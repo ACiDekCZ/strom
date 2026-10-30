@@ -184,6 +184,11 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-more { font-size: 13px; font-weight: 600; color: var(--primary); white-space: nowrap; }
 .pp-dtx[open] .pp-more { display: none; }
 .pp-row--hist .pp-y { font-size: 13px; font-weight: 400; color: var(--text-faint); }
+/* A span of years in the year column (round 3 §2.8): the start in bold, "–1790" on the line under it. */
+.pp-yr { display: inline-flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+.pp-yr b { font-weight: 600; }
+.pp-yr small { display: block; font-size: 12px; font-weight: 400; line-height: 1.3; color: var(--text-light); white-space: nowrap; }
+.pp-nw { white-space: nowrap; }
 .pp-row--hist .pp-mk { font-size: 13px; color: var(--hist-mark); }
 .pp-row--hist .pp-mk.pp-hm--place, .pp-hm--place { color: var(--hist-place); }
 .pp-row--hist .pp-mk.pp-hm--local, .pp-hm--local { color: var(--hist-local); }

@@ -1534,8 +1534,21 @@ function notesHtml(c: Ctx): string {
 // ── Timeline ──
 
 /** The year column: a span of years ("1950–1960") may break after the dash, never under the marker. */
+/**
+ * A span of years (round 3 §2.8). `cell` (the timeline's narrow year column):
+ * always two lines, the start in bold, "–1790" under it, never a dash left at
+ * a line's end; `inline` (labels, a card's footer): one piece that does not
+ * break. The same year twice is the year alone.
+ */
+export function yearRangeHtml(a: string, b: string, mode: 'cell' | 'inline'): string {
+    if (!b || a === b) return esc(a);
+    if (mode === 'inline') return `<span class="pp-nw">${esc(`${a}–${b}`)}</span>`;
+    return `<span class="pp-yr"><b>${esc(a)}</b><small>–${esc(b)}</small></span>`;
+}
+
 function yearCell(label: string): string {
-    return `<span class="pp-y">${esc(label).replace(/–/g, '–<wbr>')}</span>`;
+    const range = label.match(/^(.+?)–(.+)$/);
+    return `<span class="pp-y">${range ? yearRangeHtml(range[1], range[2], 'cell') : esc(label)}</span>`;
 }
 
 function eventOf(c: Ctx, pt: LifelinePoint): LifeEvent | undefined {
@@ -1724,7 +1737,8 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     const mark = scope === 'local' ? '■' : scope === 'place' ? '▲' : '◇';
     const meta: string[] = [];
     meta.push(`<span class="pp-hist-kind">${esc(S.history.kinds[ev.kind] ?? ev.kind)}</span>`);
-    if (item.age) meta.push(esc(item.age));
+    // "age 24–39" is one piece: the footer wraps it whole to the next line (round 3 §2.8).
+    if (item.age) meta.push(`<span class="pp-nw">${esc(item.age)}</span>`);
     if (item.regionLabel) meta.push(esc(item.regionLabel));
     if (ev.source) {
         const link = extLink(ev.source.url, historySourceLabel(ev.source));

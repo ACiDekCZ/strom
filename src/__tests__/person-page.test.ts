@@ -629,7 +629,7 @@ describe('history layer', () => {
 });
 
 describe('history spans and the folded sources', () => {
-    it('a span of years may break after the dash, in the history layer and in own rows', () => {
+    it('a span of years is two lines in the year column, the start in bold, "–1890" under it; "age 24–39" stays one piece (round 3, §2.8)', () => {
         const payload = parseHistoryPayload({
             state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
             events: [{
@@ -644,8 +644,15 @@ describe('history spans and the folded sources', () => {
         for (const mode of ['app', 'file'] as const) {
             const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
             const html = buildPersonPageBody(preparePersonPageData(d, op, { history: { payload } }), op);
-            expect(html).toContain('<span class="pp-y">1880–<wbr>1890</span>');
+            expect(html).toContain('<span class="pp-y"><span class="pp-yr"><b>1880</b><small>–1890</small></span></span>');
             expect(html).toContain('<span class="pp-y">1860</span>');
+            expect(html).not.toContain('<wbr>');
+            expect(html).toContain('<span class="pp-nw">věk 20–30</span>');
+            // The file carries the two-line rule (no JavaScript needed).
+            if (mode === 'file') {
+                const file = buildPersonPageDocument(preparePersonPageData(d, op, { history: { payload } }), op);
+                expect(file).toContain('.pp-yr { display: inline-flex; flex-direction: column;');
+            }
         }
     });
 
