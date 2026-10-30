@@ -114,11 +114,11 @@ describe('the marriage’s years and the chapters', () => {
 });
 
 describe('a link to a chapter (the family tree at the wedding, spec 027 §5.1)', () => {
-    it('a stable anchor from the union id; the title with ↓, else “story ↓”; nothing without a story', () => {
+    it('a stable anchor from the union id; always “story ↓”, never the title (round 3); nothing without a story', () => {
         expect(coupleChapterId('u1')).toBe('pp-story-u1');
         expect(coupleChapterId('u:1/ä')).toBe('pp-story-u_1__');
         const u = { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: [], story: { status: 'final', text: 'T', title: 'The mill [S0042]' } } as unknown as Partnership;
-        expect(coupleChapterLinkLabel(u, 'en')).toBe('The mill ↓');
+        expect(coupleChapterLinkLabel(u, 'en')).toBe('story ↓');
         delete u.story!.title;
         expect(coupleChapterLinkLabel(u, 'en')).toBe('story ↓');
         expect(coupleChapterLinkLabel(u, 'cs')).toBe('vyprávění ↓');

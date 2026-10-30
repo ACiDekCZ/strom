@@ -80,7 +80,7 @@ span.pp-pdf-name { color: var(--text); }
 .pp-people-note, .pp-people-more { font-size: 13.5px; color: var(--text-light); }
 /* The family tree (§4): absolute cards and 1 px lines on a 680 px column (in %), the rail when narrow. */
 .pp-fam { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
-.pp-ft { position: relative; width: 100%; }
+.pp-ft { position: relative; width: 100%; container: pp-ft / inline-size; }
 .pp-ft-h, .pp-ft-v { position: absolute; border: 0 solid var(--border); }
 .pp-ft-h { height: 0; border-top-width: 1px; }
 .pp-ft-v { width: 0; border-left-width: 1px; }
@@ -89,6 +89,11 @@ span.pp-pdf-name { color: var(--text); }
 .pp-ft-lab > * { padding: 0 4px; background: var(--pp-bg); }
 .pp-ft-story { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
 .pp-ft-lab > .pp-ft-story { background: var(--pp-bg); padding: 0 4px; }
+.pp-ft-lab > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* "story ↓", only "↓" where the gap between the cards (115/680 of the tree) is under 84 px (round 3 §4.1). */
+.pp-ft-story-s { display: none; }
+@container pp-ft (max-width: 496px) { .pp-ft-story-l { display: none; } .pp-ft-story-s { display: inline; } }
+.pp-rail-story { white-space: nowrap; }
 .pp-ft-nokids { color: var(--text-faint); }
 .pp-ft-card { display: flex; flex-direction: column; justify-content: center; min-width: 0; margin: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; text-align: left; text-decoration: none; overflow: hidden; }
 .pp-ft .pp-ft-card { position: absolute; z-index: 2; }

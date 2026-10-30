@@ -1271,9 +1271,22 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const d = geoTree();
         d.partnerships['u1' as PartnershipId].story = { status: 'final', title: 'Svatba v Čapkově', text: 'Vzali se.' };
         const app = body(d);
-        expect(app).toContain('<button type="button" class="pp-link pp-ft-story" data-pp-story="pp-story-u1">Svatba v Čapkově ↓</button>');
+        // Round 3 (§4.1): the fixed "story ↓" (only "↓" in a narrow gap, CSS), the title in the tooltip and the accessible name.
+        const inner = '<span class="pp-ft-story-l">vyprávění ↓</span><span class="pp-ft-story-s" aria-hidden="true">↓</span>';
+        const tip = 'title="Vyprávění manželství: Svatba v Čapkově" aria-label="Vyprávění manželství: Svatba v Čapkově"';
+        expect(app).toContain(`<button type="button" class="pp-link pp-ft-story" data-pp-story="pp-story-u1" ${tip}>${inner}</button>`);
         expect(app).not.toContain('data-pp-goto');
-        expect(doc(d)).toContain('<a class="pp-ft-story" href="#pp-story-u1" data-pp-story="pp-story-u1">Svatba v Čapkově ↓</a>');
+        // (The title with ↓ stays only in the own story's "continued in" line, not in the tree.)
+        expect(app).not.toMatch(/pp-ft-story[^>]*>Svatba/);
+        expect(doc(d)).toContain(`<a class="pp-ft-story" href="#pp-story-u1" data-pp-story="pp-story-u1" ${tip}>${inner}</a>`);
+        // The upright tree: "· story ↓" in one piece after the date.
+        expect(app).toMatch(/<span class="pp-rail-story">· <button type="button" class="pp-link pp-ft-story" data-pp-story="pp-story-u1"/);
+        // The label between the cards is never wider than the gap.
+        expect(app).toMatch(/<span class="pp-ft-lab" style="left:[\d.]+%;top:\d+px;max-width:16\.912%"><span>⚭ 1888<\/span><button[^>]*pp-ft-story/);
+        // No title: the two first names; a draft says so.
+        delete d.partnerships['u1' as PartnershipId].story!.title;
+        d.partnerships['u1' as PartnershipId].story!.status = 'draft';
+        expect(body(d, { lang: 'en' })).toMatch(/title="Story of the marriage: [^"]+ and [^"]+ \(draft\)"/);
         expect(body(d, rosa)).toContain('data-pp-story="pp-story-u3"');
         const prot = doc(d, { ...rosa, privacy: 'initials' });
         expect(prot).not.toContain('pp-story-u3');

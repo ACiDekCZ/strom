@@ -5762,6 +5762,8 @@ const stringsEN = {
             readAll: 'Read all ▾',
             collapse: 'Collapse ▴',
             link: 'story ↓',
+            /** The tree's "story ↓" link: its tooltip and accessible name (the title, else the two names). */
+            treeTip: (t: string, draft: boolean) => `Story of the marriage: ${t}${draft ? ' (draft)' : ''}`,
             chip: (a: string, b: string, year: string) => year ? `${a} and ${b} · ${year}` : `${a} and ${b}`,
             chipsLabel: 'Chapters',
             editInResearch: 'Edited in research.',
@@ -11491,6 +11493,7 @@ const stringsCZ: StringsType = {
             readAll: 'Číst celé ▾',
             collapse: 'Sbalit ▴',
             link: 'vyprávění ↓',
+            treeTip: (t: string, draft: boolean) => `Vyprávění manželství: ${t}${draft ? ' (návrh)' : ''}`,
             // Both first names in the nominative ("Jan a Rozálie · 1883"); no declension needed.
             chip: (a: string, b: string, year: string) => year ? `${a} a ${b} · ${year}` : `${a} a ${b}`,
             chipsLabel: 'Kapitoly',
@@ -17139,6 +17142,7 @@ const stringsDE: StringsType = {
             readAll: 'Ganz lesen ▾',
             collapse: 'Einklappen ▴',
             link: 'Geschichte ↓',
+            treeTip: (t: string, draft: boolean) => `Geschichte der Ehe: ${t}${draft ? ' (Entwurf)' : ''}`,
             chip: (a: string, b: string, year: string) => year ? `${a} und ${b} · ${year}` : `${a} und ${b}`,
             chipsLabel: 'Kapitel',
             editInResearch: 'Wird in der Forschung bearbeitet.',

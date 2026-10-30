@@ -1099,8 +1099,9 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
         const h = Math.abs(y2 - y1);
         if (h > 0) lines.push(`<span class="pp-ft-v${dashed ? ' pp-ft-dash' : ''}" style="left:${ftPct(x)};top:${t}px;height:${h}px"></span>`);
     };
-    const label = (x: number, y: number, html: string) => {
-        if (html) labels.push(`<span class="pp-ft-lab" style="left:${ftPct(x)};top:${y}px">${html}</span>`);
+    // A label between two cards never grows wider than the gap (round 3 §4.1): it would run under the cards.
+    const label = (x: number, y: number, html: string, maxW = 0) => {
+        if (html) labels.push(`<span class="pp-ft-lab" style="left:${ftPct(x)};top:${y}px${maxW ? `;max-width:${ftPct(maxW)}` : ''}">${html}</span>`);
     };
     const card = (pid: PersonId, x: number, y: number, w: number, cls: string, extra = '', h = FT_CARD_H) =>
         cards.push(ftCard(c, pid, cls, `left:${ftPct(x)};top:${y}px;width:${ftPct(w)};height:${h}px`, extra));
@@ -1150,7 +1151,7 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
             u.kids.length ? '' : `<span class="pp-ft-nokids">${esc(c.P.tree.noKids)}</span>`,
         ].filter(Boolean);
         if (bits.length) {
-            label(lx, ly - 9, bits.join(''));
+            label(lx, ly - 9, bits.join(''), meX - FT_CARD);
             bottom = Math.max(bottom, ly - 9 + bits.length * 17);
         }
         if (u.kids.length) stems.push({ kids: u.kids, x: lx, y: ly });
@@ -1238,7 +1239,8 @@ function familyTreeRailHtml(c: Ctx, d: FtData, wide = false): string {
         : `<p class="pp-rail-lab">${esc(P.tree.noKids)}</p>`) + `</div>`;
     for (const u of d.unions) {
         const story = u.story;
-        h += `<div class="pp-rail-u"><div class="pp-rail-side"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story}</p>`
+        // "· story ↓" stays one piece after the date (round 3 §4.2).
+        h += `<div class="pp-rail-u"><div class="pp-rail-side"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story ? `<span class="pp-rail-story">· ${story}</span>` : ''}</p>`
             + ftCard(c, u.partner, 'pp-rail-card') + `</div>` + kidsHtml(u.kids) + `</div>`;
     }
     if (d.solo.length) {
@@ -1336,13 +1338,20 @@ function coupleChapterFoldKey(unionId: string): string {
 }
 
 /**
- * The label of a link to a couple's chapter (the family tree at the wedding):
- * the story's title with ↓, else "story ↓"; '' when the couple has no story.
+ * The label of a link to a couple's chapter (the family tree at the wedding,
+ * round 3 §4.1): always the fixed "story ↓", never the title (it would run
+ * under the cards); '' when the couple has no story.
  */
 export function coupleChapterLinkLabel(u: Partnership, lang: Language): string {
     if (!u.story?.text?.trim()) return '';
-    const title = u.story.title?.trim() ? stripResearchIds(u.story.title).text.trim() : '';
-    return title ? `${title} ↓` : getStringsForLang(lang).personPage.story.link;
+    return getStringsForLang(lang).personPage.story.link;
+}
+
+/** The tooltip and accessible name of that link: "Story of the marriage: {title}" ({name} and {name} without one), a draft marked. */
+export function coupleChapterLinkTip(ch: CoupleChapterData, lang: Language): string {
+    const S = getStringsForLang(lang);
+    const what = ch.title || (ch.partnerShort ? S.story.couple(ch.selfShort, ch.partnerShort) : ch.selfShort);
+    return S.personPage.story.treeTip(what, ch.draft);
 }
 
 /** What a couple's chapter shows, from the person's side (coupleChapterHtml renders it). */
@@ -1448,22 +1457,28 @@ export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContex
 }
 
 /** A link that unfolds a couple's chapter and scrolls to it (window: a button; file: an anchor). */
-function storyJumpHtml(c: Ctx, unionId: string, label: string, cls = 'pp-story-jump'): string {
+function storyJumpHtml(c: Ctx, unionId: string, label: string, cls = 'pp-story-jump', tip = '', inner = ''): string {
     const id = coupleChapterId(unionId);
-    if (c.app) return `<button type="button" class="pp-link ${cls}" data-pp-story="${esc(id)}">${esc(label)}</button>`;
-    return `<a class="${cls}" href="#${esc(id)}" data-pp-story="${esc(id)}">${esc(label)}</a>`;
+    const t = tip ? ` title="${esc(tip)}" aria-label="${esc(tip)}"` : '';
+    const content = inner || esc(label);
+    if (c.app) return `<button type="button" class="pp-link ${cls}" data-pp-story="${esc(id)}"${t}>${content}</button>`;
+    return `<a class="${cls}" href="#${esc(id)}" data-pp-story="${esc(id)}"${t}>${content}</a>`;
 }
 
 /**
- * The family tree's link to a couple's chapter at the wedding (§5.1): the
- * title or "story ↓"; '' when the page has no chapter for the couple (no
- * story, or privacy left it out with a living partner).
+ * The family tree's link to a couple's chapter at the wedding (§5.1, round 3
+ * §4.1): "story ↓" with the title in the tooltip; where the gap between the
+ * cards is narrow only "↓" (CSS); '' when the page has no chapter for the
+ * couple (no story, or privacy left it out with a living partner).
  */
 function coupleChapterLinkHtml(c: Ctx, u: Partnership): string {
     const shown = c.tree.partnerships[u.id];
     if (!shown || !c.person.partnerships.includes(u.id)) return '';
     const label = coupleChapterLinkLabel(shown, c.page.lang);
-    return label ? storyJumpHtml(c, u.id, label, 'pp-ft-story') : '';
+    const ch = label ? coupleChapterData(c.tree, c.person, shown, c.page.lang) : null;
+    if (!ch) return '';
+    const inner = `<span class="pp-ft-story-l">${esc(label)}</span><span class="pp-ft-story-s" aria-hidden="true">↓</span>`;
+    return storyJumpHtml(c, u.id, label, 'pp-ft-story', coupleChapterLinkTip(ch, c.page.lang), inner);
 }
 
 function storyHtml(c: Ctx): string {
