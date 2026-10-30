@@ -16,6 +16,7 @@ import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { menuOffersLineJumps } from '../card-tap.js';
+import { coupleStories } from '../story-text.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -149,7 +150,8 @@ export const contextMenuMethods = uiModule({
         // form. Read-only / locked: only when there is something to show; in
         // normal mode "Sources" always (its dialog is the quick way to cite).
         const sourceCount = this.personSourceCount(personId);
-        const hasStory = !!person.story?.text?.trim();
+        // The person's own story or a couple's (the reader shows both).
+        const hasStory = !!person.story?.text?.trim() || coupleStories(DataManager.getData(), person).length > 0;
         const readItems = (always: boolean): PersonMenuAction[] => {
             const out: PersonMenuAction[] = [];
             if (always || sourceCount > 0) {

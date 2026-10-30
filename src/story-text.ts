@@ -15,6 +15,13 @@
  * and `1. ` (a Czech date opens a line: "1. ledna 1831 …").
  */
 
+import type { Partnership, Person, StromData } from './types.js';
+
+/** The person's couples with a story of their own (Partnership.story), in the person's order. */
+export function coupleStories(data: StromData, person: Person): Partnership[] {
+    return person.partnerships.map(id => data.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim());
+}
+
 function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

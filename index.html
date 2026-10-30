@@ -16917,9 +16917,18 @@
         .story-reader-facts { margin: 0 0 10px; padding-left: 18px; }
         .story-reader-facts li { margin: 2px 0; }
         .story-reader-note { margin: 0; font-style: italic; }
+        /* A couple's story (Partnership.story), one per marriage, under the person's own. */
+        .story-reader-body > .story-reader-couple:not(:first-child) {
+            margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider);
+        }
+        .story-reader-couple > * { max-width: 62ch; }
+        .story-reader-couple-title { font-size: 19px; overflow-wrap: anywhere; }
+        .story-reader-couple-title .story-draft-tag, .story-reader-couple-title .story-nv-tag { font-family: var(--font-sans); }
+        .story-reader-couple > .story-nv-banner { max-width: none; margin-bottom: 14px; }
         @media (max-width: 640px) {
             .story-reader-text { font-size: 16px; }
             .story-reader-title { font-size: 20px; }
+            .story-reader-couple-title { font-size: 18px; }
             .story-reader-text .story-subhead { font-size: 17px; }
         }
 

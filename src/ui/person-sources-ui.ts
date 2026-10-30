@@ -7,10 +7,10 @@
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, Source } from '../types.js';
+import { PartnershipId, PersonId, Source, Story } from '../types.js';
 import { yearOf } from '../dates.js';
 import { personSourceRows as personSourceRowsOf, PersonSourceRow } from '../person-sources.js';
-import { storyProseHtml } from '../story-text.js';
+import { storyProseHtml, coupleStories } from '../story-text.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
@@ -178,15 +178,48 @@ export const personSourcesMethods = uiModule({
     showPersonStoryDialog(personId: PersonId): void {
         document.getElementById(STORY_ID)?.remove();
         const person = DataManager.getPerson(personId);
-        const story = person?.story;
-        if (!person || !story?.text?.trim()) return;
+        if (!person) return;
+        const own = person.story?.text?.trim() ? person.story : undefined;
+        // The stories of the person's marriages, each under the person's own (as on the person page).
+        const couples = coupleStories(DataManager.getData(), person);
+        if (!own && !couples.length) return;
         const s = strings.story;
-        const editable = !DataManager.isReadOnly() && !DataManager.isPersonLocked(personId);
-        const facts = (story.facts ?? []).filter(f => f.trim());
+        const editable = !!own && !DataManager.isReadOnly() && !DataManager.isPersonLocked(personId);
         // A research draft can be approved there (the label changes with the next version).
-        const approveUrl = this.storyApproveUrl(personId);
+        const approveUrl = own ? this.storyApproveUrl(personId) : null;
         // An approved story with a new version waiting: say so and offer the comparison.
-        const waiting = storyWithDraft({ personId });
+        const waiting = own ? storyWithDraft({ personId }) : null;
+        const nvBanner = (story: Story, attrs: string): string =>
+            `<div class="story-nv-banner"><span>${esc(s.nvReader(draftDate(story)))}</span><button type="button" class="story-nv-compare" ${attrs}>${esc(s.compare)}</button></div>`;
+        const extraHtml = (story: Story): string => {
+            const facts = (story.facts ?? []).filter(f => f.trim());
+            if (!facts.length && !story.note) return '';
+            return `<div class="story-reader-extra">
+                ${facts.length > 0 ? `<div class="menu-section-header">${esc(s.facts)}</div>
+                    <ul class="story-reader-facts">${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+                ${story.note ? `<p class="story-reader-note">${esc(story.note)}</p>` : ''}
+            </div>`;
+        };
+        const ownHtml = own ? `
+                    ${waiting ? nvBanner(waiting, 'id="person-story-compare"') : ''}
+                    ${own.title ? `<h3 class="story-reader-title">${esc(own.title)}</h3>` : ''}
+                    <div class="story-reader-text">${storyProseHtml(own.text, { title: own.title })}</div>
+                    ${extraHtml(own)}` : '';
+        const self = shownName(person);
+        const couplesHtml = couples.map(u => {
+            const st = u.story!;
+            const partner = DataManager.getPerson(u.person1Id === personId ? u.person2Id : u.person1Id);
+            const label = st.title?.trim() || (partner ? s.couple(self, shownName(partner)) : self);
+            const nv = storyWithDraft({ partnershipId: u.id });
+            const tag = nv ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
+                : st.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : '';
+            return `<section class="story-reader-couple" data-partnership-id="${esc(u.id)}">
+                    <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${tag}</h3>
+                    ${nv ? nvBanner(nv, `data-partnership-id="${esc(u.id)}"`) : ''}
+                    <div class="story-reader-text">${storyProseHtml(st.text, { title: st.title })}</div>
+                    ${extraHtml(st)}
+                </section>`;
+        }).join('');
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
@@ -198,19 +231,13 @@ export const personSourcesMethods = uiModule({
                         <h2 id="person-story-heading">${esc(s.readerTitle)}</h2>
                         <div class="audit-log-subtitle">${esc(personSubtitle(personId))}${waiting
                             ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
-                            : story.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : ''}</div>
+                            : own?.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : ''}</div>
                     </div>
                     <button type="button" class="close-btn" id="person-story-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="story-reader-body" id="person-story-body" tabindex="-1" lang="${getCurrentLanguage()}">
-                    ${waiting ? `<div class="story-nv-banner"><span>${esc(s.nvReader(draftDate(waiting)))}</span><button type="button" class="story-nv-compare" id="person-story-compare">${esc(s.compare)}</button></div>` : ''}
-                    ${story.title ? `<h3 class="story-reader-title">${esc(story.title)}</h3>` : ''}
-                    <div class="story-reader-text">${storyProseHtml(story.text, { title: story.title })}</div>
-                    ${facts.length > 0 || story.note ? `<div class="story-reader-extra">
-                        ${facts.length > 0 ? `<div class="menu-section-header">${esc(s.facts)}</div>
-                            <ul class="story-reader-facts">${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-                        ${story.note ? `<p class="story-reader-note">${esc(story.note)}</p>` : ''}
-                    </div>` : ''}
+                    ${ownHtml}
+                    ${couplesHtml}
                 </div>
                 <div class="buttons">
                     ${approveUrl ? `<button type="button" class="link-button story-approve" id="person-story-approve">${esc(strings.research.approveStory)}</button>` : ''}
@@ -225,6 +252,9 @@ export const personSourcesMethods = uiModule({
         (overlay.querySelector('#person-story-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-story-edit') as HTMLButtonElement | null)?.addEventListener('click', () => this.editPersonStory(personId));
         (overlay.querySelector('#person-story-compare') as HTMLButtonElement | null)?.addEventListener('click', () => this.showStoryCompare({ personId }));
+        overlay.querySelectorAll<HTMLButtonElement>('.story-reader-couple .story-nv-compare').forEach(btn => {
+            btn.addEventListener('click', () => this.showStoryCompare({ partnershipId: btn.dataset.partnershipId as PartnershipId }));
+        });
         (overlay.querySelector('#person-story-approve') as HTMLButtonElement | null)?.addEventListener('click', () => {
             if (approveUrl) this.launchResearchLink(approveUrl);
         });

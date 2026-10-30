@@ -77,11 +77,13 @@ test.describe('a story\'s new version', () => {
         const jan = await personId(page, 'P0001');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
         const reader = page.locator('#person-story-modal');
-        await expect(reader.locator('.story-nv-tag')).toHaveText('New version waiting');
+        // Jan's own story (his couple's follows under it, see below).
+        const own = reader.locator('#person-story-body');
+        await expect(reader.locator('.audit-log-subtitle .story-nv-tag')).toHaveText('New version waiting');
         await expect(reader.locator('.story-draft-tag')).toHaveCount(0);
-        await expect(reader.locator('.story-nv-banner')).toContainText('Research wrote a new text on 2 Oct 2026. This one stays approved until a decision is made.');
+        await expect(own.locator(':scope > .story-nv-banner')).toContainText('Research wrote a new text on 2 Oct 2026. This one stays approved until a decision is made.');
         // The book's text is still the approved one.
-        await expect(reader.locator('.story-reader-text')).toHaveText('Jan byl mlynář.');
+        await expect(own.locator(':scope > .story-reader-text')).toHaveText('Jan byl mlynář.');
         await reader.locator('#person-story-compare').click();
         const cmp = page.locator('#story-compare-modal');
         await expect(cmp).toBeVisible();
@@ -133,7 +135,55 @@ test.describe('a story\'s new version', () => {
         });
         await page.keyboard.press('Escape');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
-        await expect(page.locator('#person-story-modal .story-nv-banner')).toHaveCount(0);
+        await expect(page.locator('#person-story-body > .story-nv-banner')).toHaveCount(0);
+        // The couple's new version still waits (only the person's went).
+        await expect(page.locator('#person-story-modal .story-reader-couple .story-nv-banner')).toHaveCount(1);
+    });
+
+    test('the reader tells the couple\'s story under the person\'s own; its new version is compared there', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0001');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
+        const couple = page.locator('#person-story-modal .story-reader-couple');
+        await expect(couple).toHaveCount(1);
+        await expect(couple.locator('.story-reader-couple-title')).toHaveText('Jan Vlk and Marie Vlková New version waiting');
+        await expect(couple.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');
+        await couple.locator('.story-nv-compare').click();
+        const cmp = page.locator('#story-compare-modal');
+        await expect(cmp).toBeVisible();
+        await expect(cmp).toContainText('Svatba byla v únoru 1845 v Chlumech.');
+    });
+
+    test('a partner with only the couple\'s story: the fold on the card, Story in the menu, the reader with that story alone', async ({ page }) => {
+        await setup(page);
+        const marie = await personId(page, 'P0002');
+        // Approved with a new version waiting beside it (the couple's).
+        await expect(card(page, 'Marie').locator(':scope > .card-story')).toBeVisible();
+        await expect(card(page, 'Marie').locator(':scope > .card-story')).not.toHaveClass(/draft/);
+        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('has a story, new version waiting');
+        const actions = await page.evaluate((id) => window.Strom.UI.getPersonMenuActions(id).map((a: { action: string }) => a.action), marie);
+        expect(actions).toContain('story');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), marie);
+        const reader = page.locator('#person-story-modal');
+        await expect(reader.locator('.story-reader-couple-title')).toHaveText('Marie Vlková and Jan Vlk New version waiting');
+        await expect(reader.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');
+        // Her own story: none — no subtitle tag, nothing to edit or approve here.
+        await expect(reader.locator('.audit-log-subtitle .story-nv-tag, .audit-log-subtitle .story-draft-tag')).toHaveCount(0);
+        await expect(reader.locator('#person-story-edit, #person-story-approve')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        // The couple's story as a draft: a pale fold, the reader marks it.
+        await page.evaluate(() => {
+            const data = structuredClone(window.Strom.DataManager.getData());
+            for (const u of Object.values(data.partnerships) as { story?: { status?: string; draft?: unknown } }[]) {
+                if (u.story) { u.story.status = 'draft'; delete u.story.draft; }
+            }
+            window.Strom.DataManager.replaceWithSourceData(data);
+        });
+        await expect(card(page, 'Marie').locator(':scope > .card-story')).toHaveClass(/draft/);
+        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('story in draft');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), marie);
+        await expect(reader.locator('.story-reader-couple-title .story-draft-tag')).toHaveText('Draft');
     });
 
     test('keep the approved one', async ({ page }) => {

@@ -15,6 +15,7 @@ import { Partnership, Person, PersonId, ResearchConflict, StromData } from './ty
 import { EvidenceLevel, PersonEvidence, personEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
 import { isOpenHypothesis } from './view-links.js';
+import { coupleStories } from './story-text.js';
 
 export type ActionSignal = 'waiting' | 'conflict' | 'question';
 
@@ -113,15 +114,30 @@ export interface CardSignalInfo {
     doneSince: number | null;
 }
 
+/**
+ * The story the card signals: the person's own decides; without one, the
+ * stories of the person's couples (Partnership.story) do — approved when any
+ * of them is, a draft when all are drafts. A new version waiting beside any
+ * approved one of them counts.
+ */
+export function personStoryState(p: Person, data: StromData): { story: 'final' | 'draft' | null; storyNew: boolean } {
+    const own = p.story?.text?.trim() ? p.story : undefined;
+    const stories = [...(own ? [own] : []), ...coupleStories(data, p).map(u => u.story!)];
+    if (!stories.length) return { story: null, storyNew: false };
+    const final = own ? own.status !== 'draft' : stories.some(st => st.status !== 'draft');
+    const storyNew = final && stories.some(st => st.status === 'final' && !!st.draft?.text?.trim());
+    return { story: final ? 'final' : 'draft', storyNew };
+}
+
 export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInfo {
     const evidence = ctx.treeHasSources ? personEvidence(p, ctx.data, ctx.unions) : null;
-    const story = p.story?.text?.trim() ? (p.story.status === 'draft' ? 'draft' : 'final') : null;
+    const { story, storyNew } = personStoryState(p, ctx.data);
     const research = p.refn ? ctx.research.get(p.refn) : undefined;
     const conflicts = (researchConflictsProvider?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status !== 'decided').length;
     const info: CardSignalInfo = {
         evidence,
         story,
-        storyNew: story === 'final' && !!p.story?.draft?.text?.trim(),
+        storyNew,
         attachments: p.attachments?.length ?? 0,
         materials: materialsCountProvider?.(p) ?? null,
         waiting: research?.waiting ?? null,

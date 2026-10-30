@@ -23,7 +23,7 @@ import { parseFlexDate, formatFlexDate, yearOf, ageBetween } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
-import { storyProseHtml } from './story-text.js';
+import { storyProseHtml, coupleStories } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
@@ -805,11 +805,6 @@ function section(key: PersonPageSection['key'], title: string, body: string, hea
 }
 
 // ── Story, notes ──
-
-/** The person's couples with a story of their own (Partnership.story), in the person's order. */
-function coupleStories(tree: StromData, person: Person): Partnership[] {
-    return person.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim());
-}
 
 /** A story not approved yet is shown too, marked as a draft (as the story reader does). */
 function draftTag(c: Ctx, st: Story): string {
