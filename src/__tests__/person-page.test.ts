@@ -285,6 +285,42 @@ describe('family', () => {
         expect(two).toContain('<div class="pp-rail">');
         expect(two).not.toContain('pp-rail--wide');
     });
+    it('a union without a wedding date sorts by its first child, after a dated one of that year, no year last; its label says so (round 3, §4.5)', () => {
+        const d = fiskTree();
+        const jan = d.persons['jan' as PersonId];
+        // u1 (1888) as data has it; u0 undated with a child of 1886; u2 undated with a child of 1888; u3 nothing; u4 an event of 1900.
+        const add = (k: string, name: string, kids: [string, string][], extra: Partial<Partnership> = {}) => {
+            const w = `w${k}`;
+            d.persons[w as PersonId] = p(w, name, 'Fíšková', 'female', { birthDate: '1862', deathDate: '1931', partnerships: [k as PartnershipId] });
+            for (const [kid, born] of kids) d.persons[kid as PersonId] = p(kid, `Dítě${kid}`, 'Fíšek', 'male', { birthDate: born, deathDate: '1950', parentIds: ids('jan', w) });
+            d.partnerships[k as PartnershipId] = { id: k as PartnershipId, person1Id: 'jan' as PersonId, person2Id: w as PersonId, status: 'married', childIds: ids(...kids.map(x => x[0])), ...extra };
+            jan.partnerships.push(k as PartnershipId);
+            jan.childIds.push(...ids(...kids.map(x => x[0])));
+        };
+        add('u3', 'Terezie', []);
+        add('u2', 'Ludmila', [['k2', '1888-06-01']]);
+        add('u0', 'Kateřina', [['k0', '1886']]);
+        add('u4', 'Bohumila', [], { events: [{ id: 'pe1', type: 'custom', date: '1900' }] as Partnership['events'] });
+        const html = body(d);
+        // 5 unions: the upright tree, a union a row in the sorted order.
+        const order = [...html.matchAll(/<div class="pp-rail-u"><div class="pp-rail-side">.*?data-pp-person="(w?u?\w+)"/g)].map(m => m[1]);
+        expect(order).toEqual(['wu0', 'marie', 'wu2', 'wu4', 'wu3']);
+        expect(html).toContain('⚭ rok neznámý · děti od 1886');
+        expect(html).toContain('⚭ rok neznámý · děti od 1888');
+        // An event alone gives the order, not the label; no inferred "before 1886".
+        expect(html).not.toContain('děti od 1900');
+        expect(html).not.toContain('před 1886');
+        expect(body(d, { lang: 'en' })).toContain('⚭ year unknown · children from 1886');
+        expect(body(d, { lang: 'de' })).toContain('⚭ Jahr unbekannt · Kinder ab 1886');
+        // The tree to the sides (two unions): the label in two lines.
+        for (const k of ['u2', 'u3', 'u4']) {
+            delete d.partnerships[k as PartnershipId];
+            jan.partnerships = jan.partnerships.filter(x => x !== k);
+        }
+        const ft = tree(body(d));
+        expect(ft).toContain('<span>⚭ rok neznámý</span><span class="pp-ft-from">děti od 1886</span>');
+        expect(ft.indexOf('data-pp-person="wu0"')).toBeLessThan(ft.indexOf('data-pp-person="marie"'));
+    });
     it('over five children: every row has its own bus with ticks, a trunk runs to the last row\'s bus (round 2, K2-2b)', () => {
         const d = fiskTree();
         const kids = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7'];

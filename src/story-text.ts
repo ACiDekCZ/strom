@@ -18,15 +18,57 @@
 import type { Partnership, Person, StromData } from './types.js';
 import { yearOf } from './dates.js';
 
+/** Where a union's sorting year comes from (partnershipSortKey). */
+export type PartnershipSortSource = 'wedding' | 'children' | 'event';
+
+export interface PartnershipSortKey {
+    /** null: no year at all (the union goes last). */
+    year: number | null;
+    from: PartnershipSortSource | null;
+}
+
+/**
+ * The year a union sorts by among a person's unions (spec 025 §4.5): the
+ * wedding; without one, the birth of the couple's first child; without that,
+ * the couple's first dated event; else none. `children` are the union's
+ * children as the tree has them (missing ones and stand-ins are skipped).
+ */
+export function partnershipSortKey(u: Partnership, children: readonly (Person | undefined)[]): PartnershipSortKey {
+    const wedding = yearOf(u.startDate);
+    if (wedding !== null) return { year: wedding, from: 'wedding' };
+    const min = (ys: (number | null)[]): number | null => {
+        const known = ys.filter((y): y is number => y !== null);
+        return known.length ? Math.min(...known) : null;
+    };
+    const child = min(children.filter((c): c is Person => !!c && !c.isPlaceholder).map(c => yearOf(c.birthDate)));
+    if (child !== null) return { year: child, from: 'children' };
+    const event = min((u.events ?? []).map(e => yearOf(e.date)));
+    if (event !== null) return { year: event, from: 'event' };
+    return { year: null, from: null };
+}
+
+/** Compare two sorting keys: by year, a union without a wedding date after a dated one of the same year, no year last. */
+export function comparePartnershipKeys(a: PartnershipSortKey, b: PartnershipSortKey): number {
+    const ya = a.year ?? Infinity, yb = b.year ?? Infinity;
+    if (ya !== yb) return ya < yb ? -1 : 1;
+    return (a.from === 'wedding' ? 0 : 1) - (b.from === 'wedding' ? 0 : 1);
+}
+
+/** Unions in the order of partnershipSortKey; a tie keeps the given order (the person's order in the data). */
+export function partnershipsInOrder<T extends Partnership>(data: StromData, unions: readonly T[]): T[] {
+    return unions
+        .map((u, i) => ({ u, i, k: partnershipSortKey(u, (u.childIds ?? []).map(id => data.persons[id])) }))
+        .sort((a, b) => comparePartnershipKeys(a.k, b.k) || a.i - b.i)
+        .map(x => x.u);
+}
+
 /**
  * The person's couples with a story of their own (Partnership.story), in the
- * order of the marriages (wedding year; undated ones keep the person's order, last).
+ * order of the marriages (partnershipsInOrder).
  */
 export function coupleStories(data: StromData, person: Person): Partnership[] {
-    return person.partnerships.map(id => data.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim())
-        .map((u, i) => ({ u, i, y: yearOf(u.startDate) ?? Infinity }))
-        .sort((a, b) => a.y - b.y || a.i - b.i)
-        .map(x => x.u);
+    return partnershipsInOrder(data, person.partnerships.map(id => data.partnerships[id])
+        .filter((u): u is Partnership => !!u?.story?.text?.trim()));
 }
 
 /** How many story chapters the person has: the own story and one per couple's story. */

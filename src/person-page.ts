@@ -24,7 +24,7 @@ import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from '
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
-import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead } from './story-text.js';
+import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead, partnershipsInOrder, partnershipSortKey } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
@@ -328,8 +328,8 @@ export function protectPersonPageTree(data: StromData, privacy: PrivacyMode, now
 /** The page's family: parents, partners, children, siblings (ids in the tree). */
 function familyOf(tree: StromData, person: Person) {
     const parents = person.parentIds.filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder);
-    const unions = person.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u)
-        .sort((a, b) => (yearOf(a.startDate) ?? Infinity) - (yearOf(b.startDate) ?? Infinity));
+    // §4.5: a union without a wedding date by its first child (or first event), after a dated one of that year.
+    const unions = partnershipsInOrder(tree, person.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u));
     const children = sortByBirth(person.childIds.filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder), tree);
     const sibs = new Set<PersonId>();
     for (const pid of parents) for (const c of tree.persons[pid]?.childIds ?? []) {
@@ -1014,8 +1014,10 @@ interface FtUnion {
     union: Partnership;
     partner: PersonId;
     kids: PersonId[];
-    /** "⚭ 1883" (empty for partners who did not marry). */
+    /** "⚭ 1883", "⚭ year unknown" (empty for partners who did not marry). */
     short: string;
+    /** "children from 1886" for a union without a wedding date sorted by its first child ('' otherwise). */
+    kidsFrom: string;
     /** "⚭ 10 February 1883, Lhota · divorced 1890". */
     long: string;
     /** The link to the couple's chapter at the wedding ('' when the page has no chapter for the couple). */
@@ -1059,13 +1061,18 @@ function familyTreeData(c: Ctx): FtData {
         kids.forEach(k => placed.add(k));
         const unmarried = u.status === 'partners' || u.status === 'separated';
         const y = yearOf(u.startDate);
-        const short = unmarried ? '' : y !== null ? `⚭ ${y}` : '⚭';
+        // No wedding date (§4.5): "⚭ year unknown", with the year its children start from when they give it.
+        const key = y === null ? partnershipSortKey(u, (u.childIds ?? []).map(id => tree.persons[id])) : null;
+        const kidsFrom = !unmarried && key?.from === 'children' ? P.tree.kidsFrom(String(key.year)) : '';
+        const short = unmarried ? '' : y !== null ? `⚭ ${y}` : P.tree.marUnknown;
         const parts: string[] = [];
         if (unmarried) parts.push(P.partner);
+        else if (y === null) parts.push([P.tree.marUnknown, u.startPlace?.trim() ?? ''].filter(Boolean).join(', '));
         else parts.push(['⚭', [personPageDate(u.startDate, page.lang), u.startPlace?.trim() ?? ''].filter(Boolean).join(', ')].filter(Boolean).join(' '));
+        if (kidsFrom) parts.push(kidsFrom);
         if (!unmarried && (u.endDate || u.status === 'divorced')) parts.push(P.divorced(personPageDate(u.endDate, page.lang)));
         unions.push({
-            union: u, partner: partner.id, kids, short, long: parts.join(' · '),
+            union: u, partner: partner.id, kids, short, kidsFrom, long: parts.join(' · '),
             story: coupleChapterLinkHtml(c, u),
         });
     }
@@ -1138,6 +1145,7 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
         bottom = Math.max(bottom, py + FT_CARD_H);
         const bits = [
             u.short ? `<span>${esc(u.short)}</span>` : '',
+            u.kidsFrom ? `<span class="pp-ft-from">${esc(u.kidsFrom)}</span>` : '',
             u.story,
             u.kids.length ? '' : `<span class="pp-ft-nokids">${esc(c.P.tree.noKids)}</span>`,
         ].filter(Boolean);

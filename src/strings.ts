@@ -5939,6 +5939,9 @@ const stringsEN = {
         tree: {
             noKids: 'no children',
             story: 'story ↓',
+            /** A union without a wedding date (§4.5). */
+            marUnknown: '⚭ year unknown',
+            kidsFrom: (y: string) => `children from ${y}`,
             otherParent: 'other parent unknown',
             siblings: (n: number) => `Siblings (${n})`,
             grandchildren: (n: number) => `Grandchildren (${n})`,
@@ -11661,6 +11664,8 @@ const stringsCZ: StringsType = {
         tree: {
             noKids: 'bez dětí',
             story: 'vyprávění ↓',
+            marUnknown: '⚭ rok neznámý',
+            kidsFrom: (y: string) => `děti od ${y}`,
             otherParent: 'druhý rodič neznámý',
             siblings: (n: number) => `Sourozenci (${n})`,
             grandchildren: (n: number) => `Vnoučata (${n})`,
@@ -17306,6 +17311,8 @@ const stringsDE: StringsType = {
         tree: {
             noKids: 'keine Kinder',
             story: 'Erzählung ↓',
+            marUnknown: '⚭ Jahr unbekannt',
+            kidsFrom: (y: string) => `Kinder ab ${y}`,
             otherParent: 'anderer Elternteil unbekannt',
             siblings: (n: number) => `Geschwister (${n})`,
             grandchildren: (n: number) => `Enkel (${n})`,
