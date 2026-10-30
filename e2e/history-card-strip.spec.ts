@@ -54,7 +54,7 @@ test.describe('History in the card: "not searched yet" with the link to switch i
         const { history } = await setup(page);
         await openCard(page);
         await expect(strip(page)).toHaveCount(1);
-        await expect(strip(page).locator('.pm-lifeline-desc')).toHaveText(`${SENTENCE} Turn on the search in the research`);
+        await expect(strip(page).locator('.pm-lifeline-desc')).toHaveText(`${SENTENCE} Turn on the search in the research, opens in the research`);
         // The last row of the timeline, no chip of the layer.
         await expect(page.locator('#pm-lifeline-body > :last-child')).toHaveAttribute('data-history-strip', '');
         await enable(page).click();
