@@ -16756,6 +16756,13 @@
             font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere;
         }
         .pp-toc-link[aria-current="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
+        /* Wide screens (round 4 §0.8, K4-32): a wider window, the contents 150 px and 48 px off a column of up to
+           960 px (text 660 px, picture blocks the whole column, see .pp-wide in the page's CSS), all centred. */
+        @media screen and (min-width: 1280px) {
+            .modal.modal--page { width: min(1250px, calc(100vw - 48px)); }
+            .pp-layout { gap: 48px; }
+            .pp-toc { flex-basis: 150px; }
+        }
         /* The ⋯ menu: a popover under its button (a small sheet on a phone). */
         .pp-menu {
             position: absolute; top: 56px; right: 12px; z-index: 2;

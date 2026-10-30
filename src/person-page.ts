@@ -1300,7 +1300,7 @@ function familyTreeHtml(c: Ctx): string {
     const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
         : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d);
-    return section('family', c.P.sec.family, `<div class="pp-fam">${core}${familyTreeMoreHtml(c, d)}</div>`);
+    return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>`);
 }
 
 function section(key: PersonPageSection['key'], title: string, body: string, head = ''): string {
@@ -1852,7 +1852,7 @@ function timelineHtml(c: Ctx): string {
     const legend = legendItems.length ? `<p class="pp-legend">${legendItems.join('')}</p>` : '';
     // Slot 7 (§2.1): the life chart above the text timeline.
     const chartHtml = chart
-        ? `<div class="pp-chart-host">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
+        ? `<div class="pp-chart-host pp-wide">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
         : '';
     return section('timeline', P.sec.timeline, chartHtml + legend + segHtml, head);
 }
@@ -2085,12 +2085,12 @@ function galleryHtml(c: Ctx): string {
     };
     const first = c.opts.mode === 'print' ? items : items.slice(0, 6);
     const rest = c.opts.mode === 'print' ? [] : items.slice(6);
-    let body = first.length ? `<div class="pp-gal">${first.map(thumb).join('')}</div>` : '';
+    let body = first.length ? `<div class="pp-gal pp-wide">${first.map(thumb).join('')}</div>` : '';
     if (rest.length) {
         body += fold(c, {
-            key: 'gal', id: 'pp-gal-more', cls: 'pp-gal-more',
+            key: 'gal', id: 'pp-gal-more', cls: 'pp-gal-more pp-wide',
             head: `<span class="pp-disc--inline">${foldState(`${P.gal.more(rest.length)} ▾`, `${P.gal.less} ▴`)}</span>`,
-            body: `<div class="pp-gal">${rest.map((it, i) => thumb(it, i + 6)).join('')}</div>`,
+            body: `<div class="pp-gal pp-wide">${rest.map((it, i) => thumb(it, i + 6)).join('')}</div>`,
         });
     }
     if (pdfs.length) {
@@ -2243,7 +2243,7 @@ function summaryHtml(c: Ctx): string {
     }
 
     if (cells.length < 3) return '';
-    return `<div class="pp-sum${cells.length === 3 ? ' pp-sum--3' : ''}" role="list" aria-label="${esc(P.summary.label)}">`
+    return `<div class="pp-sum${cells.length === 3 ? ' pp-sum--3' : ''} pp-wide" role="list" aria-label="${esc(P.summary.label)}">`
         + cells.map(([big, label]) => `<div class="pp-sum-cell" role="listitem"><span class="pp-sum-big">${esc(big)}</span>`
             + (label ? `<span class="pp-sum-lab">${esc(label)}</span>` : '') + `</div>`).join('')
         + `</div>`;

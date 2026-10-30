@@ -219,7 +219,7 @@ describe('places within 3 km and one place', () => {
         ]);
         expect(plan.where?.dot).toBeDefined();
         const cs = placesMapHtml(three(), TINY, { lang: 'cs', mode: 'file', kidPlaces: true });
-        expect(cs).not.toContain('class="pp-map"');
+        expect(cs).not.toContain('class="pp-map pp-wide');
         expect(cs).toContain('<p class="pp-map-sub">Místa leží do 3 km od sebe.</p>');
         // Round 4: place 1 by its badge, not by an inflected name.
         expect(cs).toContain('<b class="pp-map-name">Mlýnec</b><span class="pp-map-from"> · 2 km SV od <span class="pp-mini" role="img" aria-label="místa 1">1</span></span>');

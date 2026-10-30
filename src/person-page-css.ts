@@ -265,6 +265,14 @@ span.pp-gal-thumb { cursor: default; }
 .pp-ids li { list-style: none; margin-left: -18px; display: flex; gap: 10px; }
 .pp-ids code { flex: 0 0 auto; min-width: 52px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-faint); }
 .pp-foot { font-size: 12.5px; color: var(--text-faint); border-top: 1px solid var(--divider); padding-top: 14px; }
+/* Wide screens (round 4 §0.8, K4-32): a column of up to 960 px; text keeps its reading width (660 px), the picture
+   blocks (.pp-wide: In brief, the map, the chart, the gallery, the family tree) take the whole column. Print unchanged. */
+@media screen and (min-width: 1280px) {
+  .pp { max-width: 960px; }
+  .pp > :not(section):not(.pp-wide):not(.pp-lb), .pp > section > :not(.pp-wide) { max-width: 660px; }
+  .pp-fam.pp-wide .pp-ft { max-width: 680px; margin-inline: auto; }
+  .pp-gal { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 /* Narrow page (a phone, a window under 641 px): the window's body and the file's column are containers. */
 @container (max-width: 640px) {
   .pp-hero--photo { flex-direction: column; }
@@ -421,6 +429,12 @@ body { margin: 0; background: var(--surface); color: var(--text); font-family: v
 .pp-file-layout { display: flex; justify-content: center; gap: 40px; padding: 0 clamp(16px, 3vw, 32px); }
 .pp-file-layout > .pp-file { flex: 0 1 760px; min-width: 0; margin: 0; }
 .pp-file-layout > .pp-toc { flex: 0 0 150px; position: sticky; top: 24px; align-self: flex-start; margin-top: 44px; }
+/* Wide screens (round 4 §0.8, K4-32): the contents 150 px, 48 px apart, a column of up to 960 px, all centred. */
+@media screen and (min-width: 1280px) {
+  .pp-file { max-width: 1040px; }
+  .pp-file-layout { gap: 48px; }
+  .pp-file-layout > .pp-file { flex-basis: 960px; max-width: 960px; padding-inline: 0; }
+}
 .pp-toc-h { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-text); margin: 4px 0 10px 10px; }
 .pp-toc ol, .pp-toc-m ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pp-toc-link { display: block; padding: 5px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere; }

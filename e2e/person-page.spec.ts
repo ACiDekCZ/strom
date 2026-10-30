@@ -802,6 +802,57 @@ test.describe('person page 2: places of life and the life chart', () => {
         await expect(filePage.locator('.pp-map-row[data-pp-map-place="wien"]')).toHaveClass(/is-sel/);
         await ctx.close();
     });
+
+    test('wide screens (round 4): the map and the chart over a column of up to 960 px, text 660 px, the contents 48 px off; under 1280 px as before', async ({ page, browser }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await seedTraveller(page);
+        // Notes and a story: sections enough for the contents.
+        await page.evaluate(() => {
+            const karl = (window.Strom.DataManager.getData() as unknown as { persons: Record<string, Record<string, unknown>> }).persons['karl'];
+            karl.notes = 'A tailor who moved often.';
+            karl.story = { status: 'approved', title: 'The travelling tailor', text: 'Karl left Capkov young and kept moving south.' };
+        });
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        await expect(w.locator('.pp-map')).toBeVisible();
+        await expect(w.locator('.pp-toc')).toBeVisible();
+        const box = async (root: Page | ReturnType<typeof win>, sel: string) => (await root.locator(sel).first().boundingBox())!;
+        const check = async (root: Page | ReturnType<typeof win>) => {
+            const pp = await box(root, '.pp');
+            expect(pp.width).toBeGreaterThan(900);
+            expect(pp.width).toBeLessThanOrEqual(960);
+            for (const wide of ['.pp-map', '.pp-chart-host']) expect((await box(root, wide)).width).toBeCloseTo(pp.width, 0);
+            for (const text of ['.pp-hero', '.pp-map-list']) expect((await box(root, text)).width).toBeLessThanOrEqual(660);
+            const toc = await box(root, '.pp-toc');
+            expect(pp.x - (toc.x + toc.width)).toBeCloseTo(48, 0);
+            expect(toc.width).toBeCloseTo(150, 0);
+        };
+        await check(w);
+        // The map keeps 2 : 1.
+        const map = await box(w, '.pp-map-svg');
+        expect(map.width / map.height).toBeCloseTo(2, 1);
+
+        // The saved file: the same column, centred.
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        await check(filePage);
+        const layout = await box(filePage, '.pp-file-layout');
+        const [toc, pp] = [await box(filePage, '.pp-toc'), await box(filePage, '.pp')];
+        expect(Math.abs((toc.x - layout.x) - (layout.x + layout.width - (pp.x + pp.width)))).toBeLessThan(90);
+        // Under 1280 px: one column of 680 px as before.
+        await filePage.setViewportSize({ width: 1200, height: 900 });
+        expect((await box(filePage, '.pp')).width).toBeLessThanOrEqual(680);
+        expect((await box(filePage, '.pp-map')).width).toBeLessThanOrEqual(680);
+        await ctx.close();
+        await page.setViewportSize({ width: 1200, height: 900 });
+        expect((await box(w, '.pp')).width).toBeLessThanOrEqual(680);
+    });
 });
 
 test.describe('person page 2: a phone held sideways', () => {

@@ -1341,7 +1341,7 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
     const inset = plan.inset ? insetHtml(plan, S, sel) : '';
     // The attribution sits under the "where" inset when there is one, else top right.
     const attr = plan.where?.corner ? whereHtml(plan.where, S) : `<div class="pp-map-attr">${esc(M.attr)}</div>`;
-    return `<div class="pp-map${small ? ' pp-map--small' : ''}" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${small?.html ?? ''}${pts}${labels}</div>`
+    return `<div class="pp-map pp-wide${small ? ' pp-map--small' : ''}" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${small?.html ?? ''}${pts}${labels}</div>`
         + `${attr}${small?.box ?? ''}${scale}${inset}</div>`;
 }
 

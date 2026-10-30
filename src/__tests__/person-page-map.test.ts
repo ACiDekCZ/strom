@@ -228,7 +228,7 @@ describe('planPlacesMap', () => {
         }
         // The map is drawn, not the list.
         const html = placesMapHtml(points, geo, { lang: 'cs', mode: 'file', kidPlaces: true });
-        expect(html).toContain('class="pp-map"');
+        expect(html).toContain('class="pp-map pp-wide');
     });
 
     it('states: one place → none; one with a position → list; none with a position → noGeo', () => {
@@ -391,7 +391,7 @@ describe('placesMapHtml', () => {
     it('map, inset, scale, attribution, numbered points and the list', () => {
         const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true });
         expect(html).toMatch(/^<section class="pp-sec pp-sec--places pp-places" id="pp-sec-places">/);
-        expect(html).toContain('class="pp-map"');
+        expect(html).toContain('class="pp-map pp-wide');
         expect(html).toContain('pp-map-inset');
         expect(html).toContain('obrysy Natural Earth');
         expect(html).toContain('class="pp-map-scale"');
@@ -434,7 +434,7 @@ describe('placesMapHtml', () => {
 
     it('no position at all: the list with dashed circles and the note (window two sentences, file one)', () => {
         const app = placesMapHtml(pts(), {}, { lang: 'cs', mode: 'app', kidPlaces: true });
-        expect(app).not.toContain('class="pp-map"');
+        expect(app).not.toContain('class="pp-map pp-wide');
         expect(app).toContain('pp-map-badge--none');
         expect(app).toContain('Místa zatím nemají polohu, proto se mapa neukazuje. Polohu lze doplnit v Místech.');
         const file = placesMapHtml(pts(), {}, { lang: 'cs', mode: 'file', kidPlaces: true });
@@ -444,7 +444,7 @@ describe('placesMapHtml', () => {
 
     it('one place with a position: the list only', () => {
         const html = placesMapHtml(pts(), { [placeKey('Kolín')]: GEO[placeKey('Kolín')] }, { lang: 'cs', mode: 'file', kidPlaces: true });
-        expect(html).not.toContain('class="pp-map"');
+        expect(html).not.toContain('class="pp-map pp-wide');
         expect(html).toContain('pp-map-list');
     });
 

@@ -1130,7 +1130,7 @@ describe('person page 2 (§0, §3, §4)', () => {
     it('the summary needs three cells; a poor person has none and small initials', () => {
         const html = body(fiskTree());
         const sum = html.match(/<div class="pp-sum[^"]*" role="list"[^>]*>.*?<\/div><\/div>(?=<section|<div class="pp-sum-cell")/)?.[0] ?? html;
-        expect(html).toContain('<div class="pp-sum pp-sum--3" role="list" aria-label="V kostce">');
+        expect(html).toContain('<div class="pp-sum pp-sum--3 pp-wide" role="list" aria-label="V kostce">');
         expect(sum).toContain('<span class="pp-sum-big">50 let</span><span class="pp-sum-lab">dožitý věk</span>');
         expect(sum).toContain('<span class="pp-sum-big">2 děti</span>');
         expect(sum).toMatch(/<span class="pp-sum-big">\d+ let manželství<\/span><span class="pp-sum-lab">oženil se ve 27 letech<\/span>/);
@@ -1402,10 +1402,10 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
     it('the Places section sits between the story and the timeline; the chart opens the timeline above its rows', () => {
         const html = body(geoTree(), { open: new Set(['research']) });
         expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
-        expect(html).toContain('class="pp-map"');
+        expect(html).toContain('class="pp-map pp-wide');
         const tl = html.slice(html.indexOf('id="pp-sec-timeline"'));
-        expect(tl.indexOf('class="pp-chart-host"')).toBeGreaterThan(0);
-        expect(tl.indexOf('class="pp-chart-host"')).toBeLessThan(tl.indexOf('class="pp-seg'));
+        expect(tl.indexOf('class="pp-chart-host pp-wide"')).toBeGreaterThan(0);
+        expect(tl.indexOf('class="pp-chart-host pp-wide"')).toBeLessThan(tl.indexOf('class="pp-seg'));
         // The contents name the new section.
         expect(personPageSections(html, 'cs').find(s => s.key === 'places')).toEqual({ key: 'places', id: 'pp-sec-places', label: 'Místa života' });
         expect(personPageSections(html, 'en').find(s => s.key === 'places')?.label).toBe('Places of life');
@@ -1419,7 +1419,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const noGeo = fiskTree();
         const w = body(noGeo);
         expect(w).toContain('id="pp-sec-places"');
-        expect(w).not.toContain('class="pp-map"');
+        expect(w).not.toContain('class="pp-map pp-wide');
         expect(w).toContain('Polohu lze doplnit v Místech.');
         expect(doc(noGeo)).not.toContain('Polohu lze doplnit v Místech.');
         const poor: StromData = { persons: { x: p('x', 'Jakub', 'Prostý', 'male', { birthDate: '1900', birthPlace: 'Čapkov' }) }, partnerships: {} } as StromData;
