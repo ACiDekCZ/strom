@@ -81,7 +81,9 @@ span.pp-pdf-name { color: var(--text); }
 .pp-people-note, .pp-people-more { font-size: 13.5px; color: var(--text-light); }
 /* The family tree (§4): absolute cards and 1 px lines on a 680 px column (in %), the rail when narrow. */
 .pp-fam { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
-.pp-ft { position: relative; width: 100%; container: pp-ft / inline-size; }
+.pp-ft, .pp-ft9 { position: relative; width: 100%; container: pp-ft / inline-size; }
+/* The tree's wide variant (round 5, K5-37): only in the 960 px column, see the wide screens below. */
+.pp-ft9 { display: none; }
 .pp-ft-h, .pp-ft-v { position: absolute; border: 0 solid var(--border); }
 .pp-ft-h { height: 0; border-top-width: 1px; }
 .pp-ft-v { width: 0; border-left-width: 1px; }
@@ -97,7 +99,7 @@ span.pp-pdf-name { color: var(--text); }
 .pp-rail-story { white-space: nowrap; }
 .pp-ft-nokids { color: var(--text-faint); }
 .pp-ft-card { display: flex; flex-direction: column; justify-content: center; min-width: 0; margin: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; text-align: left; text-decoration: none; overflow: hidden; }
-.pp-ft .pp-ft-card { position: absolute; z-index: 2; }
+.pp-ft .pp-ft-card, .pp-ft9 .pp-ft-card { position: absolute; z-index: 2; }
 button.pp-ft-card, a.pp-ft-card { cursor: pointer; }
 .pp-ft-name { font-size: 13.5px; font-weight: 600; line-height: 1.25; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pp-ft-link .pp-ft-name { color: var(--primary); }
@@ -272,6 +274,9 @@ span.pp-gal-thumb { cursor: default; }
   .pp { max-width: 960px; }
   .pp > :not(section):not(.pp-wide):not(.pp-lb), .pp > section > :not(.pp-wide) { max-width: 660px; }
   .pp-fam.pp-wide .pp-ft { max-width: 680px; margin-inline: auto; }
+  /* The tree keeps 680 px in the middle; the variant whose children's row uses the whole column replaces it (K5-37). */
+  .pp-fam.pp-wide .pp-ft9 { display: block; max-width: 960px; margin-inline: auto; }
+  .pp-fam.pp-wide .pp-ft9 + .pp-ft { display: none; }
   .pp-gal { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 /* Narrow page (a phone, a window under 641 px): the window's body and the file's column are containers. */
@@ -285,7 +290,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-people-row { grid-template-columns: minmax(0, 1fr); }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-gal-item--wide { grid-column: 1 / -1; }
-  .pp-ft { display: none; }
+  .pp-ft, .pp-fam.pp-wide .pp-ft9 { display: none; }
   .pp-rail { display: flex; }
   .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-rail--wide .pp-rail-stem { margin-left: 50%; }
@@ -318,7 +323,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-people-row { grid-template-columns: minmax(0, 1fr); }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-gal-item--wide { grid-column: 1 / -1; }
-  .pp-ft { display: none; }
+  .pp-ft, .pp-fam.pp-wide .pp-ft9 { display: none; }
   .pp-rail { display: flex; }
   .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-rail--wide .pp-rail-stem { margin-left: 50%; }
@@ -341,6 +346,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-head, .pp-toc, .pp-toc-m, .pp-toggles, .pp-zoom, .pp-fold-state, .pp-differs, .pp-act, .pp-more, .pp-lb, .pp-portrait-zoom, .js-only { display: none !important; }
   /* Print: the desktop tree, every image and relative (the folds open). */
   .pp-ft { display: block !important; }
+  .pp-ft9 { display: none !important; }
   .pp-rail:not(.pp-rail--wide) { display: none !important; }
   .pp-rail--wide { display: flex !important; }
   .pp-rail-u { break-inside: avoid; }
