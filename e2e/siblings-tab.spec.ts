@@ -13,6 +13,16 @@ import { openApp } from './helpers.js';
  * siblings (and a half-sibling with the stepmother) out of view.
  */
 
+/**
+ * The app open without its "on this day" card: the fixtures have
+ * anniversaries, and on those dates the card (shown once the tree is idle)
+ * takes the room and the taps the bubbles are tested in.
+ */
+async function openQuiet(page: Page): Promise<void> {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
+}
+
 const FOCUS = 'grandchild_1';
 const PERSON = 'focus';
 const PARENTS = ['father', 'mother'];
@@ -24,7 +34,7 @@ const childrenTab = (page: Page, id: string) => cardOf(page, id).locator('.edge-
 const shownCount = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount());
 
 async function setup(page: Page): Promise<void> {
-    await openApp(page);
+    await openQuiet(page);
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
     await page.evaluate(async ([tree, f]) => {
         await window.Strom.DataManager.importAsNewTree(tree as never, 'Comprehensive');
@@ -36,7 +46,7 @@ async function setup(page: Page): Promise<void> {
 
 /** Another invented fixture with its focus. */
 async function setupFixture(page: Page, fixture: string, focus: string): Promise<void> {
-    await openApp(page);
+    await openQuiet(page);
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', `${fixture}.json`), 'utf-8'));
     await page.evaluate(async ([tree, f]) => {
         await window.Strom.DataManager.importAsNewTree(tree as never, 'Elsewhere');
@@ -126,7 +136,7 @@ test('"▸ siblings" shows the children of both parents in one step; the card st
  */
 test('at depth 1 "▸ siblings" on the father brings the aunt and the uncle with their partners, hatched, not the cousins; closing gives the view back', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openApp(page);
+    await openQuiet(page);
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
     await page.evaluate(async ([tree, f]) => {
         await window.Strom.DataManager.importAsNewTree(tree as never, 'Comprehensive');
@@ -1110,7 +1120,7 @@ test.describe('a bubble taller than a low window lists fewer names (de, 844 × 3
     test.use({ locale: 'de-DE', viewport: { width: 844, height: 390 } });
 
     async function setupLong(page: Page): Promise<void> {
-        await openApp(page);
+        await openQuiet(page);
         const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
         Object.assign(data.persons.f_m_f_m_f_sib0, { firstName: 'Zebulon', lastName: 'Quarrington-Holloway' });
         Object.assign(data.persons.f_m_f_m_f_sib1, { firstName: 'Bartholomäus', lastName: 'Kranichfeld-Oberau' });
