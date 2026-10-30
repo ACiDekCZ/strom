@@ -516,12 +516,15 @@ export function researchWriteKey(written: { at: string; intake?: string }): stri
 
 /**
  * The last write is still news (the menu's "Written to the research", "What was written ›"): not seen
- * yet, or one that left conflicts (they stay in sight until decided). Seen, it is just being in sync.
+ * yet, or one whose conflicts are still open (they stay in sight until decided). Seen, it is just being
+ * in sync — also when the count it left outlived its conflicts (decided, or never shown here: 1031).
+ * `conflictsOpen`: whether those conflicts are open now (the caller knows the tree); not said, its count.
  */
-export function researchWriteIsNews(state: Pick<ResearchAutoState, 'lastWritten' | 'writtenSeen'>): boolean {
+export function researchWriteIsNews(state: Pick<ResearchAutoState, 'lastWritten' | 'writtenSeen'>, conflictsOpen?: boolean): boolean {
     const lw = state.lastWritten;
     if (!lw) return false;
-    return (lw.conflicts ?? 0) > 0 || state.writtenSeen !== researchWriteKey(lw);
+    if (state.writtenSeen !== researchWriteKey(lw)) return true;
+    return (lw.conflicts ?? 0) > 0 && (conflictsOpen ?? true);
 }
 
 export function researchAutoState(treeId: string): ResearchAutoState {

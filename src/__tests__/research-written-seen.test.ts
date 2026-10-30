@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import { researchAutoState, patchResearchAutoState, researchWriteIsNews, researchWriteKey } from '../research-device.js';
 import { researchSyncState, ResearchSyncInput } from '../research-sync.js';
 import { TreeManager } from '../tree-manager.js';
+import { DataManager } from '../data.js';
 import type { ResearchLink, TreeId } from '../types.js';
 
 const TREE = 'tree_1700000000000_ab12c' as TreeId;
@@ -114,7 +115,36 @@ describe('a write already seen is no news', () => {
         written('I0042', WRITTEN_AT, 1);
         ui().researchNoteWrittenSeen(TREE);
         expect(researchWriteIsNews(researchAutoState(TREE))).toBe(true);
+        expect(researchWriteIsNews(researchAutoState(TREE), true)).toBe(true);
         expect(kind()).toBe('written');
+    });
+
+    it('a seen write whose count of conflicts outlived them is no news; not seen yet, it is (1031)', () => {
+        written('I0042', WRITTEN_AT, 2);
+        expect(researchWriteIsNews(researchAutoState(TREE), false)).toBe(true);
+        ui().researchNoteWrittenSeen(TREE);
+        expect(researchWriteIsNews(researchAutoState(TREE), false)).toBe(false);
+    });
+
+    it('the write\'s conflicts count as open only while one of the people it named has one open here (1031)', () => {
+        const open = new Set<string>();
+        const methodsWith = { ...methods, personOpenConflicts: (id: string) => open.has(id) ? [{ status: 'open' }] : [],
+            researchOpenConflictTotal: () => open.size } as unknown as { researchWrittenConflictsOpen(treeId: TreeId): boolean };
+        vi.spyOn(DataManager, 'getCurrentTreeId').mockReturnValue(TREE);
+        vi.spyOn(DataManager, 'getPerson').mockImplementation((id: string) => ({ id }) as never);
+        patchResearchAutoState(TREE, { lastWritten: { at: WRITTEN_AT, changes: 18, conflicts: 1, persons: ['p_jan'], intake: 'I0042' } });
+        expect(methodsWith.researchWrittenConflictsOpen(TREE)).toBe(false);
+        open.add('p_jan');
+        expect(methodsWith.researchWrittenConflictsOpen(TREE)).toBe(true);
+        // None named: any open conflict in the tree.
+        patchResearchAutoState(TREE, { lastWritten: { at: WRITTEN_AT, changes: 18, conflicts: 1, intake: 'I0042' } });
+        expect(methodsWith.researchWrittenConflictsOpen(TREE)).toBe(true);
+        open.clear();
+        expect(methodsWith.researchWrittenConflictsOpen(TREE)).toBe(false);
+        // No conflicts left by the write: nothing open of it.
+        written('I0042');
+        open.add('p_jan');
+        expect(methodsWith.researchWrittenConflictsOpen(TREE)).toBe(false);
     });
 
     it('the seen mark survives a reload (kept in this browser), bounded', () => {
