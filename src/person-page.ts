@@ -1457,13 +1457,17 @@ export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContex
             + `data-pp-toggle="${esc(coupleChapterFoldKey(ch.unionId))}">${label(P.story.readAll, P.story.collapse)}</button>`;
     } else {
         // The file: the first paragraph outside, the rest in <details> (the summary reads as a link).
+        // Opened, the summary gives way to "Collapse ▴" at the chapter's end, as in the window (the
+        // file's script closes the fold; without a script the summary stays the one control).
         text = `<div class="pp-prose">${lead}</div>`
             + `<details class="pp-ch-fold"><summary class="pp-ch-more">${label(P.story.readAll, P.story.collapse)}</summary>`
             + `<div class="pp-prose">${rest}</div>${basis}</details>`;
+        toggle = `<button type="button" class="pp-ch-more pp-ch-less js-only" data-pp-fold-close>${esc(P.story.collapse)}</button>`;
     }
     const also = cx.partnerHtml
         ? `<span class="pp-ch-also">${esc(P.story.also('\u0000')).replace('\u0000', cx.partnerHtml)}</span>` : '';
-    const foot = toggle || also ? `<p class="pp-ch-foot">${toggle}${also}</p>` : '';
+    const lessOnly = !also && toggle.includes('pp-ch-less');
+    const foot = toggle || also ? `<p class="pp-ch-foot${lessOnly ? ' pp-ch-foot--less' : ''}">${toggle}${also}</p>` : '';
     return `<div class="pp-couple-story${cx.tint ? ' pp-couple-story--tint' : ''}" id="${id}" tabindex="-1">${head}${text}${foot}</div>`;
 }
 

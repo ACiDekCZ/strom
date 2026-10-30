@@ -43,6 +43,8 @@ describe('coupleChapterHtml', () => {
         const cx = { lang: 'en' as const, foldable: true, open: false, partnerHtml: '', tint: true };
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'app' })).toContain('<button type="button" class="pp-ch-more" aria-expanded="false"');
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'file' })).toContain('<details class="pp-ch-fold">');
+        // The file: "Collapse ▴" after the last paragraph (round 3), alone in its foot without the partner line.
+        expect(coupleChapterHtml(chapter(), { ...cx, mode: 'file' })).toContain('<div class="pp-prose"><p>Druhý.</p></div></details><p class="pp-ch-foot pp-ch-foot--less"><button type="button" class="pp-ch-more pp-ch-less js-only" data-pp-fold-close>Collapse ▴</button></p>');
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'print' })).not.toContain('pp-ch-more');
         expect(coupleChapterHtml(chapter({ prose: '<p>Jediný.</p>' }), { ...cx, mode: 'app' })).not.toContain('pp-ch-more');
         // The basis goes inside the fold.

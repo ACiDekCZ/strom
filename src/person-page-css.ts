@@ -368,6 +368,9 @@ span.pp-gal-thumb { cursor: default; }
 .pp-ch-more .pp-st-open, .pp-ch-more[aria-expanded="true"] .pp-st-closed, .pp-ch-fold[open] > summary .pp-st-closed { display: none; }
 .pp-ch-more[aria-expanded="true"] .pp-st-open, .pp-ch-fold[open] > summary .pp-st-open { display: inline; }
 .pp-ch-fold > summary { margin: 0 0 0.9em; }
+/* The file: an opened chapter's control is "Collapse ▴" after its last paragraph (the summary hides; without a script it stays). */
+html.js .pp-ch-fold[open] > summary { display: none; }
+.pp-ch-fold:not([open]) ~ .pp-ch-foot .pp-ch-less, .pp-ch-fold:not([open]) ~ .pp-ch-foot--less, html.no-js .pp-ch-foot--less { display: none; }
 .pp-ch-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 10px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-faint); }
 .pp-ch-also { flex: 1 1 auto; min-width: 0; }
 .pp-story-cont { margin: 14px 0 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-light); }
@@ -465,12 +468,14 @@ window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.op
 
 /**
  * The saved file's script for the couples' chapters (spec 027 §6.1): a link
- * to a chapter opens its fold before the jump; printing opens every fold
+ * to a chapter opens its fold before the jump; "Collapse ▴" at an opened
+ * chapter's end closes it (the focus back on "Read all ▾"); printing opens every fold
  * (and closes them again afterwards).
  */
 export const PERSON_PAGE_STORY_SCRIPT = `(function(){var d=document;
 var q=function(s){return Array.prototype.slice.call(d.querySelectorAll(s))};
 q('a[data-pp-story]').forEach(function(l){l.addEventListener('click',function(){var c=d.getElementById(l.getAttribute('data-pp-story'));var f=c&&c.querySelector('details.pp-ch-fold');if(f)f.open=true})});
+q('[data-pp-fold-close]').forEach(function(b){b.addEventListener('click',function(){var c=b.closest('.pp-couple-story');var f=c&&c.querySelector('details.pp-ch-fold');if(!f)return;f.open=false;var m=f.querySelector('summary');if(m)m.focus()})});
 var shut=[];
 window.addEventListener('beforeprint',function(){shut=q('details.pp-ch-fold:not([open])');shut.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){shut.forEach(function(f){f.open=false});shut=[]});
