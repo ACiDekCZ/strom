@@ -439,7 +439,10 @@ describe('header', () => {
     it('writes dates in words, the age at death and the baptism when it differs', () => {
         expect(html).toContain('<dt>Narozen</dt><dd>12. března 1860');
         expect(html).toContain('<dt>Pokřtěn</dt><dd>13. března 1860');
-        expect(html).toContain('ve věku 50 let');
+        // The number and its unit never part at a line break.
+        expect(html).toContain('ve věku 50\u00a0let');
+        expect(body(fiskTree(), { lang: 'en' })).toContain('aged\u00a050');
+        expect(body(fiskTree(), { lang: 'de' })).toContain('im Alter von 50\u00a0Jahren');
     });
     it('approximate dates and English', () => {
         expect(personPageDate('~1835', 'cs')).toBe('asi 1835');
