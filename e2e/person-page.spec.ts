@@ -500,6 +500,27 @@ test.describe('desktop', () => {
         expect(await living.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('dashed');
         await ctx.close();
     });
+
+    test('Print prints the page: the window shows in print with the person, the tree and its toolbar stay out', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await openPageFromMenu(page);
+        const w = win(page);
+        await page.evaluate(() => { window.print = () => {}; });
+        await w.locator('.pp-print').click();
+        await page.emulateMedia({ media: 'print' });
+        const shown = await w.evaluate((el) => ({
+            display: getComputedStyle(el).display,
+            height: el.getBoundingClientRect().height,
+            text: (el as HTMLElement).innerText,
+        }));
+        expect(shown.display).not.toBe('none');
+        expect(shown.height).toBeGreaterThan(0);
+        expect(shown.text).toContain('Jan Fisek');
+        await expect(page.locator('#tree-container')).toBeHidden();
+        await expect(page.locator('.toolbar').first()).toBeHidden();
+        await page.emulateMedia({ media: 'screen' });
+    });
 });
 
 /**

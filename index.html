@@ -16785,8 +16785,9 @@
         }
         /* Print: the page alone, at full length (the content's own print rules come with it). */
         @media print {
+            /* !important: the global print rule hides every .modal-overlay with !important. */
             body.printing-person-page #person-page-modal {
-                position: static; display: block; background: none;
+                position: static; display: block !important; background: none;
             }
             body.printing-person-page .modal.modal--page {
                 position: static; width: auto; max-width: none; height: auto; max-height: none;
