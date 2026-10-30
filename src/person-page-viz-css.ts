@@ -54,8 +54,10 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-arc { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .pp-map-ipt { fill: var(--surface); stroke: var(--primary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .pp-map-ipt.is-sel { stroke: var(--accent); }
-.pp-map-ilb { position: absolute; transform: translate(6px, -50%); padding: 0 3px; border-radius: 3px; background: var(--map-label-bg); color: var(--text-light); font-size: 10px; line-height: 13px; white-space: nowrap; }
-.pp-map-ilb--l { transform: translate(calc(-100% - 6px), -50%); }
+.pp-map-ilb { --tx: 6px; --ty: -50%; position: absolute; transform: translate(var(--tx), var(--ty)); padding: 0 3px; border-radius: 3px; background: var(--map-label-bg); color: var(--text-light); font-size: 10px; line-height: 13px; white-space: nowrap; }
+.pp-map-ilb--l { --tx: calc(-100% - 6px); }
+.pp-map-ilb--up { --ty: calc(-100% - 1px); }
+.pp-map-ilb--dn { --ty: 1px; }
 .pp-map-tools { align-items: center; }
 .pp-map-tools .pp-act { margin-top: 0; min-height: 34px; }
 .pp-places { scroll-margin-top: 12px; }
@@ -85,6 +87,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-in { left: -25%; width: 150%; }
   .lb-p-l { transform: translate(calc(-100% - 16px), -50%); }
   .lb-p-hide { display: none; }
+  .pp-map-ilb--wide { display: none; }
   .pp-map-yr.y-d { display: none; }
   .pp-map-yr.y-p { display: inline; }
   .pp-map-scale { width: calc(var(--u) * 100% / 426.667); }
@@ -125,6 +128,7 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-row { position: relative; }
 .pp-ch-ages { height: 16px; font-size: 10.5px; }
 .pp-ch-ages span, .pp-ch-axis span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.pp-ch-ages .pp-ch-age--e { left: auto; right: 0; transform: none; }
 .pp-ch-hist { height: 26px; }
 .pp-ch-hbar { position: absolute; top: 12px; height: 6px; border-radius: 3px; background: var(--hist-mark); opacity: .55; }
 .pp-ch-hm { position: absolute; top: 4px; width: 0; }
@@ -211,6 +215,9 @@ export const PERSON_PAGE_CHART_CSS = `
 }
 @media (pointer: coarse) {
   .pp-ch-mk::before { left: -22px; width: 44px; }
+  /* At the chart's ends the touch area grows inwards, never past the column. */
+  .pp-ch-mk--s::before { left: 0; }
+  .pp-ch-mk--e::before { left: -44px; }
 }
 @media print {
   .pp-chart { break-inside: avoid; }

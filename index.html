@@ -17038,6 +17038,8 @@
                 width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
             }
             .story-chips { flex-wrap: nowrap; overflow-x: auto; margin-right: -12px; padding-bottom: 2px; }
+            /* Close stays beside the title, above the scrolling chips, not over the last one. */
+            .story-reader--chapters .modal-header > .close-btn { align-self: flex-start; }
             .story-ch-head { flex-wrap: wrap; }
             .story-ch-actions { flex: 1 1 100%; margin-top: 0; }
             .modal .story-ch-actions button { min-height: 44px; }

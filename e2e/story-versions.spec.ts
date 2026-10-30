@@ -192,6 +192,10 @@ test.describe('a story\'s new version', () => {
         expect(new Set(tops).size).toBe(1);
         const h = await page.locator('#person-story-modal .story-chip').first().evaluate(e => e.getBoundingClientRect().height);
         expect(h).toBeGreaterThanOrEqual(44);
+        // Close sits beside the title, never over the scrolling chips.
+        const close = (await page.locator('#person-story-close-x').boundingBox())!;
+        const row = (await page.locator('#person-story-modal .story-chips').boundingBox())!;
+        expect(close.y + close.height).toBeLessThanOrEqual(row.y + 1);
         await context.close();
     });
 

@@ -694,6 +694,53 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
         + `<div class="pp-map-attr">${esc(M.attr)}</div>${scale}${inset}</div>`;
 }
 
+/** The inset's width in px: on a desktop (31 % of a ~680 px map) and on a phone (40 % of ~350 px). */
+const INSET_PX_WIDE = 210;
+const INSET_PX_PHONE = 140;
+
+type InsetLabel = { x: number; y: number; name: string; side: 'l' | 'r'; v?: 'up' | 'dn'; phone: boolean };
+
+/**
+ * The inset's labels (at most three), each beside its dot: on the side with room, then above or
+ * below it; a label that finds no free place is left out (the list under the map names the place).
+ * Labels never cover another label or another place's dot (New York beside Chicago). Placed for a
+ * desktop's inset; `phone` false = that label does not fit the phone's smaller inset (hidden there).
+ */
+export function insetLabels(dots: { x: number; y: number; name: string }[]): InsetLabel[] {
+    type Box = { l: number; r: number; t: number; b: number };
+    const hit = (a: Box, b: Box) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+    const boxAt = (d: { x: number; y: number; name: string }, side: 'l' | 'r', v: 'up' | 'dn' | undefined, px: number): Box => {
+        const u = INSET_W / px;
+        const h = 13 * u, gap = 6 * u, w = (d.name.length * 5.6 + 6) * u;
+        const l = side === 'r' ? d.x + gap : d.x - gap - w;
+        const t = v === 'up' ? d.y - h - u : v === 'dn' ? d.y + u : d.y - h / 2;
+        return { l, r: l + w, t, b: t + h };
+    };
+    const dotsAt = (d: { x: number; y: number }, px: number): Box[] => {
+        const r = 4.5 * INSET_W / px;
+        return dots.filter(o => o !== d).map(o => ({ l: o.x - r, r: o.x + r, t: o.y - r, b: o.y + r }));
+    };
+    const free = (box: Box, placed: Box[], others: Box[]) => box.l >= 0 && box.r <= INSET_W && box.t >= 0 && box.b <= INSET_H
+        && !placed.some(p => hit(p, box)) && !others.some(o => hit(o, box));
+    const wide: Box[] = [];
+    const phone: Box[] = [];
+    const out: InsetLabel[] = [];
+    for (const d of dots) {
+        if (out.length >= 3) break;
+        const pref: 'l' | 'r' = d.x > INSET_W * 2 / 3 ? 'l' : 'r';
+        const other: 'l' | 'r' = pref === 'l' ? 'r' : 'l';
+        const tries: { side: 'l' | 'r'; v?: 'up' | 'dn' }[] = [{ side: pref }, { side: other }, { side: pref, v: 'up' }, { side: pref, v: 'dn' }, { side: other, v: 'up' }, { side: other, v: 'dn' }];
+        const t = tries.find(c => free(boxAt(d, c.side, c.v, INSET_PX_WIDE), wide, dotsAt(d, INSET_PX_WIDE)));
+        if (!t) continue;
+        wide.push(boxAt(d, t.side, t.v, INSET_PX_WIDE));
+        const small = boxAt(d, t.side, t.v, INSET_PX_PHONE);
+        const fitsPhone = free(small, phone, dotsAt(d, INSET_PX_PHONE));
+        if (fitsPhone) phone.push(small);
+        out.push({ x: d.x, y: d.y, name: d.name, side: t.side, ...(t.v ? { v: t.v } : {}), phone: fitsPhone });
+    }
+    return out;
+}
+
 function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
     const M = S.personPage.map;
     const ins = plan.inset!;
@@ -703,17 +750,16 @@ function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
     let arcs = '';
     let dots = '';
     let labels = '';
-    far.forEach((p, i) => {
+    far.forEach((p) => {
         const a = ins.from, z = p.inset!;
         const mx = (a.x + z.x) / 2, my = (a.y + z.y) / 2;
         const lift = Math.max(8, Math.hypot(z.x - a.x, z.y - a.y) * 0.3);
         arcs += `M${f1(a.x)} ${f1(a.y)}Q${f1(mx)} ${f1(my - lift)} ${f1(z.x)} ${f1(z.y)}`;
         dots += `<circle class="pp-map-ipt${sel === p.placeKey ? ' is-sel' : ''}" cx="${f1(z.x)}" cy="${f1(z.y)}" r="3.5"/>`;
-        if (i < 3) {
-            const side = z.x > INSET_W * 2 / 3 ? 'l' : 'r';
-            labels += `<span class="pp-map-ilb pp-map-ilb--${side}" style="left:${pct(z.x, INSET_W)};top:${pct(z.y, INSET_H)}">${esc(p.name)}</span>`;
-        }
     });
+    for (const l of insetLabels(far.map(p => ({ x: p.inset!.x, y: p.inset!.y, name: p.name })))) {
+        labels += `<span class="pp-map-ilb pp-map-ilb--${l.side}${l.v ? ` pp-map-ilb--${l.v}` : ''}${l.phone ? '' : ' pp-map-ilb--wide'}" style="left:${pct(l.x, INSET_W)};top:${pct(l.y, INSET_H)}">${esc(l.name)}</span>`;
+    }
     const svg = `<svg viewBox="0 0 ${INSET_W} ${INSET_H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`
         + (land ? `<path class="pp-map-land" d="${land}"/>` : '')
         + `<rect class="pp-map-frame" x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}"/>`

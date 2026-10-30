@@ -177,6 +177,31 @@ describe('lifeChartHtml', () => {
         expect(lifeChartHtml(null, { lang: 'cs', mode: 'file' })).toBe('');
     });
 
+    it('the last age label ("50 Jahre") ends at the chart\'s edge instead of past it', () => {
+        const de = getStringsForLang('de');
+        // Died at 50, eight months after the birthday: "50 Jahre" sits at the very end of the axis.
+        const t = tree();
+        t.persons[JAN].deathDate = '1910-11-03';
+        const set = chartSet(lifeChartInput(t, JAN, { now: NOW })!, de, { lang: 'de', mode: 'file' }, CHART_WIDE, false);
+        expect(set).toContain('<span class="pp-ch-age--e">50 Jahre</span>');
+        expect(set).toContain('<span style="left:');
+        // Died at 59: "50 Jahre" keeps its place under its year.
+        const inside = chartSet(input()!, de, { lang: 'de', mode: 'file' }, CHART_WIDE, false);
+        expect(inside).toContain('50 Jahre');
+        expect(inside).not.toContain('pp-ch-age--e');
+    });
+
+    it('on a phone the age label under "90 Jahre" is left out instead of colliding with it', () => {
+        const de = getStringsForLang('de');
+        const t = tree();
+        t.persons[JAN].deathDate = '1950-11-03';
+        const set = chartSet(lifeChartInput(t, JAN, { now: NOW })!, de, { lang: 'de', mode: 'file' }, 358, true);
+        const ages = set.match(/<div class="pp-ch-row pp-ch-ages"[^>]*>(.*?)<\/div>/)![1];
+        expect(ages).toContain('<span class="pp-ch-age--e">90 Jahre</span>');
+        expect(ages).not.toContain('>80<');
+        expect(ages).toContain('>70<');
+    });
+
     it('labels: long on a desktop, short on a phone', () => {
         const S = getStringsForLang('cs');
         const wide = chartSet(input()!, S, { lang: 'cs', mode: 'file' }, CHART_WIDE, false);

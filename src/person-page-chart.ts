@@ -331,6 +331,8 @@ type CS = ReturnType<typeof getStringsForLang>;
 
 /** px per character of a label (§2.3: a period label fits when its width > length × 6.4). */
 const CH_PX = 6.4;
+/** px per character of an age label (10.5 px type, digits and short words). */
+const AGE_CH_PX = 6;
 
 /**
  * The chart, or '' without input. In the window `ctx.width` is the column's
@@ -376,8 +378,19 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
         const step = (wpx(b, b + 10) < 28) ? 20 : 10;
         const ages: number[] = [];
         for (let a = 0; a <= maxAge; a += step) ages.push(a);
-        rows.push(`<div class="pp-ch-row pp-ch-ages" aria-hidden="true">${ages.map((a, i) =>
-            `<span style="left:${x(b + a)}">${esc(i === ages.length - 1 && a > 0 ? C.years(a) : String(a))}</span>`).join('')}</div>`);
+        const labels = ages.map((a, i) => ({ a, text: i === ages.length - 1 && a > 0 ? C.years(a) : String(a) }));
+        // The last label ("50 years", longer in some languages) ends at the chart's edge rather than past it;
+        // a label it would then cover ("80" under "90 Jahre" on a phone) is left out.
+        const last = labels[labels.length - 1];
+        const endAt = last ? W - last.text.length * AGE_CH_PX : W;
+        const lastAtEnd = !!last && xpx(b + last.a) + (last.text.length * AGE_CH_PX) / 2 > W;
+        rows.push(`<div class="pp-ch-row pp-ch-ages" aria-hidden="true">${labels.map((l, i) => {
+            if (i === labels.length - 1) {
+                return lastAtEnd ? `<span class="pp-ch-age--e">${esc(l.text)}</span>` : `<span style="left:${x(b + l.a)}">${esc(l.text)}</span>`;
+            }
+            if (lastAtEnd && xpx(b + l.a) + (l.text.length * AGE_CH_PX) / 2 > endAt - 4) return '';
+            return `<span style="left:${x(b + l.a)}">${esc(l.text)}</span>`;
+        }).join('')}</div>`);
     }
 
     // History of the places.

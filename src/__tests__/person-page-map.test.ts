@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, scaleBar, labelYears,
-    ownEventsText, relativeEventsText, distanceKm, insetRects, SAFE, VIEW_W, VIEW_H, type PlacePoint,
+    ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, SAFE, VIEW_W, VIEW_H, type PlacePoint,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
 import { placeKey } from '../places.js';
@@ -139,6 +139,22 @@ describe('planPlacesMap', () => {
         expect(bystrice.x).toBeDefined();
         expect(plan.inset).toBeDefined();
         expect(plan.inset!.rect.w).toBeGreaterThanOrEqual(6);
+    });
+
+    it('inset labels never cover each other or another dot: Chicago moves to the left of New York', () => {
+        // New York east of Chicago, a few units apart (as on the world inset).
+        const labels = insetLabels([{ x: 63, y: 50, name: 'Chicago' }, { x: 74, y: 48, name: 'New York' }]);
+        expect(labels.map(l => [l.name, l.side])).toEqual([['Chicago', 'l'], ['New York', 'r']]);
+        // The phone's smaller inset has no room left of Chicago: that label is for wider screens only.
+        expect(labels.map(l => l.phone)).toEqual([false, true]);
+        const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true, ambiguous: new Set() });
+        expect(html).toContain('class="pp-map-ilb');
+        // Three in a cluster: none overlaps, a fourth never shows.
+        const many = insetLabels([
+            { x: 60, y: 50, name: 'Chicago' }, { x: 66, y: 52, name: 'New York' }, { x: 63, y: 46, name: 'Detroit' }, { x: 64, y: 49, name: 'Cleveland' },
+        ]);
+        expect(many.length).toBeLessThanOrEqual(3);
+        expect(new Set(many.map(l => `${l.side}${l.v ?? ''}`)).size).toBe(many.length);
     });
 
     it('without the switch: no relatives, no inset', () => {

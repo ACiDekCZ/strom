@@ -5727,7 +5727,7 @@ const stringsEN = {
             years: (n: number) => nEn(n, 'year', 'years'),
             widowed: { m: 'widowed', f: 'widowed', u: 'widowed' },
             divorced: 'after divorce',
-            age: (n: number) => (n === 0 ? 'under 1 year' : nEn(n, 'year', 'years')),
+            age: (n: number) => (n === 0 ? 'under a year' : nEn(n, 'year', 'years')),
             after: (y: string) => `after ${y}`,
             today: 'today',
             ev: {
@@ -17088,7 +17088,7 @@ const stringsDE: StringsType = {
             years: (n: number) => nDe(n, 'Jahr', 'Jahre'),
             widowed: { m: 'verwitwet', f: 'verwitwet', u: 'verwitwet' },
             divorced: 'nach der Scheidung',
-            age: (n: number) => (n === 0 ? 'unter 1 Jahr' : nDe(n, 'Jahr', 'Jahre')),
+            age: (n: number) => (n === 0 ? 'unter einem Jahr' : nDe(n, 'Jahr', 'Jahre')),
             after: (y: string) => `nach ${y}`,
             today: 'heute',
             ev: {
