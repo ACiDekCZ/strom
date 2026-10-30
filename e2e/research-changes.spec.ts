@@ -98,6 +98,68 @@ test.describe('changes per person', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'written');
     });
 
+    test('a write with changes not written and a conflict no longer open: seen once, never news again after a restart (1031)', async ({ page }) => {
+        await openResearch(page);
+        // Written 16 of 18: two removals the research only noted, and a conflict about Jan (decided since: not open here).
+        const b = await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 18, applied: 16, input: 'I0042',
+            conflicts: [{ id: 'X0007', person: 'P0003', fact: 'NAME' }],
+            notWritten: [{ kind: 'fact.gone', person: 'P0003', fact: 'RESI', why: 'report' }, { kind: 'fact.gone', person: 'P0003', fact: 'RESI', why: 'report' }] } } });
+        await poll(page);
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        const auto = () => page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
+        await expect.poll(async () => (await auto()).lastWritten?.conflicts).toBe(1);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+        expect((await auto()).writtenSeen).toBeUndefined();
+        // The menu showing "Written 16, not written 2" closed: the write was seen.
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+        const intake = (await auto()).lastWritten.intake;
+        expect((await auto()).writtenSeen).toBe(intake);
+        // The list says why, and where it can be settled.
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('written'));
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel.locator('.research-changes-why')).toHaveText(Array(2).fill(
+            'removed here only: the research noted the removal but deletes nothing by itself; it can be deleted in the research'));
+        await page.keyboard.press('Escape');
+
+        // Later the not written state is gone (the send's copy retagged), the count of the conflict stays: a seen
+        // write is no news, after every restart.
+        await page.evaluate(() => {
+            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+            const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+            delete st.notWritten;
+            localStorage.setItem(key, JSON.stringify(st));
+        });
+        for (let i = 0; i < 2; i++) {
+            await page.reload();
+            await poll(page);
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+            await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toHaveCount(0);
+            await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+        }
+
+        // Such a write never marked seen (kept by an older version): shown once more, then not again.
+        await page.evaluate(() => {
+            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+            const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+            delete st.writtenSeen;
+            localStorage.setItem(key, JSON.stringify(st));
+        });
+        await page.reload();
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'written');
+        await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+        await page.reload();
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+    });
+
     test('a phone: the write shown on the More sheet\'s research page is seen when the sheet closes or the page is left (1028)', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await openResearch(page);

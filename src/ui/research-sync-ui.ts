@@ -842,7 +842,7 @@ export const researchSyncMethods = uiModule({
             held: this.researchWriteHeldNow(link.id),
             autoDue: autoDue.has(treeId),
             // A write already seen is no news (being in sync), also when its send is remembered again.
-            written: researchWriteIsNews(st) ? st.lastWritten ?? null : null,
+            written: researchWriteIsNews(st, this.researchWrittenConflictsOpen(treeId)) ? st.lastWritten ?? null : null,
             switched: !!st.modeSeen && st.modeSeen !== mode,
             // By hand and written a few times: sending by itself is offered, once (never at once).
             offerDue: researchSendMode(link) === 'manual' && !st.offerSeen && (st.manualWrites ?? 0) >= OFFER_AFTER_WRITES,
@@ -2365,6 +2365,21 @@ export const researchSyncMethods = uiModule({
                 this.refreshResearchSyncUi();
                 break;
         }
+    },
+
+    /**
+     * The last write's conflicts are still open here, as its block counts them: one of the people it
+     * named has an open conflict; none named, any open in the tree. A count that outlived them keeps
+     * no write as news (1031).
+     */
+    researchWrittenConflictsOpen(treeId: TreeId): boolean {
+        const lw = researchAutoState(treeId).lastWritten;
+        if (!lw || !((lw.conflicts ?? 0) > 0)) return false;
+        if (DataManager.getCurrentTreeId() !== treeId) return true;
+        const persons = (lw.persons ?? []) as PersonId[];
+        return persons.length
+            ? persons.some(id => !!DataManager.getPerson(id) && this.personOpenConflicts(id).length > 0)
+            : this.researchOpenConflictTotal(treeId) > 0;
     },
 
     /** The persons the last write's conflicts are about, while they are still open. */
