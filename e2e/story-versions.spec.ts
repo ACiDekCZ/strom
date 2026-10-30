@@ -166,8 +166,8 @@ test.describe('a story\'s new version', () => {
         await expect(chips.first()).toHaveAttribute('aria-current', 'true');
         const couple = reader.locator('.story-reader-couple');
         await expect(couple).toHaveClass(/story-reader-ch--tint/);
-        // No wedding date: the years end at the first death.
-        await expect(couple.locator('.story-ch-kicker')).toHaveText('Story of the marriage · –1874');
+        // No wedding date: "until" the first death, no dangling dash.
+        await expect(couple.locator('.story-ch-kicker')).toHaveText('Story of the marriage · until 1874');
         await expect(couple.locator('.story-ch-mono > span')).toHaveText(['JV', 'MV']);
         // Compare at each chapter; the footer has Close only.
         await expect(reader.locator('#person-story-ch-own #person-story-compare')).toHaveCount(1);
@@ -246,7 +246,7 @@ test.describe('a story\'s new version', () => {
         await expect(reader.locator('#person-story-heading')).toHaveText('Story of the marriage');
         await expect(reader.locator('.story-chips, .story-reader-ch--tint, .story-ch-mono')).toHaveCount(0);
         // The kicker stays on a chapter alone.
-        await expect(reader.locator('.story-ch-kicker')).toHaveText('Story of the marriage · –1874');
+        await expect(reader.locator('.story-ch-kicker')).toHaveText('Story of the marriage · until 1874');
         await expect(reader.locator('.story-ch-note')).toHaveText('Edited in research.');
         await expect(reader.locator('.story-reader-couple-title')).toHaveText('Marie Vlková and Jan Vlk New version waiting');
         await expect(reader.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');
