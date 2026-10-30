@@ -142,7 +142,9 @@ test.describe('History of places: a detail', () => {
         await expect(modal(page).locator('.hd-century')).toHaveCount(0);
         await expect(texts(page)).toHaveText(['A hailstorm destroyed the harvest.', 'A fire in Čapkov.', 'A new school opened.']);
         await expect(rows(page).locator('.hd-place')).toHaveText(['Čapkov', 'Čapkov', 'Kutná Hora']);
-        await expect(rows(page).first().locator('.pm-lifeline-htag')).toHaveText('from research records');
+        // The label names the kind; "from records" stands beside it (the origin is the head's ■).
+        await expect(rows(page).first().locator('.pm-lifeline-htag')).toHaveText('disaster');
+        await expect(rows(page).first().locator('.pm-lifeline-hfrom')).toHaveText('from records');
         // Places instead of kinds, by count.
         const chips = modal(page).locator('.hd-filters .hd-chip');
         await expect(chips).toHaveText(['All', 'Čapkov 2', 'Kutná Hora 1']);

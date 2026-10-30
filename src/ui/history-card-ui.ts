@@ -19,10 +19,11 @@ import { DataManager } from '../data.js';
 import { shownName } from '../person-name.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
-    groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
-    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion, type HistoryPlaceRow,
+    groupHistoryByYear, historyClusterLabel, historyClusterKinds, historySourceLabel, isHistoryLang, HISTORY_KINDS,
+    type HistoryKind, type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion, type HistoryPlaceRow,
 } from '../history.js';
 import { regionName, manageCan } from '../history-manage.js';
+import { historyKindSvg } from '../history-symbols.js';
 import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../history-bridge.js';
 import { HISTORY_SKIP_FEATURE } from '../research-link.js';
 import { shownExcerpts } from '../research-images.js';
@@ -126,8 +127,10 @@ export interface HistoryDescOptions {
  */
 export function historyEventDescHtml(ev: HistoryEvent, t: { text: string; textLang: string; tip?: string; tipLang?: string }, o: HistoryDescOptions): string {
     const h = strings.history;
-    const tag = ev.scope === 'local' ? h.local : h.kinds[ev.kind];
-    const meta: string[] = [`<span class="pm-lifeline-htag">${esc(tag)}</span>`, ...o.meta];
+    // The label names the kind; a local finding says where it came from beside it (DEV symboly §3.4).
+    const meta: string[] = [`<span class="pm-lifeline-htag">${esc(h.kinds[ev.kind])}</span>`];
+    if (ev.scope === 'local') meta.push(`<span class="pm-lifeline-hfrom">${esc(h.fromRecordsShort)}</span>`);
+    meta.push(...o.meta);
     const source = ev.source;
     const checked = formatDate(source?.checked);
     if (source) {
@@ -158,6 +161,34 @@ export function historyEventDescHtml(ev: HistoryEvent, t: { text: string; textLa
         desc += `<span class="pm-lifeline-htip"><b>${esc(h.tip)}:</b> <span${langAttr(t.tipLang)}>${esc(t.tip)}</span></span>`;
     }
     return desc + (o.tail ?? '');
+}
+
+/**
+ * The kind's symbol in a wrapper that carries its name on hover (the SVG has
+ * no text, so the row's textContent is unchanged); coloured by the origin.
+ */
+export function historyKindSpan(kind: HistoryKind, scope: HistoryEvent['scope'], size: 12 | 14 | 16, cls = ''): string {
+    return `<span class="hist-kind is-${scope}${cls ? ` ${cls}` : ''}" title="${esc(strings.history.kinds[kind] ?? strings.history.kinds.other)}">`
+        + `${historyKindSvg(kind, size)}</span>`;
+}
+
+/** The glyph column of an event's row: the kind's 14 px symbol (DEV symboly §1, §3.1). */
+function historyKindGlyph(kind: HistoryKind): string {
+    return `<span class="pm-lifeline-glyph hist-kind" title="${esc(strings.history.kinds[kind] ?? strings.history.kinds.other)}">${historyKindSvg(kind, 14)}</span>`;
+}
+
+/**
+ * A collapsed cluster's label with a 12 px symbol before each kind's name
+ * ("2 events: [⚔] war, [✺] epidemic"); its textContent is historyClusterLabel's.
+ */
+function historyClusterLabelHtml(items: readonly LifelineHistoryItem[]): string {
+    const h = strings.history;
+    const { kinds, more } = historyClusterKinds(items);
+    // The comma inside the part: a screen reader's name keeps "war, epidemic" (no space before the comma).
+    const parts = kinds.map((k, i) => `<span class="hist-kind-part">${historyKindSpan(k.kind, k.scope, 12)}${esc(h.kinds[k.kind])}`
+        + `${i < kinds.length - 1 || more ? ',' : ''}</span>`);
+    if (more) parts.push(esc(h.clusterMore(more)));
+    return `${esc(h.cluster(items.length))}: ${parts.join(' ')}`;
 }
 
 export const historyCardMethods = uiModule({
@@ -255,12 +286,16 @@ export const historyCardMethods = uiModule({
             const single = g.items.length === 1 ? g.items[0] : null;
             const label = historyClusterLabel(g.items, getCurrentLanguage(), open);
             const year = single?.yearLabel ?? String(g.year);
+            // Collapsed: a 12 px symbol before each kind's name (or before a single event's text).
+            const labelHtml = open ? esc(label)
+                : single ? `${historyKindSpan(single.ev.kind, single.ev.scope, 12, 'hist-kind-lead')}${esc(label)}`
+                    : historyClusterLabelHtml(g.items);
             let html = `<div class="pm-lifeline-row k-historyGroup is-${g.mark}" role="button" tabindex="0" aria-expanded="${open}"`
                 + ` data-history-year="${g.year}" data-hfocus="group:${g.year}">`
                 + '<span class="pm-lifeline-hmark" aria-hidden="true"></span>'
                 + `<span class="pm-lifeline-year">${esc(year)}</span>`
                 + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
-                + `<span class="pm-lifeline-desc"${single && !open ? langAttr(single.textLang) : ''}>${esc(label)}</span>`
+                + `<span class="pm-lifeline-desc"${single && !open ? langAttr(single.textLang) : ''}>${labelHtml}</span>`
                 + `<span class="pm-lifeline-hchev" aria-hidden="true">${open ? '▾' : '▸'}</span></div>`;
             if (open) html += g.items.map(i => this.lifelineHistoryRowHtml(i, false)).join('');
             return { year: g.year, html };
@@ -298,7 +333,7 @@ export const historyCardMethods = uiModule({
                         : by.place ? h.scopePlace(item.place) : h.scopePerson;
                 return '<div class="pm-lifeline-hiddenitem">'
                     + `<span class="pm-lifeline-year">${esc(item.yearLabel ?? String(item.year))}</span>`
-                    + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
+                    + historyKindGlyph(item.ev.kind)
                     + `<span class="pm-lifeline-hiddentext"><span${langAttr(item.textLang)}>${esc(item.text)}</span>`
                     + `<small>${esc(scope)} · <button type="button" class="link pm-lifeline-hrestore" data-restore="${j}"`
                     + ` data-hfocus="restore:${esc(item.ev.id)}">${esc(h.restore)}</button></small></span></div>`;
@@ -517,7 +552,7 @@ export const historyCardMethods = uiModule({
         return `<div class="pm-lifeline-row k-history is-${ev.scope}" data-history-id="${esc(ev.id)}">`
             + '<span class="pm-lifeline-hmark" aria-hidden="true"></span>'
             + `<span class="pm-lifeline-year">${esc(year)}</span>`
-            + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
+            + historyKindGlyph(ev.kind)
             + `<span class="pm-lifeline-desc">${desc}</span>`
             + `<button type="button" class="pm-lifeline-hmore" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"`
             + ` data-more="${i}" data-hfocus="more:${esc(ev.id)}">⋯</button>`
@@ -733,15 +768,22 @@ export const historyCardMethods = uiModule({
             + `${mark === 'is-tip' ? 'T' : mark === 'is-place' ? '\u25B2' : ''}</span>`
             + `<span><span class="pm-lifeline-legend-name">${esc(title)}</span><span class="pm-lifeline-legend-hint">${esc(hint)}</span>`
             + `${off ? `<span class="pm-lifeline-legend-hint pm-lifeline-legend-off">${esc(offText)}</span>` : ''}</span></div>`;
+        const phone = media(MQ_MOBILE);
+        const kindGrid = '<div class="pm-lifeline-legend-kinds">'
+            + HISTORY_KINDS.map(k => `<span class="pm-lifeline-legend-kind" data-kind="${k}">`
+                + `<span class="hist-kind" aria-hidden="true">${historyKindSvg(k, phone ? 16 : 14)}</span>${esc(h.kinds[k])}</span>`).join('')
+            + '</div>';
         const content = `<div class="pm-lifeline-legend-title">${esc(h.legendTitle)}</div>`
+            + `<div class="pm-lifeline-legend-sub">${esc(h.legendOriginTitle)}</div>`
             + row('is-region', h.legendRegion, h.legendRegionHint, !kinds.region)
             + (placeShown ? row('is-place', h.legendPlace, h.legendPlaceHint, !kinds.place) : '')
             + row('is-local', h.legendLocal, h.legendLocalHint, !kinds.local)
             + row('is-tip', h.legendTip, h.legendTipHint)
+            + `<div class="pm-lifeline-legend-sub is-kinds">${esc(h.legendKindsTitle)}</div>${kindGrid}`
             + `<p class="pm-lifeline-legend-foot">${esc(h.legendFoot)}</p>`
             + (this.historyManageAvailable()
                 ? `<button type="button" class="pm-lifeline-legend-manage" data-legend="manage">${esc(h.manageOpen)} ›</button>` : '');
-        if (media(MQ_MOBILE)) {
+        if (phone) {
             const sheet = this.showLifelineHistorySheet('pm-lifeline-legend-sheet', 'dialog', h.legendTitle,
                 `<div class="pm-lifeline-legend">${content}</div>`
                 + `<button type="button" class="bottom-sheet-item pm-lifeline-hsheet-cancel">${esc(strings.buttons.close)}</button>`);

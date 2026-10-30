@@ -1374,10 +1374,17 @@ export function historySourceLabel(source: Pick<HistorySource, 'title' | 'publis
 export interface HistoryYearGroup {
     year: number;
     items: LifelineHistoryItem[];
-    /** Shown as one collapsed row ("3 events: war, epidemic, from records ▸"). */
+    /** Shown as one collapsed row ("3 events: war, epidemic, disaster ▸"). */
     cluster: boolean;
-    /** The cluster's mark: local only when all its events are local. */
-    mark: 'region' | 'local';
+    /** The cluster's mark on the line: a local finding wins, then a place's own history, then the region. */
+    mark: HistoryScope;
+}
+
+/** The mark of a year's events: local > place > region. */
+function groupMark(items: readonly LifelineHistoryItem[]): HistoryScope {
+    if (items.some(i => i.ev.scope === 'local')) return 'local';
+    if (items.some(i => i.ev.scope === 'place')) return 'place';
+    return 'region';
 }
 
 /** Group items by year: ≥ 2 in a year → a cluster; `always` (phone held sideways) clusters every year. */
@@ -1390,22 +1397,40 @@ export function groupHistoryByYear(items: readonly LifelineHistoryItem[], always
     }
     for (const g of out) {
         g.cluster = always || g.items.length >= 2;
-        g.mark = g.items.every(i => i.ev.scope === 'local') ? 'local' : 'region';
+        g.mark = groupMark(g.items);
     }
     return out;
 }
 
-/** The label of a collapsed cluster: "3 události: válka, epidemie, z pramenů"; expanded only the count. */
+/** At most this many kinds are named in a collapsed cluster; the rest is "+n". */
+export const HISTORY_CLUSTER_KINDS_MAX = 3;
+
+export interface HistoryClusterKind {
+    kind: HistoryKind;
+    /** The origin of the first event of this kind in the cluster (the symbol's colour). */
+    scope: HistoryScope;
+}
+
+/** The unique kinds of a cluster in the events' order (at most three) and how many more there are. */
+export function historyClusterKinds(items: readonly LifelineHistoryItem[]): { kinds: HistoryClusterKind[]; more: number } {
+    const all: HistoryClusterKind[] = [];
+    for (const i of items) if (!all.some(k => k.kind === i.ev.kind)) all.push({ kind: i.ev.kind, scope: i.ev.scope });
+    return { kinds: all.slice(0, HISTORY_CLUSTER_KINDS_MAX), more: Math.max(0, all.length - HISTORY_CLUSTER_KINDS_MAX) };
+}
+
+/**
+ * The label of a collapsed cluster: "3 události: válka, epidemie, pohroma"
+ * (a local finding by its kind; more than three kinds end with "+n");
+ * expanded only the count; a single event (a phone held sideways) its text.
+ */
 export function historyClusterLabel(items: readonly LifelineHistoryItem[], lang: Language, expanded = false): string {
     const h = getStringsForLang(lang).history;
     const head = h.cluster(items.length);
     if (expanded) return head;
     if (items.length === 1) return items[0].text;
-    const tags: string[] = [];
-    for (const i of items) {
-        const tag = i.ev.scope === 'local' ? h.localShort : h.kinds[i.ev.kind];
-        if (!tags.includes(tag)) tags.push(tag);
-    }
+    const { kinds, more } = historyClusterKinds(items);
+    const tags = kinds.map(k => h.kinds[k.kind]);
+    if (more) tags.push(h.clusterMore(more));
     return `${head}: ${tags.join(', ')}`;
 }
 

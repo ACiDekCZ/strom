@@ -2887,6 +2887,12 @@
         .is-local > .hd-mark::before { left: 1.5px; top: 5px; width: 6px; height: 6px; background: var(--hist-local); }
         .is-place > .hd-mark::before { content: '▲'; left: 0; top: 2px; width: 9px; text-align: center; font-size: 8px; line-height: 1; color: var(--hist-place); }
         .is-place .pm-lifeline-htag { color: var(--hist-place-text); }
+        /* The detail's rows: the kind's symbol in place of the origin's mark (the head carries the origin). */
+        .hd-ev > .hd-mark.hd-kind { width: 14px; height: 14px; margin-top: 1px; color: var(--hist-text); }
+        .hd-ev > .hd-mark.hd-kind::before { content: none; }
+        .hd-ev.is-place > .hd-mark.hd-kind { color: var(--hist-place-text); }
+        .hd-ev.is-local > .hd-mark.hd-kind { color: var(--hist-local-text); }
+        .hd-chip > .hist-kind-svg { flex: none; color: var(--hist-text); }
         #history-modal .hd-ev button.pm-lifeline-hmore { opacity: 1; top: 4px; right: 4px; width: 28px; height: 24px; }
         #history-modal .hd-ev button.pm-lifeline-hmore[aria-expanded="true"] { background: var(--hover-bg); }
         #history-modal .hd-ev button.pm-lifeline-hmore:disabled { opacity: 0.5; cursor: default; }
@@ -5569,6 +5575,16 @@
         .pm-lifeline-hmeta > * + *::before { content: '·'; margin-right: 6px; }
         .pm-lifeline-htag { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
         .is-local .pm-lifeline-htag { color: var(--hist-local-text); }
+        /* What happened: the kind's symbol by the text, coloured by the origin (no new tokens). */
+        .k-history .hist-kind, .k-historyGroup .hist-kind { color: var(--hist-text); }
+        .k-history.is-place .hist-kind, .k-historyGroup .hist-kind.is-place { color: var(--hist-place-text); }
+        .k-history.is-local .hist-kind, .k-historyGroup .hist-kind.is-local { color: var(--hist-local-text); }
+        .pm-lifeline-glyph.hist-kind svg, .hist-kind svg { display: block; }
+        .pm-lifeline-hfrom { color: var(--hist-local-text); }
+        /* A collapsed year: a 12 px symbol before each kind; only a whole kind wraps. */
+        .hist-kind-part { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; vertical-align: bottom; }
+        .hist-kind-part > .hist-kind { display: inline-flex; }
+        .hist-kind-lead { display: inline-flex; margin-right: 4px; vertical-align: -1px; }
         .pm-lifeline-hregion { overflow-wrap: anywhere; }
         .pm-lifeline-hsrc { display: inline-flex; align-items: baseline; flex: none; max-width: 100%; min-width: 0; white-space: nowrap; }
         .pm-lifeline-hsrc a { display: inline-flex; min-width: 0; }
@@ -5668,6 +5684,7 @@
         .pm-lifeline-hiddenitem { display: flex; align-items: flex-start; gap: 10px; padding: 3px 0; font-size: 12.5px; color: var(--text-faint); }
         .pm-lifeline-hiddenitem .pm-lifeline-year { font-size: 12px; font-weight: 400; color: var(--text-faint); }
         .pm-lifeline-hiddenitem .pm-lifeline-glyph { width: 14px; }
+        .pm-lifeline-hiddenitem .pm-lifeline-glyph.hist-kind { color: var(--text-faint); }
         .pm-lifeline-hiddentext { flex: 1 1 auto; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
         .pm-lifeline-hiddentext small { display: block; font-size: 11.5px; color: var(--hist-meta); }
 
@@ -5708,6 +5725,13 @@
         .pm-lifeline-legend-row.is-off { opacity: 0.45; }
         .pm-lifeline-legend-off { display: block; font-style: italic; }
         .pm-lifeline-legend-mark.is-tip { font-size: 11px; font-weight: 700; font-style: italic; color: var(--hist-meta); text-align: center; line-height: 14px; }
+        .pm-lifeline-legend-sub {
+            margin: 2px 0 2px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text);
+        }
+        .pm-lifeline-legend-sub.is-kinds { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); }
+        .pm-lifeline-legend-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 4px 0 2px; }
+        .pm-lifeline-legend-kind { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; }
+        .pm-lifeline-legend-kind > .hist-kind { flex: none; display: flex; color: var(--hist-text); }
         .pm-lifeline-legend-foot { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; line-height: 1.45; color: var(--text-faint); }
 
         /* The same as a bottom sheet (≤ 640 px): the head wraps, rows ≥ 56 px, "Cancel" last. */
@@ -5728,6 +5752,8 @@
         .pm-lifeline-legend-sheet .pm-lifeline-legend { padding: 0 16px 8px; }
         .pm-lifeline-legend-sheet .pm-lifeline-legend-row, .pm-lifeline-legend-sheet .pm-lifeline-legend-foot { font-size: 13px; }
         .pm-lifeline-legend-sheet .pm-lifeline-legend-title { font-size: 15px; }
+        .pm-lifeline-legend-sheet .pm-lifeline-legend-kinds { gap: 8px 12px; }
+        .pm-lifeline-legend-sheet .pm-lifeline-legend-kind { gap: 8px; font-size: 14px; }
 
         @media (hover: hover) and (pointer: fine) {
             .modal button.pm-lifeline-hmore { opacity: 0; }

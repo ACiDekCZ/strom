@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     parseHistoryPayload, parseHistoryText, parseHistoryEvent, isHistoryLang, matchHistoryPlace,
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
-    groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
+    groupHistoryByYear, historyClusterLabel, historyClusterKinds, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
     historyFindRegions, historyKindsShown, historyKindLocked, historyMainPlace, historyPlaceRow, historyPlaceOfferable,
     type HistoryPayload, type HistoryPlace, type HistorySettingsInput, type HistoryHideOp,
@@ -373,21 +373,41 @@ describe('year groups', () => {
         places: { Lhota: { events: ['a-1', 'a-2', 'L1', 'L2', 'a-3'] } },
     });
     const items = computePersonHistory(data([anna]), 'anna', p, 'cs').items;
-    it('clusters a year with two or more events', () => {
+    it('clusters a year with two or more events; the mark: local > place > region', () => {
         const g = groupHistoryByYear(items);
         expect(g.map(x => [x.year, x.items.length, x.cluster, x.mark])).toEqual([
-            [1866, 3, true, 'region'], [1880, 1, false, 'local'], [1890, 1, false, 'region'],
+            [1866, 3, true, 'local'], [1880, 1, false, 'local'], [1890, 1, false, 'region'],
         ]);
+    });
+    it('a year with an event of a place (and no local finding) is marked as the place', () => {
+        const q = payload({
+            events: [regionEvent('a-1', 1866), regionEvent('p-1', 1866, { scope: 'place', place: { key: 'Lhota' }, kind: 'disaster' })],
+            places: { Lhota: { events: ['a-1', 'p-1'] } },
+        });
+        const g = groupHistoryByYear(computePersonHistory(data([anna]), 'anna', q, 'cs').items);
+        expect(g.map(x => [x.year, x.mark])).toEqual([[1866, 'place']]);
     });
     it('always clusters when asked (phone held sideways)', () => {
         expect(groupHistoryByYear(items, true).every(x => x.cluster)).toBe(true);
     });
-    it('labels a cluster with its count and the unique kinds in order', () => {
+    it('labels a cluster with its count and the unique kinds in order (a local finding by its kind)', () => {
         const g = groupHistoryByYear(items);
-        expect(historyClusterLabel(g[0].items, 'cs')).toBe('3 události: válka, epidemie, z pramenů');
+        expect(historyClusterLabel(g[0].items, 'cs')).toBe('3 události: válka, epidemie');
         expect(historyClusterLabel(g[0].items, 'cs', true)).toBe('3 události');
-        expect(historyClusterLabel(g[0].items, 'en')).toBe('3 events: war, epidemic, from records');
+        expect(historyClusterLabel(g[0].items, 'en')).toBe('3 events: war, epidemic');
         expect(historyClusterLabel(g[1].items, 'cs')).toBe('Místní L2');
+        // The symbol of a kind takes the origin of its first event.
+        expect(historyClusterKinds(g[0].items)).toEqual({ kinds: [{ kind: 'war', scope: 'region' }, { kind: 'epidemic', scope: 'region' }], more: 0 });
+    });
+    it('names at most three kinds, then "+n"', () => {
+        const kinds = ['war', 'epidemic', 'census', 'law', 'economy'];
+        const q = payload({
+            events: kinds.map((kind, i) => regionEvent(`k-${i}`, 1870, { kind })),
+            places: { Lhota: { events: kinds.map((_, i) => `k-${i}`) } },
+        });
+        const g = groupHistoryByYear(computePersonHistory(data([anna]), 'anna', q, 'en').items);
+        expect(historyClusterLabel(g[0].items, 'en')).toBe('5 events: war, epidemic, census, +2');
+        expect(historyClusterKinds(g[0].items).more).toBe(2);
     });
 });
 

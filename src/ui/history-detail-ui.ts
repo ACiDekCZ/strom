@@ -16,7 +16,7 @@ import { DataManager } from '../data.js';
 import { shownName } from '../person-name.js';
 import { yearOf } from '../dates.js';
 import { MQ_MOBILE } from '../breakpoints.js';
-import type { HistoryPayload, HistoryEvent, HistoryHideOp, EffectiveHidden } from '../history.js';
+import { HISTORY_KINDS, type HistoryPayload, type HistoryEvent, type HistoryHideOp, type EffectiveHidden } from '../history.js';
 import {
     detailEvents, detailOwner, filterDetailEvents, detailFacets, detailCenturies, centuryGroups, centuryLabel,
     emptyDetailFilter, historyAudience, audiencePlaces, manageCan, regionName,
@@ -26,6 +26,7 @@ import { postBridgeDelete, type HistoryWriteRefusal } from '../history-bridge.js
 import type { StromData, PersonId } from '../types.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { historyEventDescHtml } from './history-card-ui.js';
+import { historyKindSvg } from '../history-symbols.js';
 import type { Drawn } from './history-manage-ui.js';
 import { uiModule } from './module.js';
 
@@ -119,6 +120,11 @@ function personName(id: string): string {
     return person ? shownName(person) : id;
 }
 
+/** A chip of a kind (not "All", not a place) carries the kind's symbol before its name. */
+function kindChip(by: 'kinds' | 'places', key: string): boolean {
+    return by === 'kinds' && (HISTORY_KINDS as readonly string[]).includes(key);
+}
+
 export const historyDetailMethods = uiModule({
     /** The dialog opens or closes: nothing of the details stays. */
     resetHistoryDetail(): void {
@@ -201,8 +207,9 @@ export const historyDetailMethods = uiModule({
         const facets = detailFacets(all, f, by, d.names);
         const hiddenN = all.filter(r => r.hide !== 'none').length;
         const chip = (k: string, label: string, n: number | null, on: boolean): string =>
-            `<button type="button" class="hd-chip" data-hd="facet" data-by="${by}" data-k="${esc(k)}" aria-pressed="${on}" data-hfocus="f:${esc(k)}">`
-            + `${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
+            `<button type="button" class="hd-chip" data-hd="facet" data-by="${by}" data-k="${esc(k)}" aria-pressed="${on}" data-hfocus="f:${esc(k)}"`
+            + `${kindChip(by, k) ? ` title="${esc(label)}"` : ''}>`
+            + `${kindChip(by, k) ? historyKindSvg(k as HistoryEvent['kind'], 12) : ''}${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
         const chips = facets.length > 1 || chosen.length
             ? `<div class="hd-chips" role="group" aria-label="${esc(by === 'kinds' ? h.filterKind : h.filterPlace)}">`
                 + chip('', h.filterAll, null, !chosen.length)
@@ -290,7 +297,8 @@ export const historyDetailMethods = uiModule({
         const menu = this.historyDetailMenuItems(d, key, r, a).length > 0;
         return `<div class="pm-lifeline-row k-history is-${ev.scope} hd-ev${dim ? ' is-dim' : ''}${mem.busy.has(ev.id) ? ' is-busy' : ''}" data-history-id="${id}">`
             + `<span class="pm-lifeline-year">${esc(r.year)}</span>`
-            + '<span class="hd-mark" aria-hidden="true"></span>'
+            // The kind's symbol in place of the origin's mark (the detail's head carries the origin).
+            + `<span class="hd-mark hd-kind" title="${esc(h.kinds[ev.kind] ?? h.kinds.other)}">${historyKindSvg(ev.kind, 14)}</span>`
             + `<span class="pm-lifeline-desc">${desc}</span>`
             + (menu ? `<button type="button" class="pm-lifeline-hmore" data-hd="menu" data-ev="${id}" aria-haspopup="menu" aria-expanded="false"`
                 + ` aria-label="${esc(h.more)}" data-hfocus="more:${id}"${mem.busy.has(ev.id) ? ' disabled' : ''}>⋯</button>` : '')
@@ -430,15 +438,17 @@ export const historyDetailMethods = uiModule({
             const f = filterOf(key);
             const chosen = by === 'kinds' ? f.kinds : f.places;
             const facets = detailFacets(all, f, by, dd.names);
-            const chip = (attrs: string, label: string, on: boolean, n: number | null = null): string =>
-                `<button type="button" class="hd-chip" ${attrs} aria-pressed="${on}">${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
+            const chip = (attrs: string, label: string, on: boolean, n: number | null = null, kind = ''): string =>
+                `<button type="button" class="hd-chip" ${attrs} aria-pressed="${on}"${kind ? ` title="${esc(label)}"` : ''}>`
+                + `${kind ? historyKindSvg(kind as HistoryEvent['kind'], 14) : ''}${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
             const centuries = detailCenturies(all);
             const isCentury = (c: number) => f.from === c * 100 && f.to === c * 100 + 99;
             const count = filterDetailEvents(all, f).length;
             box.innerHTML = `<div class="pm-lifeline-hsheet-head">${esc(h.filterTitle)}</div>`
                 + `<div class="hd-fs-section"><div class="hd-fs-title">${esc(by === 'kinds' ? h.filterKind : h.filterPlace)}</div><div class="hd-chips">`
                 + chip('data-fs="facet" data-k=""', h.filterAll, !chosen.length)
-                + facets.map(x => chip(`data-fs="facet" data-k="${esc(x.key)}"`, by === 'kinds' ? cap(h.kinds[x.key as HistoryEvent['kind']] ?? x.key) : x.label, chosen.includes(x.key), x.count)).join('')
+                + facets.map(x => chip(`data-fs="facet" data-k="${esc(x.key)}"`, by === 'kinds' ? cap(h.kinds[x.key as HistoryEvent['kind']] ?? x.key) : x.label, chosen.includes(x.key), x.count,
+                    kindChip(by, x.key) ? x.key : '')).join('')
                 + '</div></div>'
                 + `<div class="hd-fs-section"><div class="hd-fs-title">${esc(h.filterPeriod)}</div><div class="hd-chips">`
                 + chip('data-fs="period" data-c=""', h.periodAll, f.from === undefined && f.to === undefined)
