@@ -12,12 +12,13 @@
  * the output.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
-    computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory,
+    computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints,
 } from './history.js';
+import { placeKey } from './places.js';
 import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
@@ -41,14 +42,17 @@ export interface PersonPageGroups {
     history: boolean;
     childEvents: boolean;
     excerpts: boolean;
+    /** Image attachments (with the source excerpts they make the page's images). */
     materials: boolean;
+    /** PDF attachments (§3.5: the file embeds them, the window lists them). */
+    pdf: boolean;
     sources: boolean;
     research: boolean;
 }
 
 /** Every group on (the window; the export dialog's default). */
 export const PERSON_PAGE_ALL_GROUPS: Readonly<PersonPageGroups> = Object.freeze({
-    history: true, childEvents: true, excerpts: true, materials: true, sources: true, research: true,
+    history: true, childEvents: true, excerpts: true, materials: true, pdf: true, sources: true, research: true,
 });
 
 /** The export's privacy of living people when no choice is remembered (K2.4). */
@@ -135,6 +139,8 @@ export interface PersonPageData {
     readOnly: boolean;
     /** What each content group holds (for the export dialog: a group with 0 is not offered). */
     counts: PersonPageGroupCounts;
+    /** People the person stood godparent to (their baptism names the person), with the baptism's year. */
+    godchildren: readonly { id: PersonId; year: number | null }[];
 }
 
 export interface PersonPageGroupCounts {
@@ -142,13 +148,14 @@ export interface PersonPageGroupCounts {
     childEvents: number;
     excerpts: number;
     materials: number;
+    pdf: number;
     sources: number;
     research: number;
 }
 
 /** A section that is on the page (for the window's table of contents). */
 export interface PersonPageSection {
-    key: 'family' | 'story' | 'notes' | 'timeline' | 'materials' | 'sources' | 'research';
+    key: 'family' | 'story' | 'question' | 'timeline' | 'materials' | 'people' | 'notes' | 'sources' | 'research';
     id: string;
     label: string;
 }
@@ -179,6 +186,17 @@ function safeImage(url: string | undefined): string | null {
     if (!url || !isSafeExcerptDataUrl(url)) return null;
     const comma = url.indexOf(',');
     return /^[A-Za-z0-9+/=\s]*$/.test(url.slice(comma + 1)) ? url : null;
+}
+
+function isPdfAttachment(a: Attachment): boolean {
+    return a.mimeType === 'application/pdf';
+}
+
+/** A PDF attachment's data URL safe to embed as a download link, else null. */
+function safePdf(a: Attachment): string | null {
+    if (!isPdfAttachment(a) || isOriginalOnlyAttachment(a)) return null;
+    const m = /^data:application\/pdf(;[\w=.-]+)*;base64,([A-Za-z0-9+/=\s]+)$/.exec(a.dataUrl ?? '');
+    return m ? `data:application/pdf;base64,${m[2].replace(/\s+/g, '')}` : null;
 }
 
 /** An excerpt as shown (turned upright), still a safe data URL. */
@@ -324,7 +342,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     const groups: PersonPageGroups = {
         ...opts.groups,
         history: opts.groups.history && opts.research && !!ctx.history,
-        materials: opts.groups.materials && opts.research,
+        // Attachments are the user's own documents: on without research too (§3.3).
         research: opts.groups.research && opts.research,
     };
     const src = full.persons[id];
@@ -333,11 +351,15 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         return {
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
             living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
-            readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, sources: 0, research: 0 },
+            readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
+            godchildren: [],
         };
     }
     const person: Person = structuredClone(src);
-    if (!groups.materials) delete person.attachments;
+    if (person.attachments) {
+        person.attachments = person.attachments.filter(a => (isPdfAttachment(a) ? groups.pdf : groups.materials));
+        if (!person.attachments.length) delete person.attachments;
+    }
     if (!groups.research) delete person.research;
     tree.persons[id] = person;
 
@@ -354,8 +376,24 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     for (const pid of [...fam.parents, ...fam.siblings, ...named]) {
         if (pid !== id && full.persons[pid]) tree.persons[pid] = relativeView(full.persons[pid], false);
     }
+    // The parents' marriage (its year is the label between them in the family tree).
+    if (fam.parents.length === 2) {
+        const pu = (full.persons[fam.parents[0]]?.partnerships ?? []).map(uid => full.partnerships[uid])
+            .find(u => !!u && (u.person1Id === fam.parents[1] || u.person2Id === fam.parents[1]));
+        if (pu && !tree.partnerships[pu.id]) {
+            tree.partnerships[pu.id] = {
+                id: pu.id, person1Id: pu.person1Id, person2Id: pu.person2Id, childIds: [], status: pu.status,
+                ...(pu.startDate ? { startDate: pu.startDate } : {}),
+            } as Partnership;
+        }
+    }
     for (const cid of fam.children) {
         tree.persons[cid] = relativeView(full.persons[cid], true);
+        // Grandchildren: names and years for the family tree's folded row (§4.1).
+        for (const gid of full.persons[cid].childIds) {
+            const g = full.persons[gid];
+            if (g && !g.isPlaceholder && !tree.persons[gid]) tree.persons[gid] = relativeView(g, false);
+        }
         // The child's marriages and divorces (dates and places only).
         for (const uid of full.persons[cid].partnerships) {
             const u = full.partnerships[uid];
@@ -388,6 +426,19 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         if (groups.history) history = h.items;
     }
 
+    // "Godparent to" (§0.5): baptisms anywhere in the tree naming the person as a godparent.
+    // A living godchild's events are gone with the privacy, so they never show here.
+    const godchildren: { id: PersonId; year: number | null }[] = [];
+    for (const other of Object.values(full.persons)) {
+        if (other.id === id || other.isPlaceholder) continue;
+        const bapt = (other.events ?? []).find(e => e.type === 'baptism'
+            && (e.participants ?? []).some(p => p.personId === id && p.role === 'godparent'));
+        if (!bapt) continue;
+        godchildren.push({ id: other.id, year: yearOf(bapt.date) ?? yearOf(other.birthDate) });
+        if (!tree.persons[other.id]) tree.persons[other.id] = relativeView(other, false);
+    }
+    godchildren.sort((a, b) => (a.year ?? Infinity) - (b.year ?? Infinity) || String(a.id).localeCompare(String(b.id)));
+
     const living = new Set<PersonId>([...Object.keys(tree.persons)].filter(p => prot.living.has(p as PersonId)) as PersonId[]);
     const page: PersonPageData = {
         personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree, living,
@@ -396,7 +447,8 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         storyDraft: groups.research && prot.drafts.has(id) && !!person.story?.text?.trim(),
         ...(ctx.changedAt ? { changedAt: ctx.changedAt } : {}),
         readOnly: !!ctx.readOnly,
-        counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, sources: 0, research: 0 },
+        counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
+        godchildren,
     };
     page.counts = countGroups(page);
     return page;
@@ -413,7 +465,8 @@ function countGroups(page: PersonPageData): PersonPageGroupCounts {
                 .reduce((n, s) => n + s.rows.filter(r => r.kind === 'kid').length, 0)
             : 0,
         excerpts: sources.reduce((n, s) => n + (s.excerpts?.length ?? 0), 0),
-        materials: (person?.attachments ?? []).filter(a => !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length,
+        materials: (person?.attachments ?? []).filter(a => !isPdfAttachment(a) && !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length,
+        pdf: (person?.attachments ?? []).filter(a => !!safePdf(a)).length,
         sources: page.groups.sources ? sources.length : 0,
         research: researchItems(page, page.lang).count + researchIdCount(page),
     };
@@ -549,6 +602,19 @@ interface Ctx {
     mainEx: Map<string, { anchor: string; label: string }>;
     /** Research ids met in texts. */
     ids: Set<string>;
+    /** The file's images, each embedded once (null in the window and in print). */
+    imgs: Map<string, ImgEntry> | null;
+    /** The gallery's images in order (the file's light boxes follow it). */
+    gal: GalleryItem[];
+    /** An image's place in the gallery (1-based): the timeline's link into the light box. */
+    galIndex: Map<string, number>;
+}
+
+interface ImgEntry {
+    n: number;
+    src: string;
+    /** "1200 / 900" from the image's header, for the box it paints. */
+    ratio: string | null;
 }
 
 function isOpen(c: Ctx, key: string): boolean {
@@ -698,10 +764,8 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
 function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null): string {
     const { P, person, page } = c;
     const g = genderKey(person);
-    const photo = safeImage(person.photo);
-    const avatar = photo
-        ? `<img class="pp-photo" src="${esc(photo)}" alt="">`
-        : `<div class="pp-initials" aria-hidden="true">${esc(personInitials(person.firstName, person.lastName))}</div>`;
+    const shield = shielded(c, person.id);
+    const photo = shield ? null : safeImage(person.photo);
     const badge = (on: boolean) => {
         if (!on) return '';
         return c.app
@@ -715,7 +779,7 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
         facts.push([P.born[g], withPlace(personPageDate(person.birthDate, page.lang), person.birthPlace) + badge(!!differs?.birth)]);
     }
     const bapt = (person.events ?? []).find(e => e.type === 'baptism' && e.date);
-    if (bapt && bapt.date !== person.birthDate) {
+    if (!shield && bapt && bapt.date !== person.birthDate) {
         facts.push([P.baptised[g], withPlace(personPageDate(bapt.date, page.lang), bapt.place)]);
     }
     const isLiving = page.living.has(person.id);
@@ -723,14 +787,14 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
         const age = ageAt(person.birthDate, person.deathDate);
         facts.push([P.died[g], withPlace(personPageDate(person.deathDate, page.lang), person.deathPlace)
             + (age !== null ? ` · ${esc(P.aged(age))}` : '') + badge(!!differs?.death)]);
-    } else if (isLiving) {
+    } else if (isLiving && !shield) {
         const age = ageAt(person.birthDate, isoDay(c.opts.now)) ?? (() => {
             const b = parseFlexDate(person.birthDate);
             return b && !b.qualifier && !b.end ? ageBetween(person.birthDate, isoDay(c.opts.now))?.years ?? null : null;
         })();
         facts.push([P.alive, age !== null ? esc(P.living(age)) : '']);
     }
-    const jobs = (person.events ?? []).filter(e => e.type === 'occupation').map(e => {
+    const jobs = shield ? [] : (person.events ?? []).filter(e => e.type === 'occupation').map(e => {
         // An occupation's name is its note (as the editor stores it).
         const what = stripResearchIds(e.note?.trim() ?? '').text;
         const d = parseFlexDate(e.date);
@@ -739,64 +803,357 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
     }).filter(Boolean);
     if (jobs.length) facts.push([P.occupation, esc(jobs.join(', '))]);
 
-    const aka = (person.nameVariants ?? []).map(v => v.trim()).filter(Boolean);
-    return `<header class="pp-hero" id="pp-sec-facts">${avatar}<div class="pp-hero-main">`
+    // The portrait (§3.1): a rounded square; a click shows it large (the window's viewer, the file's light box).
+    let avatar: string;
+    if (photo) {
+        const corner = `<span class="pp-portrait-zoom" aria-hidden="true">⤢</span>`;
+        if (c.imgs) avatar = `<a class="pp-portrait" href="#obr-p" aria-label="${esc(P.zoom)}">${imgHtml(c, photo, '', 'pp-photo')}${corner}</a>`;
+        else if (c.app) avatar = `<button type="button" class="pp-portrait" data-pp-zoom aria-label="${esc(P.zoom)}"><img class="pp-photo" src="${esc(photo)}" alt="">${corner}</button>`;
+        else avatar = `<span class="pp-portrait"><img class="pp-photo" src="${esc(photo)}" alt=""></span>`;
+    } else {
+        // A poor person (a name and a year at most) gets the smaller initials.
+        const small = facts.length <= 1 && !(person.nameVariants ?? []).length;
+        avatar = `<div class="pp-initials${small ? ' pp-initials--small' : ''}" aria-hidden="true">${esc(personInitials(person.firstName, person.lastName))}</div>`;
+    }
+    const aka = shield ? [] : (person.nameVariants ?? []).map(v => v.trim()).filter(Boolean);
+    return `<header class="pp-hero${photo ? ' pp-hero--photo' : ''}" id="pp-sec-facts">${avatar}<div class="pp-hero-main">`
         + (c.app ? '' : `<p class="pp-eyebrow">${esc(P.eyebrow)}</p>`)
         + `<h1 class="pp-name">${nameHtml(person, { former: true })}</h1>`
         + (aka.length ? `<p class="pp-aka">${esc(P.alsoKnown)} ${esc(aka.join(', '))}</p>` : '')
         + (facts.length ? `<dl class="pp-facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>` : '')
+        + (shield ? `<p class="pp-living-note">${esc(P.livingNote)}</p>` : '')
         + `</div></header>`;
 }
 
-// ── Family ──
+// ── Family tree (§4) ──
 
-function cardHtml(c: Ctx, pid: PersonId, sub = ''): string {
-    const p = c.tree.persons[pid];
-    if (!p) return '';
-    const years = yearsOf(p);
-    // The marriage line belongs to the partner's card (inside it), so it is
-    // plain text: a place button would nest a button inside the card's button.
-    const inner = `<span class="pp-card-name">${esc(shownNameOrEmpty(p) || '?')}</span>`
-        + (years ? `<span class="pp-card-years">${esc(years)}</span>` : '')
-        + (sub ? `<span class="pp-card-sub">${sub}</span>` : '');
-    if (linkable(c, pid)) {
-        if (c.opts.links === 'set') return `<a class="pp-card pp-link-card" href="#${esc(slugOf(c, pid))}">${inner}</a>`;
-        return `<button type="button" class="pp-card pp-link-card" data-pp-person="${esc(pid)}">${inner}</button>`;
-    }
-    return `<span class="pp-card pp-card--plain">${inner}</span>`;
+/** The desktop tree's column (§4.1): geometry in px of a 680 px column, written as % so it narrows with the page. */
+const FT_W = 680;
+const FT_CARD = 150;
+const FT_CARD_H = 50;
+const FT_KID = 126;
+const FT_KID_MIN = 110;
+const FT_KID_GAP = 8;
+const FT_GROUP_GAP = 20;
+const FT_KIDS_PER_ROW = 5;
+
+function ftPct(x: number): string {
+    return `${+(x / FT_W * 100).toFixed(3)}%`;
 }
 
-function familyHtml(c: Ctx): string {
+/** A living person under a privacy other than full: "E. F. · * 1952", never a link (§4.1). */
+function shielded(c: Ctx, pid: PersonId): boolean {
+    return c.page.privacy !== 'full' && c.page.living.has(pid);
+}
+
+/** A parent who is not the biological one: "stepfather", "adoptive mother", "foster father" (parentRelTypes). */
+function relKind(c: Ctx, parentId: PersonId): 'step' | 'adoptive' | 'foster' | null {
+    const k = c.person.parentRelTypes?.[parentId];
+    return k === 'step' || k === 'adoptive' || k === 'foster' ? k : null;
+}
+
+function relLabel(c: Ctx, parentId: PersonId): string {
+    const k = relKind(c, parentId);
+    return k ? c.P.rel[k][genderKey(c.tree.persons[parentId])] : '';
+}
+
+/** A card of the family tree: the name (whole in the title), the years, an optional line under them. */
+function ftCard(c: Ctx, pid: PersonId, cls: string, style = '', extra = ''): string {
+    const p = c.tree.persons[pid];
+    if (!p) return '';
+    const name = shownNameOrEmpty(p) || '?';
+    const years = yearsOf(p);
+    const classes = ['pp-ft-card', cls, shielded(c, pid) ? 'pp-ft-card--living' : ''].filter(Boolean).join(' ');
+    const inner = `<span class="pp-ft-name" title="${esc(name)}">${esc(name)}</span>`
+        + (years ? `<span class="pp-ft-years">${esc(years)}</span>` : '')
+        + (extra ? `<span class="pp-ft-rel">${esc(extra)}</span>` : '');
+    const st = style ? ` style="${style}"` : '';
+    if (linkable(c, pid)) {
+        if (c.opts.links === 'set') return `<a class="${classes} pp-ft-link" href="#${esc(slugOf(c, pid))}"${st}>${inner}</a>`;
+        return `<button type="button" class="${classes} pp-ft-link" data-pp-person="${esc(pid)}"${st}>${inner}</button>`;
+    }
+    return `<span class="${classes}"${st}>${inner}</span>`;
+}
+
+/** A chip of the siblings' and grandchildren's rows: "Jiří Fíšek 1938–2001", living under privacy "E. F. · * 1952". */
+function ftChip(c: Ctx, pid: PersonId): string {
+    const p = c.tree.persons[pid];
+    if (!p) return '';
+    const name = shownNameOrEmpty(p) || '?';
+    const years = yearsOf(p);
+    const shield = shielded(c, pid);
+    const text = `<span class="pp-chip-name">${esc(name)}</span>${years ? `${shield ? ' · ' : ' '}<span class="pp-chip-years">${esc(years)}</span>` : ''}`;
+    const cls = `pp-chip${shield ? ' pp-chip--living' : ''}`;
+    if (linkable(c, pid)) {
+        if (c.opts.links === 'set') return `<a class="${cls} pp-chip-link" href="#${esc(slugOf(c, pid))}">${text}</a>`;
+        return `<button type="button" class="${cls} pp-chip-link" data-pp-person="${esc(pid)}">${text}</button>`;
+    }
+    return `<span class="${cls}">${text}</span>`;
+}
+
+interface FtUnion {
+    union: Partnership;
+    partner: PersonId;
+    kids: PersonId[];
+    /** "⚭ 1883" (empty for partners who did not marry). */
+    short: string;
+    /** "⚭ 10 February 1883, Lhota · divorced 1890". */
+    long: string;
+    /** The couple's chapter in the story, when the page has it (its anchor). */
+    story: string | null;
+}
+
+interface FtData {
+    parents: PersonId[];
+    parentsUnion: string;
+    unions: FtUnion[];
+    /** Children with no known other parent (in no union with a partner). */
+    solo: PersonId[];
+    siblings: PersonId[];
+    grandchildren: PersonId[];
+}
+
+function familyTreeData(c: Ctx): FtData {
     const { P, tree, person, page } = c;
     const fam = familyOf(tree, person);
-    const row = (label: string, cards: string) =>
-        `<div class="pp-fam-row"><div class="pp-fam-label">${esc(label)}</div><div class="pp-fam-cards">${cards}</div></div>`;
-    const rows: string[] = [];
-    if (fam.parents.length) rows.push(row(P.parents, fam.parents.map(id => cardHtml(c, id)).join('')));
+    // Father on the left, mother on the right.
+    const parents = [...fam.parents].sort((a, b) => {
+        const rank = (id: PersonId) => (tree.persons[id]?.gender === 'male' ? 0 : tree.persons[id]?.gender === 'female' ? 2 : 1);
+        return rank(a) - rank(b);
+    });
+    let parentsUnion = '';
+    if (parents.length === 2) {
+        const pu = Object.values(tree.partnerships).find(u =>
+            (u.person1Id === parents[0] && u.person2Id === parents[1]) || (u.person1Id === parents[1] && u.person2Id === parents[0]));
+        if (pu && pu.status !== 'partners' && pu.status !== 'separated') {
+            const y = yearOf(pu.startDate);
+            parentsUnion = y !== null ? `⚭ ${y}` : '';
+        }
+    }
+    const stories = new Set(coupleStories(tree, person).map(u => u.id));
+    const placed = new Set<PersonId>();
+    const unions: FtUnion[] = [];
     for (const u of fam.unions) {
         const other = u.person1Id === person.id ? u.person2Id : u.person1Id;
         const partner = other ? tree.persons[other] : undefined;
         if (!partner || partner.isPlaceholder) continue;
+        const kids = fam.children.filter(k => (u.childIds ?? []).includes(k) && !placed.has(k));
+        kids.forEach(k => placed.add(k));
         const unmarried = u.status === 'partners' || u.status === 'separated';
-        const label = unmarried ? P.partner : partner.gender === 'male' ? P.husband : partner.gender === 'female' ? P.wife : P.partner;
-        const subParts: string[] = [];
-        if (!unmarried && (u.startDate || u.startPlace)) {
-            subParts.push(esc(P.married(personPageDate(u.startDate, page.lang), '\u0000')).replace('\u0000', esc(u.startPlace?.trim() ?? '')).replace(/, $/, ''));
-        }
-        if (!unmarried && (u.endDate || u.status === 'divorced')) subParts.push(esc(P.divorced(personPageDate(u.endDate, page.lang))));
-        rows.push(row(label, cardHtml(c, partner.id, subParts.join(' · '))));
-    }
-    if (fam.children.length) rows.push(row(P.children(fam.children.length), fam.children.map(id => cardHtml(c, id)).join('')));
-    if (fam.siblings.length) {
-        const sibs = fold(c, {
-            key: 'sibs', id: 'pp-sibs', cls: 'pp-sibs',
-            head: `<span class="pp-disc--inline">${foldState(`${P.show(fam.siblings.length)} ▸`, `${P.hide} ▾`)}</span>`,
-            body: `<div class="pp-fam-cards">${fam.siblings.map(id => cardHtml(c, id)).join('')}</div>`,
+        const y = yearOf(u.startDate);
+        const short = unmarried ? '' : y !== null ? `⚭ ${y}` : '⚭';
+        const parts: string[] = [];
+        if (unmarried) parts.push(P.partner);
+        else parts.push(['⚭', [personPageDate(u.startDate, page.lang), u.startPlace?.trim() ?? ''].filter(Boolean).join(', ')].filter(Boolean).join(' '));
+        if (!unmarried && (u.endDate || u.status === 'divorced')) parts.push(P.divorced(personPageDate(u.endDate, page.lang)));
+        unions.push({
+            union: u, partner: partner.id, kids, short, long: parts.join(' · '),
+            story: stories.has(u.id) ? `pp-story-${u.id.replace(/[^\w-]/g, '_')}` : null,
         });
-        rows.push(row(P.siblings, sibs));
     }
-    if (!rows.length) return '';
-    return section('family', P.sec.family, `<div class="pp-fam">${rows.join('')}</div>`);
+    const solo = fam.children.filter(k => !placed.has(k));
+    const grand = new Set<PersonId>();
+    for (const k of fam.children) {
+        for (const g of tree.persons[k]?.childIds ?? []) if (tree.persons[g] && !tree.persons[g].isPlaceholder) grand.add(g);
+    }
+    return { parents, parentsUnion, unions, solo, siblings: fam.siblings, grandchildren: sortByBirth([...grand], tree) };
+}
+
+/** "story ↓": to the couple's chapter (a button in the window, an anchor in the file). */
+function ftStoryLink(c: Ctx, anchor: string | null): string {
+    if (!anchor) return '';
+    return c.app
+        ? `<button type="button" class="pp-ft-story" data-pp-goto="${esc(anchor)}">${esc(c.P.tree.story)}</button>`
+        : `<a class="pp-ft-story" href="#${esc(anchor)}">${esc(c.P.tree.story)}</a>`;
+}
+
+/** The desktop and tablet tree (§4.1): parents, the person with partners to the sides, children under their union. */
+function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
+    const lines: string[] = [];
+    const labels: string[] = [];
+    const cards: string[] = [];
+    const hLine = (x1: number, x2: number, y: number, dashed = false) => {
+        const l = Math.min(x1, x2);
+        const w = Math.abs(x2 - x1);
+        if (w > 0) lines.push(`<span class="pp-ft-h${dashed ? ' pp-ft-dash' : ''}" style="left:${ftPct(l)};top:${y}px;width:${ftPct(w)}"></span>`);
+    };
+    const vLine = (x: number, y1: number, y2: number, dashed = false) => {
+        const t = Math.min(y1, y2);
+        const h = Math.abs(y2 - y1);
+        if (h > 0) lines.push(`<span class="pp-ft-v${dashed ? ' pp-ft-dash' : ''}" style="left:${ftPct(x)};top:${t}px;height:${h}px"></span>`);
+    };
+    const label = (x: number, y: number, html: string) => {
+        if (html) labels.push(`<span class="pp-ft-lab" style="left:${ftPct(x)};top:${y}px">${html}</span>`);
+    };
+    const card = (pid: PersonId, x: number, y: number, w: number, cls: string, extra = '', h = FT_CARD_H) =>
+        cards.push(ftCard(c, pid, cls, `left:${ftPct(x)};top:${y}px;width:${ftPct(w)};height:${h}px`, extra));
+    const mid = FT_W / 2;
+    const meX = mid - FT_CARD / 2;
+    let bottom = 0;
+
+    // Parents (none in the data: the row is not there, §4.1 4e).
+    const parentH = FT_CARD_H + (d.parents.some(p => relKind(c, p)) ? 16 : 0);
+    const meTop = d.parents.length ? parentH + 40 : 0;
+    if (d.parents.length === 2) {
+        const [a, b] = d.parents;
+        const ly = Math.round(parentH / 2);
+        card(a, mid - 25 - FT_CARD, 0, FT_CARD, 'pp-ft-card--parent', relLabel(c, a), parentH);
+        card(b, mid + 25, 0, FT_CARD, 'pp-ft-card--parent', relLabel(c, b), parentH);
+        hLine(mid - 25, mid, ly, !!relKind(c, a));
+        hLine(mid, mid + 25, ly, !!relKind(c, b));
+        vLine(mid, ly, meTop, !!relKind(c, a) && !!relKind(c, b));
+        if (d.parentsUnion) label(mid, ly + 6, `<span>${esc(d.parentsUnion)}</span>`);
+    } else if (d.parents.length === 1) {
+        const [a] = d.parents;
+        card(a, meX, 0, FT_CARD, 'pp-ft-card--parent', relLabel(c, a), parentH);
+        vLine(mid, parentH, meTop, !!relKind(c, a));
+    }
+    card(c.person.id, meX, meTop, FT_CARD, 'pp-ft-card--me');
+    bottom = meTop + FT_CARD_H;
+
+    // Partners to the sides: the 1st left, the 2nd right, the 3rd and later under the 2nd.
+    const cy = meTop + FT_CARD_H / 2;
+    const stems: { kids: PersonId[]; x: number; y: number }[] = [];
+    d.unions.forEach((u, k) => {
+        let px: number; let py: number; let lx: number; let ly: number;
+        if (k === 0) {
+            px = 0; py = meTop; lx = (FT_CARD + meX) / 2; ly = cy;
+            hLine(FT_CARD, meX, cy);
+        } else if (k === 1) {
+            px = FT_W - FT_CARD; py = meTop; lx = (meX + FT_CARD + FT_W - FT_CARD) / 2; ly = cy;
+            hLine(meX + FT_CARD, FT_W - FT_CARD, cy);
+        } else {
+            px = FT_W - FT_CARD; py = meTop + (k - 1) * (FT_CARD_H + 36); ly = py + FT_CARD_H / 2;
+            const elbow = meX + FT_CARD + 25;
+            lx = (elbow + FT_W - FT_CARD) / 2;
+            vLine(elbow, cy, ly);
+            hLine(elbow, FT_W - FT_CARD, ly);
+        }
+        card(u.partner, px, py, FT_CARD, 'pp-ft-card--partner');
+        bottom = Math.max(bottom, py + FT_CARD_H);
+        const bits = [
+            u.short ? `<span>${esc(u.short)}</span>` : '',
+            ftStoryLink(c, u.story),
+            u.kids.length ? '' : `<span class="pp-ft-nokids">${esc(c.P.tree.noKids)}</span>`,
+        ].filter(Boolean);
+        if (bits.length) {
+            label(lx, ly - 9, bits.join(''));
+            bottom = Math.max(bottom, ly - 9 + bits.length * 17);
+        }
+        if (u.kids.length) stems.push({ kids: u.kids, x: lx, y: ly });
+    });
+    if (d.solo.length) {
+        // Children without a known other parent: under the person, with a note.
+        label(mid, meTop + FT_CARD_H + 4, `<span>${esc(c.P.tree.otherParent)}</span>`);
+        bottom = Math.max(bottom, meTop + FT_CARD_H + 4 + 17);
+        stems.push({ kids: d.solo, x: mid, y: meTop + FT_CARD_H });
+    }
+    stems.sort((a, b) => a.x - b.x);
+
+    // Children under their union: one row, groups centred under their stem and pushed inward.
+    if (stems.length) {
+        const busY = bottom + 14;
+        const kidTop = busY + 14;
+        const cols = stems.map(s => Math.min(s.kids.length, FT_KIDS_PER_ROW));
+        let kw = FT_KID;
+        for (;;) {
+            const fixed = cols.reduce((n, k) => n + (k - 1) * FT_KID_GAP, 0) + (stems.length - 1) * FT_GROUP_GAP;
+            const sum = cols.reduce((n, k) => n + k, 0);
+            kw = Math.min(FT_KID, Math.floor((FT_W - fixed) / sum));
+            if (kw >= FT_KID_MIN) break;
+            const widest = cols.indexOf(Math.max(...cols));
+            if (cols[widest] <= 1) { kw = Math.max(kw, 60); break; }
+            cols[widest]--;
+        }
+        const widths = cols.map(k => k * kw + (k - 1) * FT_KID_GAP);
+        const lefts = stems.map((s, i) => s.x - widths[i] / 2);
+        for (let i = 0; i < lefts.length; i++) {
+            lefts[i] = Math.max(lefts[i], 0, i ? lefts[i - 1] + widths[i - 1] + FT_GROUP_GAP : 0);
+        }
+        let bound = FT_W;
+        for (let i = lefts.length - 1; i >= 0; i--) {
+            lefts[i] = Math.max(0, Math.min(lefts[i], bound - widths[i]));
+            bound = lefts[i] - FT_GROUP_GAP;
+        }
+        stems.forEach((s, i) => {
+            const n = cols[i];
+            s.kids.forEach((k, j) => {
+                const x = lefts[i] + (j % n) * (kw + FT_KID_GAP);
+                const y = kidTop + Math.floor(j / n) * (FT_CARD_H + 10);
+                card(k, x, y, kw, 'pp-ft-card--kid');
+                bottom = Math.max(bottom, y + FT_CARD_H);
+            });
+            const first = Math.min(n, s.kids.length);
+            const c0 = lefts[i] + kw / 2;
+            const c1 = lefts[i] + (first - 1) * (kw + FT_KID_GAP) + kw / 2;
+            vLine(s.x, s.y, busY);
+            hLine(Math.min(c0, s.x), Math.max(c1, s.x), busY);
+            for (let j = 0; j < first; j++) vLine(c0 + j * (kw + FT_KID_GAP), busY, kidTop);
+        });
+    }
+    return `<div class="pp-ft" style="height:${Math.ceil(bottom) + 2}px">${lines.join('')}${labels.join('')}${cards.join('')}</div>`;
+}
+
+/** The phone tree (§4.2), also in a window narrower than 641 px: parents, the person, a block per union. */
+function familyTreeRailHtml(c: Ctx, d: FtData): string {
+    const { P } = c;
+    let h = '';
+    if (d.parents.length) {
+        h += `<p class="pp-kicker pp-rail-kicker">${esc(P.parents)}</p>`
+            + `<div class="pp-rail-2">${d.parents.map(p => ftCard(c, p, 'pp-rail-card', '', relLabel(c, p))).join('')}</div>`
+            + `<span class="pp-rail-stem" aria-hidden="true"></span>`;
+    }
+    h += ftCard(c, c.person.id, 'pp-rail-card pp-ft-card--me');
+    const kidsHtml = (kids: PersonId[]) => kids.length
+        ? `<p class="pp-rail-lab">${esc(P.children(kids.length))}</p><div class="pp-rail-2">${kids.map(k => ftCard(c, k, 'pp-rail-card')).join('')}</div>`
+        : `<p class="pp-rail-lab">${esc(P.tree.noKids)}</p>`;
+    for (const u of d.unions) {
+        const story = ftStoryLink(c, u.story);
+        h += `<div class="pp-rail-u"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story}</p>`
+            + ftCard(c, u.partner, 'pp-rail-card') + kidsHtml(u.kids) + `</div>`;
+    }
+    if (d.solo.length) {
+        h += `<div class="pp-rail-u"><p class="pp-rail-lab">${esc(P.tree.otherParent)}</p>${kidsHtml(d.solo)}</div>`;
+    }
+    return `<div class="pp-rail">${h}</div>`;
+}
+
+/** Under the tree: siblings (folded over 3) and grandchildren (folded), as chips. */
+function familyTreeMoreHtml(c: Ctx, d: FtData): string {
+    const { P } = c;
+    const rows: string[] = [];
+    const chips = (ids: PersonId[]) => `<div class="pp-chips">${ids.map(id => ftChip(c, id)).join('')}</div>`;
+    if (d.siblings.length) {
+        const title = P.tree.siblings(d.siblings.length);
+        rows.push(d.siblings.length <= 3
+            ? `<div class="pp-ft-row pp-ft-row--open"><span class="pp-ft-row-h">${esc(title)}</span>${chips(d.siblings)}</div>`
+            : fold(c, {
+                key: 'sibs', id: 'pp-sibs', cls: 'pp-ft-row pp-sibs',
+                head: `<span class="pp-disc--inline">${esc(title)} ${foldState('▸', '▴')}</span>`, body: chips(d.siblings),
+            }));
+    }
+    if (d.grandchildren.length) {
+        rows.push(fold(c, {
+            key: 'grand', id: 'pp-grand', cls: 'pp-ft-row pp-grand',
+            head: `<span class="pp-disc--inline">${esc(P.tree.grandchildren(d.grandchildren.length))} ${foldState('▸', '▴')}</span>`,
+            body: chips(d.grandchildren),
+        }));
+    }
+    return rows.length ? `<div class="pp-ft-more">${rows.join('')}</div>` : '';
+}
+
+/**
+ * The family as a small tree (§4): `.pp-ft` on a page wider than 640 px,
+ * `.pp-rail` below that (the CSS picks one by the window's or file's width),
+ * the siblings' and grandchildren's rows under both.
+ */
+function familyTreeHtml(c: Ctx): string {
+    const d = familyTreeData(c);
+    const any = d.parents.length || d.unions.length || d.solo.length || d.siblings.length || d.grandchildren.length;
+    if (!any) return '';
+    const core = d.parents.length || d.unions.length || d.solo.length
+        ? familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d) : '';
+    return section('family', c.P.sec.family, `<div class="pp-fam">${core}${familyTreeMoreHtml(c, d)}</div>`);
 }
 
 function section(key: PersonPageSection['key'], title: string, body: string, head = ''): string {
@@ -1024,8 +1381,18 @@ function mainExcerpt(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): { sourc
 }
 
 function figureHtml(c: Ctx, src: string, caption: string, id?: string): string {
-    const zoom = `<button type="button" class="pp-zoom${c.app ? '' : ' js-only'}" data-pp-zoom aria-label="${esc(c.P.zoom)}">⤢</button>`;
-    return `<figure class="pp-fig"${id ? ` id="${id}"` : ''}><img src="${esc(src)}" alt="${esc(caption)}" loading="lazy">${zoom}`
+    const idAttr = id ? ` id="${id}"` : '';
+    if (c.imgs) {
+        // The file: the image's class (embedded once), a link into its light box when the gallery has it.
+        const n = c.galIndex.get(src.replace(/\s+/g, ''));
+        const img = imgHtml(c, src, caption, 'pp-fig-img');
+        const pic = n
+            ? `<a class="pp-fig-link" href="#obr-${n}" aria-label="${esc(`${c.P.zoom}: ${caption}`)}">${img}<span class="pp-zoom" aria-hidden="true">⤢</span></a>`
+            : img;
+        return `<figure class="pp-fig"${idAttr}>${pic}<figcaption>${esc(caption)}</figcaption></figure>`;
+    }
+    const zoom = c.app ? `<button type="button" class="pp-zoom" data-pp-zoom aria-label="${esc(c.P.zoom)}">⤢</button>` : '';
+    return `<figure class="pp-fig"${idAttr}><img src="${esc(src)}" alt="${esc(caption)}" loading="lazy">${zoom}`
         + `<figcaption>${esc(caption)}</figcaption></figure>`;
 }
 
@@ -1104,30 +1471,440 @@ function timelineHtml(c: Ctx): string {
     return section('timeline', P.sec.timeline, legend + segHtml, head);
 }
 
-// ── Materials ──
+// ── Images embedded once (§3.2: the file's <style> holds each image, everything else names its class) ──
 
-function materialsHtml(c: Ctx): string {
-    if (!c.page.groups.materials) return '';
+/** An image's pixel size from its data URL's header (PNG, GIF, JPEG, WebP), else null. */
+export function dataUrlImageSize(url: string): { w: number; h: number } | null {
+    const comma = url.indexOf(',');
+    if (comma < 0) return null;
+    let bytes: Uint8Array;
+    try {
+        const b64 = url.slice(comma + 1, comma + 1 + 90_000).replace(/\s+/g, '');
+        const bin = atob(b64.slice(0, b64.length - (b64.length % 4)));
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } catch {
+        return null;
+    }
+    const b = bytes;
+    const be16 = (i: number) => (b[i] << 8) | b[i + 1];
+    const le16 = (i: number) => b[i] | (b[i + 1] << 8);
+    const ok = (w: number, h: number) => (w > 0 && h > 0 ? { w, h } : null);
+    if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+        return ok(((b[16] << 24) | (b[17] << 16) | be16(18)) >>> 0, ((b[20] << 24) | (b[21] << 16) | be16(22)) >>> 0);
+    }
+    if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ok(le16(6), le16(8));
+    if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+        let i = 2;
+        while (i + 9 < b.length) {
+            if (b[i] !== 0xff) { i++; continue; }
+            const m = b[i + 1];
+            if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7) || m === 0xff) { i += m === 0xff ? 1 : 2; continue; }
+            if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return ok(be16(i + 7), be16(i + 5));
+            i += 2 + be16(i + 2);
+        }
+        return null;
+    }
+    if (b.length > 30 && b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) {
+        const tag = String.fromCharCode(b[12], b[13], b[14], b[15]);
+        if (tag === 'VP8 ') return ok(le16(26) & 0x3fff, le16(28) & 0x3fff);
+        if (tag === 'VP8L') {
+            const v = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+            return ok((v & 0x3fff) + 1, ((v >>> 14) & 0x3fff) + 1);
+        }
+        if (tag === 'VP8X') return ok((b[24] | (b[25] << 8) | (b[26] << 16)) + 1, (b[27] | (b[28] << 8) | (b[29] << 16)) + 1);
+    }
+    return null;
+}
+
+const CSS_SAFE_IMAGE = /^data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+$/;
+
+/** The file's entry of an image (registered on first use); null in the window and in print. */
+function imgEntry(c: Ctx, src: string): ImgEntry | null {
+    if (!c.imgs) return null;
+    const clean = src.replace(/\s+/g, '');
+    if (!CSS_SAFE_IMAGE.test(clean)) return null;
+    let e = c.imgs.get(clean);
+    if (!e) {
+        const size = dataUrlImageSize(clean);
+        e = { n: c.imgs.size + 1, src: clean, ratio: size ? `${size.w} / ${size.h}` : null };
+        c.imgs.set(clean, e);
+    }
+    return e;
+}
+
+/** An image: `<img>` in the window, in the file a span painted by the image's class. */
+function imgHtml(c: Ctx, src: string, alt: string, cls: string): string {
+    const e = imgEntry(c, src);
+    if (!e) return `<img class="${cls}" src="${esc(src)}" alt="${esc(alt)}" loading="lazy">`;
+    return `<span class="pp-img ${cls} img-${e.n}"${alt ? ` role="img" aria-label="${esc(alt)}"` : ' aria-hidden="true"'}></span>`;
+}
+
+/** The file's one <style> of images (each data URL once). */
+function imgStyles(c: Ctx): string {
+    if (!c.imgs?.size) return '';
+    const rules = [...c.imgs.values()]
+        .map(e => `.img-${e.n}{background-image:url("${e.src}")${e.ratio ? `;--pp-ar:${e.ratio}` : ''}}`).join('\n');
+    return `<style>\n${rules}\n</style>`;
+}
+
+// ── Gallery (§3.2) ──
+
+interface GalleryItem {
+    src: string;
+    kind: 'record' | 'document' | 'photo';
+    caption: string;
+    sub: string;
+    year: number | null;
+}
+
+interface PdfItem {
+    name: string;
+    href: string | null;
+    pages: number | null;
+    year: number | null;
+}
+
+const YEAR_IN_TEXT = /\b(1[5-9]\d\d|20\d\d)\b/;
+const DOCUMENT_WORDS = /scan|sken|list|dokument|document|urkunde|zeugnis|certific|osvědč|vysvědč|smlouv|contract|vertrag|passport|\bpas\b|dopis|letter|brief|register|matrik|zápis|record|akt/i;
+
+function cap(s: string): string {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** The excerpt's event: a main event (with its record wording) or another event's label, its year and place. */
+function excerptEvent(c: Ctx, sid: string): { event: PersonPageCaptionEvent | null; label: string; year: number | null; place: string } | null {
+    const p = c.person;
+    const bapt = p.events?.find(e => e.type === 'baptism');
+    const bur = p.events?.find(e => e.type === 'burial');
+    if (p.birthSourceIds?.includes(sid) || bapt?.sourceIds?.includes(sid)) {
+        return {
+            event: bapt?.sourceIds?.includes(sid) ? 'birthBaptism' : 'birth', label: '',
+            year: yearOf(p.birthDate) ?? yearOf(bapt?.date), place: p.birthPlace?.trim() || bapt?.place?.trim() || '',
+        };
+    }
+    if (p.deathSourceIds?.includes(sid) || bur?.sourceIds?.includes(sid)) {
+        return {
+            event: bur?.sourceIds?.includes(sid) ? 'deathBurial' : 'death', label: '',
+            year: yearOf(p.deathDate) ?? yearOf(bur?.date), place: p.deathPlace?.trim() || bur?.place?.trim() || '',
+        };
+    }
+    for (const uid of p.partnerships) {
+        const u = c.tree.partnerships[uid];
+        if (u?.sourceIds?.includes(sid)) return { event: 'marriage', label: '', year: yearOf(u.startDate), place: u.startPlace?.trim() ?? '' };
+    }
+    const ev = p.events?.find(e => e.sourceIds?.includes(sid));
+    if (ev) return { event: null, label: lifeEventLabel(ev, c.S), year: yearOf(ev.date), place: ev.place?.trim() ?? '' };
+    return null;
+}
+
+/** Every image of the person: the excerpts of the person's sources and the image attachments, by year (none last). */
+function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
     const { P } = c;
-    const atts = c.person.attachments ?? [];
-    const images: string[] = [];
-    const files: string[] = [];
-    for (const a of atts) {
-        const img = !isOriginalOnlyAttachment(a) && a.mimeType.startsWith('image/') ? safeImage(a.dataUrl) : null;
-        const caption = stripResearchIds(a.note?.trim() || a.name).text;
-        if (img) {
-            images.push(`<figure class="pp-mat"><img src="${esc(img)}" alt="${esc(caption)}" loading="lazy"><figcaption>${esc(caption)}</figcaption></figure>`);
-        } else {
-            const ext = a.mimeType === 'application/pdf' ? 'PDF' : (a.name.split('.').pop() ?? '').toUpperCase().slice(0, 5);
-            files.push(`<li><span class="pp-mat-kind">${esc(ext || '·')}</span> · ${esc(a.name)} · <span class="pp-mat-hint">${esc(c.app ? P.materials.pdfApp : P.materials.pdfFile)}</span></li>`);
+    const out: GalleryItem[] = [];
+    if (c.page.groups.excerpts) {
+        for (const row of rows) {
+            const s = c.tree.sources?.[row.source.id];
+            if (!s?.excerpts?.length) continue;
+            const title = stripResearchIds(s.title || '').text.trim();
+            const reg = registerKindOf(s.title);
+            const ev = excerptEvent(c, s.id);
+            const year = ev?.year ?? yearOf(s.recordDate);
+            const where = [ev?.place ?? '', year !== null ? String(year) : ''].filter(Boolean).join(' ');
+            const sub = [reg ? cap(P.gal.register(reg)) : peekTitle(title), where].filter(Boolean).join(', ');
+            const main = ev?.event ? P.gal.recordOf(ev.event) : ev?.label ?? '';
+            const kind: GalleryItem['kind'] = reg || ev?.event ? 'record' : 'document';
+            for (const e of s.excerpts) {
+                const src = shownExcerpt(e);
+                if (!src) continue;
+                const caption = main || stripResearchIds(e.caption?.trim() ?? '').text || peekTitle(title);
+                out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year });
+            }
         }
     }
-    if (!images.length && !files.length) return '';
+    for (const a of c.person.attachments ?? []) {
+        if (isPdfAttachment(a) || isOriginalOnlyAttachment(a) || !a.mimeType.startsWith('image/')) continue;
+        const src = safeImage(a.dataUrl);
+        if (!src) continue;
+        const caption = stripResearchIds(a.note?.trim() || a.name.replace(/\.[^.]+$/, '')).text.trim() || a.name;
+        const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
+        const year = m ? Number(m[1]) : null;
+        const s = a.sourceId ? c.tree.sources?.[a.sourceId] : undefined;
+        const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
+        out.push({ src, kind: a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo', caption, sub, year });
+    }
+    return out
+        .map((it, i) => ({ it, i }))
+        .sort((x, y) => (x.it.year ?? Infinity) - (y.it.year ?? Infinity) || x.i - y.i)
+        .map(x => x.it);
+}
+
+/** Pages of a PDF data URL (its page objects), null when it cannot be read. */
+function pdfPages(dataUrl: string): number | null {
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0 || dataUrl.length > 30_000_000) return null;
+    try {
+        const bin = atob(dataUrl.slice(comma + 1).replace(/\s+/g, ''));
+        const n = (bin.match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? []).length;
+        return n > 0 ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+function pdfItems(c: Ctx): PdfItem[] {
+    if (!c.page.groups.pdf) return [];
+    return (c.person.attachments ?? []).filter(isPdfAttachment).map(a => {
+        const href = safePdf(a);
+        const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
+        const name = stripResearchIds(a.note?.trim() || a.name).text.trim() || a.name;
+        return { name, href, pages: href ? pdfPages(href) : null, year: m ? Number(m[1]) : null };
+    });
+}
+
+function galleryCaption(it: GalleryItem, P: PP): string {
+    return `<span class="pp-gal-kind">${esc(P.gal.kind[it.kind])}</span>`
+        + `<span class="pp-gal-cap">${esc(it.caption)}</span>`
+        + (it.sub ? `<span class="pp-gal-sub">${esc(it.sub)}</span>` : '');
+}
+
+function galleryHtml(c: Ctx): string {
+    const { P } = c;
+    const items = c.gal;
+    const pdfs = pdfItems(c);
+    if (!items.length && !pdfs.length) return '';
+    const thumb = (it: GalleryItem, i: number): string => {
+        let pic: string;
+        if (c.imgs) {
+            pic = `<a class="pp-gal-thumb" href="#obr-${i + 1}" aria-label="${esc(`${P.zoom}: ${it.caption}`)}">${imgHtml(c, it.src, it.caption, 'pp-gal-img')}</a>`;
+        } else if (c.app) {
+            pic = `<button type="button" class="pp-gal-thumb" data-pp-zoom aria-label="${esc(`${P.zoom}: ${it.caption}`)}">`
+                + `<img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></button>`;
+        } else {
+            pic = `<span class="pp-gal-thumb"><img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></span>`;
+        }
+        return `<figure class="pp-gal-item">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
+    };
+    const first = c.opts.mode === 'print' ? items : items.slice(0, 6);
+    const rest = c.opts.mode === 'print' ? [] : items.slice(6);
+    let body = first.length ? `<div class="pp-gal">${first.map(thumb).join('')}</div>` : '';
+    if (rest.length) {
+        body += fold(c, {
+            key: 'gal', id: 'pp-gal-more', cls: 'pp-gal-more',
+            head: `<span class="pp-disc--inline">${foldState(`${P.gal.more(rest.length)} ▾`, `${P.gal.less} ▴`)}</span>`,
+            body: `<div class="pp-gal">${rest.map((it, i) => thumb(it, i + 6)).join('')}</div>`,
+        });
+    }
+    if (pdfs.length) {
+        const row = (f: PdfItem): string => {
+            let name: string;
+            if (c.app && !c.page.readOnly) name = `<button type="button" class="pp-pdf-name pp-link" data-pp-action="materials">${esc(f.name)}</button>`;
+            else if (!c.app && f.href) name = `<a class="pp-pdf-name" href="${esc(f.href)}" download="${esc(safeFileName(f.name.replace(/\.pdf$/i, ''), 'document'))}.pdf">${esc(f.name)}</a>`;
+            else name = `<span class="pp-pdf-name">${esc(f.name)}</span>`;
+            const meta = [P.gal.pdf(f.pages, f.year), !c.app && !f.href ? P.gal.pdfOff : ''].filter(Boolean).join(' · ');
+            return `<li class="pp-pdf"><span class="pp-pdf-ic" aria-hidden="true">PDF</span>`
+                + `<span class="pp-pdf-main">${name}<span class="pp-pdf-meta">${esc(meta)}</span></span></li>`;
+        };
+        body += `<ul class="pp-pdfs">${pdfs.map(row).join('')}</ul>`;
+    }
     const open = c.app && !c.page.readOnly
-        ? `<button type="button" class="pp-act" data-pp-action="materials">${esc(P.materials.open)} ›</button>` : '';
-    return section('materials', P.sec.materials,
-        (images.length ? `<div class="pp-mat-grid">${images.join('')}</div>` : '')
-        + (files.length ? `<ul class="pp-mat-files">${files.join('')}</ul>` : '') + open);
+        ? `<button type="button" class="pp-act pp-gal-open" data-pp-action="materials">${esc(P.materials.open)} ›</button>` : '';
+    const head = `<div class="pp-sec-head"><h2>${esc(P.sec.materials)} <span class="pp-count">${items.length + pdfs.length}</span></h2>${open}</div>`;
+    return section('materials', P.sec.materials, body, head);
+}
+
+/** The file's light boxes (§3.4): one per gallery image, shown by :target, with the counter and ‹ › anchors. */
+function lightboxHtml(c: Ctx): string {
+    if (!c.imgs) return '';
+    const { P } = c;
+    const m = c.gal.length;
+    return c.gal.map((it, i) => {
+        const n = i + 1;
+        const prev = n > 1 ? `<a class="pp-lb-nav" href="#obr-${n - 1}" data-pp-lb="prev">${esc(P.gal.prev)}</a>` : '';
+        const next = n < m ? `<a class="pp-lb-nav" href="#obr-${n + 1}" data-pp-lb="next">${esc(P.gal.next)}</a>` : '';
+        return `<div class="pp-lb" id="obr-${n}" role="dialog" aria-label="${esc(it.caption)}">`
+            + `<div class="pp-lb-top"><span class="pp-lb-count">${esc(P.gal.counter(n, m))}</span>`
+            + `<a class="pp-lb-close" href="#pp-sec-materials" data-pp-lb="close">${esc(P.gal.closeZoom)}</a></div>`
+            + imgHtml(c, it.src, it.caption, 'pp-lb-img')
+            + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc([it.caption, it.sub].filter(Boolean).join(' · '))}</span>`
+            + `<span class="pp-lb-navs">${prev}${next}</span></div></div>`;
+    }).join('');
+}
+
+/** The file's light box of the portrait. */
+function portraitLightbox(c: Ctx, photo: string | null): string {
+    if (!c.imgs || !photo) return '';
+    const name = nameOf(c, c.person.id);
+    return `<div class="pp-lb" id="obr-p" role="dialog" aria-label="${esc(name)}">`
+        + `<div class="pp-lb-top"><span class="pp-lb-count"></span><a class="pp-lb-close" href="#pp-sec-facts" data-pp-lb="close">${esc(c.P.gal.closeZoom)}</a></div>`
+        + imgHtml(c, photo, name, 'pp-lb-img')
+        + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc(name)}</span></div></div>`;
+}
+
+// ── In brief (§0.3) ──
+
+function summaryHtml(c: Ctx): string {
+    const { P, person, page, tree } = c;
+    if (shielded(c, person.id)) return '';
+    const g = genderKey(person);
+    const living = page.living.has(person.id);
+    const cells: [string, string][] = [];
+
+    // 1. Age at death (living: age today, in the window only).
+    if (!living) {
+        const exact = ageAt(person.birthDate, person.deathDate);
+        const b = yearOf(person.birthDate);
+        const d = yearOf(person.deathDate);
+        if (exact !== null) cells.push([P.summary.years(exact), P.summary.age]);
+        else if (b !== null && d !== null && d >= b) cells.push([P.summary.aboutYears(d - b), P.summary.age]);
+    } else if (c.app) {
+        const today = isoDay(c.opts.now);
+        const exact = ageBetween(person.birthDate, today);
+        const bd = parseFlexDate(person.birthDate);
+        if (bd && !bd.qualifier && !bd.end && bd.month !== undefined && exact) cells.push([P.summary.years(exact.years), P.summary.ageNow]);
+        else if (bd) cells.push([P.summary.aboutYears(c.opts.now.getFullYear() - bd.year), P.summary.ageNow]);
+    }
+
+    // 2. Marriages.
+    const fam = familyOf(tree, person);
+    const unions = fam.unions.filter(u => {
+        const other = u.person1Id === person.id ? u.person2Id : u.person1Id;
+        return !!other && !!tree.persons[other] && !tree.persons[other].isPlaceholder;
+    });
+    const married = unions.filter(u => u.status !== 'partners' && u.status !== 'separated');
+    const ageOfMarriage = (u: Partnership): number | null => {
+        const a = ageAt(person.birthDate, u.startDate);
+        if (a !== null) return a;
+        const rec = parseInt(u.ages?.[person.id] ?? '', 10);
+        return Number.isFinite(rec) ? rec : null;
+    };
+    const marriedAt = (list: Partnership[]) => {
+        const ages = list.map(ageOfMarriage);
+        return ages.every((a): a is number => a !== null) ? P.summary.marriedAt[g](ages as number[]) : '';
+    };
+    if (married.length >= 2) {
+        cells.push([P.summary.marriages(married.length), marriedAt(married)]);
+    } else if (married.length === 1) {
+        const u = married[0];
+        const other = tree.persons[(u.person1Id === person.id ? u.person2Id : u.person1Id) as PersonId];
+        const deaths = [person.deathDate, other?.deathDate].filter((x): x is string => !!x)
+            .sort((a, b) => (yearOf(a) ?? Infinity) - (yearOf(b) ?? Infinity));
+        const end = u.endDate ?? deaths[0];
+        const years = end ? ageAt(u.startDate, end) ?? (() => {
+            const s = yearOf(u.startDate);
+            const e = yearOf(end);
+            return s !== null && e !== null && e >= s ? e - s : null;
+        })() : null;
+        if (years !== null && years > 0) cells.push([P.summary.marriageYears(years), marriedAt([u])]);
+        else cells.push([P.summary.marriages(1), marriedAt([u])]);
+    } else if (unions.length) {
+        cells.push([P.summary.partnership, '']);
+    }
+
+    // 3. Children (who outlived the person only when it can be told for every child).
+    const kids = fam.children;
+    if (kids.length) {
+        let label = '';
+        const dy = yearOf(person.deathDate);
+        if (!living && dy !== null) {
+            const decided = kids.map(k => {
+                if (page.living.has(k)) return true;
+                const ky = yearOf(tree.persons[k]?.deathDate);
+                if (ky === null || ky === dy) return null;
+                return ky > dy;
+            });
+            if (decided.every(x => x !== null)) {
+                const n = decided.filter(Boolean).length;
+                if (n > 0) label = P.summary.survived[g](n);
+            }
+        }
+        if (!label) {
+            const withKids = unions.filter(u => kids.some(k => (u.childIds ?? []).includes(k))).length;
+            if (withKids >= 2) label = P.summary.fromMarriages(withKids);
+        }
+        cells.push([P.summary.children(kids.length), label]);
+    }
+
+    // 4. The longest occupation with a period, else the places of a life (3 and more).
+    let job: { years: number; label: string } | null = null;
+    for (const e of person.events ?? []) {
+        if (e.type !== 'occupation') continue;
+        const d = parseFlexDate(e.date);
+        const years = d?.end ? d.end.year - d.year : 0;
+        if (years > 0 && (!job || years > job.years)) {
+            const what = stripResearchIds(e.note?.trim() ?? '').text.trim();
+            job = { years, label: [what, e.place?.trim() ?? ''].filter(Boolean).join(', ') };
+        }
+    }
+    if (job) {
+        cells.push([P.summary.years(job.years), job.label]);
+    } else {
+        const points = residencePoints(computePersonLifeline(tree, person.id, { childEvents: false }));
+        const places = new Set(points.map(p => placeKey(p.place)).filter(Boolean));
+        if (places.size >= 3) cells.push([P.summary.places(places.size), P.summary.lifelong]);
+    }
+
+    if (cells.length < 3) return '';
+    return `<div class="pp-sum${cells.length === 3 ? ' pp-sum--3' : ''}" role="list" aria-label="${esc(P.summary.label)}">`
+        + cells.map(([big, label]) => `<div class="pp-sum-cell" role="listitem"><span class="pp-sum-big">${esc(big)}</span>`
+            + (label ? `<span class="pp-sum-lab">${esc(label)}</span>` : '') + `</div>`).join('')
+        + `</div>`;
+}
+
+// ── Open question (§0.4) ──
+
+function questionHtml(c: Ctx): string {
+    const q = c.person.question?.trim();
+    if (!q) return '';
+    // In the file only for the deceased (Milan, 30 Oct): a question about a living person stays in the app.
+    if (!c.app && c.page.living.has(c.person.id)) return '';
+    return `<section class="pp-sec pp-sec--question" id="pp-sec-question"><div class="pp-question">`
+        + `<h2 class="pp-kicker">${esc(c.P.question)}</h2><p class="pp-question-text">${esc(stripResearchIds(q).text)}</p></div></section>`;
+}
+
+// ── People around (§0.5) ──
+
+const GODCHILDREN_SHOWN = 6;
+
+function peopleAroundHtml(c: Ctx): string {
+    const { P, person, tree, page } = c;
+    const rows: { label: string; items: string[] }[] = [];
+    let names = 0;
+    const item = (p: EventParticipant): string => {
+        if (p.personId && shielded(c, p.personId)) return '';
+        const linked = p.personId ? tree.persons[p.personId] : undefined;
+        const name = linked ? shownNameOrEmpty(linked) : p.name?.trim() ?? '';
+        if (!name) return '';
+        names++;
+        const role = P.people.role[p.role in P.people.role ? p.role : 'other'][genderKey(linked)];
+        const note = p.note?.trim() ? stripResearchIds(p.note).text.trim() : '';
+        return `<li><strong>${personLink(c, esc(name), linked?.id)}</strong>${note ? `, ${esc(note)}` : ''}`
+            + ` <span class="pp-people-role">(${esc(role)})</span></li>`;
+    };
+    const bapt = (person.events ?? []).find(e => e.type === 'baptism' && e.participants?.length);
+    if (bapt) {
+        const items = bapt.participants!.map(item).filter(Boolean);
+        const y = yearOf(bapt.date);
+        if (items.length) rows.push({ label: P.people.baptism(y !== null ? String(y) : ''), items });
+    }
+    for (const u of familyOf(tree, person).unions) {
+        const items = (u.participants ?? []).map(item).filter(Boolean);
+        const y = yearOf(u.startDate);
+        if (items.length) rows.push({ label: P.people.marriage(y !== null ? String(y) : ''), items });
+    }
+    const god = page.godchildren.filter(gc => tree.persons[gc.id] && !shielded(c, gc.id));
+    if (god.length) {
+        const items = god.slice(0, GODCHILDREN_SHOWN).map(gc => {
+            names++;
+            return `<li><strong>${personLink(c, esc(nameOf(c, gc.id) || '?'), gc.id)}</strong>`
+                + ` <span class="pp-people-role">(${esc(P.people.baptismOf(gc.year !== null ? String(gc.year) : ''))})</span></li>`;
+        });
+        if (god.length > GODCHILDREN_SHOWN) items.push(`<li class="pp-people-more">${esc(P.people.more(god.length - GODCHILDREN_SHOWN))}</li>`);
+        rows.push({ label: P.people.godparentOf[genderKey(person)], items });
+    }
+    if (names < 2) return '';
+    return section('people', P.people.title, `<dl class="pp-people">${rows.map(r =>
+        `<div class="pp-people-row"><dt>${esc(r.label)}</dt><dd><ul>${r.items.join('')}</ul></dd></div>`).join('')}</dl>`);
 }
 
 // ── Sources ──
@@ -1231,6 +2008,7 @@ function makeCtx(page: PersonPageData, opts: PersonPageOptions): Ctx | null {
     return {
         page, opts, S, P: S.personPage, app: opts.mode === 'app', tree: page.tree, person,
         mainEx: new Map(), ids: new Set(),
+        imgs: opts.mode === 'file' ? new Map() : null, gal: [], galIndex: new Map(),
     };
 }
 
@@ -1241,25 +2019,45 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const rows = personSourceRows(page.tree, page.personId, c.S).filter(r => page.tree.sources?.[r.source.id]);
     const items = researchItems(page, page.lang, c);
     const differs = page.groups.research ? { birth: items.differsBirth, death: items.differsDeath } : null;
+    const footer = footerHtml(c);
+    const cls = ['pp', opts.toggles.history ? '' : 'pp-no-history', opts.toggles.childEvents ? '' : 'pp-no-kids'].filter(Boolean).join(' ');
+    const open = `<article class="${cls}" data-pp-close="${esc(c.P.close)}">`;
+    // A living person in a protected file (§0, 0f): the header ("E. F.", the birth year, a note) alone.
+    if (shielded(c, c.person.id)) return `${open}${headerHtml(c, null)}${footer}</article>`;
+    c.gal = galleryItems(c, rows);
+    c.gal.forEach((it, i) => {
+        const key = it.src.replace(/\s+/g, '');
+        if (!c.galIndex.has(key)) c.galIndex.set(key, i + 1);
+    });
     // Order of building: the timeline places the main excerpts the sources refer to,
     // the story collects the ids the researchers' section lists.
     const header = headerHtml(c, differs);
-    const family = familyHtml(c);
+    const summary = summaryHtml(c);
+    const family = familyTreeHtml(c);
     const story = storyHtml(c);
-    const notes = notesHtml(c);
+    const question = questionHtml(c);
+    // Slot 6, the places of a life (placesMapHtml, §1), goes here, after the question.
+    // Slot 7, the life chart (lifeChartHtml, §2), goes here, above the timeline.
     const timeline = timelineHtml(c);
-    const materials = materialsHtml(c);
+    const gallery = galleryHtml(c);
+    const people = peopleAroundHtml(c);
+    const notes = notesHtml(c);
     const sources = sourcesHtml(c, rows);
     const research = researchHtml(c, items, rows);
-    const cls = ['pp', opts.toggles.history ? '' : 'pp-no-history', opts.toggles.childEvents ? '' : 'pp-no-kids'].filter(Boolean).join(' ');
-    return `<article class="${cls}" data-pp-close="${esc(c.P.close)}">${header}${family}${story}${notes}${timeline}${materials}${sources}${research}${footerHtml(c)}</article>`;
+    const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
+    // Last: every image of the page is registered by now.
+    const styles = imgStyles(c);
+    return `${open}${styles}${header}${summary}${family}${story}${question}${timeline}${gallery}${people}${notes}`
+        + `${sources}${research}${footer}${boxes}</article>`;
 }
 
 /** The sections on the page, in order (the window's table of contents). */
 export function personPageSections(body: string, lang: Language): PersonPageSection[] {
     const P = getStringsForLang(lang).personPage;
-    const keys: PersonPageSection['key'][] = ['family', 'story', 'notes', 'timeline', 'materials', 'sources', 'research'];
-    return keys.filter(k => body.includes(`id="pp-sec-${k}"`)).map(k => ({ key: k, id: `pp-sec-${k}`, label: P.sec[k] }));
+    // The open question is part of the story's reading, not an entry of its own.
+    const keys = ['family', 'story', 'timeline', 'materials', 'people', 'notes', 'sources', 'research'] as const;
+    return keys.filter(k => body.includes(`id="pp-sec-${k}"`))
+        .map(k => ({ key: k, id: `pp-sec-${k}`, label: k === 'people' ? P.people.title : P.sec[k] }));
 }
 
 /**
@@ -1332,7 +2130,8 @@ export function personPageFileName(page: PersonPageData): string {
 /** The saved file's size in bytes (UTF-8) and the images it embeds. */
 export function estimatePersonPageSize(page: PersonPageData, opts: PersonPageOptions): { bytes: number; images: number } {
     const html = buildPersonPageDocument(page, opts);
-    const images = (html.match(/<img\s/g) ?? []).length;
+    // The window's <img> or the file's one rule per image.
+    const images = (html.match(/<img\s/g) ?? []).length + (html.match(/background-image:url\(/g) ?? []).length;
     return { bytes: utf8Length(html), images };
 }
 

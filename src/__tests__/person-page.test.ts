@@ -11,7 +11,7 @@ import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
-    personPageTocCurrent,
+    personPageTocCurrent, dataUrlImageSize,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
 import { personSourceRows } from '../person-sources.js';
@@ -91,8 +91,8 @@ describe('sections', () => {
         const html = body(fiskTree(), { open: new Set(['research']) });
         expect(html.startsWith('<article class="pp"')).toBe(true);
         expect(html.indexOf('<header class="pp-hero"')).toBeLessThan(html.indexOf('pp-sec-family'));
-        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-notes', 'pp-sec-timeline', 'pp-sec-sources', 'pp-sec-research']);
-        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'notes', 'timeline', 'sources', 'research']);
+        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
+        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'timeline', 'materials', 'notes', 'sources', 'research']);
     });
 
     it('a person with only a name has a header and nothing empty', () => {
@@ -112,7 +112,6 @@ describe('sections', () => {
         expect(html).toContain('Jan se narodil v Čapkově.');
         expect(html).toContain('<span class="pp-draft-tag">Návrh</span>');
         expect(html).not.toContain('pp-sec-research');
-        expect(html).not.toContain('pp-sec-materials');
         const file = doc(d, { lang: 'de' });
         expect(file).toContain('Jan se narodil v Čapkově.');
         expect(file).toContain('<span class="pp-draft-tag">Entwurf</span>');
@@ -163,7 +162,7 @@ describe('sections', () => {
         expect(doc(d, { personId: 'karel' as PersonId, privacy: 'full' })).toContain('Karel a Lída žili ve mlýně.');
     });
 
-    it('materials show safe images in a research tree only', () => {
+    it('the gallery shows safe images, with or without research (§3.3)', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].attachments = [
             { id: 'a1', name: 'dum.jpg', mimeType: 'image/jpeg', dataUrl: IMG, sizeBytes: 100, note: 'Dům čp. 12' },
@@ -173,27 +172,72 @@ describe('sections', () => {
         expect(withResearch).toContain('pp-sec-materials');
         expect(withResearch).toContain('Dům čp. 12');
         expect(withResearch).not.toContain('image/svg');
-        expect(body(d, { research: false })).not.toContain('pp-sec-materials');
+        expect(body(d, { research: false })).toContain('Dům čp. 12');
     });
 });
 
 describe('family', () => {
-    it('the marriage line sits inside the partner\'s card, in the window and in the file', () => {
-        const card = (html: string) => html.match(/<button [^>]*class="pp-card[^"]*"[^>]*>(?:(?!<\/button>).)*Marie(?:(?!<\/button>).)*<\/button>/)?.[0] ?? '';
-        const app = card(body(fiskTree()));
-        expect(app).toContain('data-pp-person="marie"');
-        expect(app).toMatch(/<span class="pp-card-sub">sňatek 2\. února 1888, Čapkov<\/span><\/button>$/);
-        // No button inside the card's button.
-        expect(app.match(/<button/g)).toHaveLength(1);
-        expect(doc(fiskTree())).toContain('<span class="pp-card pp-card--plain"><span class="pp-card-name">Marie Dvořáková</span>'
-            + '<span class="pp-card-years">1865–1930</span><span class="pp-card-sub">sňatek 2. února 1888, Čapkov</span></span>');
+    const tree = (html: string) => html.match(/<div class="pp-ft"[^>]*>.*?<\/div><div class="pp-rail">/)?.[0] ?? '';
+    const rail = (html: string) => html.match(/<div class="pp-rail">.*?<\/div>(?=<div class="pp-ft-more">|<\/div><\/section>)/)?.[0] ?? '';
+    it('the tree: parents above, the person marked, the partner beside with the marriage year, children under the union', () => {
+        const app = tree(body(fiskTree()));
+        expect(app).toMatch(/<button type="button" class="pp-ft-card pp-ft-card--partner pp-ft-link" data-pp-person="marie"[^>]*><span class="pp-ft-name" title="Marie Dvořáková">Marie Dvořáková<\/span><span class="pp-ft-years">1865–1930<\/span><\/button>/);
+        expect(app).toContain('data-pp-person="otec"');
+        expect(app).toContain('data-pp-person="petr"');
+        expect(app).toMatch(/<span class="pp-ft-card pp-ft-card--me"[^>]*><span class="pp-ft-name" title="Jan Fíšek">/);
+        expect(app).toContain('<span>⚭ 1888</span>');
+        // Parents first, the person, the partner, the children (top to bottom).
+        const top = (id: string) => Number(app.match(new RegExp(`data-pp-person="${id}" style="[^"]*top:(\\d+)px`))?.[1]);
+        expect(top('otec')).toBeLessThan(top('marie'));
+        expect(top('marie')).toBeLessThan(top('petr'));
+        // The file: plain text cards, no buttons.
+        const file = doc(fiskTree());
+        expect(tree(file)).toContain('<span class="pp-ft-card pp-ft-card--partner" style=');
+        expect(tree(file)).not.toContain('<button');
+    });
+    it('the rail (narrow pages): the union\'s date and place, the partner, the children', () => {
+        const r = rail(body(fiskTree()));
+        expect(r).toContain('⚭ 2. února 1888, Čapkov');
+        expect(r).toContain('Děti (2)');
+        expect(r.indexOf('data-pp-person="marie"')).toBeLessThan(r.indexOf('data-pp-person="petr"'));
+    });
+    it('a step-parent is labelled and joined by a dashed line; a couple without children says so', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].parentRelTypes = { otec: 'step' } as Person['parentRelTypes'];
+        d.persons['jan' as PersonId].childIds = [];
+        d.partnerships['u1' as PartnershipId].childIds = [];
+        const html = body(d);
+        expect(tree(html)).toContain('<span class="pp-ft-rel">nevlastní otec</span>');
+        expect(tree(html)).toContain('pp-ft-dash');
+        expect(tree(html)).toContain('bez dětí');
+    });
+    it('siblings over three and the grandchildren are folded rows of chips', () => {
+        const d = fiskTree();
+        for (const k of ['s2', 's3', 's4']) {
+            d.persons[k as PersonId] = p(k, `Sourozenec${k}`, 'Fíšek', 'male', { birthDate: '1870', parentIds: ids('otec', 'matka') });
+            d.persons['otec' as PersonId].childIds.push(k as PersonId);
+        }
+        d.persons['vnucka' as PersonId] = p('vnucka', 'Božena', 'Fíšková', 'female', { birthDate: '1915', deathDate: '1990', parentIds: ids('rosa') });
+        d.persons['rosa' as PersonId].childIds = ids('vnucka');
+        const html = body(d);
+        expect(html).toContain('aria-controls="pp-sibs-body"');
+        expect(html).toMatch(/id="pp-sibs-body" hidden/);
+        expect(html).toContain('Sourozenci (4)');
+        expect(html).toContain('Vnoučata (1)');
+        expect(html).toMatch(/id="pp-grand-body" hidden><div class="pp-chips"><button type="button" class="pp-chip pp-chip-link" data-pp-person="vnucka"><span class="pp-chip-name">Božena Fíšková<\/span> <span class="pp-chip-years">1915–1990<\/span><\/button>/);
+        // Three siblings or fewer: a plain row.
+        expect(body(fiskTree())).toContain('<div class="pp-ft-row pp-ft-row--open"><span class="pp-ft-row-h">Sourozenci (1)</span>');
+        // The file: <details>, the chips plain text.
+        const file = doc(d);
+        expect(file).toContain('<details class="pp-coll pp-ft-row pp-grand" id="pp-grand">');
+        expect(file).toContain('<span class="pp-chip"><span class="pp-chip-name">Božena Fíšková</span>');
     });
 });
 
 describe('default folds', () => {
     it('siblings, sources, each source, the basis and the researchers section start closed', () => {
         const html = body(fiskTree());
-        for (const id of ['pp-sibs', 'pp-sources', 'pp-src-s1', 'pp-basis', 'pp-research']) {
+        for (const id of ['pp-sources', 'pp-src-s1', 'pp-basis', 'pp-research']) {
             expect(html).toContain(`aria-controls="${id}-body"`);
             expect(html).toMatch(new RegExp(`id="${id}-body" hidden`));
         }
@@ -203,9 +247,9 @@ describe('default folds', () => {
     });
 
     it('open keys open them', () => {
-        const html = body(fiskTree(), { open: new Set(['sources', 'sibs']) });
+        const html = body(fiskTree(), { open: new Set(['sources', 's:s1']) });
         expect(html).toContain('id="pp-sources-body">');
-        expect(html).toContain('id="pp-sibs-body">');
+        expect(html).toContain('id="pp-src-s1-body">');
         expect(html).toContain('id="pp-basis-body" hidden');
     });
 
@@ -311,7 +355,8 @@ describe('timeline', () => {
         expect(html).toContain('Zápis o narození a křtu v matrice narozených, Čapkov 1860');
         expect(html).toContain('id="pp-ex-marriage-1"');
         expect(html).toContain('href="#pp-ex-birth"');
-        expect((html.match(/<img /g) ?? []).length).toBe(2);
+        // Two at the rows, both again in the gallery.
+        expect((html.match(/<img /g) ?? []).length).toBe(4);
         const noEx = body(fiskTree(), { groups: { ...PERSON_PAGE_ALL_GROUPS, excerpts: false } });
         expect(noEx).not.toContain('<img');
     });
@@ -597,16 +642,183 @@ describe('privacy of the living', () => {
         // A living person's own page: the name alone for the person, the relation for the others.
         expect(personPageLivingNames(preparePersonPageData(living(), { ...op, personId: 'eva' as PersonId, lang: 'en' })).sort()).toEqual(['Eva Fíšková', 'Lída Malá (mother)']);
         expect(personPageLivingNames(preparePersonPageData(fiskTree(), opts({ personId: 'karel' as PersonId })))).toEqual([]);
-        // A great-grandchild on the page only as a godparent (the grandchild between is not on the page):
-        // the relation comes from the whole tree.
+        // A great-great-grandchild on the page only as a witness (the great-grandchild between is not on
+        // the page; grandchildren are, for the family tree): the relation comes from the whole tree.
         const d = living();
         d.persons['vnuk' as PersonId] = p('vnuk', 'Ota', 'Fíšek', 'male', { birthDate: '1975', parentIds: ids('eva'), childIds: ids('pravnuk') });
-        d.persons['pravnuk' as PersonId] = p('pravnuk', 'Jakub', 'Fíšek', 'male', { birthDate: '2000', parentIds: ids('vnuk') });
+        d.persons['pravnuk' as PersonId] = p('pravnuk', 'Petr', 'Fíšek', 'male', { birthDate: '1995', parentIds: ids('vnuk'), childIds: ids('prapra') });
+        d.persons['prapra' as PersonId] = p('prapra', 'Jakub', 'Fíšek', 'male', { birthDate: '2015', parentIds: ids('pravnuk') });
         d.persons['eva' as PersonId].childIds = ids('vnuk');
-        d.persons['karel' as PersonId].events = [{ id: 'e9', type: 'burial', date: '1999', participants: [{ id: 'g9', role: 'witness', name: 'Jakub Fíšek', personId: 'pravnuk' as PersonId }] }];
+        d.persons['karel' as PersonId].events = [{ id: 'e9', type: 'burial', date: '1999', participants: [{ id: 'g9', role: 'witness', name: 'Jakub Fíšek', personId: 'prapra' as PersonId }] }];
         const page = preparePersonPageData(d, op);
-        expect(personPageLivingNames(page, d)).toContain('Jakub Fíšek (pravnuk)');
+        expect(personPageLivingNames(page, d)).toContainEqual(expect.stringMatching(/^Jakub Fíšek \(.+\)$/));
         expect(personPageLivingNames(page)).toContain('Jakub Fíšek');
+    });
+});
+
+describe('person page 2 (§0, §3, §4)', () => {
+    /** A PNG header of the given size (enough for the size parser and a safe image). */
+    function png(w: number, h: number): string {
+        const b = Buffer.alloc(33);
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+        b.writeUInt32BE(13, 8);
+        b.write('IHDR', 12, 'ascii');
+        b.writeUInt32BE(w, 16);
+        b.writeUInt32BE(h, 20);
+        return `data:image/png;base64,${b.toString('base64')}`;
+    }
+    const PDF = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj<</Type /Page>>endobj\n2 0 obj<</Type /Page>>endobj\n%%EOF').toString('base64')}`;
+    function withAttachments(n: number): StromData {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].attachments = [
+            ...Array.from({ length: n }, (_, i) => ({ id: `a${i}`, name: `foto${i}.png`, mimeType: 'image/png', dataUrl: png(10 + i, 20), sizeBytes: 50, note: `Fotografie ${i + 1}` })),
+            { id: 'pdf1', name: 'smlouva-1902.pdf', mimeType: 'application/pdf', dataUrl: PDF, sizeBytes: 90 },
+        ];
+        return d;
+    }
+
+    it('reads the size of PNG, GIF and JPEG data URLs', () => {
+        expect(dataUrlImageSize(png(1600, 900))).toEqual({ w: 1600, h: 900 });
+        expect(dataUrlImageSize(IMG)).toEqual({ w: 1, h: 1 });
+        const gif = Buffer.from('GIF89a\x07\x00\x03\x00\x00\x00\x00\x00\x00\x00', 'latin1').toString('base64');
+        expect(dataUrlImageSize(`data:image/gif;base64,${gif}`)).toEqual({ w: 7, h: 3 });
+        expect(dataUrlImageSize('data:image/png;base64,AAAA')).toBeNull();
+    });
+
+    it('the summary needs three cells; a poor person has none and small initials', () => {
+        const html = body(fiskTree());
+        const sum = html.match(/<div class="pp-sum[^"]*" role="list"[^>]*>.*?<\/div><\/div>(?=<section|<div class="pp-sum-cell")/)?.[0] ?? html;
+        expect(html).toContain('<div class="pp-sum pp-sum--3" role="list" aria-label="V kostce">');
+        expect(sum).toContain('<span class="pp-sum-big">50 let</span><span class="pp-sum-lab">dožitý věk</span>');
+        expect(sum).toContain('<span class="pp-sum-big">2 děti</span>');
+        expect(sum).toMatch(/<span class="pp-sum-big">\d+ let manželství<\/span><span class="pp-sum-lab">oženil se ve 27 letech<\/span>/);
+        // Before the family, after the header.
+        expect(html.indexOf('pp-sum')).toBeGreaterThan(html.indexOf('</header>'));
+        expect(html.indexOf('pp-sum')).toBeLessThan(html.indexOf('pp-sec-family'));
+        // A name and a birth year: no summary, the small initials.
+        const poor: StromData = { persons: { x: p('x', 'Jakub', 'Prostý', 'male', { birthDate: '1801' }) }, partnerships: {} } as StromData;
+        const ph = body(poor, { personId: 'x' as PersonId });
+        expect(ph).not.toContain('pp-sum');
+        expect(ph).toContain('<div class="pp-initials pp-initials--small" aria-hidden="true">JP</div>');
+        expect(html).not.toContain('pp-initials--small');
+    });
+
+    it('the open question: in the window, in the file only for the deceased', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].question = 'Odkud přišel jeho otec? [S0042]';
+        const html = body(d);
+        expect(html).toContain('<section class="pp-sec pp-sec--question" id="pp-sec-question"><div class="pp-question"><h2 class="pp-kicker">Otevřená otázka</h2><p class="pp-question-text">Odkud přišel jeho otec?</p></div></section>');
+        // After the story, before the timeline.
+        expect(html.indexOf('pp-sec-question')).toBeGreaterThan(html.indexOf('pp-sec-story'));
+        expect(html.indexOf('pp-sec-question')).toBeLessThan(html.indexOf('pp-sec-timeline'));
+        expect(doc(d)).toContain('Odkud přišel jeho otec?');
+        // A living person's question stays in the app (even with full data in the file).
+        d.persons['rosa' as PersonId].question = 'Kde žije?';
+        delete d.persons['rosa' as PersonId].deathDate;
+        d.persons['rosa' as PersonId].birthDate = '1993';
+        expect(body(d, { personId: 'rosa' as PersonId })).toContain('Kde žije?');
+        expect(doc(d, { personId: 'rosa' as PersonId, privacy: 'full' })).not.toContain('Kde žije?');
+    });
+
+    it('people around: the baptism, the marriage and the godchildren; one name alone makes no section', () => {
+        expect(body(fiskTree())).not.toContain('pp-sec-people');
+        const d = fiskTree();
+        d.partnerships['u1' as PartnershipId].participants = [{ id: 'w1', role: 'witness', name: 'František Svědek', note: 'soused' }];
+        d.persons['cizi' as PersonId].events = [{ id: 'cb', type: 'baptism', date: '1870', participants: [{ id: 'g2', role: 'godparent', name: 'Jan Fíšek', personId: 'jan' as PersonId }] }];
+        const html = body(d);
+        const sec = html.match(/<section class="pp-sec pp-sec--people" id="pp-sec-people">.*?<\/section>/)?.[0] ?? '';
+        expect(sec).toContain('<dt>Při křtu 1860</dt><dd><ul><li><strong>Josef Kmotr</strong> <span class="pp-people-role">(kmotr/a)</span></li>');
+        expect(sec).toContain('<dt>Při sňatku 1888</dt><dd><ul><li><strong>František Svědek</strong>, soused <span class="pp-people-role">(svědek)</span></li>');
+        expect(sec).toMatch(/<dt>Byl kmotrem<\/dt><dd><ul><li><strong><button[^>]*data-pp-person="cizi"[^>]*>Tomáš Neznámý<\/button><\/strong> <span class="pp-people-role">\(křest 1870\)<\/span>/);
+        // After the gallery, before the notes.
+        expect(html.indexOf('pp-sec-people')).toBeGreaterThan(html.indexOf('pp-sec-materials'));
+        expect(html.indexOf('pp-sec-people')).toBeLessThan(html.indexOf('pp-sec-notes'));
+    });
+
+    it('the gallery: six images, the rest folded, PDF rows; in the app the images zoom in place', () => {
+        const d = withAttachments(6);
+        const html = body(d);
+        const sec = html.match(/<section class="pp-sec pp-sec--materials" id="pp-sec-materials">.*?<\/section>/)?.[0] ?? '';
+        // 2 excerpts + 6 photos + 1 PDF.
+        expect(sec).toContain('<span class="pp-count">9</span>');
+        expect(sec.match(/<figure class="pp-gal-item">/g)).toHaveLength(8);
+        expect(sec).toContain('aria-controls="pp-gal-more-body"');
+        expect(sec).toContain('Zobrazit další (2)');
+        expect(sec).toContain('<button type="button" class="pp-gal-thumb" data-pp-zoom');
+        expect(sec).toContain('<span class="pp-pdf-meta">PDF · 2 strany · 1902</span>');
+        expect(sec).toContain('data-pp-action="materials"');
+        // Excerpts carry the record's kind, attachments are photos.
+        expect(sec).toContain('<span class="pp-gal-kind">Zápis z matriky</span><span class="pp-gal-cap">Zápis o narození a křtu</span>');
+        expect(sec).toContain('<span class="pp-gal-kind">Fotografie</span><span class="pp-gal-cap">Fotografie 1</span>');
+        // The print shows them all.
+        expect(body(d, { mode: 'print', links: 'plain' })).not.toContain('pp-gal-more');
+    });
+
+    it('the file: one light box per image, each image embedded once, the timeline points to the box', () => {
+        const d = withAttachments(2);
+        d.persons['jan' as PersonId].photo = png(300, 400);
+        const html = doc(d);
+        // Excerpts (the same image twice), two photos, the portrait: three distinct data URLs + the portrait.
+        expect(html.split(IMG).length - 1).toBe(1);
+        expect(html.split(png(10, 20)).length - 1).toBe(1);
+        expect(html.split(png(300, 400)).length - 1).toBe(1);
+        expect(html).not.toContain('<img ');
+        for (const n of [1, 2, 3, 4]) expect(html).toContain(`<div class="pp-lb" id="obr-${n}" role="dialog"`);
+        expect(html).not.toContain('id="obr-5"');
+        expect(html).toContain('<span class="pp-lb-count">1 / 4</span>');
+        expect(html).toContain('<a class="pp-lb-nav" href="#obr-2" data-pp-lb="next">další ›</a>');
+        expect(html).toContain('<a class="pp-lb-close" href="#pp-sec-materials" data-pp-lb="close">✕ Zavřít</a>');
+        expect(html).toContain('<a class="pp-gal-thumb" href="#obr-1"');
+        // The portrait opens its own box.
+        expect(html).toMatch(/<a class="pp-portrait[^"]*" href="#obr-p"/);
+        expect(html).toContain('<div class="pp-lb" id="obr-p" role="dialog"');
+        // The timeline's excerpt opens the gallery's box of the same image.
+        expect(html).toMatch(/<figure class="pp-fig"[^>]*>.*?href="#obr-[12]"/);
+        // The PDF is embedded as a download.
+        expect(html).toContain('download="smlouva-1902.pdf"');
+        // Images and PDF off: no boxes, the PDF named as left out.
+        const off = doc(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, excerpts: false, materials: false, pdf: false } });
+        expect(off).not.toContain('id="obr-1"');
+        // The portrait belongs to the header and keeps its box.
+        expect(off).toContain('id="obr-p"');
+        expect(off).not.toContain(png(10, 20));
+        expect(off).not.toContain('application/pdf');
+    });
+
+    it('the family tree in the file: a living card is "E. F. · * 1952" with a dashed border, no living name anywhere', () => {
+        const d: StromData = {
+            persons: {
+                karel: p('karel', 'Karel', 'Fíšek', 'male', { birthDate: '1925', deathDate: '1999', childIds: ids('eva'), partnerships: ['u2' as PartnershipId], question: 'Kdo byl otec?' }),
+                lida: p('lida', 'Lída', 'Malá', 'female', { birthDate: '1950-05-05', partnerships: ['u2' as PartnershipId], childIds: ids('eva') }),
+                eva: p('eva', 'Eva', 'Fíšková', 'female', { birthDate: '1952-07-14', parentIds: ids('karel', 'lida'), childIds: ids('ota'), question: 'Kde žije?' }),
+                ota: p('ota', 'Ota', 'Fíšek', 'male', { birthDate: '1975', parentIds: ids('eva') }),
+            },
+            partnerships: {
+                u2: { id: 'u2' as PartnershipId, person1Id: 'karel' as PersonId, person2Id: 'lida' as PersonId, status: 'married', childIds: ids('eva'), startDate: '1951-06-01', participants: [{ id: 'w', role: 'witness', name: 'Ota Fíšek', personId: 'ota' as PersonId }, { id: 'w2', role: 'witness', name: 'Eva Fíšková', personId: 'eva' as PersonId }] } as Partnership,
+            },
+            sources: {},
+        } as StromData;
+        d.persons['karel' as PersonId].attachments = [{ id: 'ph', name: 'dum-1960.png', mimeType: 'image/png', dataUrl: png(5, 5), sizeBytes: 9, note: 'Dům čp. 12' }];
+        const html = doc(d, { personId: 'karel' as PersonId, privacy: 'initials' });
+        expect(html).toContain('<span class="pp-ft-card pp-ft-card--kid pp-ft-card--living" style=');
+        expect(html).toContain('<span class="pp-ft-name" title="E. F.">E. F.</span><span class="pp-ft-years">* 1952</span>');
+        expect(html).toContain('<span class="pp-chip pp-chip--living"><span class="pp-chip-name">O. F.</span> · <span class="pp-chip-years">* 1975</span></span>');
+        for (const name of ['Eva', 'Fíšková', 'Lída', 'Malá', 'Ota', 'Kde žije?', '14. července', '1952-07']) expect(html).not.toContain(name);
+        // The dead person's own question and the summary stay; the living witnesses leave the people around.
+        expect(html).toContain('Kdo byl otec?');
+        expect(html).not.toContain('pp-sec-people');
+        // The style marks a living card dashed.
+        expect(html).toMatch(/\.pp-ft-card--living[^{]*\{[^}]*border-style:\s*dashed/);
+        // A living person's own page: the header with initials and the birth year, the note, nothing else.
+        const eva = doc(d, { personId: 'eva' as PersonId, privacy: 'initials' });
+        const art = eva.match(/<article class="pp".*<\/article>/s)?.[0] ?? '';
+        expect(art).toContain('<h1 class="pp-name">E. F.</h1>');
+        expect(art).toContain('<p class="pp-living-note">Žijící osoba. Další údaje se v souboru neuvádějí.</p>');
+        expect(art).not.toMatch(/<section /);
+        expect(art).not.toContain('pp-sum');
+        for (const name of ['Eva', 'Karel', 'Ota', 'Lída', 'Kde žije?']) expect(art).not.toContain(name);
+        // Full data: the names are there.
+        expect(doc(d, { personId: 'karel' as PersonId, privacy: 'full' })).toContain('Eva Fíšková');
     });
 });
 
@@ -623,11 +835,12 @@ describe('file name and size', () => {
         const est = estimatePersonPageSize(page, op);
         const real = new TextEncoder().encode(buildPersonPageDocument(page, op)).length;
         expect(Math.abs(est.bytes - real) / real).toBeLessThan(0.1);
-        expect(est.images).toBe(2);
+        // Both excerpts are the same image: embedded once.
+        expect(est.images).toBe(1);
     });
     it('counts what each group holds', () => {
         const page = preparePersonPageData(fiskTree(), opts());
-        expect(page.counts).toMatchObject({ childEvents: 1, excerpts: 2, sources: 3, materials: 0 });
+        expect(page.counts).toMatchObject({ childEvents: 1, excerpts: 2, sources: 3, materials: 0, pdf: 0 });
         expect(page.counts.research).toBeGreaterThan(0);
     });
     it('says the size in MB with one decimal, never 0, with the language’s decimal mark', () => {

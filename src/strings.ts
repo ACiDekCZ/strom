@@ -84,6 +84,14 @@ function zeCs(m: number): string {
     if (n < 1000) return [1, 2, 3, 4, 6, 7].includes(Math.floor(n / 100)) ? 'ze' : 'z';
     return 'z';
 }
+/** Czech "v" / "ve" before an age as it is read ("v 19", "ve 23", "ve 4"). */
+function veCs(m: number): string {
+    const n = Math.abs(Math.trunc(m));
+    if (n < 10) return [2, 3, 4].includes(n) ? 've' : 'v';
+    if (n < 20) return [12, 13, 14].includes(n) ? 've' : 'v';
+    if (n < 100) return [2, 3, 4].includes(Math.floor(n / 10)) ? 've' : 'v';
+    return 'v';
+}
 /** German count form shorthand: `${n} ${word}`. */
 const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
 
@@ -5802,6 +5810,80 @@ const stringsEN = {
             /** "12 March 1860" / "March 1860". */
             words: (day: number | undefined, month: string, year: number) => `${day !== undefined ? `${day} ` : ''}${month} ${year}`,
         },
+        // Person page, 2nd round (§0, §3, §4)
+        summary: {
+            label: 'In brief',
+            age: 'age at death',
+            ageNow: 'age today',
+            years: (n: number) => nEn(n, 'year', 'years'),
+            aboutYears: (n: number) => `about ${nEn(n, 'year', 'years')}`,
+            marriages: (n: number) => nEn(n, 'marriage', 'marriages'),
+            marriageYears: (n: number) => `${nEn(n, 'year', 'years')} of marriage`,
+            partnership: 'partnership',
+            marriedAt: {
+                m: (ages: number[]) => `married at ${joinAnd('en', ages.map(String))}`,
+                f: (ages: number[]) => `married at ${joinAnd('en', ages.map(String))}`,
+                u: (ages: number[]) => `married at ${joinAnd('en', ages.map(String))}`,
+            },
+            children: (n: number) => nEn(n, 'child', 'children'),
+            survived: {
+                m: (n: number) => `${n} outlived him`,
+                f: (n: number) => `${n} outlived her`,
+                u: (n: number) => `${n} outlived the parent`,
+            },
+            fromMarriages: (n: number) => `from ${n} marriages`,
+            places: (n: number) => nEn(n, 'place', 'places'),
+            lifelong: 'over a lifetime',
+        },
+        question: 'Open question',
+        people: {
+            title: 'People around',
+            baptism: (y: string) => (y ? `At baptism ${y}` : 'At baptism'),
+            marriage: (y: string) => (y ? `At marriage ${y}` : 'At marriage'),
+            godparentOf: { m: 'Godparent to', f: 'Godparent to', u: 'Godparent to' },
+            baptismOf: (y: string) => (y ? `baptism ${y}` : 'baptism'),
+            role: {
+                godparent: { m: 'godfather', f: 'godmother', u: 'godparent' },
+                witness: { m: 'witness', f: 'witness', u: 'witness' },
+                officiant: { m: 'officiant', f: 'officiant', u: 'officiant' },
+                other: { m: 'present', f: 'present', u: 'present' },
+            },
+            more: (n: number) => `and ${n} more`,
+        },
+        gal: {
+            kind: { record: 'Register entry', document: 'Document', photo: 'Photograph' },
+            recordOf: (event: PersonPageCaptionEvent) =>
+                `Record of ${{ birth: 'birth', birthBaptism: 'birth and baptism', marriage: 'marriage', death: 'death', deathBurial: 'death and burial' }[event]}`,
+            register: (register: PersonPageRegister) => ({ birth: 'birth register', marriage: 'marriage register', death: 'death register' }[register]),
+            more: (n: number) => `Show ${n} more`,
+            less: 'Show fewer',
+            pdf: (pages: number | null, year: number | null) => ['PDF', pages ? nEn(pages, 'page', 'pages') : '', year !== null ? String(year) : ''].filter(Boolean).join(' · '),
+            pdfOff: 'not attached to the file',
+            counter: (n: number, m: number) => `${n} / ${m}`,
+            prev: '‹ previous',
+            next: 'next ›',
+            closeZoom: '✕ Close',
+        },
+        tree: {
+            noKids: 'no children',
+            story: 'story ↓',
+            otherParent: 'other parent unknown',
+            siblings: (n: number) => `Siblings (${n})`,
+            grandchildren: (n: number) => `Grandchildren (${n})`,
+        },
+        rel: {
+            step: { m: 'stepfather', f: 'stepmother', u: 'step-parent' },
+            adoptive: { m: 'adoptive father', f: 'adoptive mother', u: 'adoptive parent' },
+            foster: { m: 'foster father', f: 'foster mother', u: 'foster parent' },
+        },
+        livingNote: 'Living person. No further details are given in the file.',
+        media: {
+            title: 'Images and documents',
+            images: (n: number) => `Attach images (${n})`,
+            pdf: (n: number) => `Attach PDF documents (${n})`,
+            shrink: 'Images larger than 1600 px are reduced on saving; the originals stay in the tree.',
+            big: 'The file may be too large for WhatsApp or e-mail.',
+        },
     },
 };
 
@@ -11380,6 +11462,80 @@ const stringsCZ: StringsType = {
             months: ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'],
             words: (day: number | undefined, month: string, year: number) => `${day !== undefined ? `${day}. ` : ''}${month} ${year}`,
         },
+        // Person page, 2nd round (§0, §3, §4)
+        summary: {
+            label: 'V kostce',
+            age: 'dožitý věk',
+            ageNow: 'věk dnes',
+            years: (n: number) => nCs(n, 'rok', 'roky', 'let'),
+            aboutYears: (n: number) => `asi ${nCs(n, 'rok', 'roky', 'let')}`,
+            marriages: (n: number) => `${n} manželství`,
+            marriageYears: (n: number) => `${nCs(n, 'rok', 'roky', 'let')} manželství`,
+            partnership: 'partnerství',
+            marriedAt: {
+                m: (ages: number[]) => `oženil se ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
+                f: (ages: number[]) => `vdala se ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
+                u: (ages: number[]) => `sňatek ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
+            },
+            children: (n: number) => nCs(n, 'dítě', 'děti', 'dětí'),
+            survived: {
+                m: (n: number) => `${n} ho ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')}`,
+                f: (n: number) => `${n} ji ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')}`,
+                u: (n: number) => `${n} ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')} rodiče`,
+            },
+            fromMarriages: (n: number) => `${zeCs(n)} ${n} manželství`,
+            places: (n: number) => nCs(n, 'místo', 'místa', 'míst'),
+            lifelong: 'za život',
+        },
+        question: 'Otevřená otázka',
+        people: {
+            title: 'Lidé kolem',
+            baptism: (y: string) => (y ? `Při křtu ${y}` : 'Při křtu'),
+            marriage: (y: string) => (y ? `Při sňatku ${y}` : 'Při sňatku'),
+            godparentOf: { m: 'Byl kmotrem', f: 'Byla kmotrou', u: 'Kmotr/a' },
+            baptismOf: (y: string) => (y ? `křest ${y}` : 'křest'),
+            role: {
+                godparent: { m: 'kmotr', f: 'kmotra', u: 'kmotr/a' },
+                witness: { m: 'svědek', f: 'svědkyně', u: 'svědek' },
+                officiant: { m: 'oddávající', f: 'oddávající', u: 'oddávající' },
+                other: { m: 'přítomen', f: 'přítomna', u: 'přítomen' },
+            },
+            more: (n: number) => `a další (${n})`,
+        },
+        gal: {
+            kind: { record: 'Zápis z matriky', document: 'Dokument', photo: 'Fotografie' },
+            recordOf: (event: PersonPageCaptionEvent) =>
+                `Zápis o ${{ birth: 'narození', birthBaptism: 'narození a křtu', marriage: 'sňatku', death: 'úmrtí', deathBurial: 'úmrtí a pohřbu' }[event]}`,
+            register: (register: PersonPageRegister) => ({ birth: 'matrika narozených', marriage: 'matrika oddaných', death: 'matrika zemřelých' }[register]),
+            more: (n: number) => `Zobrazit další (${n})`,
+            less: 'Zobrazit méně',
+            pdf: (pages: number | null, year: number | null) => ['PDF', pages ? nCs(pages, 'strana', 'strany', 'stran') : '', year !== null ? String(year) : ''].filter(Boolean).join(' · '),
+            pdfOff: 'do souboru se nepřikládá',
+            counter: (n: number, m: number) => `${n} / ${m}`,
+            prev: '‹ předchozí',
+            next: 'další ›',
+            closeZoom: '✕ Zavřít',
+        },
+        tree: {
+            noKids: 'bez dětí',
+            story: 'vyprávění ↓',
+            otherParent: 'druhý rodič neznámý',
+            siblings: (n: number) => `Sourozenci (${n})`,
+            grandchildren: (n: number) => `Vnoučata (${n})`,
+        },
+        rel: {
+            step: { m: 'nevlastní otec', f: 'nevlastní matka', u: 'nevlastní rodič' },
+            adoptive: { m: 'adoptivní otec', f: 'adoptivní matka', u: 'adoptivní rodič' },
+            foster: { m: 'pěstoun', f: 'pěstounka', u: 'pěstoun' },
+        },
+        livingNote: 'Žijící osoba. Další údaje se v souboru neuvádějí.',
+        media: {
+            title: 'Obrázky a dokumenty',
+            images: (n: number) => `Přiložit obrázky (${n})`,
+            pdf: (n: number) => `Přiložit dokumenty PDF (${n})`,
+            shrink: 'Obrázky větší než 1600 px se při uložení zmenší; originály ve stromu zůstanou.',
+            big: 'Soubor může být pro WhatsApp nebo e-mail velký.',
+        },
     },
 };
 
@@ -16882,6 +17038,80 @@ const stringsDE: StringsType = {
         date: {
             months: ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
             words: (day: number | undefined, month: string, year: number) => `${day !== undefined ? `${day}. ` : ''}${month} ${year}`,
+        },
+        // Person page, 2nd round (§0, §3, §4)
+        summary: {
+            label: 'Auf einen Blick',
+            age: 'erreichtes Alter',
+            ageNow: 'Alter heute',
+            years: (n: number) => nDe(n, 'Jahr', 'Jahre'),
+            aboutYears: (n: number) => `etwa ${nDe(n, 'Jahr', 'Jahre')}`,
+            marriages: (n: number) => nDe(n, 'Ehe', 'Ehen'),
+            marriageYears: (n: number) => `${nDe(n, 'Jahr', 'Jahre')} Ehe`,
+            partnership: 'Partnerschaft',
+            marriedAt: {
+                m: (ages: number[]) => `heiratete mit ${joinAnd('de', ages.map(String))}`,
+                f: (ages: number[]) => `heiratete mit ${joinAnd('de', ages.map(String))}`,
+                u: (ages: number[]) => `heiratete mit ${joinAnd('de', ages.map(String))}`,
+            },
+            children: (n: number) => nDe(n, 'Kind', 'Kinder'),
+            survived: {
+                m: (n: number) => `${n} ${plural('de', n, 'überlebte', 'überlebten')} ihn`,
+                f: (n: number) => `${n} ${plural('de', n, 'überlebte', 'überlebten')} sie`,
+                u: (n: number) => `${n} ${plural('de', n, 'überlebte', 'überlebten')} den Elternteil`,
+            },
+            fromMarriages: (n: number) => `aus ${n} Ehen`,
+            places: (n: number) => nDe(n, 'Ort', 'Orte'),
+            lifelong: 'im Lauf des Lebens',
+        },
+        question: 'Offene Frage',
+        people: {
+            title: 'Menschen im Umfeld',
+            baptism: (y: string) => (y ? `Bei der Taufe ${y}` : 'Bei der Taufe'),
+            marriage: (y: string) => (y ? `Bei der Heirat ${y}` : 'Bei der Heirat'),
+            godparentOf: { m: 'Pate von', f: 'Patin von', u: 'Pate/Patin von' },
+            baptismOf: (y: string) => (y ? `Taufe ${y}` : 'Taufe'),
+            role: {
+                godparent: { m: 'Pate', f: 'Patin', u: 'Pate/Patin' },
+                witness: { m: 'Trauzeuge', f: 'Trauzeugin', u: 'Zeuge' },
+                officiant: { m: 'Geistlicher', f: 'Geistliche', u: 'Geistliche/r' },
+                other: { m: 'anwesend', f: 'anwesend', u: 'anwesend' },
+            },
+            more: (n: number) => `und ${n} weitere`,
+        },
+        gal: {
+            kind: { record: 'Matrikeneintrag', document: 'Dokument', photo: 'Fotografie' },
+            recordOf: (event: PersonPageCaptionEvent) =>
+                `Eintrag über ${{ birth: 'die Geburt', birthBaptism: 'Geburt und Taufe', marriage: 'die Heirat', death: 'den Tod', deathBurial: 'Tod und Begräbnis' }[event]}`,
+            register: (register: PersonPageRegister) => ({ birth: 'Taufbuch', marriage: 'Traubuch', death: 'Sterbebuch' }[register]),
+            more: (n: number) => `${n} weitere anzeigen`,
+            less: 'Weniger anzeigen',
+            pdf: (pages: number | null, year: number | null) => ['PDF', pages ? nDe(pages, 'Seite', 'Seiten') : '', year !== null ? String(year) : ''].filter(Boolean).join(' · '),
+            pdfOff: 'nicht in der Datei',
+            counter: (n: number, m: number) => `${n} / ${m}`,
+            prev: '‹ zurück',
+            next: 'weiter ›',
+            closeZoom: '✕ Schließen',
+        },
+        tree: {
+            noKids: 'keine Kinder',
+            story: 'Erzählung ↓',
+            otherParent: 'anderer Elternteil unbekannt',
+            siblings: (n: number) => `Geschwister (${n})`,
+            grandchildren: (n: number) => `Enkel (${n})`,
+        },
+        rel: {
+            step: { m: 'Stiefvater', f: 'Stiefmutter', u: 'Stiefelternteil' },
+            adoptive: { m: 'Adoptivvater', f: 'Adoptivmutter', u: 'Adoptivelternteil' },
+            foster: { m: 'Pflegevater', f: 'Pflegemutter', u: 'Pflegeelternteil' },
+        },
+        livingNote: 'Lebende Person. Weitere Angaben stehen nicht in der Datei.',
+        media: {
+            title: 'Bilder und Dokumente',
+            images: (n: number) => `Bilder beifügen (${n})`,
+            pdf: (n: number) => `PDF-Dokumente beifügen (${n})`,
+            shrink: 'Bilder über 1600 px werden beim Speichern verkleinert; die Originale bleiben im Stammbaum.',
+            big: 'Die Datei kann für WhatsApp oder E-Mail zu groß sein.',
         },
     },
 };

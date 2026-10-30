@@ -10,7 +10,7 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId } from '../types.js';
+import { PersonId, StromData, Attachment } from '../types.js';
 import { PrivacyMode } from '../privacy.js';
 import { placeKey } from '../places.js';
 import { researchPersonRef } from '../research-link.js';
@@ -38,9 +38,65 @@ const LARGE_BYTES = 15_000_000;
 /** A swipe this far down closes the export dialog shown as a bottom sheet. */
 const SHEET_SWIPE_CLOSE_PX = 80;
 /** The export dialog's groups, in its order. */
-const GROUP_ORDER: (keyof PersonPageGroups)[] = ['history', 'childEvents', 'excerpts', 'materials', 'sources', 'research'];
+const GROUP_ORDER: ('history' | 'childEvents' | 'sources' | 'research')[] = ['history', 'childEvents', 'sources', 'research'];
 /** Groups a privacy other than full data leaves out for living people only (K2.7); the deceased keep them. */
-const LIVING_DROPS: ReadonlySet<keyof PersonPageGroups> = new Set(['excerpts', 'materials', 'sources']);
+const LIVING_DROPS: ReadonlySet<keyof PersonPageGroups> = new Set(['excerpts', 'materials', 'pdf', 'sources']);
+/** Attachment images longer than this are reduced for the saved file (§3.5). */
+const SHRINK_EDGE_PX = 1600;
+const SHRINK_QUALITY = 0.82;
+
+/** One image reduced to SHRINK_EDGE_PX on its longer side (JPEG), or null when it is small enough or cannot be read. */
+function shrinkImage(dataUrl: string): Promise<string | null> {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            const edge = Math.max(w, h);
+            if (!w || !h || edge <= SHRINK_EDGE_PX) { resolve(null); return; }
+            const k = SHRINK_EDGE_PX / edge;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(w * k);
+            canvas.height = Math.round(h * k);
+            const g = canvas.getContext('2d');
+            if (!g) { resolve(null); return; }
+            // A transparent PNG becomes JPEG on white, not on black.
+            g.fillStyle = '#ffffff';
+            g.fillRect(0, 0, canvas.width, canvas.height);
+            g.drawImage(img, 0, 0, canvas.width, canvas.height);
+            try {
+                const out = canvas.toDataURL('image/jpeg', SHRINK_QUALITY);
+                resolve(out.length < dataUrl.length ? out : null);
+            } catch {
+                resolve(null);
+            }
+        };
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+    });
+}
+
+/** The person's attachment images over SHRINK_EDGE_PX, reduced: attachment id → the smaller data URL. */
+async function shrinkAttachments(list: readonly Attachment[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const a of list) {
+        if (!a.mimeType.startsWith('image/') || !a.dataUrl?.startsWith('data:image/')) continue;
+        const small = await shrinkImage(a.dataUrl);
+        if (small) out.set(a.id, small);
+    }
+    return out;
+}
+
+/** The tree with one person's attachments swapped for their reduced copies (the tree itself untouched). */
+function withShrunkAttachments(data: StromData, personId: PersonId, shrunk: ReadonlyMap<string, string>): StromData {
+    const p = data.persons[personId];
+    if (!p?.attachments || !shrunk.size) return data;
+    const attachments = p.attachments.map(a => {
+        const small = shrunk.get(a.id);
+        return small ? { ...a, dataUrl: small, mimeType: 'image/jpeg', sizeBytes: Math.round(small.length * 0.75) } : a;
+    });
+    return { ...data, persons: { ...data.persons, [personId]: { ...p, attachments } } };
+}
 const PRIVACY_MODES = PERSON_PAGE_PRIVACY_MODES;
 
 /** One page of the window: the person, where it was scrolled, what was open and the switches. */
@@ -442,8 +498,14 @@ export const personPageMethods = uiModule({
         }
         const zoom = target.closest<HTMLElement>('[data-pp-zoom]');
         if (zoom) {
-            const src = zoom.closest('.pp-fig')?.querySelector('img')?.getAttribute('src');
+            const src = (zoom.querySelector('img') ?? zoom.closest('.pp-fig')?.querySelector('img'))?.getAttribute('src');
             if (src) openImageViewer(src, () => zoom.focus({ preventScroll: true }));
+            return;
+        }
+        // "story ↓" in the family tree: to the couple's chapter.
+        const goto = target.closest<HTMLElement>('[data-pp-goto]');
+        if (goto) {
+            bodyEl()?.querySelector<HTMLElement>(`#${CSS.escape(goto.dataset.ppGoto ?? '')}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
             return;
         }
         const differs = target.closest<HTMLElement>('[data-pp-differs]');
@@ -598,6 +660,9 @@ export const personPageMethods = uiModule({
         const P = strings.personPage;
         const X = P.export;
         const data = DataManager.getData();
+        // Attachment images over 1600 px go into the file reduced (§3.5); the tree keeps the originals.
+        let shrunk = new Map<string, string>();
+        const fileData = (): StromData => withShrunkAttachments(data, personId, shrunk);
         const now = new Date();
         const ctx = this.personPageContext(personId);
         const fontCss = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
@@ -605,9 +670,10 @@ export const personPageMethods = uiModule({
             mode: 'file', links: 'plain', groups, privacy, now, fontCss, open: new Set(),
         });
         // The groups, their counts and the living people come from the full page.
-        const fullProt = protectPersonPageTree(data, 'full', now);
+        let fullProt = protectPersonPageTree(data, 'full', now);
         const full = preparePersonPageData(data, fileOpts({ ...PERSON_PAGE_ALL_GROUPS }, 'full'), { ...ctx, protected: fullProt });
         const shown = GROUP_ORDER.filter(g => full.counts[g] > 0);
+        const imageCount = full.counts.excerpts + full.counts.materials;
         const living = full.living.size > 0;
         const treeId = DataManager.getCurrentTreeId();
         const saved = treeId ? TreeManager.getPersonPageExport(treeId) : undefined;
@@ -624,7 +690,7 @@ export const personPageMethods = uiModule({
             full: pv.modeFull, initials: pv.modeInitials, anonymous: pv.modeAnonymous, minimal: pv.modeMinimal,
         };
         const checks = shown.map(g => `
-            <label class="ppx-check" data-ppx-row="${g}">
+            <label class="ppx-check" data-ppx-row="${g}"${LIVING_DROPS.has(g) ? ' data-ppx-drops' : ''}>
                 <input type="checkbox" data-ppx-group="${g}"${groups[g] ? ' checked' : ''}>
                 <span class="ppx-check-label">${esc(X.group[g])}</span>
                 <span class="ppx-count">${full.counts[g]}</span>
@@ -636,6 +702,22 @@ export const personPageMethods = uiModule({
                     ${PRIVACY_MODES.map(m => `<button type="button" class="segment-btn" role="radio" data-ppx-privacy="${m}" aria-checked="false">${esc(modeLabel[m])}</button>`).join('')}
                 </div>
                 <p class="ppx-note">${esc(X.privacyWho(personPageLivingNames(full, DataManager.getData()).join(', ')))}</p>
+            </div>` : '';
+        // Images and documents (§3.5): the source excerpts and image attachments together, the PDFs apart.
+        const M = P.media;
+        const mediaRow = (key: 'images' | 'pdf', label: string, on: boolean) => `
+            <label class="ppx-check" data-ppx-row="${key}" data-ppx-drops>
+                <input type="checkbox" data-ppx-media="${key}"${on ? ' checked' : ''}>
+                <span class="ppx-check-label">${esc(label)}</span>
+            </label>`;
+        const mediaHtml = imageCount || full.counts.pdf ? `
+            <div class="ppx-sec" role="group" aria-labelledby="ppx-media-h">
+                <div class="ppx-label" id="ppx-media-h">${esc(M.title)}</div>
+                <div class="ppx-checks">
+                    ${imageCount ? mediaRow('images', M.images(imageCount), groups.excerpts && groups.materials) : ''}
+                    ${full.counts.pdf ? mediaRow('pdf', M.pdf(full.counts.pdf), groups.pdf) : ''}
+                </div>
+                ${imageCount ? `<p class="ppx-note ppx-shrink">${esc(M.shrink)}</p>` : ''}
             </div>` : '';
         const footer = deviceShare
             ? `<button type="button" class="secondary" data-dismiss>${esc(X.cancel)}</button>`
@@ -660,11 +742,12 @@ export const personPageMethods = uiModule({
                     <p class="ppx-note ppx-always">${esc(X.always)}</p>
                     <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(X.privacyDrops)}</p>
                 </div>
+                ${mediaHtml}
                 ${privacyHtml}
                 <div class="ppx-size">
                     <strong id="ppx-size-mb"></strong>
                     <span class="ppx-size-hint">${esc(X.sizeHint)}</span>
-                    <span class="ppx-size-large" id="ppx-size-large" hidden>${esc(X.sizeLarge)}</span>
+                    <span class="ppx-size-large" id="ppx-size-large" hidden>${esc(M.big)}</span>
                 </div>
                 <div class="buttons">
                     <span class="ppx-remember">${esc(X.remember)}</span>
@@ -680,10 +763,10 @@ export const personPageMethods = uiModule({
             // The groups stay on: only the living lose them, the note says so.
             for (const row of overlay.querySelectorAll<HTMLElement>('[data-ppx-row]')) {
                 const input = row.querySelector('input') as HTMLInputElement;
-                if (drops && LIVING_DROPS.has(row.dataset.ppxRow as keyof PersonPageGroups)) input.setAttribute('aria-describedby', 'ppx-drops');
+                if (drops && row.hasAttribute('data-ppx-drops')) input.setAttribute('aria-describedby', 'ppx-drops');
                 else input.removeAttribute('aria-describedby');
             }
-            (overlay.querySelector('#ppx-drops') as HTMLElement).hidden = !(drops && shown.some(g => LIVING_DROPS.has(g)));
+            (overlay.querySelector('#ppx-drops') as HTMLElement).hidden = !(drops && !!overlay.querySelector('[data-ppx-drops]'));
             for (const b of overlay.querySelectorAll<HTMLElement>('[data-ppx-privacy]')) {
                 const on = b.dataset.ppxPrivacy === privacy;
                 b.classList.toggle('active', on);
@@ -692,8 +775,8 @@ export const personPageMethods = uiModule({
             }
             const opts = fileOpts({ ...groups }, privacy);
             const page = privacy === 'full'
-                ? preparePersonPageData(data, opts, { ...ctx, protected: fullProt })
-                : preparePersonPageData(data, opts, ctx);
+                ? preparePersonPageData(fileData(), opts, { ...ctx, protected: fullProt })
+                : preparePersonPageData(fileData(), opts, ctx);
             current = { page, opts };
             const fileName = personPageFileName(page);
             (overlay.querySelector('#ppx-file') as HTMLElement).textContent = fileName;
@@ -714,8 +797,9 @@ export const personPageMethods = uiModule({
             const p = current.page.tree.persons[current.page.personId];
             return { html, name: personPageFileName(current.page), title: p ? shownName(p) : P.title };
         };
-        const saveFile = (): void => {
+        const saveFile = async (): Promise<void> => {
             remember();
+            await shrinking;
             const out = build();
             this.closePersonPageExport();
             if (!out) return;
@@ -737,6 +821,7 @@ export const personPageMethods = uiModule({
         };
         const shareFile = async (): Promise<void> => {
             remember();
+            await shrinking;
             const out = build();
             this.closePersonPageExport();
             if (!out) return;
@@ -752,12 +837,19 @@ export const personPageMethods = uiModule({
         overlay.addEventListener('click', (e) => {
             const t = e.target as HTMLElement;
             if (t === overlay || t.closest('[data-dismiss]') || t.closest('[data-ppx="close"]')) { this.closePersonPageExport(); return; }
-            if (t.closest('[data-ppx="save"]')) { saveFile(); return; }
+            if (t.closest('[data-ppx="save"]')) { void saveFile(); return; }
             if (t.closest('[data-ppx="share"]')) { void shareFile(); return; }
             const pb = t.closest<HTMLElement>('[data-ppx-privacy]');
             if (pb) { privacy = pb.dataset.ppxPrivacy as PrivacyMode; refresh(); }
         });
         overlay.addEventListener('change', (e) => {
+            const media = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ppx-media]');
+            if (media) {
+                if (media.dataset.ppxMedia === 'pdf') groups.pdf = media.checked;
+                else groups.excerpts = groups.materials = media.checked;
+                refresh();
+                return;
+            }
             const input = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ppx-group]');
             if (!input) return;
             groups[input.dataset.ppxGroup as keyof PersonPageGroups] = input.checked;
@@ -775,6 +867,13 @@ export const personPageMethods = uiModule({
             overlay.querySelector<HTMLElement>(`[data-ppx-privacy="${privacy}"]`)?.focus();
         });
         refresh();
+        // Reduce the large attachment images meanwhile; the size and the file follow.
+        const shrinking = shrinkAttachments(data.persons[personId]?.attachments ?? []).then(map => {
+            if (!map.size) return;
+            shrunk = map;
+            fullProt = protectPersonPageTree(fileData(), 'full', now);
+            if (overlay.isConnected) refresh();
+        }).catch(() => undefined);
         const box = overlay.querySelector('.modal') as HTMLElement;
         // As a phone's bottom sheet: a swipe down from the handle or the title closes it.
         let dragY: number | null = null;

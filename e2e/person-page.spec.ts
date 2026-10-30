@@ -80,8 +80,10 @@ test.describe('desktop', () => {
         await expect(w.locator('h1')).toContainText('Jan Fisek');
         await expect(w.locator('.pp-sub')).toHaveText('Jan Fisek · 1860–1910');
         await expect(w.locator('.pp-body')).toBeFocused();
-        // The marriage line sits inside the partner's card.
-        await expect(w.locator('[data-pp-person="marie"] .pp-card-sub')).toHaveText('married 2 February 1888, Capkov');
+        // The family tree: the partner's card with the marriage year over the line; the rail is for phones.
+        await expect(w.locator('.pp-ft [data-pp-person="marie"] .pp-ft-name')).toHaveText('Marie Dvorakova');
+        await expect(w.locator('.pp-ft .pp-ft-lab').first()).toHaveText('⚭ 1888');
+        await expect(w.locator('.pp-rail')).toBeHidden();
         // Four sections or more: the contents beside the page.
         await expect(w.locator('.pp-toc .pp-toc-link')).not.toHaveCount(0);
 
@@ -188,11 +190,13 @@ test.describe('desktop', () => {
         const dlg = page.locator('#person-page-export-modal');
         await expect(dlg).toBeVisible();
         await expect(dlg.locator('#ppx-file')).toHaveText('jan-fisek-1860-1910.html');
-        // The groups the page has, with counts; nobody living on Jan's page: no privacy choice.
-        await expect(dlg.locator('[data-ppx-group="excerpts"]')).toBeChecked();
+        // The groups the page has, with counts; the living granddaughter (in the family tree's
+        // grandchildren row) makes the privacy choice appear.
+        await expect(dlg.locator('[data-ppx-media="images"]')).toBeChecked();
         await expect(dlg.locator('[data-ppx-group="sources"]')).toBeChecked();
         await expect(dlg.locator('[data-ppx-group="history"]')).toHaveCount(0);
-        await expect(dlg.locator('[data-ppx-privacy]')).toHaveCount(0);
+        await expect(dlg.locator('[data-ppx-privacy]')).toHaveCount(4);
+        await expect(dlg.locator('.ppx-note', { hasText: 'Applies to living people only' })).toContainText('Evelina Mala');
         await expect(dlg.locator('#ppx-size-mb')).toContainText('MB');
         // Desktop: no Share.
         await expect(dlg.locator('[data-ppx="share"]')).toHaveCount(0);
@@ -230,13 +234,15 @@ test.describe('desktop', () => {
         await expect(plain.locator('.pp-toggle')).toBeHidden();
         await noJs.close();
 
-        // The choice is remembered for the tree: excerpts off, saved, offered off again.
+        // The choice is remembered for the tree: images off, saved, offered off again.
         await win(page).locator('.pp-save').click();
-        await dlg.locator('[data-ppx-group="excerpts"]').uncheck();
+        await dlg.locator('[data-ppx-media="images"]').uncheck();
         const [second] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
-        expect(readFileSync(await second.path(), 'utf-8')).not.toContain('<img');
+        const noImages = readFileSync(await second.path(), 'utf-8');
+        expect(noImages).not.toContain('data:image/jpeg');
+        expect(noImages).not.toContain('id="obr-1"');
         await win(page).locator('.pp-save').click();
-        await expect(dlg.locator('[data-ppx-group="excerpts"]')).not.toBeChecked();
+        await expect(dlg.locator('[data-ppx-media="images"]')).not.toBeChecked();
     });
 
     test('privacy: offered with a living relative only, initials by default; only the living lose name, dates and sources', async ({ page }) => {
@@ -255,7 +261,7 @@ test.describe('desktop', () => {
         await expect(dlg.locator('#ppx-drops')).toBeVisible();
         await expect(dlg.locator('#ppx-drops')).toContainText('for living people only');
         await expect(dlg.locator('[data-ppx-group="sources"]')).toBeEnabled();
-        await expect(dlg.locator('[data-ppx-group="excerpts"]')).toBeChecked();
+        await expect(dlg.locator('[data-ppx-media="images"]')).toBeChecked();
         await dlg.locator('[data-ppx-privacy="full"]').click();
         await expect(dlg.locator('#ppx-drops')).toBeHidden();
         await dlg.locator('[data-ppx-privacy="initials"]').click();
@@ -269,6 +275,9 @@ test.describe('desktop', () => {
         // Rosa died: her death record and its excerpt stay in the file.
         expect(html).toContain('Birth register Capkov 1850-1870');
         expect(html).toContain('<figure class="pp-fig"');
+        // The family tree is the one place a living person shows: initials and the birth year, dashed.
+        expect(html).toContain('<span class="pp-ft-name" title="E. M.">E. M.</span><span class="pp-ft-years">* 1955</span>');
+        expect(html).not.toMatch(/04\.? ?(April|dubna)|4 April 1955/);
 
         // A remembered choice wins over the default, full data too.
         await w.locator('.pp-save').click();
@@ -373,8 +382,9 @@ test.describe('desktop', () => {
         await openApp(page);
         await seedFisek(page);
         const dlg = page.locator('#person-page-export-modal');
-        // Jan's page has nobody living: no choice, and saving it does not turn the default into full data.
-        await openPageFromMenu(page);
+        // Karel's page has nobody living: no choice, and saving it does not turn the default into full data.
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karel' as never));
+        await expect(win(page).locator('h1')).toContainText('Karel Fisek');
         await win(page).locator('.pp-save').click();
         await expect(dlg.locator('[data-ppx-privacy]')).toHaveCount(0);
         await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
@@ -382,6 +392,112 @@ test.describe('desktop', () => {
         await expect(win(page).locator('h1')).toContainText('Rosa Fiskova');
         await win(page).locator('.pp-save').click();
         await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
+    });
+
+    test('person page 2: the summary, the open question, the people around, the gallery zooming in place', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => {
+            const jan = window.Strom.DataManager.getPerson('jan' as never)!;
+            jan.question = 'Where did his father come from?';
+            jan.events = [{ id: 'e1', type: 'baptism', date: '1860-03-13', place: 'Capkov', sourceIds: ['s1'], participants: [
+                { id: 'g1', role: 'godparent', name: 'Josef Kmotr' },
+                { id: 'g2', role: 'godparent', name: 'Anna Kmotrova' },
+            ] }] as never;
+        });
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        // In brief: three cells in a row under the header.
+        const cells = w.locator('.pp-sum .pp-sum-cell');
+        await expect(cells).toHaveCount(3);
+        await expect(cells.nth(0)).toHaveText('50 yearsage at death');
+        await expect(w.locator('.pp-sum')).toContainText('2 children');
+        const boxes = await cells.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+        expect(new Set(boxes).size).toBe(1);
+        // The question after the story's place, before the timeline.
+        await expect(w.locator('#pp-sec-question .pp-question-text')).toHaveText('Where did his father come from?');
+        // People around: the two godparents.
+        await expect(w.locator('#pp-sec-people dt')).toHaveText(['At baptism 1860']);
+        await expect(w.locator('#pp-sec-people li')).toHaveCount(2);
+        // The gallery: the excerpt, zoomed in the window's own layer.
+        const gal = w.locator('#pp-sec-materials');
+        await expect(gal.locator('.pp-gal-item')).toHaveCount(1);
+        await gal.locator('.pp-gal-thumb').click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
+        await expect(w).toBeVisible();
+    });
+
+    test('Save as HTML: images and PDF checkboxes with the size; the file opens an image in its light box and closes it', async ({ page, browser }) => {
+        await openApp(page);
+        await seedFisek(page);
+        const pdf = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj<</Type /Page>>endobj\n%%EOF').toString('base64')}`;
+        await page.evaluate((pdf) => {
+            window.Strom.DataManager.getPerson('jan' as never)!.attachments = [{ id: 'a1', name: 'contract-1902.pdf', mimeType: 'application/pdf', dataUrl: pdf, sizeBytes: 60 }];
+        }, pdf);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        await expect(w.locator('#pp-sec-materials .pp-pdf-name')).toHaveText('contract-1902.pdf');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        // On by default (Milan, 30 Oct), with the size and the note on shrinking.
+        await expect(dlg.locator('[data-ppx-media="images"]')).toBeChecked();
+        await expect(dlg.locator('[data-ppx-media="pdf"]')).toBeChecked();
+        await expect(dlg.locator('[data-ppx-row="images"]')).toContainText('Attach images (1)');
+        await expect(dlg.locator('[data-ppx-row="pdf"]')).toContainText('Attach PDF documents (1)');
+        await expect(dlg.locator('.ppx-shrink')).toBeVisible();
+        await expect(dlg.locator('#ppx-size-mb')).toContainText('1 image');
+        await expect(dlg.locator('#ppx-size-large')).toBeHidden();
+        await dlg.locator('[data-ppx-media="images"]').uncheck();
+        await expect(dlg.locator('#ppx-size-mb')).toContainText('0 images');
+        await dlg.locator('[data-ppx-media="images"]').check();
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        // The image once, the PDF as a download.
+        expect(html.split('data:image/jpeg').length - 1).toBe(1);
+        expect(html).toContain('download="contract-1902.pdf"');
+
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        const box = filePage.locator('#obr-1');
+        await expect(box).toBeHidden();
+        await filePage.locator('#pp-sec-materials .pp-gal-thumb').click();
+        await expect(box).toBeVisible();
+        await expect(box.locator('.pp-lb-count')).toHaveText('1 / 1');
+        await filePage.keyboard.press('Escape');
+        await expect(box).toBeHidden();
+        await filePage.locator('#pp-sec-materials .pp-gal-thumb').click();
+        await expect(box).toBeVisible();
+        await box.locator('.pp-lb-close').click();
+        await expect(box).toBeHidden();
+        // The file's tree cards are plain text.
+        await expect(filePage.locator('.pp-ft .pp-ft-card--partner')).toHaveText('Marie Dvorakova1865–1930');
+        expect(await filePage.locator('.pp-ft button, .pp-ft a').count()).toBe(0);
+        await ctx.close();
+    });
+
+    test('a protected file: the living child is "E. M. · * 1955" with a dashed border, the name nowhere', async ({ page, browser }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('rosa' as never));
+        const w = win(page);
+        // In the window the living child is named and opens her page.
+        await expect(w.locator('.pp-ft [data-pp-person="eva"] .pp-ft-name')).toHaveText('Evelina Mala');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        for (const word of ['Evelina', 'Mala', 'Lhota', '1955-04-04']) expect(html).not.toContain(word);
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        const living = filePage.locator('.pp-ft .pp-ft-card--living');
+        await expect(living).toHaveText('E. M.* 1955');
+        expect(await living.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('dashed');
+        await ctx.close();
     });
 });
 
@@ -479,6 +595,25 @@ test.describe('a phone', () => {
         // Save and Print in ⋯ on a phone.
         await w.locator('.pp-more').click();
         await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
+    });
+
+    test('the family is a rail on a phone: the union, the partner and the children, the tree hidden', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        const rail = w.locator('.pp-rail');
+        await expect(rail).toBeVisible();
+        await expect(w.locator('.pp-ft')).toBeHidden();
+        await expect(rail.locator('.pp-rail-lab').first()).toHaveText('⚭ 2 February 1888, Capkov');
+        await expect(rail.locator('[data-pp-person="marie"]')).toBeVisible();
+        await expect(rail.locator('[data-pp-person="petr"]')).toBeVisible();
+        // A card is a 44 px target that opens the relative's page.
+        expect((await rail.locator('[data-pp-person="marie"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await rail.locator('[data-pp-person="marie"]').click();
+        await expect(w.locator('h1')).toContainText('Marie Dvorakova');
+        const fits = await w.locator('.pp-body').evaluate((el) => el.scrollWidth <= el.clientWidth);
+        expect(fits).toBe(true);
     });
 
     test('Save as HTML is a bottom sheet: a handle, the file name under the title, the buttons full width', async ({ page }) => {
