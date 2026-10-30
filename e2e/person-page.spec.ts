@@ -651,6 +651,28 @@ test.describe('person page 2: places of life and the life chart', () => {
     });
 });
 
+test.describe('person page 2: a phone held sideways', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('the life chart\'s shorter rows keep the ages off the periods and each mark off its year', async ({ page }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const chart = win(page).locator('.pp-chart');
+        await chart.scrollIntoViewIfNeeded();
+        const gaps = await chart.evaluate((c) => {
+            const bottom = (s: string) => Math.max(...[...c.querySelectorAll(s)].map(e => e.getBoundingClientRect().bottom));
+            const top = (s: string) => Math.min(...[...c.querySelectorAll(s)].map(e => e.getBoundingClientRect().top));
+            const marks = [...c.querySelectorAll('.pp-ch-mk')].filter(m => m.querySelector('.pp-ch-gl') && m.querySelector('.pp-ch-ml'))
+                .map(m => m.querySelector('.pp-ch-ml')!.getBoundingClientRect().top - m.querySelector('.pp-ch-gl')!.getBoundingClientRect().bottom);
+            return { ages: top('.pp-ch-pl') - bottom('.pp-ch-ages span'), marks };
+        });
+        expect(gaps.ages).toBeGreaterThanOrEqual(-0.5);
+        expect(gaps.marks.length).toBeGreaterThan(0);
+        for (const g of gaps.marks) expect(g).toBeGreaterThanOrEqual(-0.5);
+    });
+});
+
 test.describe('person page 2: the saved file follows the window\'s switches', () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 

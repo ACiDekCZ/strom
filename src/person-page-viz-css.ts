@@ -194,9 +194,13 @@ export const PERSON_PAGE_CHART_CSS = `
 }
 @media ${LANDSCAPE} {
   .pp-ch-ages { height: 13px; }
+  /* The shorter rows keep their labels apart: the ages above the periods, a mark above its year. */
+  .pp-ch-ages span { top: 0; }
+  .pp-ch-gl { line-height: 10px; }
   .pp-ch-hist { height: 21px; }
   .pp-ch-hbar { top: 9px; }
   .pp-ch-plabels { height: 15px; }
+  .pp-ch-pl { bottom: 1px; line-height: 14px; }
   .pp-ch-bar, .pp-ch-barin, .pp-ch-dash { height: 13px; }
   .pp-ch-band { height: 14px; }
   .pp-ch-res { line-height: 14px; }
