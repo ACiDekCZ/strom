@@ -110,13 +110,28 @@ test.describe('changes per person', () => {
         await expect.poll(() => b.posts.length).toBe(1);
         const auto = () => page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
         await expect.poll(async () => (await auto()).lastWritten?.conflicts).toBe(1);
+        const dot = page.locator('#research-menu-signal[data-signal="attention"]');
+        await expect(dot).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+        await expect(block(page)).toHaveClass(/research-sync-block--warn/);
         expect((await auto()).writtenSeen).toBeUndefined();
-        // The menu showing "Written 16, not written 2" closed: the write was seen.
+        // The menu showing "Written 16, not written 2" closed, its list never opened: the write was seen.
         await page.evaluate(() => window.Strom.UI.closeResearchMenu());
         const intake = (await auto()).lastWritten.intake;
         expect((await auto()).writtenSeen).toBe(intake);
+
+        // No news after every restart: no dot on the Research button, the block quiet until the next send.
+        for (let i = 0; i < 2; i++) {
+            await page.reload();
+            await poll(page);
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+            await expect(block(page)).toHaveClass(/research-sync-block--neutral/);
+            await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+            await expect(dot).toHaveCount(0);
+        }
+
         // The list says why, and where it can be settled.
         await page.evaluate(() => window.Strom.UI.showResearchChanges('written'));
         const panel = page.locator('#research-changes-panel');
@@ -124,27 +139,12 @@ test.describe('changes per person', () => {
             'removed here only: the research noted the removal but deletes nothing by itself; it can be deleted in the research'));
         await page.keyboard.press('Escape');
 
-        // Later the not written state is gone (the send's copy retagged), the count of the conflict stays: a seen
-        // write is no news, after every restart.
+        // Such a write never marked seen, by an older version that kept no list of what was not written (Milan's case
+        // of 28 Oct): shown once more, then never news again, though the count of its conflict outlived it.
         await page.evaluate(() => {
             const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
             const st = JSON.parse(localStorage.getItem(key) ?? '{}');
             delete st.notWritten;
-            localStorage.setItem(key, JSON.stringify(st));
-        });
-        for (let i = 0; i < 2; i++) {
-            await page.reload();
-            await poll(page);
-            await openResearchMenu(page);
-            await expect(block(page)).toHaveAttribute('data-state', 'inSync');
-            await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toHaveCount(0);
-            await page.evaluate(() => window.Strom.UI.closeResearchMenu());
-        }
-
-        // Such a write never marked seen (kept by an older version): shown once more, then not again.
-        await page.evaluate(() => {
-            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
-            const st = JSON.parse(localStorage.getItem(key) ?? '{}');
             delete st.writtenSeen;
             localStorage.setItem(key, JSON.stringify(st));
         });

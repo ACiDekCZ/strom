@@ -47,7 +47,7 @@ import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchWriteKey, researchWriteIsNews, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
-    ResearchHeldConflicts, StoredResearchTree,
+    ResearchAutoState, ResearchHeldConflicts, StoredResearchTree,
 } from '../research-device.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
@@ -1147,11 +1147,16 @@ export const researchSyncMethods = uiModule({
         }
     },
 
-    /** The last write of the tree was seen (its list opened, the menu showing it closed): no news any more. */
+    /**
+     * The last write of the tree was seen (its list opened, the menu showing it closed): no news any more,
+     * also what it did not write ("Written N, not written M" goes neutral, no dot on the Research button).
+     */
     researchNoteWrittenSeen(treeId: TreeId): void {
         const st = researchAutoState(treeId);
-        if (!st.lastWritten || st.writtenSeen === researchWriteKey(st.lastWritten)) return;
-        patchResearchAutoState(treeId, { writtenSeen: researchWriteKey(st.lastWritten) });
+        const patch: Partial<ResearchAutoState> = {};
+        if (st.lastWritten && st.writtenSeen !== researchWriteKey(st.lastWritten)) patch.writtenSeen = researchWriteKey(st.lastWritten);
+        if (st.notWritten && !st.notWritten.seen) patch.notWritten = { ...st.notWritten, seen: true };
+        if (Object.keys(patch).length) patchResearchAutoState(treeId, patch);
     },
 
     /** When a send of this tree went, by the research's mark: its record there, else this app's own. */
