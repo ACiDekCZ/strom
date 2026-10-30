@@ -383,7 +383,8 @@ export const historyCardMethods = uiModule({
             + `${busy ? ' aria-disabled="true"' : ''}>${esc(label)}${busy?.slow ? '…' : ''}</button>`;
         if (media(MQ_MOBILE)) {
             // One line: the sentence ellipsized, the link whole.
-            return '<div class="pm-lifeline-row k-historyState is-region is-find-one">'
+            // Both offers (region and place): each may wrap, so neither name is cut to a stub.
+            return `<div class="pm-lifeline-row k-historyState is-region is-find-one${withPlace ? ' is-find-both' : ''}">`
                 + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
                 + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
                 + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc((withPlace ? h.findShortRegion : h.findShort)(name(top.id)))}</span>${link(h.findShortLink)}</span></div>`;

@@ -61,6 +61,12 @@ const oneLine = (row: ReturnType<Page['locator']>) => row.locator('.pm-lifeline-
     const text = el.querySelector('.pm-lifeline-hfind-text')!.getBoundingClientRect();
     return Math.abs(link.top - text.top) < 12 && link.right <= el.getBoundingClientRect().right + 1;
 });
+/** The sentence not cut to an ellipsis and the link inside the row (both offers: the row may wrap). */
+const whole = (row: ReturnType<Page['locator']>) => row.locator('.pm-lifeline-desc').evaluate(el => {
+    const text = el.querySelector<HTMLElement>('.pm-lifeline-hfind-text')!;
+    const link = el.querySelector('button')!.getBoundingClientRect();
+    return text.scrollWidth <= text.clientWidth + 1 && link.right <= el.getBoundingClientRect().right + 1;
+});
 const refuse = (status: number, code: string, text: string) => ({ status, body: { error: text, code, text } });
 
 test.describe('History of places: "Find the history of …" in the card', () => {
@@ -171,13 +177,22 @@ test.describe('History of places: the region and the place both offered in the c
         ]);
     });
 
-    test('phone (390 px): two lines, "Region Bohemia" and "Čapkov and surroundings", each with its link whole', async ({ page }) => {
+    test('phone (390 px): two rows, "Region Bohemia" and "Čapkov and surroundings", each sentence and link whole (they may wrap)', async ({ page }) => {
         await setup(page, { width: 390, features: HISTORY_R1_FEATURES });
         await openCard(page, 'Jan');
         await expect(regionRow(page).locator('.pm-lifeline-hfind-text')).toHaveText('Region Bohemia not searched yet.');
         await expect(regionRow(page).locator('button[data-find]')).toHaveText('Find first');
         await expect(placeRow(page)).toHaveText('Čapkov and surroundings: Find history…');
-        expect(await oneLine(regionRow(page))).toBe(true);
-        expect(await oneLine(placeRow(page))).toBe(true);
+        expect(await whole(regionRow(page))).toBe(true);
+        expect(await whole(placeRow(page))).toBe(true);
+    });
+
+    test('phone (390 px), a long region name: both sentences wrap whole, nothing cut to an ellipsis', async ({ page }) => {
+        const h = unsearched();
+        h.payload.regions!['cz-bohemia'].name = { cs: 'Čechy a Kladské hrabství', en: 'Bohemia and the County of Kladsko', de: 'Böhmen und Grafschaft Glatz' };
+        await setup(page, { width: 390, history: h, features: HISTORY_R1_FEATURES });
+        await openCard(page, 'Jan');
+        await expect(regionRow(page).locator('.pm-lifeline-hfind-text')).toHaveText('Region Bohemia and the County of Kladsko not searched yet.');
+        for (const row of [regionRow(page), placeRow(page)]) expect(await whole(row)).toBe(true);
     });
 });

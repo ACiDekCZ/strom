@@ -5658,6 +5658,11 @@
         .k-historyState.is-find-one .pm-lifeline-desc { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
         .pm-lifeline-hfind-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .k-historyState.is-find-one .pm-lifeline-hfind { flex: none; }
+        /* Region and place offered together: the sentences wrap, the link follows (or goes under it). */
+        .k-historyState.is-find-both .pm-lifeline-desc,
+        .k-historyState.is-find-both ~ .is-place-row.is-find-one .pm-lifeline-desc { flex-wrap: wrap; column-gap: 6px; row-gap: 0; white-space: normal; }
+        .k-historyState.is-find-both .pm-lifeline-hfind-text,
+        .k-historyState.is-find-both ~ .is-place-row.is-find-one .pm-lifeline-hfind-text { overflow: visible; }
         /* "Not searched yet" with its close button (spec 020 K1.6); a phone: one line like the find row. */
         .k-historyState.is-strip .pm-lifeline-desc { padding-right: 26px; }
         .k-historyState.is-find-one .pm-lifeline-hstrip-on { flex: none; white-space: nowrap; }
@@ -6409,7 +6414,7 @@
         .research-tools-group + .research-tools-group { margin-top: 4px; border-top: 1px solid var(--divider); }
         .research-tool-item .research-item-label { flex: 1; min-width: 0; }
         .research-tool-title { font-size: 13.5px; }
-        .research-tool-desc { font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .research-tool-desc { max-width: 300px; font-size: 12px; line-height: 1.35; color: var(--text-faint); white-space: normal; }
         .research-tools-foot {
             max-width: 320px; margin-top: 6px; padding: 8px 14px 2px; border-top: 1px solid var(--divider);
             font-size: 12px; line-height: 1.4; color: var(--text-light); white-space: normal;
