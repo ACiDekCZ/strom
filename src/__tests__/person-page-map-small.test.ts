@@ -4,7 +4,7 @@
  * to the regional city, the region's name, the "where in the country" inset,
  * places within 3 km (no map, distances and directions) and one place; living
  * protection through the new elements. Fictional people and villages
- * (Zálesí, Mlýnec, Rybníčky, Kozí Hrádek) at made-up positions; the towns,
+ * (Zálesí, Mlýnec, Rybníčky, Kozákov) at made-up positions; the towns,
  * rivers and regions come from the bundled Natural Earth extract (no network).
  */
 
@@ -195,8 +195,8 @@ function p(id: string, first: string, last: string, gender: Gender, extra: Parti
 
 /**
  * Kvido Zálesák (1900–1975): born in Zálesí, lived in Mlýnec, died in Rybníčky.
- * A second union with Bětuška (living) was made in Kozí Hrádek in 1920; their
- * daughter Ludmila (living) emigrated to Salina (Kansas).
+ * A second union with Bětuška (living) was made in Kozákov in 1920; their
+ * daughter Radmila (living) emigrated to Salina (Kansas).
  */
 function tree(withLiving: boolean): StromData {
     const kvido = p('kvido', 'Kvido', 'Zálesák', 'male', {
@@ -207,15 +207,15 @@ function tree(withLiving: boolean): StromData {
     const partnerships: StromData['partnerships'] = {} as StromData['partnerships'];
     if (withLiving) {
         kvido.partnerships = ['u1' as PartnershipId];
-        kvido.childIds = ['ludmila' as PersonId];
-        persons['betuska' as PersonId] = p('betuska', 'Bětuška', 'Zálesáková', 'female', { birthDate: '1902', birthPlace: 'Vrbětín', isDeceased: false, partnerships: ['u1' as PartnershipId], childIds: ['ludmila' as PersonId] });
-        persons['ludmila' as PersonId] = p('ludmila', 'Ludmila', 'Zálesáková', 'female', {
+        kvido.childIds = ['radmila' as PersonId];
+        persons['betuska' as PersonId] = p('betuska', 'Bětuška', 'Zálesáková', 'female', { birthDate: '1902', birthPlace: 'Vrbětín', isDeceased: false, partnerships: ['u1' as PartnershipId], childIds: ['radmila' as PersonId] });
+        persons['radmila' as PersonId] = p('radmila', 'Radmila', 'Zálesáková', 'female', {
             birthDate: '1940', isDeceased: false, parentIds: ['kvido', 'betuska'] as PersonId[],
             events: [{ id: 'l1', type: 'emigration', date: '1960', place: 'Salina' }],
         });
         partnerships['u1' as PartnershipId] = {
-            id: 'u1' as PartnershipId, person1Id: 'kvido' as PersonId, person2Id: 'betuska' as PersonId, childIds: ['ludmila' as PersonId],
-            status: 'married', startDate: '1920-06-06', startPlace: 'Kozí Hrádek',
+            id: 'u1' as PartnershipId, person1Id: 'kvido' as PersonId, person2Id: 'betuska' as PersonId, childIds: ['radmila' as PersonId],
+            status: 'married', startDate: '1920-06-06', startPlace: 'Kozákov',
         };
     }
     return { version: 11, persons, partnerships };
@@ -225,7 +225,7 @@ describe('living protection through the new elements', () => {
     const salina = towns().find(t => t.name === 'Salina')!;
     const geo = (base: Record<string, PlaceGeo>): Record<string, PlaceGeo> => ({
         ...base,
-        [placeKey('Kozí Hrádek')]: { lat: 49.425, lon: 15.215 },
+        [placeKey('Kozákov')]: { lat: 49.425, lon: 15.215 },
         [placeKey('Vrbětín')]: { lat: 49.435, lon: 15.21 },
         [placeKey('Salina')]: { lat: salina.lat, lon: salina.lon },
     });
@@ -237,10 +237,10 @@ describe('living protection through the new elements', () => {
             const html = (t: StromData, protect: boolean) =>
                 placesMapHtml(collectPersonPlacePoints(t, KID, { protect, now: 2026 }), g, { lang: 'cs', mode: 'file', kidPlaces: true });
             const open = html(tree(true), false);
-            expect(open).toContain('Kozí Hrádek');
+            expect(open).toContain('Kozákov');
             const prot = html(tree(true), true);
             expect(prot).toBe(html(tree(false), false));
-            for (const hidden of ['Kozí Hrádek', 'Vrbětín', 'Salina', 'Bětuška', 'Ludmila']) expect(prot).not.toContain(hidden);
+            for (const hidden of ['Kozákov', 'Vrbětín', 'Salina', 'Bětuška', 'Radmila']) expect(prot).not.toContain(hidden);
         });
     }
 
@@ -249,6 +249,6 @@ describe('living protection through the new elements', () => {
         const html = placesMapHtml(collectPersonPlacePoints(tree(true), KID, { now: 2026 }), g, { lang: 'en', mode: 'file', kidPlaces: false });
         expect(html).toContain(' of Zálesí');
         const prot = placesMapHtml(collectPersonPlacePoints(tree(true), KID, { protect: true, now: 2026 }), g, { lang: 'en', mode: 'file', kidPlaces: false });
-        expect(prot).not.toContain('Kozí Hrádek');
+        expect(prot).not.toContain('Kozákov');
     });
 });
