@@ -262,6 +262,7 @@ export const readProposeMethods = uiModule({
         const crop = readCropHtml(imageUrl, page, region, 96, 34);
         const variants = personVariants(p, entry.variants);
         const fresh = variants.some(v => freshVariants.has(variantKey(v)));
+        const said = variantsText(variants, { word: t.variantRole, name: code => t.roles[code] || code });
         let main = '';
         if (c.choice === 'skip') {
             main = `<span class="read-p-line"><span class="read-p-name">${esc(readName(p) || p.written)}</span> <span class="read-p-muted">· ${esc(t.skipped)}</span></span>`;
@@ -273,7 +274,7 @@ export const readProposeMethods = uiModule({
                     + `${unsure ? `<span class="read-p-tag">${esc(t.uncertainTag)}</span>` : ''}</label>`;
             };
             const unsure = (p.uncertain.includes('given') && !c.edited.given) || (p.uncertain.includes('surname') && !c.edited.surname);
-            const note = unsure ? `<span class="read-p-unsure${fresh ? ' is-fresh' : ''}">${esc(t.uncertainNote(variantsText(variants)))}</span>` : '';
+            const note = unsure ? `<span class="read-p-unsure${fresh ? ' is-fresh' : ''}">${esc(t.uncertainNote(said))}</span>` : '';
             main = `<span class="read-p-fields">${field('given', t.givenLabel)}${field('surname', t.surnameLabel)}${note}</span>`
                 + `<span class="read-p-muted">${esc(c.candidate ? t.newPicked : t.newNoMatch)}</span>`;
         } else {
@@ -302,7 +303,7 @@ export const readProposeMethods = uiModule({
             }
         }
         if (variants.length > 0 && !(c.choice === 'new' && main.includes('read-p-unsure'))) {
-            main += `<span class="read-p-variants${fresh ? ' is-fresh' : ''}">${esc(t.readersSay(variantsText(variants)))}</span>`;
+            main += `<span class="read-p-variants${fresh ? ' is-fresh' : ''}">${esc(t.readersSay(said))}</span>`;
         }
         const seg = (choice: ProposeChoice, label: string): string =>
             `<button type="button" role="radio" class="read-p-seg-btn${c.choice === choice ? ' is-on' : ''}" aria-checked="${c.choice === choice}"`

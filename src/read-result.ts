@@ -74,11 +74,15 @@ export function parseMarks(text: string): MarkSeg[] {
     return out;
 }
 
-/** One line with the readers' differing spans (`at` found literally in the line, each variant once). */
+/**
+ * One line with the readers' differing spans (`at` found literally in the line, each variant once). Only the
+ * transcription's own variants: a role, a name field or an event ("p2.role" father / witness) is no text of the
+ * line ("other" would light up in "mother"); those show at the person.
+ */
 export function parseTranscriptLine(line: string, variants: readonly ReadVariant[], used: Set<number>): TranscriptLine {
     const hits: { start: number; end: number; v: ReadVariant }[] = [];
     variants.forEach((v, i) => {
-        if (used.has(i) || !v.at) return;
+        if (used.has(i) || !v.at || (v.field && v.field !== 'transcript')) return;
         let from = 0;
         while (from <= line.length) {
             const start = line.indexOf(v.at, from);

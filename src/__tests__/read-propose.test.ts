@@ -135,6 +135,25 @@ describe('the suggestion of a read entry', () => {
         expect(variantsText(v)).toBe('Joannes / Josephus');
         expect(personVariants(e.persons[1], e.variants)).toEqual([]);
     });
+
+    it('the readers\' variants with a field go to their person: a role, a name, a person only one reader has', () => {
+        const e = baptism();
+        e.variants = [
+            { at: 'father', other: 'witness', field: 'p2.role' },
+            { at: 'Novák', other: 'Dvořák', field: 'p2.surname' },
+            { at: 'Jan Král', other: '', field: 'p4' },
+            { at: '3. 4. 1846', other: '4. 4. 1846', field: 'BAPM.date' },
+            { at: 'Joannes[?]', other: 'Josephus', field: 'transcript' },
+        ];
+        const [p1, p2, , p4] = e.persons;
+        // p1 (Jan Novák) shares the surname with p2: the field says whose the difference is.
+        expect(personVariants(p1, e.variants).map(v => v.at)).toEqual(['Joannes[?]']);
+        expect(personVariants(p2, e.variants).map(v => v.field)).toEqual(['p2.role', 'p2.surname']);
+        expect(personVariants(p4, e.variants).map(v => v.field)).toEqual(['p4']);
+        const role = { word: 'role', name: (c: string) => ({ father: 'otec', witness: 'svědek' } as Record<string, string>)[c] ?? c };
+        expect(variantsText(personVariants(p2, e.variants), role)).toBe('role: otec / svědek; Novák / Dvořák');
+        expect(variantsText(personVariants(p4, e.variants), role)).toBe('Jan Král / —');
+    });
 });
 
 describe('the same entry suggested again', () => {

@@ -676,11 +676,16 @@ function plain(text: string): string {
     return text.replace(/\[\?\]|\[(?:\.{2,}|…)\]/g, '').replace(/\s*\|\s*/g, ' ').trim();
 }
 
-/** The places the readers differ in that concern a person ("Jan / Josef"). */
-export function personVariants(p: Pick<ReadPerson, 'given' | 'surname' | 'written'>, variants: readonly ReadVariant[]): ReadVariant[] {
+/**
+ * The places the readers differ in that concern a person ("Jan / Josef"). A variant with the person's field
+ * ("p2.surname", "p2.role", "p2") is the person's; one of another person or of an event is not; the
+ * transcription's words (and an older research's variants without a field) by the name.
+ */
+export function personVariants(p: Pick<ReadPerson, 'ref' | 'given' | 'surname' | 'written'>, variants: readonly ReadVariant[]): ReadVariant[] {
     const written = fold(plain(p.written));
     const names = [p.given, p.surname].filter(Boolean).map(fold);
     return variants.filter(v => {
+        if (v.field && v.field !== 'transcript') return v.field === p.ref || v.field.startsWith(`${p.ref}.`);
         const at = fold(plain(v.at));
         const other = fold(plain(v.other));
         if (!at) return false;
@@ -688,12 +693,19 @@ export function personVariants(p: Pick<ReadPerson, 'given' | 'surname' | 'writte
     });
 }
 
-/** The variants as a line ("Jan / Josef; Nowak / Novák"). */
-export function variantsText(variants: readonly ReadVariant[]): string {
-    return variants.map(v => `${plain(v.at)} / ${plain(v.other)}`).join('; ');
+/**
+ * The variants as a line ("Jan / Josef; Nowak / Novák; role: father / witness"). `role` names a role code in
+ * the app's language with the word for "role" (a role variant carries codes); a side a reader left out is "—".
+ */
+export function variantsText(variants: readonly ReadVariant[], role?: { word: string; name: (code: string) => string }): string {
+    return variants.map(v => {
+        const side = (s: string) => plain(s) || '—';
+        if (v.field?.endsWith('.role') && role) return `${role.word}: ${role.name(v.at)} / ${v.other ? role.name(v.other) : '—'}`;
+        return `${side(v.at)} / ${side(v.other)}`;
+    }).join('; ');
 }
 
 /** A variant's identity (to tell the new ones after a second reading). */
 export function variantKey(v: ReadVariant): string {
-    return `${v.at}\u0000${v.other}`;
+    return `${v.field ?? ''}\u0000${v.at}\u0000${v.other}`;
 }
