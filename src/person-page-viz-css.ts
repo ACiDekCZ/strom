@@ -40,7 +40,10 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-pt.is-sel { z-index: 3; width: 26px; height: 26px; margin: -13px 0 0 -13px; line-height: 22px; background: var(--accent); }
 .pp-map-pt--rel.is-sel { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: var(--accent); background: var(--surface); }
 .pp-map-pt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.pp-map-lb { position: absolute; z-index: 1; transform: translate(16px, -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
+.pp-map-cl { width: auto; min-width: 22px; margin: 0; padding: 0 6px; border-radius: 11px; transform: translate(-50%, -50%); white-space: nowrap; }
+.pp-map-cl.is-sel { width: auto; min-width: 26px; height: 26px; margin: 0; padding: 0 8px; border-radius: 13px; }
+.pp-map-lb--cl { font-weight: 600; }
+.pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .pp-map-lb--rel { font-weight: 500; color: var(--text-light); }
 .pp-map-yr { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-faint); }
 .pp-map-yr.y-p { display: none; }
@@ -84,8 +87,7 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-river { fill: none; stroke: var(--map-water); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .pp-map-ring { fill: none; stroke: var(--map-ring); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
 .pp-map-rl { position: absolute; transform: translate(3px, -100%); color: var(--text-faint); font-size: 10.5px; line-height: 12px; white-space: nowrap; pointer-events: none; }
-.pp-map-region { position: absolute; left: 50%; top: 81%; transform: translate(-50%, -50%); color: var(--map-region); font-family: var(--font-serif, Georgia, serif); font-size: 22px; line-height: 1; letter-spacing: .32em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
-.pp-map-region--long { font-size: 16px; letter-spacing: .2em; }
+.pp-map-region { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); color: var(--map-region); font-family: var(--font-serif, Georgia, serif); font-size: var(--fd, 22px); line-height: 1; letter-spacing: .32em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
 .pp-map-rvl { position: absolute; transform: translate(4px, -110%); color: var(--text-faint); font-size: 10.5px; font-style: italic; line-height: 12px; white-space: nowrap; pointer-events: none; }
 .pp-map-anc { position: absolute; transform: translate(-3.5px, -50%); padding-left: 12px; color: var(--text-light); font-size: 12px; line-height: 16px; white-space: nowrap; pointer-events: none; }
 .pp-map-anc::before { content: ''; position: absolute; left: 0; top: 4.5px; width: 7px; height: 7px; background: var(--map-anchor); }
@@ -108,16 +110,23 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-brief-main { flex: 1 1 auto; min-width: 0; }
 .pp-map-sub { margin: -4px 0 8px !important; color: var(--text-light); font-size: 13px; }
 .pp-map-from { color: var(--text-light); }
+.pp-mini { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 9.5px; font-weight: 600; line-height: 15px; text-align: center; vertical-align: 1px; }
 @media (min-width: 641px) {
-  .lb-d-l { transform: translate(calc(-100% - 16px), -50%); }
+  .lb-d-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }
+  .lb-d-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - 13px)); }
+  .lb-d-b { transform: translate(calc(-1 * var(--hw)), 13px); }
   .lb-d-hide { display: none; }
   .pp-map-rl--p { display: none; }
+  .pp-map-pt.cl-d, .pp-map-cl--p, .pp-map-route.r-p, .pp-map-i--p, .rg-d-hide { display: none; }
 }
 @media (max-width: 640px) {
   .pp-map { aspect-ratio: 4 / 3; }
   .pp-map-in { left: -25%; width: 150%; }
-  .lb-p-l { transform: translate(calc(-100% - 16px), -50%); }
+  .lb-p-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }
+  .lb-p-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - 13px)); }
+  .lb-p-b { transform: translate(calc(-1 * var(--hw)), 13px); }
   .lb-p-hide { display: none; }
+  .pp-map-pt.cl-p, .pp-map-cl--d, .pp-map-route.r-d, .pp-map-i--d, .rg-p-hide { display: none; }
   .pp-map-ilb--wide { display: none; }
   .pp-map-yr.y-d { display: none; }
   .pp-map-yr.y-p { display: inline; }
@@ -125,8 +134,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-inset { width: 40%; }
   .pp-map-row { font-size: 13.5px; }
   .pp-map-ring--2, .pp-map-rl--2, .pp-map-rl--d, .pp-map-anc, .pp-map-rvl { display: none; }
-  .pp-map-region { font-size: 15px; letter-spacing: .28em; }
-  .pp-map-region--long { font-size: 11px; letter-spacing: .16em; }
+  .pp-map-region { top: 14px; font-size: var(--fp, 15px); letter-spacing: .28em; }
   .pp-map-arrow { font-size: 11px; padding: 2px 6px; }
   .pp-map-arrow--u, .pp-map-arrow--d { left: var(--xp); }
   .pp-map-where { right: 8px; bottom: 8px; }
@@ -140,7 +148,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-scale { width: calc(var(--u) * 100% / 640); }
   .pp-map-inset { width: 24%; }
   .pp-map-anc, .pp-map-rvl { display: none; }
-  .pp-map-region { top: 70%; font-size: 15px; }
+  .pp-map-region { top: calc(100% / 6 + 8px); }
 }
 @media (hover: hover) {
   .pp-map-row[data-pp-map-place]:hover { background: var(--hover-bg); }

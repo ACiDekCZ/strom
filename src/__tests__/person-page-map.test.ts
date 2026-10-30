@@ -7,12 +7,14 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, scaleBar, labelYears,
+    collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, labelRect, scaleBar, labelYears,
+    numberRanges, chainClusters, isSelected, PLACES_MAP_SCRIPT,
     ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, SAFE, VIEW_W, VIEW_H, type PlacePoint,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
 import { placeKey } from '../places.js';
 import { getStringsForLang } from '../strings.js';
+import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
 import type { StromData, PersonId, PartnershipId, Person, Gender, Partnership, PlaceGeo } from '../types.js';
 
 function p(id: string, first: string, last: string, gender: Gender, extra: Partial<Person> = {}): Person {
@@ -252,17 +254,28 @@ describe('scale bar and labels', () => {
         }
     });
 
-    it('label right of the point; left in the right third; left on a collision; else left out', () => {
+    it('label right of the point; left in the right third; left, above, below on a collision; else left out', () => {
         const o = { minX: 0, maxX: 640, minY: 0, maxY: 320, pxToUnit: 1 };
         expect(placeLabelSides([{ x: 100, y: 100, w: 60 }], o)).toEqual(['r']);
         expect(placeLabelSides([{ x: 500, y: 100, w: 60 }], o)).toEqual(['l']);
-        // The third point: its right side hits the second point, its left side the first label.
+        // The third point: its right side hits the second point, its left side the first label: above (round 4).
         const sides = placeLabelSides([
             { x: 100, y: 100, w: 80 },
             { x: 300, y: 100, w: 80 },
             { x: 220, y: 100, w: 70 },
         ], o);
-        expect(sides).toEqual(['r', 'r', 'hide']);
+        expect(sides).toEqual(['r', 'r', 'a']);
+        // Above aligned to the point's left edge, 3 px off it; below likewise.
+        expect(labelRect({ x: 220, y: 100, w: 70 }, 'a', 1)).toEqual({ x: 209, y: 66, w: 70, h: 20 });
+        expect(labelRect({ x: 220, y: 100, w: 70 }, 'b', 1)).toEqual({ x: 209, y: 114, w: 70, h: 20 });
+        // The top edge too close: below.
+        expect(placeLabelSides([
+            { x: 100, y: 30, w: 80 }, { x: 300, y: 30, w: 80 }, { x: 220, y: 30, w: 70 },
+        ], o)).toEqual(['r', 'r', 'b']);
+        // Nowhere free: the number only.
+        expect(placeLabelSides([
+            { x: 100, y: 100, w: 80 }, { x: 300, y: 100, w: 80 }, { x: 220, y: 100, w: 70 },
+        ], { ...o, obstacles: [{ x: 150, y: 50, w: 140, h: 40 }, { x: 150, y: 112, w: 140, h: 40 }] })).toEqual(['r', 'r', 'hide']);
         // A right side off the view flips left even in the left part.
         expect(placeLabelSides([{ x: 400, y: 100, w: 300 }], { ...o, maxX: 640 })).toEqual(['l']);
         // An obstacle (the inset) on the right sends the label left.
@@ -300,6 +313,78 @@ describe('list texts', () => {
     });
 });
 
+describe('clusters of close points (round 4, K4-29)', () => {
+    const pts = () => collectPersonPlacePoints(tree(), JAN, { now: 2026 });
+    // Wien (a daughter's place) widens the frame: Čapkov and Lhotka come within 26 px of each other.
+
+    it('numbers as ranges, names of a cluster', () => {
+        expect(numberRanges([1, 2])).toBe('1–2');
+        expect(numberRanges([4, 1, 3])).toBe('1, 3–4');
+        expect(numberRanges([1, 2, 3, 5])).toBe('1–3, 5');
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            const M = getStringsForLang(lang).personPage.map;
+            expect(M.cluster(['Voss', 'Bergen'])).toBe('Voss · Bergen');
+            expect(M.cluster(['Voss', 'Bergen', 'Oslo'])).toBe('Voss +2');
+        }
+    });
+
+    it('chains points closer than the limit into one cluster at their centroid, per box', () => {
+        expect(chainClusters([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 40, y: 0 }, { x: 100, y: 0 }], 25).map(g => g.length)).toEqual([3]);
+        const plan = planPlacesMap(pts(), GEO, { kidPlaces: true });
+        for (const mode of ['d', 'p'] as const) {
+            const cl = plan.clusters![mode];
+            expect(cl.map(c => [c.text, c.members.map(m => m.name)])).toEqual([['1–2', ['Čapkov', 'Lhotka']]]);
+            const [a, b] = cl[0].members;
+            expect(cl[0].x).toBeCloseTo((a.x! + b.x!) / 2, 5);
+            // The members have no label of their own there.
+            expect([a.side![mode], b.side![mode]]).toEqual(['hide', 'hide']);
+            expect(cl[0].side).not.toBe('hide');
+            // The path leaves out the segment inside the cluster: one point fewer.
+            expect(plan.routes![mode].length).toBe(plan.route.length - 1);
+            expect(plan.routes![mode][0]).toEqual({ x: cl[0].x, y: cl[0].y });
+        }
+        // Far apart (without Wien the frame is narrower): no cluster.
+        const plain = planPlacesMap(pts(), GEO, { kidPlaces: false });
+        expect(plain.clusters).toBeUndefined();
+    });
+
+    it('a pill with the ranges, one label with both names and the years (desktop), a click selects all its rows', () => {
+        const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true });
+        const keys = `${placeKey('Čapkov')}\t${placeKey('Lhotka')}`;
+        expect(html).toContain(`<button type="button" class="pp-map-pt pp-map-cl" style="left:`);
+        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl"[^>]*data-pp-map-place="${keys}" aria-label="1–2 Čapkov, Lhotka">1–2</button>`));
+        expect(html).toMatch(/<span class="pp-map-lb pp-map-lb--cl lb-d-\w+ lb-p-\w+" style="[^"]*--hw:\d+px" aria-hidden="true">Čapkov · Lhotka<span class="pp-map-yr y-d">1860–1883<\/span><\/span>/);
+        // The members' own points stay for the selection, hidden in the box where they are clustered.
+        expect(html).toMatch(/class="pp-map-pt cl-d cl-p"[^>]*data-pp-map-place="capkov"/);
+        // A cluster's selection highlights all its rows and the pill; one row's selection the pill too.
+        const sel = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'app', kidPlaces: true, selected: keys });
+        expect(sel).toMatch(/class="pp-map-row is-sel"[^>]*data-pp-map-place="capkov"/);
+        expect(sel).toMatch(/class="pp-map-row is-sel"[^>]*data-pp-map-place="lhotka"/);
+        expect(sel).toMatch(/class="pp-map-pt pp-map-cl is-sel"/);
+        expect(isSelected(keys, ['lhotka'])).toBe(true);
+        expect(isSelected('lhotka', ['capkov', 'lhotka'])).toBe(true);
+        expect(isSelected('kolin', ['capkov', 'lhotka'])).toBe(false);
+        // The file's script splits a cluster's keys the same way.
+        expect(PLACES_MAP_SCRIPT).toContain(".split('\\t')");
+    });
+
+    it('the CSS hides the members in the box where they are clustered and the other box\'s pill and path', () => {
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(min-width: 641px\) \{[^@]*\.pp-map-pt\.cl-d, \.pp-map-cl--p, \.pp-map-route\.r-p, \.pp-map-i--p/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-pt\.cl-p, \.pp-map-cl--d, \.pp-map-route\.r-d, \.pp-map-i--d/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.lb-d-a \{ transform: translate\(calc\(-1 \* var\(--hw\)\), calc\(-100% - 13px\)\); \}/);
+    });
+
+    it('the world inset: far places close together are one dot with one label', () => {
+        const t = tree();
+        t.persons['eva' as PersonId].events = [{ id: 'ev1', type: 'emigration', date: '1950', place: 'Milwaukee' }];
+        const geo = { ...GEO, [placeKey('Milwaukee')]: { lat: 43.04, lon: -87.91 } };
+        const html = placesMapHtml(collectPersonPlacePoints(t, JAN, { now: 2026 }), geo, { lang: 'cs', mode: 'file', kidPlaces: true });
+        const inset = html.slice(html.indexOf('pp-map-inset'));
+        expect((inset.match(/<circle class="pp-map-ipt/g) ?? []).length).toBe(1);
+        expect(inset).toContain('>Chicago · Milwaukee</span>');
+    });
+});
+
 describe('placesMapHtml', () => {
     const pts = () => collectPersonPlacePoints(tree(), JAN, { now: 2026 });
 
@@ -311,7 +396,7 @@ describe('placesMapHtml', () => {
         expect(html).toContain('obrysy Natural Earth');
         expect(html).toContain('class="pp-map-scale"');
         expect(html).toContain('class="pp-map-route"');
-        expect((html.match(/class="pp-map-pt( is-sel)?"/g) ?? []).length).toBe(3);
+        expect((html.match(/class="pp-map-pt( cl-d)?( cl-p)?( is-sel)?"/g) ?? []).length).toBe(3);
         expect(html).toContain('pp-map-pt--rel');
         expect(html).toContain('Bez polohy na mapě: Kutná Hora (povolání)');
         expect(html).toContain('Václav (syn): vystěhování 1913, úmrtí 1968');
@@ -338,7 +423,7 @@ describe('placesMapHtml', () => {
 
     it('the selected place is highlighted on the map and in the list', () => {
         const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'app', kidPlaces: true, selected: placeKey('Lhotka') });
-        expect(html).toMatch(/class="pp-map-pt is-sel"[^>]*data-pp-map-place="lhotka"/);
+        expect(html).toMatch(/class="pp-map-pt[^"]* is-sel"[^>]*data-pp-map-place="lhotka"/);
         expect(html).toMatch(/class="pp-map-row is-sel"[^>]*data-pp-map-place="lhotka"/);
     });
 

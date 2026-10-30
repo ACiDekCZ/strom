@@ -7,15 +7,20 @@
  *
  *   # Natural Earth 10m GeoJSON (github.com/nvkelso/natural-earth-vector, geojson/):
  *   #   ne_10m_populated_places_simple, ne_10m_rivers_lake_centerlines, ne_10m_admin_1_states_provinces
+ *   # and the rivers' attribute table (10m_physical/ne_10m_rivers_lake_centerlines.dbf): their German
+ *   # and English names (joined by RIVERNUM; the GeoJSON has no name_de)
  *   # world-atlas 2.0.2 (npm pack world-atlas@2.0.2): countries-50m.json
  *   npx tsx scripts/build-map-context.ts <dir with the NE GeoJSON> <world-atlas dir>
  *
  * Source: Natural Earth (public domain); the country polygons as packaged in
  * world-atlas 2.0.2 (TopoJSON, ISC, Michael Bostock). Kept:
- *   - towns: name, position, "big" (an admin-1 capital or POP_MAX ≥ 50 000);
- *     POP_MAX ≥ 10 000 or a capital; the whole world;
+ *   - towns: name, position, "big" (an admin-1 capital or POP_MAX ≥ 50 000) and
+ *     the size class of POP_MAX; every town of the source (it holds only the
+ *     notable ones), the whole world;
  *   - rivers and lake centrelines with SCALERANK ≤ 9, inside the detail regions
- *     (Europe, North America), with their names;
+ *     (Europe, North America), with their English, German and Czech names
+ *     (Czech from RIVER_NAMES_CS; a river without a name in a language stays
+ *     unnamed there);
  *   - admin-1 regions inside the detail regions: name (+ English and German
  *     names when they differ and look sound) and a simplified polygon — just
  *     enough to tell whether a frame lies in one region;
@@ -102,13 +107,15 @@ function encodeRing(ring: Pos[], tol: number, scale: number): string {
 const SCALE_TOWN = 100;   // 0.01° (≈ 1 km)
 /** Known typos of the source, corrected (the names show on the map). */
 const TOWN_FIX: Record<string, string> = { 'Pizen': 'Plzeň', 'Usti Nad Labem': 'Ústí nad Labem' };
+/** Size class of a population: 10·log10 (steps of about 26 %), 0 for none. */
+const popClass = (pop: number): number => (pop > 0 ? Math.round(10 * Math.log10(pop)) : 0);
 const towns = readGeo('ne_10m_populated_places_simple')
     .map(f => f.properties as { name: string; latitude: number; longitude: number; pop_max: number; featurecla: string })
-    .filter(p => p.pop_max >= 10_000 || /capital/i.test(p.featurecla))
     .map(p => ({
         name: (TOWN_FIX[p.name] ?? p.name).replace(/[|]/g, ' ').trim(),
         lon: p.longitude, lat: p.latitude,
         big: /admin-[01] capital/i.test(p.featurecla) || p.pop_max >= 50_000,
+        pop: popClass(p.pop_max),
     }))
     .filter(t => t.name)
     .sort((a, b) => a.lon - b.lon || a.lat - b.lat);
@@ -117,7 +124,7 @@ let townCoords = '';
     let px = 0, py = 0;
     for (const t of towns) {
         const x = Math.round(t.lon * SCALE_TOWN), y = Math.round(t.lat * SCALE_TOWN);
-        townCoords += encodeNum(x - px) + encodeNum(y - py);
+        townCoords += encodeNum(x - px) + encodeNum(y - py) + encodeNum(t.pop);
         px = x; py = y;
     }
 }
@@ -126,12 +133,46 @@ const townNames = towns.map(t => (t.big ? '*' : '') + t.name).join('|');
 // ── rivers ──
 const SCALE_RIVER = 200;  // 0.005°
 const TOL_RIVER = 0.01;
-/** One entry per river name: "name\tline line …" (the name may be empty). */
+/** Czech names of the rivers a Czech reader knows by a Czech name, by the English name (Natural Earth has no name_cs). */
+const RIVER_NAMES_CS: Record<string, string> = {
+    Elbe: 'Labe', Vltava: 'Vltava', Morava: 'Morava', Oder: 'Odra', Danube: 'Dunaj', Thaya: 'Dyje', Dyje: 'Dyje',
+    Ohre: 'Ohře', 'Ohře': 'Ohře', Eger: 'Ohře', Sazava: 'Sázava', 'Sázava': 'Sázava', Berounka: 'Berounka',
+    Vistula: 'Visla', Rhine: 'Rýn', Main: 'Mohan', Inn: 'Inn', Vah: 'Váh', 'Váh': 'Váh', Tisza: 'Tisa',
+};
+/** The attribute table of a shapefile (dBASE III): one record of trimmed strings per feature. */
+function readDbf(path: string): Record<string, string>[] {
+    const b = readFileSync(path);
+    const n = b.readUInt32LE(4), hlen = b.readUInt16LE(8), rlen = b.readUInt16LE(10);
+    const fields: { name: string; len: number }[] = [];
+    for (let off = 32; b[off] !== 0x0d; off += 32) {
+        fields.push({ name: b.toString('latin1', off, off + 11).split('\0')[0], len: b[off + 16] });
+    }
+    const out: Record<string, string>[] = [];
+    for (let i = 0; i < n; i++) {
+        let pos = hlen + i * rlen + 1;
+        const rec: Record<string, string> = {};
+        for (const f of fields) { rec[f.name] = b.toString('utf8', pos, pos + f.len).replace(/\0/g, '').trim(); pos += f.len; }
+        out.push(rec);
+    }
+    return out;
+}
+/** English and German names by RIVERNUM (the first record that has them). */
+const riverNames = new Map<string, { en: string; de: string }>();
+for (const r of readDbf(join(neDir, 'ne_10m_rivers_lake_centerlines.dbf'))) {
+    const num = r.rivernum, cur = riverNames.get(num);
+    if (!cur) riverNames.set(num, { en: r.name_en, de: r.name_de });
+    else { cur.en ||= r.name_en; cur.de ||= r.name_de; }
+}
+const cleanName = (n: unknown): string => String(n ?? '').replace(/[\t|]/g, ' ').trim();
+/** One entry per set of names: "English|German|Czech\tline line …" (any name may be empty). */
 const riverByName = new Map<string, string[]>();
 for (const f of readGeo('ne_10m_rivers_lake_centerlines')) {
-    const p = f.properties as { name?: string | null; scalerank: number };
+    const p = f.properties as { name?: string | null; name_en?: string | null; rivernum?: number; scalerank: number };
     if (p.scalerank > 9) continue;
-    const name = (p.name ?? '').replace(/[\t|]/g, ' ').trim();
+    const joined = riverNames.get(String(p.rivernum ?? ''));
+    const en = cleanName(joined?.en || p.name_en);
+    const de = cleanName(joined?.de);
+    const name = `${en}|${de}|${RIVER_NAMES_CS[en] ?? ''}`;
     const parts = (f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [f.geometry.coordinates]) as Pos[][];
     for (const line of parts) {
         // The runs inside the detail regions.
@@ -248,11 +289,11 @@ const out = `/**
 export const TOWN_SCALE = ${SCALE_TOWN};
 /** Town names in the order of TOWN_COORDS, "|"-separated; "*" marks a big town (a regional capital or 50 000+). */
 export const TOWN_NAMES = ${chunk(townNames)};
-/** One delta-coded [lon, lat] pair per town. */
+/** Per town a delta-coded [lon, lat] pair and its size class (10·log10 POP_MAX, not delta-coded). */
 export const TOWN_COORDS = ${chunk(townCoords)};
 
 export const RIVER_SCALE = ${SCALE_RIVER};
-/** "name<TAB>line line …" per river (the detail regions only). */
+/** "English|German|Czech<TAB>line line …" per river (the detail regions only; an empty name = none in that language). */
 export const RIVERS: readonly string[] = ${list(rivers)};
 
 export const REGION_SCALE = ${SCALE_ADM};

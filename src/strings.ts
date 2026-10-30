@@ -5716,7 +5716,11 @@ const stringsEN = {
             aria: 'Map of the places of life',
             // A small neighbourhood (§1.3a): places within 3 km, the distance and direction from place 1, a city beyond the frame.
             tiny: 'The places lie within 3 km of each other.',
-            near: (km: number, side: string, name: string) => ` · ${km} km ${side} of ${name}`,
+            // `badge`: the small badge of place 1 (HTML), round 4.
+            near: (km: number, side: string, badge: string) => ` · ${km} km ${side} of ${badge}`,
+            placeN: (n: number) => `place ${n}`,
+            // A cluster of close points (K4-29): two names, or the first and how many more.
+            cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
             dirs: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Location in the country',
@@ -11459,9 +11463,12 @@ const stringsCZ: StringsType = {
             km: (n: number) => `${n} km`,
             inset: 'výřez',
             aria: 'Mapa míst života',
-            // A small neighbourhood (§1.3a); the place name stays in the nominative ("od místa Čapkov").
+            // A small neighbourhood (§1.3a); place 1 by its numbered badge, no inflected name (round 4).
             tiny: 'Místa leží do 3 km od sebe.',
-            near: (km: number, side: string, name: string) => ` · ${km} km ${side} od místa ${name}`,
+            near: (km: number, side: string, badge: string) => ` · ${km} km ${side} od ${badge}`,
+            placeN: (n: number) => `místa ${n}`,
+            // A cluster of close points (K4-29): two names, or the first and how many more.
+            cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
             dirs: ['S', 'SV', 'V', 'JV', 'J', 'JZ', 'Z', 'SZ'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Poloha v zemi',
@@ -17122,7 +17129,10 @@ const stringsDE: StringsType = {
             inset: 'Ausschnitt',
             aria: 'Karte der Lebensorte',
             tiny: 'Die Orte liegen höchstens 3 km voneinander entfernt.',
-            near: (km: number, side: string, name: string) => ` · ${km} km ${side} von ${name}`,
+            near: (km: number, side: string, badge: string) => ` · ${km} km ${side} von ${badge}`,
+            placeN: (n: number) => `Ort ${n}`,
+            // A cluster of close points (K4-29): two names, or the first and how many more.
+            cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
             dirs: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Lage im Land',

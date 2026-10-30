@@ -11,8 +11,15 @@ import {
 } from './map-context-data.js';
 import { decodeLines, type GeoLine, type GeoBounds } from './map-outlines.js';
 
-export interface Town { name: string; lon: number; lat: number; /** A regional capital or a city of 50 000+. */ big: boolean }
-export interface River { name: string; lines: GeoLine[] }
+export interface Town {
+    name: string; lon: number; lat: number;
+    /** A regional capital or a city of 50 000+. */
+    big: boolean;
+    /** Size class of the population (10·log10 POP_MAX, 0 unknown): a bigger town has a higher one. */
+    pop: number;
+}
+/** A river's names in the app's languages; '' where the data have none (the river is then drawn unnamed). */
+export interface River { names: { en: string; de: string; cs: string }; lines: GeoLine[] }
 export interface Region { name: string; en: string; de: string; rings: GeoLine[] }
 
 let townCache: Town[] | null = null;
@@ -20,7 +27,7 @@ let riverCache: River[] | null = null;
 let regionCache: Region[] | null = null;
 let countryCache: GeoLine[][] | null = null;
 
-/** Towns of 10 000+ and capitals, the whole world. */
+/** The notable towns of Natural Earth, the whole world. */
 export function towns(): Town[] {
     if (townCache) return townCache;
     const names = TOWN_NAMES.split('|');
@@ -38,8 +45,9 @@ export function towns(): Town[] {
     for (const raw of names) {
         if (i >= TOWN_COORDS.length) break;
         x += next(); y += next();
+        const pop = next();
         const big = raw.startsWith('*');
-        out.push({ name: big ? raw.slice(1) : raw, lon: x / TOWN_SCALE, lat: y / TOWN_SCALE, big });
+        out.push({ name: big ? raw.slice(1) : raw, lon: x / TOWN_SCALE, lat: y / TOWN_SCALE, big, pop });
     }
     townCache = out;
     return out;
@@ -50,9 +58,15 @@ export function rivers(): River[] {
     if (riverCache) return riverCache;
     riverCache = RIVERS.map(row => {
         const tab = row.indexOf('\t');
-        return { name: row.slice(0, tab), lines: decodeLines(row.slice(tab + 1), RIVER_SCALE) };
+        const [en = '', de = '', cs = ''] = row.slice(0, tab).split('|');
+        return { names: { en, de, cs }, lines: decodeLines(row.slice(tab + 1), RIVER_SCALE) };
     });
     return riverCache;
+}
+
+/** A river's name in a language: never another language's name ('' = draw it unnamed). */
+export function riverName(r: River, lang: string): string {
+    return lang === 'cs' ? r.names.cs : lang === 'de' ? r.names.de : r.names.en;
 }
 
 function regions(): Region[] {
