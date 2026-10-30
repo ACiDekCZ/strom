@@ -283,6 +283,8 @@ export const PERSON_PAGE_CHART_CSS = `
   /* At the chart's ends the touch area grows inwards, never past the column. */
   .pp-ch-mk--s::before { left: 0; }
   .pp-ch-mk--e::before { left: -44px; }
+  /* History glyphs and clusters (round 4): 44 x 44 px around the glyph, narrowed to half the gap to a neighbour. */
+  .pp-ch-hm::before { content: ''; position: absolute; top: -15px; left: calc(-1 * var(--tl, 22px)); width: calc(var(--tl, 22px) + var(--tr, 22px)); height: 44px; }
 }
 @media print {
   .pp-chart { break-inside: avoid; }
