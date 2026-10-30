@@ -197,6 +197,11 @@ function registerAppListeners(): void {
     window.addEventListener('strom:save-blocked', () => {
         UI.showToast(strings.storageSafety.saveBlocked, 6000);
     });
+    // A tree saved by a newer app, opened by switching: what this version
+    // does not know may not show and goes at the next save (prod 3.17 N1).
+    window.addEventListener('strom:newer-data', () => {
+        UI.showToast(strings.validation.newerDataTree, 12000, { closable: true, notice: true, kind: 'newer-data' });
+    });
     window.addEventListener('strom:tree-unreadable', (e) => {
         // Locked session → Unlock banner; unlocked but another key → ask for
         // that tree's password and re-encrypt it (K8).

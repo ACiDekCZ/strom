@@ -1051,6 +1051,7 @@ class DataManagerClass {
         const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
             await TreeManager.adoptStoredData(treeId);
+            this.announceNewerData(treeId, treeData);
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
@@ -1072,6 +1073,18 @@ class DataManagerClass {
     }
 
     /**
+     * A tree stored by a newer app (data version above this one's), opened
+     * after the start (the startup check covers only the first tree): the UI
+     * says so — what this version does not know is dropped at its next save.
+     */
+    private announceNewerData(treeId: TreeId, stored: StromData): void {
+        const dataVersion = stored.version ?? 1;
+        if (dataVersion > STROM_DATA_VERSION && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('strom:newer-data', { detail: { treeId, dataVersion } }));
+        }
+    }
+
+    /**
      * Reload current tree data (async, for encrypted data)
      * Used after unlocking crypto session to load decrypted data
      */
@@ -1083,6 +1096,7 @@ class DataManagerClass {
         const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
             await TreeManager.adoptStoredData(treeId);
+            this.announceNewerData(treeId, treeData);
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
