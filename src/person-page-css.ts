@@ -6,6 +6,8 @@
  * .pp-head, .pp-toc) is the window's own and is not here.
  */
 
+import { PERSON_PAGE_VIZ_CSS, PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page-viz-css.js';
+
 /** The light ("paper") values of the app tokens the page uses — the file's :root and print. */
 export const PERSON_PAGE_LIGHT_TOKENS = [
     '--surface: #fffdf8', '--surface-2: #f6f2ea', '--surface-modal: #fbf8f1',
@@ -360,7 +362,7 @@ a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }
   details.pp-ch-fold > summary { display: none !important; }
   details.pp-ch-fold::details-content { content-visibility: visible; display: contents; }
 }
-`;
+` + PERSON_PAGE_VIZ_CSS;
 
 /** The saved file's own frame (paper look, centred column) and the no-JS rules. */
 const FILE_FRAME_CSS = `
@@ -379,7 +381,7 @@ html.no-js .pp-fig { max-width: 100%; }
 export function personPageFileCss(fontCss = ''): string {
     // A font face never ends the <style> element early.
     const fonts = fontCss.replace(/<\//g, '<\\/');
-    return `${fonts}\n:root { ${PERSON_PAGE_LIGHT_TOKENS} ${FONT_STACKS} color-scheme: light; }\n${FILE_FRAME_CSS}${PERSON_PAGE_CSS}`;
+    return `${fonts}\n:root { ${PERSON_PAGE_LIGHT_TOKENS} ${PERSON_PAGE_VIZ_LIGHT_TOKENS} ${FONT_STACKS} color-scheme: light; }\n${FILE_FRAME_CSS}${PERSON_PAGE_CSS}`;
 }
 
 /**

@@ -18,6 +18,7 @@ import { personSourceRows } from '../person-sources.js';
 import { computePersonLifeline } from '../timeline.js';
 import { parseHistoryPayload, HistoryPayload } from '../history.js';
 import { getStringsForLang } from '../strings.js';
+import { placeKey } from '../places.js';
 import { StromData, PersonId, PartnershipId, Person, Gender, Partnership } from '../types.js';
 
 /** A 1×1 JPEG. */
@@ -91,8 +92,8 @@ describe('sections', () => {
         const html = body(fiskTree(), { open: new Set(['research']) });
         expect(html.startsWith('<article class="pp"')).toBe(true);
         expect(html.indexOf('<header class="pp-hero"')).toBeLessThan(html.indexOf('pp-sec-family'));
-        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
-        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'timeline', 'materials', 'notes', 'sources', 'research']);
+        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
+        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'places', 'timeline', 'materials', 'notes', 'sources', 'research']);
     });
 
     it('a person with only a name has a header and nothing empty', () => {
@@ -914,5 +915,148 @@ describe('languages', () => {
     it('English and German pages use their strings', () => {
         expect(body(fiskTree(), { lang: 'en' })).toContain('Family');
         expect(body(fiskTree(), { lang: 'de' })).toContain('Familie');
+    });
+});
+
+describe('person page 2: the places map and the life chart wired in (§1, §2)', () => {
+    const geoTree = (): StromData => {
+        const d = fiskTree();
+        d.places = {
+            [placeKey('Čapkov')]: { lat: 49.85, lon: 15.2, label: 'Čapkov, Česko' },
+            [placeKey('Vídeň')]: { lat: 48.21, lon: 16.37 },
+            [placeKey('Toronto')]: { lat: 43.65, lon: -79.38 },
+            [placeKey('Lhota')]: { lat: 49.9, lon: 15.3 },
+        };
+        // Rosa: two places of her own, a living daughter who emigrated, a living second husband with a couple's story.
+        const rosa = d.persons['rosa' as PersonId];
+        Object.assign(rosa, {
+            birthPlace: 'Čapkov', deathDate: '1970', deathPlace: 'Vídeň',
+            childIds: ids('eva'), partnerships: ['u2' as PartnershipId, 'u3' as PartnershipId],
+        });
+        d.persons['tomas' as PersonId] = p('tomas', 'Tomáš', 'Malý', 'male', {
+            birthDate: '1890', deathDate: '1960', partnerships: ['u2' as PartnershipId], childIds: ids('eva'),
+        });
+        d.persons['jiri' as PersonId] = p('jiri', 'Jiřina', 'Nováková', 'female', {
+            birthDate: '1950-02-02', birthPlace: 'Lhota', partnerships: ['u3' as PartnershipId],
+        });
+        d.persons['eva' as PersonId] = p('eva', 'Evelína', 'Malá', 'female', {
+            birthDate: '1955-04-04', birthPlace: 'Lhota', parentIds: ids('tomas', 'rosa'),
+            events: [{ id: 'ev1', type: 'emigration', date: '1980', place: 'Toronto' }],
+        });
+        d.partnerships['u2' as PartnershipId] = { id: 'u2' as PartnershipId, person1Id: 'tomas' as PersonId, person2Id: 'rosa' as PersonId, status: 'married', childIds: ids('eva'), startDate: '1950' } as Partnership;
+        d.partnerships['u3' as PartnershipId] = {
+            id: 'u3' as PartnershipId, person1Id: 'rosa' as PersonId, person2Id: 'jiri' as PersonId, status: 'married', childIds: [], startDate: '1965',
+            story: { status: 'final', title: 'Pozdní láska', text: 'Potkaly se ve Lhotě.' },
+        } as Partnership;
+        return d;
+    };
+    const rosa = { personId: 'rosa' as PersonId };
+
+    it('the Places section sits between the story and the timeline; the chart opens the timeline above its rows', () => {
+        const html = body(geoTree(), { open: new Set(['research']) });
+        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
+        expect(html).toContain('class="pp-map"');
+        const tl = html.slice(html.indexOf('id="pp-sec-timeline"'));
+        expect(tl.indexOf('class="pp-chart-host"')).toBeGreaterThan(0);
+        expect(tl.indexOf('class="pp-chart-host"')).toBeLessThan(tl.indexOf('class="pp-seg'));
+        // The contents name the new section.
+        expect(personPageSections(html, 'cs').find(s => s.key === 'places')).toEqual({ key: 'places', id: 'pp-sec-places', label: 'Místa života' });
+        expect(personPageSections(html, 'en').find(s => s.key === 'places')?.label).toBe('Places of life');
+    });
+
+    it('thresholds: one place → no section; places without position → the list; one dated year → no chart', () => {
+        const one = geoTree();
+        one.persons['jan' as PersonId].events = one.persons['jan' as PersonId].events!.filter(e => e.place !== 'Vídeň');
+        expect(body(one)).not.toContain('id="pp-sec-places"');
+        expect(doc(one)).not.toContain(".pp-places');if(!root)");
+        const noGeo = fiskTree();
+        const w = body(noGeo);
+        expect(w).toContain('id="pp-sec-places"');
+        expect(w).not.toContain('class="pp-map"');
+        expect(w).toContain('Polohu lze doplnit v Místech.');
+        expect(doc(noGeo)).not.toContain('Polohu lze doplnit v Místech.');
+        const poor: StromData = { persons: { x: p('x', 'Jakub', 'Prostý', 'male', { birthDate: '1900', birthPlace: 'Čapkov' }) }, partnerships: {} } as StromData;
+        const ph = body(poor, { personId: 'x' as PersonId });
+        expect(ph).not.toContain('pp-chart');
+        expect(ph).not.toContain('id="pp-sec-places"');
+    });
+
+    it('window: the switch, Open in map, the selected place; the file: none of them, the script only with the map', () => {
+        const app = body(geoTree(), { ...rosa, selectedPlace: placeKey('Vídeň') });
+        expect(app).toContain('data-pp-switch="kidPlaces"');
+        expect(app).toContain('data-pp-action="map:open"');
+        expect(app).toMatch(/class="pp-map-row is-sel"[^>]*data-pp-map-place="vi/);
+        // Toronto (the daughter's emigration) far away: the world inset, the hollow point in the list.
+        expect(app).toContain('Toronto');
+        const off = body(geoTree(), { ...rosa, toggles: { history: true, childEvents: true, kidPlaces: false } });
+        expect(off).toContain('aria-checked="false" data-pp-switch="kidPlaces"');
+        expect(off).not.toContain('Toronto');
+        const file = doc(geoTree(), { ...rosa, privacy: 'full' });
+        expect(file).not.toContain('data-pp-switch="kidPlaces"');
+        expect(file).not.toContain('map:open');
+        expect(file).toContain(".pp-places');if(!root)");
+        // Places in the text lead to the section.
+        expect(file).toMatch(/<a class="pp-link pp-place-link" href="#pp-sec-places" data-pp-to-place="[^"]+">Čapkov<\/a>/);
+        // The window keeps its buttons: the window decides where a place leads (§1.6).
+        expect(app).toContain('data-pp-place="Čapkov"');
+    });
+
+    it('every anchor of the chart and the places list names a timeline row, each id once', () => {
+        for (const html of [body(geoTree()), doc(geoTree()), body(geoTree(), rosa)]) {
+            const ids = [...html.matchAll(/ id="(osa-[^"]+)"/g)].map(m => m[1]);
+            expect(new Set(ids).size).toBe(ids.length);
+            const targets = new Set([...html.matchAll(/data-pp-osa="(osa-[^"]+)"/g)].map(m => m[1]));
+            expect(targets.size).toBeGreaterThan(0);
+            for (const t of targets) expect(ids).toContain(t);
+        }
+        // The chart's anchors work without JavaScript: plain fragment links in the file.
+        expect(doc(geoTree())).toMatch(/<a [^>]*href="#osa-1860-/);
+        // The merged baptism keeps its own anchor inside the birth row.
+        const birthKey = computePersonLifeline(geoTree(), 'jan').find(pt => pt.eventType === 'baptism')!.sortKey;
+        expect(body(geoTree())).toMatch(new RegExp(`<span class="pp-osa-anchor" id="osa-${birthKey.toFixed(3).replace('.', '-')}">`));
+    });
+
+    it('the switches cover the chart: the history row and the children\'s lines hide with them', () => {
+        const app = body(geoTree(), { ...rosa, toggles: { history: true, childEvents: false } });
+        expect(app.startsWith('<article class="pp pp-no-kids"')).toBe(true);
+        expect(app).toContain('pp-ch-kid');
+        expect(app).toContain('data-pp-switch="childEvents"');
+    });
+
+    it('a protected file: no living person in the map or the chart, the living one\'s own page has neither block', () => {
+        const prot = doc(geoTree(), { ...rosa, privacy: 'initials' });
+        expect(prot).toContain('id="pp-sec-places"');
+        expect(prot).toContain('class="pp-chart"');
+        for (const word of ['Evelína', 'Toronto', 'Lhota', 'Jiřina', 'Pozdní láska', '1955-04-04']) expect(prot).not.toContain(word);
+        // The window (full data) has them.
+        const app = body(geoTree(), rosa);
+        for (const word of ['Evelína', 'Toronto']) expect(app).toContain(word);
+        const evaFile = doc(geoTree(), { personId: 'eva' as PersonId, privacy: 'initials' });
+        expect(evaFile).not.toContain('id="pp-sec-places"');
+        expect(evaFile).not.toContain('class="pp-chart"');
+        expect(evaFile).not.toContain(".pp-places');if(!root)");
+        // The living person's page in the window: the map and the chart (to today).
+        const evaApp = body(geoTree(), { personId: 'eva' as PersonId });
+        expect(evaApp).toContain('id="pp-sec-places"');
+        expect(evaApp).toContain('class="pp-chart"');
+    });
+
+    it('the family tree links to the couple\'s chapter with the chapter helpers; none with a living partner in a protected file', () => {
+        const d = geoTree();
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', title: 'Svatba v Čapkově', text: 'Vzali se.' };
+        const app = body(d);
+        expect(app).toContain('<button type="button" class="pp-link pp-ft-story" data-pp-story="pp-story-u1">Svatba v Čapkově ↓</button>');
+        expect(app).not.toContain('data-pp-goto');
+        expect(doc(d)).toContain('<a class="pp-ft-story" href="#pp-story-u1" data-pp-story="pp-story-u1">Svatba v Čapkově ↓</a>');
+        expect(body(d, rosa)).toContain('data-pp-story="pp-story-u3"');
+        const prot = doc(d, { ...rosa, privacy: 'initials' });
+        expect(prot).not.toContain('pp-story-u3');
+    });
+
+    it('the file carries the map and chart tokens on :root and grey print values', () => {
+        const file = doc(geoTree());
+        expect(file).toMatch(/:root \{[^}]*--map-land: #f4efe4[^}]*--chart-young: #e2d6bd/);
+        expect(file).toContain('--accent: #b0703c');
+        expect(file).toMatch(/@media print \{\s*\.pp-places, \.pp-chart \{[^}]*--map-land: #ffffff/);
     });
 });

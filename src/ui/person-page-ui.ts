@@ -22,8 +22,10 @@ import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
     preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageSections,
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
-    PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy,
+    PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput,
 } from '../person-page.js';
+import { selectMapPlace, placeOrderKey, PlacePoint } from '../person-page-map.js';
+import { lifeChartHtml } from '../person-page-chart.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
 import { openImageViewer } from './image-viewer.js';
@@ -99,12 +101,14 @@ function withShrunkAttachments(data: StromData, personId: PersonId, shrunk: Read
 }
 const PRIVACY_MODES = PERSON_PAGE_PRIVACY_MODES;
 
-/** One page of the window: the person, where it was scrolled, what was open and the switches. */
+/** One page of the window: the person, where it was scrolled, what was open, the switches and the selected place. */
 interface PageEntry {
     personId: PersonId;
     scrollTop: number;
     open: Set<string>;
-    toggles: { history: boolean; childEvents: boolean };
+    toggles: { history: boolean; childEvents: boolean; kidPlaces: boolean };
+    /** The place selected in the places map (placeKey). */
+    place: string | null;
 }
 
 interface PageState {
@@ -123,6 +127,14 @@ let tocPick: ((id: string) => void) | null = null;
 let editObserver: MutationObserver | null = null;
 let rerenderQueued = false;
 let userChangeHandler: (() => void) | null = null;
+/** Redraws the life chart for the column's width (the current page's). */
+let chartObserver: ResizeObserver | null = null;
+/** The last measured width of the life chart (the next page starts with it). */
+let chartWidth = 0;
+/** The current page's places map points (the place clicked in the text, Open in map). */
+let pagePlaces: readonly PlacePoint[] = [];
+/** How long a timeline row stays highlighted after a jump from the chart or the places list (ms). */
+const OSA_FLASH_MS = 1300;
 
 function esc(text: string): string {
     return text
@@ -131,11 +143,15 @@ function esc(text: string): string {
 }
 
 function freshEntry(personId: PersonId): PageEntry {
-    return { personId, scrollTop: 0, open: new Set(), toggles: { history: true, childEvents: true } };
+    return { personId, scrollTop: 0, open: new Set(), toggles: { history: true, childEvents: true, kidPlaces: true }, place: null };
 }
 
 function cloneEntry(e: PageEntry): PageEntry {
-    return { personId: e.personId, scrollTop: e.scrollTop, open: new Set(e.open), toggles: { ...e.toggles } };
+    return { personId: e.personId, scrollTop: e.scrollTop, open: new Set(e.open), toggles: { ...e.toggles }, place: e.place };
+}
+
+function reducedMotion(): boolean {
+    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
 function nameOf(personId: PersonId): string {
@@ -255,6 +271,9 @@ export const personPageMethods = uiModule({
         tocCleanup = null;
         editObserver?.disconnect();
         editObserver = null;
+        chartObserver?.disconnect();
+        chartObserver = null;
+        pagePlaces = [];
         if (userChangeHandler) {
             window.removeEventListener('strom:user-change', userChangeHandler);
             window.removeEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
@@ -279,10 +298,12 @@ export const personPageMethods = uiModule({
         const P = strings.personPage;
         const lang = getCurrentLanguage();
         const opts = this.personPageOptions(entry.personId, {
-            mode: 'app', links: 'app', toggles: entry.toggles, open: entry.open,
+            mode: 'app', links: 'app', toggles: entry.toggles, open: entry.open, selectedPlace: entry.place,
+            ...(chartWidth ? { chartWidth } : {}),
         });
         const page = preparePersonPageData(DataManager.getData(), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);
+        pagePlaces = page.places;
         const sections = personPageSections(body, lang);
         // The contents start with the header's details (the top of the page), counted apart from the four sections.
         const tocItems = [{ id: 'pp-sec-facts', label: P.sec.facts }, ...sections];
@@ -319,6 +340,24 @@ export const personPageMethods = uiModule({
         scroller.innerHTML = `<div class="pp-layout">${toc}${body}</div>`;
         scroller.scrollTop = entry.scrollTop;
         this.watchPersonPageToc();
+        this.watchPersonPageChart(personPageChartInput(page, opts.now), lang);
+    },
+
+    /** The life chart follows the column's width (§2.2): one set of labels for the width it has. */
+    watchPersonPageChart(input: ReturnType<typeof personPageChartInput>, lang: ReturnType<typeof getCurrentLanguage>): void {
+        chartObserver?.disconnect();
+        chartObserver = null;
+        const host = bodyEl()?.querySelector<HTMLElement>('.pp-chart-host');
+        if (!host || !input || typeof ResizeObserver === 'undefined') return;
+        let drawn = chartWidth;
+        chartObserver = new ResizeObserver(() => {
+            const w = Math.round(host.clientWidth);
+            if (w <= 0 || Math.abs(w - drawn) < 2) return;
+            drawn = w;
+            chartWidth = w;
+            host.innerHTML = lifeChartHtml(input, { lang, mode: 'app', width: w });
+        });
+        chartObserver.observe(host);
     },
 
     /** The options of the window's page (mode 'app') or the file's (mode 'file'). */
@@ -450,6 +489,13 @@ export const personPageMethods = uiModule({
             e.preventDefault();
             e.stopPropagation();
             this.personPageBack();
+            return;
+        }
+        // A row of the places list: Enter / Space as a click.
+        const row = (e.key === 'Enter' || e.key === ' ') ? (e.target as HTMLElement).closest?.<HTMLElement>('li[data-pp-map-place]') : null;
+        if (row) {
+            e.preventDefault();
+            this.pickPersonPageMapPlace(row);
         }
     },
 
@@ -481,15 +527,29 @@ export const personPageMethods = uiModule({
         }
 
         // The page's content (delegation on .pp-body).
+        // The places map (§1.4): a point or a row selects; the selected row again leads to the timeline.
+        const mapPlace = target.closest<HTMLElement>('.pp-places [data-pp-map-place]');
+        if (mapPlace) { this.pickPersonPageMapPlace(mapPlace); return; }
+        // The life chart (§2.1): a period, mark or line leads to its timeline row.
+        const osa = target.closest<HTMLElement>('.pp-chart [data-pp-osa]');
+        if (osa) { e.preventDefault(); this.scrollPersonPageOsa(osa.dataset.ppOsa ?? ''); return; }
         const storyJump = target.closest<HTMLElement>('[data-pp-story]');
         if (storyJump) { e.preventDefault(); this.openPersonPageStory(storyJump.dataset.ppStory ?? ''); return; }
         const personBtn = target.closest<HTMLElement>('[data-pp-person]');
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
-        if (placeBtn) { this.openPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
+        if (placeBtn) { this.showPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
         const fold = target.closest<HTMLElement>('[data-pp-toggle]');
         if (fold) { this.togglePersonPageFold(fold, fold.getAttribute('aria-expanded') !== 'true'); return; }
         const sw = target.closest<HTMLElement>('[data-pp-switch]');
+        if (sw?.dataset.ppSwitch === 'kidPlaces') {
+            // Children's places change the map's frame: the page is drawn again where it was.
+            state.current.toggles.kidPlaces = sw.getAttribute('aria-checked') !== 'true';
+            this.snapshotPersonPage();
+            this.renderPersonPage();
+            overlay.querySelector<HTMLElement>('[data-pp-switch="kidPlaces"]')?.focus({ preventScroll: true });
+            return;
+        }
         if (sw) {
             const key = sw.dataset.ppSwitch === 'history' ? 'history' : 'childEvents';
             const on = sw.getAttribute('aria-checked') !== 'true';
@@ -502,12 +562,6 @@ export const personPageMethods = uiModule({
         if (zoom) {
             const src = (zoom.querySelector('img') ?? zoom.closest('.pp-fig')?.querySelector('img'))?.getAttribute('src');
             if (src) openImageViewer(src, () => zoom.focus({ preventScroll: true }));
-            return;
-        }
-        // "story ↓" in the family tree: to the couple's chapter.
-        const goto = target.closest<HTMLElement>('[data-pp-goto]');
-        if (goto) {
-            bodyEl()?.querySelector<HTMLElement>(`#${CSS.escape(goto.dataset.ppGoto ?? '')}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
             return;
         }
         const differs = target.closest<HTMLElement>('[data-pp-differs]');
@@ -554,6 +608,7 @@ export const personPageMethods = uiModule({
     /** The page's actions into the app: a source, Materials, the research. */
     runPersonPageAction(action: string, el: HTMLElement): void {
         if (!state) return;
+        if (action === 'map:open') { this.openPersonPageMap(); return; }
         const personId = state.current.personId;
         const person = DataManager.getPerson(personId);
         if (action === 'source') {
@@ -582,6 +637,59 @@ export const personPageMethods = uiModule({
             else if (ref) url = this.activeResearchLink('review', { person: ref, scope: 'person' });
             if (url) this.launchResearchLink(url, 'terminal');
         }
+    },
+
+    /** Select a place of the places map (a point or a row); the selected row clicked again goes to the place's first event. */
+    pickPersonPageMapPlace(el: HTMLElement): void {
+        const body = bodyEl();
+        const key = el.dataset.ppMapPlace ?? '';
+        if (!body || !state || !key) return;
+        const again = el.classList.contains('pp-map-row') && el.classList.contains('is-sel');
+        selectMapPlace(body, key);
+        state.current.place = key;
+        if (again && el.dataset.ppOsa) this.scrollPersonPageOsa(el.dataset.ppOsa);
+    },
+
+    /** Scroll the text timeline to a row (#osa-…) and highlight it briefly (§2.1). */
+    scrollPersonPageOsa(id: string): void {
+        const target = id ? bodyEl()?.querySelector<HTMLElement>(`#${CSS.escape(id)}`) : null;
+        const row = target?.closest<HTMLElement>('.pp-row') ?? target;
+        // A row the switches hide (history, children's events) has no box: nothing to show.
+        if (!row || row.getClientRects().length === 0) return;
+        row.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        row.classList.remove('pp-osa-flash');
+        void row.offsetWidth;
+        row.classList.add('pp-osa-flash');
+        window.setTimeout(() => row.classList.remove('pp-osa-flash'), OSA_FLASH_MS);
+    },
+
+    /**
+     * A place in the header or the timeline (§1.6, Milan): when the page's
+     * Places section names it, scroll there and select it (the page stays);
+     * otherwise the app's map as before.
+     */
+    showPersonPagePlace(place: string): void {
+        const body = bodyEl();
+        const key = placeKey(place);
+        const section = body?.querySelector<HTMLElement>('#pp-sec-places');
+        const listed = !!section && !!key && (!!section.querySelector(`[data-pp-map-place="${CSS.escape(key)}"]`)
+            || pagePlaces.some(p => !p.rel && p.placeKey === key));
+        if (!body || !section || !state || !listed) { this.openPersonPagePlace(place); return; }
+        if (section.querySelector(`[data-pp-map-place="${CSS.escape(key)}"]`)) {
+            selectMapPlace(body, key);
+            state.current.place = key;
+        }
+        section.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    },
+
+    /** "Open in map ›": the app's map at the selected place, else the first place of the life (the round 1 flow). */
+    openPersonPageMap(): void {
+        if (!state) return;
+        const geo = DataManager.getData().places ?? {};
+        const ordered = [...pagePlaces].filter(p => !p.rel).sort((a, b) => placeOrderKey(a) - placeOrderKey(b));
+        const pick = (state.current.place ? pagePlaces.find(p => p.placeKey === state!.current.place) : undefined)
+            ?? ordered.find(p => !!geo[p.placeKey]) ?? ordered[0];
+        if (pick) this.openPersonPagePlace(pick.place);
     },
 
     /** A place: the window closes, the map (or the places manager) opens; the toast brings the page back. */
@@ -685,6 +793,8 @@ export const personPageMethods = uiModule({
         const fontCss = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
         const fileOpts = (groups: PersonPageGroups, privacy: PrivacyMode): PersonPageOptions => this.personPageOptions(personId, {
             mode: 'file', links: 'plain', groups, privacy, now, fontCss, open: new Set(),
+            // Children's places as the window shows them when saving (§1.2).
+            toggles: { history: true, childEvents: true, kidPlaces: state?.current.toggles.kidPlaces ?? true },
         });
         // The groups, their counts and the living people come from the full page.
         let fullProt = protectPersonPageTree(data, 'full', now);

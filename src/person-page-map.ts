@@ -772,7 +772,8 @@ export function selectMapPlace(root: ParentNode, key: string | null): Element | 
 /**
  * The saved file's selection script (inline, optional: without it the map is
  * static and nothing breaks). Click / Enter / Space on a point or row selects
- * the place; again on the selected row follows its timeline anchor.
+ * the place; again on the selected row follows its timeline anchor; a place
+ * in the text (an anchor to the section) selects its place too.
  */
 export const PLACES_MAP_SCRIPT = `(function(){
 var root=document.querySelector('.pp-places');if(!root)return;
@@ -781,4 +782,5 @@ function act(el){var k=el.getAttribute('data-pp-map-place');var was=el.classList
 if(was&&el.classList.contains('pp-map-row')){var a=el.getAttribute('data-pp-osa');var t=a&&document.getElementById(a);if(t)t.scrollIntoView({block:'center'});}}
 root.addEventListener('click',function(e){var el=e.target.closest&&e.target.closest('[data-pp-map-place]');if(el)act(el);});
 root.addEventListener('keydown',function(e){if(e.key!=='Enter'&&e.key!==' ')return;var el=e.target.closest&&e.target.closest('li[data-pp-map-place]');if(el){e.preventDefault();act(el);}});
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-pp-to-place]');if(a)sel(a.getAttribute('data-pp-to-place'));});
 })();`;

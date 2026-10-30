@@ -501,6 +501,156 @@ test.describe('desktop', () => {
     });
 });
 
+/**
+ * Karl Berger (1900–1975) of Capkov and Wien: his places with positions, a
+ * partner born in Lhota, a son who died in Graz, a LIVING daughter who
+ * emigrated to Toronto (far: the world inset).
+ */
+async function seedTraveller(page: Page): Promise<void> {
+    const P = (id: string, firstName: string, lastName: string, gender: string, extra: Record<string, unknown> = {}) =>
+        ({ id, firstName, lastName, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...extra });
+    const persons = {
+        karl: P('karl', 'Karl', 'Berger', 'male', {
+            birthDate: '1900-03-03', birthPlace: 'Capkov', deathDate: '1975-08-08', deathPlace: 'Wien',
+            partnerships: ['u1'], childIds: ['otto', 'lena'],
+            events: [{ id: 'k1', type: 'military', date: '1918', place: 'Graz' }],
+        }),
+        berta: P('berta', 'Berta', 'Kral', 'female', { birthDate: '1902', birthPlace: 'Lhota', deathDate: '1980', partnerships: ['u1'], childIds: ['otto', 'lena'] }),
+        otto: P('otto', 'Otto', 'Berger', 'male', { birthDate: '1927', deathDate: '1990', deathPlace: 'Linz', parentIds: ['karl', 'berta'] }),
+        lena: P('lena', 'Magdalena', 'Bergerova', 'female', {
+            birthDate: '1950-06-06', birthPlace: 'Wien', parentIds: ['karl', 'berta'],
+            events: [{ id: 'l1', type: 'emigration', date: '1975', place: 'Toronto' }],
+        }),
+    };
+    const partnerships = {
+        u1: { id: 'u1', person1Id: 'karl', person2Id: 'berta', childIds: ['otto', 'lena'], status: 'married', startDate: '1925-05-05', startPlace: 'Wien' },
+    };
+    const places = {
+        capkov: { lat: 49.85, lon: 15.2 }, wien: { lat: 48.21, lon: 16.37 }, graz: { lat: 47.07, lon: 15.44 },
+        lhota: { lat: 49.9, lon: 15.3 }, linz: { lat: 48.31, lon: 14.29 }, toronto: { lat: 43.65, lon: -79.38 },
+    };
+    await page.evaluate(async ({ persons, partnerships, places }) => {
+        window.Strom.SettingsManager.setOnThisDay(false);
+        await window.Strom.DataManager.importAsNewTree({ persons, partnerships, places } as never, 'Berger');
+        await window.Strom.TreeRenderer.setFocus('karl' as never);
+    }, { persons, partnerships, places });
+    await expect(card(page, 'Karl')).toBeVisible();
+}
+
+test.describe('person page 2: places of life and the life chart', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    test('the map with its list, Children’s places and selection; a place in the header scrolls to it; the chart leads to the timeline', async ({ page }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        const sec = w.locator('#pp-sec-places');
+        await expect(sec.locator('.pp-map')).toBeVisible();
+        await expect(sec.locator('.pp-map-row', { hasText: 'Capkov' })).toBeVisible();
+        await expect(sec.locator('h2')).toHaveText('Places of life');
+        // Children's places: on, the hollow points; off, gone (the page stays where it was).
+        const kids = sec.locator('[data-pp-switch="kidPlaces"]');
+        await expect(kids).toHaveAttribute('aria-checked', 'true');
+        await expect(sec.locator('.pp-map-pt--rel')).not.toHaveCount(0);
+        await expect(sec.locator('.pp-map-row--rel', { hasText: 'Toronto' })).toBeVisible();
+        await kids.click();
+        await expect(w.locator('[data-pp-switch="kidPlaces"]')).toHaveAttribute('aria-checked', 'false');
+        await expect(w.locator('#pp-sec-places .pp-map-pt--rel')).toHaveCount(0);
+        await w.locator('[data-pp-switch="kidPlaces"]').click();
+        await expect(w.locator('#pp-sec-places .pp-map-pt--rel')).not.toHaveCount(0);
+
+        // A point selects its row; the selected row clicked again leads to the place's first event.
+        await sec.locator('.pp-map-pt[data-pp-map-place="wien"]').click();
+        await expect(sec.locator('.pp-map-pt[data-pp-map-place="wien"]')).toHaveClass(/is-sel/);
+        const row = sec.locator('.pp-map-row[data-pp-map-place="wien"]');
+        await expect(row).toHaveClass(/is-sel/);
+        const osa = await row.getAttribute('data-pp-osa');
+        expect(osa).toMatch(/^osa-1925-/);
+        await row.click();
+        await expect(w.locator(`#${osa}`)).toHaveClass(/pp-osa-flash/);
+        await expect(w.locator(`#${osa}`)).toBeInViewport();
+
+        // A place in the header: the page scrolls to the map and selects it, the window stays (§1.6).
+        await w.locator('.pp-body').evaluate((el) => { el.scrollTop = 0; });
+        await w.locator('#pp-sec-facts [data-pp-place="Capkov"]').click();
+        await expect(sec.locator('.pp-map-row[data-pp-map-place="capkov"]')).toHaveClass(/is-sel/);
+        await expect(sec.locator('.pp-map')).toBeInViewport();
+        await expect(w).toBeVisible();
+
+        // The chart above the text timeline: a mark leads to its row.
+        const chart = w.locator('#pp-sec-timeline .pp-chart');
+        await expect(chart).toBeVisible();
+        const mark = chart.locator('a.pp-ch-mk--event[data-pp-osa]').first();
+        const target = await mark.getAttribute('data-pp-osa');
+        expect(target).toMatch(/^osa-/);
+        // A mark is a zero-width anchor (a 16 px ::before hit area): its label is clicked.
+        await mark.locator('.pp-ch-ml').click();
+        await expect(w.locator(`#${target}`)).toHaveClass(/pp-osa-flash/);
+        await expect(w.locator(`#${target}`)).toBeInViewport();
+        // The chart is drawn for the column it has (one set, the ResizeObserver's width).
+        await expect(chart.locator('.pp-chart-set--one')).toHaveCount(1);
+        // Children's events off hides the children's lines too.
+        await expect(chart.locator('.pp-ch-kid').first()).toBeVisible();
+        await w.locator('[data-pp-switch="childEvents"]').click();
+        await expect(chart.locator('.pp-ch-kid').first()).toBeHidden();
+    });
+
+    test('Open in map closes the window at the place; the toast brings the page back', async ({ page }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        await w.locator('#pp-sec-places .pp-map-pt[data-pp-map-place="wien"]').click();
+        await w.locator('[data-pp-action="map:open"]').click();
+        await expect(w).toHaveCount(0);
+        const toast = page.locator('.toast[data-kind="person-page"]');
+        await expect(toast).toContainText('Map: Wien');
+        await toast.locator('.toast-action').click();
+        await expect(win(page).locator('h1')).toContainText('Karl Berger');
+        await expect(win(page).locator('#pp-sec-places .pp-map-row[data-pp-map-place="wien"]')).toHaveClass(/is-sel/);
+    });
+
+    test('the saved file: the map and the chart, anchors without JavaScript, nothing of the living daughter', async ({ page, browser }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        await expect(w.locator('#pp-sec-places .pp-map-row', { hasText: 'Toronto' })).toBeVisible();
+        await expect(w.locator('.pp-chart')).toContainText('Magdalena');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('id="pp-sec-places"');
+        expect(html).toContain('class="pp-chart"');
+        for (const word of ['Magdalena', 'Toronto', '1950-06-06']) expect(html).not.toContain(word);
+        expect(html).not.toMatch(/https?:\/\/[^"'\s]*(tile|openstreetmap)/i);
+
+        const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+        const plain = await noJs.newPage();
+        await plain.setContent(html, { waitUntil: 'load' });
+        await expect(plain.locator('.pp-map')).toBeVisible();
+        await expect(plain.locator('.pp-chart-set--wide')).toBeVisible();
+        await expect(plain.locator('.pp-chart-set--narrow')).toBeHidden();
+        // A chart mark is a plain fragment link to its timeline row.
+        const href = await plain.locator('.pp-chart-set--wide a[href^="#osa-"]').first().getAttribute('href');
+        expect(await plain.locator(href!).count()).toBe(1);
+        // Places in the text lead to the map.
+        await expect(plain.locator('#pp-sec-facts a.pp-place-link[href="#pp-sec-places"]').first()).toBeVisible();
+        await noJs.close();
+
+        // With JavaScript a point selects its row.
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        await filePage.locator('.pp-map-pt[data-pp-map-place="wien"]').click();
+        await expect(filePage.locator('.pp-map-row[data-pp-map-place="wien"]')).toHaveClass(/is-sel/);
+        await ctx.close();
+    });
+});
+
 test.describe('a research tree with history', () => {
     test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -521,7 +671,7 @@ test.describe('a research tree with history', () => {
         await expect(rows.first()).toContainText('Austro-Prussian War; fighting around Čapkov.');
         await expect(rows.first().locator('a[href="https://example.org/war-1866"]')).toHaveAttribute('rel', 'noopener noreferrer');
         await expect(w.locator('#pp-sec-timeline')).not.toContainText('Vienna stock exchange crash');
-        const legend = w.locator('#pp-sec-timeline .pp-legend');
+        const legend = w.locator('#pp-sec-timeline .pp-legend:not(.pp-chart-legend)');
         await expect(legend).toBeVisible();
         await expect(legend.locator('.pp-hm')).toHaveCount(3);
 

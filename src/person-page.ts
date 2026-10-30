@@ -12,7 +12,7 @@
  * the output.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
@@ -31,6 +31,8 @@ import { personInitials } from './initials.js';
 import { clipText } from './text-clip.js';
 import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { findRelationship } from './kinship.js';
+import { collectPersonPlacePoints, placesMapHtml, PlacePoint, PLACES_MAP_SCRIPT } from './person-page-map.js';
+import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeChartInput } from './person-page-chart.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -82,8 +84,16 @@ export interface PersonPageOptions {
     groups: PersonPageGroups;
     /** The window is always 'full'. */
     privacy: PrivacyMode;
-    /** Initial state of the timeline switches (the page's default: both on). */
-    toggles: { history: boolean; childEvents: boolean };
+    /**
+     * Initial state of the switches (the page's default: all on): the timeline's
+     * History / Children's events (they apply to the life chart too) and the
+     * places map's Children's places (missing = on).
+     */
+    toggles: { history: boolean; childEvents: boolean; kidPlaces?: boolean };
+    /** Window: the place selected in the places map (placeKey). */
+    selectedPlace?: string | null;
+    /** Window: the life chart's width in px (the column, measured by the window); default 680. */
+    chartWidth?: number;
     /** Open folds: 'sources', 'research', 'sibs', 'basis', 's:<source id>'. */
     open?: ReadonlySet<string>;
     /** The tree is linked to Strom Research (history, materials, the researchers' section). */
@@ -141,6 +151,14 @@ export interface PersonPageData {
     counts: PersonPageGroupCounts;
     /** People the person stood godparent to (their baptism names the person), with the baptism's year. */
     godchildren: readonly { id: PersonId; year: number | null }[];
+    /**
+     * The places map's points (§1), collected from the whole protected tree (the
+     * page's subset keeps too little of the children: emigrations, deaths);
+     * nothing of a living person in a protected file.
+     */
+    places: readonly PlacePoint[];
+    /** Coordinates of those places only (placeKey → geo), from the tree's places. */
+    geo: Readonly<Record<string, PlaceGeo>>;
 }
 
 export interface PersonPageGroupCounts {
@@ -155,7 +173,7 @@ export interface PersonPageGroupCounts {
 
 /** A section that is on the page (for the window's table of contents). */
 export interface PersonPageSection {
-    key: 'family' | 'story' | 'question' | 'timeline' | 'materials' | 'people' | 'notes' | 'sources' | 'research';
+    key: 'family' | 'story' | 'question' | 'places' | 'timeline' | 'materials' | 'people' | 'notes' | 'sources' | 'research';
     id: string;
     label: string;
 }
@@ -352,7 +370,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
             living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
             readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-            godchildren: [],
+            godchildren: [], places: [], geo: {},
         };
     }
     const person: Person = structuredClone(src);
@@ -440,6 +458,13 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     godchildren.sort((a, b) => (a.year ?? Infinity) - (b.year ?? Infinity) || String(a.id).localeCompare(String(b.id)));
 
     const living = new Set<PersonId>([...Object.keys(tree.persons)].filter(p => prot.living.has(p as PersonId)) as PersonId[]);
+    // The places map (§1): points from the whole protected tree, the coordinates of those places alone.
+    const places = collectPersonPlacePoints(full, id, { living: prot.living, protect: opts.privacy !== 'full', now: opts.now.getFullYear() });
+    const geo: Record<string, PlaceGeo> = {};
+    for (const pt of places) {
+        const g = full.places?.[pt.placeKey];
+        if (g) geo[pt.placeKey] = { lat: g.lat, lon: g.lon };
+    }
     const page: PersonPageData = {
         personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree, living,
         history, historyPending: groups.research && historyPending,
@@ -448,7 +473,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         ...(ctx.changedAt ? { changedAt: ctx.changedAt } : {}),
         readOnly: !!ctx.readOnly,
         counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-        godchildren,
+        godchildren, places, geo,
     };
     page.counts = countGroups(page);
     return page;
@@ -608,6 +633,12 @@ interface Ctx {
     gal: GalleryItem[];
     /** An image's place in the gallery (1-based): the timeline's link into the light box. */
     galIndex: Map<string, number>;
+    /** The places the page's Places section names (placeKey): a place in the text leads there. */
+    placeKeys: Set<string>;
+    /** Ids of the timeline's rows given out so far (one row per chart anchor). */
+    anchors: Set<string>;
+    /** The life chart's input (§2), null when the chart is not drawn. */
+    chart: LifeChartInput | null;
 }
 
 interface ImgEntry {
@@ -644,11 +675,27 @@ function personLink(c: Ctx, nameHtmlStr: string, pid: PersonId | undefined): str
     return `<button type="button" class="pp-link" data-pp-person="${esc(pid)}">${nameHtmlStr}</button>`;
 }
 
+/**
+ * A place in the text. Window: a button (the window scrolls to the Places
+ * section and selects the place there, or opens the app's map, §1.6). File:
+ * an anchor to the Places section when it names the place, else text.
+ */
 function placeLink(c: Ctx, place: string | undefined): string {
     const p = place?.trim();
     if (!p) return '';
     if (c.app && c.opts.links === 'app') return `<button type="button" class="pp-link" data-pp-place="${esc(p)}">${esc(p)}</button>`;
+    const key = placeKey(p);
+    if (!c.app && key && c.placeKeys.has(key)) {
+        return `<a class="pp-link pp-place-link" href="#pp-sec-places" data-pp-to-place="${esc(key)}">${esc(p)}</a>`;
+    }
     return esc(p);
+}
+
+/** ` id="…"` for the first timeline row of a chart anchor ('' when given out already). */
+function anchorAttr(c: Ctx, id: string): string {
+    if (!id || c.anchors.has(id)) return '';
+    c.anchors.add(id);
+    return ` id="${esc(id)}"`;
 }
 
 function nameOf(c: Ctx, pid: PersonId | undefined): string {
@@ -899,8 +946,8 @@ interface FtUnion {
     short: string;
     /** "⚭ 10 February 1883, Lhota · divorced 1890". */
     long: string;
-    /** The couple's chapter in the story, when the page has it (its anchor). */
-    story: string | null;
+    /** The link to the couple's chapter at the wedding ('' when the page has no chapter for the couple). */
+    story: string;
 }
 
 interface FtData {
@@ -930,7 +977,6 @@ function familyTreeData(c: Ctx): FtData {
             parentsUnion = y !== null ? `⚭ ${y}` : '';
         }
     }
-    const stories = new Set(coupleStories(tree, person).map(u => u.id));
     const placed = new Set<PersonId>();
     const unions: FtUnion[] = [];
     for (const u of fam.unions) {
@@ -948,7 +994,7 @@ function familyTreeData(c: Ctx): FtData {
         if (!unmarried && (u.endDate || u.status === 'divorced')) parts.push(P.divorced(personPageDate(u.endDate, page.lang)));
         unions.push({
             union: u, partner: partner.id, kids, short, long: parts.join(' · '),
-            story: stories.has(u.id) ? `pp-story-${u.id.replace(/[^\w-]/g, '_')}` : null,
+            story: coupleChapterLinkHtml(c, u),
         });
     }
     const solo = fam.children.filter(k => !placed.has(k));
@@ -957,14 +1003,6 @@ function familyTreeData(c: Ctx): FtData {
         for (const g of tree.persons[k]?.childIds ?? []) if (tree.persons[g] && !tree.persons[g].isPlaceholder) grand.add(g);
     }
     return { parents, parentsUnion, unions, solo, siblings: fam.siblings, grandchildren: sortByBirth([...grand], tree) };
-}
-
-/** "story ↓": to the couple's chapter (a button in the window, an anchor in the file). */
-function ftStoryLink(c: Ctx, anchor: string | null): string {
-    if (!anchor) return '';
-    return c.app
-        ? `<button type="button" class="pp-ft-story" data-pp-goto="${esc(anchor)}">${esc(c.P.tree.story)}</button>`
-        : `<a class="pp-ft-story" href="#${esc(anchor)}">${esc(c.P.tree.story)}</a>`;
 }
 
 /** The desktop and tablet tree (§4.1): parents, the person with partners to the sides, children under their union. */
@@ -1033,7 +1071,7 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
         bottom = Math.max(bottom, py + FT_CARD_H);
         const bits = [
             u.short ? `<span>${esc(u.short)}</span>` : '',
-            ftStoryLink(c, u.story),
+            u.story,
             u.kids.length ? '' : `<span class="pp-ft-nokids">${esc(c.P.tree.noKids)}</span>`,
         ].filter(Boolean);
         if (bits.length) {
@@ -1108,7 +1146,7 @@ function familyTreeRailHtml(c: Ctx, d: FtData): string {
         ? `<p class="pp-rail-lab">${esc(P.children(kids.length))}</p><div class="pp-rail-2">${kids.map(k => ftCard(c, k, 'pp-rail-card')).join('')}</div>`
         : `<p class="pp-rail-lab">${esc(P.tree.noKids)}</p>`;
     for (const u of d.unions) {
-        const story = ftStoryLink(c, u.story);
+        const story = u.story;
         h += `<div class="pp-rail-u"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story}</p>`
             + ftCard(c, u.partner, 'pp-rail-card') + kidsHtml(u.kids) + `</div>`;
     }
@@ -1315,10 +1353,10 @@ export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContex
 }
 
 /** A link that unfolds a couple's chapter and scrolls to it (window: a button; file: an anchor). */
-function storyJumpHtml(c: Ctx, unionId: string, label: string): string {
+function storyJumpHtml(c: Ctx, unionId: string, label: string, cls = 'pp-story-jump'): string {
     const id = coupleChapterId(unionId);
-    if (c.app) return `<button type="button" class="pp-link pp-story-jump" data-pp-story="${esc(id)}">${esc(label)}</button>`;
-    return `<a class="pp-story-jump" href="#${esc(id)}" data-pp-story="${esc(id)}">${esc(label)}</a>`;
+    if (c.app) return `<button type="button" class="pp-link ${cls}" data-pp-story="${esc(id)}">${esc(label)}</button>`;
+    return `<a class="${cls}" href="#${esc(id)}" data-pp-story="${esc(id)}">${esc(label)}</a>`;
 }
 
 /**
@@ -1330,7 +1368,7 @@ function coupleChapterLinkHtml(c: Ctx, u: Partnership): string {
     const shown = c.tree.partnerships[u.id];
     if (!shown || !c.person.partnerships.includes(u.id)) return '';
     const label = coupleChapterLinkLabel(shown, c.page.lang);
-    return label ? storyJumpHtml(c, u.id, label) : '';
+    return label ? storyJumpHtml(c, u.id, label, 'pp-ft-story') : '';
 }
 
 function storyHtml(c: Ctx): string {
@@ -1568,7 +1606,7 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
             + `<blockquote>${esc(S.history.quoted(quote))}</blockquote></details>`);
     }
     const langAttr = item.textLang && item.textLang !== c.page.lang ? ` lang="${esc(item.textLang)}"` : '';
-    return `<div class="pp-row pp-row--hist">${yearCell(item.yearLabel ?? String(item.year))}`
+    return `<div class="pp-row pp-row--hist"${anchorAttr(c, chartHistAnchorId(ev.id))}>${yearCell(item.yearLabel ?? String(item.year))}`
         + `<span class="pp-m"><span class="pp-mk pp-hm--${scope}" aria-hidden="true">${mark}</span></span>`
         + `<div class="pp-t"><div class="pp-hist"><p${langAttr}>${esc(stripResearchIds(item.text).text)}</p>`
         + `<div class="pp-hist-meta">${meta.join('<span aria-hidden="true">·</span>')}</div></div></div></div>`;
@@ -1596,9 +1634,13 @@ function timelineHtml(c: Ctx): string {
             const caption = P.excerptCaption(ex.event, registerKindOf(ex.source.title), pt.place ?? '', pt.year);
             fig = figureHtml(c, shownExcerpt(ex.excerpt), caption, anchor);
         }
-        return `<div class="pp-row ${cls}">${yearCell(pt.yearLabel ?? String(pt.year))}`
+        // The life chart's and the places list's anchors (#osa-…): the row, and inside it the point merged in.
+        const id = anchorAttr(c, chartAnchorId(pt.sortKey));
+        const mergedId = r.merged ? anchorAttr(c, chartAnchorId(r.merged.sortKey)) : '';
+        return `<div class="pp-row ${cls}"${id}>${yearCell(pt.yearLabel ?? String(pt.year))}`
             + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
-            + `<div class="pp-t">${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
+            + `<div class="pp-t">${mergedId ? `<span class="pp-osa-anchor"${mergedId}></span>` : ''}`
+            + `${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
     };
     const segHtml = segs.map(s => {
         const has = new Set(s.rows.map(r => r.kind));
@@ -1608,18 +1650,24 @@ function timelineHtml(c: Ctx): string {
             : '';
         return `<div class="${cls}">${title}${s.rows.map(rowHtml).join('')}</div>`;
     }).join('');
-    const hasHist = segs.some(s => s.rows.some(r => r.kind === 'hist'));
-    const hasKid = segs.some(s => s.rows.some(r => r.kind === 'kid'));
+    // The switches apply to the life chart too (its history row, the children's lines).
+    const chart = c.chart;
+    const hasHist = segs.some(s => s.rows.some(r => r.kind === 'hist')) || !!chart?.history.length;
+    const hasKid = segs.some(s => s.rows.some(r => r.kind === 'kid')) || !!chart?.lines.some(l => l.kind === 'child');
     const sw = (key: 'history' | 'childEvents', label: string) =>
         `<button type="button" class="pp-toggle${c.app ? '' : ' js-only'}" role="switch" aria-checked="${c.opts.toggles[key]}" data-pp-switch="${key}">${esc(label)}</button>`;
     const toggles = [hasHist ? sw('history', P.toggle.history) : '', hasKid ? sw('childEvents', P.toggle.childEvents) : ''].join('');
     const head = `<div class="pp-sec-head"><h2>${esc(P.sec.timeline)}</h2>${toggles ? `<div class="pp-toggles">${toggles}</div>` : ''}</div>`;
-    const legend = hasHist
+    const legend = segs.some(s => s.rows.some(r => r.kind === 'hist'))
         ? `<p class="pp-legend"><span><span class="pp-hm pp-hm--region" aria-hidden="true">◇</span>${esc(P.legend.region)}</span>`
             + `<span><span class="pp-hm pp-hm--place" aria-hidden="true">▲</span>${esc(P.legend.place)}</span>`
             + `<span><span class="pp-hm pp-hm--local" aria-hidden="true">■</span>${esc(P.legend.local)}</span></p>`
         : '';
-    return section('timeline', P.sec.timeline, legend + segHtml, head);
+    // Slot 7 (§2.1): the life chart above the text timeline.
+    const chartHtml = chart
+        ? `<div class="pp-chart-host">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
+        : '';
+    return section('timeline', P.sec.timeline, chartHtml + legend + segHtml, head);
 }
 
 // ── Images embedded once (§3.2: the file's <style> holds each image, everything else names its class) ──
@@ -2160,7 +2208,38 @@ function makeCtx(page: PersonPageData, opts: PersonPageOptions): Ctx | null {
         page, opts, S, P: S.personPage, app: opts.mode === 'app', tree: page.tree, person,
         mainEx: new Map(), ids: new Set(),
         imgs: opts.mode === 'file' ? new Map() : null, gal: [], galIndex: new Map(),
+        placeKeys: new Set(), anchors: new Set(), chart: null,
     };
+}
+
+/** Is the life chart's / places map's content protected (a file with a privacy other than full data)? */
+function protects(page: PersonPageData): boolean {
+    return page.privacy !== 'full';
+}
+
+/**
+ * The places the Places section names (§1): the person's own places when
+ * there are at least two, and with Children's places on and two own places on
+ * the map, the relatives' places that have a position.
+ */
+function placesSectionKeys(page: PersonPageData, kidPlaces: boolean): Set<string> {
+    const own = new Set(page.places.filter(p => !p.rel).map(p => p.placeKey));
+    if (own.size <= 1) return new Set();
+    const out = new Set(own);
+    const onMap = [...own].filter(k => page.geo[k]).length;
+    if (kidPlaces && onMap >= 2) {
+        for (const p of page.places) if (p.rel && page.geo[p.placeKey]) out.add(p.placeKey);
+    }
+    return out;
+}
+
+/** The life chart's input for a page (null: not drawn). The window redraws the chart with it when its width changes. */
+export function personPageChartInput(page: PersonPageData, now: Date): LifeChartInput | null {
+    if (!page.tree.persons[page.personId]) return null;
+    return lifeChartInput(page.tree, page.personId, {
+        living: page.living, protect: protects(page), history: page.history,
+        now: now.getFullYear() + now.getMonth() / 12,
+    });
 }
 
 /** The page's body: `<article class="pp">…</article>`. */
@@ -2180,6 +2259,16 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
         const key = it.src.replace(/\s+/g, '');
         if (!c.galIndex.has(key)) c.galIndex.set(key, i + 1);
     });
+    // The places map first: a place in the header or the timeline leads to it (§1.6).
+    const kidPlaces = opts.toggles.kidPlaces !== false;
+    const places = placesMapHtml(page.places, page.geo, {
+        lang: page.lang, mode: c.app ? 'app' : 'file', kidPlaces,
+        ...(c.app && opts.selectedPlace ? { selected: opts.selectedPlace } : {}),
+        // The places manager keeps one position per name and no candidates: nothing to tell.
+        ambiguous: new Set<string>(),
+    });
+    if (places) c.placeKeys = placesSectionKeys(page, kidPlaces);
+    c.chart = personPageChartInput(page, opts.now);
     // Order of building: the timeline places the main excerpts the sources refer to,
     // the story collects the ids the researchers' section lists.
     const header = headerHtml(c, differs);
@@ -2187,8 +2276,7 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const family = familyTreeHtml(c);
     const story = storyHtml(c);
     const question = questionHtml(c);
-    // Slot 6, the places of a life (placesMapHtml, §1), goes here, after the question.
-    // Slot 7, the life chart (lifeChartHtml, §2), goes here, above the timeline.
+    // Slot 6, the places of a life (placesMapHtml, §1), after the question; slot 7, the life chart, opens the timeline.
     const timeline = timelineHtml(c);
     const gallery = galleryHtml(c);
     const people = peopleAroundHtml(c);
@@ -2198,7 +2286,7 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
     // Last: every image of the page is registered by now.
     const styles = imgStyles(c);
-    return `${open}${styles}${header}${summary}${family}${story}${question}${timeline}${gallery}${people}${notes}`
+    return `${open}${styles}${header}${summary}${family}${story}${question}${places}${timeline}${gallery}${people}${notes}`
         + `${sources}${research}${footer}${boxes}</article>`;
 }
 
@@ -2206,9 +2294,9 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
 export function personPageSections(body: string, lang: Language): PersonPageSection[] {
     const P = getStringsForLang(lang).personPage;
     // The open question is part of the story's reading, not an entry of its own.
-    const keys = ['family', 'story', 'timeline', 'materials', 'people', 'notes', 'sources', 'research'] as const;
+    const keys = ['family', 'story', 'places', 'timeline', 'materials', 'people', 'notes', 'sources', 'research'] as const;
     return keys.filter(k => body.includes(`id="pp-sec-${k}"`))
-        .map(k => ({ key: k, id: `pp-sec-${k}`, label: k === 'people' ? P.people.title : P.sec[k] }));
+        .map(k => ({ key: k, id: `pp-sec-${k}`, label: k === 'people' ? P.people.title : k === 'places' ? P.map.title : P.sec[k] }));
 }
 
 /**
@@ -2250,7 +2338,9 @@ export function personPageDocumentShell(lang: Language, title: string, body: str
         + `<style>${personPageFileCss(fontCss)}</style>`
         + `</head><body><script>document.documentElement.className='js'</script>`
         + `<main class="pp-file">${body}</main>`
-        + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script></body></html>`;
+        + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script>`
+        + (body.includes('class="pp-sec pp-sec--places') ? `<script>${PLACES_MAP_SCRIPT}</script>` : '')
+        + '</body></html>';
 }
 
 /** The whole saved file (§5.6). */

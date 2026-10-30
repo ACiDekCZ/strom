@@ -57,6 +57,8 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-ilb { position: absolute; transform: translate(6px, -50%); padding: 0 3px; border-radius: 3px; background: var(--map-label-bg); color: var(--text-light); font-size: 10px; line-height: 13px; white-space: nowrap; }
 .pp-map-ilb--l { transform: translate(calc(-100% - 6px), -50%); }
 .pp-map-tools { align-items: center; }
+.pp-map-tools .pp-act { margin-top: 0; min-height: 34px; }
+.pp-places { scroll-margin-top: 12px; }
 .pp-map-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pp-map-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 14px; line-height: 1.45; }
 .pp-map-row[data-pp-map-place] { cursor: pointer; }
@@ -100,6 +102,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-pt:hover { filter: brightness(1.12); }
 }
 @media (pointer: coarse) {
+  .pp-map-tools .pp-act { min-height: 44px; }
   .pp-map-pt::before { content: ''; position: absolute; inset: -11px; border-radius: 50%; }
   .pp-map-pt--rel::before { inset: -15px; }
   .pp-map-row { min-height: 44px; align-items: center; }
@@ -178,6 +181,8 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-sw--partner { height: 3px; background: var(--accent); }
 .pp-ch-sw--child { height: 3px; background: var(--primary); }
 .pp-osa-flash { animation: pp-osa-flash 1.2s ease-out; }
+.pp-osa-anchor { position: absolute; }
+.pp-row:target, .pp-row:has(> .pp-t > .pp-osa-anchor:target) { animation: pp-osa-flash 1.2s ease-out; }
 @keyframes pp-osa-flash { from { background: var(--hover-bg); } to { background: transparent; } }
 @media (max-width: 640px) {
   .pp-chart-set--wide { display: none; }
