@@ -209,7 +209,12 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
             // Of a union with a living partner only the year of the marriage is known (privacy).
             const year = shielded ? parseFlexDate(u.startDate)?.year : undefined;
             const start = shielded ? (year !== undefined ? chartDate(String(year), false) : undefined) : chartDate(u.startDate, false);
-            return { u, other, shielded, start };
+            // Such a union that ended in the person's life (a divorce, a separation, an end date before the
+            // death) has no length in the chart: neither its end nor its kind may show, so the ⚭ mark alone.
+            const endAt = chartDate(u.endDate, true)?.at;
+            const ended = shielded && (u.status === 'divorced' || u.status === 'separated'
+                || (endAt !== undefined && endAt < lifeEnd - 0.01));
+            return { u, other, shielded, ended, start };
         });
     const unions = shown.filter(x => !!x.start).sort((a, b) => a.start!.at - b.start!.at);
     // A union without a marriage date (§2.3, round 2): its first known point is the birth of the first common child.
@@ -231,6 +236,12 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
     unions.forEach((x, i) => {
         const from = x.start!.at;
         const next = unions[i + 1]?.start!.at;
+        if (x.ended) {
+            // The time it may have covered is plain life (as with a union of no date and no child).
+            const until = Math.min(next ?? lifeEnd, lifeEnd);
+            if (until > from) periods.push({ kind: 'life', from, to: until, anchor: anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
+            return;
+        }
         const endDate = x.shielded ? undefined : chartDate(x.u.endDate, true);
         const partnerDeath = x.other && !x.shielded ? chartDate(x.other.deathDate, true) : undefined;
         const candidates = [lifeEnd, next, endDate?.at, partnerDeath?.at].filter((n): n is number => n !== undefined && n > from);

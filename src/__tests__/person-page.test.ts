@@ -14,6 +14,7 @@ import {
     personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
+import { getDemoTree } from '../demo-tree.js';
 import { personSourceRows } from '../person-sources.js';
 import { computePersonLifeline } from '../timeline.js';
 import { parseHistoryPayload, HistoryPayload } from '../history.js';
@@ -1351,6 +1352,23 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const html = buildPersonPageDocument(page, op);
         expect(html).toContain('Manželství · Z. N.');
         for (const word of ['Zbyňka', 'Nováková', '1950-02-02']) expect(html).not.toContain(word);
+    });
+
+    it('a protected file: a union with a living partner that ended has no length in the chart, nor its end (round 3, finding F)', () => {
+        // Sample tree: Martin (died 2015) and the living Sarah Walsh separated in 1978.
+        const op = opts({ personId: 'demo_martin' as PersonId, mode: 'file', links: 'plain', privacy: 'initials' });
+        const page = preparePersonPageData(getDemoTree(), op);
+        const input = personPageChartInput(page, NOW)!;
+        expect(input.periods.map(x => `${x.kind}:${x.name ?? ''}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+            'youth::1940-1969', 'life::1969-2015',
+        ]);
+        expect(input.marks.filter(m => m.kind === 'marriage').map(m => `${m.title}:${m.year}`)).toEqual(['S. W.:1969']);
+        const html = buildPersonPageDocument(page, op);
+        for (const word of ['1978', 'Partnerství · S. W.', 'po rozvodu', 'po rozchodu', 'vdovec', 'Sarah', 'Walsh']) expect(html).not.toContain(word);
+        // Without protection the chart keeps the union's nine years and the time after it.
+        const fullOp = opts({ personId: 'demo_martin' as PersonId, mode: 'file', links: 'plain' });
+        const fullHtml = buildPersonPageDocument(preparePersonPageData(getDemoTree(), fullOp), fullOp);
+        expect(fullHtml).toContain('Partnerství · Sarah · 9 let');
     });
 
     it('the family tree links to the couple\'s chapter with the chapter helpers; none with a living partner in a protected file', () => {

@@ -180,6 +180,45 @@ describe('lifeChartInput', () => {
         expect(html).not.toContain('1974-06');
     });
 
+    it('protected file: a union with a living partner that ended has no length, only the ⚭ year (round 3, finding F)', () => {
+        // Jan's second union (1905) is to a living woman and ended in 1911; Jan dies in 1920.
+        const ended = (end: Partial<Partnership>): StromData => {
+            const t = tree();
+            t.persons['marie' as PersonId].isDeceased = false;
+            delete t.persons['marie' as PersonId].deathDate;
+            t.persons['marie' as PersonId].birthDate = '1888-01-01';
+            Object.assign(t.partnerships['u2' as PartnershipId], end);
+            return t;
+        };
+        const variants: Partial<Partnership>[] = [
+            { status: 'separated', endDate: '1911-03-01' },
+            { status: 'divorced', endDate: '1911-03-01' },
+            { status: 'divorced' },
+            { status: 'married', endDate: '1911-03-01' },
+        ];
+        for (const v of variants) {
+            const input = lifeChartInput(ended(v), JAN, { now: NOW, protect: true, living: new Set(['marie', 'eva']) as Set<PersonId> })!;
+            expect(input.periods.map(x => `${x.kind}:${x.name ?? ''}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+                'youth::1860-1883', 'marriage:Rozálie:1883-1900', 'widowed::1900-1905', 'life::1905-1920',
+            ]);
+            expect(input.marks.filter(m => m.kind === 'marriage').map(m => `${m.title}:${m.year}`)).toEqual(['Rozálie:1883', 'M. F.:1905']);
+            expect(input.marks.some(m => m.kind === 'divorce')).toBe(false);
+            for (const lang of ['cs', 'en', 'de'] as const) {
+                const html = lifeChartHtml(input, { lang, mode: 'file' });
+                const L = getStringsForLang(lang).personPage.chart;
+                expect(html).not.toContain(L.divorced);
+                expect(html).not.toContain('1911');
+                expect(html).not.toContain('Marie');
+                expect(html).not.toContain(L.years(15));
+            }
+        }
+        // Without protection the union keeps its length and the time after it.
+        const full = lifeChartInput(ended(variants[0]), JAN, { now: NOW })!;
+        expect(full.periods.map(x => `${x.kind}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+            'youth:1860-1883', 'marriage:1883-1900', 'widowed:1900-1905', 'partnership:1905-1911', 'divorced:1911-1920',
+        ]);
+    });
+
     it('widowhood is claimed only when no other union can be in the gap', () => {
         // An undated union whose first child comes after the wife's death ends the widowhood there.
         const t = tree();
