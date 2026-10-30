@@ -103,13 +103,23 @@ describe('sections', () => {
         expect(file).toContain('<footer class="pp-foot">');
     });
 
-    it('a story in draft is not shown; the researchers section needs a research tree', () => {
+    it('a story in draft is shown marked as a draft, in the window and in the file; the researchers section needs a research tree', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].story!.status = 'draft';
         const html = body(d, { research: false });
-        expect(html).not.toContain('pp-sec-story');
+        expect(html).toContain('pp-sec-story');
+        expect(html).toContain('Jan se narodil v Čapkově.');
+        expect(html).toContain('<span class="pp-draft-tag">Návrh</span>');
         expect(html).not.toContain('pp-sec-research');
         expect(html).not.toContain('pp-sec-materials');
+        const file = doc(d, { lang: 'de' });
+        expect(file).toContain('Jan se narodil v Čapkově.');
+        expect(file).toContain('<span class="pp-draft-tag">Entwurf</span>');
+        // Without a title the tag sits in the section's heading.
+        delete d.persons['jan' as PersonId].story!.title;
+        expect(body(d, { lang: 'en' })).toContain('<h2 class="pp-kicker pp-story-kicker">Story <span class="pp-draft-tag">Draft</span></h2>');
+        // An approved story has no tag.
+        expect(body(fiskTree())).not.toContain('pp-draft-tag">');
     });
 
     it('materials show safe images in a research tree only', () => {

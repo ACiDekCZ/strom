@@ -26,7 +26,10 @@ async function seedFisek(page: Page): Promise<void> {
         }),
         otec: P('otec', 'Vaclav', 'Fisek', 'male', { birthDate: '1830', deathDate: '1890', childIds: ['jan', 'karel'], partnerships: ['u0'] }),
         matka: P('matka', 'Anna', 'Nova', 'female', { birthDate: '1835', deathDate: '1895', childIds: ['jan', 'karel'], partnerships: ['u0'] }),
-        karel: P('karel', 'Karel', 'Fisek', 'male', { birthDate: '1862', deathDate: '1930', parentIds: ['otec', 'matka'] }),
+        karel: P('karel', 'Karel', 'Fisek', 'male', {
+            birthDate: '1862', deathDate: '1930', parentIds: ['otec', 'matka'],
+            story: { status: 'draft', title: 'The brother who stayed', text: 'Karel kept the farm in Capkov.' },
+        }),
         marie: P('marie', 'Marie', 'Dvorakova', 'female', { birthDate: '1865', deathDate: '1930', partnerships: ['u1'], childIds: ['petr', 'rosa'] }),
         petr: P('petr', 'Petr', 'Fisek', 'male', { birthDate: '1890-01-01', deathDate: '1892-05-05', parentIds: ['jan', 'marie'] }),
         rosa: P('rosa', 'Rosa', 'Fiskova', 'female', {
@@ -274,6 +277,21 @@ test.describe('desktop', () => {
         await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
         await w.locator('.pp-save').click();
         await expect(dlg.locator('[data-ppx-privacy="full"]')).toHaveAttribute('aria-checked', 'true');
+    });
+
+    test('a story in draft is on the page and in the file, marked as a draft', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karel' as never));
+        const story = win(page).locator('#pp-sec-story');
+        await expect(story).toContainText('Karel kept the farm in Capkov.');
+        await expect(story.locator('.pp-draft-tag')).toHaveText('Draft');
+        await win(page).locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('Karel kept the farm in Capkov.');
+        expect(html).toContain('<span class="pp-draft-tag">Draft</span>');
     });
 
     test('a page without living people keeps the remembered privacy for the next page', async ({ page }) => {

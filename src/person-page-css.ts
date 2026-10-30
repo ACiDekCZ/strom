@@ -69,6 +69,7 @@ button.pp-card { cursor: pointer; }
 .pp-peek { display: block; font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .pp-coll[open] > summary .pp-peek, .pp-disc[aria-expanded="true"] .pp-peek { display: none; }
 .pp-sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
+.pp .pp-draft-tag { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-light); font-size: 11px; line-height: 18px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
 .pp .pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
 .pp-prose { font-family: var(--font-serif); font-size: clamp(16px, 2.5cqi, 17.5px); line-height: 1.65; overflow-wrap: anywhere; }
 .pp-prose p, .pp-prose ul { margin: 0 0 0.9em; }

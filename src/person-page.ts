@@ -425,7 +425,7 @@ function researchIdCount(page: PersonPageData): number {
     const ids = new Set<string>();
     if (page.groups.sources) for (const s of Object.values(page.tree.sources ?? {})) if (s.refn) ids.add(s.refn);
     const st = person?.story;
-    if (st && st.status !== 'draft' && st.text?.trim()) {
+    if (st?.text?.trim()) {
         for (const t of [st.text, ...(st.facts ?? [])]) stripResearchIds(t).ids.forEach(id => ids.add(id));
     }
     if (person?.notes) stripResearchIds(person.notes).ids.forEach(id => ids.add(id));
@@ -807,14 +807,16 @@ function section(key: PersonPageSection['key'], title: string, body: string, hea
 function storyHtml(c: Ctx): string {
     const { P, person, page } = c;
     const st = person.story;
-    if (!st || st.status === 'draft' || !st.text?.trim()) return '';
+    if (!st || !st.text?.trim()) return '';
     const stripped = stripResearchIds(st.text);
     stripped.ids.forEach(id => c.ids.add(id));
     const text = stripped.text;
     const title = st.title?.trim() ? stripResearchIds(st.title).text : '';
+    // A story not approved yet is shown too, marked as a draft (as the story reader does).
+    const tag = st.status === 'draft' ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
     const head = title
-        ? `<p class="pp-kicker">${esc(P.sec.story)}</p><h2 class="pp-story-title">${esc(title)}</h2>`
-        : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}</h2>`;
+        ? `<p class="pp-kicker">${esc(P.sec.story)}${tag}</p><h2 class="pp-story-title">${esc(title)}</h2>`
+        : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
     const prose = `<div class="pp-prose">${storyProseHtml(text, { title: title || undefined, headingLevel: 3 })}</div>`;
     let basis = '';
     const facts = (st.facts ?? []).map(f => stripResearchIds(f)).filter(f => f.text.trim());
