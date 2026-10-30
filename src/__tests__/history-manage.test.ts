@@ -416,6 +416,19 @@ describe('header', () => {
         expect(h.summary).toMatch(/1 region/);
         expect(manageSummaries(q, 'en').settings).toMatch(/1/);
     });
+
+    it('a summary says only what there is: nothing at all says nothing (no "0 regions · 0 events")', () => {
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const none = manageSummaries(payload({}), lang);
+            expect(none.menu).toBe('');
+            expect(none.settings).toBe('');
+        }
+        // Regions but no events yet: the regions alone.
+        const regionsOnly = payload({ regions: { a: region('a'), b: region('b') } });
+        expect(manageSummaries(regionsOnly, 'en').menu).toBe('2 regions');
+        expect(manageSummaries(regionsOnly, 'cs').menu).toBe('2 regiony');
+        expect(manageSummaries(regionsOnly, 'de').settings).toBe('2 Regionen');
+    });
 });
 
 describe('two searches apart (experiments.split, spec 020 K8, 1029)', () => {

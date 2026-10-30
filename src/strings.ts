@@ -5401,11 +5401,12 @@ const stringsEN = {
         // History of places — the manager (#history-modal, spec 1028 part A).
         manage: 'History of places',
         manageOpen: 'Manage history of places',
-        manageSummary: (r: number, n: number) => `${nEn(r, 'region', 'regions')} · ${nEn(n, 'event', 'events')}`,
+        // Only what there is: none of either says nothing (no "0 regions · 0 events" under the menu row).
+        manageSummary: (r: number, n: number) => [r ? nEn(r, 'region', 'regions') : '', n ? nEn(n, 'event', 'events') : ''].filter(Boolean).join(' · '),
         manageSummaryFull: (r: number, p: number, e: number, h: number) =>
             `${nEn(r, 'region', 'regions')} · ${nEn(p, 'place', 'places')} · ${nEn(e, 'event', 'events')} · ${h} hidden`,
         manageSettingsSub: (r: number, n: number, h: number) =>
-            `${nEn(r, 'region', 'regions')} · ${nEn(n, 'event', 'events')}${h ? ` · ${h} hidden` : ''}`,
+            [r ? nEn(r, 'region', 'regions') : '', n ? nEn(n, 'event', 'events') : '', h ? `${h} hidden` : ''].filter(Boolean).join(' · '),
         manageOff: 'The research is not looking for history. Events already found stay.',
         manageOffElsewhere: 'The research is not looking for history. Events already found stay. The search can be turned on in the research on the computer where it runs.',
         manageTreeOff: 'The history search is off for this tree. Events already found stay.',
@@ -11153,11 +11154,11 @@ const stringsCZ: StringsType = {
         // Dějiny míst — správa (#history-modal, spec 1028 část A).
         manage: 'Dějiny míst',
         manageOpen: 'Spravovat dějiny míst',
-        manageSummary: (r: number, n: number) => `${nCs(r, 'region', 'regiony', 'regionů')} · ${nCs(n, 'událost', 'události', 'událostí')}`,
+        manageSummary: (r: number, n: number) => [r ? nCs(r, 'region', 'regiony', 'regionů') : '', n ? nCs(n, 'událost', 'události', 'událostí') : ''].filter(Boolean).join(' · '),
         manageSummaryFull: (r: number, p: number, e: number, h: number) =>
             `${nCs(r, 'region', 'regiony', 'regionů')} · ${nCs(p, 'místo', 'místa', 'míst')} · ${nCs(e, 'událost', 'události', 'událostí')} · ${nCs(h, 'skrytá', 'skryté', 'skrytých')}`,
         manageSettingsSub: (r: number, n: number, h: number) =>
-            `${nCs(r, 'region', 'regiony', 'regionů')} · ${nCs(n, 'událost', 'události', 'událostí')}${h ? ` · ${nCs(h, 'skrytá', 'skryté', 'skrytých')}` : ''}`,
+            [r ? nCs(r, 'region', 'regiony', 'regionů') : '', n ? nCs(n, 'událost', 'události', 'událostí') : '', h ? nCs(h, 'skrytá', 'skryté', 'skrytých') : ''].filter(Boolean).join(' · '),
         manageOff: 'Výzkum dějiny nehledá. Nalezené události zůstávají.',
         manageOffElsewhere: 'Výzkum dějiny nehledá. Nalezené události zůstávají. Zapnout hledání jde ve výzkumu na počítači, kde běží.',
         manageTreeOff: 'Hledání dějin je u tohoto stromu vypnuté. Nalezené události zůstávají.',
@@ -16820,11 +16821,11 @@ const stringsDE: StringsType = {
         // Geschichte der Orte — Verwaltung (#history-modal, Spezifikation 1028 Teil A).
         manage: 'Geschichte der Orte',
         manageOpen: 'Geschichte der Orte verwalten',
-        manageSummary: (r: number, n: number) => `${nDe(r, 'Region', 'Regionen')} · ${nDe(n, 'Ereignis', 'Ereignisse')}`,
+        manageSummary: (r: number, n: number) => [r ? nDe(r, 'Region', 'Regionen') : '', n ? nDe(n, 'Ereignis', 'Ereignisse') : ''].filter(Boolean).join(' · '),
         manageSummaryFull: (r: number, p: number, e: number, h: number) =>
             `${nDe(r, 'Region', 'Regionen')} · ${nDe(p, 'Ort', 'Orte')} · ${nDe(e, 'Ereignis', 'Ereignisse')} · ${h} ausgeblendet`,
         manageSettingsSub: (r: number, n: number, h: number) =>
-            `${nDe(r, 'Region', 'Regionen')} · ${nDe(n, 'Ereignis', 'Ereignisse')}${h ? ` · ${h} ausgeblendet` : ''}`,
+            [r ? nDe(r, 'Region', 'Regionen') : '', n ? nDe(n, 'Ereignis', 'Ereignisse') : '', h ? `${h} ausgeblendet` : ''].filter(Boolean).join(' · '),
         manageOff: 'Die Forschung sucht kein Zeitgeschehen. Bereits gefundene Ereignisse bleiben.',
         manageOffElsewhere: 'Die Forschung sucht kein Zeitgeschehen. Bereits gefundene Ereignisse bleiben. Die Suche lässt sich in der Forschung auf dem Computer einschalten, auf dem sie läuft.',
         manageTreeOff: 'Die Suche ist für diesen Stammbaum ausgeschaltet. Bereits gefundene Ereignisse bleiben.',
