@@ -2,6 +2,18 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.19.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Person page**: under each register excerpt a link *Scan in the archive* leads to its scan, at the event and in the source card, in the window and in the saved file. On the map close places join into one numbered cluster with one label; the gallery shows a register entry or a document whole on a paper ground, a wide one over two columns; on a wide screen the picture blocks take the whole column beside the contents.
+- **Places**: the dialog sorts the places *By name*, *By number of people* or *Not on the map first*.
+- **History in the person card**: a region not searched yet and the place's own history are offered together (*Find the history of …* · *Find local history…*); a range of years no longer widens the year column.
+- **Kinds of history**: each event of history shows its kind as a symbol (war, epidemic, census, state and borders, emigration, law, economy, disaster, other) in the timeline, in *History of places* and on the person page; a collapsed year names its kinds with small symbols and *What the marks mean* shows all nine.
+- **Tree fixes and Research tools**: where the research offers bulk fixes of the data, the *Research* menu has *Tree fixes* with the count of the available ones; each fix shows its count, a short description and its state, and opens or is undone in the research's terminal. *Research tools* lists the research's own tools grouped by what they do, the research check first.
+- **Research mark**: actions that open the research's terminal end with its mark instead of ↗, which stays for the web only.
+- **Smaller changes**: a tree saved by a newer version of the app warns also when opened later; the family book keeps the sources of the deceased under the initials privacy; the new-version prompt waits while a dialog is open; a phone held sideways at 640 px or less shows the tree right under the header; further fixes of layout and texts.
+
 ## 3.18.0
 
 *Released 30 October 2026.*

@@ -2,6 +2,18 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.19.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Personenseite**: Unter jedem Ausschnitt aus einem Kirchenbuch führt ein Link *Scan im Archiv* zu seinem Scan, beim Ereignis und in der Quellenkarte, im Fenster und in der gespeicherten Datei. Auf der Karte verbinden sich nahe Orte zu einer nummerierten Gruppe mit einer Beschriftung; die Galerie zeigt einen Kirchenbucheintrag oder ein Dokument ganz auf Papiergrund, ein breites über zwei Spalten; auf einem breiten Bildschirm nehmen die Bildblöcke die ganze Spalte neben dem Inhaltsverzeichnis ein.
+- **Orte**: Der Dialog sortiert die Orte *Nach Name*, *Nach Anzahl der Personen* oder *Ohne Position zuerst*.
+- **Geschichte in der Personenkarte**: Eine noch nicht durchsuchte Region und die eigene Geschichte des Ortes werden zusammen angeboten (*Geschichte von … suchen* · *Ortsgeschichte suchen…*); eine Spanne von Jahren verbreitert die Jahresspalte nicht mehr.
+- **Arten der Geschichte**: Jedes Ereignis der Geschichte zeigt seine Art als Symbol (Krieg, Epidemie, Volkszählung, Staat und Grenzen, Auswanderung, Recht, Wirtschaft, Katastrophe, Sonstiges) im Lebenslauf, in *Geschichte der Orte* und auf der Personenseite; ein zugeklapptes Jahr nennt seine Arten mit kleinen Symbolen, und *Was die Zeichen bedeuten* zeigt alle neun.
+- **Baumkorrekturen und Forschungswerkzeuge**: Wo die Forschung Sammelkorrekturen der Daten anbietet, hat das Menü *Forschung* den Eintrag *Baumkorrekturen* mit der Zahl der verfügbaren; jede Korrektur nennt ihre Anzahl, eine kurze Beschreibung und ihren Stand und wird im Terminal der Forschung geöffnet oder rückgängig gemacht. *Forschungswerkzeuge* listet die eigenen Werkzeuge der Forschung nach ihrem Zweck gruppiert, zuerst die Prüfung der Forschung.
+- **Zeichen der Forschung**: Aktionen, die das Terminal der Forschung öffnen, enden mit ihrem Zeichen statt mit ↗, das nur für das Web bleibt.
+- **Kleinere Änderungen**: Ein mit einer neueren Version der App gespeicherter Stammbaum warnt auch beim späteren Öffnen; das Familienbuch lässt Verstorbenen beim Schutz durch Initialen ihre Quellen; der Hinweis auf eine neue Version wartet, solange ein Dialog offen ist; ein quer gehaltenes Telefon bis 640 px zeigt den Stammbaum direkt unter dem Kopf; weitere Korrekturen an Anordnung und Texten.
+
 ## 3.18.0
 
 *Veröffentlicht am 30. Oktober 2026.*

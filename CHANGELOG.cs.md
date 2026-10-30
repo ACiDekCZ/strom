@@ -2,6 +2,18 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.19.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Stránka osoby**: pod každým výřezem z matriky vede odkaz *Sken v archivu* na jeho sken, u události i v kartě pramene, v okně i v uloženém souboru. Blízká místa se na mapě spojí do jednoho číslovaného shluku s jedním popiskem; galerie ukáže zápis z matriky nebo dokument celý na papírovém podkladu, široký přes dva sloupce; na širokém displeji zaberou obrazové bloky celý sloupec vedle obsahu.
+- **Místa**: dialog řadí místa *Podle názvu*, *Podle počtu osob* nebo *Bez polohy napřed*.
+- **Dějiny v kartě osoby**: dosud nehledaný region a vlastní dějiny místa se nabízejí spolu (*Najít dějiny regionu …* · *Najít dějiny místa a okolí…*); rozpětí let už nerozšiřuje sloupec roků.
+- **Druhy dějin**: každá událost dějin ukazuje svůj druh symbolem (válka, epidemie, sčítání, stát a hranice, vystěhovalectví, právo, hospodářství, pohroma, jiné) na časové ose, v *Dějinách míst* i na stránce osoby; sbalený rok jmenuje své druhy malými symboly a *Co znamenají značky* ukazuje všech devět.
+- **Opravy stromu a Nástroje výzkumu**: kde výzkum nabízí hromadné opravy dat, má nabídka *Výzkum* položku *Opravy stromu* s počtem dostupných; každá oprava uvádí počet, krátký popis a stav a otevře se nebo vrátí v terminálu výzkumu. *Nástroje výzkumu* uvádějí vlastní nástroje výzkumu seskupené podle toho, co dělají, jako první kontrolu výzkumu.
+- **Značka výzkumu**: akce, které otevírají terminál výzkumu, končí jeho značkou místo ↗, které zůstává jen pro web.
+- **Drobnější změny**: strom uložený novější verzí aplikace upozorní i při pozdějším otevření; kniha rodu při ochraně iniciálami ponechá zemřelým jejich prameny; nabídka nové verze počká, dokud je otevřený dialog; telefon na šířku do 640 px ukazuje strom hned pod hlavičkou; další opravy rozložení a textů.
+
 ## 3.18.0
 
 *Vydáno 30. října 2026.*
