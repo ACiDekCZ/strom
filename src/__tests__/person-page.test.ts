@@ -315,7 +315,7 @@ describe('history spans and the folded sources', () => {
             state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
             events: [{
                 id: 'cz-bohemia-0002', from: 1880, to: 1890, kind: 'war', scope: 'region',
-                region: { id: 'cz-bohemia', name: { cs: 'Čechy' } }, text: { cs: 'Dlouhé období' },
+                region: { id: 'cz-bohemia', name: { cs: 'Kraj' } }, text: { cs: 'Válka v kraji' },
                 source: { title: 'Období', publisher: 'Wikipedie', url: 'https://cs.wikipedia.org/wiki/Y', checked: '2026-10-27' },
             }],
             places: { 'Čapkov': { events: ['cz-bohemia-0002'] } },
