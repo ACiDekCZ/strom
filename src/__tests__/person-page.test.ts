@@ -11,7 +11,7 @@ import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageFileToggles, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
-    personPageTocCurrent, dataUrlImageSize,
+    personPageTocCurrent, dataUrlImageSize, personPageChartInput,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
 import { personSourceRows } from '../person-sources.js';
@@ -1142,6 +1142,19 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const evaApp = body(geoTree(), { personId: 'eva' as PersonId });
         expect(evaApp).toContain('id="pp-sec-places"');
         expect(evaApp).toContain('class="pp-chart"');
+    });
+
+    it('a protected file: the chart keeps a marriage to a living partner as the family tree does, no widowhood after it (round 3, finding 1)', () => {
+        const op = opts({ ...rosa, mode: 'file', links: 'plain', privacy: 'initials' });
+        const page = preparePersonPageData(geoTree(), op);
+        const input = personPageChartInput(page, NOW)!;
+        expect(input.periods.map(x => `${x.kind}:${x.name ?? ''}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+            'youth::1893-1950', 'marriage:Tomáš:1950-1960', 'widowed::1960-1965', 'marriage:Z. N.:1965-1970',
+        ]);
+        expect(input.lines.some(l => l.kind === 'partner' && l.name.startsWith('Z'))).toBe(false);
+        const html = buildPersonPageDocument(page, op);
+        expect(html).toContain('Manželství · Z. N.');
+        for (const word of ['Zbyňka', 'Nováková', '1950-02-02']) expect(html).not.toContain(word);
     });
 
     it('the family tree links to the couple\'s chapter with the chapter helpers; none with a living partner in a protected file', () => {

@@ -166,6 +166,11 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
     const living = isLiving(person);
     if (opts.protect && living) return null;
     const hidden = (p: Person | undefined): boolean => !!p && !!opts.protect && isLiving(p);
+    // A living partner in a protected file: the union stays as the family tree shows it (initials, the marriage
+    // year), so the chart never claims a widowhood the rest of the file contradicts; no line of their life.
+    const shieldedName = (p: Person): string => [p.firstName, p.lastName]
+        .map(n => (n ?? '').trim()).filter(Boolean).map(n => `${n[0].toUpperCase()}.`).join(' ');
+    const nameOf = (p: Person | undefined): string => !p ? '' : hidden(p) ? shieldedName(p) : (p.firstName?.trim() || '');
 
     const lifeline = opts.lifeline ?? computePersonLifeline(tree, personId);
     const years = new Set(lifeline.map(p => p.year));
@@ -200,9 +205,12 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
         .map(u => {
             const otherId = u.person1Id === personId ? u.person2Id : u.person1Id;
             const other = tree.persons[otherId];
-            return { u, other, start: chartDate(u.startDate, false) };
-        })
-        .filter(x => !hidden(x.other));
+            const shielded = hidden(other);
+            // Of a union with a living partner only the year of the marriage is known (privacy).
+            const year = shielded ? parseFlexDate(u.startDate)?.year : undefined;
+            const start = shielded ? (year !== undefined ? chartDate(String(year), false) : undefined) : chartDate(u.startDate, false);
+            return { u, other, shielded, start };
+        });
     const unions = shown.filter(x => !!x.start).sort((a, b) => a.start!.at - b.start!.at);
     // A union without a marriage date (§2.3, round 2): its first known point is the birth of the first common child.
     const firstChildAt = (u: Partnership): number | undefined => {
@@ -223,12 +231,12 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
     unions.forEach((x, i) => {
         const from = x.start!.at;
         const next = unions[i + 1]?.start!.at;
-        const endDate = chartDate(x.u.endDate, true);
-        const partnerDeath = x.other ? chartDate(x.other.deathDate, true) : undefined;
+        const endDate = x.shielded ? undefined : chartDate(x.u.endDate, true);
+        const partnerDeath = x.other && !x.shielded ? chartDate(x.other.deathDate, true) : undefined;
         const candidates = [lifeEnd, next, endDate?.at, partnerDeath?.at].filter((n): n is number => n !== undefined && n > from);
         const to = Math.min(...candidates);
         const unmarried = x.u.status === 'partners' || x.u.status === 'separated';
-        const name = x.other ? (x.other.firstName?.trim() || '') : '';
+        const name = nameOf(x.other);
         periods.push({ kind: unmarried ? 'partnership' : 'marriage', from, to, ...(name ? { name } : {}),
             anchor: anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
         // The gap up to the next marriage or the end of the life.
@@ -237,8 +245,17 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
             const byDeath = partnerDeath !== undefined && Math.abs(partnerDeath.at - to) < 0.01;
             const byEnd = endDate !== undefined && Math.abs(endDate.at - to) < 0.01;
             if (byDeath || byEnd) {
-                periods.push({ kind: byDeath && !byEnd ? 'widowed' : 'divorced', from: to, to: gapEnd,
-                    anchor: byEnd ? anchorOf(p => p.kind === 'divorce' && p.partnershipId === x.u.id) : '' });
+                // Widowed / after a divorce only while no other union can be there: an undated union whose
+                // first child comes in the gap ends it there, one with no known point at all leaves it unknown.
+                const unknown = undated.some(y => y.firstAt === undefined);
+                const laterAt = undated.map(y => y.firstAt).filter((n): n is number => n !== undefined && n > to + 0.01 && n < gapEnd);
+                const until = laterAt.length ? Math.min(...laterAt) : gapEnd;
+                const anchor = byEnd ? anchorOf(p => p.kind === 'divorce' && p.partnershipId === x.u.id) : '';
+                if (unknown) periods.push({ kind: 'life', from: to, to: gapEnd, anchor });
+                else {
+                    if (until - to > 0.2) periods.push({ kind: byDeath && !byEnd ? 'widowed' : 'divorced', from: to, to: until, anchor });
+                    if (until < gapEnd) periods.push({ kind: 'life', from: until, to: gapEnd, anchor: '' });
+                }
             }
         }
     });
@@ -262,8 +279,7 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
         if (!id) return '';
         const u = tree.partnerships[id];
         if (!u) return '';
-        const other = tree.persons[u.person1Id === personId ? u.person2Id : u.person1Id];
-        return other?.firstName?.trim() ?? '';
+        return nameOf(tree.persons[u.person1Id === personId ? u.person2Id : u.person1Id]);
     };
     const hiddenUnion = (id: PartnershipId | undefined): boolean => {
         if (!id) return false;
@@ -275,7 +291,11 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
         const base = { at, year: p.year, anchor: chartAnchorId(p.sortKey) };
         if (p.kind === 'birth') marks.push({ ...base, kind: 'birth', title: '', ...(birth ? { label: birth.label } : {}) });
         else if (p.kind === 'death') marks.push({ ...base, kind: 'death', title: '', ...(death ? { label: death.label } : {}) });
-        else if (p.kind === 'marriage' && !hiddenUnion(p.partnershipId)) marks.push({ ...base, kind: 'marriage', title: partnerNameOf(p.partnershipId) });
+        else if (p.kind === 'marriage') {
+            // A union with a living partner: the year alone (the family tree's "⚭ 1974 L. Ž.").
+            const shieldedAt = hiddenUnion(p.partnershipId) ? p.year + 0.05 : undefined;
+            marks.push({ ...base, ...(shieldedAt !== undefined ? { at: shieldedAt } : {}), kind: 'marriage', title: partnerNameOf(p.partnershipId) });
+        }
         else if (p.kind === 'divorce' && !p.unmarried && !hiddenUnion(p.partnershipId)) marks.push({ ...base, kind: 'divorce', title: partnerNameOf(p.partnershipId) });
         else if (p.kind === 'event' && p.eventType && p.eventType !== 'birth' && p.eventType !== 'death') {
             marks.push({ ...base, kind: p.eventType === 'emigration' ? 'emigration' : 'event', eventType: p.eventType,
@@ -290,7 +310,7 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
         ...undated.filter(x => x.firstAt !== undefined).map(x => ({ x, from: x.firstAt!, fade: true })),
     ].sort((a, b) => a.from - b.from);
     for (const { x, from, fade } of partnerLines) {
-        if (!x.other || x.other.isPlaceholder) continue;
+        if (!x.other || x.other.isPlaceholder || x.shielded) continue;
         const d = chartDate(x.other.deathDate, true);
         lines.push({ kind: 'partner', name: x.other.firstName?.trim() || '', from,
             ...(d ? { to: d.at, deathYear: d.year } : {}),

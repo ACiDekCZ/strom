@@ -147,11 +147,55 @@ describe('lifeChartInput', () => {
         const input = lifeChartInput(tree(), JAN, { now: NOW, protect: true })!;
         expect(input.lines.some(l => l.name === 'Eva')).toBe(false);
         expect(lifeChartInput(tree(), JAN, { now: NOW })!.lines.some(l => l.name === 'Eva')).toBe(true);
-        // A living partner (by the page's living set): neither the marriage nor the line.
+        // A living partner (by the page's living set): the marriage stays as the family tree shows it
+        // (initials, the year), with no line of the partner's life.
         const withSet = lifeChartInput(tree(), JAN, { now: NOW, protect: true, living: new Set(['marie', 'eva']) })!;
         expect(withSet.periods.some(x => x.name === 'Marie')).toBe(false);
-        expect(withSet.lines.some(l => l.name === 'Marie')).toBe(false);
-        expect(withSet.marks.filter(m => m.kind === 'marriage').length).toBe(1);
+        expect(withSet.periods.find(x => x.kind === 'marriage' && x.name === 'M. F.')).toBeDefined();
+        expect(withSet.lines.some(l => l.kind === 'partner' && l.name.startsWith('M'))).toBe(false);
+        const marks = withSet.marks.filter(m => m.kind === 'marriage');
+        expect(marks.map(m => m.title)).toEqual(['Rozálie', 'M. F.']);
+        expect(JSON.stringify(withSet)).not.toContain('Marie');
+    });
+
+    it('protected file: a remarriage to a living partner is no widowhood (finding 1, round 3)', () => {
+        // The first wife dies in 1975, the second marriage (1974) is to a living woman, Jan dies in 2010.
+        const t = tree();
+        t.persons[JAN].deathDate = '2010-03-01';
+        t.persons['roza' as PersonId].deathDate = '1975-06-01';
+        t.partnerships['u1' as PartnershipId].startDate = '1950-05-01';
+        t.partnerships['u2' as PartnershipId].startDate = '1974-06-01';
+        t.persons['marie' as PersonId].isDeceased = false;
+        delete t.persons['marie' as PersonId].deathDate;
+        t.persons['marie' as PersonId].birthDate = '1950-01-01';
+        const input = lifeChartInput(t, JAN, { now: NOW, protect: true })!;
+        expect(input.periods.some(x => x.kind === 'widowed')).toBe(false);
+        expect(input.periods.map(x => `${x.kind}:${x.name ?? ''}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+            'youth::1860-1950', 'marriage:Rozálie:1950-1974', 'marriage:M. F.:1974-2010',
+        ]);
+        const html = lifeChartHtml(input, { lang: 'cs', mode: 'file' });
+        expect(html).not.toContain('vdovec');
+        expect(html).not.toContain('Marie');
+        expect(html).not.toContain('1974-06');
+    });
+
+    it('widowhood is claimed only when no other union can be in the gap', () => {
+        // An undated union whose first child comes after the wife's death ends the widowhood there.
+        const t = tree();
+        delete t.partnerships['u2' as PartnershipId].startDate;
+        t.persons['eva' as PersonId].birthDate = '1903-03-01';
+        const input = lifeChartInput(t, JAN, { now: NOW })!;
+        expect(input.periods.map(x => `${x.kind}:${Math.floor(x.from)}-${Math.floor(x.to)}`)).toEqual([
+            'youth:1860-1883', 'marriage:1883-1900', 'widowed:1900-1903', 'life:1903-1920',
+        ]);
+        // An undated union with no known point at all: the time after the wife's death stays unknown.
+        const t2 = tree();
+        delete t2.partnerships['u2' as PartnershipId].startDate;
+        t2.partnerships['u2' as PartnershipId].childIds = [];
+        t2.persons['eva' as PersonId].parentIds = ['jan'] as PersonId[];
+        const input2 = lifeChartInput(t2, JAN, { now: NOW })!;
+        expect(input2.periods.some(x => x.kind === 'widowed')).toBe(false);
+        expect(input2.periods[input2.periods.length - 1].kind).toBe('life');
     });
 
     it('uncertain dates: ~year and a range fade, a year alone does not (round 2, point 6)', () => {
