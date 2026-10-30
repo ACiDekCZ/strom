@@ -146,6 +146,10 @@ embedded in the app's HTML (a comment in `<head>`):
 - Some interface icons come from or are based on **Lucide** (ISC License,
   Copyright (c) Lucide Icons and Contributors) and **Feather** (MIT License,
   Copyright (c) 2013-2023 Cole Bemis).
+- The person page's map draws country outlines from **Natural Earth**
+  (https://www.naturalearthdata.com, public domain), as packaged in
+  **world-atlas** 2.0.2 (ISC License, Copyright 2013-2019 Michael Bostock);
+  an extract is bundled in `src/map-outlines-data.ts`.
 - Map tiles are loaded at run time from OpenStreetMap (© OpenStreetMap
   contributors, https://www.openstreetmap.org/copyright); the map shows this
   attribution.
