@@ -124,7 +124,7 @@ describe('what the sample shows', () => {
         expect(checkRecordedAge(laura.deathAge, laura.birthDate, laura.deathDate)?.differs).toBeFalsy();
     });
 
-    it('godparents, witnesses, register entries, a story and an open question', () => {
+    it('godparents, witnesses, register entries, stories of a person and a couple, an open question', () => {
         const johan = data.persons[DEMO_FOCUS];
         const baptism = johan.events!.find(e => e.type === 'baptism')!;
         expect(baptism.participants!.map(p => p.personId ?? p.name)).toEqual(['Ole Dahl', id('kari')]);
@@ -134,6 +134,10 @@ describe('what the sample shows', () => {
         expect(johan.birthSourceIds).toEqual(['demo_src_baptism']);
         expect(Object.values(data.sources!).every(s => s.transcript)).toBe(true);
         expect(johan.story?.status).toBe('final');
+        // The marriage has its own story too: the person page's chapter of the couple.
+        expect(wedding.story?.status).toBe('final');
+        expect(wedding.story?.title).toBeTruthy();
+        expect(wedding.story!.text.split('\n\n').length).toBeGreaterThanOrEqual(2);
         expect(persons.some(p => p.question)).toBe(true);
         expect(data.surnameVariants).toEqual([['Berg', 'Bergh']]);
     });
@@ -173,7 +177,8 @@ describe('sample pictures', () => {
 
     it('carries the drawn portraits, the page and the crops linked to it', () => {
         const data = getDemoTree(maker);
-        expect(Object.values(data.persons).filter(p => p.photo)).toHaveLength(3);
+        expect(Object.values(data.persons).filter(p => p.photo)).toHaveLength(4);
+        expect(data.persons[DEMO_FOCUS].photo).toBe(jpeg);
         const page = data.persons[DEMO_FOCUS].attachments![0];
         expect(page.sourceId).toBe('demo_src_baptism');
         const crop = data.sources!.demo_src_baptism.excerpts![0];

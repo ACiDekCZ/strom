@@ -12,7 +12,8 @@
  *   record writes it (Johan's death record says 75 — the dates say 74), the
  *   farm or house of a birth, a death or a wedding;
  * - register entries with a transcript and a crop of the page, spellings of
- *   the name (Bergh, John Berg), a family-book story, an open question;
+ *   the name (Bergh, John Berg), family-book stories of a person and of a
+ *   couple, an open question;
  * - an emigration from Norway to America and a great-grandson moving back,
  *   so the map and the timeline have a journey to draw; living people, so the
  *   privacy options have someone to hide.
@@ -244,6 +245,7 @@ export function getDemoTree(images?: DemoImageMaker): StromData {
         birthDate: '1825-03-14', birthPlace: 'Voss', birthAddress: 'Nedre Berg', birthSourceIds: [srcBaptism],
         deathDate: '1899-11-02', deathPlace: 'Minneapolis', deathCause: t.causePneumonia, deathAge: age('75y'),
         deathAddress: '1412 Cedar Avenue', deathSourceIds: [srcDeath],
+        ...photo(4, 'male'),
         notes: t.johanNote, nameVariants: ['Johannes Bergh', 'John Berg'],
         story: { status: 'final', title: t.johanStoryTitle, text: t.johanStory, note: t.johanStoryNote },
         events: [
@@ -283,6 +285,7 @@ export function getDemoTree(images?: DemoImageMaker): StromData {
     f.kids(uKari, ida);
     const uJohanIda = f.union(johan, ida, {
         startDate: '1850-06-02', startPlace: 'Voss', address: 'Øvre Strand', sourceIds: [srcMarriage],
+        story: { status: 'final', title: t.johanIdaStoryTitle, text: t.johanIdaStory },
         participants: [
             { role: 'witness', personId: peter },
             { role: 'witness', name: 'Nils Holm', note: t.noteSchoolteacher },

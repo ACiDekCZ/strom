@@ -293,6 +293,8 @@ const stringsEN = {
             johanStory: 'Johan grew up on the Nedre Berg farm above Voss. After two bad harvests he sold the cattle, and in the spring of 1868 he left Bergen with Ida and the children on the ship Hero.\n\nIn Minneapolis he worked as a carpenter and in 1874 became an American citizen. The letters home he signed **John Berg**.',
             johanStoryNote: 'Retold from the family letters; not a source.',
             coupleStoryTitle: 'The schoolhouse on Cedar Avenue',
+            johanIdaStoryTitle: 'A wedding at Øvre Strand',
+            johanIdaStory: 'Johan and Ida were married on 2 June 1850 in the church at Voss, and the wedding was held at Øvre Strand, the farm where Ida had grown up with her mother Kari. Johan\'s father Peter and the schoolteacher Nils Holm stood as witnesses.\n\nThey took over a small holding below Nedre Berg. Erik was born the next summer; the twins Hanna and Clara came in April 1855, and Clara lived only eighteen days.\n\nIn April 1868 they left Bergen with Erik and Hanna. Ida\'s mother Kari stayed at Voss, and they never saw her again. Ida kept the family Bible from Voss all her life; she outlived Johan by six years.',
             coupleStory: 'David and Emma met at the school where both of them taught. They married in 1905 and let a room to lodgers, so the house was always full.',
         }
     },
@@ -6088,6 +6090,8 @@ const stringsCZ: StringsType = {
             johanStory: 'Johan vyrůstal na statku Nedre Berg nad Vossem. Po dvou neúrodách prodal dobytek a na jaře 1868 odplul s Idou a dětmi z Bergenu na lodi Hero.\n\nV Minneapolisu pracoval jako tesař a v roce 1874 dostal americké občanství. Dopisy domů podepisoval **John Berg**.',
             johanStoryNote: 'Převyprávěno z rodinných dopisů; není to pramen.',
             coupleStoryTitle: 'Škola na Cedar Avenue',
+            johanIdaStoryTitle: 'Svatba na Øvre Strand',
+            johanIdaStory: 'Johan a Ida se vzali 2. června 1850 v kostele ve Vossu a svatba se slavila na Øvre Strand, statku, kde Ida vyrůstala s matkou Kari. Za svědky šli Johanův otec Peter a učitel Nils Holm.\n\nPřevzali malé hospodářství pod Nedre Berg. Příští léto se narodil Erik, v dubnu 1855 dvojčata Hanna a Clara; Clara žila jen osmnáct dní.\n\nV dubnu 1868 odpluli s Erikem a Hannou z Bergenu. Idina matka Kari zůstala ve Vossu a už ji nikdy neviděli. Ida si celý život schovávala rodinnou bibli z Vossu; Johana přežila o šest let.',
             coupleStory: 'David a Emma se poznali ve škole, kde oba učili. Vzali se v roce 1905 a pronajímali pokoj podnájemníkům, takže dům byl pořád plný.',
         }
     },
@@ -11817,6 +11821,8 @@ const stringsDE: StringsType = {
             johanStory: 'Johan wuchs auf dem Hof Nedre Berg oberhalb von Voss auf. Nach zwei Missernten verkaufte er das Vieh und verließ im Frühjahr 1868 mit Ida und den Kindern Bergen auf dem Schiff Hero.\n\nIn Minneapolis arbeitete er als Zimmermann und wurde 1874 amerikanischer Staatsbürger. Die Briefe nach Hause unterschrieb er mit **John Berg**.',
             johanStoryNote: 'Nach den Familienbriefen nacherzählt; keine Quelle.',
             coupleStoryTitle: 'Das Schulhaus an der Cedar Avenue',
+            johanIdaStoryTitle: 'Eine Hochzeit auf Øvre Strand',
+            johanIdaStory: 'Johan und Ida heirateten am 2. Juni 1850 in der Kirche von Voss, gefeiert wurde auf Øvre Strand, dem Hof, auf dem Ida mit ihrer Mutter Kari aufgewachsen war. Trauzeugen waren Johans Vater Peter und der Lehrer Nils Holm.\n\nSie übernahmen eine kleine Stelle unterhalb von Nedre Berg. Im Sommer darauf kam Erik zur Welt, im April 1855 die Zwillinge Hanna und Clara; Clara lebte nur achtzehn Tage.\n\nIm April 1868 verließen sie mit Erik und Hanna Bergen. Idas Mutter Kari blieb in Voss, sie sahen sie nie wieder. Die Familienbibel aus Voss bewahrte Ida ihr Leben lang auf; sie überlebte Johan um sechs Jahre.',
             coupleStory: 'David und Emma lernten sich an der Schule kennen, an der beide unterrichteten. 1905 heirateten sie und vermieteten ein Zimmer, so war das Haus immer voll.',
         }
     },

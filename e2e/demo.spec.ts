@@ -29,7 +29,7 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
             crops: Object.values(d.sources ?? {}).flatMap(s => s.excerpts ?? []).length,
         };
     });
-    expect(media).toEqual({ photos: 3, pages: 1, crops: 3 });
+    expect(media).toEqual({ photos: 4, pages: 1, crops: 3 });
 });
 
 test('the sample keeps a card density the user already chose', async ({ page }) => {
