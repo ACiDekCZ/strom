@@ -127,6 +127,8 @@ let tocPick: ((id: string) => void) | null = null;
 let editObserver: MutationObserver | null = null;
 let rerenderQueued = false;
 let userChangeHandler: (() => void) | null = null;
+/** Keeps the header's Share/Save button right when the window changes size (a resized browser, a turned device). */
+let resizeHandler: (() => void) | null = null;
 /** Redraws the life chart for the column's width (the current page's). */
 let chartObserver: ResizeObserver | null = null;
 /** The last measured width of the life chart (the next page starts with it). */
@@ -180,6 +182,15 @@ function canShareFiles(): boolean {
 
 function phoneBar(): boolean {
     return typeof window.matchMedia === 'function' && window.matchMedia(MQ_PHONE_BAR).matches;
+}
+
+/** Desktop: only "Save as HTML"; a phone always has the header button (Share or Save), a tablet with Web Share only. */
+function syncShareButton(): void {
+    const share = overlayEl()?.querySelector<HTMLButtonElement>('.pp-share');
+    if (!share) return;
+    const shareOk = canShareFiles();
+    share.hidden = isDesktop() || (!phoneBar() && !(isTablet() && shareOk));
+    share.textContent = shareOk ? strings.personPage.share : strings.personPage.saveShort;
 }
 
 function overlayEl(): HTMLElement | null {
@@ -249,6 +260,8 @@ export const personPageMethods = uiModule({
         window.addEventListener('strom:user-change', userChangeHandler);
         // The history layer read (or changed) after the window opened: its rows come in place.
         window.addEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
+        resizeHandler = () => syncShareButton();
+        window.addEventListener('resize', resizeHandler);
         // The person editor closed over the page: back to reading.
         const pm = document.getElementById('person-modal');
         if (pm && typeof MutationObserver !== 'undefined') {
@@ -279,6 +292,8 @@ export const personPageMethods = uiModule({
             window.removeEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
         }
         userChangeHandler = null;
+        if (resizeHandler) window.removeEventListener('resize', resizeHandler);
+        resizeHandler = null;
         this.dialogStack = this.dialogStack.filter(d => d !== PERSON_PAGE_ID);
         if (!overlay) { state = null; return; }
         overlay.remove();
@@ -329,11 +344,7 @@ export const personPageMethods = uiModule({
             back.setAttribute('aria-label', P.back(prevName));
             back.title = P.back(prevName);
         }
-        const share = overlay.querySelector('.pp-share') as HTMLButtonElement;
-        const shareOk = canShareFiles();
-        // Desktop: only "Save as HTML"; a phone always has the header button (Share or Save), a tablet with Web Share only.
-        share.hidden = isDesktop() || (!phoneBar() && !(isTablet() && shareOk));
-        share.textContent = shareOk ? P.share : P.saveShort;
+        syncShareButton();
         this.closePersonPageMenu(false);
 
         const scroller = overlay.querySelector('.pp-body') as HTMLElement;

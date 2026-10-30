@@ -796,6 +796,22 @@ test.describe('a phone', () => {
         await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
     });
 
+    test('the header follows the window\'s size: Save on a phone, Save as HTML once wider, Save again when narrow', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        const jan = await page.evaluate(() =>
+            (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.UI.showPersonPage(id as never), jan);
+        const w = win(page);
+        await expect(w.locator('.pp-share')).toBeVisible();
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await expect(w.locator('.pp-share')).toBeHidden();
+        await expect(w.locator('.pp-save')).toBeVisible();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(w.locator('.pp-share')).toBeVisible();
+        await expect(w.locator('.pp-save')).toBeHidden();
+    });
+
     test('the family is a rail on a phone: the union, the partner and the children, the tree hidden', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);
