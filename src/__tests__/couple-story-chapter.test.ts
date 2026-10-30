@@ -90,12 +90,18 @@ describe('the marriage’s years and the chapters', () => {
     };
 
     it('wedding → end of the union, else the first death', () => {
-        const y = (...args: Parameters<typeof tree>) => { const t = tree(...args); return coupleStoryYears(t.data, t.u); };
+        const until = getStringsForLang('cs').personPage.story.until;
+        const y = (...args: Parameters<typeof tree>) => { const t = tree(...args); return coupleStoryYears(t.data, t.u, until); };
         expect(y({ startDate: '1885-05-01', endDate: '1899' }, '1910', '1920')).toBe('1885–1899');
         expect(y({ startDate: '1885' }, '1920', '1910')).toBe('1885–1910');
         expect(y({ startDate: '1885' })).toBe('1885');
-        expect(y({}, '1910')).toBe('–1910');
+        // No wedding date, only the end: worded, never a dangling dash (round 3, finding 2).
+        expect(y({}, '1910')).toBe('do 1910');
         expect(y({})).toBe('');
+        const t = tree({}, '1999');
+        expect(coupleStoryYears(t.data, t.u, getStringsForLang('en').personPage.story.until)).toBe('until 1999');
+        expect(coupleStoryYears(t.data, t.u, getStringsForLang('de').personPage.story.until)).toBe('bis 1999');
+        expect(getStringsForLang('cs').personPage.story.couple(y({}, '1999'))).toBe('Vyprávění manželství · do 1999');
     });
 
     it('counts the own story and one chapter per couple’s story', () => {

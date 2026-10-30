@@ -305,7 +305,7 @@ export const personSourcesMethods = uiModule({
                     <div class="story-ch-head">
                         ${mono}
                         <div class="story-ch-headtext">
-                            <p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u)))}</p>
+                            <p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u, P.until)))}</p>
                             <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${stateTag(st, !!nv)}</h3>
                             ${st.title?.trim() ? `<p class="story-ch-pair">${esc(pair)}</p>` : ''}
                             ${!locked ? `<p class="story-ch-note">${esc(P.editInResearch)}</p>` : ''}

@@ -36,15 +36,16 @@ export function personStoryChapterCount(data: StromData, person: Person): number
 
 /**
  * The years of a marriage for its story: the wedding → the end of the union,
- * else the death of the first partner to die. "1885–1910", "1885", "–1910" or "".
+ * else the death of the first partner to die. "1885–1910", "1885", "until 1910"
+ * (no wedding date: `until` words it, never a dangling dash) or "".
  */
-export function coupleStoryYears(data: StromData, u: Partnership): string {
+export function coupleStoryYears(data: StromData, u: Partnership, until: (year: string) => string): string {
     const from = yearOf(u.startDate);
     const deaths = [u.person1Id, u.person2Id].map(id => yearOf(data.persons[id]?.deathDate)).filter((y): y is number => y !== null);
     const to = yearOf(u.endDate) ?? (deaths.length ? Math.min(...deaths) : null);
     if (from !== null && to !== null) return to > from ? `${from}–${to}` : String(from);
     if (from !== null) return String(from);
-    return to !== null ? `–${to}` : '';
+    return to !== null ? until(String(to)) : '';
 }
 
 /**

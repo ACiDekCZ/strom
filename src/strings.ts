@@ -5754,6 +5754,8 @@ const stringsEN = {
         story: {
             // A couple's story as a chapter of the person page and the story reader (spec 027).
             couple: (years: string) => years ? `Story of the marriage · ${years}` : 'Story of the marriage',
+            /** The years of a marriage with no wedding date: only its end is known. */
+            until: (y: string) => `until ${y}`,
             titleCouple: 'Story of the marriage',
             also: (name: string) => `The same story is also on the page of: ${name}.`,
             continues: 'Continued in the story of the marriage:',
@@ -11471,6 +11473,7 @@ const stringsCZ: StringsType = {
         story: {
             // Vyprávění páru jako kapitola stránky osoby a okna Vyprávění (spec 027).
             couple: (years: string) => years ? `Vyprávění manželství · ${years}` : 'Vyprávění manželství',
+            until: (y: string) => `do ${y}`,
             titleCouple: 'Vyprávění manželství',
             // Neutral construction: names are not declined (the name stands alone in the nominative).
             also: (name: string) => `Stejné vyprávění je i na stránce: ${name}.`,
@@ -17113,6 +17116,7 @@ const stringsDE: StringsType = {
         story: {
             // A couple's story as a chapter of the person page and the story reader (spec 027).
             couple: (years: string) => years ? `Geschichte der Ehe · ${years}` : 'Geschichte der Ehe',
+            until: (y: string) => `bis ${y}`,
             titleCouple: 'Geschichte der Ehe',
             also: (name: string) => `Dieselbe Geschichte steht auch auf der Seite: ${name}.`,
             continues: 'Fortsetzung in der Geschichte der Ehe:',

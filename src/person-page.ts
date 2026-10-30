@@ -1310,7 +1310,7 @@ export interface CoupleChapterContext {
 }
 
 /** The chapter's data from a tree: the person and one of the person's couples with a story (null: none). */
-export function coupleChapterData(tree: StromData, person: Person, u: Partnership): CoupleChapterData | null {
+export function coupleChapterData(tree: StromData, person: Person, u: Partnership, lang: Language): CoupleChapterData | null {
     const st = u.story;
     if (!st?.text?.trim()) return null;
     const pid = u.person1Id === person.id ? u.person2Id : u.person1Id;
@@ -1326,7 +1326,7 @@ export function coupleChapterData(tree: StromData, person: Person, u: Partnershi
         selfInitials: personInitials(person.firstName, person.lastName),
         partnerInitials: real ? personInitials(real.firstName, real.lastName) : '',
         ...(real ? { partnerId: real.id } : {}),
-        years: coupleStoryYears(tree, u),
+        years: coupleStoryYears(tree, u, getStringsForLang(lang).personPage.story.until),
         title,
         prose: storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 4 }),
         draft: st.status === 'draft',
@@ -1395,7 +1395,7 @@ function storyHtml(c: Ctx): string {
     const { P, S, person } = c;
     const own = person.story?.text?.trim() ? person.story : undefined;
     const chapters = coupleStories(c.tree, person)
-        .map(u => ({ u, ch: coupleChapterData(c.tree, person, u) }))
+        .map(u => ({ u, ch: coupleChapterData(c.tree, person, u, c.page.lang) }))
         .filter((x): x is { u: Partnership; ch: CoupleChapterData } => !!x.ch);
     if (!own && !chapters.length) return '';
     let head = `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}</h2>`;

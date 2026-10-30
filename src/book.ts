@@ -367,7 +367,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         return list.map(u => {
             const other = persons[u.person1Id === p.id ? u.person2Id : u.person1Id];
             const who = other && !other.isPlaceholder ? shownNameOrEmpty(other) : '?';
-            return storyHtml(u.story!, 'couple', esc(B.coupleSub(shownNameOrEmpty(p) || '?', who, coupleStoryYears(tree, u))), undefined, u, true);
+            return storyHtml(u.story!, 'couple', esc(B.coupleSub(shownNameOrEmpty(p) || '?', who, coupleStoryYears(tree, u, S.personPage.story.until))), undefined, u, true);
         });
     };
 
