@@ -1744,8 +1744,14 @@ function mainExcerpt(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): { sourc
     return null;
 }
 
-function figureHtml(c: Ctx, src: string, caption: string, id?: string): string {
+/** An excerpt's link to its scan in the archive: its own page, else (an event's excerpt) the source's page. */
+function scanLink(c: Ctx, e: SourceExcerpt, sourceUrl?: string): string {
+    return extLink(e.pageUrl, c.P.sources.archiveScan) || extLink(sourceUrl, c.P.sources.archivePage);
+}
+
+function figureHtml(c: Ctx, src: string, caption: string, id?: string, link = ''): string {
     const idAttr = id ? ` id="${id}"` : '';
+    const scan = link ? `<p class="pp-fig-scan">${link}</p>` : '';
     if (c.imgs) {
         // The file: the image's class (embedded once), a link into its light box when the gallery has it.
         const n = c.galIndex.get(src.replace(/\s+/g, ''));
@@ -1753,11 +1759,11 @@ function figureHtml(c: Ctx, src: string, caption: string, id?: string): string {
         const pic = n
             ? `<a class="pp-fig-link" href="#obr-${n}" aria-label="${esc(`${c.P.zoom}: ${caption}`)}">${img}<span class="pp-zoom" aria-hidden="true">⤢</span></a>`
             : img;
-        return `<figure class="pp-fig"${idAttr}>${pic}<figcaption>${esc(caption)}</figcaption></figure>`;
+        return `<figure class="pp-fig"${idAttr}>${pic}<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
     }
     const zoom = c.app ? `<button type="button" class="pp-zoom" data-pp-zoom aria-label="${esc(c.P.zoom)}">⤢</button>` : '';
     return `<figure class="pp-fig"${idAttr}><img src="${esc(src)}" alt="${esc(caption)}" loading="lazy">${zoom}`
-        + `<figcaption>${esc(caption)}</figcaption></figure>`;
+        + `<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
 }
 
 function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
@@ -1808,7 +1814,7 @@ function timelineHtml(c: Ctx): string {
                 : `${r.merged ? (pt.kind === 'birth' ? P.ev.birthBaptism : P.ev.deathBurial) : c.S.events.types[pt.kind === 'birth' ? 'birth' : 'death']} ${pt.year}`;
             c.mainEx.set(ex.source.id, { anchor, label });
             const caption = P.excerptCaption(ex.event, registerKindOf(ex.source.title), pt.place ?? '', pt.year);
-            fig = figureHtml(c, shownExcerpt(ex.excerpt), caption, anchor);
+            fig = figureHtml(c, shownExcerpt(ex.excerpt), caption, anchor, scanLink(c, ex.excerpt, ex.source.url));
         }
         // The life chart's and the places list's anchors (#osa-…): the row, and inside it the point merged in.
         const id = anchorAttr(c, chartAnchorId(pt.sortKey));
@@ -2312,10 +2318,15 @@ function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
         const ref = [s.repository, s.reference].map(x => x?.trim()).filter(Boolean).join(' · ');
         const body: string[] = [];
         const main = c.mainEx.get(s.id);
+        // Each excerpt shown here links its own scan; the card's link below is another page, or none.
+        const linked = new Set<string>();
         (s.excerpts ?? []).forEach((e, i) => {
             if (main && i === 0) return;
             const img = safeImage(e.dataUrl);
-            if (img) body.push(figureHtml(c, shownExcerpt(e), e.caption?.trim() || title));
+            if (!img) return;
+            const href = safeHttpUrl(e.pageUrl);
+            if (href) linked.add(href);
+            body.push(figureHtml(c, shownExcerpt(e), e.caption?.trim() || title, undefined, scanLink(c, e)));
         });
         if (main) {
             body.push(`<p>${esc(P.excerptAbove('\u0000')).replace('\u0000', `<a href="#${main.anchor}">${esc(main.label)}</a>`)}</p>`);
@@ -2323,7 +2334,8 @@ function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
         if (s.transcript?.trim()) {
             body.push(`<div><p class="pp-kicker">${esc(P.sources.transcript)}</p><p class="pp-transcript">${esc(stripResearchIds(s.transcript).text)}</p></div>`);
         }
-        const page = extLink(s.excerpts?.find(e => safeHttpUrl(e.pageUrl))?.pageUrl ?? s.url, P.sources.archivePage);
+        const pageUrl = [s.url, ...(s.excerpts ?? []).map(e => e.pageUrl)].map(safeHttpUrl).find(u => u && !linked.has(u));
+        const page = extLink(pageUrl ?? undefined, P.sources.archivePage);
         if (page) body.push(`<p>${page}</p>`);
         if (c.app) body.push(`<button type="button" class="pp-act" data-pp-action="source" data-pp-source="${esc(s.id)}">${esc(P.sources.open)} ›</button>`);
         const head = `<span class="pp-src-lines"><span class="pp-src-title">${esc(title)}</span>`

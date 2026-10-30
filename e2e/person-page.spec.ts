@@ -14,7 +14,7 @@ import { fakeBridge, fakeHistory, historyGed, openResearch, poll, HISTORY_FEATUR
 /** A 1×1 JPEG. */
 const IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
 
-async function seedFisek(page: Page): Promise<void> {
+async function seedFisek(page: Page, s1: Record<string, unknown> = {}): Promise<void> {
     const P = (id: string, firstName: string, lastName: string, gender: string, extra: Record<string, unknown> = {}) =>
         ({ id, firstName, lastName, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...extra });
     const persons = {
@@ -47,6 +47,7 @@ async function seedFisek(page: Page): Promise<void> {
         s1: {
             id: 's1', title: 'Birth register Capkov 1850-1870', repository: 'Capkov archive',
             excerpts: [{ id: 'x1', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100 }],
+            ...s1,
         },
     };
     await page.evaluate(async ({ persons, partnerships, sources }) => {
@@ -854,6 +855,49 @@ test.describe('person page 2: the saved file follows the window\'s switches', ()
 
 test.describe('a research tree with history', () => {
     test.use({ viewport: { width: 1280, height: 720 } });
+
+    test('a link to the scan under each excerpt, at the event and in the source card, in the window and the file', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page, {
+            url: 'https://example.org/register',
+            excerpts: [
+                { id: 'x1', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, pageUrl: 'https://example.org/scan/12' },
+                { id: 'x2', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Second entry', pageUrl: 'https://example.org/scan/13' },
+                { id: 'x3', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Third entry', pageUrl: 'javascript:alert(1)' },
+            ],
+        });
+        await openPageFromMenu(page);
+        const w = win(page);
+        const atBirth = w.locator('#pp-ex-birth .pp-fig-scan a');
+        await expect(atBirth).toHaveText('Scan in the archive ↗');
+        await expect(atBirth).toHaveAttribute('href', 'https://example.org/scan/12');
+        await expect(atBirth).toHaveAttribute('target', '_blank');
+        await expect(atBirth).toHaveAttribute('rel', 'noopener noreferrer');
+        // The source card: each excerpt its own scan (the unsafe one none), the register's page below.
+        await w.locator('[data-pp-toggle="sources"]').click();
+        await w.locator('[data-pp-toggle="s:s1"]').click();
+        const cardBody = w.locator('#pp-src-s1-body');
+        await expect(cardBody.locator('.pp-fig')).toHaveCount(2);
+        await expect(cardBody.locator('.pp-fig-scan a')).toHaveCount(1);
+        await expect(cardBody.locator('.pp-fig-scan a')).toHaveAttribute('href', 'https://example.org/scan/13');
+        await expect(cardBody.locator('a', { hasText: 'Page in the archive' })).toHaveAttribute('href', 'https://example.org/register');
+        await expect(w.locator('a[href^="javascript:"]')).toHaveCount(0);
+        // The link opens apart, the image does not zoom.
+        await page.context().route('https://example.org/**', (route) => route.fulfill({ body: 'scan' }));
+        const [popup] = await Promise.all([page.waitForEvent('popup'), atBirth.click()]);
+        expect(popup.url()).toBe('https://example.org/scan/12');
+        await popup.close();
+        await expect(page.locator('#attachment-overlay')).toBeHidden();
+
+        // The file: the same links.
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toMatch(/<figure class="pp-fig" id="pp-ex-birth">[\s\S]*?<p class="pp-fig-scan"><a href="https:\/\/example\.org\/scan\/12" rel="noopener noreferrer" target="_blank">Scan in the archive ↗<\/a><\/p><\/figure>/);
+        expect(html).toContain('href="https://example.org/scan/13" rel="noopener noreferrer" target="_blank"');
+        expect(html).not.toContain('javascript:');
+    });
 
     test('history rows with the legend, the History switch hides them, the file keeps the safe source link', async ({ page, browser }) => {
         // The research's events of the time: E1 (1866) in Jan's Čapkov, E2 hidden there.

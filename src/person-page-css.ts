@@ -210,6 +210,7 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-fig { display: grid; grid-template-columns: minmax(0, 1fr); margin: 10px 0 4px; max-width: 460px; }
 .pp-fig img { grid-area: 1 / 1; display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
 .pp-fig figcaption { grid-row: 2; margin-top: 4px; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+.pp-fig-scan { grid-row: 3; margin: 2px 0 0; font-size: 12.5px; overflow-wrap: anywhere; }
 .pp-zoom { grid-area: 1 / 1; align-self: end; justify-self: end; margin: 6px; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer; }
 .pp-fig-link { grid-area: 1 / 1; display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; text-decoration: none; cursor: zoom-in; }
 .pp-fig-link > .pp-img, .pp-fig > .pp-img { grid-area: 1 / 1; }
@@ -290,6 +291,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-chip { align-items: center; }
   .pp-ft-story { min-height: 32px; }
   .pp-zoom { width: 44px; height: 44px; }
+  .pp-fig-scan a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 @media (max-width: 640px) {
   .pp-hero--photo { flex-direction: column; }
@@ -333,7 +335,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-ft-card--me { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .pp-body { overflow: visible !important; height: auto !important; }
   .pp { font-size: 11pt; gap: 18pt; max-width: none; }
-  .pp-aka, .pp-dt, .pp-hist-meta, .pp-src-sup, .pp-src-ref, .pp-foot, .pp-fig figcaption { font-size: 10pt; }
+  .pp-aka, .pp-dt, .pp-hist-meta, .pp-src-sup, .pp-src-ref, .pp-foot, .pp-fig figcaption, .pp-fig-scan { font-size: 10pt; }
   #pp-sec-timeline { break-before: page; }
   .pp-ft-link .pp-ft-name, .pp-chip-link .pp-chip-name { color: var(--text); }
   .pp-row, .pp-fig, .pp-src { break-inside: avoid; }

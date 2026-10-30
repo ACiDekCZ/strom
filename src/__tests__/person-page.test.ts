@@ -647,6 +647,91 @@ describe('timeline', () => {
     });
 });
 
+describe('links to the scans in the archive (K1.5)', () => {
+    const fig = (html: string, id: string) => html.match(new RegExp(`<figure class="pp-fig" id="${id}">[\\s\\S]*?</figure>`))?.[0] ?? '';
+    const card = (html: string, sid: string) => html.match(new RegExp(`<li class="pp-src">(?:(?!<li class="pp-src">)[\\s\\S])*?id="pp-src-${sid}-body"[\\s\\S]*?</li>`))?.[0] ?? '';
+    function scans(): StromData {
+        const d = fiskTree();
+        d.sources!.s1.excerpts![0].pageUrl = 'https://example.org/scan/12';
+        d.sources!.s1.excerpts!.push(
+            { id: 'x1b', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Druhý výřez', pageUrl: 'https://example.org/scan/13' },
+            { id: 'x1c', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Třetí výřez', pageUrl: 'https://example.org/scan/14' },
+        );
+        return d;
+    }
+
+    it('an event\'s excerpt links its own scan, else its source\'s page, else nothing', () => {
+        const own = fig(body(scans()), 'pp-ex-birth');
+        expect(own).toContain('<p class="pp-fig-scan"><a href="https://example.org/scan/12" rel="noopener noreferrer" target="_blank">Sken v archivu ↗</a></p>');
+        // s1's excerpt without a page of its own: the source's page.
+        expect(fig(body(fiskTree()), 'pp-ex-birth')).toContain('<a href="https://example.org/scan" rel="noopener noreferrer" target="_blank">Stránka v archivu ↗</a>');
+        // s2 has neither: no line under the image.
+        expect(fig(body(fiskTree()), 'pp-ex-marriage-1')).not.toContain('pp-fig-scan');
+    });
+
+    it('each excerpt in a source card links its own scan; the card\'s link is a page not linked yet', () => {
+        const html = body(scans(), { open: new Set(['sources', 's:s1']) });
+        const c = card(html, 's1');
+        expect(c).toContain('href="https://example.org/scan/13"');
+        expect(c).toContain('href="https://example.org/scan/14"');
+        expect(c.match(/class="pp-fig-scan"/g)).toHaveLength(2);
+        // The first excerpt sits at the birth row with its link; the card names the source's page.
+        expect(c).not.toContain('scan/12');
+        expect(c).toContain('<p><a href="https://example.org/scan" rel="noopener noreferrer" target="_blank">Stránka v archivu ↗</a></p>');
+        // Without a page of the source: the main excerpt's page is still reachable from the card.
+        const d = scans();
+        delete d.sources!.s1.url;
+        const c2 = card(body(d, { open: new Set(['sources', 's:s1']) }), 's1');
+        expect(c2).toContain('<p><a href="https://example.org/scan/12" rel="noopener noreferrer" target="_blank">Stránka v archivu ↗</a></p>');
+        // The same page on a card's excerpt and the source: once.
+        d.sources!.s1.url = 'https://example.org/scan/13';
+        d.sources!.s1.excerpts![0].pageUrl = undefined;
+        const c3 = card(body(d, { open: new Set(['sources', 's:s1']) }), 's1');
+        expect(c3.match(/scan\/13"/g)).toHaveLength(1);
+        // The file carries the same links.
+        const file = doc(scans());
+        expect(fig(file, 'pp-ex-birth')).toContain('href="https://example.org/scan/12"');
+        expect(file).toContain('href="https://example.org/scan/13"');
+        expect(file).toContain('href="https://example.org/scan/14"');
+        expect(file).toContain('target="_blank"');
+    });
+
+    it('only http(s) pages become links', () => {
+        const d = scans();
+        d.sources!.s1.excerpts![0].pageUrl = 'javascript:alert(1)';
+        d.sources!.s1.excerpts![1].pageUrl = 'data:text/html,x';
+        d.sources!.s1.url = 'javascript:alert(2)';
+        for (const html of [body(d, { open: new Set(['sources', 's:s1']) }), doc(d)]) {
+            expect(html).not.toContain('javascript:');
+            expect(html).not.toContain('data:text/html');
+            expect(fig(html, 'pp-ex-birth')).not.toContain('pp-fig-scan');
+        }
+        expect(doc(d)).toContain('href="https://example.org/scan/14"');
+    });
+
+    it('a protected file links no scan of a living person\'s record (initials)', () => {
+        const d: StromData = {
+            persons: {
+                karel: p('karel', 'Karel', 'Fíšek', 'male', { birthDate: '1925', deathDate: '1999', childIds: ids('eva'), birthSourceIds: ['s1'] }),
+                eva: p('eva', 'Eva', 'Fíšková', 'female', { birthDate: '1952-07-14', parentIds: ids('karel'), birthSourceIds: ['s2'] }),
+            },
+            partnerships: {},
+            sources: {
+                s1: { id: 's1', title: 'Matrika narozených Čapkov 1925', excerpts: [{ id: 'xk', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, pageUrl: 'https://example.org/karel' }] },
+                s2: { id: 's2', title: 'Matrika narozených Čapkov 1952', url: 'https://example.org/kniha-1952', excerpts: [{ id: 'xe', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, pageUrl: 'https://example.org/eva' }] },
+            },
+        } as StromData;
+        for (const personId of ids('karel', 'eva')) {
+            const html = doc(d, { personId, privacy: 'initials' });
+            expect(html).not.toContain('example.org/eva');
+            expect(html).not.toContain('kniha-1952');
+        }
+        expect(doc(d, { personId: 'karel' as PersonId, privacy: 'initials' })).toContain('href="https://example.org/karel"');
+        // Full data (the window, or a file without protection) keeps it.
+        expect(doc(d, { personId: 'eva' as PersonId, privacy: 'full' })).toContain('href="https://example.org/eva"');
+    });
+});
+
 describe('history layer', () => {
     const payload: HistoryPayload = parseHistoryPayload({
         state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
