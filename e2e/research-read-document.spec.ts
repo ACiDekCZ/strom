@@ -279,6 +279,26 @@ test.describe('Read a document', () => {
         await expect(d.locator('.read-progress-expect')).toBeVisible();
     });
 
+    test('on the clock alone, the state unchanged: the dialog\'s own asking brings the several-minutes line, then the time brings "taking longer"', async ({ page }) => {
+        await page.clock.install();
+        const b = await setup(page);
+        const d = await startReading(page, b);
+        await step(page, b, 'reading');
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 3 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
+        await expect(d.locator('#read-progress-slow')).toBeHidden();
+        // The bridge says a slow pace; the reading stays in the same state and nobody asks by hand.
+        b.read!.reads[0].expectSecs = 240;
+        await page.clock.fastForward(5100);   // the dialog's own asking (every 5 s)
+        await expect(d.locator('.read-progress-expect')).toBeVisible();
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 4 minutes');
+        await expect(d.locator('#read-progress-slow')).toBeHidden();
+        // Twice the usual time gone, still the same state: the "taking longer" line by the clock.
+        await page.clock.fastForward(8 * 60_000);
+        await expect(d.locator('#read-progress-slow')).toBeVisible();
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 4 minutes');
+    });
+
     test('a slow pace said only by /status shows at once, while queued only the agent\'s own pace counts', async ({ page }) => {
         const b = await setup(page);
         const d = await startReading(page, b);
