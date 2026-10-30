@@ -39,6 +39,10 @@ describe('tree fixes of the research (§7)', () => {
         expect(r.rev).toBe('8c1e2f0-3a91');
         expect(r.fixes.map(f => f.id)).toEqual(['blind-reduced', 'new-model', 'participant-names', 'app-shapes', 'street-places', 'old-undo', 'early-fixed']);
         expect(r.fixes.find(f => f.id === 'early-fixed')!.unit).toBe('item');
+        // Every unit the strings can count is kept, not read as an item
+        for (const unit of ['person', 'family', 'event', 'source']) {
+            expect(parseFixesReply({ ...RAW, fixes: [{ ...RAW.fixes[0], unit }] })!.fixes[0].unit).toBe(unit);
+        }
         expect(r.fixes.find(f => f.id === 'blind-reduced')!.paid).toBe(true);
         expect(parseFixesReply({ rev: 'x' })).toBeNull();
         expect(parseFixesReply(null)).toBeNull();

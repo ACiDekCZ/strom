@@ -25,8 +25,8 @@ export type ResearchFixState = 'pending' | 'declined' | 'fixed' | 'nothing';
 const STATES: readonly string[] = ['pending', 'declined', 'fixed', 'nothing'];
 
 /** What `count` counts; any other value of a newer research reads as `item`. */
-export type ResearchFixUnit = 'reading' | 'place' | 'participant' | 'finding' | 'fact' | 'item';
-const UNITS: readonly string[] = ['reading', 'place', 'participant', 'finding', 'fact'];
+export type ResearchFixUnit = 'reading' | 'place' | 'participant' | 'finding' | 'fact' | 'person' | 'family' | 'event' | 'source' | 'item';
+const UNITS: readonly string[] = ['reading', 'place', 'participant', 'finding', 'fact', 'person', 'family', 'event', 'source'];
 
 /** A fix's id in the research: what the link carries (and the research checks again). */
 export const FIX_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
