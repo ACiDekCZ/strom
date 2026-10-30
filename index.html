@@ -15242,10 +15242,14 @@
         /* Lift the family offer above the undo toast when both are showing. A message toast is not lifted:
            one toast at a time (round 6 §43, src/toast-slot.ts), the newer one shows in the older one's place. */
         body:has(.undo-toast) .family-offer { bottom: 84px; }
+        /* A message toast stands where the offer stands (bottom centre) and below it (z-index 150 under 250):
+           the offer steps aside while one shows ("Undone: adding …" sat under it), one message at a time. */
+        body:has(.toast.show) .family-offer { opacity: 0; visibility: hidden; pointer-events: none; }
         /* :has() fallback (older Safari) — body classes kept in sync by JS. */
         @supports not (selector(:has(*))) {
             body.has-active-modal .undo-toast { display: none; }
             body.has-undo-toast .family-offer { bottom: 84px; }
+            body.has-toast .family-offer { opacity: 0; visibility: hidden; pointer-events: none; }
         }
         /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
         @media (max-width: 1024px) {

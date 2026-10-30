@@ -116,9 +116,10 @@ export const familyWizardMethods = uiModule({
         el.className = 'family-offer';
         const pill = document.createElement('div');
         pill.className = 'family-offer-pill';
-        pill.innerHTML = `<span>${this.escapeHtml(fw.continuePrompt)}</span>`
-            + `<button type="button" class="family-offer-btn">${this.escapeHtml(fw.continueYes)}</button>`
-            + `<button type="button" class="family-offer-close" aria-label="${strings.buttons.close}">&times;</button>`;
+        // data-i18n: a change of the UI language while it shows says it in the new one (initializeStrings).
+        pill.innerHTML = `<span data-i18n="familyWizard.continuePrompt">${this.escapeHtml(fw.continuePrompt)}</span>`
+            + `<button type="button" class="family-offer-btn" data-i18n="familyWizard.continueYes">${this.escapeHtml(fw.continueYes)}</button>`
+            + `<button type="button" class="family-offer-close" data-i18n-aria-label="buttons.close" aria-label="${strings.buttons.close}">&times;</button>`;
         el.appendChild(pill);
 
         let done = false;
@@ -132,14 +133,17 @@ export const familyWizardMethods = uiModule({
         requestAnimationFrame(() => el.classList.add('show'));
 
         // 12s of VISIBLE time. The offer is hidden while a dialog covers it
-        // (CSS display:none) or the tab is in the background — that time must
+        // (CSS display:none), steps aside while a message toast shows (CSS
+        // visibility:hidden) or the tab is in the background — that time must
         // not count, or the offer is gone the moment the user returns to it.
         // getClientRects() is empty exactly when an ancestor is display:none.
         let remaining = 12000;
         const tickMs = 250;
         const timer = setInterval(() => {
             if (!document.body.contains(el)) { clearInterval(timer); return; }
-            const hidden = document.hidden || el.getClientRects().length === 0;
+            // The person it offers relatives for is gone (the adding undone): nothing to offer.
+            if (!DataManager.getPerson(personId)) { close(); return; }
+            const hidden = document.hidden || el.getClientRects().length === 0 || getComputedStyle(el).visibility === 'hidden';
             if (hidden) return;
             remaining -= tickMs;
             if (remaining <= 0) close();
