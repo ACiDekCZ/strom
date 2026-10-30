@@ -190,6 +190,7 @@ export class UIClass {
     passwordPromptOnCancel: (() => void) | null = null;    // Called once when the prompt is cancelled
     onLocalDataUnlocked: (() => Promise<void>) | null = null;  // Set by main.ts: reload + first render after unlock
     lockedDataReopen: (() => void) | null = null;          // The prompt the Unlock action reopens (null = default)
+    newerNoticeTreeId: TreeId | null = null;               // The newer app's tree the read-only bar was raised for
     exportPasswordCallback: ((password: string | null) => void) | null = null;
     // Per-category byte sizes of the tree in the open export dialog, measured
     // once when the dialog opens so toggling a content checkbox never

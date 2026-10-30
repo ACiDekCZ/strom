@@ -7136,6 +7136,14 @@
         body.data-locked #add-person-btn,
         body.data-locked .add-person-round,
         body.data-locked .toolbar-buttons { display: none !important; }
+        /* A tree a newer app saved (DataManager.isNewerData): read-only the
+           same way; the tree switcher and manager keep working. */
+        body.data-newer .edit-only { display: none !important; }
+        body.data-newer .person-card .add-btn,
+        body.data-newer .person-card .rel-link-icon,
+        body.data-newer #add-person-btn,
+        body.data-newer .add-person-round,
+        body.data-newer .toolbar-buttons { display: none !important; }
 
         /* Lock styles */
         .person-card.locked .add-btn { display: none !important; }

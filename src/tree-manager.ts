@@ -562,6 +562,8 @@ class TreeManagerClass {
             personCount: realPersonCount(sourceData),
             partnershipCount: Object.keys(sourceData.partnerships).length,
             sizeBytes,
+            // A newer app's tree stays one in its copy (read-only here too).
+            dataVersion: sourceData.version ?? 1,
             // A duplicate of a research tree can be sent back too, as a copy.
             ...(source?.research ? { research: { ...withoutSendState(source.research), copy: true } } : {}),
         };
@@ -570,7 +572,7 @@ class TreeManagerClass {
         // StorageManager.set wrote PLAINTEXT while encryption was on (V4).
         this.index.trees.push(metadata);
         this.saveIndex();
-        this.saveTreeData(newId, sourceData);
+        this.saveTreeData(newId, sourceData, { asStored: true });
 
         return newId;
     }
@@ -596,14 +598,33 @@ class TreeManagerClass {
         // A count kept by an older version (the "?" stand-ins counted too) is put right when the tree is read.
         if (result.status === 'ok') {
             const tree = this.index.trees.find(t => t.id === id);
-            if (tree?.research && 'sexU' in tree.research) result.data = await this.dropLegacySexU(id, tree, result.data);
+            // The version the record was saved with: a newer app's tree is
+            // never written here, not even by a migration on reading.
+            const version = result.data.version ?? 1;
+            let changed = false;
+            if (tree && tree.dataVersion !== version) {
+                tree.dataVersion = version;
+                changed = true;
+            }
+            if (tree?.research && 'sexU' in tree.research && !this.isTreeNewer(id)) result.data = await this.dropLegacySexU(id, tree, result.data);
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
                 tree.personCount = count;
-                this.saveIndex();
+                changed = true;
             }
+            if (changed) this.saveIndex();
         }
         return result;
+    }
+
+    /**
+     * The tree was saved by a newer app (its data version is above this
+     * one's): it opens read-only and saveTreeData refuses to write it, so
+     * nothing this version does not know is lost.
+     */
+    isTreeNewer(id: TreeId): boolean {
+        const version = this.index.trees.find(t => t.id === id)?.dataVersion;
+        return version !== undefined && version > STROM_DATA_VERSION;
     }
 
     /**
@@ -743,7 +764,7 @@ class TreeManagerClass {
             // Re-saved under the session key: images get ids and encryption
             // of that key, the old ones go with the next pool cleanup.
             this.unreadableTrees.delete(id);
-            this.saveTreeData(id, pooled);
+            this.saveTreeData(id, pooled, { asStored: true });
             await this.flush(id);
             return 'ok';
         }
@@ -879,6 +900,8 @@ class TreeManagerClass {
                 forgetRescueKey(key);
                 continue;
             }
+            // Left by a newer app: waits for it (this version would drop what it does not know).
+            if ((rescued.data.version ?? 1) > STROM_DATA_VERSION) continue;
             const list = byTree.get(id) ?? [];
             list.push({ key, rescued });
             byTree.set(id, list);
@@ -888,7 +911,8 @@ class TreeManagerClass {
             const storedAt = Date.parse(tree.lastModifiedAt);
             list.sort((a, b) => a.rescued.at - b.rescued.at);
             const newest = list[list.length - 1];
-            const store = newest.rescued.at >= storedAt || !Number.isFinite(storedAt) ? newest : null;
+            // A tree a newer app stored is never written over: its rescues go to the backups.
+            const store = !this.isTreeNewer(id) && (newest.rescued.at >= storedAt || !Number.isFinite(storedAt)) ? newest : null;
             for (const item of list) if (item !== store) void this.backUpRescue(id, item.key, item.rescued);
             if (!store) continue;
             store.rescued.data.version = STROM_DATA_VERSION;
@@ -929,12 +953,22 @@ class TreeManagerClass {
      * (audit K5). Failures now surface as a strom:save-failed event instead
      * of a swallowed rejection.
      */
-    saveTreeData(id: TreeId, data: StromData): void {
+    saveTreeData(id: TreeId, data: StromData, opts: { asStored?: boolean } = {}): void {
         // Never overwrite a tree we could not read: the in-memory copy is a
         // stand-in, not the family (review K8).
         if (this.unreadableTrees.has(id)) {
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('strom:save-blocked', { detail: { treeId: id } }));
+            }
+            return;
+        }
+        // A newer app saved this tree: this version would drop what it does
+        // not know. Only the stored data themselves may be written again
+        // (`asStored`: re-encrypted, duplicated), keeping their version.
+        if (this.isTreeNewer(id) && !opts.asStored) {
+            console.warn('Not saved: the tree was saved by a newer version of the app', id);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:save-newer', { detail: { treeId: id } }));
             }
             return;
         }
@@ -947,8 +981,8 @@ class TreeManagerClass {
             }
             return;
         }
-        // Ensure version is set
-        data.version = STROM_DATA_VERSION;
+        // Ensure version is set (data a newer app stored keep theirs)
+        data.version = opts.asStored ? Math.max(data.version ?? 1, STROM_DATA_VERSION) : STROM_DATA_VERSION;
         // A tree with people is worth protecting from browser eviction.
         if (Object.keys(data.persons ?? {}).length > 0) void requestPersistentStorage();
         // Snapshot NOW: the caller keeps mutating the live object. The copy
@@ -1163,6 +1197,7 @@ class TreeManagerClass {
         const tree = this.index.trees.find(t => t.id === id);
         if (tree) {
             tree.lastModifiedAt = new Date().toISOString();
+            tree.dataVersion = data.version ?? STROM_DATA_VERSION;
             tree.personCount = realPersonCount(data);
             tree.partnershipCount = Object.keys(data.partnerships).length;
             tree.sizeBytes = sizeBytes;

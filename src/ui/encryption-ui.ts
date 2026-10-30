@@ -174,7 +174,7 @@ export const encryptionUiMethods = uiModule({
             for (const tree of trees) {
                 const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
-                    TreeManager.saveTreeData(tree.id as TreeId, data);
+                    TreeManager.saveTreeData(tree.id as TreeId, data, { asStored: true });
                 }
             }
             await TreeManager.flush();
@@ -301,7 +301,7 @@ export const encryptionUiMethods = uiModule({
             for (const tree of trees) {
                 const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
-                    TreeManager.saveTreeData(tree.id as TreeId, data);
+                    TreeManager.saveTreeData(tree.id as TreeId, data, { asStored: true });
                 }
             }
             await TreeManager.flush();

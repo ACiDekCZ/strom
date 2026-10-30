@@ -160,6 +160,7 @@ function registerAppListeners(): void {
         // Locked ↔ readable flips with every tree (re)load: sync the
         // read-only gating before the render reads it.
         UI.syncLockedState();
+        UI.syncNewerDataState();
         TreeRenderer.render();
         UI.refreshSearch();
         // Track changes for embedded mode unsaved warning
@@ -197,10 +198,17 @@ function registerAppListeners(): void {
     window.addEventListener('strom:save-blocked', () => {
         UI.showToast(strings.storageSafety.saveBlocked, 6000);
     });
-    // A tree saved by a newer app, opened by switching: what this version
-    // does not know may not show and goes at the next save (prod 3.17 N1).
-    window.addEventListener('strom:newer-data', () => {
-        UI.showToast(strings.validation.newerDataTree, 12000, { closable: true, notice: true, kind: 'newer-data' });
+    // A tree saved by a newer app, opened by switching or reloaded: it is
+    // read-only here, with the bar saying so (prod 3.17 N1, then "1a").
+    window.addEventListener('strom:newer-data', () => UI.syncNewerDataState());
+    // A write a newer app's tree refused (a path the read-only UI does not
+    // close, e.g. a tree updated in the background): said once per tree.
+    const newerNotSaved = new Set<string>();
+    window.addEventListener('strom:save-newer', (e) => {
+        const treeId = (e as CustomEvent<{ treeId?: string }>).detail?.treeId;
+        if (!treeId || newerNotSaved.has(treeId)) return;
+        newerNotSaved.add(treeId);
+        UI.showToast(strings.storageSafety.newerNotSaved, 8000, { closable: true, notice: true, kind: 'newer-data' });
     });
     window.addEventListener('strom:tree-unreadable', (e) => {
         // Locked session → Unlock banner; unlocked but another key → ask for
@@ -500,14 +508,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // research fields — keep them visible for that user (one-time default).
         SettingsManager.defaultAdvancedFieldsFromData(DataManager.getData());
 
-        // Check storage version compatibility (for non-embedded data) — after
-        // unlocking too, so an older build never migrates newer data (V3).
-        if (!hasEmbeddedData) {
-            if (!await UI.checkStorageVersionOnStartup()) {
-                // Newer version detected in storage - dialog shown, stop here
-                return;
-            }
-        }
+        // A tree a newer app saved opens read-only, never written (also
+        // after unlocking: an older build never migrates newer data, V3).
+        if (!hasEmbeddedData) UI.syncNewerDataState();
 
         // Initialize view mode UI if we have embedded data
         if (hasEmbeddedData) {
