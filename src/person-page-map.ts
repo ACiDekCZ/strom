@@ -306,7 +306,15 @@ export interface SmallLayer {
      * missing where it fits no size or would cover a place's label.
      */
     regionFont?: { d?: number; p?: number };
+    /**
+     * Where in the top band the name goes on desktop (d) and a phone (p): centre, left, right (round 5,
+     * K5-36: moved aside from a label before a smaller size); missing = centre.
+     */
+    regionPos?: { d?: RegionPos; p?: RegionPos };
 }
+
+/** The region's place in the top band: centre, left, right. */
+export type RegionPos = 'c' | 'l' | 'r';
 
 /** The "where in the country" inset: the country's outline with the frame (map) or a dot (no map). */
 export interface WhereInset {
@@ -783,25 +791,22 @@ export function planPlacesMap(
             });
         };
         const rectsD = [...labRects('d'), ...deskObst, ...(where ? [] : [attr])], rectsP = [...labRects('p'), ...phoneObst];
-        // The region's name at the top centre (round 4): the biggest size that fits 70 % of the box,
-        // none when it would cover a label, a point or an inset.
+        // The region's name in the top band (round 4, round 5 K5-36): for each size that fits 70 % of the box,
+        // biggest first, the centre, then left, then right (16 px off the edge, phone 12); the first place clear
+        // of a label, a point, a cluster, an inset and the arrow wins. None when no size has a free place.
         if (small.region) {
             const name = regionName(small.region as Region, lang).toLocaleUpperCase(lang);
             const font: { d?: number; p?: number } = {};
-            const fit = (mode: 'd' | 'p', sizes: number[], top: number, rects: Rect[]): void => {
-                const u = mode === 'd' ? pxD : pxP;
-                const boxPx = mode === 'd' ? BOX_PX.desk : BOX_PX.phone;
-                const size = sizes.find(z => regionWidthPx(name, z) <= boxPx * 0.7);
-                if (size === undefined) return;
-                const w = regionWidthPx(name, size) * u;
-                const r = { x: VIEW_W / 2 - w / 2, y: top * u, w, h: size * u };
-                if (rects.some(q => overlaps(q, r))) return;
-                font[mode] = size;
-                rects.push(r);
-            };
-            fit('d', [22, 20, 18, 16], 40, rectsD);
-            fit('p', [15, 13, 12], 14, rectsP);
+            const pos: { d?: RegionPos; p?: RegionPos } = {};
+            for (const [mode, rects] of [['d', rectsD], ['p', rectsP]] as const) {
+                const spot = regionSpot(name, mode, rects);
+                if (!spot) continue;
+                font[mode] = spot.size;
+                if (spot.pos !== 'c') pos[mode] = spot.pos;
+                rects.push(spot.rect);
+            }
             small.regionFont = font;
+            if (pos.d || pos.p) small.regionPos = pos;
         }
         small.rings.lab = ringLabelSpots(small.rings, route, { d: rectsD, p: rectsP });
     }
@@ -962,6 +967,30 @@ function arrowX(at: number): { d: number; p: number } {
 }
 
 /** The region name's width in px: Strom Serif capitals (about 0.7 em) with 0.32 em letter spacing. */
+/**
+ * The region's name in the top band (round 4; round 5, K5-36): for each size that fits 70 % of the box
+ * (desktop 22 → 16 px, phone 15 → 12), biggest first, the centre, then left, then right (16 px off the
+ * edge, phone 12 px off the visible middle 2/3); the first place clear of `rects` (labels, points,
+ * clusters, insets, the arrow) wins. `undefined`: no size has a free place (the name is left out).
+ */
+export function regionSpot(name: string, mode: 'd' | 'p', rects: readonly Rect[]): { size: number; pos: RegionPos; rect: Rect } | undefined {
+    const u = mode === 'd' ? pxD : pxP;
+    const boxPx = mode === 'd' ? BOX_PX.desk : BOX_PX.phone;
+    const sizes = mode === 'd' ? [22, 20, 18, 16] : [15, 13, 12];
+    const top = mode === 'd' ? 40 : 14, edge = mode === 'd' ? 16 : 12;
+    // The visible box: the whole view on desktop, the middle 2/3 on a phone.
+    const x0 = mode === 'd' ? 0 : SAFE.x0, x1 = mode === 'd' ? VIEW_W : SAFE.x1;
+    for (const size of sizes.filter(z => regionWidthPx(name, z) <= boxPx * 0.7)) {
+        const w = regionWidthPx(name, size) * u;
+        const at: Record<RegionPos, number> = { c: VIEW_W / 2 - w / 2, l: x0 + edge * u, r: x1 - edge * u - w };
+        for (const pos of ['c', 'l', 'r'] as const) {
+            const rect = { x: at[pos], y: top * u, w, h: size * u };
+            if (!rects.some(q => overlaps(q, rect))) return { size, pos, rect };
+        }
+    }
+    return undefined;
+}
+
 export function regionWidthPx(name: string, size: number): number {
     return Math.ceil(name.length * size * 1.02);
 }
@@ -1261,7 +1290,8 @@ function smallHtml(plan: MapPlan, S: MapStrings, lang: Language): { svg: string;
     const rf = sm.regionFont ?? {};
     if (sm.region && (rf.d || rf.p)) {
         const name = regionName(sm.region as Region, lang).toLocaleUpperCase(lang);
-        const cls = `pp-map-region${rf.d ? '' : ' rg-d-hide'}${rf.p ? '' : ' rg-p-hide'}`;
+        const rp = sm.regionPos ?? {};
+        const cls = `pp-map-region${rf.d ? '' : ' rg-d-hide'}${rf.p ? '' : ' rg-p-hide'}${rp.d ? ` rg-d-${rp.d}` : ''}${rp.p ? ` rg-p-${rp.p}` : ''}`;
         html += `<span class="${cls}" style="--fd:${rf.d ?? 16}px;--fp:${rf.p ?? 12}px" aria-hidden="true">${esc(name)}</span>`;
     }
     if (sm.river) {

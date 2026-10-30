@@ -126,6 +126,9 @@ export const PERSON_PAGE_MAP_CSS = `
   .lb-d-hide { display: none; }
   .pp-map-rl--p { display: none; }
   .pp-map-pt.cl-d, .pp-map-cl--p, .pp-map-route.r-p, .pp-map-i--p, .rg-d-hide { display: none; }
+  /* Round 5 (K5-36): the region's name moved aside from a label, 16 px off the edge. */
+  .pp-map-region.rg-d-l { left: 16px; transform: none; }
+  .pp-map-region.rg-d-r { left: auto; right: 16px; transform: none; }
 }
 @media (max-width: 640px) {
   .pp-map { aspect-ratio: 4 / 3; }
@@ -144,6 +147,9 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-row { font-size: 13.5px; }
   .pp-map-ring--2, .pp-map-rl--2, .pp-map-rl--d, .pp-map-anc, .pp-map-rvl { display: none; }
   .pp-map-region { top: 14px; font-size: var(--fp, 15px); letter-spacing: .28em; }
+  /* The phone shows the middle 2/3 of the map: 12 px off its edges. */
+  .pp-map-region.rg-p-l { left: calc(100% / 6 + 12px); transform: none; }
+  .pp-map-region.rg-p-r { left: auto; right: calc(100% / 6 + 12px); transform: none; }
   .pp-map-arrow { font-size: 11px; padding: 2px 6px; }
   .pp-map-arrow--u, .pp-map-arrow--d { left: var(--xp); }
   .pp-map-where { right: 8px; bottom: 8px; }
