@@ -283,12 +283,18 @@ function isoDay(d: Date): string {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-function yearsOf(p: Person): string {
-    const b = yearOf(p.birthDate);
-    const d = yearOf(p.deathDate);
-    if (b !== null && d !== null) return `${b}–${d}`;
-    if (b !== null) return `* ${b}`;
-    if (d !== null) return `† ${d}`;
+/**
+ * A person's life years as a card of the page says them, each date with its
+ * precision (personPageYear, as the header's occupation): "1798–1850",
+ * "asi 1798 – 1850", "1802–1804 – před 1850" (spaced dash once a side is more
+ * than a year, like the tree's cards), "* 1952", "† před 1850".
+ */
+function yearsOf(p: Person, lang: Language): string {
+    const b = yearOf(p.birthDate) !== null ? personPageYear(p.birthDate, lang) : '';
+    const d = yearOf(p.deathDate) !== null ? personPageYear(p.deathDate, lang) : '';
+    if (b && d) return /[\s–]/.test(b + d) ? `${b} – ${d}` : `${b}–${d}`;
+    if (b) return `* ${b}`;
+    if (d) return `† ${d}`;
     return '';
 }
 
@@ -986,10 +992,11 @@ function ftCard(c: Ctx, pid: PersonId, cls: string, style = '', extra = ''): str
     const p = c.tree.persons[pid];
     if (!p) return '';
     const name = shownNameOrEmpty(p) || '?';
-    const years = yearsOf(p);
+    const years = yearsOf(p, c.page.lang);
     const classes = ['pp-ft-card', cls, shielded(c, pid) ? 'pp-ft-card--living' : ''].filter(Boolean).join(' ');
     const inner = `<span class="pp-ft-name" title="${esc(name)}">${esc(name)}</span>`
-        + (years ? `<span class="pp-ft-years">${esc(years)}</span>` : '')
+        // Words or a range may be cut on a narrow card: the whole in the tooltip.
+        + (years ? `<span class="pp-ft-years"${/^[*† ]*\d+(–\d+)?$/.test(years) ? '' : ` title="${esc(years)}"`}>${esc(years)}</span>` : '')
         + (extra ? `<span class="pp-ft-rel">${esc(extra)}</span>` : '');
     const st = style ? ` style="${style}"` : '';
     if (linkable(c, pid)) {
@@ -1004,7 +1011,7 @@ function ftChip(c: Ctx, pid: PersonId): string {
     const p = c.tree.persons[pid];
     if (!p) return '';
     const name = shownNameOrEmpty(p) || '?';
-    const years = yearsOf(p);
+    const years = yearsOf(p, c.page.lang);
     const shield = shielded(c, pid);
     const text = `<span class="pp-chip-name">${esc(name)}</span>${years ? `${shield ? ' · ' : ' '}<span class="pp-chip-years">${esc(years)}</span>` : ''}`;
     const cls = `pp-chip${shield ? ' pp-chip--living' : ''}`;
@@ -1052,8 +1059,7 @@ function familyTreeData(c: Ctx): FtData {
         const pu = Object.values(tree.partnerships).find(u =>
             (u.person1Id === parents[0] && u.person2Id === parents[1]) || (u.person1Id === parents[1] && u.person2Id === parents[0]));
         if (pu && pu.status !== 'partners' && pu.status !== 'separated') {
-            const y = yearOf(pu.startDate);
-            parentsUnion = y !== null ? `⚭ ${y}` : '';
+            parentsUnion = yearOf(pu.startDate) !== null ? `⚭ ${personPageYear(pu.startDate, page.lang)}` : '';
         }
     }
     const placed = new Set<PersonId>();
@@ -1069,7 +1075,7 @@ function familyTreeData(c: Ctx): FtData {
         // No wedding date (§4.5): "⚭ year unknown", with the year its children start from when they give it.
         const key = y === null ? partnershipSortKey(u, (u.childIds ?? []).map(id => tree.persons[id])) : null;
         const kidsFrom = !unmarried && key?.from === 'children' ? P.tree.kidsFrom(String(key.year)) : '';
-        const short = unmarried ? '' : y !== null ? `⚭ ${y}` : P.tree.marUnknown;
+        const short = unmarried ? '' : y !== null ? `⚭ ${personPageYear(u.startDate, page.lang)}` : P.tree.marUnknown;
         const parts: string[] = [];
         if (unmarried) parts.push(P.partner);
         else if (y === null) parts.push([P.tree.marUnknown, u.startPlace?.trim() ?? ''].filter(Boolean).join(', '));
@@ -2234,10 +2240,7 @@ function peopleAroundHtml(c: Ctx): string {
         const items = list.map(item).filter(Boolean);
         if (items.length) rows.push({ label, items });
     };
-    const yearText = (date: string | undefined): string => {
-        const y = yearOf(date);
-        return y !== null ? String(y) : '';
-    };
+    const yearText = (date: string | undefined): string => (yearOf(date) !== null ? personPageYear(date, page.lang) : '');
     const bapt = (person.events ?? []).find(e => e.type === 'baptism' && e.participants?.length);
     if (bapt) {
         const y = yearText(bapt.date);
@@ -2527,7 +2530,7 @@ function documentTitle(page: PersonPageData): string {
     const p = page.tree.persons[page.personId];
     if (!p) return getStringsForLang(page.lang).personPage.title;
     // "1798–1850", "* 1798" or "† 1850" (never an open "1798–").
-    const years = yearsOf(p);
+    const years = yearsOf(p, page.lang);
     const name = shownNameOrEmpty(p) || getStringsForLang(page.lang).personPage.title;
     return years ? `${name} (${years})` : name;
 }

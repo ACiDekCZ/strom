@@ -360,6 +360,25 @@ describe('family', () => {
         expect(tree(html)).toContain('pp-ft-dash');
         expect(tree(html)).toContain('bez dětí');
     });
+    it('the cards and chips keep the precision of a life date: about, before, a range of years', () => {
+        const d = fiskTree();
+        d.persons['otec' as PersonId].birthDate = '~1798';
+        d.persons['matka' as PersonId].birthDate = '1802..1804';
+        d.persons['matka' as PersonId].deathDate = '<1850';
+        d.persons['karel' as PersonId].birthDate = '>1862';
+        delete d.persons['karel' as PersonId].deathDate;
+        d.partnerships['u1' as PartnershipId].startDate = '~1888';
+        const html = body(d);
+        expect(html).toContain('<span class="pp-ft-years" title="asi 1798 – 1890">asi 1798 – 1890</span>');
+        expect(html).toContain('<span class="pp-ft-years" title="1802–1804 – před 1850">1802–1804 – před 1850</span>');
+        expect(html).toContain('<span class="pp-chip-years">* po 1862</span>');
+        expect(html).toContain('<span>⚭ asi 1888</span>');
+        expect(html).not.toContain('1798–1890');
+        expect(html).not.toContain('1802–1850');
+        // Plain years stay as they were; the English page in its words.
+        expect(html).toContain('<span class="pp-ft-years">1865–1930</span>');
+        expect(body(d, { lang: 'en' })).toContain('<span class="pp-ft-years" title="1802–1804 – before 1850">1802–1804 – before 1850</span>');
+    });
     it('siblings over three and the grandchildren are folded rows of chips', () => {
         const d = fiskTree();
         for (const k of ['s2', 's3', 's4']) {
