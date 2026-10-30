@@ -116,3 +116,22 @@ test('switching to a tree a newer app saved: read-only with the bar; back on a t
     expect(await page.evaluate(() => window.Strom.DataManager.isReadOnly())).toBe(false);
     await expect(page.locator('.btn-add-person')).toBeVisible();
 });
+
+test('the read-only bar says it in the new language at once when the UI language changes', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, { jan: { firstName: 'Jan', lastName: 'Zkousek' } }, 'Future');
+    const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+    const newer = await makeNewer(page, treeId);
+    await page.reload();
+    await expect(card(page, 'Jan')).toBeVisible();
+    await expectReadOnly(page);
+
+    const bar = page.locator('#newer-data-notice');
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+    await expect(bar).toContainText('Tento strom uložila novější verze aplikace');
+    await expect(bar.locator('.pwa-update-close')).toHaveAttribute('aria-label', 'Zavřít');
+    await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+    await expect(bar).toContainText('Dieser Stammbaum wurde von einer neueren Version der App gespeichert');
+    await expect(bar).not.toContainText('Tento strom');
+    expect(await readRecord(page, treeId)).toEqual(newer);
+});

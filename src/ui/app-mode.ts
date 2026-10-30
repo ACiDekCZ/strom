@@ -436,6 +436,15 @@ export const appModeMethods = uiModule({
         else document.getElementById('newer-data-notice')?.remove();
     },
 
+    /** The UI language changed: the read-only bar, while it stands, says it in the new one. */
+    retranslateNewerDataNotice(): void {
+        const el = document.getElementById('newer-data-notice');
+        if (!el) return;
+        const text = el.querySelector(':scope > span');
+        if (text) text.textContent = strings.storageSafety.newerReadOnly;
+        el.querySelector('.pwa-update-close')?.setAttribute('aria-label', strings.buttons.close);
+    },
+
     /**
      * Check JSON version before import
      * @returns true if OK to import, false if blocked
