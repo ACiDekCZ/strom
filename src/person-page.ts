@@ -102,6 +102,11 @@ export interface PersonPageOptions {
     now: Date;
     /** The embedded @font-face rules of the file (the app supplies personPageFontCss()); none = fallback fonts. */
     fontCss?: string;
+    /**
+     * File: the contents "On this page" (round 3 §0.7; the dialog's choice, on
+     * there by default), with four sections or more as in the window.
+     */
+    toc?: boolean;
 }
 
 /** What the app knows besides the tree (all optional). */
@@ -2452,8 +2457,40 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
     // Last: every image of the page is registered by now.
     const styles = imgStyles(c);
-    return `${open}${styles}${header}${summary}${family}${story}${question}${places}${timeline}${gallery}${people}${notes}`
-        + `${sources}${research}${footer}${boxes}</article>`;
+    const content = `${summary}${family}${story}${question}${places}${timeline}${gallery}${people}${notes}${sources}${research}`;
+    // The file's contents on a phone and in a narrow window (§0.7): a fold under the header.
+    const tocM = opts.toc && !c.app ? tocFoldHtml(personPageTocItems(content, page.lang), page.lang) : '';
+    return `${open}${styles}${header}${tocM}${content}${footer}${boxes}</article>`;
+}
+
+/**
+ * The entries of the contents "On this page" (the window and the file, §0.7):
+ * the header's details, then the sections the page has; none under four
+ * sections. Section names only, never a person's name.
+ */
+export function personPageTocItems(body: string, lang: Language): { id: string; label: string }[] {
+    const sections = personPageSections(body, lang);
+    if (sections.length < 4) return [];
+    return [{ id: 'pp-sec-facts', label: getStringsForLang(lang).personPage.sec.facts }, ...sections];
+}
+
+/** The file's contents beside the page (≥ 900 px, §0.7): plain anchors, no script. */
+function tocNavHtml(items: readonly { id: string; label: string }[], lang: Language): string {
+    if (!items.length) return '';
+    const P = getStringsForLang(lang).personPage;
+    return `<nav class="pp-toc" aria-label="${esc(P.toc)}"><div class="pp-toc-h">${esc(P.toc)}</div><ol>`
+        + items.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
+        + '</ol></nav>';
+}
+
+/** The file's contents under the header (< 900 px, §0.7): a closed fold. */
+function tocFoldHtml(items: readonly { id: string; label: string }[], lang: Language): string {
+    if (!items.length) return '';
+    const P = getStringsForLang(lang).personPage;
+    return `<details class="pp-toc-m"><summary>${esc(P.toc)}<span class="pp-toc-m-arr" aria-hidden="true">▾</span></summary>`
+        + `<nav aria-label="${esc(P.toc)}"><ol>`
+        + items.map(s => `<li><a class="pp-toc-m-link" href="#${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
+        + '</ol></nav></details>';
 }
 
 /** The sections on the page, in order (the window's table of contents). */
@@ -2496,13 +2533,13 @@ function documentTitle(page: PersonPageData): string {
 }
 
 /** The file's frame around a body (separate, so a set of pages wraps its pages once, §8). */
-export function personPageDocumentShell(lang: Language, title: string, body: string, fontCss = ''): string {
+export function personPageDocumentShell(lang: Language, title: string, body: string, fontCss = '', toc = ''): string {
     return `<!doctype html><html lang="${esc(lang)}" class="no-js"><head>`
         + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
         + `<meta name="generator" content="Strom"><title>${esc(title)}</title>`
         + `<style>${personPageFileCss(fontCss)}</style>`
         + `</head><body><script>document.documentElement.className='js'</script>`
-        + `<main class="pp-file">${body}</main>`
+        + (toc ? `<div class="pp-file-layout">${toc}<main class="pp-file">${body}</main></div>` : `<main class="pp-file">${body}</main>`)
         + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script>`
         + (body.includes('class="pp-sec pp-sec--places') ? `<script>${PLACES_MAP_SCRIPT}</script>` : '')
         + '</body></html>';
@@ -2511,7 +2548,8 @@ export function personPageDocumentShell(lang: Language, title: string, body: str
 /** The whole saved file (§5.6). */
 export function buildPersonPageDocument(page: PersonPageData, opts: PersonPageOptions): string {
     const body = buildPersonPageBody(page, { ...opts, mode: opts.mode === 'app' ? 'file' : opts.mode });
-    return personPageDocumentShell(page.lang, documentTitle(page), body, opts.fontCss ?? '');
+    const toc = opts.toc ? tocNavHtml(personPageTocItems(body, page.lang), page.lang) : '';
+    return personPageDocumentShell(page.lang, documentTitle(page), body, opts.fontCss ?? '', toc);
 }
 
 /**

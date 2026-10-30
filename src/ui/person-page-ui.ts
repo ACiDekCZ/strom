@@ -20,7 +20,7 @@ import { isDesktop, isTablet, MQ_PHONE_BAR } from '../breakpoints.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
-    preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageSections,
+    preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageTocItems,
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
     PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput, personPageFileToggles,
 } from '../person-page.js';
@@ -319,10 +319,9 @@ export const personPageMethods = uiModule({
         const page = preparePersonPageData(DataManager.getData(), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);
         pagePlaces = page.places;
-        const sections = personPageSections(body, lang);
         // The contents start with the header's details (the top of the page), counted apart from the four sections.
-        const tocItems = [{ id: 'pp-sec-facts', label: P.sec.facts }, ...sections];
-        const toc = sections.length >= 4
+        const tocItems = personPageTocItems(body, lang);
+        const toc = tocItems.length
             ? `<nav class="pp-toc" aria-label="${esc(P.toc)}"><div class="pp-toc-h">${esc(P.toc)}</div><ol>`
                 + tocItems.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
                 + '</ol></nav>'
@@ -802,8 +801,12 @@ export const personPageMethods = uiModule({
         const now = new Date();
         const ctx = this.personPageContext(personId);
         const fontCss = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
+        const treeId = DataManager.getCurrentTreeId();
+        const saved = treeId ? TreeManager.getPersonPageExport(treeId) : undefined;
+        // The contents "On this page" (round 3 §0.7): on unless switched off before.
+        let toc = saved?.toc !== false;
         const fileOpts = (groups: PersonPageGroups, privacy: PrivacyMode): PersonPageOptions => this.personPageOptions(personId, {
-            mode: 'file', links: 'plain', groups, privacy, now, fontCss, open: new Set(),
+            mode: 'file', links: 'plain', groups, privacy, now, fontCss, open: new Set(), toc,
             // Every switch as the window shows it when saving: what is visible is what gets saved.
             toggles: personPageFileToggles(state?.current.toggles ?? { history: true, childEvents: true, kidPlaces: true }),
         });
@@ -815,8 +818,6 @@ export const personPageMethods = uiModule({
         const imageCount = full.counts.excerpts + full.counts.materials
             ? estimatePersonPageSize(full, fileOpts({ ...PERSON_PAGE_ALL_GROUPS }, 'full')).images : 0;
         const living = full.living.size > 0;
-        const treeId = DataManager.getCurrentTreeId();
-        const saved = treeId ? TreeManager.getPersonPageExport(treeId) : undefined;
         const groups: PersonPageGroups = { ...PERSON_PAGE_ALL_GROUPS, ...(saved?.groups ?? {}) };
         let privacy: PrivacyMode = personPageExportPrivacy(living, saved?.privacy);
         const shareOk = share && canShareFiles() && !isDesktop();
@@ -878,7 +879,12 @@ export const personPageMethods = uiModule({
                 </div>
                 <div class="ppx-sec" role="group" aria-labelledby="ppx-content-h">
                     <div class="ppx-label" id="ppx-content-h">${esc(X.content)}</div>
-                    ${checks ? `<div class="ppx-checks">${checks}</div>` : ''}
+                    <div class="ppx-checks">
+                        <label class="ppx-check" data-ppx-row="toc">
+                            <input type="checkbox" data-ppx-toc${toc ? ' checked' : ''}>
+                            <span class="ppx-check-label">${esc(X.toc)}</span>
+                        </label>${checks}
+                    </div>
                     <p class="ppx-note ppx-always">${esc(X.always)}</p>
                     <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(X.privacyDrops)}</p>
                 </div>
@@ -928,7 +934,7 @@ export const personPageMethods = uiModule({
         const remember = (): void => {
             // A page without living people offers no choice: keep the one remembered before.
             if (treeId) TreeManager.setPersonPageExport(treeId, {
-                groups: { ...groups }, privacy: living ? privacy : saved?.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY,
+                groups: { ...groups }, privacy: living ? privacy : saved?.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, toc,
             });
         };
         const build = (): { html: string; name: string; title: string } | null => {
@@ -983,6 +989,8 @@ export const personPageMethods = uiModule({
             if (pb) { privacy = pb.dataset.ppxPrivacy as PrivacyMode; refresh(); }
         });
         overlay.addEventListener('change', (e) => {
+            const tocBox = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ppx-toc]');
+            if (tocBox) { toc = tocBox.checked; refresh(); return; }
             const media = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ppx-media]');
             if (media) {
                 if (media.dataset.ppxMedia === 'pdf') groups.pdf = media.checked;

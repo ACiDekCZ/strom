@@ -319,7 +319,7 @@ span.pp-gal-thumb { cursor: default; }
 @media print {
   body.printing-person-page > :not(.modal-overlay--page) { display: none !important; }
   .pp, .pp-body { ${PERSON_PAGE_LIGHT_TOKENS} }
-  .pp-head, .pp-toc, .pp-toggles, .pp-zoom, .pp-fold-state, .pp-differs, .pp-act, .pp-more, .pp-lb, .pp-portrait-zoom, .js-only { display: none !important; }
+  .pp-head, .pp-toc, .pp-toc-m, .pp-toggles, .pp-zoom, .pp-fold-state, .pp-differs, .pp-act, .pp-more, .pp-lb, .pp-portrait-zoom, .js-only { display: none !important; }
   /* Print: the desktop tree, every image and relative (the folds open). */
   .pp-ft { display: block !important; }
   .pp-rail:not(.pp-rail--wide) { display: none !important; }
@@ -401,6 +401,32 @@ const FILE_FRAME_CSS = `
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--surface); color: var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 .pp-file { max-width: 760px; margin: 0 auto; padding: clamp(20px, 5vw, 44px) clamp(16px, 4vw, 40px) 56px; container-type: inline-size; }
+/* The contents "On this page" (round 3 §0.7): a sticky column on the left from 900 px, a closed fold under the
+   header below; plain anchors (the section reached is :target), none in print. */
+.pp-file [id^="pp-sec-"] { scroll-margin-top: 16px; }
+.pp-toc-m { display: none; }
+.pp-file-layout { display: flex; justify-content: center; gap: 40px; padding: 0 clamp(16px, 3vw, 32px); }
+.pp-file-layout > .pp-file { flex: 0 1 760px; min-width: 0; margin: 0; }
+.pp-file-layout > .pp-toc { flex: 0 0 150px; position: sticky; top: 24px; align-self: flex-start; margin-top: 44px; }
+.pp-toc-h { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-text); margin: 4px 0 10px 10px; }
+.pp-toc ol, .pp-toc-m ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pp-toc-link { display: block; padding: 5px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere; }
+.pp-toc-link:focus-visible, .pp-toc-m-link:focus-visible, .pp-toc-m summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.pp-file .pp-sec:target > h2, .pp-file .pp-sec:target > .pp-sec-head h2 { color: var(--accent-text); }
+@media (hover: hover) { .pp-toc-link:hover, .pp-toc-m-link:hover { color: var(--text); background: var(--surface-2); } }
+@media (max-width: 899px) {
+  .pp-file-layout { display: block; padding: 0; }
+  .pp-file-layout > .pp-toc { display: none; }
+  .pp-file-layout > .pp-file { margin: 0 auto; }
+  .pp-toc-m { display: block; border: 1px solid var(--border); border-radius: 10px; background: var(--pp-bg); }
+  .pp-toc-m summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; box-sizing: border-box; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; color: var(--text); }
+  .pp-toc-m summary::-webkit-details-marker { display: none; }
+  .pp-toc-m-arr { color: var(--text-light); transition: transform .15s; }
+  .pp-toc-m[open] .pp-toc-m-arr { transform: rotate(180deg); }
+  .pp-toc-m nav { padding: 0 6px 6px; }
+  .pp-toc-m-link { display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: 6px; font-size: 14px; color: var(--text-light); text-decoration: none; }
+}
+@media print { .pp-file-layout { display: block; padding: 0; } .pp-toc, .pp-toc-m { display: none !important; } }
 html.no-js .js-only { display: none !important; }
 html.no-js .pp-fig { max-width: 100%; }
 `;

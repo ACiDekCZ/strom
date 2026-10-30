@@ -1538,6 +1538,8 @@ export interface TreeMetadata {
     personPageExport?: {
         groups: import('./person-page.js').PersonPageGroups;
         privacy: import('./privacy.js').PrivacyMode;
+        /** The contents "On this page" in the file (missing = on). */
+        toc?: boolean;
     };
 }
 

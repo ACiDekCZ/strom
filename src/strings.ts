@@ -5864,6 +5864,8 @@ const stringsEN = {
             titleShare: 'Share person page',
             file: 'File',
             content: 'File content',
+            /** The contents "On this page" in the file (round 3 §0.7), the first option, on by default. */
+            toc: 'Page contents (On this page)',
             group: {
                 history: 'History', childEvents: 'Children’s events', excerpts: 'Images from sources',
                 materials: 'Images from materials', sources: 'Sources', research: 'For researchers',
@@ -11592,6 +11594,7 @@ const stringsCZ: StringsType = {
             titleShare: 'Sdílet stránku osoby',
             file: 'Soubor',
             content: 'Obsah souboru',
+            toc: 'Obsah stránky (Na stránce)',
             group: {
                 history: 'Dějiny', childEvents: 'Události dětí', excerpts: 'Výřezy z pramenů',
                 materials: 'Obrázky z materiálů', sources: 'Prameny', research: 'Pro badatele',
@@ -17241,6 +17244,7 @@ const stringsDE: StringsType = {
             titleShare: 'Personenseite teilen',
             file: 'Datei',
             content: 'Inhalt der Datei',
+            toc: 'Seiteninhalt (Auf dieser Seite)',
             group: {
                 history: 'Geschichte', childEvents: 'Ereignisse der Kinder', excerpts: 'Ausschnitte aus Quellen',
                 materials: 'Bilder aus Materialien', sources: 'Quellen', research: 'Für Forschende',

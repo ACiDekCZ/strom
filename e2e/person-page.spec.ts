@@ -245,6 +245,59 @@ test.describe('desktop', () => {
         await expect(dlg.locator('[data-ppx-media="images"]')).not.toBeChecked();
     });
 
+    test('Save as HTML: the contents "On this page" in the file, first option and on; a column on a computer, a closed fold on a phone, anchors without JavaScript, none in print', async ({ page, browser }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await openPageFromMenu(page);
+        await win(page).locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const first = dlg.locator('.ppx-checks').first().locator('.ppx-check').first();
+        await expect(first).toContainText('Page contents (On this page)');
+        await expect(first.locator('[data-ppx-toc]')).toBeChecked();
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+
+        const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+        const file = await noJs.newPage();
+        await file.setContent(html, { waitUntil: 'load' });
+        const nav = file.locator('nav.pp-toc');
+        await expect(nav).toBeVisible();
+        await expect(file.locator('details.pp-toc-m')).toBeHidden();
+        expect(await nav.evaluate(e => getComputedStyle(e).position)).toBe('sticky');
+        await expect(nav.locator('a')).not.toHaveCount(0);
+        expect(await nav.innerText()).not.toContain('Fisek');
+        await nav.locator('a[href="#pp-sec-timeline"]').click();
+        await expect(file.locator('#pp-sec-timeline')).toBeInViewport();
+        // A phone: the fold under the header, closed; it opens and leads to the section.
+        await file.setViewportSize({ width: 390, height: 800 });
+        await expect(nav).toBeHidden();
+        const fold = file.locator('details.pp-toc-m');
+        await expect(fold).toBeVisible();
+        expect(await fold.evaluate(e => (e as HTMLDetailsElement).open)).toBe(false);
+        expect((await fold.locator('summary').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await fold.locator('summary').click();
+        const link = fold.locator('a[href="#pp-sec-family"]');
+        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(36);
+        await link.click();
+        await expect(file.locator('#pp-sec-family')).toBeInViewport();
+        // Print: none.
+        await file.emulateMedia({ media: 'print' });
+        await expect(fold).toBeHidden();
+        await file.setViewportSize({ width: 1280, height: 800 });
+        await expect(nav).toBeHidden();
+        await noJs.close();
+
+        // Off: the file has no contents, and the choice is remembered.
+        await win(page).locator('.pp-save').click();
+        await dlg.locator('[data-ppx-toc]').uncheck();
+        const [second] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const off = readFileSync(await second.path(), 'utf-8');
+        expect(off).not.toContain('<nav class="pp-toc"');
+        expect(off).not.toContain('<details class="pp-toc-m">');
+        await win(page).locator('.pp-save').click();
+        await expect(dlg.locator('[data-ppx-toc]')).not.toBeChecked();
+    });
+
     test('privacy: offered with a living relative only, initials by default; only the living lose name, dates and sources', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);

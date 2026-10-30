@@ -802,6 +802,59 @@ describe('escaping and unsafe content', () => {
     });
 });
 
+describe('the contents "On this page" in the file (round 3 §0.7)', () => {
+    const navOf = (html: string) => html.slice(html.indexOf('<nav class="pp-toc"'), html.indexOf('</nav>', html.indexOf('<nav class="pp-toc"')) + 6);
+    const hrefs = (html: string) => [...html.matchAll(/href="#([^"]+)"/g)].map(m => m[1]);
+    it('on: a column beside the page and a closed fold under the header, plain anchors to the sections the file has', () => {
+        const html = doc(fiskTree(), { toc: true });
+        expect(html).toContain('<div class="pp-file-layout"><nav class="pp-toc" aria-label="Na stránce"><div class="pp-toc-h">Na stránce</div><ol>');
+        const nav = navOf(html);
+        expect(hrefs(nav)).toEqual(['pp-sec-facts', ...sectionIds(html)]);
+        expect(nav).toContain('>Rodina</a>');
+        expect(nav).not.toMatch(/<script|onclick|data-pp-toc/);
+        // The fold: under the header, closed, the same entries.
+        const fold = html.slice(html.indexOf('<details class="pp-toc-m">'), html.indexOf('</details>', html.indexOf('<details class="pp-toc-m">')));
+        expect(html.indexOf('<details class="pp-toc-m">')).toBeGreaterThan(html.indexOf('<header class="pp-hero"'));
+        expect(html.indexOf('<details class="pp-toc-m">')).toBeLessThan(html.indexOf('id="pp-sec-family"'));
+        expect(fold).toContain('<summary>Na stránce<span class="pp-toc-m-arr" aria-hidden="true">▾</span></summary>');
+        expect(hrefs(fold)).toEqual(hrefs(nav));
+        // Section names only: no name of a person.
+        for (const name of ['Jan', 'Fíšek', 'Marie', 'Rosa', 'Petr']) expect(nav + fold).not.toContain(name);
+        // Desktop / phone / print.
+        expect(html).toContain('.pp-toc-m { display: none; }');
+        expect(html).toMatch(/@media \(max-width: 899px\) \{[^@]*\.pp-file-layout > \.pp-toc \{ display: none; \}/);
+        expect(html).toContain('.pp-toc, .pp-toc-m { display: none !important; }');
+        expect(doc(fiskTree(), { toc: true, lang: 'en' })).toContain('aria-label="On this page"');
+    });
+    it('off, under four sections, or in the window: none', () => {
+        const off = doc(fiskTree());
+        for (const c of ['<div class="pp-file-layout">', '<nav class="pp-toc"', '<details class="pp-toc-m">']) expect(off).not.toContain(c);
+        const poor: StromData = { persons: { x: p('x', 'Jakub', 'Prostý', 'male') }, partnerships: {} } as StromData;
+        const small = doc(poor, { personId: 'x' as PersonId, toc: true });
+        expect(small).not.toContain('<nav class="pp-toc"');
+        expect(small).not.toContain('<details class="pp-toc-m">');
+        expect(body(fiskTree(), { toc: true })).not.toContain('pp-toc-m');
+    });
+    it('a group left out of the file has no entry', () => {
+        const html = doc(fiskTree(), { toc: true, groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false, research: false } });
+        const nav = navOf(html);
+        expect(hrefs(nav)).toEqual(['pp-sec-facts', ...sectionIds(html)]);
+        expect(nav).not.toContain('pp-sec-sources');
+        expect(nav).not.toContain('pp-sec-research');
+    });
+    it('protects the living: hidden in the whole file and the contents; with full data the contents follow the file', () => {
+        const d = fiskTree();
+        delete d.persons['rosa' as PersonId].deathDate;
+        d.persons['rosa' as PersonId].birthDate = '1950-04-04';
+        const prot = doc(d, { toc: true, privacy: 'initials' });
+        expect(prot).toContain('<nav class="pp-toc"');
+        expect(prot).not.toContain('Rosa');
+        const full = doc(d, { toc: true, privacy: 'full' });
+        expect(full).toContain('Rosa');
+        expect(hrefs(navOf(full))).toEqual(['pp-sec-facts', ...sectionIds(full)]);
+    });
+});
+
 describe('privacy of the living', () => {
     function living(): StromData {
         const d: StromData = {

@@ -392,7 +392,7 @@ class TreeManagerClass {
     setPersonPageExport(id: TreeId, value: NonNullable<TreeMetadata['personPageExport']>): void {
         const tree = this.index.trees.find(t => t.id === id);
         if (!tree) return;
-        tree.personPageExport = { groups: { ...value.groups }, privacy: value.privacy };
+        tree.personPageExport = { groups: { ...value.groups }, privacy: value.privacy, ...(value.toc === false ? { toc: false } : {}) };
         this.saveIndex();
     }
 
