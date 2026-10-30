@@ -294,6 +294,27 @@ test.describe('desktop', () => {
         expect(html).toContain('<span class="pp-draft-tag">Draft</span>');
     });
 
+    test('a couple’s story is told on the person page and in the file, with its own heading', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => {
+            window.Strom.DataManager.getPartnership('u1' as never)!.story = { status: 'draft', text: 'Jan and Marie ran the farm at number 12.' } as never;
+        });
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        const couple = w.locator('#pp-sec-story .pp-couple-story');
+        await expect(couple.locator('h3')).toHaveText('Jan Fisek and Marie Dvorakova Draft');
+        await expect(couple).toContainText('Jan and Marie ran the farm at number 12.');
+        // Jan has no story of his own: the couple's story alone makes the section and its item in the contents.
+        await expect(w.locator('.pp-toc-link[data-pp-toc="pp-sec-story"]')).toHaveText('Story');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('Jan and Marie ran the farm at number 12.');
+        expect(html).toContain('<h3 class="pp-couple-story-title">Jan Fisek and Marie Dvorakova <span class="pp-draft-tag">Draft</span></h3>');
+    });
+
     test('the contents list the story and mark the last section at the end; years end at one edge; folded sources keep their header', async ({ page, browser }) => {
         await openApp(page);
         await seedFisek(page);

@@ -12,7 +12,7 @@
  * the output.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
@@ -425,8 +425,9 @@ function researchIdCount(page: PersonPageData): number {
     const person = page.tree.persons[page.personId];
     const ids = new Set<string>();
     if (page.groups.sources) for (const s of Object.values(page.tree.sources ?? {})) if (s.refn) ids.add(s.refn);
-    const st = person?.story;
-    if (st?.text?.trim()) {
+    const stories = [person?.story, ...(person ? coupleStories(page.tree, person) : []).map(u => u.story)];
+    for (const st of stories) {
+        if (!st?.text?.trim()) continue;
         for (const t of [st.text, ...(st.facts ?? [])]) stripResearchIds(t).ids.forEach(id => ids.add(id));
     }
     if (person?.notes) stripResearchIds(person.notes).ids.forEach(id => ids.add(id));
@@ -805,37 +806,68 @@ function section(key: PersonPageSection['key'], title: string, body: string, hea
 
 // ── Story, notes ──
 
-function storyHtml(c: Ctx): string {
-    const { P, person, page } = c;
-    const st = person.story;
-    if (!st || !st.text?.trim()) return '';
-    const stripped = stripResearchIds(st.text);
-    stripped.ids.forEach(id => c.ids.add(id));
-    const text = stripped.text;
-    const title = st.title?.trim() ? stripResearchIds(st.title).text : '';
-    // A story not approved yet is shown too, marked as a draft (as the story reader does).
-    const tag = st.status === 'draft' ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
-    const head = title
-        ? `<p class="pp-kicker">${esc(P.sec.story)}${tag}</p><h2 class="pp-story-title">${esc(title)}</h2>`
-        : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
-    const prose = `<div class="pp-prose">${storyProseHtml(text, { title: title || undefined, headingLevel: 3 })}</div>`;
-    let basis = '';
+/** The person's couples with a story of their own (Partnership.story), in the person's order. */
+function coupleStories(tree: StromData, person: Person): Partnership[] {
+    return person.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim());
+}
+
+/** A story not approved yet is shown too, marked as a draft (as the story reader does). */
+function draftTag(c: Ctx, st: Story): string {
+    return st.status === 'draft' ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
+}
+
+/** What the story rests on (facts, the author's note), folded under the prose. */
+function storyBasisHtml(c: Ctx, st: Story, key: string, id: string): string {
+    const { P, page } = c;
     const facts = (st.facts ?? []).map(f => stripResearchIds(f)).filter(f => f.text.trim());
     const note = st.note?.trim() ? stripResearchIds(st.note).text : '';
-    if (facts.length || note) {
-        const showIds = page.groups.research;
-        const items = facts.map(f => {
-            f.ids.forEach(id => c.ids.add(id));
-            return `<li>${esc(f.text.trim())}${showIds ? f.ids.map(id => `<span class="pp-id">${esc(id)}</span>`).join('') : ''}</li>`;
-        }).join('');
-        basis = fold(c, {
-            key: 'basis', id: 'pp-basis', cls: 'pp-basis',
-            head: `<span class="pp-disc--inline">${esc(P.storyBasis)} ${foldState('▸', '▾')}</span>`,
-            body: `<div class="pp-basis-body">${items ? `<ul>${items}</ul>` : ''}`
-                + (note ? `<p class="pp-basis-note">${esc(P.authorNote)}: ${esc(note)}</p>` : '') + `</div>`,
-        });
+    if (!facts.length && !note) return '';
+    const showIds = page.groups.research;
+    const items = facts.map(f => {
+        f.ids.forEach(rid => c.ids.add(rid));
+        return `<li>${esc(f.text.trim())}${showIds ? f.ids.map(rid => `<span class="pp-id">${esc(rid)}</span>`).join('') : ''}</li>`;
+    }).join('');
+    return fold(c, {
+        key, id, cls: 'pp-basis',
+        head: `<span class="pp-disc--inline">${esc(P.storyBasis)} ${foldState('▸', '▾')}</span>`,
+        body: `<div class="pp-basis-body">${items ? `<ul>${items}</ul>` : ''}`
+            + (note ? `<p class="pp-basis-note">${esc(P.authorNote)}: ${esc(note)}</p>` : '') + `</div>`,
+    });
+}
+
+function storyHtml(c: Ctx): string {
+    const { P, S, person } = c;
+    const own = person.story?.text?.trim() ? person.story : undefined;
+    const couples = coupleStories(c.tree, person);
+    if (!own && !couples.length) return '';
+    let head = `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}</h2>`;
+    let body = '';
+    if (own) {
+        const stripped = stripResearchIds(own.text);
+        stripped.ids.forEach(id => c.ids.add(id));
+        const title = own.title?.trim() ? stripResearchIds(own.title).text : '';
+        const tag = draftTag(c, own);
+        head = title
+            ? `<p class="pp-kicker">${esc(P.sec.story)}${tag}</p><h2 class="pp-story-title">${esc(title)}</h2>`
+            : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
+        body += `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 3 })}</div>`
+            + storyBasisHtml(c, own, 'basis', 'pp-basis');
     }
-    return section('story', P.sec.story, prose + basis, head);
+    // A couple's story under the person's own, one per marriage: its title, or "<person> and <partner>".
+    for (const u of couples) {
+        const st = u.story!;
+        const stripped = stripResearchIds(st.text);
+        stripped.ids.forEach(id => c.ids.add(id));
+        const title = st.title?.trim() ? stripResearchIds(st.title).text : '';
+        const self = nameOf(c, person.id);
+        const partner = nameOf(c, u.person1Id === person.id ? u.person2Id : u.person1Id);
+        const label = title || (partner ? S.story.couple(self, partner) : self);
+        const uid = u.id.replace(/[^\w-]/g, '_');
+        body += `<div class="pp-couple-story" id="pp-story-${uid}"><h3 class="pp-couple-story-title">${esc(label)}${draftTag(c, st)}</h3>`
+            + `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 4 })}</div>`
+            + storyBasisHtml(c, st, `basis-${uid}`, `pp-basis-${uid}`) + `</div>`;
+    }
+    return section('story', P.sec.story, body, head);
 }
 
 function notesHtml(c: Ctx): string {

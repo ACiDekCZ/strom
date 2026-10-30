@@ -123,6 +123,46 @@ describe('sections', () => {
         expect(body(fiskTree())).not.toContain('pp-draft-tag">');
     });
 
+    it('a couple’s story follows the person’s own, on both partners’ pages; alone it still makes the section', () => {
+        const d = fiskTree();
+        d.partnerships['u1' as PartnershipId].story = { status: 'draft', text: 'Jan a Marie hospodařili na čísle 12. [S0042]' };
+        const html = body(d);
+        const own = html.indexOf('Oženil se s Marií.');
+        const couple = html.indexOf('<div class="pp-couple-story" id="pp-story-u1"><h3 class="pp-couple-story-title">Jan Fíšek a Marie Dvořáková <span class="pp-draft-tag">Návrh</span></h3>');
+        expect(own).toBeGreaterThan(0);
+        expect(couple).toBeGreaterThan(own);
+        expect(html).toContain('Jan a Marie hospodařili na čísle 12.');
+        expect(html).not.toContain('hospodařili na čísle 12. [S0042]');
+        // Marie's page tells it too, she first; a title replaces the names.
+        expect(body(d, { personId: 'marie' as PersonId })).toContain('<h3 class="pp-couple-story-title">Marie Dvořáková a Jan Fíšek <span class="pp-draft-tag">Návrh</span></h3>');
+        d.partnerships['u1' as PartnershipId].story!.title = 'Dvůr pod kopcem';
+        d.partnerships['u1' as PartnershipId].story!.status = 'final';
+        expect(body(d, { lang: 'de' })).toContain('<h3 class="pp-couple-story-title">Dvůr pod kopcem</h3>');
+        // Only the couple's story: the section and its place in the contents remain, in the file as well.
+        delete d.persons['jan' as PersonId].story;
+        const only = body(d);
+        expect(only).toContain('<h2 class="pp-kicker pp-story-kicker">Vyprávění</h2><div class="pp-couple-story"');
+        expect(personPageSections(only, 'cs').map(x => x.key)).toContain('story');
+        expect(doc(d, { lang: 'en' })).toContain('<h3 class="pp-couple-story-title">Dvůr pod kopcem</h3>');
+    });
+
+    it('privacy leaves out a couple’s story with a living partner; a deceased couple keeps theirs', () => {
+        const d = fiskTree();
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.' };
+        // Karel (deceased) with a second wife still living, no children to date her.
+        d.persons['lida' as PersonId] = p('lida', 'Lída', 'Malá', 'female', { birthDate: '1950', partnerships: ['u2' as PartnershipId] });
+        d.persons['karel' as PersonId].partnerships = ['u2' as PartnershipId];
+        d.persons['karel' as PersonId].story = { status: 'final', text: 'Karel zůstal na statku.' };
+        d.partnerships['u2' as PartnershipId] = { id: 'u2' as PartnershipId, person1Id: 'karel' as PersonId, person2Id: 'lida' as PersonId, status: 'married', childIds: [], story: { status: 'final', text: 'Karel a Lída žili ve mlýně.' } };
+        expect(doc(d, { privacy: 'initials' })).toContain('Jan a Marie hospodařili na čísle 12.');
+        const karel = doc(d, { personId: 'karel' as PersonId, privacy: 'initials' });
+        expect(karel).not.toContain('žili ve mlýně');
+        expect(karel).not.toContain('pp-couple-story"');
+        // Karel is deceased: his own story stays.
+        expect(karel).toContain('Karel zůstal na statku.');
+        expect(doc(d, { personId: 'karel' as PersonId, privacy: 'full' })).toContain('Karel a Lída žili ve mlýně.');
+    });
+
     it('materials show safe images in a research tree only', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].attachments = [

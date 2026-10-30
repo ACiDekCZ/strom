@@ -73,8 +73,12 @@ button.pp-card { cursor: pointer; }
 .pp-coll > summary > .pp-fold-h { display: flex; flex: 1 1 auto; min-width: 0; }
 .pp-coll > summary > .pp-peek { flex: 0 0 100%; margin-top: -4px; }
 .pp-sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
-.pp .pp-draft-tag { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-light); font-size: 11px; line-height: 18px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
+.pp .pp-draft-tag { display: inline-block; font-family: var(--font-sans); font-weight: 500; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-light); font-size: 11px; line-height: 18px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
 .pp .pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
+/* A couple's story under the person's own (Partnership.story). */
+.pp .pp-couple-story { margin-top: 24px; }
+.pp .pp-story-kicker + .pp-couple-story { margin-top: 4px; }
+.pp .pp-couple-story-title { font-size: clamp(18px, 3cqi, 21px); line-height: 1.3; margin: 0 0 10px; overflow-wrap: anywhere; hyphens: manual; }
 .pp-prose { font-family: var(--font-serif); font-size: clamp(16px, 2.5cqi, 17.5px); line-height: 1.65; overflow-wrap: anywhere; }
 .pp-prose p, .pp-prose ul { margin: 0 0 0.9em; }
 .pp-prose .story-subhead { font-size: 1.05em; margin: 1.1em 0 0.4em; }
