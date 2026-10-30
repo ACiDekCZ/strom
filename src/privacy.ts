@@ -364,6 +364,16 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     if (startYear !== null) partnership.startDate = String(startYear);
 }
 
+export interface LivingPrivacyOptions {
+    /**
+     * Deceased people keep their sources and attachments (the person page,
+     * spec 025 K2.7): only the living lose them, and the source catalog keeps
+     * just the sources someone still cites. Without it every source and
+     * attachment goes (book, tree export).
+     */
+    keepDeceasedSources?: boolean;
+}
+
 /**
  * Return a deep copy of `data` with living persons obscured according to `mode`.
  * Deceased persons and placeholders are left untouched. 'full' is a no-op copy.
@@ -371,7 +381,8 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
 export function applyLivingPrivacy(
     data: StromData,
     mode: PrivacyMode,
-    currentYear: number = new Date().getFullYear()
+    currentYear: number = new Date().getFullYear(),
+    options: LivingPrivacyOptions = {}
 ): StromData {
     const copy = structuredClone(data);
     if (mode === 'full') return copy;
@@ -379,17 +390,19 @@ export function applyLivingPrivacy(
     // The source catalog may hold sensitive references (e.g. registers of the
     // living), so it is never exported under a privacy mode. Drop every citation
     // too, so no person/event points at a source that is no longer present.
-    delete copy.sources;
-    for (const person of Object.values(copy.persons)) {
-        delete person.sourceIds;
-        delete person.birthSourceIds;
-        delete person.deathSourceIds;
-        delete person.attachments;
-        for (const ev of person.events ?? []) delete ev.sourceIds;
-    }
-    for (const partnership of Object.values(copy.partnerships)) {
-        delete partnership.sourceIds;
-        for (const ev of partnership.events ?? []) delete ev.sourceIds;
+    if (!options.keepDeceasedSources) {
+        delete copy.sources;
+        for (const person of Object.values(copy.persons)) {
+            delete person.sourceIds;
+            delete person.birthSourceIds;
+            delete person.deathSourceIds;
+            delete person.attachments;
+            for (const ev of person.events ?? []) delete ev.sourceIds;
+        }
+        for (const partnership of Object.values(copy.partnerships)) {
+            delete partnership.sourceIds;
+            for (const ev of partnership.events ?? []) delete ev.sourceIds;
+        }
     }
 
     // Decide liveness BEFORE any transformation (the loop below strips the
@@ -441,6 +454,24 @@ export function applyLivingPrivacy(
                 break;
             }
         }
+    }
+
+    // The living lost their citations above; a source only they cited goes too.
+    if (options.keepDeceasedSources && copy.sources) {
+        const cited = new Set<string>();
+        const cite = (ids: readonly string[] | undefined) => { for (const id of ids ?? []) cited.add(id); };
+        for (const p of Object.values(copy.persons)) {
+            cite(p.sourceIds);
+            cite(p.birthSourceIds);
+            cite(p.deathSourceIds);
+            for (const ev of p.events ?? []) cite(ev.sourceIds);
+            for (const a of p.attachments ?? []) if (a.sourceId) cited.add(a.sourceId);
+        }
+        for (const u of Object.values(copy.partnerships)) {
+            cite(u.sourceIds);
+            for (const ev of u.events ?? []) cite(ev.sourceIds);
+        }
+        for (const id of Object.keys(copy.sources)) if (!cited.has(id)) delete copy.sources[id];
     }
 
     return copy;

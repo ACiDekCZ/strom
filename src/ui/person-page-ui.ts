@@ -22,6 +22,7 @@ import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
     preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageSections,
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames,
+    PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy,
 } from '../person-page.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
@@ -38,9 +39,9 @@ const LARGE_BYTES = 15_000_000;
 const SHEET_SWIPE_CLOSE_PX = 80;
 /** The export dialog's groups, in its order. */
 const GROUP_ORDER: (keyof PersonPageGroups)[] = ['history', 'childEvents', 'excerpts', 'materials', 'sources', 'research'];
-/** Groups a privacy other than full data leaves without content (applyLivingPrivacy drops sources and attachments). */
-const PRIVACY_DROPS: ReadonlySet<keyof PersonPageGroups> = new Set(['excerpts', 'materials', 'sources']);
-const PRIVACY_MODES: PrivacyMode[] = ['full', 'initials', 'anonymous', 'minimal'];
+/** Groups a privacy other than full data leaves out for living people only (K2.7); the deceased keep them. */
+const LIVING_DROPS: ReadonlySet<keyof PersonPageGroups> = new Set(['excerpts', 'materials', 'sources']);
+const PRIVACY_MODES = PERSON_PAGE_PRIVACY_MODES;
 
 /** One page of the window: the person, where it was scrolled, what was open and the switches. */
 interface PageEntry {
@@ -590,7 +591,7 @@ export const personPageMethods = uiModule({
         const treeId = DataManager.getCurrentTreeId();
         const saved = treeId ? TreeManager.getPersonPageExport(treeId) : undefined;
         const groups: PersonPageGroups = { ...PERSON_PAGE_ALL_GROUPS, ...(saved?.groups ?? {}) };
-        let privacy: PrivacyMode = living && saved?.privacy && PRIVACY_MODES.includes(saved.privacy) ? saved.privacy : 'full';
+        let privacy: PrivacyMode = personPageExportPrivacy(living, saved?.privacy);
         const shareOk = share && canShareFiles() && !isDesktop();
         const deviceShare = canShareFiles() && !isDesktop();
 
@@ -636,7 +637,7 @@ export const personPageMethods = uiModule({
                     <div class="ppx-label" id="ppx-content-h">${esc(X.content)}</div>
                     ${checks ? `<div class="ppx-checks">${checks}</div>` : ''}
                     <p class="ppx-note ppx-always">${esc(X.always)}</p>
-                    <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(pv.dropsSourcesContent)}</p>
+                    <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(X.privacyDrops)}</p>
                 </div>
                 ${privacyHtml}
                 <div class="ppx-size">
@@ -655,26 +656,20 @@ export const personPageMethods = uiModule({
         let current: { page: PersonPageData; opts: PersonPageOptions } | null = null;
         const refresh = (): void => {
             const drops = privacy !== 'full';
+            // The groups stay on: only the living lose them, the note says so.
             for (const row of overlay.querySelectorAll<HTMLElement>('[data-ppx-row]')) {
-                const g = row.dataset.ppxRow as keyof PersonPageGroups;
                 const input = row.querySelector('input') as HTMLInputElement;
-                const inert = drops && PRIVACY_DROPS.has(g);
-                // The ticks stay as chosen: Full data takes them again.
-                input.disabled = inert;
-                row.classList.toggle('is-inert', inert);
-                if (inert) input.setAttribute('aria-describedby', 'ppx-drops');
+                if (drops && LIVING_DROPS.has(row.dataset.ppxRow as keyof PersonPageGroups)) input.setAttribute('aria-describedby', 'ppx-drops');
                 else input.removeAttribute('aria-describedby');
             }
-            (overlay.querySelector('#ppx-drops') as HTMLElement).hidden = !(drops && shown.some(g => PRIVACY_DROPS.has(g)));
+            (overlay.querySelector('#ppx-drops') as HTMLElement).hidden = !(drops && shown.some(g => LIVING_DROPS.has(g)));
             for (const b of overlay.querySelectorAll<HTMLElement>('[data-ppx-privacy]')) {
                 const on = b.dataset.ppxPrivacy === privacy;
                 b.classList.toggle('active', on);
                 b.setAttribute('aria-checked', String(on));
                 b.tabIndex = on ? 0 : -1;
             }
-            const effective: PersonPageGroups = { ...groups };
-            if (drops) for (const g of PRIVACY_DROPS) effective[g] = false;
-            const opts = fileOpts(effective, privacy);
+            const opts = fileOpts({ ...groups }, privacy);
             const page = privacy === 'full'
                 ? preparePersonPageData(data, opts, { ...ctx, protected: fullProt })
                 : preparePersonPageData(data, opts, ctx);
@@ -687,7 +682,10 @@ export const personPageMethods = uiModule({
             (overlay.querySelector('#ppx-size-large') as HTMLElement).hidden = size.bytes <= LARGE_BYTES;
         };
         const remember = (): void => {
-            if (treeId) TreeManager.setPersonPageExport(treeId, { groups: { ...groups }, privacy });
+            // A page without living people offers no choice: keep the one remembered before.
+            if (treeId) TreeManager.setPersonPageExport(treeId, {
+                groups: { ...groups }, privacy: living ? privacy : saved?.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY,
+            });
         };
         const build = (): { html: string; name: string; title: string } | null => {
             if (!current) return null;

@@ -50,6 +50,22 @@ export const PERSON_PAGE_ALL_GROUPS: Readonly<PersonPageGroups> = Object.freeze(
     history: true, childEvents: true, excerpts: true, materials: true, sources: true, research: true,
 });
 
+/** The export's privacy of living people when no choice is remembered (K2.4). */
+export const PERSON_PAGE_DEFAULT_PRIVACY: PrivacyMode = 'initials';
+
+/** The export dialog's privacy choices, in its order. */
+export const PERSON_PAGE_PRIVACY_MODES: readonly PrivacyMode[] = ['full', 'initials', 'anonymous', 'minimal'];
+
+/**
+ * The privacy the export dialog starts with: full data when nobody on the
+ * page is living (there is nothing to protect), else the remembered choice,
+ * else initials + birth year.
+ */
+export function personPageExportPrivacy(living: boolean, saved: PrivacyMode | undefined): PrivacyMode {
+    if (!living) return 'full';
+    return saved && PERSON_PAGE_PRIVACY_MODES.includes(saved) ? saved : PERSON_PAGE_DEFAULT_PRIVACY;
+}
+
 export interface PersonPageOptions {
     personId: PersonId;
     lang: Language;
@@ -250,7 +266,8 @@ export function protectPersonPageTree(data: StromData, privacy: PrivacyMode, now
     for (const p of Object.values(data.persons)) {
         if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
     }
-    const tree = applyLivingPrivacy(data, privacy, year);
+    // Only the living lose sources, excerpts and attachments (K2.7); the book drops them for everyone.
+    const tree = applyLivingPrivacy(data, privacy, year, { keepDeceasedSources: true });
     const drafts = new Set<PersonId>();
     for (const p of Object.values(tree.persons)) if (p.story?.draft) drafts.add(p.id);
     stripResearchWork(tree);

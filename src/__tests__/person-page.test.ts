@@ -10,8 +10,9 @@ import { describe, it, expect } from 'vitest';
 import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
-    PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames,
+    PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
 } from '../person-page.js';
+import { buildFamilyBook } from '../book.js';
 import { personSourceRows } from '../person-sources.js';
 import { computePersonLifeline } from '../timeline.js';
 import { parseHistoryPayload, HistoryPayload } from '../history.js';
@@ -436,6 +437,41 @@ describe('privacy of the living', () => {
         const page = preparePersonPageData(living(), op, { protected: prot });
         expect(buildPersonPageDocument(page, op)).toContain('Eva Fíšková');
         expect(personPageFileName(page)).toBe('eva-fiskova-1952.html');
+    });
+    it('the export starts with initials + birth year; a remembered choice wins; full data without the living', () => {
+        expect(personPageExportPrivacy(true, undefined)).toBe('initials');
+        expect(personPageExportPrivacy(true, 'full')).toBe('full');
+        expect(personPageExportPrivacy(true, 'minimal')).toBe('minimal');
+        expect(personPageExportPrivacy(true, 'bogus' as never)).toBe('initials');
+        expect(personPageExportPrivacy(false, 'initials')).toBe('full');
+    });
+    it('protection covers the living only: the dead keep sources and excerpts (K2.7)', () => {
+        const d = living();
+        d.sources = {
+            s1: { id: 's1', title: 'Matrika narozených Čapkov 1925', excerpts: [{ id: 'xk', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Zápis křtu Karla' }] },
+            s2: { id: 's2', title: 'Matrika narozených Čapkov 1952', excerpts: [{ id: 'xe', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100, caption: 'Zápis narození Evy' }] },
+        };
+        d.persons['eva' as PersonId].birthSourceIds = ['s2'];
+        const op = opts({ personId: 'karel' as PersonId, mode: 'file', links: 'plain', privacy: 'initials' });
+        const page = preparePersonPageData(d, op);
+        const html = buildPersonPageDocument(page, op);
+        expect(html).toContain('Matrika narozených Čapkov 1925');
+        expect(html).toContain('<figure class="pp-fig"');
+        expect(Object.keys(page.tree.sources ?? {})).toEqual(['s1']);
+        expect(page.counts.excerpts).toBe(1);
+        expect(html).not.toContain('Matrika narozených Čapkov 1952');
+        expect(html).not.toContain('Zápis narození Evy');
+        expect(html).not.toContain('Eva');
+        expect(html).not.toContain('14. července');
+        // The living person's own page has no sources at all.
+        const evaOp = { ...op, personId: 'eva' as PersonId };
+        const evaHtml = buildPersonPageDocument(preparePersonPageData(d, evaOp), evaOp);
+        expect(evaHtml).not.toContain('Matrika narozených');
+        expect(evaHtml).not.toContain('<figure class="pp-fig"');
+        // The family book still drops every source under a privacy mode.
+        const book = buildFamilyBook(d, { lang: 'cs', privacyMode: 'initials' });
+        expect(book).not.toContain('Matrika narozených Čapkov 1925');
+        expect(buildFamilyBook(d, { lang: 'cs', privacyMode: 'full' })).toContain('Matrika narozených Čapkov 1925');
     });
     it('names the living people the privacy choice is about; none on a page of the dead', () => {
         const op = opts({ personId: 'karel' as PersonId, mode: 'file', links: 'plain', privacy: 'full' });

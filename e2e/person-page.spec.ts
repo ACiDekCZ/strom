@@ -236,7 +236,7 @@ test.describe('desktop', () => {
         await expect(dlg.locator('[data-ppx-group="excerpts"]')).not.toBeChecked();
     });
 
-    test('privacy: offered with a living relative only; initials keep the living name out of the file', async ({ page }) => {
+    test('privacy: offered with a living relative only, initials by default; only the living lose name, dates and sources', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);
         await page.evaluate(() => window.Strom.UI.showPersonPage('rosa' as never));
@@ -245,14 +245,17 @@ test.describe('desktop', () => {
         await w.locator('.pp-save').click();
         const dlg = page.locator('#person-page-export-modal');
         await expect(dlg.locator('[data-ppx-privacy]')).toHaveCount(4);
-        await expect(dlg.locator('[data-ppx-privacy="full"]')).toHaveAttribute('aria-checked', 'true');
+        // Nothing remembered yet: initials + birth year (K2.4).
+        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dlg.locator('.ppx-note', { hasText: 'Applies to living people only' })).toContainText('Evelina Mala');
+        // Sources and excerpts stay on: only the living lose them, the note says so (K2.7).
+        await expect(dlg.locator('#ppx-drops')).toBeVisible();
+        await expect(dlg.locator('#ppx-drops')).toContainText('for living people only');
+        await expect(dlg.locator('[data-ppx-group="sources"]')).toBeEnabled();
+        await expect(dlg.locator('[data-ppx-group="excerpts"]')).toBeChecked();
+        await dlg.locator('[data-ppx-privacy="full"]').click();
         await expect(dlg.locator('#ppx-drops')).toBeHidden();
         await dlg.locator('[data-ppx-privacy="initials"]').click();
-        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
-        // Sources go with a privacy other than full data: their rows inert, the ticks kept.
-        await expect(dlg.locator('[data-ppx-group="sources"]')).toBeDisabled();
-        await expect(dlg.locator('#ppx-drops')).toBeVisible();
         const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
         const html = readFileSync(await download.path(), 'utf-8');
         expect(html).toContain('Rosa');
@@ -260,6 +263,32 @@ test.describe('desktop', () => {
         expect(html).not.toContain('Mala');
         expect(html).not.toContain('1955-04-04');
         expect(html).not.toContain('Lhota');
+        // Rosa died: her death record and its excerpt stay in the file.
+        expect(html).toContain('Birth register Capkov 1850-1870');
+        expect(html).toContain('<figure class="pp-fig"');
+
+        // A remembered choice wins over the default, full data too.
+        await w.locator('.pp-save').click();
+        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
+        await dlg.locator('[data-ppx-privacy="full"]').click();
+        await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        await w.locator('.pp-save').click();
+        await expect(dlg.locator('[data-ppx-privacy="full"]')).toHaveAttribute('aria-checked', 'true');
+    });
+
+    test('a page without living people keeps the remembered privacy for the next page', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        const dlg = page.locator('#person-page-export-modal');
+        // Jan's page has nobody living: no choice, and saving it does not turn the default into full data.
+        await openPageFromMenu(page);
+        await win(page).locator('.pp-save').click();
+        await expect(dlg.locator('[data-ppx-privacy]')).toHaveCount(0);
+        await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('rosa' as never));
+        await expect(win(page).locator('h1')).toContainText('Rosa Fiskova');
+        await win(page).locator('.pp-save').click();
+        await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
     });
 });
 

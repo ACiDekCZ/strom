@@ -136,6 +136,56 @@ describe('applyLivingPrivacy', () => {
     });
 });
 
+describe('keepDeceasedSources (person page, spec 025 K2.7)', () => {
+    function withSources(): StromData {
+        const data = tree(
+            person('dead', {
+                birthDate: '1900', deathDate: '1970', sourceIds: ['s-dead'], deathSourceIds: ['s-shared'],
+                attachments: [{ id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:,', sizeBytes: 1, sourceId: 's-att' }],
+                events: [{ id: 'e1', type: 'burial', date: '1970', sourceIds: ['s-event'] }],
+            }),
+            person('living', {
+                birthDate: '1990', sourceIds: ['s-living'], birthSourceIds: ['s-shared'],
+                attachments: [{ id: 'a2', name: 'photo.jpg', mimeType: 'image/jpeg', dataUrl: 'data:,', sizeBytes: 1 }],
+            }),
+        );
+        data.sources = Object.fromEntries(['s-dead', 's-shared', 's-att', 's-event', 's-living', 's-unused']
+            .map(id => [id, { id, title: id }]));
+        return data;
+    }
+
+    it('the deceased keep sources and attachments; the living lose them', () => {
+        const out = applyLivingPrivacy(withSources(), 'initials', NOW, { keepDeceasedSources: true });
+        expect(P(out)['dead'].sourceIds).toEqual(['s-dead']);
+        expect(P(out)['dead'].deathSourceIds).toEqual(['s-shared']);
+        expect(P(out)['dead'].attachments).toHaveLength(1);
+        expect(P(out)['dead'].events?.[0].sourceIds).toEqual(['s-event']);
+        expect(P(out)['living'].sourceIds).toBeUndefined();
+        expect(P(out)['living'].birthSourceIds).toBeUndefined();
+        expect(P(out)['living'].attachments).toBeUndefined();
+        // Only the sources someone still cites stay in the catalog.
+        expect(Object.keys(out.sources ?? {}).sort()).toEqual(['s-att', 's-dead', 's-event', 's-shared']);
+    });
+
+    it('a couple with a living partner loses its sources', () => {
+        const data = withSources();
+        P(data)['dead'].partnerships = ['u' as PartnershipId];
+        P(data)['living'].partnerships = ['u' as PartnershipId];
+        data.partnerships = { u: { id: 'u' as PartnershipId, person1Id: 'dead' as PersonId, person2Id: 'living' as PersonId, status: 'married', childIds: [], sourceIds: ['s-unused'] } } as StromData['partnerships'];
+        const out = applyLivingPrivacy(data, 'initials', NOW, { keepDeceasedSources: true });
+        expect(out.partnerships['u' as PartnershipId].sourceIds).toBeUndefined();
+        expect(out.sources?.['s-unused']).toBeUndefined();
+    });
+
+    it('without it (book, tree export) every source and attachment goes, as before', () => {
+        const out = applyLivingPrivacy(withSources(), 'initials', NOW);
+        expect(out.sources).toBeUndefined();
+        expect(P(out)['dead'].sourceIds).toBeUndefined();
+        expect(P(out)['dead'].attachments).toBeUndefined();
+        expect(P(out)['dead'].events?.[0].sourceIds).toBeUndefined();
+    });
+});
+
 describe('inferBirthUpperBounds — indirect liveness evidence', () => {
     const uid = (s: string) => s as PartnershipId;
     const withUnions = (d: StromData, ...unions: Array<{ id: string; p1: string; p2: string; startDate?: string }>): StromData => {
