@@ -302,6 +302,15 @@ export const PERSON_PAGE_CHART_CSS = `
   .pp-ch-mk--e::before { left: -44px; }
   /* History glyphs and clusters (round 4): 44 x 44 px around the glyph, narrowed to half the gap to a neighbour. */
   .pp-ch-hm::before { content: ''; position: absolute; top: -15px; left: calc(-1 * var(--tl, 22px)); width: calc(var(--tl, 22px) + var(--tr, 22px)); height: 44px; }
+  /* Round 5 (K5-38): up into the ages and below into the period names the target may reach (nothing tappable there);
+     a period bar over it (a link) stops it half way: the bar ends 6 px down the row, the glyph starts at 12 px. */
+  .pp-ch-hm--ub::before { top: -3px; height: 32px; }
+}
+@media ${LANDSCAPE} and (pointer: coarse) {
+  /* The phone's set held sideways: the glyph 9 px down a 22 px row, the bar of life 15 px under the row. The target
+     stops half way to the bar (7 px under the glyph) and to a period bar over it (1.5 px above the glyph). */
+  .pp-ch-hist--n .pp-ch-hm::before { top: -15px; height: 36px; }
+  .pp-ch-hist--n .pp-ch-hm--ub::before { top: -1.5px; height: 22.5px; }
 }
 @media print {
   .pp-chart { break-inside: avoid; }

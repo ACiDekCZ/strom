@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, historyTouchHalves, residenceLabel } from '../person-page-chart.js';
+import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, historyTouchHalves, barsOver, residenceLabel } from '../person-page-chart.js';
 import { PERSON_PAGE_CHART_CSS } from '../person-page-viz-css.js';
 import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -478,7 +478,26 @@ describe('lifeChartHtml', () => {
         // The target only on touch, from the variables, 44 px high around the 14 px glyph.
         const coarse = PERSON_PAGE_CHART_CSS.slice(PERSON_PAGE_CHART_CSS.lastIndexOf('@media (pointer: coarse)'));
         expect(coarse).toContain(".pp-ch-hm::before { content: ''; position: absolute; top: -15px; left: calc(-1 * var(--tl, 22px)); width: calc(var(--tl, 22px) + var(--tr, 22px)); height: 44px; }");
-        expect(PERSON_PAGE_CHART_CSS.split('.pp-ch-hm::before').length).toBe(2);
+        expect(PERSON_PAGE_CHART_CSS.slice(0, PERSON_PAGE_CHART_CSS.lastIndexOf('@media (pointer: coarse)'))).not.toContain('.pp-ch-hm::before');
+    });
+
+    it('history (round 5, K5-38): a target reaches into the ages and the period names, but stops half way to a period bar over it', () => {
+        expect(barsOver([[100, 200]], 150, 194)).toBe(true);
+        expect(barsOver([[100, 200]], 200, 244)).toBe(false);
+        expect(barsOver([], 0, 44)).toBe(false);
+        // A war of 1866–1880 lies over the glyph of 1870, not over the one of 1900.
+        const item = (id: string, from: number, to?: number) => ({ ev: { id, from, to, kind: 'war', scope: 'region', text: { cs: `Válka ${from}` } }, year: from, age: '', place: 'Čapkov', placeKey: 'capkov', text: `Válka ${from}`, textLang: 'cs' });
+        const hist = [item('w', 1866, 1880), item('a', 1870), item('b', 1900)] as unknown as LifelineHistoryItem[];
+        const html = lifeChartHtml(lifeChartInput(tree(), JAN, { now: NOW, history: hist }), { lang: 'cs', mode: 'file' });
+        const marks = [...html.matchAll(/<a class="(pp-ch-hm [^"]*)"[^>]*title="([^"]*)"/g)].map(m => [m[2], m[1].includes('pp-ch-hm--ub')]);
+        expect(marks.filter(m => m[0] === '1870 Válka 1870').length).toBeGreaterThan(0);
+        expect(marks.filter(m => m[0] === '1870 Válka 1870').every(m => m[1])).toBe(true);
+        expect(marks.filter(m => m[0] === '1900 Válka 1900').some(m => m[1])).toBe(false);
+        const coarse = PERSON_PAGE_CHART_CSS.slice(PERSON_PAGE_CHART_CSS.lastIndexOf('@media (pointer: coarse)'));
+        // From 6 px under the period bar's top to the glyph's 12 px: half way is 9 px, 3 px above the glyph.
+        expect(coarse).toContain('.pp-ch-hm--ub::before { top: -3px; height: 32px; }');
+        // The phone held sideways: the bar of life 14 px under the glyph, the target 7 px of it.
+        expect(coarse).toMatch(/@media \(max-width: 1024px\) and \(max-height: 500px\) and \(orientation: landscape\) and \(pointer: coarse\) \{[^}]*\.pp-ch-hist--n \.pp-ch-hm::before \{ top: -15px; height: 36px; \}/);
     });
 
     it('escapes names', () => {

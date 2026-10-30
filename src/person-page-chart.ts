@@ -655,6 +655,15 @@ export function historyTouchHalves(xs: readonly number[]): { l?: number; r?: num
     }));
 }
 
+/**
+ * Whether a period bar (a link of its own) lies over the horizontal span of a
+ * glyph's touch target (round 5, K5-38): the target then stops half way up to
+ * the bar instead of reaching over it.
+ */
+export function barsOver(bars: readonly (readonly [number, number])[], left: number, right: number): boolean {
+    return bars.some(([a, b]) => a < right && b > left);
+}
+
 /** One glyph of the history row: the events of one year, or a cluster of near years. */
 export interface ChartHistGlyph {
     /** px of the first event. */
@@ -740,11 +749,14 @@ function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => n
     const glyphs = historyGlyphs(items, S, xpx, narrow ? HIST_CLUSTER_PX_NARROW : HIST_CLUSTER_PX);
     const pc = (n: number): string => `${(Math.round((n / W) * 10000) / 100).toString()}%`;
     const touch = historyTouchHalves(glyphs.map(g => g.x));
+    const barSpans = bars.map(h => [xpx(h.from), xpx(h.to! + 1)] as const);
     glyphs.forEach((g, i) => {
         const glyph = g.scope === 'local' ? '■' : g.scope === 'place' ? '▲' : '◇';
         const t = touch[i];
         const tv = `${t.l !== undefined ? `;--tl:${t.l}px` : ''}${t.r !== undefined ? `;--tr:${t.r}px` : ''}`;
-        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
+        // Round 5 (K5-38): the target reaches up into the period bars' line only where no bar lies over it.
+        const under = barsOver(barSpans, g.x - (t.l ?? HIST_TOUCH_HALF), g.x + (t.r ?? HIST_TOUCH_HALF));
+        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}${under ? ' pp-ch-hm--ub' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
             + `<span class="pp-ch-hg">${glyph}</span>${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
     });
     if (!narrow) {
