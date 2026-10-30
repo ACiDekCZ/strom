@@ -1070,9 +1070,10 @@ describe('privacy of the living', () => {
         const evaHtml = buildPersonPageDocument(preparePersonPageData(d, evaOp), evaOp);
         expect(evaHtml).not.toContain('Matrika narozených');
         expect(evaHtml).not.toContain('<figure class="pp-fig"');
-        // The family book still drops every source under a privacy mode.
+        // The family book protects the same way: the dead keep theirs, the living lose them.
         const book = buildFamilyBook(d, { lang: 'cs', privacyMode: 'initials' });
-        expect(book).not.toContain('Matrika narozených Čapkov 1925');
+        expect(book).toContain('Matrika narozených Čapkov 1925');
+        expect(book).not.toContain('Matrika narozených Čapkov 1952');
         expect(buildFamilyBook(d, { lang: 'cs', privacyMode: 'full' })).toContain('Matrika narozených Čapkov 1925');
     });
     it('names the living people the privacy choice is about; none on a page of the dead', () => {

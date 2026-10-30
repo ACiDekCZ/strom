@@ -61,8 +61,10 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const S = getStringsForLang(lang);
     const B: Book = S.book;
 
-    // Privacy + media stripping happen BEFORE anything is rendered.
-    let tree = applyLivingPrivacy(data, options.privacyMode);
+    // Privacy + media stripping happen BEFORE anything is rendered. As on the
+    // person page, only the living lose their sources: a citation of someone
+    // who died long ago is no secret and makes the book's footnotes.
+    let tree = applyLivingPrivacy(data, options.privacyMode, undefined, { keepDeceasedSources: true });
     if (options.dropMedia) tree = stripMedia(tree);
     const persons = tree.persons;
     const partnerships = tree.partnerships;

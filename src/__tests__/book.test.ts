@@ -120,6 +120,24 @@ describe('buildFamilyBook (synthetic)', () => {
         expect(html).toContain('Matrika Děčín 1900');
         expect(html).toContain('SOA Litoměřice');
     });
+
+    it('the default initials privacy keeps the sources of the deceased and hides those of the living', () => {
+        const old: Source = { id: 's1', title: 'Matrika Bělkov 1898' };
+        const recent: Source = { id: 's2', title: 'Matrika Bělkov 1992' };
+        const data: StromData = {
+            persons: mkPersons(
+                p('dad', 'Josef', 'Kvítek', 'male', { birthDate: '1898', deathDate: '1960', childIds: ['kid'], partnerships: ['u'], sourceIds: ['s1'] }),
+                p('mom', 'Anna', 'Kvítková', 'female', { birthDate: '1990', isDeceased: false, childIds: ['kid'], partnerships: ['u'], sourceIds: ['s2'] }),
+                p('kid', 'Petr', 'Kvítek', 'male', { birthDate: '2015', parentIds: ['dad', 'mom'] }),
+            ),
+            partnerships: union('u', 'dad', 'mom', ['kid']),
+            sources: { s1: old, s2: recent },
+        };
+        const html = buildFamilyBook(data, { lang: 'cs', privacyMode: 'initials' });
+        expect(html).toContain('Matrika Bělkov 1898');
+        expect(html).toContain('[1]');
+        expect(html).not.toContain('Matrika Bělkov 1992');
+    });
 });
 
 describe('Register-style chapter ordering', () => {

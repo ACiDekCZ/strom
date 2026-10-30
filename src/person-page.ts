@@ -328,7 +328,7 @@ export function protectPersonPageTree(data: StromData, privacy: PrivacyMode, now
     for (const p of Object.values(data.persons)) {
         if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
     }
-    // Only the living lose sources, excerpts and attachments (K2.7); the book drops them for everyone.
+    // Only the living lose sources, excerpts and attachments (K2.7), as in the family book.
     const tree = applyLivingPrivacy(data, privacy, year, { keepDeceasedSources: true });
     const drafts = new Set<PersonId>();
     for (const p of Object.values(tree.persons)) if (p.story?.draft) drafts.add(p.id);
