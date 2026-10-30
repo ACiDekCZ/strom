@@ -285,6 +285,29 @@ describe('lifeChartInput', () => {
         expect(lifeChartHtml(input, { lang: 'en', mode: 'file' })).toContain(`after ${input.lastYear} ?`);
     });
 
+    it('an unknown death: an event\'s label at the last year gives way to "after 1871 ?" (no overlap)', () => {
+        // A short life known from a birth and a residence of 1871 only (RESI with the year alone).
+        const t = tree();
+        const jan = t.persons[JAN];
+        jan.birthDate = '1865-03-12';
+        delete jan.deathDate;
+        jan.isDeceased = true;
+        jan.partnerships = [];
+        jan.childIds = [];
+        jan.events = [{ id: 'r', type: 'residence', date: '1871', place: 'Lhota' }];
+        t.partnerships = {} as StromData['partnerships'];
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const html = lifeChartHtml(lifeChartInput(t, JAN, { now: NOW })!, { lang, mode: 'app' });
+            const marks = html.slice(html.indexOf('pp-ch-marks'));
+            const row = marks.slice(0, marks.indexOf('</div>'));
+            const after = { en: 'after 1871 ?', cs: 'po 1871 ?', de: 'nach 1871 ?' }[lang];
+            expect(row).toContain(after);
+            // The residence keeps its mark and title; its label would sit under "after 1871 ?" and is left out.
+            expect(row).toMatch(/pp-ch-mk--event[^>]*title="[^"]*1871"/);
+            expect(row).not.toMatch(/<span class="pp-ch-ml">(residence|bydliště|Wohnort)<\/span>/);
+        }
+    });
+
     it('living: "today" in the window only, an open end in a file', () => {
         const t = tree();
         const eva = t.persons['eva' as PersonId];

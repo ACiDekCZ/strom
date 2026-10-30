@@ -567,8 +567,16 @@ function marksRow(input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (
         if (g && px - g.px < 8) g.marks.push(m);
         else groups.push({ marks: [m], px });
     }
+    // The open end's label ("after 1871 ?", "today") ends at the bar's end; it is placed first, a mark's label
+    // under it is left out (the mark keeps its title).
+    const endText = input.endKind === 'unknown' && input.lastYear !== undefined ? `${C.after(String(input.lastYear))} ?`
+        : input.endKind === 'living' && app ? C.today : '';
     // Labels: most important first, a label left out when it would overlap one already placed.
     const taken: [number, number][] = [];
+    if (endText) {
+        const r = Math.min(W, xpx(input.barEnd));
+        taken.push([Math.max(0, r - (endText.length * 5.8 + 4)), r]);
+    }
     const labelOf = new Map<number, string>();
     const order = groups.map((g, i) => ({ g, i })).sort((a, b) => Math.min(...a.g.marks.map(prio)) - Math.min(...b.g.marks.map(prio)) || a.g.px - b.g.px);
     for (const { g, i } of order) {
@@ -592,10 +600,10 @@ function marksRow(input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (
             + `<span class="pp-ch-tick"></span>${glyph ? `<span class="pp-ch-gl">${glyph}</span>` : ''}${label ? `<span class="pp-ch-ml">${esc(label)}</span>` : ''}</a>`;
     });
     // The open end: "after 1871 ?" for an unknown death, "today" for a living person (window only).
-    if (input.endKind === 'unknown' && input.lastYear !== undefined) {
-        html += `<span class="pp-ch-end pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-ml">${esc(C.after(String(input.lastYear)))} ?</span></span>`;
-    } else if (input.endKind === 'living' && app) {
-        html += `<span class="pp-ch-end pp-ch-end--today pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-tick"></span><span class="pp-ch-ml">${esc(C.today)}</span></span>`;
+    if (input.endKind === 'unknown' && endText) {
+        html += `<span class="pp-ch-end pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-ml">${esc(endText)}</span></span>`;
+    } else if (input.endKind === 'living' && endText) {
+        html += `<span class="pp-ch-end pp-ch-end--today pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-tick"></span><span class="pp-ch-ml">${esc(endText)}</span></span>`;
     }
     return `<div class="pp-ch-row pp-ch-marks">${html}</div>`;
 }
