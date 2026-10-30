@@ -200,3 +200,31 @@ for (const size of [{ width: 640, height: 360 }, { width: 844, height: 390 }]) {
         await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
     });
 }
+
+for (const size of [{ width: 640, height: 360 }, { width: 568, height: 320 }]) {
+    test(`${size.width} × ${size.height} (≤640 wide): no person row under the header; the tree and the descendants badge beside the side bar`, async ({ page }) => {
+        await page.setViewportSize(size);
+        await sample(page);
+        const head = (await page.locator('.toolbar').boundingBox())!;
+        const bar = (await page.locator('#bottom-bar').boundingBox())!;
+        // The person is in the header, once: the phone's person row does not show under it (it stood cut under the side bar).
+        await expect(page.locator('#toolbar-focus-name')).toBeVisible();
+        await expect(page.locator('#focus-controls')).toBeHidden();
+        const tree = (await page.locator('#tree-container').boundingBox())!;
+        expect(Math.round(tree.y)).toBe(Math.round(head.y + head.height));
+        expect(Math.round(tree.x)).toBe(Math.round(bar.x + bar.width));
+        // The steppers open as the popover, the tree stays where it is.
+        await page.locator('.toolbar-focus .focus-chip[data-for="toolbar-depth-down"]').click();
+        await expect(page.locator('.toolbar .toolbar-focus .focus-depth')).toBeVisible();
+        expect(Math.round((await page.locator('#tree-container').boundingBox())!.y)).toBe(Math.round(head.y + head.height));
+        await page.keyboard.press('Escape');
+        // The descendants view: its badge beside the side bar, not under it.
+        await page.locator('#bb-view-descendants').click();
+        const badge = page.locator('.descendants-badge');
+        await expect(badge).toBeVisible();
+        const b = (await badge.boundingBox())!;
+        expect(b.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+        expect(b.x + b.width).toBeLessThanOrEqual(size.width);
+        expect(b.y).toBeGreaterThanOrEqual(head.y + head.height);
+    });
+}

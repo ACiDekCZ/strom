@@ -15847,6 +15847,14 @@
                 top: var(--toolbar-h); left: var(--side-bar-w);
                 right: env(safe-area-inset-right, 0px); bottom: 0;
             }
+            /* The person is in the header: no person row under it, also at
+               ≤640 wide (568×320, 640×360), where the phone rules above would
+               put that row under the header and the side bar. */
+            .focus-controls { display: none !important; }
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) #tree-container,
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) #tree-container { top: var(--toolbar-h); }
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) .embedded-mode-banner,
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) .embedded-mode-banner { top: var(--toolbar-h); }
             /* The tree's name leaves room for the person; the magnifier (and
                Cancel) at the end of the header, after the person. */
             .toolbar .tree-switcher { flex: 0 1 auto; max-width: 42%; }
@@ -15949,6 +15957,11 @@
             }
             .descendants-badge .descendants-seg { padding-top: 6px; padding-bottom: 6px; }
 
+        }
+        /* A phone sideways at ≤640 wide (568×320, 640×360): the two-row badge
+           beside the side bar, not under it. */
+        @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+            .descendants-badge { left: calc(var(--side-bar-w) + 8px); }
         }
 
         @media (max-width: 640px) {
