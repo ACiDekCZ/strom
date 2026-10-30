@@ -294,6 +294,60 @@ test.describe('desktop', () => {
         expect(html).toContain('<span class="pp-draft-tag">Draft</span>');
     });
 
+    test('the contents list the story and mark the last section at the end; years end at one edge; folded sources keep their header', async ({ page, browser }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => window.Strom.DataManager.updatePerson('jan' as never, {
+            story: { status: 'draft', title: 'The farmer', text: 'Jan farmed house number 12.' },
+        } as never));
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        await expect(w.locator('#pp-sec-story')).toContainText('Jan farmed house number 12.');
+        const links = w.locator('.pp-toc-link');
+        await expect(w.locator('.pp-toc-link[data-pp-toc="pp-sec-story"]')).toHaveText('Story');
+        // Scrolled to the end: the last section, however short; back at the top: the first.
+        const body = w.locator('.pp-body');
+        await body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+        await expect(links.last()).toHaveAttribute('aria-current', 'true');
+        await expect(w.locator('.pp-toc-link[aria-current="true"]')).toHaveCount(1);
+        await body.evaluate((el) => { el.scrollTop = 0; });
+        await expect(links.first()).toHaveAttribute('aria-current', 'true');
+
+        // Every year of the timeline (own and the children's) ends at the same edge by the marker.
+        const yearEdges = (root: Page | ReturnType<typeof win>) => root.locator('.pp-row .pp-y').evaluateAll((els) => els.map((el) => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return Math.round(r.getBoundingClientRect().right);
+        }));
+        const sw = w.locator('[data-pp-switch="childEvents"]');
+        if (await sw.getAttribute('aria-checked') !== 'true') await sw.click();
+        await expect(w.locator('.pp-row--kid').first()).toBeVisible();
+        expect(new Set(await yearEdges(w)).size).toBe(1);
+
+        // Folded sources: the heading on one row with its state, the peek below it in plain text.
+        const foldedSources = async (root: Page | ReturnType<typeof win>) => {
+            const h = (await root.locator('#pp-sec-sources .pp-fold-h').boundingBox())!;
+            const state = (await root.locator('#pp-sec-sources .pp-fold-h .pp-fold-state').boundingBox())!;
+            const peek = (await root.locator('#pp-sec-sources .pp-peek').boundingBox())!;
+            expect(h.height).toBeLessThan(60);
+            expect(state.y).toBeLessThan(h.y + h.height);
+            expect(peek.y).toBeGreaterThanOrEqual(h.y + h.height - 1);
+            expect(await root.locator('#pp-sec-sources .pp-peek').evaluate((el) => getComputedStyle(el).fontWeight)).toBe('400');
+        };
+        await foldedSources(w);
+
+        // The same in the saved file.
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const filePage = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+        await filePage.setContent(readFileSync(await download.path(), 'utf-8'), { waitUntil: 'load' });
+        await expect(filePage.locator('.pp-row--kid').first()).toBeVisible();
+        expect(new Set(await yearEdges(filePage)).size).toBe(1);
+        await foldedSources(filePage);
+        await filePage.context().close();
+    });
+
     test('a page without living people keeps the remembered privacy for the next page', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);

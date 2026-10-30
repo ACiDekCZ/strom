@@ -66,8 +66,12 @@ button.pp-card { cursor: pointer; }
 .pp-fold-state .pp-st-open, .pp-coll[open] > summary .pp-st-closed, .pp-disc[aria-expanded="true"] .pp-st-closed { display: none; }
 .pp-coll[open] > summary .pp-st-open, .pp-disc[aria-expanded="true"] .pp-st-open { display: inline; }
 .pp-count { font-size: 13.5px; color: var(--text-faint); font-weight: 400; font-family: var(--font-sans); }
-.pp-peek { display: block; font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
-.pp-coll[open] > summary .pp-peek, .pp-disc[aria-expanded="true"] .pp-peek { display: none; }
+.pp-peek { display: block; margin-top: 2px; font-family: var(--font-sans); font-size: 13.5px; font-weight: 400; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+.pp-coll[open] > summary .pp-peek, .pp-coll:has(> .pp-fold-h > .pp-disc[aria-expanded="true"]) > .pp-peek { display: none; }
+/* In the file the peek sits inside the summary: the heading keeps the full row, the peek wraps below it. */
+.pp-coll > summary.pp-disc { flex-wrap: wrap; }
+.pp-coll > summary > .pp-fold-h { display: flex; flex: 1 1 auto; min-width: 0; }
+.pp-coll > summary > .pp-peek { flex: 0 0 100%; margin-top: -4px; }
 .pp-sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
 .pp .pp-draft-tag { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-light); font-size: 11px; line-height: 18px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
 .pp .pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
@@ -91,9 +95,10 @@ button.pp-card { cursor: pointer; }
 .pp-seg + .pp-seg { margin-top: 14px; }
 .pp-seg-title { padding: 0 0 6px 82px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
 .pp-seg-years { margin-left: 8px; color: var(--text-faint); font-weight: 400; letter-spacing: 0; white-space: nowrap; }
-.pp-row { display: grid; grid-template-columns: 46px 28px minmax(0, 1fr); column-gap: 8px; }
-.pp-y { padding: 6px 0; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pp-m { display: flex; justify-content: center; align-items: flex-start; padding-top: 6px; background: linear-gradient(var(--divider), var(--divider)) center / 2px 100% no-repeat; }
+/* Every year (own, children's, history, a span) ends at the marker and sits on the first line of its text. */
+.pp-row { display: grid; grid-template-columns: 46px 28px minmax(0, 1fr); column-gap: 8px; align-items: baseline; }
+.pp-y { min-width: 0; padding: 6px 0; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: normal; }
+.pp-m { align-self: stretch; display: flex; justify-content: center; align-items: flex-start; padding-top: 6px; background: linear-gradient(var(--divider), var(--divider)) center / 2px 100% no-repeat; }
 .pp-mk { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); color: var(--primary); font-size: 18px; line-height: 1; }
 .pp-t { min-width: 0; padding: 6px 0 10px; font-size: 15.5px; overflow-wrap: anywhere; }
 .pp-place { color: var(--text-light); }
@@ -115,7 +120,7 @@ button.pp-card { cursor: pointer; }
 .pp-quote > summary { display: inline; cursor: pointer; color: var(--primary); font-weight: 600; list-style: none; }
 .pp-quote[open] { flex-basis: 100%; }
 .pp-quote blockquote { margin: 4px 0 0; font-family: var(--font-serif); font-style: italic; font-size: 14px; color: var(--text-light); }
-.pp-row--kid .pp-y { padding-right: 10px; font-size: 13px; font-weight: 400; color: var(--text-light); }
+.pp-row--kid .pp-y { font-size: 13px; font-weight: 400; color: var(--text-light); }
 .pp-row--kid .pp-mk { font-size: 15px; color: var(--text-faint); }
 .pp-row--kid .pp-t { font-size: 14px; color: var(--text-light); }
 .pp-no-history .pp-row--hist, .pp-no-history .pp-legend, .pp-no-kids .pp-row--kid { display: none; }

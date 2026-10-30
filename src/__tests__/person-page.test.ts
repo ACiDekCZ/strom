@@ -11,6 +11,7 @@ import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
+    personPageTocCurrent,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
 import { personSourceRows } from '../person-sources.js';
@@ -305,6 +306,71 @@ describe('history layer', () => {
         const plain = preparePersonPageData(fiskTree(), opts({ research: false }), { history: { payload } });
         expect(plain.history).toEqual([]);
         expect(plain.groups.history).toBe(false);
+    });
+});
+
+describe('history spans and the folded sources', () => {
+    it('a span of years may break after the dash, in the history layer and in own rows', () => {
+        const payload = parseHistoryPayload({
+            state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
+            events: [{
+                id: 'cz-bohemia-0002', from: 1880, to: 1890, kind: 'war', scope: 'region',
+                region: { id: 'cz-bohemia', name: { cs: 'Čechy' } }, text: { cs: 'Dlouhé období' },
+                source: { title: 'Období', publisher: 'Wikipedie', url: 'https://cs.wikipedia.org/wiki/Y', checked: '2026-10-27' },
+            }],
+            places: { 'Čapkov': { events: ['cz-bohemia-0002'] } },
+        }, '2026-10-27T14:05:00Z')!;
+        const d = fiskTree();
+        d.persons['jan' as PersonId].events!.push({ id: 'e4', type: 'residence', date: 'FROM 1895 TO 1900', place: 'Lhota' });
+        for (const mode of ['app', 'file'] as const) {
+            const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
+            const html = buildPersonPageBody(preparePersonPageData(d, op, { history: { payload } }), op);
+            expect(html).toContain('<span class="pp-y">1880–<wbr>1890</span>');
+            expect(html).toContain('<span class="pp-y">1860</span>');
+        }
+    });
+
+    it('folded, the sources name three titles in plain text under the heading and count the rest', () => {
+        const d = fiskTree();
+        for (let i = 0; i < 28; i++) {
+            const id = `m${i}`;
+            d.sources![id] = { id, title: `Velmi dlouhý název pramene číslo ${i} z archivu v Čapkově, fol. ${i}` };
+            d.persons['jan' as PersonId].sourceIds = [...(d.persons['jan' as PersonId].sourceIds ?? []), id];
+        }
+        for (const s of Object.values(d.sources!)) s.title = `${s.title}, fond Farní úřad Čapkov, inventární číslo 12, signatura II/3`;
+        for (const mode of ['app', 'file'] as const) {
+            const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
+            const html = buildPersonPageBody(preparePersonPageData(d, op), op);
+            const peek = html.match(/<span class="pp-peek">([^<]*)<\/span>/)?.[1] ?? '';
+            expect(peek.split(' · ')).toHaveLength(4);
+            expect(peek).toMatch(/ · a 28 dalších$/);
+            // A long title is cut at a word, so three titles stay a short preview.
+            const titles = peek.split(' · ').slice(0, 3);
+            for (const t of titles) expect(t.length).toBeLessThanOrEqual(60);
+            expect(titles.every(t => /[^\s,(]…$/.test(t))).toBe(true);
+            // Not inside the heading (where it took the heading's font and pushed it aside).
+            const heading = html.match(/<h2 class="pp-fold-h">((?:(?!<\/h2>).)*)<\/h2>/)?.[1] ?? '';
+            expect(heading).toContain('Prameny');
+            expect(heading).not.toContain('pp-peek');
+        }
+        const en = buildPersonPageBody(preparePersonPageData(d, opts({ lang: 'en' })), opts({ lang: 'en' }));
+        expect(en).toMatch(/ · and 28 more<\/span>/);
+    });
+});
+
+describe('the contents mark the section being read', () => {
+    const secs = [{ id: 'facts', top: 0 }, { id: 'family', top: 300 }, { id: 'timeline', top: 700 }, { id: 'sources', top: 3000 }, { id: 'research', top: 3200 }];
+    it('the last section past the reading line; the top one before any', () => {
+        expect(personPageTocCurrent(secs, { scrollTop: 0, clientHeight: 800, scrollHeight: 3500 })).toBe('facts');
+        expect(personPageTocCurrent(secs, { scrollTop: 600, clientHeight: 800, scrollHeight: 3500 })).toBe('timeline');
+        expect(personPageTocCurrent(secs, { scrollTop: 2600, clientHeight: 800, scrollHeight: 3500 })).toBe('timeline');
+    });
+    it('at the end of the page the last section, though it never reaches the line', () => {
+        expect(personPageTocCurrent(secs, { scrollTop: 2700, clientHeight: 800, scrollHeight: 3500 })).toBe('research');
+        expect(personPageTocCurrent(secs, { scrollTop: 2690, clientHeight: 800, scrollHeight: 3500 })).toBe('timeline');
+        // A page that does not scroll: the top.
+        expect(personPageTocCurrent(secs, { scrollTop: 0, clientHeight: 4000, scrollHeight: 4000 })).toBe('facts');
+        expect(personPageTocCurrent([], { scrollTop: 0, clientHeight: 1, scrollHeight: 1 })).toBeNull();
     });
 });
 

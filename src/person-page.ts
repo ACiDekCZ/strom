@@ -27,6 +27,7 @@ import { storyProseHtml } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
+import { clipText } from './text-clip.js';
 import { PERSON_PAGE_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { findRelationship } from './kinship.js';
 
@@ -847,6 +848,11 @@ function notesHtml(c: Ctx): string {
 
 // ── Timeline ──
 
+/** The year column: a span of years ("1950–1960") may break after the dash, never under the marker. */
+function yearCell(label: string): string {
+    return `<span class="pp-y">${esc(label).replace(/–/g, '–<wbr>')}</span>`;
+}
+
 function eventOf(c: Ctx, pt: LifelinePoint): LifeEvent | undefined {
     return pt.eventId ? c.person.events?.find(e => e.id === pt.eventId) : undefined;
 }
@@ -1017,7 +1023,7 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
             + `<blockquote>${esc(S.history.quoted(quote))}</blockquote></details>`);
     }
     const langAttr = item.textLang && item.textLang !== c.page.lang ? ` lang="${esc(item.textLang)}"` : '';
-    return `<div class="pp-row pp-row--hist"><span class="pp-y">${esc(item.yearLabel ?? String(item.year))}</span>`
+    return `<div class="pp-row pp-row--hist">${yearCell(item.yearLabel ?? String(item.year))}`
         + `<span class="pp-m"><span class="pp-mk pp-hm--${scope}" aria-hidden="true">${mark}</span></span>`
         + `<div class="pp-t"><div class="pp-hist"><p${langAttr}>${esc(stripResearchIds(item.text).text)}</p>`
         + `<div class="pp-hist-meta">${meta.join('<span aria-hidden="true">·</span>')}</div></div></div></div>`;
@@ -1045,7 +1051,7 @@ function timelineHtml(c: Ctx): string {
             const caption = P.excerptCaption(ex.event, registerKindOf(ex.source.title), pt.place ?? '', pt.year);
             fig = figureHtml(c, shownExcerpt(ex.excerpt), caption, anchor);
         }
-        return `<div class="pp-row ${cls}"><span class="pp-y">${esc(pt.yearLabel ?? String(pt.year))}</span>`
+        return `<div class="pp-row ${cls}">${yearCell(pt.yearLabel ?? String(pt.year))}`
             + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
             + `<div class="pp-t">${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
     };
@@ -1099,6 +1105,18 @@ function materialsHtml(c: Ctx): string {
 
 // ── Sources ──
 
+/** Source titles the folded Sources section names before "and N more", each cut to a short line. */
+const SOURCES_PEEK = 3;
+const SOURCES_PEEK_TITLE = 60;
+
+function peekTitle(title: string): string {
+    const t = stripResearchIds(title || '?').text.trim();
+    if (t.length <= SOURCES_PEEK_TITLE) return t;
+    const cut = clipText(t, SOURCES_PEEK_TITLE - 1);
+    const space = cut.lastIndexOf(' ');
+    return `${(space > SOURCES_PEEK_TITLE / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:.(–-]+$/, '')}…`;
+}
+
 function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
     if (!c.page.groups.sources || !rows.length) return '';
     const { P } = c;
@@ -1129,13 +1147,15 @@ function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
             + foldState('▸', '▾');
         return `<li class="pp-src">${fold(c, { key: `s:${s.id}`, id: `pp-src-${asciiSlug(s.id) || 'x'}`, cls: 'pp-src-card', head, body: `<div class="pp-src-body">${body.join('')}</div>` })}</li>`;
     }).join('');
-    const peek = rows.map(r => stripResearchIds(r.source.title || '?').text).join(' · ');
+    // Folded: a few titles under the heading in plain text, the rest counted.
+    const peekTitles = rows.slice(0, SOURCES_PEEK).map(r => peekTitle(r.source.title));
+    if (rows.length > SOURCES_PEEK) peekTitles.push(P.sources.peekMore(rows.length - SOURCES_PEEK));
+    const peek = `<span class="pp-peek">${esc(peekTitles.join(' · '))}</span>`;
     const head = `<span class="pp-sum-main"><span class="pp-h2-text">${esc(P.sec.sources)}</span> <span class="pp-count">${rows.length}</span></span>`
-        + foldState(`${P.expand} ▸`, `${P.collapse} ▾`)
-        + `<span class="pp-peek">${esc(peek)}</span>`;
+        + foldState(`${P.expand} ▸`, `${P.collapse} ▾`);
     const body = `<p class="pp-src-intro">${esc(P.sources.intro)}</p><ol class="pp-src-list">${cards}</ol>`;
     return `<section class="pp-sec pp-sec--sources" id="pp-sec-sources">`
-        + fold(c, { key: 'sources', id: c.app ? 'pp-sources' : 'pp-sources-fold', cls: 'pp-sources', head, heading: true, body })
+        + fold(c, { key: 'sources', id: c.app ? 'pp-sources' : 'pp-sources-fold', cls: 'pp-sources', head, heading: true, after: peek, body })
         + `</section>`;
 }
 
@@ -1213,6 +1233,26 @@ export function personPageSections(body: string, lang: Language): PersonPageSect
     const P = getStringsForLang(lang).personPage;
     const keys: PersonPageSection['key'][] = ['family', 'story', 'notes', 'timeline', 'materials', 'sources', 'research'];
     return keys.filter(k => body.includes(`id="pp-sec-${k}"`)).map(k => ({ key: k, id: `pp-sec-${k}`, label: P.sec[k] }));
+}
+
+/**
+ * The section the contents mark (K1, Milan 30. 10.): the last one whose top
+ * has passed the reading line a quarter down the view; scrolled to the end,
+ * the last section, however short (it may never reach the line). Tops are
+ * offsets in the scrolled content, in page order.
+ */
+export function personPageTocCurrent(
+    sections: readonly { id: string; top: number }[],
+    view: { scrollTop: number; clientHeight: number; scrollHeight: number },
+): string | null {
+    if (sections.length === 0) return null;
+    // A page that does not scroll is all in view: its top.
+    if (view.scrollHeight - view.clientHeight <= 1) return sections[0].id;
+    if (view.scrollTop >= view.scrollHeight - view.clientHeight - 2) return sections[sections.length - 1].id;
+    const line = view.scrollTop + view.clientHeight * 0.25;
+    let current = sections[0].id;
+    for (const s of sections) if (s.top <= line) current = s.id;
+    return current;
 }
 
 /** The document title: "Jan Fíšek (1860–1910)". */

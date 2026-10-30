@@ -21,7 +21,7 @@ import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
     preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageSections,
-    personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames,
+    personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
     PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy,
 } from '../person-page.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
@@ -60,7 +60,10 @@ interface PageState {
 }
 
 let state: PageState | null = null;
-let tocObserver: IntersectionObserver | null = null;
+/** Stops the contents following the scroll (the window's current page). */
+let tocCleanup: (() => void) | null = null;
+/** A section picked in the contents stays marked while the page scrolls to it. */
+let tocPick: ((id: string) => void) | null = null;
 let editObserver: MutationObserver | null = null;
 let rerenderQueued = false;
 let userChangeHandler: (() => void) | null = null;
@@ -192,8 +195,8 @@ export const personPageMethods = uiModule({
     closePersonPage(opts: { focus?: boolean } = {}): void {
         const overlay = overlayEl();
         this.closePersonPageExport();
-        tocObserver?.disconnect();
-        tocObserver = null;
+        tocCleanup?.();
+        tocCleanup = null;
         editObserver?.disconnect();
         editObserver = null;
         if (userChangeHandler) {
@@ -297,33 +300,50 @@ export const personPageMethods = uiModule({
         return ctx;
     },
 
-    /** The table of contents marks the section being read (IntersectionObserver on the scrolled body). */
+    /** The table of contents marks the section being read; at the end of the page the last one (personPageTocCurrent). */
     watchPersonPageToc(): void {
-        tocObserver?.disconnect();
-        tocObserver = null;
+        tocCleanup?.();
+        tocCleanup = null;
+        tocPick = null;
         const scroller = bodyEl();
         const links = [...(scroller?.querySelectorAll<HTMLAnchorElement>('.pp-toc-link') ?? [])];
-        if (!scroller || links.length === 0 || typeof IntersectionObserver === 'undefined') return;
+        if (!scroller || links.length === 0) return;
         const mark = (id: string): void => {
             for (const a of links) {
                 if (a.dataset.ppToc === id) a.setAttribute('aria-current', 'true');
                 else a.removeAttribute('aria-current');
             }
         };
-        mark(links[0].dataset.ppToc ?? '');
-        const visible = new Set<string>();
-        tocObserver = new IntersectionObserver((records) => {
-            for (const r of records) {
-                if (r.isIntersecting) visible.add(r.target.id);
-                else visible.delete(r.target.id);
-            }
-            const first = links.find(a => visible.has(a.dataset.ppToc ?? ''));
-            if (first) mark(first.dataset.ppToc ?? '');
-        }, { root: scroller, rootMargin: '0px 0px -60% 0px' });
-        for (const a of links) {
-            const sec = scroller.querySelector(`#${CSS.escape(a.dataset.ppToc ?? '')}`);
-            if (sec) tocObserver.observe(sec);
-        }
+        const update = (): void => {
+            const base = scroller.getBoundingClientRect().top - scroller.scrollTop;
+            const sections = links.flatMap(a => {
+                const sec = scroller.querySelector<HTMLElement>(`#${CSS.escape(a.dataset.ppToc ?? '')}`);
+                return sec ? [{ id: sec.id, top: sec.getBoundingClientRect().top - base }] : [];
+            });
+            const id = personPageTocCurrent(sections, scroller);
+            if (id) mark(id);
+        };
+        // A pick holds until the scroll it started has settled.
+        let picked = false;
+        let settle = 0;
+        const holdPick = (): void => {
+            window.clearTimeout(settle);
+            settle = window.setTimeout(() => { picked = false; }, 180);
+        };
+        let frame = 0;
+        const onScroll = (): void => {
+            if (picked) { holdPick(); return; }
+            if (!frame) frame = requestAnimationFrame(() => { frame = 0; update(); });
+        };
+        tocPick = (id: string): void => { picked = true; mark(id); holdPick(); };
+        scroller.addEventListener('scroll', onScroll, { passive: true });
+        tocCleanup = () => {
+            scroller.removeEventListener('scroll', onScroll);
+            cancelAnimationFrame(frame);
+            window.clearTimeout(settle);
+            tocPick = null;
+        };
+        update();
     },
 
     /** Where the page is now, kept in its entry (scroll; folds and switches are kept as they change). */
@@ -399,6 +419,7 @@ export const personPageMethods = uiModule({
         if (tocLink) {
             e.preventDefault();
             const sec = bodyEl()?.querySelector<HTMLElement>(`#${CSS.escape(tocLink.dataset.ppToc ?? '')}`);
+            if (sec) tocPick?.(sec.id);
             sec?.scrollIntoView({ block: 'start', behavior: 'smooth' });
             return;
         }
