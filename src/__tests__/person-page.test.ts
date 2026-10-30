@@ -11,7 +11,7 @@ import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageFileToggles, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
-    personPageTocCurrent, dataUrlImageSize, personPageChartInput,
+    personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
 import { personSourceRows } from '../person-sources.js';
@@ -386,6 +386,24 @@ describe('header', () => {
         expect(personPageDate('~1835', 'cs')).toBe('asi 1835');
         expect(personPageDate('1860-03-12', 'en')).toContain('1860');
         expect(personPageDate('1860-03-12', 'en')).toMatch(/March/);
+    });
+    it('an occupation keeps the precision of its date: before, after, about, a period (round 3, finding 3)', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].events!.push(
+            { id: 'o1', type: 'occupation', date: '<1895', note: 'zámečník' },
+            { id: 'o2', type: 'occupation', date: '1896/1901', note: 'hostinský' },
+            { id: 'o3', type: 'occupation', date: '~1905', note: 'rolník' },
+            { id: 'o4', type: 'occupation', date: '1908-04-01', note: 'starosta' },
+        );
+        const html = body(d);
+        expect(html).toContain('zámečník (před 1895), hostinský (1896–1901), rolník (asi 1905), starosta (1908)');
+        expect(html).not.toContain('zámečník (1895)');
+        expect(personPageYear('>1880', 'cs')).toBe('po 1880');
+        expect(personPageYear('<1965', 'en')).toBe('before 1965');
+        expect(personPageYear('<1965', 'de')).toBe('vor 1965');
+        expect(personPageYear('/1965', 'cs')).toBe('do 1965');
+        expect(personPageYear('1890..1892', 'cs')).toBe('1890–1892');
+        expect(personPageYear('1890-05-01', 'cs')).toBe('1890');
     });
     it('an open birth conflict gives the differs badge leading to the researchers section', () => {
         const d = fiskTree();

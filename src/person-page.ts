@@ -20,7 +20,7 @@ import {
 } from './history.js';
 import { placeKey } from './places.js';
 import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
-import { parseFlexDate, formatFlexDate, yearOf, ageBetween } from './dates.js';
+import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
@@ -245,6 +245,19 @@ export function personPageDate(value: string | undefined, lang: Language): strin
         ? P.date.words(d.day, P.date.months[d.month - 1] ?? String(d.month), d.year)
         : String(d.year);
     return d.qualifier === '~' ? `${P.about} ${core}` : core;
+}
+
+/**
+ * A date to the year, its precision kept the way personPageDate words it: "1965",
+ * "before 1965", "after 1965", "about 1965", "to 1965" (a period's end), "1950–1960"
+ * (a period or a range across years). An occupation in the header (round 3, finding 3).
+ */
+export function personPageYear(value: string | undefined, lang: Language): string {
+    const d = parseFlexDate(value);
+    if (!d) return value?.trim() ?? '';
+    if (d.end && d.end.year !== d.year) return `${d.year}–${d.end.year}`;
+    if (d.end || (!d.qualifier && !d.period)) return String(d.year);
+    return personPageDate(toCanonical({ qualifier: d.qualifier, year: d.year, ...(d.period ? { period: true } : {}) }), lang);
 }
 
 /** Whole years between two dates when both are exact days or both mere years; else null. */
@@ -844,8 +857,7 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
     const jobs = shield ? [] : (person.events ?? []).filter(e => e.type === 'occupation').map(e => {
         // An occupation's name is its note (as the editor stores it).
         const what = stripResearchIds(e.note?.trim() ?? '').text;
-        const d = parseFlexDate(e.date);
-        const years = d ? (d.end && d.end.year !== d.year ? `${d.year}–${d.end.year}` : String(d.year)) : '';
+        const years = personPageYear(e.date, page.lang);
         return [what, years ? `(${years})` : ''].filter(Boolean).join(' ');
     }).filter(Boolean);
     if (jobs.length) facts.push([P.occupation, esc(jobs.join(', '))]);
