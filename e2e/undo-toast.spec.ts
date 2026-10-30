@@ -281,3 +281,26 @@ test.describe('a toast to be read stands 3 s at least', () => {
         await expect(page.locator('body > .undo-toast.show .undo-toast-msg')).toHaveText('adding Sigwulf', { timeout: 1000 });
     });
 });
+
+test('a change of the UI language closes the undo pill and the "Undone: …" message said in the old one', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const pill = page.locator('body > .undo-toast');
+    await expect(pill).toBeVisible();
+    await expect(pill.locator('.undo-toast-btn')).toHaveText('Undo');
+    // The pill's sentence was made in English when the change was: it cannot be said in Czech, so it goes.
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+    await expect(pill).toHaveCount(0, { timeout: 1500 });
+    // The change itself can still be undone (Czech now); its "Vráceno: …" goes on the next change of language.
+    await page.evaluate(() => window.Strom.UI.performUndo());
+    const done = page.locator('body > .toast.show');
+    await expect(done).toContainText('Vráceno:');
+    await page.evaluate(() => window.Strom.UI.setLanguage('en' as never));
+    await expect(page.locator('body > .toast')).toHaveCount(0, { timeout: 1500 });
+    // The same language chosen again changes nothing: a pill standing stays.
+    await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+    await expect(pill).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.setLanguage('en' as never));
+    await page.waitForTimeout(400);
+    await expect(pill).toBeVisible();
+});

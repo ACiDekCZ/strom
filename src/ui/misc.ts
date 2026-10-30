@@ -561,7 +561,9 @@ export const miscMethods = uiModule({
     },
 
     setLanguage(language: LanguageSetting): void {
+        const before = getCurrentLanguage();
         SettingsManager.setLanguage(language);
+        if (getCurrentLanguage() !== before) this.dropUndoToastsOfOldLanguage();
         // Refresh UI to update all strings
         this.initializeStrings();
         // Refresh dynamically created components
@@ -579,6 +581,22 @@ export const miscMethods = uiModule({
         // Settings drawn from code while open (the originals waiting, the change history's state): the new language
         // at once, not at the next opening (J4 of the language round).
         if (document.getElementById('settings-modal')?.classList.contains('active')) this.showSettingsDialog();
+    },
+
+    /**
+     * A change of the UI language closes the undo pill and the "Undone: …" /
+     * "Redone: …" message standing: their text names the change as it was
+     * described when it was made, in the old language (the undo stack keeps
+     * that sentence, not its parts), so it cannot be said again in the new
+     * one, and a pill half in one language and half in the other reads worse
+     * than none. The change can still be undone from the toolbar or Ctrl+Z.
+     */
+    dropUndoToastsOfOldLanguage(): void {
+        this.dismissUndoToast();
+        for (const t of document.querySelectorAll<HTMLElement>('body > .toast[data-kind="undo-result"]')) {
+            t.classList.remove('show');
+            setTimeout(() => t.remove(), 300);
+        }
     },
 
     // ---- MENUS ----
@@ -1796,7 +1814,7 @@ export const miscMethods = uiModule({
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();    // attachments brought back or gone again
-        this.showToast(strings.undo.undone(result.description));
+        this.showToast(strings.undo.undone(result.description), 3000, { kind: 'undo-result' });
     },
 
     /** Replay the last undone mutation. Symmetric to performUndo(). */
@@ -1812,7 +1830,7 @@ export const miscMethods = uiModule({
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();
-        this.showToast(strings.undo.redone(result.description));
+        this.showToast(strings.undo.redone(result.description), 3000, { kind: 'undo-result' });
     },
 
 });
