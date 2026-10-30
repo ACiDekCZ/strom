@@ -918,7 +918,9 @@ test.describe('a research tree with history', () => {
         await expect(w.locator('#pp-sec-timeline')).not.toContainText('Vienna stock exchange crash');
         const legend = w.locator('#pp-sec-timeline .pp-legend:not(.pp-chart-legend)');
         await expect(legend).toBeVisible();
-        await expect(legend.locator('.pp-hm')).toHaveCount(3);
+        // Only the kinds the rows carry: one regional event, so no "Local history" or "From records".
+        await expect(legend.locator('.pp-hm')).toHaveCount(1);
+        await expect(legend).toHaveText('◇Regional history');
         // Its own margin below (the page's paragraph reset does not take it): the first segment's title keeps off.
         expect(await legend.evaluate((el) => getComputedStyle(el).marginBottom)).toBe('14px');
 

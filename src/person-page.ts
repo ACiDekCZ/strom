@@ -1766,10 +1766,15 @@ function figureHtml(c: Ctx, src: string, caption: string, id?: string, link = ''
         + `<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
 }
 
+/** A history event's mark on the page: the research's own records, the place's history, else the region's. */
+function histScope(ev: LifelineHistoryItem['ev']): 'region' | 'place' | 'local' {
+    return ev.scope === 'local' ? 'local' : ev.scope === 'place' ? 'place' : 'region';
+}
+
 function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     const { S } = c;
     const ev = item.ev;
-    const scope = ev.scope === 'local' ? 'local' : ev.scope === 'place' ? 'place' : 'region';
+    const scope = histScope(ev);
     const mark = scope === 'local' ? '■' : scope === 'place' ? '▲' : '◇';
     const meta: string[] = [];
     meta.push(`<span class="pp-hist-kind">${esc(S.history.kinds[ev.kind] ?? ev.kind)}</span>`);
@@ -1840,11 +1845,11 @@ function timelineHtml(c: Ctx): string {
         `<button type="button" class="pp-toggle${c.app ? '' : ' js-only'}" role="switch" aria-checked="${c.opts.toggles[key]}" data-pp-switch="${key}">${esc(label)}</button>`;
     const toggles = [hasHist ? sw('history', P.toggle.history) : '', hasKid ? sw('childEvents', P.toggle.childEvents) : ''].join('');
     const head = `<div class="pp-sec-head"><h2>${esc(P.sec.timeline)}</h2>${toggles ? `<div class="pp-toggles">${toggles}</div>` : ''}</div>`;
-    const legend = segs.some(s => s.rows.some(r => r.kind === 'hist'))
-        ? `<p class="pp-legend"><span><span class="pp-hm pp-hm--region" aria-hidden="true">◇</span>${esc(P.legend.region)}</span>`
-            + `<span><span class="pp-hm pp-hm--place" aria-hidden="true">▲</span>${esc(P.legend.place)}</span>`
-            + `<span><span class="pp-hm pp-hm--local" aria-hidden="true">■</span>${esc(P.legend.local)}</span></p>`
-        : '';
+    // The legend names only the marks the rows carry (a page with regional history alone shows "◇ Regional history").
+    const scopes = new Set(segs.flatMap(s => s.rows.flatMap(r => r.kind === 'hist' ? [histScope(r.item.ev)] : [])));
+    const legendItems = ([['region', '◇'], ['place', '▲'], ['local', '■']] as const).filter(([k]) => scopes.has(k))
+        .map(([k, mark]) => `<span><span class="pp-hm pp-hm--${k}" aria-hidden="true">${mark}</span>${esc(P.legend[k])}</span>`);
+    const legend = legendItems.length ? `<p class="pp-legend">${legendItems.join('')}</p>` : '';
     // Slot 7 (§2.1): the life chart above the text timeline.
     const chartHtml = chart
         ? `<div class="pp-chart-host">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`

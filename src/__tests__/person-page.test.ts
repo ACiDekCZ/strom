@@ -755,6 +755,19 @@ describe('history layer', () => {
         expect(plain.history).toEqual([]);
         expect(plain.groups.history).toBe(false);
     });
+
+    it('the legend names only the kinds of history the rows carry, in the window and the file', () => {
+        for (const mode of ['app', 'file'] as const) {
+            const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
+            const page = preparePersonPageData(fiskTree(), op, { history: { payload } });
+            const html = mode === 'app' ? buildPersonPageBody(page, op) : buildPersonPageDocument(page, op);
+            const legend = html.match(/<p class="pp-legend">([\s\S]*?)<\/p>/)?.[1] ?? '';
+            expect(legend).toContain('Dějiny regionu');
+            expect(legend).not.toContain('Dějiny místa');
+            expect(legend).not.toContain('Z pramenů');
+            expect(legend.match(/class="pp-hm /g)).toHaveLength(1);
+        }
+    });
 });
 
 describe('history spans and the folded sources', () => {
