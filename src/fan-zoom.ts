@@ -644,7 +644,8 @@ export class FanZoom {
  * (240 ms ease-out cubic, none with reduced motion), wheel only with
  * Ctrl/⌘ (else the hint for 1.5 s), pinch, a drag only when zoomed in (a
  * drag never follows a link), touch-action `pan-x pan-y` at z = 1, a new
- * size back to the whole fan. Labels are not refitted (no model in the page).
+ * size and printing back to the whole fan. Labels are not refitted (no model
+ * in the page).
  */
 export function fanZoomInlineScript(): string {
     return FAN_ZOOM_INLINE;
@@ -676,6 +677,7 @@ el.addEventListener('pointermove',function(e){var o=P[e.pointerId];if(!o)return;
 if(!pd||pd.id!=e.pointerId||v.z<=1.001)return;if(!pd.m&&M.hypot(q.x-pd.x,q.y-pd.y)>8){pd.m=1;sup=1;try{el.setPointerCapture(e.pointerId)}catch(x){}}if(pd.m)pan(q.x-o.x,q.y-o.y)});
 function up(e){if(!P[e.pointerId])return;delete P[e.pointerId];n--;if(n<2)pin=null;if(!n)pd=null}
 el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
-if(window.ResizeObserver)new ResizeObserver(function(){var w=W,h=H;sz();if(w!=W||h!=H){v=fit();ap()}}).observe(el)}
+if(window.ResizeObserver)new ResizeObserver(function(){var w=W,h=H;sz();if(w!=W||h!=H){v=fit();ap()}}).observe(el);
+addEventListener('beforeprint',function(){cancelAnimationFrame(an);v=fit();ap()})}
 function all(){document.querySelectorAll('[data-fan-zoom]').forEach(F)}
 if(document.readyState=='loading')document.addEventListener('DOMContentLoaded',all);else all()})();`;
