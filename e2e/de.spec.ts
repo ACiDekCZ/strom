@@ -141,7 +141,7 @@ test('German UI: html lang and the main dialogs are free of English words', { ta
     await expect(overview.locator('.tov-nums')).toContainText('3');
     const closed = overview.locator('.tov-sec-head[aria-expanded="false"]');
     while (await closed.count() > 0) await closed.first().click();
-    await expect(overview.locator('.tov-sec[data-ready="true"]')).toHaveCount(6);
+    await expect(overview.locator('.tov-sec[data-ready="true"]')).toHaveCount(7);
     await expect(overview.locator('.tov-sec[data-section="time"]')).toContainText('Männer / Frauen');
     await expectNoEnglish(overview, 'Tree overview');
     await closeWithEscape(page, overview);

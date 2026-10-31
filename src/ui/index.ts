@@ -106,6 +106,8 @@ import { viewLinksUiMethods } from './view-links-ui.js';
 import { viewLinksListMethods } from './view-links-list-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
+import { bookRodsUiMethods } from './book-rods-ui.js';
+import { lineageEditUiMethods } from './lineage-edit-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { genLabelsMethods } from './gen-labels.js';
@@ -739,6 +741,14 @@ Object.assign(UIClass.prototype, exportImageMethods);
 type BookUiMethods = typeof bookUiMethods;
 export interface UIClass extends BookUiMethods {}
 Object.assign(UIClass.prototype, bookUiMethods);
+
+type BookRodsUiMethods = typeof bookRodsUiMethods;
+export interface UIClass extends BookRodsUiMethods {}
+Object.assign(UIClass.prototype, bookRodsUiMethods);
+
+type LineageEditUiMethods = typeof lineageEditUiMethods;
+export interface UIClass extends LineageEditUiMethods {}
+Object.assign(UIClass.prototype, lineageEditUiMethods);
 
 type SnapshotsUiMethods = typeof snapshotsUiMethods;
 export interface UIClass extends SnapshotsUiMethods {}

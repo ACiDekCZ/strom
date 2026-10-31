@@ -304,6 +304,8 @@ class TreeRendererClass {
     private changedIds: Set<PersonId> | null = null;
     /** "Show in tree" from the tree overview: these people stand out, the rest dims. Not kept over a reload. */
     private evidenceIds: Set<PersonId> | null = null;
+    /** Shown faintly beside the highlighted people (a lineage's married-in spouses): neither framed nor dimmed. */
+    private evidenceFaintIds: Set<PersonId> | null = null;
     /** The Evidence mode: every card framed by its level (null: off). */
     private evidenceLevelMap: Map<PersonId, EvidenceLevel> | null = null;
     private focusDepthUp: number = 3;
@@ -3507,10 +3509,12 @@ class TreeRendererClass {
     /**
      * "Where evidence is missing → Show in tree": the people in `ids` get a
      * dashed frame, everyone else dims (cards and fan sectors). Null ends it.
-     * Class toggling only; re-applied on every render.
+     * Class toggling only; re-applied on every render. `faint`: people shown
+     * beside them with a lighter frame instead of dimmed.
      */
-    setEvidenceHighlight(ids: Set<PersonId> | null): void {
+    setEvidenceHighlight(ids: Set<PersonId> | null, faint: Set<PersonId> | null = null): void {
         this.evidenceIds = ids;
+        this.evidenceFaintIds = ids ? faint : null;
         this.applyEvidenceHighlight();
     }
 
@@ -3524,11 +3528,17 @@ class TreeRendererClass {
         return this.evidenceIds;
     }
 
+    /** A card's class while a group is highlighted: in it, shown faintly beside it, or dimmed. */
+    private evidenceClass(id: PersonId): string {
+        if (this.evidenceIds?.has(id)) return 'evidence-hit';
+        return this.evidenceFaintIds?.has(id) ? 'evidence-faint' : 'evidence-dim';
+    }
+
     private applyEvidenceHighlight(): void {
         const mark = (el: Element, id: string | null | undefined): void => {
-            el.classList.remove('evidence-hit', 'evidence-dim');
+            el.classList.remove('evidence-hit', 'evidence-faint', 'evidence-dim');
             if (!this.evidenceIds || !id) return;
-            el.classList.add(this.evidenceIds.has(id as PersonId) ? 'evidence-hit' : 'evidence-dim');
+            el.classList.add(this.evidenceClass(id as PersonId));
         };
         document.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
             mark(card, card.dataset.id);
@@ -3853,7 +3863,7 @@ class TreeRendererClass {
             const ghostOf = this.viewLayer?.ghostIds.has(id) ? this.viewLayer.ghostOf.get(id) : undefined;
             if (ghostOf) classes += ' view-ghost';
             if (shownHere.has(id)) classes += ' shown-here';
-            if (this.evidenceIds) classes += this.evidenceIds.has(id) ? ' evidence-hit' : ' evidence-dim';
+            if (this.evidenceIds) classes += ` ${this.evidenceClass(id)}`;
             const evl = this.evidenceLevelMap?.get(id);
             if (evl) classes += ` evl-${evl}`;
             // Optional branch colour stripe (focus and placeholders never tagged).

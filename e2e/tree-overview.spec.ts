@@ -318,7 +318,7 @@ test.describe('tree overview', () => {
         const treeId = await setup(page);
         const dialog = await openOverview(page, treeId);
         // Computed on idle callbacks while closed.
-        for (const id of ['life', 'time', 'quality', 'highlights']) {
+        for (const id of ['rods', 'life', 'time', 'quality', 'highlights']) {
             await expect(section(dialog, id)).toHaveAttribute('data-ready', 'true');
         }
         await expect(section(dialog, 'life').locator('.tov-sum')).toHaveText('');
@@ -398,7 +398,7 @@ test.describe('tree overview', () => {
         await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
         let dialog = await openOverview(page, treeId);
         await expect(dialog.locator('.tov-title')).toHaveText('Přehled stromu: Lindqvist');
-        await expect(dialog.locator('.tov-sec-title')).toHaveText(['Na co se zaměřit', 'Předci', 'Život a zdraví', 'Rod v čase', 'Kvalita dat', 'Zajímavosti']);
+        await expect(dialog.locator('.tov-sec-title')).toHaveText(['Na co se zaměřit', 'Předci', 'Rody', 'Život a zdraví', 'Rodina v čase', 'Kvalita dat', 'Zajímavosti']);
         await expect(section(dialog, 'quality').locator('.tov-sum .tov-sum-err')).toHaveText('2 chyby');
         await section(dialog, 'quality').locator('.tov-sec-head').click();
         await expect(section(dialog, 'quality').locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 svazky. Všechny osoby jsou propojeny do jedné rodiny.');

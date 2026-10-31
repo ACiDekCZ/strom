@@ -6,8 +6,8 @@
  *
  * - The header numbers are computed at once. "Where to focus", "Ancestors"
  *   and any other section remembered open are computed when the dialog
- *   opens; the rest on idle callbacks (life → time → quality → highlights,
- *   one per callback) or at once when expanded first.
+ *   opens; the rest on idle callbacks (family lines → life → time → quality →
+ *   highlights, one per callback) or at once when expanded first.
  * - A section still calculating shows "Calculating…" after 150 ms and keeps
  *   it at least 300 ms once shown (aria-busy on its body).
  * - Results are cached by section + tree + chosen person + revision; the
@@ -16,7 +16,8 @@
  *   (debounced; open sections, the chosen person and the scroll position
  *   kept; postponed while a question is being edited).
  * - Device memory: which sections are open (`overview.open`), whether
- *   Ancestors › Ask the family is open (`overview.rememberers`), the chosen
+ *   Ancestors › Ask the family is open (`overview.rememberers`), the order of
+ *   the family lines (`overview.rodsSort`), the chosen
  *   person per tree (`overview.root.{treeId}`) and the recently chosen ones
  *   (`overview.recent.{treeId}`). Every storage access may fail.
  * - A tree that is not open is read only: actions that change data are
@@ -58,8 +59,15 @@ import { displayYear, yearOf } from '../dates.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { uiModule } from './module.js';
 import { evidenceIds, type HighlightGroup } from './evidence-ui.js';
+import {
+    LineageIndex, Rod, RodId, SMALL_ROD_MAX_MEMBERS, buildLineages, marriedInto, rodGenerations, rodLabels, rodOf,
+} from '../lineage.js';
+import {
+    RodSort, ROD_SORTS, ROD_SEARCH_FROM, isRodSort, sortRods, rodAxis, rodBar, searchRods, romanNumeral, founderPlace,
+    rodLivingCount,
+} from '../rods-overview.js';
 
-export type SectionId = 'focus' | 'ancestors' | 'life' | 'time' | 'quality' | 'highlights';
+export type SectionId = 'focus' | 'ancestors' | 'rods' | 'life' | 'time' | 'quality' | 'highlights';
 
 export interface TreeOverviewOptions {
     /** Expand this section (the others as remembered). */
@@ -73,11 +81,11 @@ export interface TreeOverviewOptions {
 const OVERLAY_ID = 'tree-overview-modal';
 /** The dialog a plain close returns to (set by `parent`, dropped by any other close). */
 let returnParent: string | null = null;
-const ALL_SECTIONS: readonly SectionId[] = ['focus', 'ancestors', 'life', 'time', 'quality', 'highlights'];
+const ALL_SECTIONS: readonly SectionId[] = ['focus', 'ancestors', 'rods', 'life', 'time', 'quality', 'highlights'];
 /** Computed when the dialog opens (the rest: idle callbacks, or when expanded). */
 const EAGER_SECTIONS: readonly SectionId[] = ['focus', 'ancestors'];
 /** The order the idle callbacks compute the other sections in, one per callback. */
-const IDLE_SECTIONS: readonly SectionId[] = ['life', 'time', 'quality', 'highlights'];
+const IDLE_SECTIONS: readonly SectionId[] = ['rods', 'life', 'time', 'quality', 'highlights'];
 /**
  * Sections calculated from the chosen person (marked ◉). "Life and health"
  * shows only the whole-tree age at death for now, so it is not rooted.
@@ -148,6 +156,96 @@ let refreshPending = false;
  * fills, until the dialog is scrolled, clicked or typed into.
  */
 let scrollTarget: SectionId | null = null;
+
+/** Family lines: the order of the list (device memory; this session's choice when storage fails). */
+const RODS_SORT_KEY = 'overview.rodsSort';
+let rodsSortSession: RodSort = 'size';
+/** Members of a generation listed before "and N more" (from this many on). */
+const ROD_GEN_LIST_FROM = 6;
+const ROD_GEN_SHOWN = 4;
+/** Places listed before "and N more" (from this many on). */
+const ROD_PLACES_LIST_FROM = 6;
+const ROD_PLACES_SHOWN = 3;
+/** Spouses listed in a lineage's detail. */
+const ROD_SPOUSES_SHOWN = 4;
+
+function readRodsSort(): RodSort {
+    try {
+        const v = localStorage.getItem(RODS_SORT_KEY);
+        if (isRodSort(v)) return v;
+    } catch { /* this session's choice */ }
+    return rodsSortSession;
+}
+
+function writeRodsSort(sort: RodSort): void {
+    rodsSortSession = sort;
+    try { localStorage.setItem(RODS_SORT_KEY, sort); } catch { /* kept for this session only */ }
+}
+
+/**
+ * What the family lines section shows open, for this session and one tree:
+ * the lineage whose detail is open (one at most), "Other families" open, the
+ * search, how many rows are listed, the generations a phone shows in full.
+ * `target`: a lineage the overview was opened at (scrolled to, opened).
+ */
+interface RodsUi {
+    treeId: string;
+    open: RodId | null;
+    smallOpen: boolean;
+    query: string;
+    showAll: boolean;
+    allGens: boolean;
+    genMore: Set<number>;
+    spousesMore: boolean;
+    marked: RodId | null;
+    target: RodId | null;
+}
+
+let rodsUi: RodsUi | null = null;
+/** The lineage row (or small family) the overview scrolls to after opening at it. */
+let rodScrollTo: RodId | null = null;
+
+function rodsUiOf(treeId: string): RodsUi {
+    if (!rodsUi || rodsUi.treeId !== treeId) {
+        rodsUi = {
+            treeId, open: null, smallOpen: false, query: '', showAll: false, allGens: false,
+            genMore: new Set(), spousesMore: false, marked: null, target: null,
+        };
+    }
+    return rodsUi;
+}
+
+/** Open one lineage's detail (the parts expanded inside the last one are folded again). */
+function openRodDetail(ui: RodsUi, id: RodId | null): void {
+    ui.open = id;
+    ui.allGens = false;
+    ui.genMore = new Set();
+    ui.spousesMore = false;
+}
+
+/** The family lines of the open dialog's tree (computed on idle, once per revision). */
+interface RodsData {
+    index: LineageIndex;
+    labels: Map<RodId, string>;
+    /** Lineages over the small threshold, and the small ones ("Other families"). */
+    big: Rod[];
+    small: Rod[];
+    living: Map<RodId, number>;
+    /** Each lineage's real members by generation (filled as rows ask). */
+    generations: Map<RodId, PersonId[][]>;
+}
+
+/** The real members of a lineage (placeholders left out). */
+function realRodMembers(index: LineageIndex, id: RodId): PersonId[] {
+    const rod = index.rods.get(id);
+    return rod ? rod.memberIds.filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
+}
+
+/** The real spouses who married into a lineage. */
+function realRodSpouses(index: LineageIndex, id: RodId): PersonId[] {
+    const rod = index.rods.get(id);
+    return rod ? rod.spouses.map(s => s.personId).filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
+}
 
 /**
  * Scroll the overview so `el` starts right under the sticky header. The header
@@ -431,13 +529,17 @@ export const treeOverviewMethods = uiModule({
             if (e.target === overlay) this.dismissTreeOverview();
         });
         overlay.addEventListener('click', (e) => this.onTreeOverviewClick(e));
+        overlay.addEventListener('input', (e) => {
+            const el = e.target;
+            if (el instanceof HTMLInputElement && el.classList.contains('tov-rod-search')) this.onTreeOverviewRodSearch(el);
+        });
         this.clearDialogStack();
         this.pushDialog(OVERLAY_ID);
 
         this.fillTreeOverviewSections(open);
         if (opts.section && opts.scroll) {
             scrollTarget = opts.section;
-            const stop = (): void => { scrollTarget = null; };
+            const stop = (): void => { scrollTarget = null; rodScrollTo = null; };
             const scroller = overlay.querySelector<HTMLElement>('.tov-scroll');
             for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const) {
                 (type === 'keydown' ? overlay : scroller)?.addEventListener(type, stop, { once: true, passive: true });
@@ -451,7 +553,11 @@ export const treeOverviewMethods = uiModule({
     scrollTreeOverviewToTarget(): void {
         if (!scrollTarget) return;
         const sec = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-sec[data-section="${scrollTarget}"]`);
-        if (sec) scrollBelowHeader(sec);
+        // Opened at one lineage: its row (or its place among the small families).
+        const rod = scrollTarget === 'rods' && rodScrollTo
+            ? sec?.querySelector<HTMLElement>(`[data-rod="${CSS.escape(rodScrollTo)}"]`) : null;
+        if (rod) scrollBelowHeader(rod);
+        else if (sec) scrollBelowHeader(sec);
     },
 
     /** The focus bar's person count: the overview of the open tree. */
@@ -476,6 +582,7 @@ export const treeOverviewMethods = uiModule({
         refreshTimer = null;
         refreshPending = false;
         scrollTarget = null;
+        rodScrollTo = null;
     },
 
     /** A plain close (×, Escape, backdrop): back to the dialog it was opened from, if any. */
@@ -731,6 +838,7 @@ export const treeOverviewMethods = uiModule({
         switch (id) {
             case 'focus': return this.treeOverviewFocusHtml();
             case 'ancestors': return this.treeOverviewAncestorsHtml();
+            case 'rods': return this.treeOverviewRodsHtml();
             case 'life': return this.treeOverviewLifeHtml();
             case 'time': return this.treeOverviewTimeHtml();
             case 'quality': return this.treeOverviewQualityHtml();
@@ -1119,6 +1227,412 @@ export const treeOverviewMethods = uiModule({
         this.refreshTreeOverview();
         document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-rem-row[data-id="${CSS.escape(id)}"] .tov-rem-btn`)
             ?.focus({ preventScroll: true });
+    },
+
+    treeOverviewRodsData(): RodsData {
+        return cached('rods', false, () => {
+            const st = state!;
+            const index = buildLineages(st.data);
+            const labels = rodLabels(index);
+            const all = [...index.rods.values()];
+            const year = new Date().getFullYear();
+            const bounds = inferBirthUpperBounds(st.data);
+            const living = new Map<RodId, number>();
+            for (const rod of all) if (!rod.small) living.set(rod.id, rodLivingCount(rod, st.data, year, bounds));
+            // A spouse who married in and has no parents recorded is a one-person
+            // lineage: shown with the lineage she married into, not as a family of her own.
+            const marriedIn = new Set<PersonId>();
+            for (const rod of all) for (const sp of rod.spouses) marriedIn.add(sp.personId);
+            const lone = (r: Rod): boolean => r.solitary && realRodMembers(index, r.id).every(id => marriedIn.has(id));
+            return {
+                index, labels, living, generations: new Map(),
+                big: all.filter(r => !r.small),
+                small: all.filter(r => r.small && !lone(r)),
+            };
+        });
+    },
+
+    /** A lineage's real members by generation (I = the founder's), computed once per revision. */
+    treeOverviewRodGenerations(d: RodsData, id: RodId): PersonId[][] {
+        let gens = d.generations.get(id);
+        if (!gens) {
+            gens = rodGenerations(d.index, id);
+            d.generations.set(id, gens);
+        }
+        return gens;
+    },
+
+    /** "asi 1702–1771", "1744", "† 1801" or "" (a member or spouse in the detail). */
+    treeOverviewRodYears(p: Person): string {
+        const b = birthYearOf(p);
+        const d = yearOf(deathDateOf(p));
+        const born = b ? (b.approx ? strings.treeOverview.rods.approx(b.year) : String(b.year)) : '';
+        if (born && d !== null) return `${born}–${d}`;
+        if (born) return born;
+        return d !== null ? `† ${d}` : '';
+    },
+
+    /** The founder's year and place: "asi 1702, Čapkov", "1745", "nejstarší známý, Čapkov". */
+    treeOverviewRodFounderFacts(rod: Rod, data: StromData): string {
+        const r = strings.treeOverview.rods;
+        const founder = data.persons[rod.founderId];
+        const year = rod.founderYear != null
+            ? (rod.founderYearApprox ? r.approx(rod.founderYear) : String(rod.founderYear))
+            : r.oldestKnown(founder?.gender ?? 'unknown');
+        return [year, founder ? founderPlace(founder) : null].filter(Boolean).join(', ');
+    },
+
+    /** "48 členů · 17 přivdaných · 8 generací · 3 žijící" (married in and living only when there are some). */
+    treeOverviewRodCounts(d: RodsData, rod: Rod): string {
+        const r = strings.treeOverview.rods;
+        const gens = this.treeOverviewRodGenerations(d, rod.id).length;
+        const living = d.living.get(rod.id) ?? 0;
+        return [
+            r.members(rod.realMemberCount),
+            rod.realSpouseCount > 0 ? r.marriedIn(rod.realSpouseCount) : '',
+            r.generations(gens),
+            living > 0 ? r.living(living) : '',
+        ].filter(Boolean).join(' · ');
+    },
+
+    /** The lineage of the person the rooted sections are calculated from (its ◉), or null. */
+    treeOverviewRootRod(d: RodsData): { id: RodId; title: string } | null {
+        const st = state!;
+        const root = realPerson(st.data, st.rootId);
+        const id = root ? rodOf(d.index, root.id) : null;
+        return root && id ? { id, title: strings.treeOverview.rods.rootMark(shownName(root)) } : null;
+    },
+
+    treeOverviewRodMarkHtml(title: string): string {
+        const esc = (s: string): string => this.escapeHtml(s);
+        return `<span class="tov-rod-mark" title="${esc(title)}"><span aria-hidden="true">◉</span><span class="tov-rod-sr">${esc(title)}</span></span>`;
+    },
+
+    /**
+     * Family lines (spec 1031 §1): a row per lineage over the small threshold
+     * (label, period, founder, counts, the period bar), one detail open at a
+     * time, "Other families" folded under them. One lineage: its detail at
+     * once; only small ones: their grid at once; none: what makes a lineage.
+     */
+    treeOverviewRodsHtml(): SectionContent {
+        const st = state!;
+        const t = strings.treeOverview;
+        const r = t.rods;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const d = this.treeOverviewRodsData();
+        const ui = rodsUiOf(st.treeId);
+        if (ui.target) {
+            if (d.big.some(x => x.id === ui.target)) {
+                if (ui.open !== ui.target) openRodDetail(ui, ui.target);
+                ui.query = '';
+            } else if (d.small.some(x => x.id === ui.target)) {
+                ui.smallOpen = true;
+                ui.marked = ui.target;
+            }
+            rodScrollTo = ui.target;
+            ui.target = null;
+        }
+        if (d.big.length === 0 && d.small.length === 0) {
+            return { body: `<p class="tov-muted tov-rod-none">${esc(r.none)}</p>`, summary: esc(r.summaryNone) };
+        }
+        const label = (id: RodId): string => d.labels.get(id) ?? '';
+        const sort = readRodsSort();
+        const sortSeg = d.big.length < 2 ? '' : `
+            <div class="tov-rod-sort" role="group" aria-label="${esc(r.sortLabel)}">${ROD_SORTS.map(k =>
+                `<button type="button" class="tov-rod-sort-btn" data-tov="rod-sort" data-kind="${k}" aria-pressed="${k === sort}">${esc(r.sorts[k])}</button>`).join('')}
+            </div>`;
+        const top = `<div class="tov-rod-top"><p class="tov-rod-intro">${esc(r.intro)}</p>${sortSeg}</div>`;
+
+        let list = '';
+        if (d.big.length === 1) {
+            const rod = d.big[0];
+            const root = this.treeOverviewRootRod(d);
+            const period = rod.period ? this.treeOverviewRodPeriod(rod) : '';
+            list = `
+                <div class="tov-rod tov-rod--single is-open" data-rod="${esc(rod.id)}">
+                    <div class="tov-rod-single-head"><strong class="tov-rod-label">${esc(label(rod.id))}</strong>${root?.id === rod.id ? this.treeOverviewRodMarkHtml(root.title) : ''}${period ? `<span class="tov-rod-period"> · ${esc(period)}</span>` : ''}</div>
+                    ${this.treeOverviewRodDetailHtml(d, rod, 'single')}
+                </div>`;
+        } else if (d.big.length > 1) {
+            const search = d.big.length < ROD_SEARCH_FROM ? '' : `
+                <input type="search" class="tov-rod-search" data-key="rod-search" placeholder="${esc(r.search)}" aria-label="${esc(r.search)}"
+                    autocomplete="off" spellcheck="false" value="${esc(ui.query)}">`;
+            const axis = rodAxis(d.big);
+            const axisRow = !axis ? '' : `
+                <div class="tov-rod-axis" aria-hidden="true"><span></span><span></span><span class="tov-rod-axis-marks">
+                    <span class="tov-rod-axis-from">${axis.from}</span>${axis.mid === null ? '' : `<span class="tov-rod-axis-mid" style="left:${((axis.mid - axis.from) / (axis.to - axis.from) * 100).toFixed(2)}%">${axis.mid}</span>`}<span class="tov-rod-axis-to">${axis.to}</span>
+                </span></div>`;
+            list = `${search}${axisRow}<div class="tov-rod-listwrap">${this.treeOverviewRodListHtml(d, sort)}</div>`;
+        }
+
+        let small = '';
+        if (d.small.length > 0) {
+            const people = d.small.reduce((n, x) => n + x.realMemberCount, 0);
+            const root = this.treeOverviewRootRod(d);
+            const items = [...d.small].sort((a, b) => label(a.id).localeCompare(label(b.id), getCurrentLanguage())).map(rod => {
+                const years = rod.period ? this.treeOverviewRodPeriod(rod) : '';
+                const facts = [r.people(rod.realMemberCount), years].filter(Boolean).join(' · ');
+                const show = st.active ? '' : ` title="${esc(t.openAndShow)}"`;
+                return `<span class="tov-rod-small-item${ui.marked === rod.id ? ' is-marked' : ''}" role="listitem" data-rod="${esc(rod.id)}">`
+                    + `<button type="button" class="tov-link" data-tov="rod-show" data-id="${esc(rod.id)}"${show}>${esc(label(rod.id))}</button>`
+                    + `${root?.id === rod.id ? this.treeOverviewRodMarkHtml(root.title) : ''} <span class="tov-rod-small-facts">${esc(facts)}</span></span>`;
+            }).join('');
+            const grid = `<div class="tov-rod-small" id="tov-rod-small" role="list">${items}</div>`;
+            if (d.big.length === 0) {
+                small = grid;
+            } else {
+                const open = ui.smallOpen;
+                small = `
+                    <button type="button" class="tov-rod-other" data-tov="rod-small" aria-expanded="${open}" aria-controls="tov-rod-small">
+                        <span class="tov-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+                        <span class="tov-rod-other-main"><strong>${esc(r.other(d.small.length))}</strong> <span class="tov-rod-other-upto">${esc(r.otherUpTo(SMALL_ROD_MAX_MEMBERS))}</span></span>
+                        <span class="tov-rod-other-n">${esc(r.people(people))}</span>
+                    </button>
+                    ${open ? grid : ''}`;
+            }
+        }
+
+        const summary = d.big.length === 0 ? r.summarySmall(d.small.length)
+            : d.big.length === 1 ? r.summaryOne(label(d.big[0].id))
+            : r.summary(d.big.length, d.small.length);
+        return {
+            body: `<div class="tov-rods${d.big.length === 1 ? ' tov-rods--single' : ''}">${top}${list}<div class="tov-rod-others">${small}</div></div>`,
+            summary: esc(summary),
+        };
+    },
+
+    /** "1702–2010", or one year when the period is one year. */
+    treeOverviewRodPeriod(rod: Rod): string {
+        if (!rod.period) return '';
+        return rod.period.from === rod.period.to ? String(rod.period.from) : `${rod.period.from}–${rod.period.to}`;
+    },
+
+    /** The rows of the lineages over the threshold (sorted, searched, the first 20 unless all are asked for). */
+    treeOverviewRodListHtml(d: RodsData, sort: RodSort): string {
+        const st = state!;
+        const r = strings.treeOverview.rods;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const ui = rodsUiOf(st.treeId);
+        const sorted = sortRods(d.big, sort, d.labels, getCurrentLanguage());
+        const found = d.big.length >= ROD_SEARCH_FROM ? searchRods(sorted, ui.query, st.data, d.labels) : sorted;
+        if (found.length === 0) return `<p class="tov-muted tov-rod-nomatch">${esc(r.noMatch)}</p>`;
+        const openAt = ui.open ? found.findIndex(x => x.id === ui.open) : -1;
+        const limit = ui.showAll || d.big.length < ROD_SEARCH_FROM ? found.length : Math.max(ROD_SEARCH_FROM, openAt + 1);
+        const shown = found.slice(0, limit);
+        const axis = rodAxis(d.big);
+        const root = this.treeOverviewRootRod(d);
+        const rows = shown.map((rod, i) => {
+            const open = ui.open === rod.id;
+            const founder = st.data.persons[rod.founderId];
+            const gender = founder?.gender ?? 'unknown';
+            const facts = this.treeOverviewRodFounderFacts(rod, st.data);
+            const founderName = founder ? shownName(founder) : '';
+            const counts = this.treeOverviewRodCounts(d, rod);
+            const period = this.treeOverviewRodPeriod(rod);
+            const bar = axis && rod.period ? rodBar(rod.period, axis) : null;
+            const year = facts.split(', ')[0];
+            return `
+                <div class="tov-rod${open ? ' is-open' : ''}" data-rod="${esc(rod.id)}" role="listitem">
+                    <button type="button" class="tov-rod-row" data-tov="rod-toggle" data-id="${esc(rod.id)}" aria-expanded="${open}" aria-controls="tov-rod-d-${i}">
+                        <span class="tov-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+                        <span class="tov-rod-main">
+                            <span class="tov-rod-l1"><strong class="tov-rod-label">${esc(d.labels.get(rod.id) ?? rod.surname)}</strong>${root?.id === rod.id ? this.treeOverviewRodMarkHtml(root.title) : ''}${period ? `<span class="tov-rod-period"><span class="tov-rod-period-sep"> · </span>${esc(period)}</span>` : ''}</span>
+                            <span class="tov-rod-founder">${esc(`${r.founder(gender)} ${founderName}${facts ? ` (${facts})` : ''}`)}</span>
+                            <span class="tov-rod-counts">${esc(counts)}</span>
+                            <span class="tov-rod-short">${esc([founderName, year, counts].filter(Boolean).join(' · '))}</span>
+                        </span>
+                        <span class="tov-rod-bar" aria-hidden="true">${bar ? `<span class="tov-rod-bar-fill" style="left:${bar.left.toFixed(2)}%;width:${bar.width.toFixed(2)}%"></span>` : ''}</span>
+                    </button>
+                    ${open ? this.treeOverviewRodDetailHtml(d, rod, `tov-rod-d-${i}`) : ''}
+                </div>`;
+        }).join('');
+        const more = shown.length < found.length
+            ? `<button type="button" class="tov-link tov-rod-more" data-tov="rod-more">${esc(r.showMore(found.length - shown.length))}</button>` : '';
+        return `<div class="tov-rod-list" role="list">${rows}</div>${more}`;
+    },
+
+    /**
+     * A lineage's detail: founder (computed or set by hand), places, name
+     * forms, members by generation (daughters' marriages into other lineages
+     * linked), the spouses who married in with their birth lineages, and the
+     * actions (show in tree, the book, edit).
+     */
+    treeOverviewRodDetailHtml(d: RodsData, rod: Rod, domId: string): string {
+        const st = state!;
+        const t = strings.treeOverview;
+        const r = t.rods;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const ui = rodsUiOf(st.treeId);
+        const data = st.data;
+        const rodLink = (id: RodId): string =>
+            `<button type="button" class="tov-link" data-tov="rod-go" data-id="${esc(id)}">${esc(d.labels.get(id) ?? '')}</button>`;
+        const founder = data.persons[rod.founderId];
+        const facts = this.treeOverviewRodFounderFacts(rod, data);
+        const how = rod.manual
+            ? ` <span class="tov-chip tov-rod-manual">${esc(r.founderManual)}</span>`
+            : ` <span class="tov-faint">· ${esc(r.founderAuto)}</span>`;
+        const placeNames = rod.places.map(p => p.name);
+        const places = placeNames.length >= ROD_PLACES_LIST_FROM
+            ? `${placeNames.slice(0, ROD_PLACES_SHOWN).join(', ')} ${r.placesMore(placeNames.length - ROD_PLACES_SHOWN)}`
+            : placeNames.join(', ');
+        const forms = [...rod.forms, ...rod.otherForms].join(' · ');
+        const fact = (kind: string, label: string, value: string): string => !value ? '' :
+            `<div class="tov-rod-fact" data-fact="${kind}"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+        const factsHtml = `<dl class="tov-rod-facts">
+            ${fact('founder', r.founderTitle(founder?.gender ?? 'unknown'), `${esc(founder ? shownName(founder) : '?')}${facts ? ` (${esc(facts)})` : ''}${how}`)}
+            ${fact('places', r.places, esc(places))}
+            ${fact('forms', r.forms, esc(forms))}
+        </dl>`;
+
+        // Members by generation: the first name when the member writes the lineage's
+        // name as it is, the whole name otherwise; daughters' marriages into other lineages.
+        const gens = this.treeOverviewRodGenerations(d, rod.id);
+        const personText = (id: PersonId): string => {
+            const p = data.persons[id];
+            const plain = (p.lastName ?? '').trim() === rod.surname && !!p.firstName?.trim();
+            const name = plain ? p.firstName!.trim() : shownName(p);
+            const years = this.treeOverviewRodYears(p);
+            const into = [...new Set(marriedInto(d.index, id).map(m => m.rodId))]
+                .filter(x => x !== rod.id && d.index.rods.has(x) && !d.index.rods.get(x)!.solitary);
+            const links = into.map(x => ` <span class="tov-rod-into">→ ${esc(r.rodLink('\u0000')).replace('\u0000', rodLink(x))}</span>`).join('');
+            return `<span class="tov-rod-person">${esc(name)}${years ? ` (${esc(years)})` : ''}${links}</span>`;
+        };
+        const genRows = gens.map((ids, g) => {
+            if (ids.length === 0) return '';
+            const cut = ids.length >= ROD_GEN_LIST_FROM && !ui.genMore.has(g);
+            const list = (cut ? ids.slice(0, ROD_GEN_SHOWN) : ids).map(personText).join(', ');
+            const more = cut ? ` <button type="button" class="tov-link" data-tov="rod-gen-more" data-n="${g}">${esc(r.moreInGeneration(ids.length - ROD_GEN_SHOWN))}</button>` : '';
+            return `<div class="tov-rod-gen${g >= 2 ? ' tov-rod-gen--late' : ''}" data-gen="${g + 1}">
+                <span class="tov-rod-gen-n">${romanNumeral(g + 1)}</span><span class="tov-rod-gen-names">${list}${more}</span></div>`;
+        }).join('');
+        const allGens = gens.length > 2
+            ? `<button type="button" class="tov-link tov-rod-allgens" data-tov="rod-gens">${esc(r.allGenerations(gens.length))}</button>` : '';
+        const membersBlock = `<div class="tov-rod-block" data-block="members"><span class="tov-rod-sub">${esc(r.membersTitle)}</span>${genRows}${allGens}</div>`;
+
+        // The spouses who married in, with their birth lineage (not a lineage of their own alone).
+        const spouses = rod.spouses.filter(s => data.persons[s.personId] && !data.persons[s.personId].isPlaceholder);
+        let spousesBlock = '';
+        if (spouses.length > 0) {
+            const genders = new Set(spouses.map(s => data.persons[s.personId].gender));
+            const title = genders.size === 1 && genders.has('female') ? r.wivesTitle
+                : genders.size === 1 && genders.has('male') ? r.husbandsTitle : r.spousesTitle;
+            const shown = ui.spousesMore ? spouses : spouses.slice(0, ROD_SPOUSES_SHOWN);
+            const rows = shown.map(s => {
+                const p = data.persons[s.personId];
+                const born = birthYearOf(p);
+                const year = born ? (born.approx ? r.approx(born.year) : String(born.year)) : '';
+                const birth = s.birthRodId && s.birthRodId !== rod.id && d.index.rods.has(s.birthRodId) && !d.index.rods.get(s.birthRodId)!.solitary
+                    ? `<span class="tov-faint"> · ${esc(r.birthLine)} </span>${rodLink(s.birthRodId)}` : '';
+                return `<div class="tov-rod-spouse">${esc(shownName(p))}${year ? ` (${esc(year)})` : ''}${birth}</div>`;
+            }).join('');
+            const more = shown.length < spouses.length
+                ? `<button type="button" class="tov-link" data-tov="rod-spouses-more">${esc(r.moreSpouses(spouses.length - shown.length))}</button>` : '';
+            spousesBlock = `<div class="tov-rod-block" data-block="spouses"><span class="tov-rod-sub">${esc(title)}</span>${rows}${more}</div>`;
+        }
+
+        const id = `data-id="${esc(rod.id)}"`;
+        const actions = `<div class="tov-rod-actions">
+            <button type="button" class="tov-btn tov-rod-act" data-tov="rod-show" ${id}>${esc(st.active ? t.actShowInTree : t.openAndShow)}</button>
+            <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-book" ${id}>${esc(r.book)}</button>
+            ${this.treeOverviewActionHtml('rod-edit', r.edit, 'tov-btn tov-rod-act tov-rod-act--plain', id)}
+        </div>`;
+        return `<div class="tov-rod-detail${ui.allGens ? ' is-all-gens' : ''}" id="${domId}">${factsHtml}${membersBlock}${spousesBlock}${actions}</div>`;
+    },
+
+    /**
+     * Draw the family lines section again from the cached data (an expanded
+     * detail, the order, Other families): the keyboard focus goes back to the
+     * element with the same key.
+     */
+    rerenderTreeOverviewRods(focusKey: string | null = null): void {
+        const overlay = document.getElementById(OVERLAY_ID);
+        const sec = overlay?.querySelector<HTMLElement>('.tov-sec[data-section="rods"]');
+        const body = sec?.querySelector<HTMLElement>('.tov-sec-body');
+        const sum = sec?.querySelector<HTMLElement>('.tov-sum');
+        if (!sec || !body || !sum || !state || sec.dataset.ready !== 'true') return;
+        const key = focusKey ?? (document.activeElement instanceof HTMLElement && body.contains(document.activeElement)
+            ? document.activeElement.dataset.key ?? null : null);
+        const content = this.treeOverviewRodsHtml();
+        body.innerHTML = content.body;
+        stampFocusKeys(body, 'rods');
+        sum.innerHTML = content.summary;
+        if (key) body.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+    },
+
+    /** The search field of a long list: only the rows are drawn again (the field keeps the focus). */
+    onTreeOverviewRodSearch(input: HTMLInputElement): void {
+        if (!state) return;
+        const ui = rodsUiOf(state.treeId);
+        ui.query = input.value;
+        ui.showAll = false;
+        const wrap = input.closest('.tov-sec-body')?.querySelector<HTMLElement>('.tov-rod-listwrap');
+        if (!wrap) return;
+        wrap.innerHTML = this.treeOverviewRodListHtml(this.treeOverviewRodsData(), readRodsSort());
+        stampFocusKeys(wrap, 'rods');
+    },
+
+    /** Open another lineage's detail (a birth lineage or a daughter's marriage) and bring it into view. */
+    goToTreeOverviewRod(id: RodId): void {
+        if (!state) return;
+        const d = this.treeOverviewRodsData();
+        const ui = rodsUiOf(state.treeId);
+        const small = d.small.some(x => x.id === id);
+        if (small) {
+            ui.smallOpen = true;
+            ui.marked = id;
+        } else {
+            openRodDetail(ui, id);
+            ui.query = '';
+        }
+        this.rerenderTreeOverviewRods();
+        const sec = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-sec[data-section="rods"]`);
+        const el = sec?.querySelector<HTMLElement>(small
+            ? `.tov-rod-small-item[data-rod="${CSS.escape(id)}"]` : `.tov-rod[data-rod="${CSS.escape(id)}"]`);
+        if (!el) return;
+        scrollBelowHeader(el);
+        el.querySelector<HTMLElement>(small ? '.tov-link' : '.tov-rod-row')?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Open the overview at a lineage: the family lines section open and the
+     * lineage's detail expanded (a small one: Other families open, the
+     * lineage marked), scrolled into view. The person card's "Family line"
+     * row comes here.
+     */
+    async showTreeOverviewRod(treeId: string, rodId: RodId): Promise<void> {
+        const ui = rodsUiOf(treeId);
+        ui.target = rodId;
+        ui.marked = null;
+        await this.showTreeOverview(treeId, { section: 'rods', scroll: true });
+    },
+
+    /** "Show in tree" on a lineage: its members highlighted, the spouses who married in faintly. */
+    showTreeOverviewRodInTree(id: RodId): void {
+        if (!state) return;
+        const d = this.treeOverviewRodsData();
+        const rod = d.index.rods.get(id);
+        if (!rod) return;
+        const label = d.labels.get(id) ?? rod.surname;
+        let latest: LineageIndex | null = null;
+        void this.startTreeOverviewHighlight({
+            kind: 'rod', cite: false,
+            personIds: realRodMembers(d.index, id),
+            title: (n) => strings.treeOverview.rods.highlight(label, n),
+            recount: () => {
+                latest = buildLineages(DataManager.getData());
+                return realRodMembers(latest, id);
+            },
+            faint: () => realRodSpouses(latest ?? d.index, id),
+        });
+    },
+
+    /** "Family line book…": the book dialog for this lineage (its tree opened first). */
+    async openTreeOverviewRodBook(id: RodId): Promise<void> {
+        if (!state) return;
+        const { treeId, active } = state;
+        this.closeTreeOverview();
+        if (!active) await this.switchToTree(treeId as TreeId);
+        this.openBookForRods([id]);
     },
 
     /** The research's certainty of births, deaths and marriages (research trees). */
@@ -1679,6 +2193,55 @@ export const treeOverviewMethods = uiModule({
                 this.closeTreeOverview();
                 this.showSplitFamiliesDialog();
                 return;
+            case 'rod-toggle': {
+                const ui = rodsUiOf(st.treeId);
+                const id = target.dataset.id as RodId;
+                openRodDetail(ui, ui.open === id ? null : id);
+                this.rerenderTreeOverviewRods(target.dataset.key ?? null);
+                return;
+            }
+            case 'rod-sort': {
+                const kind = target.dataset.kind;
+                if (!isRodSort(kind)) return;
+                writeRodsSort(kind);
+                this.rerenderTreeOverviewRods(target.dataset.key ?? null);
+                return;
+            }
+            case 'rod-small': {
+                const ui = rodsUiOf(st.treeId);
+                ui.smallOpen = !ui.smallOpen;
+                this.rerenderTreeOverviewRods(target.dataset.key ?? null);
+                return;
+            }
+            case 'rod-more':
+                rodsUiOf(st.treeId).showAll = true;
+                this.rerenderTreeOverviewRods();
+                return;
+            case 'rod-gens':
+                rodsUiOf(st.treeId).allGens = true;
+                this.rerenderTreeOverviewRods();
+                return;
+            case 'rod-gen-more':
+                rodsUiOf(st.treeId).genMore.add(Number(target.dataset.n));
+                this.rerenderTreeOverviewRods();
+                return;
+            case 'rod-spouses-more':
+                rodsUiOf(st.treeId).spousesMore = true;
+                this.rerenderTreeOverviewRods();
+                return;
+            case 'rod-go':
+                this.goToTreeOverviewRod(target.dataset.id as RodId);
+                return;
+            case 'rod-show':
+                this.showTreeOverviewRodInTree(target.dataset.id as RodId);
+                return;
+            case 'rod-book':
+                void this.openTreeOverviewRodBook(target.dataset.id as RodId);
+                return;
+            case 'rod-edit':
+                // The edit dialog decides whether it opens over the overview.
+                this.openLineageEdit(target.dataset.id as RodId);
+                return;
         }
     },
 
@@ -1738,6 +2301,8 @@ export const treeOverviewMethods = uiModule({
         const overlay = document.getElementById(OVERLAY_ID);
         const root = overlay?.querySelector<HTMLElement>('.tov-root');
         if (root) root.innerHTML = this.treeOverviewRootHtml();
+        // Family lines are not rooted, but mark the root person's lineage.
+        this.rerenderTreeOverviewRods();
         // The rooted sections computed (or computing) are recomputed: an open
         // one at once, a closed one again on the idle callbacks.
         for (const sid of ROOT_DEPENDENT) {
