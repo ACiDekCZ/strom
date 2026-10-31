@@ -155,9 +155,26 @@ export interface StoryProseOptions {
     title?: string;
     /** The heading level of `#`/`##` (`###` and deeper one below); default 4. */
     headingLevel?: number;
+    /**
+     * A single newline inside a paragraph: a line break (default, the story
+     * reader and the person page) or a space (the family book, §5.1: a book
+     * paragraph is set as one block of text).
+     */
+    softBreak?: 'br' | 'space';
+    /** Drop `**` and lone `*` marks left unpaired (the book: no markdown reaches the paper). */
+    dropStrayMarks?: boolean;
+}
+
+/** The prose of a story or a note: the one renderer shared by the person page, the reader and the family book. */
+export function proseHtml(text: string, options: StoryProseOptions = {}): string {
+    return storyProseHtml(text, options);
 }
 
 export function storyProseHtml(text: string, options: StoryProseOptions = {}): string {
+    const joiner = options.softBreak === 'space' ? ' ' : '<br>';
+    const inl = options.dropStrayMarks
+        ? (t: string): string => inline(t).replace(/\*\*/g, '').replace(/(^|\s)\*(?=\s|$)/g, '$1')
+        : inline;
     const base = Math.min(Math.max(options.headingLevel ?? 4, 1), 6);
     const out: string[] = [];
     let para: string[] = [];
@@ -165,11 +182,11 @@ export function storyProseHtml(text: string, options: StoryProseOptions = {}): s
     let first = true;
 
     const flushPara = (): void => {
-        if (para.length > 0) out.push(`<p>${para.map(inline).join('<br>')}</p>`);
+        if (para.length > 0) out.push(`<p>${para.map(inl).join(joiner)}</p>`);
         para = [];
     };
     const flushList = (): void => {
-        if (items.length > 0) out.push(`<ul>${items.map(it => `<li>${it.map(inline).join('<br>')}</li>`).join('')}</ul>`);
+        if (items.length > 0) out.push(`<ul>${items.map(it => `<li>${it.map(inl).join(joiner)}</li>`).join('')}</ul>`);
         items = [];
     };
 
@@ -188,7 +205,7 @@ export function storyProseHtml(text: string, options: StoryProseOptions = {}): s
             first = false;
             if (!repeatsTitle && heading[2]) {
                 const level = Math.min(heading[1].length <= 2 ? base : base + 1, 6);
-                out.push(`<h${level} class="story-subhead">${inline(heading[2])}</h${level}>`);
+                out.push(`<h${level} class="story-subhead">${inl(heading[2])}</h${level}>`);
             }
             continue;
         }

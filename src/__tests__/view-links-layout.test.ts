@@ -296,7 +296,7 @@ describe('what never sees the view links', () => {
             completeness: computeCompleteness(data),
             fan: buildFanModel(data, KAREL, 6)!.sectors.map(s => s.person?.id ?? null),
             timeline: computeTimelineModel(data, Object.keys(data.persons), 2026),
-            book: buildFamilyBook(data, { lang: 'en', privacyMode: 'full', dateLabel: 'x' }),
+            book: buildFamilyBook(data, { lang: 'en', privacy: 'full' }, { dateLabel: 'x' }),
         };
         // Lay the view out with the links, in both views that draw them.
         layout(data, KAREL, { viewLinks: shown });
@@ -307,7 +307,7 @@ describe('what never sees the view links', () => {
         expect(computeCompleteness(data)).toEqual(before.completeness);
         expect(buildFanModel(data, KAREL, 6)!.sectors.map(s => s.person?.id ?? null)).toEqual(before.fan);
         expect(computeTimelineModel(data, Object.keys(data.persons), 2026)).toEqual(before.timeline);
-        expect(buildFamilyBook(data, { lang: 'en', privacyMode: 'full', dateLabel: 'x' })).toBe(before.book);
+        expect(buildFamilyBook(data, { lang: 'en', privacy: 'full' }, { dateLabel: 'x' })).toBe(before.book);
         // The fan of Karel knows no shown family.
         expect(before.fan).not.toContain(JAKUB);
         expect(data).toEqual(TREE);

@@ -214,6 +214,23 @@ export function stripResearchIds(text: string): { text: string; ids: string[] } 
     return { text: out, ids };
 }
 
+/**
+ * A researcher's working note made fit for print (family book §5.8): no
+ * research ids, no emoji, no task boxes ("- [ ] …", "[x]"), no stage or
+ * certainty marks ("✓", "(jistota: …)"); what is left is the text.
+ */
+export function cleanWorkNote(text: string): string {
+    return stripResearchIds(text.replace(/\r\n?/g, '\n')).text
+        .replace(/^[ \t]*(?:[-*+][ \t]+)?\[[ xX✓✔]\][ \t]*/gm, '')
+        .replace(/\p{Extended_Pictographic}️?/gu, '')
+        .replace(/[✓✔✗✘☐☑☒⚑⚐★☆●◐○◯]/g, '')
+        .replace(/\((?:jistota|certainty|Sicherheit|etapa|stage|Phase)\s*:[^)]*\)/gi, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 /** A raster image data URL safe to embed (the app's check plus a clean base64 body). */
 function safeImage(url: string | undefined): string | null {
     if (!url || !isSafeExcerptDataUrl(url)) return null;
@@ -679,6 +696,8 @@ interface Ctx {
     anchors: Set<string>;
     /** The life chart's input (§2), null when the chart is not drawn. */
     chart: LifeChartInput | null;
+    /** Set by the family book's print blocks only: rows without folds, the people around only when asked. */
+    book?: { people: boolean };
 }
 
 interface ImgEntry {
@@ -1705,15 +1724,17 @@ function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string 
     const bapt = merged ? eventOf(c, merged) : undefined;
     const u = pt.partnershipId ? c.tree.partnerships[pt.partnershipId] : undefined;
     const godSrc = ev?.type === 'baptism' ? ev : bapt?.type === 'baptism' ? bapt : undefined;
-    if (godSrc) {
+    // The book's Brief and Normal detail leave the people around out (§4.4).
+    const people = !c.book || c.book.people;
+    if (godSrc && people) {
         const g = participantNames(c, godSrc.participants, 'godparent');
         if (g) parts.push(P.detail.godparents('\u0000').split('\u0000').map(esc).join(g));
     }
     const witnessList = pt.kind === 'marriage' ? u?.participants
         : pt.kind === 'coupleEvent' ? u?.events?.find(e => e.id === pt.eventId)?.participants : ev?.participants;
-    const w = participantNames(c, witnessList, 'witness');
+    const w = people ? participantNames(c, witnessList, 'witness') : '';
     if (w) parts.push(P.detail.witnesses('\u0000').split('\u0000').map(esc).join(w));
-    if (ev && ev.type !== 'baptism') {
+    if (ev && ev.type !== 'baptism' && people) {
         const others = participantNames(c, ev.participants?.filter(p => p.role !== 'witness' && p.role !== 'godparent'));
         if (others) parts.push(c.S.personModal.lifelineWith('\u0000').split('\u0000').map(esc).join(others));
     }
@@ -1730,7 +1751,7 @@ function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string 
     if (!parts.length) return '';
     const line = parts.join(' · ');
     const plainLen = line.replace(/<[^>]*>/g, '').length;
-    if (plainLen <= 140) return `<span class="pp-dt">${line}</span>`;
+    if (plainLen <= 140 || c.book) return `<span class="pp-dt">${line}</span>`;
     return `<details class="pp-dtx"><summary><span class="pp-dt">${line}</span><span class="pp-more">${esc(P.more)} ▸</span></summary></details>`;
 }
 
@@ -1923,6 +1944,133 @@ function timelineHtml(c: Ctx): string {
         ? `<div class="pp-chart-host pp-wide">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
         : '';
     return section('timeline', P.sec.timeline, chartHtml + legend + segHtml, head);
+}
+
+// ── The family book's print blocks (1031 §5.5): the same rows, set for paper ──
+
+/** What the book's person block takes from the timeline (§4.4). */
+export interface PersonBookTimelineOptions {
+    /** 'main': birth, baptism, marriages, the children's births (merged), moves, occupations, death, burial; 'all': every row. */
+    rows: 'main' | 'all';
+    /** The main excerpts (birth, marriage, death) under their rows. */
+    figures: boolean;
+    /** The people around (godparents, witnesses) in the rows' details. */
+    people: boolean;
+    /** History rows at most (0: none). */
+    historyMax: number;
+    /** "and 4 more children until 1857" after the first child's row ('main'). */
+    moreChildren: (n: number, until: number) => string;
+    /** A marker after a figure's caption (the book's source number). */
+    cite?: (sourceId: string) => string;
+}
+
+const BOOK_MAIN_EVENTS = new Set(['baptism', 'burial', 'residence', 'occupation', 'emigration', 'immigration']);
+
+/**
+ * The person's timeline for the family book: the segments with their titles
+ * and the rows of the page's timeline, without the section, switches, legend,
+ * anchors or folds (a book holds many people). '' for a shielded person.
+ */
+export function personBookTimelineHtml(page: PersonPageData, opts: PersonPageOptions, o: PersonBookTimelineOptions): string {
+    const c = makeCtx(page, opts);
+    if (!c || shielded(c, c.person.id)) return '';
+    c.book = { people: o.people };
+    const { P } = c;
+    const points = computePersonLifeline(page.tree, page.personId, { childEvents: false });
+    const hist = o.historyMax > 0 ? page.history.slice(0, o.historyMax) : [];
+    let segs = personPageTimeline(points, hist, { childEvents: false, history: hist.length > 0, living: page.living.has(c.person.id) });
+    const suffix = new Map<LifelinePoint, string>();
+    if (o.rows === 'main') {
+        const kids = segs.flatMap(s => s.rows).filter((r): r is Extract<PersonPageTimelineRow, { kind: 'own' }> => r.kind === 'own' && r.point.kind === 'child');
+        const first = kids[0];
+        if (first && first.kind === 'own' && kids.length > 1) {
+            const last = kids[kids.length - 1];
+            suffix.set(first.point, o.moreChildren(kids.length - 1, last.kind === 'own' ? last.point.year : first.point.year));
+        }
+        const keep = (r: PersonPageTimelineRow): boolean => {
+            if (r.kind !== 'own') return r.kind === 'hist';
+            const pt = r.point;
+            if (pt.kind === 'child') return pt === first?.point;
+            if (pt.kind === 'event') return BOOK_MAIN_EVENTS.has(pt.eventType ?? '');
+            return pt.kind === 'birth' || pt.kind === 'death' || pt.kind === 'marriage' || pt.kind === 'divorce';
+        };
+        segs = segs.map(s => ({ ...s, rows: s.rows.filter(keep) })).filter(s => s.rows.length > 0);
+    }
+    if (!segs.length) return '';
+    const rowHtml = (r: PersonPageTimelineRow): string => {
+        if (r.kind === 'hist') {
+            const ev = r.item.ev;
+            return `<div class="pp-row pp-row--hist">${yearCell(r.item.yearLabel ?? String(r.item.year))}`
+                + `<span class="pp-m"><span class="pp-mk pp-mk-h" aria-hidden="true">${historyKindSvg(ev.kind, 14)}</span></span>`
+                + `<div class="pp-t"><p class="pp-hist-text">${esc(stripResearchIds(r.item.text).text)}</p></div></div>`;
+        }
+        const pt = r.point;
+        let fig = '';
+        const ex = o.figures && r.kind === 'own' ? mainExcerpt(c, pt, r.merged) : null;
+        if (ex) {
+            const src = shownExcerpt(ex.excerpt);
+            const caption = P.excerptCaption(ex.event, registerKindOf(ex.source.title), pt.place ?? '', pt.year);
+            if (src) {
+                fig = `<figure class="pp-fig book-clip"><img src="${esc(src)}" alt="${esc(caption)}">`
+                    + `<figcaption>${esc(caption)}${o.cite?.(ex.source.id) ?? ''}</figcaption></figure>`;
+            }
+        }
+        const more = suffix.get(pt);
+        return `<div class="pp-row pp-row--${r.kind}">${yearCell(rowYearText(c, pt))}`
+            + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
+            + `<div class="pp-t">${rowText(c, pt, r.merged)}${more ? ` <span class="pp-more-kids">· ${esc(more)}</span>` : ''}`
+            + `${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
+    };
+    return segs.map(s => {
+        const title = s.titled
+            ? `<div class="pp-seg-title">${esc(P.seg[s.key])}<span class="pp-seg-years">${s.from === s.to ? s.from : `${s.from}–${s.to}`}</span></div>`
+            : '';
+        return `<div class="pp-seg">${title}${s.rows.map(rowHtml).join('')}</div>`;
+    }).join('');
+}
+
+/**
+ * Every excerpt of the person's sources for the family book's "all" detail
+ * (§4.4): a grid of three, each captioned with its event and the book's
+ * source number. '' for a shielded person or without excerpts.
+ */
+export function personBookClipsHtml(page: PersonPageData, opts: PersonPageOptions, cite?: (sourceId: string) => string): string {
+    const c = makeCtx(page, opts);
+    if (!c || shielded(c, c.person.id) || !c.page.groups.excerpts) return '';
+    const { P } = c;
+    const figs: string[] = [];
+    for (const row of personSourceRows(page.tree, page.personId, c.S)) {
+        const s = page.tree.sources?.[row.source.id];
+        if (!s?.excerpts?.length) continue;
+        const ev = excerptEvent(c, s.id);
+        const title = peekTitle(s.title);
+        for (const e of s.excerpts) {
+            const src = shownExcerpt(e);
+            if (!src || !safeImage(e.dataUrl)) continue;
+            const caption = ev?.event
+                ? P.excerptCaption(ev.event, registerKindOf(s.title), ev.place, ev.year)
+                : stripResearchIds(e.caption?.trim() ?? '').text || [ev?.label ?? '', title].filter(Boolean).join(', ');
+            figs.push(`<figure class="pp-fig book-clip"><img src="${esc(src)}" alt="${esc(caption)}">`
+                + `<figcaption>${esc(caption)}${cite?.(s.id) ?? ''}</figcaption></figure>`);
+        }
+    }
+    return figs.length ? `<div class="book-clips">${figs.join('')}</div>` : '';
+}
+
+/** The person's life chart for the family book: one set of `width` px for paper ('' when not drawn). */
+export function personBookChartHtml(page: PersonPageData, now: Date, width: number): string {
+    return lifeChartHtml(personPageChartInput(page, now), { lang: page.lang, mode: 'print', width });
+}
+
+/**
+ * The researcher's view of a person for the family book (1031 §4.5): open
+ * conflicts, hypotheses, the facts' certainty and how many are sourced, as one
+ * plain list without links into the research ('' when there is nothing).
+ */
+export function personBookResearchHtml(page: PersonPageData, _opts: PersonPageOptions): string {
+    const items = researchItems(page, page.lang);
+    const list = [...items.conflicts, ...items.hypotheses, ...(items.sourced ? [items.sourced] : []), ...items.certainty];
+    return list.length ? `<ul class="book-research-list">${list.map(x => `<li>${x}</li>`).join('')}</ul>` : '';
 }
 
 // ── Images embedded once (§3.2: the file's <style> holds each image, everything else names its class) ──

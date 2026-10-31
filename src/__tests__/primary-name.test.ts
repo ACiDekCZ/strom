@@ -29,7 +29,7 @@ import { buildFamilyBook } from '../book.js';
 import { PRIMARY_NAME_TAG } from '../gedcom-names.js';
 import { setLanguage } from '../strings.js';
 import {
-    Person, PrimaryName, StromData, SurnameDisplay, TreeId, toPersonId, isPrimaryName, mergedPrimaryName,
+    Person, PrimaryName, StromData, SurnameDisplay, TreeId, toPersonId, toPartnershipId, isPrimaryName, mergedPrimaryName,
 } from '../types.js';
 
 const fixture = (name: string): string =>
@@ -397,12 +397,22 @@ describe('merges, privacy, CSV, the book and the search', () => {
     });
 
     it('the family book index: "dříve Zástěrová" for one who goes by the birth surname', () => {
-        const book = (p: Person) => buildFamilyBook(tree(p), { lang: 'cs', privacyMode: 'full' });
+        // Jana in a family (only people in the book are in its index).
+        const family = (j: Person): StromData => {
+            const d = tree(
+                { ...j, partnerships: [toPartnershipId('u')], childIds: [toPersonId('c')] },
+                person('h', 'Petr', 'Zástěra', { gender: 'male', birthDate: '1918', isDeceased: true, partnerships: [toPartnershipId('u')], childIds: [toPersonId('c')] }),
+                person('c', 'Ota', 'Zástěra', { gender: 'male', birthDate: '1950', deathDate: '2010', parentIds: [toPersonId('h'), toPersonId('j')] }),
+            );
+            d.partnerships = { [toPartnershipId('u')]: { id: toPartnershipId('u'), person1Id: toPersonId('h'), person2Id: toPersonId('j'), status: 'married', childIds: [toPersonId('c')] } };
+            return d;
+        };
+        const book = (p: Person, lang: 'cs' | 'en' = 'cs') => buildFamilyBook(family(p), { lang, privacy: 'full' });
         const dead = { birthDate: '1921', isDeceased: true };
-        expect(book(jana('birth', dead))).toMatch(/Lhotová, Jana<span class="book-muted">, dříve Zástěrová<\/span>/);
-        expect(book(jana('married', dead))).toMatch(/Lhotová, Jana<span class="book-muted">, po sňatku Zástěrová<\/span>/);
-        expect(book(jana(undefined, dead))).toMatch(/Lhotová, Jana<span class="book-muted">, po sňatku Zástěrová<\/span>/);
-        expect(buildFamilyBook(tree(jana('birth', dead)), { lang: 'en', privacyMode: 'full' })).toContain(', formerly Zástěrová</span>');
+        expect(book(jana('birth', dead))).toContain('>Lhotová Jana, dříve Zástěrová (* 1921)<');
+        expect(book(jana('married', dead))).toContain('>Lhotová Jana, provd. Zástěrová (* 1921)<');
+        expect(book(jana(undefined, dead))).toContain('>Lhotová Jana, provd. Zástěrová (* 1921)<');
+        expect(book(jana('birth', dead), 'en')).toContain('Lhotová Jana, formerly Zástěrová');
     });
 
     it('the search row under the name says which surname matched', () => {

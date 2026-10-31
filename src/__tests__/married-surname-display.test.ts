@@ -98,65 +98,33 @@ describe('the shown name and Settings → Surname display', () => {
 });
 
 describe('the family book index', () => {
+    // A family, so the book has a chapter: only people in the book are in its index.
     const data = (): StromData => ({
         persons: {
-            m: person('m', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková', birthDate: '1921', isDeceased: true }),
-            j: person('j', 'Jan', 'Novák', { gender: 'male', birthDate: '1919', isDeceased: true }),
+            m: person('m', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková', birthDate: '1921', isDeceased: true, partnerships: ['u'] as never, childIds: ['k'] as never }),
+            j: person('j', 'Jan', 'Novák', { gender: 'male', birthDate: '1919', isDeceased: true, partnerships: ['u'] as never, childIds: ['k'] as never }),
+            k: person('k', 'Karel', 'Novák', { gender: 'male', birthDate: '1945', deathDate: '2001', parentIds: ['j', 'm'] as never }),
         } as StromData['persons'],
-        partnerships: {},
+        partnerships: { u: { id: 'u', person1Id: 'j', person2Id: 'm', status: 'married', childIds: ['k'] } } as unknown as StromData['partnerships'],
     });
+    const index = (html: string): string => html.slice(html.indexOf('class="book-index"'));
 
     it('lists the person under the birth surname with the married one, and a cross-reference under the married one', () => {
-        const html = buildFamilyBook(data(), { lang: 'cs', privacyMode: 'full' });
-        expect(html).toMatch(/Dvořáková, Marie<span class="book-muted">, po sňatku Nováková<\/span>/);
-        expect(html).toContain('<div class="book-index-row book-index-see">Nováková, Marie → viz Dvořáková, Marie</div>');
-        // Sorted under N: after "Novák, Jan".
-        expect(html.indexOf('Novák, Jan')).toBeLessThan(html.indexOf('Nováková, Marie → viz'));
-        expect(html.indexOf('Dvořáková, Marie')).toBeLessThan(html.indexOf('Novák, Jan'));
+        const html = index(buildFamilyBook(data(), { lang: 'cs', privacy: 'full' }));
+        expect(html).toContain('<span class="book-index-name">Dvořáková Marie, provd. Nováková (* 1921)</span>');
+        expect(html).toContain('<div class="book-index-row book-index-see">Nováková Marie → Dvořáková Marie</div>');
+        // Sorted under N: after "Novák Jan".
+        expect(html.indexOf('Novák Jan')).toBeLessThan(html.indexOf('Nováková Marie → Dvořáková'));
+        expect(html.indexOf('Dvořáková Marie')).toBeLessThan(html.indexOf('Novák Jan'));
     });
 
     it('is independent of the setting, and unchanged without a married surname', () => {
         vi.spyOn(SettingsManager, 'getSurnameDisplay').mockReturnValue('birth');
-        expect(buildFamilyBook(data(), { lang: 'cs', privacyMode: 'full' })).toContain('class="book-index-row book-index-see"');
+        expect(buildFamilyBook(data(), { lang: 'cs', privacy: 'full' })).toContain('class="book-index-row book-index-see"');
         const without = data();
         delete without.persons['m' as PersonId].marriedSurname;
-        const html = buildFamilyBook(without, { lang: 'cs', privacyMode: 'full' });
+        const html = buildFamilyBook(without, { lang: 'cs', privacy: 'full' });
         expect(html).not.toContain('class="book-index-row book-index-see"');
         expect(html).not.toContain('po sňatku');
-    });
-});
-
-describe('surname counts and married surnames', () => {
-    const data: StromData = {
-        persons: {
-            m: person('m', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková', birthDate: '1921' }),
-            e: person('e', 'Eva', 'Malá', { marriedSurname: 'Nováková' }),
-            j: person('j', 'Jan', 'Novák', { gender: 'male' }),
-            k: person('k', 'Karel', 'Dvořák', { gender: 'male' }),
-        } as StromData['persons'],
-        partnerships: {},
-    };
-
-    it('counts stay with the birth surname: a married surname adds nothing', () => {
-        const counts = Object.fromEntries(surnamesInTree(data).map(s => [s.surname, s.count]));
-        expect(counts).toEqual({ 'Dvořáková': 1, 'Malá': 1, 'Novák': 1, 'Dvořák': 1 });
-    });
-
-    it('the holders of a married surname, found through every form of the surname', () => {
-        expect(marriedSurnameHolders('Nováková', data).map(p => p.id)).toEqual(['e', 'm']);
-        expect(marriedSurnameHolders('Novák', data).map(p => p.id)).toEqual(['e', 'm']);
-        expect(marriedSurnameHolders('Dvořák', data)).toEqual([]);
-    });
-});
-
-describe('the birth row in an exported image', () => {
-    it('whole when it fits, shortened with at least four letters of the surname, else left out', () => {
-        setLanguage('cs');
-        expect(fitBirthRow('Dvořáková', 200, () => 60)).toBe('roz. Dvořáková');
-        const w = (t: string): number => t.length * 6;
-        const short = fitBirthRow('Vondráčková-Šťastná', 80, w);
-        expect(short.endsWith('…')).toBe(true);
-        expect(short.replace('roz. ', '').replace('…', '').length).toBeGreaterThanOrEqual(4);
-        expect(fitBirthRow('Vondráčková', 40, w)).toBe('');
     });
 });

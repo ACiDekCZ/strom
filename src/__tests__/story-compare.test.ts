@@ -133,14 +133,15 @@ describe('the family book', () => {
     } as unknown as StromData);
 
     it('says nothing about new versions without the UI', () => {
-        const out = buildFamilyBook(data(), { lang: 'cs', privacyMode: 'full' });
+        const out = buildFamilyBook(data(), { lang: 'cs', privacy: 'full' });
         expect(out).not.toContain('book-nv"');
         expect(out).not.toContain('<dialog');
     });
 
     it('puts a banner above the person\'s and the couple\'s story, and their comparisons', () => {
         const out = buildFamilyBook(data(), {
-            lang: 'cs', privacyMode: 'full',
+            lang: 'cs', privacy: 'full',
+        }, {
             storyDraftUrls: (o) => 'person' in o ? { final: 'strom-research://story?x&do=final', keep: 'strom-research://story?x&do=keep' } : {},
         });
         expect(out.match(/<div class="book-nv">/g)).toHaveLength(2);
@@ -151,6 +152,13 @@ describe('the family book', () => {
         expect(out).toContain('href="strom-research://story?x&amp;do=final" data-compare-do="final"');
         // The couple without links: read-only.
         expect(out).toContain('Rozhodnout jde ve výzkumu na počítači.');
-        expect(out).toMatch(/@media print \{[^}]*\}\s*\.book-nv, \.book-compare \{ display: none !important; \}/);
+        // Never printed, never saved.
+        expect(out).toMatch(/@media print \{[\s\S]*?\.book-nv, \.book-compare[^{]*\{ display: none !important; \}/);
+        const saved = buildFamilyBook(data(), { lang: 'cs', privacy: 'full' }, {
+            forSave: true,
+            storyDraftUrls: () => ({ final: 'strom-research://story?x&do=final', keep: 'strom-research://story?x&do=keep' }),
+        });
+        expect(saved).not.toContain('<div class="book-nv">');
+        expect(saved).not.toContain('<dialog');
     });
 });

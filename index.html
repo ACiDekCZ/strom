@@ -17,7 +17,9 @@
     Third-party components, each under its own license:
 
     * Strom Serif (embedded font): a modified (subsetted) version of
-      Source Serif 4, renamed as the Reserved Font Name requires.
+      Source Serif 4 (upright, and the italic embedded in the family book),
+      renamed as the Reserved Font Name requires. Source Serif 4 was
+      designed by Frank Grießhammer for Adobe.
       Source Serif 4: Copyright 2014 - 2021 Adobe Systems Incorporated
       (http://www.adobe.com/), with Reserved Font Name 'Source'.
       Licensed under the SIL Open Font License, Version 1.1 (text below).
@@ -15209,6 +15211,253 @@
         .tov-pop-name { font-size: 14px; font-weight: 500; }
         .tov-pop-meta { font-size: 12px; color: var(--text-faint); }
         .tov-pop-none { padding: 8px 10px; font-size: 13px; color: var(--text-light); }
+
+        /* ── Family book dialog (1031 §4): 960 × min(860, 100vh − 48); options | 340 px preview panel ── */
+        #book-modal { --book-side-bg: #ebe5d9; }
+        [data-theme="dark"] #book-modal { --book-side-bg: var(--card-bg-2); }
+        #book-modal .modal.book-dlg {
+            width: 960px; max-width: calc(100vw - 48px); height: min(860px, calc(100vh - 48px)); max-height: none;
+            display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: auto auto minmax(0, 1fr) auto;
+            padding: 0; overflow: hidden;
+        }
+        #book-modal .book-dlg-head { grid-column: 1 / -1; grid-row: 1; gap: 18px; padding: 16px 20px 14px 24px; }
+        #book-modal .book-dlg-head h2 { font-family: var(--font-serif, Georgia, serif); font-size: 21px; font-weight: 600; white-space: nowrap; }
+        #book-modal .book-dlg > .view-links-note { grid-column: 1 / -1; grid-row: 2; margin: 0; }
+        #book-modal .book-dlg-main { display: contents; }
+        #book-modal .book-dlg-opts { grid-column: 1; grid-row: 3 / 5; min-height: 0; overflow-y: auto; padding: 8px 24px 28px; }
+        #book-modal .book-dlg-side { grid-column: 2; grid-row: 3; min-height: 0; overflow-y: auto; background: var(--book-side-bg); padding: 20px 22px 8px; }
+        #book-modal .book-dlg-foot { grid-column: 2; grid-row: 4; background: var(--book-side-bg); padding: 10px 22px 18px; }
+        #book-modal .book-presets { display: flex; margin-right: auto; }
+        #book-modal .book-presets, #book-modal .book-seg { gap: 2px; padding: 3px; border-radius: 9px; background: var(--card-bg-2); width: max-content; max-width: 100%; }
+        #book-modal .book-seg { display: inline-flex; flex: none; }
+        #book-modal .book-presets button, #book-modal .book-seg button {
+            padding: 6px 12px; border: 0; border-radius: 7px; background: none; color: var(--text-light);
+            font: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap; min-height: 0;
+        }
+        #book-modal .book-presets button[aria-checked="true"], #book-modal .book-seg button[aria-checked="true"] {
+            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(60, 50, 30, 0.15);
+        }
+        #book-modal .book-presets button:focus-visible, #book-modal .book-seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        #book-modal .book-sec { padding: 18px 0; border-top: 1px solid var(--divider); }
+        #book-modal .book-sec-what { border-top: 0; padding-top: 14px; }
+        #book-modal .book-sec-sel { border-top: 0; padding-top: 0; }
+        #book-modal .book-sec-h { margin: 0 0 10px; font-size: 13.5px; font-weight: 600; color: var(--accent-text); }
+        #book-modal .book-sec-h label { font: inherit; color: inherit; }
+        #book-modal .book-hint { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        /* What goes in the book: four cards 2 × 2 and the "House · later" placeholder */
+        #book-modal .book-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        #book-modal .book-kind {
+            display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface); cursor: pointer; min-width: 0;
+        }
+        #book-modal .book-kind.is-on { border-color: var(--primary); box-shadow: inset 0 0 0 0.5px var(--primary); }
+        #book-modal .book-kind input { margin: 3px 0 0; accent-color: var(--primary); flex: none; }
+        #book-modal .book-kind-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+        #book-modal .book-kind-t { font-size: 14.5px; font-weight: 500; color: var(--text); }
+        #book-modal .book-kind-h { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        #book-modal .book-kind--house { grid-column: 1 / -1; border-style: dashed; background: none; cursor: default; padding: 8px 14px; opacity: .8; }
+        #book-modal .book-kind--house .book-kind-h { color: var(--text-faint); }
+        #book-modal .book-kind-sum { display: none; }
+        #book-modal .book-sel { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+        #book-modal .book-sel[hidden] { display: none; }
+        #book-modal .book-sel-tree { border: 0; padding: 0 2px; background: none; }
+        #book-modal .book-sel-rods { padding: 4px 0 10px; }
+        #book-modal .book-rods-list { display: flex; flex-direction: column; max-height: 300px; overflow-y: auto; }
+        #book-modal .book-rod-row { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 14px; cursor: pointer; }
+        #book-modal .book-rod-row input { margin: 0; accent-color: var(--primary); flex: none; }
+        #book-modal .book-rod-name { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+        #book-modal .book-rod-meta { flex: none; font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        #book-modal .book-rods-small { margin: 6px 14px 0; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12.5px; color: var(--text-light); }
+        #book-modal .book-sel-rods > .book-hint { margin: 6px 14px 0; }
+        #book-modal .book-person-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        #book-modal .book-person-l { font-size: 13.5px; color: var(--text-light); }
+        #book-modal .book-person-btn {
+            display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 36px; padding: 0 12px; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--card-bg-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+        }
+        #book-modal .book-person-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #book-modal .book-caret { font-size: 11px; color: var(--text-light); }
+        #book-modal .book-gens { display: inline-flex; align-items: center; gap: 6px; }
+        #book-modal .book-step {
+            width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+            color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        #book-modal .book-step:disabled { opacity: .4; cursor: default; }
+        #book-modal .book-gens-n { min-width: 22px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+        /* Parts: two columns; an unavailable part stays, grey, with its reason */
+        #book-modal .book-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 20px; }
+        #book-modal .book-part { display: flex; align-items: flex-start; gap: 10px; min-height: 30px; padding: 4px 0; cursor: pointer; }
+        #book-modal .book-part input { margin: 3px 0 0; accent-color: var(--primary); flex: none; }
+        #book-modal .book-part-text { display: flex; flex-direction: column; min-width: 0; }
+        #book-modal .book-part-t { font-size: 14.5px; }
+        #book-modal .book-part-r { font-size: 12px; color: var(--text-light); }
+        #book-modal .book-part-r:empty { display: none; }
+        #book-modal .book-part.is-off { cursor: default; }
+        #book-modal .book-part.is-off .book-part-t { color: var(--text-faint); }
+        #book-modal .book-detail-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        #book-modal .book-detail-line .book-hint { margin: 0; flex: 1; min-width: 200px; }
+        /* Notes and researcher data: switches */
+        #book-modal .book-switch-row { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0; }
+        #book-modal .book-switch-row + .book-switch-row { margin-top: 8px; }
+        #book-modal .book-switch { flex: none; width: 40px; height: 24px; padding: 0; border: 0; background: none; cursor: pointer; min-height: 0; }
+        #book-modal .book-switch-track { position: relative; display: block; width: 36px; height: 20px; margin: 2px; border-radius: 10px; background: var(--border); transition: background .15s; }
+        #book-modal .book-switch-track::after {
+            content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+            box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+        }
+        #book-modal .book-switch[aria-checked="true"] .book-switch-track { background: var(--primary); }
+        #book-modal .book-switch[aria-checked="true"] .book-switch-track::after { transform: translateX(16px); }
+        #book-modal .book-switch:focus-visible { outline: none; }
+        #book-modal .book-switch:focus-visible .book-switch-track { outline: 2px solid var(--primary); outline-offset: 2px; }
+        #book-modal .book-switch-text { display: flex; flex-direction: column; min-width: 0; }
+        #book-modal .book-switch-t { font-size: 14.5px; }
+        #book-modal .book-switch-text .book-hint { margin-top: 1px; }
+        /* Privacy | language side by side */
+        #book-modal .book-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; border-top: 1px solid var(--divider); }
+        #book-modal .book-pair > .book-sec { border-top: 0; }
+        #book-modal .book-radios { display: flex; flex-direction: column; gap: 2px; }
+        #book-modal .book-radio { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; cursor: pointer; }
+        #book-modal .book-radio input { margin: 0; accent-color: var(--primary); }
+        #book-modal .book-title-input {
+            width: 100%; box-sizing: border-box; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 15px;
+        }
+        #book-modal .book-title-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+        #book-modal .book-title-revert {
+            padding: 0; border: 0; background: none; color: var(--primary); font: inherit; text-decoration: underline; cursor: pointer; min-height: 0;
+        }
+        /* Phone-only parts of the markup */
+        #book-modal .book-sum, #book-modal .book-sub-head, #book-modal .book-sub-only { display: none; }
+        /* The preview panel: the title page 210 × 297, the outline */
+        #book-modal .book-cover {
+            width: 210px; height: 297px; margin: 0 auto 22px; box-sizing: border-box; padding: 38px 18px 18px; display: flex; flex-direction: column;
+            align-items: center; text-align: center; background: #fffefb; color: #1f1c17; box-shadow: 0 2px 10px rgba(40, 30, 10, .16);
+            font-family: 'Strom Serif', Georgia, serif; overflow: hidden;
+        }
+        #book-modal .book-cover-rule { width: 28px; border-top: 1px solid #8a5528; margin-bottom: 16px; }
+        #book-modal .book-cover-title { font-size: 18px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+        #book-modal .book-cover-sub { margin-top: 8px; font-size: 11px; color: #4a4438; }
+        #book-modal .book-cover-foot { margin-top: auto; font-size: 9px; line-height: 1.6; color: #4a4438; }
+        #book-modal .book-cover-prot { margin-top: 4px; font-style: italic; color: #5c5546; }
+        #book-modal .book-outline-h { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); margin-bottom: 4px; }
+        #book-modal .book-outline ol { list-style: none; margin: 0; padding: 0; }
+        #book-modal .book-outline li { display: flex; gap: 10px; justify-content: space-between; font-size: 13px; line-height: 1.5; color: var(--text); }
+        #book-modal .book-outline li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+        #book-modal .book-outline-r { flex: none; color: var(--text-light); }
+        #book-modal .book-estimate { font-size: 14.5px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+        #book-modal .book-estimate.is-empty { font-weight: 500; color: var(--text-light); }
+        #book-modal .book-dlg-foot .buttons { padding: 0; border: 0; background: none; gap: 8px; }
+        #book-modal .book-dlg-foot .buttons .primary { flex: 1; min-height: 42px; font-size: 15px; font-weight: 600; }
+        #book-modal .book-open-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.4; text-align: center; color: var(--text-light); }
+        @media (hover: hover) {
+            #book-modal .book-kind:not(.book-kind--house):hover { border-color: var(--primary); }
+            #book-modal .book-rod-row:hover, #book-modal .book-step:not(:disabled):hover { background: var(--hover-bg); }
+            #book-modal .book-presets button:not([aria-checked="true"]):hover, #book-modal .book-seg button:not([aria-checked="true"]):hover { color: var(--text); }
+        }
+        /* Narrower than 900 px: one column, the outline under the options (no title page), the estimate and button stuck below */
+        @media (max-width: 899px) {
+            #book-modal .modal.book-dlg { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+            #book-modal .book-dlg-main { display: block; grid-column: 1; grid-row: 3; min-height: 0; overflow-y: auto; }
+            #book-modal .book-dlg-opts { overflow: visible; padding-bottom: 8px; }
+            #book-modal .book-dlg-side { overflow: visible; margin: 0 24px 16px; padding: 14px 16px; border-radius: 10px; }
+            #book-modal .book-cover { display: none; }
+            #book-modal .book-dlg-foot { grid-column: 1; grid-row: 4; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap;
+                padding: 12px 24px; border-top: 1px solid var(--divider); }
+            #book-modal .book-estimate { flex: 1; min-width: 200px; margin: 0; }
+            #book-modal .book-dlg-foot .buttons .primary { flex: none; }
+            #book-modal .book-open-hint { flex-basis: 100%; margin: 0; text-align: left; }
+        }
+        /* Phone (4b), also held sideways: a full-screen sheet; rows with summaries open sub-sheets; footer 48 px */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #book-modal { align-items: stretch; }
+            #book-modal .modal.book-dlg { width: 100vw; max-width: 100vw; height: 100dvh; border-radius: 0; }
+            #book-modal .book-dlg-head { flex-wrap: wrap; gap: 10px; padding: 12px 8px 12px 16px; }
+            #book-modal .book-dlg-head h2 { flex: 1; }
+            #book-modal .book-presets { order: 3; flex: 1 1 100%; width: auto; }
+            #book-modal .book-presets button { flex: 1; min-height: 40px; }
+            #book-modal .close-btn { width: 44px; height: 44px; }
+            #book-modal .book-dlg-opts { padding: 0 16px 16px; }
+            #book-modal .book-dlg-side { display: none; }
+            #book-modal .book-dlg-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; gap: 8px; background: var(--card-bg); }
+            #book-modal .book-estimate { min-width: 0; text-align: center; font-size: 14px; }
+            #book-modal .book-dlg-foot .buttons [data-dismiss], #book-modal .book-open-hint { display: none; }
+            #book-modal .book-dlg-foot .buttons .primary { flex: 1; min-height: 48px; }
+            #book-modal .book-kinds { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+            #book-modal .book-kind { min-height: 48px; align-items: center; padding: 0 14px; border: 0; border-radius: 0; box-shadow: none !important; }
+            #book-modal .book-kind + .book-kind { border-top: 1px solid var(--divider); }
+            #book-modal .book-kind input { margin: 0; }
+            #book-modal .book-kind-h { display: none; }
+            #book-modal .book-kind--house { display: none; }
+            #book-modal .book-kind.is-on .book-kind-sum { display: inline-flex; }
+            #book-modal .book-kind-sum, #book-modal .book-sum-row {
+                align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--text-light); font: inherit; font-size: 14px; min-height: 44px; cursor: pointer; min-width: 0;
+            }
+            #book-modal .book-sum-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            #book-modal .book-kind-sum { max-width: 55%; }
+            #book-modal .book-chev { font-size: 17px; }
+            #book-modal .book-sec-sel, #book-modal .book-sec:not(.book-sec-what), #book-modal .book-pair { display: none; }
+            #book-modal .book-sum { display: flex; flex-direction: column; margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+            #book-modal .book-sum-row { display: flex; width: 100%; min-height: 52px; padding: 0 14px; color: var(--text); text-align: left; }
+            #book-modal .book-sum-row + .book-sum-row { border-top: 1px solid var(--divider); }
+            #book-modal .book-sum-l { flex: 1; min-width: 0; font-size: 15px; }
+            #book-modal .book-sum-row .book-sum-v { max-width: 55%; color: var(--text-light); }
+            /* A sub-sheet: only its section, with "Back" */
+            #book-modal .book-dlg[data-sub] .book-sec-what, #book-modal .book-dlg[data-sub] .book-sum { display: none; }
+            #book-modal .book-dlg[data-sub] .book-sub-head { display: flex; align-items: center; gap: 8px; margin: 0 -8px 4px; padding: 4px 0; }
+            #book-modal .book-sub-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--primary); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+            #book-modal .book-sub-title { font-weight: 600; font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            #book-modal .book-dlg[data-sub="sel"] .book-sec-sel,
+            #book-modal .book-dlg[data-sub="parts"] [data-sec="parts"],
+            #book-modal .book-dlg[data-sub="detail"] [data-sec="detail"],
+            #book-modal .book-dlg[data-sub="notes"] [data-sec="notes"],
+            #book-modal .book-dlg[data-sub="title"] [data-sec="title"] { display: block; border-top: 0; padding-top: 4px; }
+            #book-modal .book-dlg[data-sub="privacy"] .book-pair, #book-modal .book-dlg[data-sub="lang"] .book-pair { display: block; border-top: 0; }
+            #book-modal .book-dlg[data-sub="privacy"] [data-sec="privacy"], #book-modal .book-dlg[data-sub="lang"] [data-sec="lang"] { display: block; padding-top: 4px; }
+            #book-modal .book-dlg[data-sub] .book-sec-h:not(.book-sub-only) { display: none; }
+            #book-modal .book-sel { margin-top: 0; }
+            #book-modal .book-rods-list { max-height: none; }
+            #book-modal .book-rod-row, #book-modal .book-part, #book-modal .book-radio { min-height: 48px; }
+            #book-modal .book-parts { grid-template-columns: minmax(0, 1fr); }
+            #book-modal .book-part { align-items: center; }
+            #book-modal .book-part input { margin: 0; }
+            #book-modal .book-seg { display: flex; width: 100%; }
+            #book-modal .book-seg button { flex: 1; min-height: 44px; }
+            #book-modal .book-detail-line { display: block; }
+            #book-modal .book-detail-line .book-hint { margin-top: 10px; }
+            #book-modal .book-step { width: 44px; height: 44px; }
+            #book-modal .book-person-btn { min-height: 44px; }
+            #book-modal .book-title-input { height: 48px; font-size: 16px; }
+        }
+        /* A phone held sideways: rows in two columns, the footer on the right */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #book-modal { align-items: stretch; }
+            #book-modal .modal.book-dlg { width: 100vw; max-width: 100vw; height: 100dvh; border-radius: 0;
+                grid-template-columns: minmax(0, 1fr) 240px; grid-template-rows: auto auto minmax(0, 1fr); }
+            #book-modal .book-dlg-head { flex-wrap: nowrap; padding: 6px 8px 6px 16px; }
+            #book-modal .book-dlg-head h2 { flex: none; }
+            #book-modal .book-presets { order: 0; flex: 0 1 auto; width: max-content; }
+            #book-modal .book-presets button { flex: none; }
+            #book-modal .book-dlg-main { display: block; grid-column: 1; grid-row: 3; min-height: 0; overflow-y: auto; }
+            #book-modal .book-dlg-opts { overflow: visible; }
+            #book-modal .book-dlg-side { display: none; }
+            #book-modal .book-dlg-foot { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
+                padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 0; border-left: 1px solid var(--divider); }
+            #book-modal .book-estimate { flex: none; min-width: 0; }
+            #book-modal .book-dlg-foot .buttons .primary { flex: 1; min-height: 48px; }
+            #book-modal .book-open-hint { display: none; }
+            #book-modal .book-kinds, #book-modal .book-sum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            #book-modal .book-kind + .book-kind, #book-modal .book-sum-row + .book-sum-row { border-top: 0; }
+            #book-modal .book-kind, #book-modal .book-sum-row { border-bottom: 1px solid var(--divider); }
+            #book-modal .book-dlg[data-sub] .book-sum, #book-modal .book-dlg[data-sub] .book-sec-what { display: none; }
+        }
+        @media (pointer: coarse) {
+            #book-modal .book-presets button, #book-modal .book-seg button { min-height: 44px; }
+            #book-modal .book-rod-row, #book-modal .book-part, #book-modal .book-radio { min-height: 44px; }
+            #book-modal .book-step { width: 44px; height: 44px; }
+            #book-modal .book-person-btn { min-height: 44px; }
+            #book-modal .book-switch { width: 44px; height: 44px; }
+            #book-modal .close-btn { width: 44px; height: 44px; }
+        }
         /* Life and health, Family through time, Data quality, Highlights */
         .tov-block { display: flex; flex-direction: column; gap: 8px; }
         .tov-block-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
@@ -20736,39 +20985,28 @@
         </div>
     </div>
 
-    <!-- Family Book Dialog -->
+    <!-- Family Book Dialog (1031 §4): options left, preview + estimate right; filled by src/ui/book-ui.ts -->
     <div class="modal-overlay" id="book-modal">
-        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="book.dialogTitle"></h2>
+        <div class="modal modal--lg book-dlg" role="dialog" data-dialog-kind="form" data-skeleton="skip" aria-modal="true" aria-labelledby="book-dlg-title">
+            <div class="modal-header book-dlg-head">
+                <h2 id="book-dlg-title" data-i18n="book.dialogTitle"></h2>
+                <div class="book-presets" role="radiogroup"></div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
             </div>
-            <div class="form-group">
-                <label for="book-title" data-i18n="book.optName"></label>
-                <input type="text" id="book-title" autocomplete="off">
+            <div class="book-dlg-main">
+                <div class="book-dlg-opts"></div>
+                <aside class="book-dlg-side">
+                    <div class="book-cover" aria-hidden="true"></div>
+                    <div class="book-outline"></div>
+                </aside>
             </div>
-            <div class="form-group">
-                <label for="book-privacy-mode" data-i18n="privacy.label"></label>
-                <select id="book-privacy-mode">
-                    <option value="full" data-i18n="privacy.modeFull"></option>
-                    <option value="initials" data-i18n="privacy.modeInitials"></option>
-                    <option value="minimal" data-i18n="privacy.modeMinimal"></option>
-                    <option value="anonymous" data-i18n="privacy.modeAnonymous"></option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="book-max-gen" data-i18n="book.optMaxGen"></label>
-                <input type="number" id="book-max-gen" min="1" inputmode="numeric" autocomplete="off">
-            </div>
-            <div class="form-group">
-                <label class="settings-checkbox">
-                    <input type="checkbox" id="book-drop-media">
-                    <span data-i18n="privacy.stripPhotos"></span>
-                </label>
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
-                <button class="primary" onclick="window.Strom.UI.generateFamilyBook()" data-i18n="book.generate"></button>
+            <div class="book-dlg-foot">
+                <div class="book-estimate" aria-live="polite"></div>
+                <div class="buttons">
+                    <button class="secondary" data-dismiss onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
+                    <button class="primary" id="book-open" onclick="window.Strom.UI.generateFamilyBook()" data-i18n="book.generate"></button>
+                </div>
+                <p class="book-open-hint"></p>
             </div>
         </div>
     </div>

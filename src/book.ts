@@ -1,666 +1,329 @@
 /**
- * Family book generator. Produces a self-contained, printable HTML document
- * (title page → family tree → "Families" chapters → person index) following the
- * approved template in docs/predlohy/. Pure and DOM-free: the caller supplies
- * the tree SVG (options.treeSvg) so this stays testable.
+ * The family book ("Kniha rodu 2", 1031 §5, §6): the orchestrator. It takes
+ * the tree and the book's options, protects the living, builds the chapter
+ * model from the lineages and sets the blocks of src/book-blocks.ts into one
+ * self-contained HTML document: the title page, the contents, a part per
+ * lineage (its opening page, its line tree, its families), "Other families",
+ * the sources and the index — as the enabled parts say.
  *
- * Structure and algorithms are adopted from the F1 prototype
- * (docs/predlohy/kniha-predloha-generator.ts); F2 adds source footnotes,
- * localization, privacy, media dropping and a max-generations limit.
+ * Pure and DOM-free; the same data and options give the same document (the
+ * date and "now" are injected). Typesetting lives in src/book-css.ts.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, LifeEvent, Story, personSourceIds } from './types.js';
-import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
+import { Partnership, Person, PersonId, PartnershipId, StromData, Story, StoryDraft } from './types.js';
+import { applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, stripResearchWork } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { sortCoupleEvents, sortLifeEvents } from './events.js';
-import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 import { researchOpenSvg } from './history-symbols.js';
-import { personInitials } from './initials.js';
-import { storyProseHtml, coupleStoryYears } from './story-text.js';
-import { storyCompareHtml, STORY_COMPARE_CSS } from './story-compare.js';
-import { shownName, shownNameOrEmpty } from './person-name.js';
+import { proseHtml } from './story-text.js';
+import { storyCompareHtml } from './story-compare.js';
+import { shownName } from './person-name.js';
+import { buildLineages } from './lineage.js';
+import { PersonPageContext } from './person-page.js';
+import { BookChapter, buildBookModel } from './book-model.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import {
+    BookCtx, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, indexHtml, pairFirstNames, pairName,
+    rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
+} from './book-blocks.js';
+import { BOOK_CSS, rodPagesCss } from './book-css.js';
+import { BOOK_WINDOW_CSS, BOOK_WINDOW_SCRIPT, BookSideEntry, bookSideHtml, bookToolbarHtml } from './book-window.js';
 
-export interface BookOptions {
-    title?: string;
-    lang: 'cs' | 'en' | 'de';
-    privacyMode: PrivacyMode;
-    dropMedia?: boolean;
-    maxGenerations?: number;
-    /** Tree overview SVG for the "Family tree" page (supplied by the UI). */
-    treeSvg?: string;
-    /** "compiled …" line (supplied so output is deterministic for tests). */
+export type { BookOptions, BookLang, BookDetail, BookParts, BookPreset, BookSelectionSpec, BookEstimate } from './book-options.js';
+export { estimateBook, defaultBookOptions } from './book-options.js';
+
+/** The options of one book: anything left out takes the default (defaultBookOptions). */
+export type BookBuildOptions = Partial<BookOptions> & { lang: BookLang };
+
+/** What the caller supplies besides the options (the window's world). */
+export interface BookBuildEnv {
+    /** The tree's name: the title of a whole-tree book. */
+    treeName?: string;
+    /** "compiled …" on the title page (supplied so the output is deterministic). */
     dateLabel?: string;
+    /** The @font-face rules of the book's serif (the app's embedded faces + the italic). */
+    fontCss?: string;
+    /** The document is saved as a file: no research controls, the toolbar has Print only (§6.3). */
+    forSave?: boolean;
+    /** Today, for who is living and the person blocks (default: the clock). */
+    now?: Date;
+    /** The lineages of `data`, built once by the caller. */
+    index?: ReturnType<typeof buildLineages>;
+    /** The tree has a history layer (the "Period" part is possible). */
+    hasHistory?: boolean;
+    /** A person's history layer, as the person page gets it. */
+    personHistory?: (personId: PersonId) => PersonPageContext['history'];
     /**
      * The strom-research:// link approving a person's draft story, or null
-     * (supplied by the UI: only a research tree whose research announced it).
-     * Shown on screen under the draft, never printed.
+     * (a research tree whose research announced it). On screen only.
      */
     approveStoryUrl?: (person: Person) => string | null;
     /**
      * An approved story with a new version waiting (Story.draft): the links
      * that take it or keep the approved one ({} without links: the comparison
-     * is read-only). Supplied by the UI — without it the book says nothing
-     * about new versions. On screen only: a banner above the story and the
-     * comparison in a dialog of the book's own window; never printed.
+     * is read-only). On screen only: a banner above the story and the
+     * comparison in a dialog of the book's window; never printed or saved.
      */
     storyDraftUrls?: (owner: { person: Person } | { couple: Partnership }) => { final?: string; keep?: string };
 }
 
 function esc(text: string): string {
-    return text
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-type Book = ReturnType<typeof getStringsForLang>['book'];
+/** Full options from a partial set (parts merged key by key). */
+export function resolveBookOptions(options: BookBuildOptions): BookOptions {
+    const base = defaultBookOptions(options.lang);
+    return { ...base, ...options, parts: { ...base.parts, ...(options.parts ?? {}) } };
+}
+
+function linkTo(target: BookLinkTarget): string | null {
+    if ('chapter' in target) return `#kap-${target.chapter}`;
+    if ('rod' in target) return `#rod-${target.rod}`;
+    return null;
+}
+
+/** "5" or "5–19". */
+function range(chapters: readonly BookChapter[]): string {
+    if (!chapters.length) return '';
+    const a = chapters[0].no, b = chapters[chapters.length - 1].no;
+    return a === b ? String(a) : `${a}–${b}`;
+}
+
+/** One line of the contents: "{no} {couple} · {gen}. gen. · {wedding year}", indented 18 px per generation. */
+function tocFamilyHtml(ctx: BookCtx, ch: BookChapter): string {
+    const B = getStringsForLang(ctx.lang).book;
+    const u = ctx.tree.partnerships[ch.unionId];
+    if (!u) return '';
+    const wed = yearOf(u.startDate);
+    const bits = [pairName(ctx, u), esc(B.generationsShort(ch.gen)), wed !== null ? String(wed) : ''].filter(Boolean).join(' · ');
+    const indent = (Math.max(0, ch.gen - 1) + (ch.sub ? 1 : 0)) * 18;
+    return `<li class="book-toc-fam${ch.sub ? ' book-toc-sub' : ''}" style="padding-left:${indent}px">`
+        + `<a href="#kap-${ch.no}"><span class="book-toc-no">${ch.no}</span>${bits}</a></li>`;
+}
+
+/**
+ * The contents (§5.2): the chapters in the line's order, without page numbers
+ * (browsers cannot count them). A book of lineages lists each lineage with its
+ * chapter range, its families under it; then the back of the book.
+ */
+export function tocHtml(ctx: BookCtx, parts: BookParts): string {
+    const B = getStringsForLang(ctx.lang).book;
+    const rows: string[] = [];
+    if (ctx.model.groups.length) {
+        ctx.model.groups.forEach((g, i) => {
+            if (!g.chapters.length) return;
+            const label = rodLabelOf(ctx, g.rod.id);
+            rows.push(`<li class="book-toc-rod"><a href="#rod-${i + 1}">${esc(B.rodName(label))}</a> <span class="book-muted">· ${esc(B.chaptersRef(range(g.chapters)))}</span></li>`);
+            for (const ch of g.chapters) rows.push(tocFamilyHtml(ctx, ch));
+        });
+    } else {
+        for (const ch of ctx.model.chapters) rows.push(tocFamilyHtml(ctx, ch));
+    }
+    const back = (id: string, label: string): string => `<li class="book-toc-rod"><a href="#${id}">${esc(label)}</a></li>`;
+    if (parts.smallRods && ctx.model.smallRods.length) rows.push(back('book-small-rods', B.parts.smallRods));
+    if (parts.sources && ctx.sources.no.size) rows.push(back('book-sources', B.sources));
+    if (parts.index) rows.push(back('book-index', B.index));
+    return `<h2>${esc(B.contents)}</h2><ol>${rows.join('')}</ol>`;
+}
+
+/** The span of the book's dated records over the protected tree ('' without dates). */
+function protectedPeriod(ctx: BookCtx): string {
+    let from = Infinity, to = -Infinity;
+    const see = (date: string | undefined): void => {
+        const y = yearOf(date);
+        if (y === null) return;
+        if (y < from) from = y;
+        if (y > to) to = y;
+    };
+    for (const id of ctx.model.personIds) {
+        const p = ctx.tree.persons[id];
+        if (!p || p.isPlaceholder) continue;
+        see(p.birthDate);
+        see(p.deathDate);
+    }
+    for (const ch of ctx.model.chapters) see(ctx.tree.partnerships[ch.unionId]?.startDate);
+    if (from === Infinity) return '';
+    return from === to ? String(from) : `${from}–${to}`;
+}
+
+/**
+ * The side contents (§6.1): the title page, the contents, each lineage with
+ * its line tree and chapters ("5 · Jan and Marie"), the back of the book.
+ */
+function bookSideEntries(ctx: BookCtx, parts: BookParts): BookSideEntry[] {
+    const B = getStringsForLang(ctx.lang).book;
+    const out: BookSideEntry[] = [{ kind: 'link', href: '#book-title-page', label: esc(B.win.titlePage) }];
+    if (parts.toc) out.push({ kind: 'link', href: '#book-toc', label: esc(B.contents) });
+    const chapter = (ch: BookChapter, kind: 'link' | 'sub'): BookSideEntry | null => {
+        const u = ctx.tree.partnerships[ch.unionId];
+        return u ? { kind, href: `#kap-${ch.no}`, label: B.win.chapter(ch.no, pairFirstNames(ctx, u)) } : null;
+    };
+    if (ctx.model.groups.length) {
+        ctx.model.groups.forEach((g, i) => {
+            if (!g.chapters.length) return;
+            out.push({ kind: 'link', href: `#rod-${i + 1}`, label: esc(B.rodName(rodLabelOf(ctx, g.rod.id))) });
+            if (parts.tree) out.push({ kind: 'sub', href: `#rod-${i + 1}-tree`, label: esc(B.parts.tree) });
+            for (const ch of g.chapters) { const e = chapter(ch, 'sub'); if (e) out.push(e); }
+        });
+    } else {
+        for (const ch of ctx.model.chapters) { const e = chapter(ch, 'link'); if (e) out.push(e); }
+    }
+    if (parts.smallRods && ctx.model.smallRods.length) out.push({ kind: 'link', href: '#book-small-rods', label: esc(B.parts.smallRods) });
+    if (parts.sources && ctx.sources.no.size) out.push({ kind: 'link', href: '#book-sources', label: esc(B.sources) });
+    if (parts.index) out.push({ kind: 'link', href: '#book-index', label: esc(B.index) });
+    return out;
+}
+
+/** The license notice of the embedded serif (OFL 1.1 asks it to travel with the font). */
+const FONT_NOTICE = 'Strom Serif: a modified (subsetted) version of Source Serif 4 (designed by Frank Grießhammer for Adobe), '
+    + 'renamed as its Reserved Font Name requires. Copyright 2014 - 2021 Adobe Systems Incorporated, with Reserved Font Name "Source". '
+    + 'Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).';
 
 /** Generate the complete family-book HTML for `data`. */
-export function buildFamilyBook(data: StromData, options: BookOptions): string {
-    const lang = options.lang;
+export function buildFamilyBook(data: StromData, options: BookBuildOptions, env: BookBuildEnv = {}): string {
+    const opts = resolveBookOptions(options);
+    const lang = opts.lang;
     const S = getStringsForLang(lang);
-    const B: Book = S.book;
-    // The research's mark on what opens it (a saved file: inline, its meaning on the title; never AI here).
+    const B = S.book;
+    const now = env.now ?? new Date();
+    const year = now.getFullYear();
+    const index = env.index && env.index.data === data ? env.index : buildLineages(data);
+    const parts = effectiveBookParts(data, opts, { index, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) });
+    const model = buildBookModel(data, opts.selection, index);
+
+    // Who is living is judged on the data before protection (the protection strips the very dates it reads).
+    const bounds = inferBirthUpperBounds(data);
+    const living = new Set<PersonId>();
+    for (const p of Object.values(data.persons)) if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
+
+    // Privacy before anything is rendered; only the living lose their sources (as on the person page).
+    let tree = applyLivingPrivacy(data, opts.privacy, year, { keepDeceasedSources: true });
+    if (opts.privacy === 'anonymous' || opts.privacy === 'minimal') {
+        // "Living person" in the book's language, not the app's.
+        for (const id of living) { const p = tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }
+    }
+    // New versions of stories wait in the research's workshop: kept aside for the screen, gone from the tree.
+    const personDrafts = new Map<PersonId, StoryDraft>();
+    const coupleDrafts = new Map<PartnershipId, StoryDraft>();
+    for (const p of Object.values(tree.persons)) if (p.story?.draft) personDrafts.set(p.id, p.story.draft);
+    for (const u of Object.values(tree.partnerships)) if (u.story?.draft) coupleDrafts.set(u.id, u.story.draft);
+    stripResearchWork(tree);
+    if (!parts.media) tree = stripMedia(tree);
+
+    // Research controls (compare a new version, approve a draft): on the screen only, never in a saved file.
     const openMark = `<span class="book-open-mark" title="${esc(S.research.opensInResearchTitle)}">${researchOpenSvg(12)}</span>`;
-
-    // Privacy + media stripping happen BEFORE anything is rendered. As on the
-    // person page, only the living lose their sources: a citation of someone
-    // who died long ago is no secret and makes the book's footnotes.
-    let tree = applyLivingPrivacy(data, options.privacyMode, undefined, { keepDeceasedSources: true });
-    if (options.dropMedia) tree = stripMedia(tree);
-    const persons = tree.persons;
-    const partnerships = tree.partnerships;
-    const sources = tree.sources ?? {};
-
-    const name = (p?: Person) => p ? esc(shownNameOrEmpty(p)) : '';
-    const dates = (p: Person) => {
-        const b = formatFlexDate(p.birthDate, lang);
-        const d = formatFlexDate(p.deathDate, lang);
-        if (!b && !d) return '';
-        return `${b ? '* ' + b : ''}${b && d ? ' ' : ''}${d ? '† ' + d : ''}`;
-    };
-    const placeLine = (p: Person) => {
-        const parts: string[] = [];
-        if (p.birthPlace) parts.push(`${B.born} ${p.birthPlace}`);
-        if (p.deathPlace) parts.push(`${B.died} ${p.deathPlace}`);
-        return parts.join(' · ');
-    };
-
-    // ---- generation assignment (longest ancestor path, memoized DAG walk) ----
-    const gen = assignGenerations(tree);
-    const personGen = (id: string) => gen.get(id) ?? 0;
-
-    // ---- chapters: one per partnership WITH children, in REGISTER order ----
-    // Classic family-book (Register style) ordering: after a couple's chapter
-    // come the families of their children, depth-first, children in birth
-    // order — the book reads along the family line instead of sweeping whole
-    // generations. Root chapters (couples who are nobody's children within
-    // the book) are ordered oldest generation first, then by wedding year,
-    // then by the older partner's birth year, then by name (deterministic).
-    const withChildren = Object.values(partnerships).filter(u => u.childIds.length > 0);
-    const coupleKey = (u: Partnership): [number, number, number, string] => {
-        const g = Math.max(personGen(u.person1Id), personGen(u.person2Id));
-        const wed = yearOf(u.startDate) ?? 9999;
-        const born = Math.min(
-            yearOf(persons[u.person1Id]?.birthDate) ?? 9999,
-            yearOf(persons[u.person2Id]?.birthDate) ?? 9999);
-        const nm = `${persons[u.person1Id]?.lastName ?? ''} ${persons[u.person1Id]?.firstName ?? ''}`;
-        return [g, wed, born, nm];
-    };
-    const cmpCouples = (a: Partnership, b: Partnership): number => {
-        const ka = coupleKey(a), kb = coupleKey(b);
-        for (let i = 0; i < 3; i++) {
-            if (ka[i] !== kb[i]) return (ka[i] as number) - (kb[i] as number);
-        }
-        return (ka[3] as string).localeCompare(kb[3] as string);
-    };
-
-    // A root chapter: neither partner is a child of another chapter couple.
-    const chapterChildIds = new Set(withChildren.flatMap(u => u.childIds as string[]));
-    const roots = withChildren
-        .filter(u => !chapterChildIds.has(u.person1Id) && !chapterChildIds.has(u.person2Id))
-        .sort(cmpCouples);
-
-    const unionsOfParent = new Map<string, Partnership[]>();
-    for (const u of withChildren) {
-        for (const pid of [u.person1Id, u.person2Id]) {
-            const list = unionsOfParent.get(pid) ?? [];
-            list.push(u);
-            unionsOfParent.set(pid, list);
-        }
-    }
-
-    const byBirth = (a: PersonId, b: PersonId) =>
-        (yearOf(persons[a]?.birthDate) ?? 9999) - (yearOf(persons[b]?.birthDate) ?? 9999);
-
-    let chapterUnions: Partnership[] = [];
-    const visited = new Set<string>();
-    const visit = (u: Partnership): void => {
-        if (visited.has(u.id)) return;
-        visited.add(u.id);
-        chapterUnions.push(u);
-        for (const childId of [...u.childIds].sort(byBirth)) {
-            for (const childUnion of (unionsOfParent.get(childId) ?? []).sort(cmpCouples)) {
-                visit(childUnion);
-            }
-        }
-    };
-    for (const root of roots) visit(root);
-    // Anything unreachable (defensive: odd graphs) still gets a chapter.
-    for (const u of [...withChildren].sort(cmpCouples)) visit(u);
-
-    // maxGenerations: keep chapters within N generations of the oldest.
-    if (options.maxGenerations !== undefined) {
-        chapterUnions = chapterUnions.filter(u =>
-            Math.max(personGen(u.person1Id), personGen(u.person2Id)) < options.maxGenerations!);
-    }
-
-    const chapterNo = new Map<string, number>();
-    chapterUnions.forEach((u, i) => chapterNo.set(u.id, i + 1));
-    const parentChapter = new Map<string, number>();
-    for (const u of chapterUnions) {
-        const n = chapterNo.get(u.id)!;
-        if (!parentChapter.has(u.person1Id)) parentChapter.set(u.person1Id, n);
-        if (u.person2Id && !parentChapter.has(u.person2Id)) parentChapter.set(u.person2Id, n);
-    }
-
-    // ---- event + source helpers ----
-    const eventLabel = (ev: LifeEvent): string => {
-        if (ev.type === 'custom') return ev.customLabel ?? '';
-        return S.events.types[ev.type] ?? ev.type;
-    };
-    const formatSource = (src: Source): string =>
-        [src.title, src.repository, src.reference].filter(Boolean).map(x => esc(x!)).join(', ');
-
-    /**
-     * A narrative, set as the prose it is: paragraphs and the small markdown
-     * set of src/story-text.ts (subheadings, lists, **bold** — registers-turned-
-     * prose lean on it for the words that carry the point: "nádeník", "domkář").
-     *
-     * It is deliberately NOT rendered inside the person's medallion: two
-     * medallions stand side by side, so a story there came out as a column of
-     * three-word lines. Stories run the full width of the page BELOW the
-     * couple, one after the other, each headed by whose it is.
-     */
-    /**
-     * A note longer than this is prose, not a caption. A medallion column is
-     * about 35 characters wide, so anything past ~4 lines reads as a ribbon of
-     * three-word lines; those join the narratives below the couple, where they
-     * have the width they need. Shorter ones stay with the person, where a
-     * caption belongs.
-     */
-    const LONG_NOTE = 140;
-    const isLongNote = (person?: Person): boolean => (person?.notes?.length ?? 0) > LONG_NOTE;
-
-    /** Story subheadings sit below the h4 head of the story. */
-    const proseHtml = (text: string, title?: string): string => storyProseHtml(text, { title, headingLevel: 5 });
-
-    /** A person's long note, set below the couple like a narrative. */
-    const longNoteHtml = (person: Person): string => {
-        const body = proseHtml(person.notes ?? '');
-        return body
-            ? `<div class="book-story book-story-note"><h4 class="book-story-head">${name(person)}</h4>${body}</div>`
-            : '';
-    };
-
-    /** The comparison dialogs of new versions, set at the end of the body (outside the pages). */
     const compareDialogs: string[] = [];
+    const prose = (text: string, title?: string): string => proseHtml(text, { ...(title ? { title } : {}), headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
     const plainName = (p?: Person): string => p ? shownName(p) : '?';
-
-    /** The banner above a story whose new version waits, and its comparison dialog. */
-    const newVersionHtml = (story: Story, owner: { person: Person } | { couple: Partnership }): string => {
-        const draft = story.draft;
-        if (!options.storyDraftUrls || story.status !== 'final' || !draft?.text.trim()) return '';
-        const n = compareDialogs.length + 1;
-        const id = `bc-${n}`;
-        const L = S.story;
-        const day = draft.at ? formatFlexDate(draft.at, lang) || undefined : undefined;
-        const who = 'person' in owner ? plainName(owner.person)
-            : L.couple(plainName(persons[owner.couple.person1Id]), plainName(persons[owner.couple.person2Id]));
-        const urls = options.storyDraftUrls(owner);
-        const close = `<button type="button" class="bc-btn" data-compare-close>${esc(S.buttons.close)}</button>`;
-        const foot = urls.final && urls.keep
-            ? `${close}<span class="bc-gap"></span><a class="bc-btn" href="${esc(urls.keep)}" data-compare-do="keep">${esc(L.keepOld)}${openMark}</a><a class="bc-btn bc-btn--primary" href="${esc(urls.final)}" data-compare-do="final">${esc(L.takeNew)}${openMark}</a>`
-            : `<div class="bc-msg">${esc(L.decideOnDesktop)}</div>${close}`;
-        const target = 'person' in owner ? `data-story-person="${esc(owner.person.id)}"` : `data-story-couple="${esc(owner.couple.id)}"`;
-        compareDialogs.push(`<dialog class="book-compare" id="${id}" ${target} aria-labelledby="${id}-h">
-            <div class="bc-head"><div><h2 id="${id}-h">${esc(L.compareTitle)}</h2><div class="bc-sub">${esc(L.compareSub(who, day))}</div></div><button type="button" class="bc-x" data-compare-close aria-label="${esc(S.buttons.close)}">&times;</button></div>
-            <div class="bc-body">${storyCompareHtml({ approved: story, draft }, L, { idPrefix: id, prose: proseHtml })}</div>
-            <div class="bc-foot${urls.final && urls.keep ? '' : ' bc-foot--note'}">${foot}</div>
-        </dialog>`);
-        const sentence = esc(L.nvBook(day)).replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');
-        return `<div class="book-nv"><span>${sentence}</span><button type="button" class="book-nv-compare" data-story-compare="${id}">${esc(L.compare)}</button></div>`;
+    const extras: BookStoryExtras | undefined = env.forSave ? undefined : {
+        banner: (story: Story, owner) => {
+            const draft = 'person' in owner ? personDrafts.get(owner.person.id) : coupleDrafts.get(owner.couple.id);
+            if (!env.storyDraftUrls || story.status !== 'final' || !draft?.text.trim()) return '';
+            const id = `bc-${compareDialogs.length + 1}`;
+            const L = S.story;
+            const day = draft.at ? formatFlexDate(draft.at, lang) || undefined : undefined;
+            const who = 'person' in owner ? plainName(owner.person)
+                : L.couple(plainName(tree.persons[owner.couple.person1Id]), plainName(tree.persons[owner.couple.person2Id]));
+            const urls = env.storyDraftUrls(owner);
+            const close = `<button type="button" class="bc-btn" data-compare-close>${esc(S.buttons.close)}</button>`;
+            const foot = urls.final && urls.keep
+                ? `${close}<span class="bc-gap"></span><a class="bc-btn" href="${esc(urls.keep)}" data-compare-do="keep">${esc(L.keepOld)}${openMark}</a><a class="bc-btn bc-btn--primary" href="${esc(urls.final)}" data-compare-do="final">${esc(L.takeNew)}${openMark}</a>`
+                : `<div class="bc-msg">${esc(L.decideOnDesktop)}</div>${close}`;
+            const target = 'person' in owner ? `data-story-person="${esc(owner.person.id)}"` : `data-story-couple="${esc(owner.couple.id)}"`;
+            compareDialogs.push(`<dialog class="book-compare" id="${id}" ${target} aria-labelledby="${id}-h">`
+                + `<div class="bc-head"><div><h2 id="${id}-h">${esc(L.compareTitle)}</h2><div class="bc-sub">${esc(L.compareSub(who, day))}</div></div><button type="button" class="bc-x" data-compare-close aria-label="${esc(S.buttons.close)}">&times;</button></div>`
+                + `<div class="bc-body">${storyCompareHtml({ approved: story, draft }, L, { idPrefix: id, prose })}</div>`
+                + `<div class="bc-foot${urls.final && urls.keep ? '' : ' bc-foot--note'}">${foot}</div></dialog>`);
+            const sentence = esc(L.nvBook(day)).replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');
+            return `<div class="book-nv"><span>${sentence}</span><button type="button" class="book-nv-compare" data-story-compare="${id}">${esc(L.compare)}</button></div>`;
+        },
+        approve: (p: Person) => {
+            const url = env.approveStoryUrl?.(p);
+            return url ? `<p class="book-story-approve"><a href="${esc(url)}">${esc(S.research.approveStory)}${openMark}</a></p>` : '';
+        },
     };
 
-    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person, couple?: Partnership, sub = false): string => {
-        const paragraphs = proseHtml(story.text, story.title);
-        if (!paragraphs) return '';
-        const nv = person ? newVersionHtml(story, { person }) : couple ? newVersionHtml(story, { couple }) : '';
-        // The draft/approved state is the author's workshop note: it travels in
-        // the data and back out to GEDCOM, but a printed book says nothing
-        // about it — a page of prose is either worth printing or it is not.
-        const title = story.title
-            ? ` <span class="book-story-title">${esc(story.title)}</span>` : '';
-        const head = `<h4 class="book-story-head">${who}${title}</h4>`;
-        // A draft of a research tree can be approved there — on screen only.
-        const approve = story.status === 'draft' && person ? options.approveStoryUrl?.(person) : null;
-        const approveHtml = approve
-            ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}${openMark}</a></p>` : '';
-        return `<div class="book-story book-story-${kind}${sub ? ' book-story-sub' : ''}">${nv}${head}${paragraphs}${approveHtml}</div>`;
+    const ctx: BookCtx = {
+        mode: 'book', lang, privacy: opts.privacy, detail: opts.detail, parts, notes: opts.notes, research: opts.research,
+        linkTo, tree, living, model, now,
+        sources: new BookSourceNumbers(tree.sources ?? {}, parts.sources),
+        ...(env.personHistory ? { personHistory: env.personHistory } : {}),
+        ...(extras ? { extras } : {}),
+        described: new Map(),
+        protectedTree: { tree, privacy: opts.privacy, living, drafts: new Set(personDrafts.keys()) },
     };
 
-    // Photo (circular) or initials.
-    const photoImg = (p: Person) => p.photo
-        ? `<img class="book-portrait" src="${esc(p.photo)}" alt="">`
-        : `<div class="book-portrait book-portrait-empty">${esc(personInitials(p.firstName, p.lastName) || '?')}</div>`;
-
-    // A person medallion. `cite(id)` returns a footnote-marker string for a
-    // source id, collecting per-chapter footnotes as a side effect.
-    const personBlock = (p: Person, cite: (sourceId: string) => string) => {
-        const events = sortLifeEvents(p.events ?? []);
-        const eventHtml = events.map(ev => {
-            const label = esc(eventLabel(ev));
-            const date = ev.date ? ` ${esc(formatFlexDate(ev.date, lang))}` : '';
-            const place = ev.place ? `, ${esc(ev.place)}` : '';
-            const note = ev.note ? ` — ${esc(ev.note)}` : '';
-            const refs = (ev.sourceIds ?? []).map(cite).join('');
-            return `<div class="book-person-event">${label}${date}${place}${note}${refs}</div>`;
-        }).join('');
-        const personRefs = personSourceIds(p).map(cite).join('');
-        return `
-        <div class="book-person">
-            ${photoImg(p)}
-            <div class="book-person-info">
-                <div class="book-person-name">${name(p)}${personRefs}</div>
-                <div class="book-person-dates">${esc(dates(p))}</div>
-                ${placeLine(p) ? `<div class="book-person-places">${esc(placeLine(p))}</div>` : ''}
-                ${eventHtml}
-                ${p.notes && !isLongNote(p) ? `<div class="book-person-notes">${esc(p.notes)}</div>` : ''}
-            </div>
-        </div>`;
-    };
-
-    // Marriage line: "⚭ date, place" plus how the union ended (a divorce,
-    // a separation, a partnership's end); unmarried partners get no "⚭".
-    const marriageLine = (u: Partnership): string => {
-        const start = [u.startDate ? formatFlexDate(u.startDate, lang) : '', u.startPlace ?? '']
-            .filter(Boolean).join(', ');
-        let line = u.status === 'partners'
-            ? [B.partners, start].filter(Boolean).join(' ')
-            : (start ? `⚭ ${start}` : '');
-        const endDate = u.endDate ? formatFlexDate(u.endDate, lang) : '';
-        let endLabel = '';
-        if (u.status === 'divorced' || (u.status === 'married' && u.endDate)) endLabel = B.divorced;
-        else if (u.status === 'separated') endLabel = B.separated;
-        else if (u.status === 'partners' && u.endDate) endLabel = B.ended;
-        if (endLabel) {
-            const end = [endLabel, endDate].filter(Boolean).join(' ');
-            line = line ? `${line} · ${end}` : `⚭ · ${end}`;
-        }
-        return esc(line);
-    };
-
-    // The couple's other events under the wedding: "22. 1. 1888 | Banns, Dolní
-    // Lhota. Witnesses Josef Kříž and Václav Dvořák (neighbour)." In date
-    // order, undated last; citations as footnotes. Nothing without events.
-    const coupleEventsHtml = (u: Partnership, cite: (sourceId: string) => string): string => {
-        const events = sortCoupleEvents(u.events ?? []);
-        if (events.length === 0) return '';
-        const rows = events.map(ev => {
-            const label = ev.type === 'custom' && ev.customLabel?.trim()
-                ? ev.customLabel.trim() : S.partnerEvents.types[ev.type];
-            const where = [ev.place?.trim(), ev.address?.trim()].filter(Boolean).join(' ');
-            const people = (ev.participants ?? []).map(part => {
-                const linked = part.personId ? persons[part.personId] : undefined;
-                const who = linked ? shownNameOrEmpty(linked) : (part.name ?? '').trim();
-                return who ? (part.note?.trim() ? `${who} (${part.note.trim()})` : who) : '';
-            }).filter(Boolean);
-            const list = people.length > 1
-                ? `${people.slice(0, -1).join(', ')} ${B.and} ${people[people.length - 1]}` : people.join('');
-            const text = [
-                `${[label, where].filter(Boolean).join(', ')}.`,
-                list ? B.eventWitnesses(list) : '',
-                ev.note?.trim() ? (/[.!?…]$/.test(ev.note.trim()) ? ev.note.trim() : `${ev.note.trim()}.`) : '',
-            ].filter(Boolean).join(' ');
-            const refs = (ev.sourceIds ?? []).map(cite).join('');
-            const date = ev.date ? formatFlexDate(ev.date, lang) : S.partnerEvents.noDate;
-            return `<div class="book-couple-event"><span class="book-couple-event-date${ev.date ? '' : ' book-muted'}">${esc(date)}</span><span>${esc(text)}${refs}</span></div>`;
-        }).join('');
-        return `<div class="book-couple-events"><h3>${esc(S.partnerEvents.bookTitle)}</h3>${rows}</div>`;
-    };
-
-    // Non-biological tie of a child to this couple (adopted, stepchild,
-    // foster), naming the parent when only one of the two holds it.
-    const childRelation = (c: Person, u: Partnership): string => {
-        const t1 = c.parentRelTypes?.[u.person1Id];
-        const t2 = c.parentRelTypes?.[u.person2Id];
-        const parts: string[] = [];
-        for (const type of ['adoptive', 'step', 'foster'] as const) {
-            const has1 = t1 === type, has2 = t2 === type;
-            if (!has1 && !has2) continue;
-            const label = B.childRel[type];
-            if (has1 && has2) { parts.push(label); continue; }
-            const parent = persons[has1 ? u.person1Id : u.person2Id];
-            const pn = parent ? shownNameOrEmpty(parent) : '';
-            parts.push(pn ? B.childRelOf(label, pn) : label);
-        }
-        return parts.join(', ');
-    };
-
-    // A childless couple's story has no chapter of its own: it becomes a
-    // subchapter in the chapter of the partner on the main line (the first
-    // chapter where that partner is one of the couple), right after that
-    // partner's own story (spec 027 §5.7). Keyed by chapter union, then partner.
-    const subStories = new Map<string, Map<PersonId, Partnership[]>>();
-    for (const u of Object.values(partnerships)) {
-        if (!u.story?.text?.trim() || chapterNo.has(u.id)) continue;
-        const pick = [u.person1Id, u.person2Id]
-            .map(pid => ({ pid, n: pid ? parentChapter.get(pid) : undefined }))
-            .filter((x): x is { pid: PersonId; n: number } => x.n !== undefined)
-            .sort((a, b) => a.n - b.n)[0];
-        if (!pick) continue;
-        const host = chapterUnions[pick.n - 1].id;
-        const byPartner = subStories.get(host) ?? new Map<PersonId, Partnership[]>();
-        byPartner.set(pick.pid, [...(byPartner.get(pick.pid) ?? []), u]);
-        subStories.set(host, byPartner);
-    }
-    const subStoriesHtml = (host: Partnership, p?: Person): string[] => {
-        if (!p) return [];
-        const list = [...(subStories.get(host.id)?.get(p.id) ?? [])]
-            .sort((a, b) => (yearOf(a.startDate) ?? 9999) - (yearOf(b.startDate) ?? 9999));
-        return list.map(u => {
-            const other = persons[u.person1Id === p.id ? u.person2Id : u.person1Id];
-            const who = other && !other.isPlaceholder ? shownNameOrEmpty(other) : '?';
-            return storyHtml(u.story!, 'couple', esc(B.coupleSub(shownNameOrEmpty(p) || '?', who, coupleStoryYears(tree, u, S.personPage.story.until))), undefined, u, true);
+    // ── The body: lineages (or the families of a book of ancestors / descendants) ──
+    const body: string[] = [];
+    const heads: string[] = [];
+    if (model.groups.length) {
+        model.groups.forEach((g, i) => {
+            if (!g.chapters.length) return;
+            const n = i + 1;
+            heads[i] = B.rodName(rodLabelOf(ctx, g.rod.id));
+            const lineage = parts.tree ? rodLineageHtml(g.rod, ctx, { breakBefore: rodHasMaleLine(g.rod, ctx), id: `rod-${n}-tree` }) : '';
+            const chapters = g.chapters.map(ch => familyChapterHtml(ch, ctx)).join('');
+            body.push(`<section class="book-sheet book-rod rod-${n}" id="rod-${n}">${rodOverviewHtml(g.rod, ctx)}${lineage}${chapters}</section>`);
         });
-    };
-
-    const chapters = chapterUnions.map(u => {
-        const p1 = persons[u.person1Id];
-        const p2 = persons[u.person2Id];
-        const n = chapterNo.get(u.id)!;
-
-        // Per-chapter footnotes: source id -> local number, in first-seen order.
-        const footnoteNo = new Map<string, number>();
-        const cite = (sourceId: string): string => {
-            if (!sources[sourceId]) return '';
-            let no = footnoteNo.get(sourceId);
-            if (no === undefined) { no = footnoteNo.size + 1; footnoteNo.set(sourceId, no); }
-            return `<sup class="book-fn-ref">[${no}]</sup>`;
-        };
-
-        const married = marriageLine(u);
-        const coupleHtml = `${p1 ? personBlock(p1, cite) : ''}${p2 ? personBlock(p2, cite) : ''}`;
-        // After the couple, so the partners' own citations keep the first footnote numbers.
-        const coupleEvents = coupleEventsHtml(u, cite);
-        const children = u.childIds.map(cid => {
-            const c = persons[cid];
-            if (!c) return '';
-            const ref = parentChapter.get(cid);
-            const rel = childRelation(c, u);
-            return `<li>${name(c)}${dates(c) ? ` <span class="book-muted">(${esc(dates(c))})</span>` : ''}${rel ? ` <span class="book-muted">— ${esc(rel)}</span>` : ''}${ref ? ` <span class="book-chapter-ref">→ ${B.chapterShort} ${ref}</span>` : ''}</li>`;
-        }).join('');
-
-        // Prose runs below the couple, in reading order: his, hers, theirs —
-        // a long note first, then the narrative written about that person
-        // (and the stories of that person's childless marriages after it).
-        const stories = [
-            ...(isLongNote(p1) ? [longNoteHtml(p1!)] : []),
-            ...(p1?.story ? [storyHtml(p1.story, 'person', name(p1), p1)] : []),
-            ...subStoriesHtml(u, p1),
-            ...(isLongNote(p2) ? [longNoteHtml(p2!)] : []),
-            ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2), p2)] : []),
-            ...subStoriesHtml(u, p2),
-            ...(u.story ? [storyHtml(u.story, 'couple',
-                `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`, undefined, u)] : []),
-        ].join('');
-
-        // Footnotes are collected during coupleHtml rendering above.
-        const footnotes = [...footnoteNo.entries()]
-            .map(([sid, no]) => `<div class="book-footnote">[${no}] ${formatSource(sources[sid])}</div>`)
-            .join('');
-
-        return `
-        <section class="book-chapter">
-            <h2><span class="book-chapter-num">${n}</span> ${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}</h2>
-            ${married ? `<div class="book-marriage-line">${married}</div>` : ''}
-            ${u.note ? `<div class="book-marriage-note">${esc(u.note)}</div>` : ''}
-            ${coupleEvents}
-            <div class="book-couple">${coupleHtml}</div>
-            ${stories}
-            ${children ? `<div class="book-children"><h3>${esc(B.children)}</h3><ul>${children}</ul></div>` : ''}
-            ${footnotes ? `<div class="book-footnotes"><h3>${esc(B.sources)}</h3>${footnotes}</div>` : ''}
-        </section>`;
-    }).join('\n');
-
-    // ---- index: every non-placeholder person that appears in the book ----
-    const inBook = (p: Person): boolean => {
-        if (options.maxGenerations === undefined) return true;
-        if (parentChapter.has(p.id)) return true;
-        return chapterUnions.some(u => u.childIds.includes(p.id));
-    };
-    // A person with a married surname (Person.marriedSurname) stands under the
-    // birth surname with "married name Nováková" after the name, and a
-    // cross-reference under the married one ("Nováková, Marie → see Dvořáková,
-    // Marie", no chapters), whatever the surname display setting; a person
-    // who goes by the birth surname (Person.primaryName 'birth') has
-    // "formerly Nováková" there instead.
-    const indexEntries: { key: string; html: string }[] = [];
-    for (const p of Object.values(persons)) {
-        if (p.isPlaceholder || !inBook(p)) continue;
-        const refs = new Set<number>();
-        const pc = parentChapter.get(p.id);
-        if (pc) refs.add(pc);
-        for (const u of chapterUnions) if (u.childIds.includes(p.id)) refs.add(chapterNo.get(u.id)!);
-        const refStr = [...refs].sort((a, b) => a - b).join(', ');
-        const indexName = p.lastName ? `${p.lastName}, ${p.firstName}` : p.firstName;
-        const married = p.marriedSurname?.trim();
-        // A person who goes by the birth surname again: "formerly Zástěrová".
-        const marriedText = married ? (p.primaryName === 'birth' ? B.indexFormer : B.indexMarried)(married) : '';
-        const marriedNote = married ? `<span class="book-muted">, ${esc(marriedText)}</span>` : '';
-        indexEntries.push({
-            key: `${p.lastName} ${p.firstName}`,
-            html: `<div class="book-index-row"><span>${esc(indexName)}${marriedNote}</span><span class="book-dots"></span><span class="book-muted">${esc(dates(p)) || '—'}</span>${refStr ? `<span class="book-index-ref">${B.chapterShort} ${refStr}</span>` : ''}</div>`,
-        });
-        if (married && married !== p.lastName?.trim()) {
-            const marriedName = `${married}, ${p.firstName}`;
-            indexEntries.push({
-                key: `${married} ${p.firstName}`,
-                html: `<div class="book-index-row book-index-see">${esc(B.indexSee(marriedName, indexName))}</div>`,
-            });
-        }
+    } else if (model.chapters.length) {
+        const chapters = model.chapters.map(ch => familyChapterHtml(ch, ctx)).join('');
+        body.push(`<section class="book-sheet book-families"><h2>${esc(B.families)}</h2>${chapters}</section>`);
     }
-    const indexRows = indexEntries
-        .sort((a, b) => a.key.localeCompare(b.key, lang))
-        .map(e => e.html).join('');
+    // Named pages need a name for every index, even of a group without chapters.
+    const rodCss = rodPagesCss(model.groups.map((g, i) => heads[i] ?? B.rodName(g.label)));
 
-    // ---- title-page stats ----
-    const indexedPersons = Object.values(persons).filter(p => !p.isPlaceholder && inBook(p));
-    const personCount = indexedPersons.length;
-    const years = indexedPersons.map(p => yearOf(p.birthDate)).filter((y): y is number => y !== null);
-    const span = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : '';
-    const generations = gen.size ? Math.max(...gen.values()) + 1 : 0;
+    // ── The back of the book (after the chapters: the sources are numbered by then) ──
+    const back: string[] = [];
+    if (parts.smallRods && model.smallRods.length) {
+        back.push(`<section class="book-sheet book-back" id="book-small-rods">${smallRodsHtml(model.smallRods, ctx)}</section>`);
+    }
+    if (parts.sources) {
+        const list = sourcesHtml(ctx);
+        if (list) back.push(`<section class="book-sheet book-back book-sources-page" id="book-sources">${list}</section>`);
+    }
+    if (parts.index) back.push(`<section class="book-sheet book-back book-index-page" id="book-index">${indexHtml(ctx)}</section>`);
 
-    const title = esc(options.title || B.title);
-    const compiled = options.dateLabel ? esc(options.dateLabel) : '';
+    // ── The front: the title page and the contents ──
+    const titleData = (opts.selection.kind === 'ancestors' || opts.selection.kind === 'descendants')
+        && living.has(opts.selection.person) && opts.privacy !== 'full' ? tree : data;
+    const title = opts.title?.trim()
+        || autoBookTitle(titleData, opts.selection, lang, { ...(titleData === data ? { index } : {}), ...(env.treeName ? { treeName: env.treeName } : {}) });
+    const period = protectedPeriod(ctx);
+    const persons = [...model.personIds].filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder).length;
+    const meta = [B.persons(persons)];
+    const front = `<section class="book-sheet book-front book-title-page" id="book-title-page"><div class="book-kicker">${esc(B.subtitle)}</div>`
+        + `<h1>${esc(title)}</h1>${period ? `<div class="book-title-sub">${esc(period)}</div>` : ''}<hr class="book-rule">`
+        + `<div class="book-title-meta">${esc(meta.join(' · '))}${env.dateLabel ? `<br>${esc(env.dateLabel)}` : ''}</div></section>`;
+    const toc = parts.toc ? `<nav class="book-sheet book-front book-toc" id="book-toc">${tocHtml(ctx, parts)}</nav>` : '';
+
+    // ── The window: the toolbar, the side contents (§6.1, §6.2) ──
+    const pages = estimateBook(data, opts, { index, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) }).pages;
+    const toolbar = bookToolbarHtml(lang, title, pages, !!env.forSave);
+    const side = bookSideHtml(lang, bookSideEntries(ctx, parts));
+    const fonts = (env.fontCss ?? '').replace(/<\//g, '<\\/');
+    // The embedded font travels with a saved book: its notice goes with it.
+    const fontNotice = fonts ? `<!-- ${FONT_NOTICE} -->\n` : '';
 
     return `<!DOCTYPE html>
-<html lang="${lang}"><head><meta charset="utf-8"><title>${esc(B.title)} — ${title}</title>
-<style>
-    :root { --book-ink: #2b2620; --book-accent: #8b6f47; --book-rule: #c9b99a; }
-    .book-page * { margin: 0; padding: 0; box-sizing: border-box; }
-    /* The narrative: prose after the facts, running the full width of the page
-       (inside a medallion it came out as a column of three-word lines). */
-    .book-story { margin: 16px 0 0 30px; font-size: 13.5px; line-height: 1.7; text-align: justify;
-        hyphens: auto; }
-    .book-story p { margin-bottom: 7px; text-indent: 1.2em; }
-    .book-story p:first-of-type { text-indent: 0; }
-    .book-story .story-subhead { font-size: 13.5px; font-weight: bold; font-style: italic; text-align: left;
-        margin: 12px 0 4px; break-after: avoid; }
-    .book-story .story-subhead + p { text-indent: 0; }
-    .book-story ul { margin: 0 0 7px 1.4em; text-align: left; }
-    .book-story li { margin-bottom: 2px; }
-    .book-story-head { font-size: 13px; font-weight: bold; text-align: left; margin-bottom: 5px;
-        padding-bottom: 3px; border-bottom: 1px solid var(--book-rule); }
-    .book-story-title { font-weight: normal; font-style: italic; color: var(--book-accent); }
-    .book-story-title::before { content: '— '; }
-    /* Their shared chapter reads as one voice: a wider, quieter opening. */
-    .book-story-couple .book-story-head { color: var(--book-accent); }
-    /* A long note is research, not narrative — same width, quieter voice. */
-    .book-story-note { font-style: italic; color: #5d5346; }
-    .book-story-note .book-story-head { font-style: normal; }
-    body { font-family: Georgia, 'Times New Roman', serif; color: var(--book-ink); background: #f4efe6; }
-    .book-page { max-width: 700px; margin: 0 auto; padding: 48px 56px; background: #fffdf8; }
-    @media screen { .book-page { box-shadow: 0 2px 14px rgba(0,0,0,.12); margin: 24px auto; } }
-
-    .book-title-page { text-align: center; display: flex; flex-direction: column; justify-content: center; min-height: 85vh; }
-    .book-title-ornament { color: var(--book-accent); font-size: 22px; letter-spacing: .6em; margin: 18px 0; }
-    .book-title-page h1 { font-size: 44px; font-weight: normal; letter-spacing: .06em; margin: 10px 0 4px; }
-    .book-title-sub { font-style: italic; color: #6b6154; font-size: 17px; }
-    .book-title-rule { width: 140px; border: 0; border-top: 1px solid var(--book-rule); margin: 26px auto; }
-    .book-title-meta { color: #8a8070; font-size: 13px; line-height: 1.9; }
-
-    .book-tree-page h2, .book-index-page h2, .book-families h2 { font-size: 24px; font-weight: normal; border-bottom: 1px solid var(--book-rule); padding-bottom: 8px; margin-bottom: 18px; }
-    .book-tree-wrap { overflow: hidden; border: 1px solid var(--book-rule); }
-    .book-tree-wrap svg { width: 100%; height: auto; display: block; }
-    .book-tree-hint { font-size: 12px; color: #8a8070; margin-top: 8px; font-style: italic; }
-
-    .book-chapter { margin: 34px 0; break-inside: avoid; }
-    .book-chapter h2 { font-size: 21px; font-weight: normal; border-bottom: 1px solid var(--book-rule); padding-bottom: 6px; margin-bottom: 4px; }
-    .book-chapter-num { display: inline-block; min-width: 30px; color: var(--book-accent); }
-    .book-amp { color: var(--book-accent); }
-    .book-marriage-line { font-size: 13.5px; color: #6b6154; margin: 4px 0 2px 30px; }
-    .book-marriage-note { font-size: 13px; font-style: italic; color: #6b6154; margin: 2px 0 0 30px; }
-    .book-couple-events { margin: 10px 0 0 30px; }
-    .book-couple-events h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--book-accent); font-weight: normal; margin-bottom: 4px; }
-    .book-couple-event { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 13.5px; line-height: 1.55; }
-    @media (max-width: 640px) { .book-couple-event { grid-template-columns: minmax(0, 1fr); gap: 0; margin-bottom: 4px; } }
-    .book-couple { display: flex; gap: 24px; margin: 14px 0 0 30px; }
-    .book-person { flex: 1; display: flex; gap: 10px; min-width: 0; }
-    .book-portrait { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex: none; border: 1px solid var(--book-rule); }
-    .book-portrait-empty { display: flex; align-items: center; justify-content: center; background: #efe7d8; color: var(--book-accent); font-size: 16px; }
-    .book-person-name { font-weight: bold; font-size: 14.5px; }
-    .book-person-dates { font-size: 13px; color: #6b6154; }
-    .book-person-places, .book-person-event { font-size: 12.5px; color: #6b6154; }
-    .book-person-event::before { content: '· '; color: var(--book-accent); }
-    .book-person-notes { font-size: 12.5px; font-style: italic; margin-top: 4px; line-height: 1.45; }
-    .book-fn-ref { color: var(--book-accent); font-size: 10px; }
-    .book-children { margin: 12px 0 0 30px; }
-    .book-children h3, .book-footnotes h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--book-accent); font-weight: normal; margin-bottom: 4px; }
-    .book-children ul { list-style: none; }
-    .book-children li { font-size: 13.5px; line-height: 1.75; }
-    .book-children li::before { content: '— '; color: var(--book-rule); }
-    .book-chapter-ref, .book-index-ref { font-size: 11.5px; color: var(--book-accent); white-space: nowrap; }
-    .book-muted { color: #8a8070; }
-    .book-footnotes { margin: 12px 0 0 30px; border-top: 1px solid var(--book-rule); padding-top: 6px; }
-    .book-footnote { font-size: 11.5px; color: #6b6154; line-height: 1.6; }
-
-    .book-index-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.9; }
-    .book-index-row .book-dots { flex: 1; border-bottom: 1px dotted var(--book-rule); }
-    .book-index-see { font-style: italic; }
-
-    /* Floating toolbar: the book opens in its own window/view — standalone
-       PWAs have no browser chrome, so it must carry its own Close + Print. */
-    .book-toolbar {
-        position: fixed; top: 10px; right: 10px; z-index: 10;
-        display: flex; gap: 8px;
-    }
-    .book-toolbar button {
-        font: 600 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        padding: 9px 14px; border-radius: 18px; border: 1px solid #cfc7b8;
-        background: rgba(255,255,255,0.92); color: #4a4436; cursor: pointer;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-    }
-    .book-toolbar button:hover { background: #fff; }
-
-    /* A new version of an approved story waits: on screen only. */
-    .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px;
-        border-radius: 8px; background: #f6ecd3; color: #7f5500; font-family: system-ui, sans-serif; font-size: 13px;
-        line-height: 1.45; text-align: left; }
-    .book-nv > span { flex: 1; min-width: 200px; }
-    .book-nv-compare, .bc-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid #e2cf9f; background: #fffdf8;
-        color: #2b2822; font: 500 13px system-ui, sans-serif; cursor: pointer; text-decoration: none; }
-    .book-compare { width: min(720px, 92vw); max-height: 88vh; padding: 0; border: 0; border-radius: 14px;
-        box-shadow: 0 12px 40px rgba(20,16,8,0.3); background: #fffdf8; color: #2b2822; font-family: system-ui, sans-serif; }
-    .book-compare[open] { display: flex; flex-direction: column; }
-    .book-compare::backdrop { background: rgba(20,16,8,0.45); }
-    .bc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #ece5d6; }
-    .bc-head h2 { margin: 0; font-family: Georgia, serif; font-size: 19px; }
-    .bc-sub { margin-top: 2px; font-size: 13px; color: #5c5546; }
-    .bc-x { width: 32px; height: 32px; border: 0; background: none; font-size: 22px; color: #5c5546; cursor: pointer; }
-    .bc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 24px 24px; }
-    .bc-body .sc-bar { position: sticky; top: -16px; z-index: 1; margin: -16px -24px 20px; padding: 12px 24px; background: #fffdf8; }
-    .bc-foot { display: flex; align-items: center; gap: 8px; padding: 14px 24px; background: #f6f2ea; border-top: 1px solid #ece5d6; }
-    .bc-foot .bc-btn { padding: 9px 16px; border-color: #ddd4c2; font-size: 14px; }
-    .book-open-mark { display: inline-flex; vertical-align: -2px; margin-left: 6px; opacity: .8; }
-    .bc-btn--primary { background: #3f6b4f; border-color: #3f6b4f !important; color: #fff; font-weight: 600; }
-    .bc-gap { flex: 1; }
-    .bc-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: #5c5546; }
-    .bc-msg strong { color: #2b2822; }
-    @media (max-width: 640px) {
-        .book-compare { width: 100vw; max-width: 100vw; max-height: 94vh; margin: auto 0 0; border-radius: 14px 14px 0 0; }
-        .bc-head, .bc-foot { padding-left: 16px; padding-right: 16px; }
-        .bc-body { padding: 14px 16px 20px; }
-        .bc-body .sc-bar { top: -14px; margin: -14px -16px 16px; padding: 10px 16px; }
-        .bc-foot { flex-direction: column-reverse; align-items: stretch; }
-        .bc-foot .bc-btn { text-align: center; }
-        .bc-gap { display: none; }
-        .bc-foot [data-compare-close] { order: -1; }
-        .bc-msg { text-align: center; }
-    }
-${STORY_COMPARE_CSS}
-    @page { size: A4; margin: 18mm 16mm; }
-    .book-story-approve { margin: 6px 0 0; font-family: system-ui, sans-serif; font-size: 13px; }
-    .book-story-approve a { color: #8a5a2b; }
-    @media print {
-        .book-story-approve { display: none; }
-        .book-nv, .book-compare { display: none !important; }
-        .book-toolbar { display: none; }
-        body { background: #fff; }
-        .book-page { max-width: none; box-shadow: none; margin: 0; padding: 0; background: #fff; }
-        .book-page-break { break-before: page; }
-        .book-title-page { min-height: 90vh; }
-        .book-chapter { break-inside: avoid; }
-        /* A chapter with a narrative is a page or more of prose: let it break,
-           but never leave its heading, or a single line, stranded. */
-        .book-chapter:has(.book-story) { break-inside: auto; }
-        .book-story-head { break-after: avoid; }
-        .book-story p { orphans: 2; widows: 2; }
-    }
-</style></head><body>
-
-<div class="book-toolbar">
-    <button type="button" onclick="window.print()">🖨 ${esc(B.toolbarPrint)}</button>
-    <button type="button" onclick="window.close(); setTimeout(function(){ if (!window.closed) history.back(); }, 200)">✕ ${esc(B.toolbarClose)}</button>
-</div>
-
-<div class="book-page book-title-page">
-    <div class="book-title-ornament">❦</div>
-    <h1>${title}</h1>
-    <div class="book-title-sub">${esc(B.subtitle)}</div>
-    <hr class="book-title-rule">
-    <div class="book-title-meta">
-        ${esc(B.persons(personCount))} · ${esc(B.generations(generations))}${span ? ` · ${esc(span)}` : ''}${compiled ? `<br>${compiled}` : ''}
-    </div>
-    <div class="book-title-ornament">❦</div>
-</div>
-
-${options.treeSvg ? `<div class="book-page book-tree-page book-page-break">
-    <h2>${esc(B.tree)}</h2>
-    <div class="book-tree-wrap">${options.treeSvg}</div>
-    <div class="book-tree-hint">${esc(B.treeHint)}</div>
-</div>` : ''}
-
-<div class="book-page book-families book-page-break">
-    <h2>${esc(B.families)}</h2>
-    ${chapters}
-</div>
-
-<div class="book-page book-index-page book-page-break">
-    <h2>${esc(B.index)}</h2>
-    ${indexRows}
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+${fontNotice}<style>${fonts}
+${BOOK_CSS}
+${BOOK_WINDOW_CSS}
+${rodCss}</style></head><body>
+${toolbar}
+<div class="book-layout">
+${side}
+<main class="book">
+${front}
+${toc}
+${body.join('\n')}
+${back.join('\n')}
+</main>
 </div>
 ${compareDialogs.join('\n')}
+<script>${BOOK_WINDOW_SCRIPT}</script>
 </body></html>`;
 }

@@ -153,12 +153,12 @@ describe('S28 tree overview skips placeholders', () => {
 describe('S33 family book shows how unions ended and non-biological children', () => {
     it('renders divorce and adoption markers', () => {
         const d = data([
-            p('h', 'Jan', 'Kovář', 'male', { childIds: ['c', 's'], birthDate: '1900-01-01', deathDate: '1970-01-01' }),
-            p('w', 'Eva', 'Kovářová', 'female', { childIds: ['c', 's'], birthDate: '1902-01-01', deathDate: '1975-01-01' }),
+            p('h', 'Jan', 'Kovář', 'male', { childIds: ['c', 's'], partnerships: ['u'], birthDate: '1900-01-01', deathDate: '1970-01-01' }),
+            p('w', 'Eva', 'Kovářová', 'female', { childIds: ['c', 's'], partnerships: ['u'], birthDate: '1902-01-01', deathDate: '1975-01-01' }),
             p('c', 'Petr', 'Kovář', 'male', { parentIds: ['h', 'w'], birthDate: '1925-01-01', deathDate: '1990-01-01', parentRelTypes: { h: 'adoptive', w: 'adoptive' } }),
             p('s', 'Ota', 'Kovář', 'male', { parentIds: ['h', 'w'], birthDate: '1927-01-01', deathDate: '1995-01-01', parentRelTypes: { h: 'step' } }),
         ], [u('u', 'h', 'w', { status: 'divorced', startDate: '1924-05-01', endDate: '1940', childIds: ['c', 's'] })]);
-        const html = buildFamilyBook(d, { lang: 'en', privacyMode: 'full' });
+        const html = buildFamilyBook(d, { lang: 'en', privacy: 'full' });
         expect(html).toContain('⚭ 1 May 1924 · divorced 1940');
         expect(html).toContain('— adopted');
         expect(html).toContain('stepchild of Jan Kovář');
@@ -166,12 +166,12 @@ describe('S33 family book shows how unions ended and non-biological children', (
 
     it('unmarried partners get no wedding symbol', () => {
         const d = data([
-            p('h', 'Jan', 'A', 'male', { childIds: ['c'], birthDate: '1900-01-01', deathDate: '1970-01-01' }),
-            p('w', 'Eva', 'B', 'female', { childIds: ['c'], birthDate: '1902-01-01', deathDate: '1975-01-01' }),
+            p('h', 'Jan', 'A', 'male', { childIds: ['c'], partnerships: ['u'], birthDate: '1900-01-01', deathDate: '1970-01-01' }),
+            p('w', 'Eva', 'B', 'female', { childIds: ['c'], partnerships: ['u'], birthDate: '1902-01-01', deathDate: '1975-01-01' }),
             p('c', 'Kid', 'A', 'male', { parentIds: ['h', 'w'], birthDate: '1925-01-01', deathDate: '1990-01-01' }),
         ], [u('u', 'h', 'w', { status: 'partners', startDate: '1924', childIds: ['c'] })]);
-        const html = buildFamilyBook(d, { lang: 'en', privacyMode: 'full' });
-        expect(html).toContain('<div class="book-marriage-line">Partners 1924</div>');
+        const html = buildFamilyBook(d, { lang: 'en', privacy: 'full' });
+        expect(html).toContain('<div class="book-family-line">Partners 1924</div>');
     });
 });
 

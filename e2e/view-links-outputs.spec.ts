@@ -66,7 +66,7 @@ async function posterSvg(page: Page): Promise<string> {
     return readFileSync(await download.path(), 'utf-8');
 }
 
-/** The book's tree page (privacy: full). */
+/** The book's body (privacy: full): made from the tree's data, never from the view. */
 async function bookTree(page: Page, context: BrowserContext): Promise<string> {
     await page.evaluate(() => window.Strom.UI.showBookDialog());
     const dialog = page.locator('#book-modal');
@@ -76,9 +76,9 @@ async function bookTree(page: Page, context: BrowserContext): Promise<string> {
         dialog.getByRole('button', { name: 'Open book' }).click(),
     ]);
     await book.waitForLoadState('domcontentloaded');
-    const svg = await book.locator('.book-tree-wrap svg').evaluate(el => el.outerHTML);
+    const body = await book.locator('main.book').evaluate(el => el.outerHTML);
     await book.close();
-    return svg;
+    return body;
 }
 
 /** The people of the outputs, the poster's card box, by first name. */
@@ -161,12 +161,11 @@ test.describe('linked in the view only: the outputs', () => {
         expect(on.svg).not.toContain('Kolowrata');
         const onBook = await bookTree(page, context);
         expect(onBook).toBe(offBook);
-        expect(onBook).not.toContain('Jakub');
         // The screen keeps its own width.
         expect(await page.evaluate(() => window.Strom.TreeRenderer.getCardBox().cardWidth)).toBe(screen);
     });
 
-    test('the book: its tree page as with the links off, its dialog says so', async ({ page, context }) => {
+    test('the book: the same as with the links off, its dialog says so', async ({ page, context }) => {
         await setup(page);
         await show(page, [B, PARTNER], false);
         const off = await bookTree(page, context);
@@ -175,7 +174,6 @@ test.describe('linked in the view only: the outputs', () => {
         await expect(ghosts(page)).toHaveCount(6);
         const on = await bookTree(page, context);
         expect(on).toBe(off);
-        for (const name of GHOSTS) expect(on).not.toContain(name);
         await page.evaluate(() => window.Strom.UI.showBookDialog());
         await expect(note(page, 'book-modal')).toHaveText('View-only links (2) are not included');
         // Above the options, under the title.

@@ -54,9 +54,8 @@ import { totalAttachmentBytes, ATTACHMENT_WARN_BYTES } from '../attachments.js';
 import { upcomingAnniversaries, Anniversary } from '../anniversaries.js';
 import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
-import { filterAndSort } from '../person-picker.js';
-import { displayYear, yearOf } from '../dates.js';
-import { MQ_MOBILE } from '../breakpoints.js';
+import { openPersonPopover } from './person-popover.js';
+import { yearOf } from '../dates.js';
 import { uiModule } from './module.js';
 import { evidenceIds, type HighlightGroup } from './evidence-ui.js';
 import {
@@ -121,7 +120,6 @@ const BUSY_DELAY_MS = 150;
 const BUSY_MIN_MS = 300;
 /** Ancestor rows shown at least (empty generations padded). */
 const MIN_ANCESTOR_ROWS = 3;
-const PICK_LIMIT = 50;
 /** A touch screen: no tooltips to read. */
 const MQ_COARSE = '(pointer: coarse)';
 
@@ -325,7 +323,7 @@ function readString(key: string): string | null {
     try { return localStorage.getItem(key); } catch { return null; }
 }
 
-function readRecent(treeId: string): PersonId[] {
+export function readRecent(treeId: string): PersonId[] {
     try {
         const list: unknown = JSON.parse(localStorage.getItem(recentKey(treeId)) ?? '[]');
         return Array.isArray(list) ? list.filter((x): x is PersonId => typeof x === 'string') : [];
@@ -2356,99 +2354,19 @@ export const treeOverviewMethods = uiModule({
         if (!overlay || !button) return;
         closePopover?.();
         const t = strings.treeOverview;
-        const esc = (s: string): string => this.escapeHtml(s);
-        const pop = document.createElement('div');
-        pop.className = 'tov-pop';
-        pop.innerHTML = `
-            <input type="search" class="tov-pop-search" placeholder="${esc(t.searchPerson)}" aria-label="${esc(t.searchPerson)}"
-                autocomplete="off" spellcheck="false">
-            <div class="tov-pop-list" role="listbox" aria-label="${esc(t.rootLabel)}"></div>`;
-        overlay.appendChild(pop);
-        const place = (): void => {
-            if (window.matchMedia(MQ_MOBILE).matches) {
-                pop.style.left = '16px';
-                pop.style.right = '16px';
-                pop.style.width = 'auto';
-            } else {
-                const r = button.getBoundingClientRect();
-                pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 328))}px`;
-            }
-            const r = button.getBoundingClientRect();
-            pop.style.top = `${r.bottom + 6}px`;
-            pop.style.maxHeight = `${Math.max(160, window.innerHeight - r.bottom - 22)}px`;
-        };
-        place();
-        const input = pop.querySelector<HTMLInputElement>('.tov-pop-search')!;
-        const list = pop.querySelector<HTMLElement>('.tov-pop-list')!;
-        const persons = Object.values(st.data.persons).filter(p => !p.isPlaceholder);
-        const row = (p: Person, meta: string): string => {
-            const born = p.birthDate ? `* ${displayYear(p.birthDate)}` : '';
-            const sub = [born, meta].filter(Boolean).join(' · ');
-            return `<button type="button" class="tov-pop-row" role="option" data-id="${esc(p.id)}" aria-selected="${p.id === st.rootId}">
-                <span class="tov-pop-name">${esc(shownName(p))}</span>${sub ? `<span class="tov-pop-meta">${esc(sub)}</span>` : ''}</button>`;
-        };
-        const render = (): void => {
-            const q = input.value.trim();
-            let html = '';
-            if (!q) {
-                const seen = new Set<PersonId>();
-                const focus = realPerson(st.data, st.focusId);
-                if (focus) { html += row(focus, t.inFocus); seen.add(focus.id); }
-                for (const id of readRecent(st.treeId)) {
-                    const p = realPerson(st.data, id);
-                    if (p && !seen.has(p.id)) { html += row(p, t.recent); seen.add(p.id); }
-                }
-                if (!html) html = filterAndSort('', persons, st.data).slice(0, PICK_LIMIT).map(p => row(p, '')).join('');
-            } else {
-                const found = filterAndSort(q, persons, st.data).slice(0, PICK_LIMIT);
-                html = found.length ? found.map(p => row(p, '')).join('') : `<div class="tov-pop-none">${esc(t.noMatch)}</div>`;
-            }
-            list.innerHTML = html;
-        };
-        render();
-        button.setAttribute('aria-expanded', 'true');
-        const onDown = (e: MouseEvent): void => {
-            if (!pop.contains(e.target as Node) && !button.contains(e.target as Node)) close();
-        };
-        const close = (): void => {
-            pop.remove();
-            document.removeEventListener('mousedown', onDown, true);
-            button.setAttribute('aria-expanded', 'false');
-            if (closePopover === close) closePopover = null;
-        };
+        const suggested: Array<{ id: PersonId; meta: string }> = [];
+        if (realPerson(st.data, st.focusId)) suggested.push({ id: st.focusId as PersonId, meta: t.inFocus });
+        for (const id of readRecent(st.treeId)) suggested.push({ id, meta: t.recent });
+        const close = openPersonPopover({
+            host: overlay, anchor: button, data: st.data, selectedId: st.rootId, suggested,
+            labels: { search: t.searchPerson, list: t.rootLabel, noMatch: t.noMatch },
+            onClose: () => { closePopover = null; },
+            onPick: (id) => {
+                this.setTreeOverviewRoot(id);
+                document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-root-btn`)?.focus();
+            },
+        });
         closePopover = close;
-        document.addEventListener('mousedown', onDown, true);
-        input.addEventListener('input', render);
-        pop.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                close();
-                button.focus();
-                return;
-            }
-            const rows = [...list.querySelectorAll<HTMLElement>('.tov-pop-row')];
-            const at = rows.indexOf(document.activeElement as HTMLElement);
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                rows[Math.min(rows.length - 1, at + 1)]?.focus();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (at <= 0) input.focus(); else rows[at - 1]?.focus();
-            } else if (e.key === 'Enter' && document.activeElement === input && rows[0]) {
-                e.preventDefault();
-                rows[0].click();
-            }
-        });
-        list.addEventListener('click', (e) => {
-            const r = (e.target as HTMLElement).closest<HTMLElement>('.tov-pop-row');
-            if (!r) return;
-            e.stopPropagation();
-            close();
-            this.setTreeOverviewRoot(r.dataset.id as PersonId);
-            document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-root-btn`)?.focus();
-        });
-        input.focus();
     },
 
     /** "Open tree" in the read-only banner: switch to the tree and show its overview again. */

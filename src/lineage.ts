@@ -859,6 +859,63 @@ export function rodLabels(index: LineageIndex): Map<RodId, string> {
     return new Map(all.map(r => [r.id, rodLabel(r, all, index.data)]));
 }
 
+/** A place a lineage lived in, over time (the book's "Where the line lived", §5.3). */
+export interface RodPlaceSpan {
+    /** The spelling used most. */
+    name: string;
+    /** First and last year of a dated record there. */
+    from: number;
+    to: number;
+    /** Members and married-in spouses with a record there. */
+    persons: number;
+}
+
+/**
+ * The places of a lineage's members, its married-in spouses and its families
+ * with the span of dated records there; most people first, then the earlier
+ * start, then the name. A place without any dated record is left out (it has
+ * no span on the common axis).
+ */
+export function rodPlaceSpans(index: LineageIndex, rodId: RodId, skip?: (personId: PersonId) => boolean): RodPlaceSpan[] {
+    const rod = index.rods.get(rodId);
+    if (!rod) return [];
+    const data = index.data;
+    const acc = new Map<string, { names: Map<string, number>; from: number; to: number; persons: Set<string> }>();
+    const note = (place: string | undefined, date: string | undefined, who: string): void => {
+        const name = place?.trim();
+        const year = yearOf(date);
+        if (!name || year === null) return;
+        const key = placeKey(name) || name.toLowerCase();
+        let a = acc.get(key);
+        if (!a) { a = { names: new Map(), from: year, to: year, persons: new Set() }; acc.set(key, a); }
+        a.names.set(name, (a.names.get(name) ?? 0) + 1);
+        a.from = Math.min(a.from, year);
+        a.to = Math.max(a.to, year);
+        a.persons.add(who);
+    };
+    const people = [...rod.memberIds, ...rod.spouses.map(s => s.personId)];
+    for (const id of people) {
+        const p = data.persons[id];
+        if (!p || p.isPlaceholder || skip?.(id)) continue;
+        note(p.birthPlace, p.birthDate, id);
+        note(p.deathPlace, p.deathDate, id);
+        for (const ev of p.events ?? []) note(ev.place, ev.date, id);
+    }
+    for (const uid of rod.familyIds) {
+        const u = data.partnerships[uid];
+        // A family of a skipped (living, protected) partner says nothing of where they wed either.
+        if (!u || (skip && (skip(u.person1Id) || (!!u.person2Id && skip(u.person2Id))))) continue;
+        const who = rod.memberIds.includes(u.person1Id) ? u.person1Id : u.person2Id;
+        note(u.startPlace, u.startDate, who);
+    }
+    return [...acc.values()]
+        .map(a => ({
+            name: [...a.names.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0],
+            from: a.from, to: a.to, persons: a.persons.size,
+        }))
+        .sort((x, y) => y.persons - x.persons || x.from - y.from || x.name.localeCompare(y.name));
+}
+
 // ---------------------------------------------------------------------------
 // Corrections and their preview (package 1031 §2)
 

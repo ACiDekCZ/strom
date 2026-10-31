@@ -25,9 +25,11 @@ test('family book: dialog generates a printable book in a new window, with its o
 
     // The book contains the demo tree's people and the expected structure.
     await expect(book.locator('body')).toContainText('Johan');
-    await expect(book.locator('.book-families > h2')).toHaveText('Families');
+    await expect(book.locator('.book-title-page h1')).toBeVisible();
+    await expect(book.locator('#book-toc .book-toc-rod').first()).toBeVisible();
+    await expect(book.locator('.book-rod').first()).toBeVisible();
+    await expect(book.locator('.book-family').first()).toBeVisible();
     await expect(book.locator('.book-index-page > h2')).toHaveText('Person index');
-    await expect(book.locator('.book-chapter').first()).toBeVisible();
 
     // The book window carries its own Print and Close controls. Clicking Close
     // runs window.close(); the click races with the page tearing down, so
@@ -41,15 +43,18 @@ test('family book: dialog generates a printable book in a new window, with its o
     await expect.poll(() => book.isClosed()).toBe(true);
 });
 
-test('family book: the initials privacy default also hides living names in the tree page', async ({ page, context }) => {
+test('family book: the initials privacy default also hides living names in the lineage tree', async ({ page, context }) => {
     await openApp(page);
-    // A living person (recent birth, no death date) plus a deceased relative
-    // (born 1850 → the 110-year heuristic marks them deceased).
+    // A living person (recent birth, no death date) plus a deceased couple
+    // (born 1850 → the 110-year heuristic marks them deceased): a chapter of
+    // the Predek line, the living daughter in its lineage tree and index.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const living = dm.createPerson({ firstName: 'Zivana', lastName: 'Soukroma', gender: 'female', birthDate: '1990' });
+        const living = dm.createPerson({ firstName: 'Zivana', lastName: 'Predkova', gender: 'female', birthDate: '1990' });
         const dead = dm.createPerson({ firstName: 'Stary', lastName: 'Predek', gender: 'male', birthDate: '1850' });
-        dm.addParentChild(dead.id, living.id);
+        const wife = dm.createPerson({ firstName: 'Stara', lastName: 'Lomikarova', gender: 'female', birthDate: '1852' });
+        const union = dm.createPartnership(dead.id, wife.id)!;
+        dm.addParentChild(dead.id, living.id, union.id);
         window.Strom.TreeRenderer.setFocus(living.id);
         window.Strom.TreeRenderer.render();
     });
@@ -66,91 +71,18 @@ test('family book: the initials privacy default also hides living names in the t
     ]);
     await book.waitForLoadState('domcontentloaded');
 
-    // The living person's full name appears NOWHERE — chapters, index, nor the
-    // embedded tree SVG (regression: the overview SVG used unfiltered data).
+    // The living person's full name appears NOWHERE — contents, chapters,
+    // lineage tree, nor the index.
+    await expect(book.locator('.book-rod-lineage').first()).toBeVisible();
     const html = await book.content();
     expect(html).not.toContain('Zivana');
     expect(html).toContain('Predek'); // the deceased relative stays readable
+    // No drawn tree page: the lineage tree is text.
+    expect(html).not.toContain('foreignObject');
+    await expect(book.locator('.book-tree-wrap')).toHaveCount(0);
 });
 
-// N16: the tree page used to draw every card at the default 188x64 on a layout
-// made for the density's own card (compact 150x44: overlapping cards, lines
-// through them). Every density is drawn at the size the layout was made for;
-// the cards of details (Detailed, Register, Custom) each at its own height.
-test('family book, every card density (compact, normal, detailed, register): the tree page draws the cards at the layout\'s size, apart, no line through a card', async ({ page, context }) => {
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(page.locator('#empty-state')).toBeHidden();
-    for (const density of ['compact', 'normal', 'detailed', 'register'] as const) {
-        await test.step(`${density} cards`, async () => {
-            await page.evaluate((d) => window.Strom.UI.setCardDensity(d), density);
-            await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe(density);
-            await page.evaluate(() => window.Strom.UI.showBookDialog());
-            const dialog = page.locator('#book-modal');
-            await dialog.locator('#book-privacy-mode').selectOption('full');
-            const [book] = await Promise.all([
-                context.waitForEvent('page'),
-                dialog.getByRole('button', { name: 'Open book' }).click(),
-            ]);
-            await book.waitForLoadState('domcontentloaded');
-            const svg = await book.locator('.book-tree-wrap svg').evaluate(el => el.outerHTML);
-            const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
-                .map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
-            // The layout the book was made from.
-            const view = await page.evaluate(() => {
-                const box = window.Strom.TreeRenderer.getPosterCardBox();
-                const layout = window.Strom.TreeRenderer.getPosterLayout();
-                return {
-                    width: box.cardWidth, height: box.cardHeight,
-                    cards: [...layout.positions.entries()].map(([id, p]) => ({
-                        x: p.x, y: p.y, h: box.personHeights?.get(id) ?? box.cardHeight,
-                    })),
-                };
-            });
-            const fixed = ({ compact: [150, 44], normal: [188, 64] } as Record<string, number[]>)[density];
-            if (fixed) expect([view.width, view.height]).toEqual(fixed);
-            else {
-                expect(view.width).toBeGreaterThanOrEqual(200);
-                expect(view.width).toBeLessThanOrEqual(320);
-            }
-
-            // One card per laid-out person, each where the layout put it and as large as the layout's card.
-            expect(rects).toHaveLength(view.cards.length);
-            for (const c of view.cards) {
-                const r = rects.find(x => Math.abs(x.x - c.x) < 0.06 && Math.abs(x.y - c.y) < 0.06);
-                expect(r, `card at ${c.x},${c.y}`).toBeTruthy();
-                expect([r!.w, r!.h]).toEqual([view.width, c.h]);
-            }
-            // No two cards overlap.
-            for (let i = 0; i < rects.length; i++) {
-                for (let j = i + 1; j < rects.length; j++) {
-                    const a = rects[i], b = rects[j];
-                    const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-                    expect(overlap, `cards ${i} and ${j}`).toBe(false);
-                }
-            }
-            // No tree line runs through a card (lines touch a card only at its edge).
-            const lines = [...svg.matchAll(/<line x1="(-?[\d.]+)" y1="(-?[\d.]+)" x2="(-?[\d.]+)" y2="(-?[\d.]+)"/g)]
-                .map(m => m.slice(1, 5).map(Number));
-            expect(lines.length).toBeGreaterThan(0);
-            for (const [x1, y1, x2, y2] of lines) {
-                for (const r of rects) {
-                    const through = Math.max(x1, x2) > r.x + 1 && Math.min(x1, x2) < r.x + r.w - 1
-                        && Math.max(y1, y2) > r.y + 1 && Math.min(y1, y2) < r.y + r.h - 1;
-                    expect(through, `line ${x1},${y1}-${x2},${y2} through card at ${r.x},${r.y}`).toBe(false);
-                }
-            }
-            // The density's look: compact is the name only (no avatar), normal a
-            // 34px avatar, the cards of details a 30px one beside the name.
-            const avatars = [...svg.matchAll(/<circle [^>]*r="(\d+)"/g)].map(m => Number(m[1]));
-            if (density === 'compact') expect(avatars).toEqual([]);
-            else expect(new Set(avatars)).toEqual(new Set([density === 'normal' ? 17 : 15]));
-            await book.close();
-        });
-    }
-});
-
-test('family book: a childless couple\'s story is a subchapter in the main-line partner\'s chapter (spec 027)', async ({ page, context }) => {
+test('family book: a childless couple\'s story is a subchapter after the main-line partner\'s chapter (spec 027, 1031)', async ({ page, context }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
@@ -174,9 +106,13 @@ test('family book: a childless couple\'s story is a subchapter in the main-line 
         page.locator('#book-modal').getByRole('button', { name: 'Open book' }).click(),
     ]);
     await book.waitForLoadState('domcontentloaded');
-    const sub = book.locator('.book-chapter .book-story-sub');
+    // The childless union is a subchapter of its own, with the couple's story.
+    const sub = book.locator('article.book-family.is-sub', { hasText: 'Rozalie Testova' });
     await expect(sub).toHaveCount(1);
-    await expect(sub.locator('.book-story-head')).toContainText(/^Marriage: .+ and Rozalie Testova · 1730–/);
+    await expect(sub.locator('.book-family-head h2')).toContainText(/ and Rozalie Testova$/);
+    await expect(sub.locator('.book-story h4')).toContainText(/ and Rozalie Testova · 1730–/);
     await expect(sub).toContainText('The second marriage was short.');
+    // In the contents one step further in than its parent chapter.
+    await expect(book.locator('#book-toc li.book-toc-sub', { hasText: 'Rozalie Testova' })).toHaveCount(1);
     await book.close();
 });
