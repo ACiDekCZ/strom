@@ -3,8 +3,9 @@ import { openApp, card } from './helpers.js';
 
 /**
  * Responsive layout sweep over the breakpoint map (index.html, top of the
- * stylesheet): mobile ≤ 499, tablet 500–900, desktop ≥ 901, plus the toolbar
- * regime edges (1024, 1280). For every width, in the light and the dark theme,
+ * stylesheet, and src/breakpoints.ts): mobile ≤ 640, tablet 641–1024, desktop
+ * ≥ 1025 — each edge probed on both sides — plus the 1280 toolbar regime edge.
+ * For every width, in the light and the dark theme,
  * on the demo tree:
  *   1. the document never scrolls horizontally,
  *   2. the visible toolbar controls do not overlap each other,
@@ -14,7 +15,7 @@ import { openApp, card } from './helpers.js';
  * One page per width: the demo loads once, both themes are probed on it.
  */
 
-const WIDTHS = [360, 499, 550, 768, 900, 1024, 1280, 1440];
+const WIDTHS = [360, 640, 641, 768, 1024, 1025, 1280, 1440];
 const HEIGHT = 800;
 
 interface Dialog {

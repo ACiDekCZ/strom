@@ -108,6 +108,14 @@ test('Settings → Surname display switches the cards at once, the compact card 
     await page.keyboard.press('ArrowLeft');
     await expect(radio('both')).toBeChecked();
     await expect(card(page, 'Marie').locator('.card-birth')).toHaveText('née Dvořáková');
+
+    // The compact card drops the birth row at once, even with "both"; back on
+    // the normal card it returns.
+    await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
+    await expect(card(page, 'Marie').locator('.name-text')).toHaveAttribute('data-surname', 'Nováková');
+    await expect(card(page, 'Marie').locator('.card-birth')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
+    await expect(card(page, 'Marie').locator('.card-birth')).toHaveText('née Dvořáková');
 });
 
 test('the compact card never shows the birth row', async ({ page }) => {
