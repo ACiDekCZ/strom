@@ -161,15 +161,6 @@ test('info dialogs close on the backdrop and on Close; forms ignore the backdrop
     await expect(form).toBeHidden();
 });
 
-test('a decision without a "leave it" option ignores Escape', async ({ page }) => {
-    await openApp(page);
-    await page.evaluate(() => document.getElementById('newer-version-storage-modal')!.classList.add('active'));
-    const modal = page.locator('#newer-version-storage-modal');
-    await expect(modal).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(modal).toBeVisible();
-});
-
 // 600px is a phone too (the phone band runs to 640px, like the phone chrome).
 for (const [id, width] of [['storage-status-modal', 360], ['storage-status-modal', 600]] as const) {
     test(`${width}px: ${id} footer stacks full width, primary on top`, async ({ page }) => {

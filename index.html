@@ -6845,20 +6845,12 @@
             font-weight: 500;
             margin-bottom: 12px;
         }
-        .warning-detail {
-            color: var(--text-light);
-            margin-bottom: 16px;
-        }
         .version-info {
             background: var(--placeholder-bg);
             padding: 12px 16px;
             border-radius: 6px;
             margin-bottom: 16px;
             font-size: 13px;
-        }
-        .solution-text {
-            color: var(--primary);
-            font-weight: 500;
         }
         .buttons .danger {
             background: var(--danger-soft);
@@ -21354,27 +21346,6 @@
             <div class="buttons export-buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeExportPasswordDialog()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="export-submit-btn" onclick="window.Strom.UI.confirmExport()" data-i18n="encryption.exportBtn">Export</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Newer Version Warning Dialog (Storage) - No continue option -->
-    <div class="modal-overlay" id="newer-version-storage-modal">
-        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="validation.newerDataTitle">Newer data version detected</h2>
-            </div>
-            <div class="newer-version-content">
-                <p class="warning-message" data-i18n="validation.newerDataInStorage">Your stored data was created with a newer version of the application.</p>
-                <p class="warning-detail" data-i18n="validation.newerDataWarning">Opening with this older version may cause data loss or errors.</p>
-                <div class="version-info">
-                    <span data-i18n="validation.yourVersion">Your app version</span>: <strong id="storage-your-version">1</strong><br>
-                    <span data-i18n="validation.dataVersion">Data version</span>: <strong id="storage-data-version">?</strong>
-                </div>
-                <p class="solution-text" data-i18n="validation.newerDataSolution">Recommended: Export your data as JSON and import it in the newer version.</p>
-            </div>
-            <div class="buttons">
-                <button class="primary" onclick="window.Strom.UI.exportStorageAndClose()" data-i18n="validation.exportAndExit">Export JSON & close</button>
             </div>
         </div>
     </div>

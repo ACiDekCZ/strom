@@ -81,7 +81,7 @@ test('a tree a newer app saved, opened at the start: read-only with the bar, its
     await page.reload();
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
     // No blocking dialog any more: the tree is shown as stored.
-    await expect(page.locator('#newer-version-storage-modal')).not.toHaveClass(/active/);
+    await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
     await expect(card(page, 'Jan')).toBeVisible();
     await expectReadOnly(page);
 

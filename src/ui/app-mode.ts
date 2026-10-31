@@ -344,40 +344,6 @@ export const appModeMethods = uiModule({
     },
 
     /**
-     * Export storage data and close (for storage version mismatch)
-     */
-    async exportStorageAndClose(): Promise<void> {
-        // Export all trees as JSON — read through TreeManager (IndexedDB,
-        // decrypted); the legacy localStorage keys are empty (review S18).
-        const trees = TreeManager.getTrees();
-        const allData: Record<string, unknown> = {};
-
-        for (const tree of trees) {
-            try {
-                const data = await TreeManager.getTreeData(tree.id);
-                if (data) {
-                    allData[tree.id] = {
-                        name: tree.name,
-                        data
-                    };
-                }
-            } catch {
-                // Skip unreadable data
-            }
-        }
-
-        const dataStr = JSON.stringify(allData, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'strom-backup-all-trees.json';
-        a.click();
-        URL.revokeObjectURL(a.href);
-
-        // Don't close dialog - let user close the app/tab manually
-    },
-
-    /**
      * View newer version data in read-only mode (import will be blocked)
      */
     async viewNewerVersionData(): Promise<void> {
