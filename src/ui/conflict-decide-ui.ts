@@ -410,7 +410,7 @@ export const conflictDecideMethods = uiModule({
             const st = researchAutoState(treeId);
             const nw = st.notWritten && link.sent?.state === 'written' && st.notWritten.fingerprint === link.sent.fingerprint
                 ? st.notWritten.items.length + st.notWritten.unexplained : 0;
-            const answer = await this.askResearchLoad(TreeManager.getTreeMetadata(treeId)?.name ?? '', researchDateLabel(version.header.date), here, there, {
+            const answer = await this.askResearchLoad(TreeManager.getTreeMetadata(treeId)?.name ?? '', researchDateLabel(version.header.date, version.header.asOf), here, there, {
                 off: researchSendMode(link) === 'off', notWritten: nw,
                 decided: { intro: strings.conflict.loadIntro(said(values.research)), later: strings.conflict.loadLater(said(from)), rows: r => isDecidedRow(r, decided) },
             });
