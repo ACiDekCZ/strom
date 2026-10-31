@@ -59,12 +59,14 @@ a { color: inherit; }
 .book-grid { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 4px 16px; margin: 0; }
 .book-grid dt { color: #5c5546; font-size: 10.5pt; padding-top: 2px; }
 .book-grid dd { margin: 0; }
-.book-places { margin: 6px 0 0; }
-.book-place { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; gap: 12px; align-items: center; font-size: 10.5pt; break-inside: avoid; }
+/* One grid for all the rows: the count column is as wide as its longest count ("13 Personen" never wraps) and the axes stay aligned. */
+.book-places { margin: 6px 0 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) max-content; gap: 0 12px; align-items: center; font-size: 10.5pt; }
+.book-places > .book-sub, .book-places > .book-muted { grid-column: 1 / -1; }
+.book-place { display: contents; }
 .book-place-axis { position: relative; height: 8px; border-bottom: 1px solid #e3dccd; }
 .book-place-bar { position: absolute; top: 1px; height: 6px; border-radius: 3px; background: #8a5528; opacity: .7; min-width: 4px; }
-.book-place-n { text-align: right; color: #5c5546; }
-.book-place-years { font-size: 9pt; color: #5c5546; display: flex; justify-content: space-between; margin-left: 162px; margin-right: 82px; }
+.book-place-n { text-align: right; color: #5c5546; white-space: nowrap; }
+.book-place-years { grid-column: 2; font-size: 9pt; color: #5c5546; display: flex; justify-content: space-between; }
 .book-maleline { margin-top: 12px; }
 .book-maleline-gen { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; break-inside: avoid; }
 .book-maleline-card { font-size: 12.5px; line-height: 1.25; border: 1px solid #e3dccd; border-radius: 4px; padding: 3px 7px; background: #fbf8f1; text-align: center; }
@@ -143,6 +145,8 @@ a { color: inherit; }
 .pp-more-kids { color: #4a4438; }
 ${PERSON_PAGE_CHART_CSS}
 .pp-chart { font-family: ${SANS}; }
+/* The chart's legend: its items apart (the app's page spaces them under .pp, which the book has not). */
+.pp-chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 9.5pt; color: #5c5546; }
 
 /* Other families, sources, index */
 .book-back { break-before: page; }
@@ -197,8 +201,7 @@ ${STORY_COMPARE_CSS}
     .book-family-head h2 { font-size: 22px; }
     .book-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
     .book-grid dd { margin-bottom: 6px; }
-    .book-place { grid-template-columns: 96px minmax(0, 1fr) 54px; gap: 8px; }
-    .book-place-years { margin-left: 104px; margin-right: 62px; }
+    .book-places { grid-template-columns: 96px minmax(0, 1fr) max-content; column-gap: 8px; }
     .book-lineage-row { grid-template-columns: 30px minmax(0, 1fr) 52px; gap: 6px; }
     .book-lineage-text { padding-left: calc(var(--lv, 0) * 12px) !important; }
     .book-pair { grid-template-columns: minmax(0, 1fr); }

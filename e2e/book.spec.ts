@@ -418,6 +418,29 @@ test.describe('family book: phone, German', () => {
         expect(past).toEqual([]);
         expect(await book.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     });
+
+    test('where the line lived: each count on one line; the life chart legend\'s items apart (1031)', async ({ page, context }) => {
+        await setup(page);
+        await openDialog(page);
+        const book = await openBook(page, context);
+        await expect(book.locator('.book-place-n').first()).toHaveText(/Person/);
+        const wrapped = await book.evaluate(() => [...document.querySelectorAll('.book-place-n')].filter(el => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return new Set([...r.getClientRects()].map(x => Math.round(x.top))).size > 1;
+        }).map(el => el.textContent));
+        expect(wrapped).toEqual([]);
+        // The counts of all rows share one column: the axes start and end together.
+        const axes = await book.locator('.book-places').first().locator('.book-place-axis').evaluateAll(els =>
+            [...new Set(els.map(e => { const b = e.getBoundingClientRect(); return `${Math.round(b.left)}-${Math.round(b.right)}`; }))]);
+        expect(axes).toHaveLength(1);
+        const legend = book.locator('.pp-chart-legend:visible').first();
+        await expect(legend).toBeVisible();
+        const gaps = await legend.locator('.pp-ch-lg').evaluateAll(els => els.map(e => e.getBoundingClientRect())
+            .flatMap((b, i, all) => i > 0 && Math.abs(b.top - all[i - 1].top) < 2 ? [b.left - all[i - 1].right] : []));
+        expect(gaps.length).toBeGreaterThan(0);
+        for (const g of gaps) expect(g).toBeGreaterThanOrEqual(8);
+    });
 });
 
 test.describe('family book: the content', () => {

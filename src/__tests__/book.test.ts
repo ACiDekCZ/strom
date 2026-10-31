@@ -374,6 +374,49 @@ describe('chapters along the line', () => {
         expect(lineage).not.toMatch(/Mlhovc[^)<]* line\)/);
     });
 
+    it('the line\'s opening page and line tree: the female form once, lines only among the links, an approximate year as "asi", no "⚭ ?" (1031)', () => {
+        setLanguage('cs');
+        const d = line();
+        // The founder's birth is approximate; a daughter carries the female form.
+        d.persons['a' as PersonId]!.birthDate = '~1800';
+        d.persons['f' as PersonId] = p('f', 'Františka', 'Trnkopalová', 'female', { birthDate: '1834', deathDate: '1880', parentIds: ['a', 'aw'] });
+        d.persons['a' as PersonId]!.childIds.push('f' as PersonId);
+        d.persons['aw' as PersonId]!.childIds.push('f' as PersonId);
+        d.partnerships['ua' as PartnershipId]!.childIds.push('f' as PersonId);
+        // Emil's wife is not known: one union with its year, one without.
+        d.persons['ex' as PersonId] = { ...p('ex', '', '', 'female', { partnerships: ['ue1', 'ue2'], childIds: ['g', 'h'] }), isPlaceholder: true };
+        d.persons['g' as PersonId] = p('g', 'Gabriel', 'Trnkopal', 'male', { birthDate: '1915', deathDate: '1980', parentIds: ['e', 'ex'] });
+        d.persons['h' as PersonId] = p('h', 'Hubert', 'Trnkopal', 'male', { birthDate: '1925', deathDate: '1990', parentIds: ['e', 'ex'] });
+        d.persons['e' as PersonId]!.partnerships = ['ue1', 'ue2'] as PartnershipId[];
+        d.persons['e' as PersonId]!.childIds = ['g', 'h'] as PersonId[];
+        d.partnerships['ue1' as PartnershipId] = u('ue1', 'e', 'ex', ['g'], { startDate: '1914' });
+        d.partnerships['ue2' as PartnershipId] = u('ue2', 'e', 'ex', ['h']);
+        const opening = (html: string): string => {
+            const a = html.indexOf('<dl class="book-grid">');
+            return html.slice(a, html.indexOf('</dl>', a));
+        };
+
+        let html = buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, ENV);
+        let head = opening(html);
+        expect(head).toContain('<dt>Zakladatel</dt><dd>Adam Trnkopal (* asi 1800, † 1870)</dd>');
+        expect(head).toContain('<dt>Tvary jména</dt><dd>Trnkopal; ženské: Trnkopalová</dd>');
+        // The wives married in alone (Vlnovská, Hvozdecká, Mlhovcová, Kapradinová) are no lines to link.
+        expect(head).not.toContain('Spojení s rody');
+        const { lineage } = regions(html);
+        expect(lineage).toContain('<span class="book-marr">⚭ 1914</span>');
+        expect(lineage).not.toContain('⚭ ?');
+        expect(lineage).not.toMatch(/<span class="book-marr">⚭ <\/span>/);
+
+        // Bára's parents recorded: the Hvozdecký line is a line, and it is linked.
+        d.persons['hv' as PersonId] = p('hv', 'Hynek', 'Hvozdecký', 'male', { birthDate: '1805', deathDate: '1870', partnerships: ['uh'], childIds: ['bw'] });
+        d.persons['hvw' as PersonId] = p('hvw', 'Hana', 'Sejková', 'female', { birthDate: '1808', deathDate: '1872', partnerships: ['uh'], childIds: ['bw'] });
+        d.persons['bw' as PersonId]!.parentIds = ['hv', 'hvw'] as PersonId[];
+        d.partnerships['uh' as PartnershipId] = u('uh', 'hv', 'hvw', ['bw']);
+        html = buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, ENV);
+        head = opening(html);
+        expect(head).toMatch(/<dt>Spojení s rody<\/dt><dd>Hvozdeck[^<,]*<\/dd>/);
+    });
+
     it('children point to their own chapter', () => {
         const html = buildFamilyBook(line(), { lang: 'cs', privacy: 'full' }, ENV);
         const first = html.slice(html.indexOf('id="kap-1"'), html.indexOf('id="kap-2"'));

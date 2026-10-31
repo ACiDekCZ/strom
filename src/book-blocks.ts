@@ -12,7 +12,7 @@
 import { Partnership, Person, PersonId, Source, StromData, Story, personSourceIds } from './types.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
-import { formatFlexDate, yearOf } from './dates.js';
+import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { feminineForm, czechRulesApply } from './surnames.js';
@@ -147,6 +147,13 @@ export function bookYears(p: Person | undefined): string {
     return '';
 }
 
+/** A founder's year as the overview writes it: "1810", "asi 1810" for an approximate date or a span, '' without a date. */
+function founderYear(ctx: BookCtx, date: string | undefined): string {
+    const d = parseFlexDate(date);
+    if (!d) return '';
+    return d.qualifier !== '' || !!d.end ? T(ctx).treeOverview.rods.approx(d.year) : String(d.year);
+}
+
 /** A living person under a privacy other than full: no details. */
 function shielded(ctx: BookCtx, id: PersonId): boolean {
     return ctx.living.has(id) && ctx.privacy !== 'full';
@@ -277,9 +284,9 @@ export function rodOverviewHtml(rod: Rod, ctx: BookCtx): string {
     if (founder) {
         const bits: string[] = [];
         if (!shielded(ctx, rod.founderId)) {
-            const b = yearOf(founder.birthDate), d = yearOf(founder.deathDate);
-            if (b !== null || founder.birthPlace) bits.push(`* ${[b, founder.birthPlace].filter(x => x != null && x !== '').join(' ')}`);
-            if (d !== null || founder.deathPlace) bits.push(`† ${[d, founder.deathPlace].filter(x => x != null && x !== '').join(' ')}`);
+            const b = founderYear(ctx, founder.birthDate), d = founderYear(ctx, founder.deathDate);
+            if (b || founder.birthPlace) bits.push(`* ${[b, founder.birthPlace].filter(x => !!x).join(' ')}`);
+            if (d || founder.deathPlace) bits.push(`† ${[d, founder.deathPlace].filter(x => !!x).join(' ')}`);
         }
         rows.push([B.founder[gKey(founder)], `${bookName(ctx, rod.founderId)}${bits.length ? ` (${esc(bits.join(', '))})` : ''}`]);
     }
@@ -288,17 +295,21 @@ export function rodOverviewHtml(rod: Rod, ctx: BookCtx): string {
         const forms = rod.forms.length ? rod.forms : [rod.surname];
         let text = esc(forms.join(', '));
         if (czechRulesApply(ctx.model.index.data)) {
+            // A female form some member carries is named once, among the female forms.
             const fem = [...new Set(forms.map(f => feminineForm(f)).filter((f): f is string => !!f))];
-            if (fem.length) text += `; ${esc(B.femaleForms(fem.join(', ')))}`;
+            const own = forms.filter(f => !fem.includes(f));
+            if (fem.length && own.length) text = `${esc(own.join(', '))}; ${esc(B.femaleForms(fem.join(', ')))}`;
         }
         rows.push([B.nameForms, text]);
     }
     rows.push([B.inRod, esc(B.inRodValue(rod.realMemberCount, rod.realSpouseCount, rod.generations, rod.familyIds.length))]);
+    // Lines only: a spouse who married in alone (no parents recorded) is not a line of their own.
     const linked = new Set<RodId>();
-    for (const s of rod.spouses) if (s.birthRodId && s.birthRodId !== rod.id && rodShown(ctx, s.personId)) linked.add(s.birthRodId);
+    const isLine = (id: RodId | null): id is RodId => !!id && id !== rod.id && ctx.model.index.rods.get(id)?.solitary === false;
+    for (const s of rod.spouses) if (isLine(s.birthRodId) && rodShown(ctx, s.personId)) linked.add(s.birthRodId);
     for (const id of rod.memberIds) {
         if (!rodShown(ctx, id)) continue;
-        for (const m of marriedInto(ctx.model.index, id)) if (m.rodId !== rod.id) linked.add(m.rodId);
+        for (const m of marriedInto(ctx.model.index, id)) if (isLine(m.rodId)) linked.add(m.rodId);
     }
     if (linked.size) {
         rows.push([B.linkedRods, [...linked].map(r => esc(rodLabelOf(ctx, r))).sort((a, b) => a.localeCompare(b, ctx.lang)).join(', ')]);
@@ -357,7 +368,10 @@ export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boo
                 const y = yearOf(u.startDate);
                 const otherRod = other && rodShown(ctx, other) ? birthRodNamed(ctx, other) : null;
                 const rodTxt = otherRod && otherRod !== rod.id ? ` ${esc(B.spouseRod(rodLabelOf(ctx, otherRod)))}` : '';
-                return `<span class="book-marr">⚭ ${y !== null ? `${y} ` : ''}${op && !op.isPlaceholder ? bookName(ctx, other) : '?'}${rodTxt}</span>`;
+                // An unknown partner is left out (no "⚭ ?"); the wedding year alone still says there was one.
+                const known = !!op && !op.isPlaceholder;
+                if (!known && y === null) return '';
+                return `<span class="book-marr">⚭ ${[y !== null ? String(y) : '', known ? `${bookName(ctx, other)}${rodTxt}` : ''].filter(Boolean).join(' ')}</span>`;
             }).join('');
             const ch = ctx.model.chapterOf.get(own[0].id);
             rows.push(row(gen, `<span class="is-family">${name}${years ? ` ${years}` : ''}</span>${marr}`, ch ? chapterRef(ctx, ch.no) : ''));
