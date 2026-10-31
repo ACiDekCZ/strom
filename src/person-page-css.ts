@@ -16,6 +16,7 @@ export const PERSON_PAGE_LIGHT_TOKENS = [
     '--primary: #3f6b4f', '--primary-soft: #e6efe8', '--on-primary: #ffffff',
     '--accent-text: #8a5528', '--hover-bg: #f3eee2',
     '--hist-bg: #f5f1e7', '--hist-mark: #746c5c', '--hist-place: #3d7a8c', '--hist-local: #b5772a',
+    '--hist-text: #5c5546', '--hist-place-text: #245868', '--hist-local-text: #7f5500',
 ].join('; ') + ';';
 
 /** The font stacks of the app (the file falls back to Georgia / the system sans without the embedded faces). */
@@ -169,6 +170,11 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-toggle[aria-checked="true"]::before { content: '\\2713'; display: flex; align-items: center; justify-content: center; border-color: var(--primary); background: var(--primary); color: var(--on-primary); font-size: 11px; line-height: 1; }
 .pp .pp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -4px 0 14px; font-size: 12.5px; color: var(--text-faint); }
 .pp-legend .pp-hm { margin-right: 4px; }
+/* The kinds of history the page shows (round 3 §10): the symbol, its name; only the kinds present. */
+.pp .pp-legend-kinds { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -8px 0 14px; font-size: 12.5px; color: var(--text-light); }
+.pp-legend-kinds > span { display: inline-flex; align-items: center; gap: 5px; }
+.pp-lk { display: inline-flex; color: var(--hist-text); }
+.pp-lk svg { display: block; }
 .pp-seg { display: flex; flex-direction: column; }
 .pp-seg + .pp-seg { margin-top: 14px; }
 .pp-seg-title { padding: 0 0 6px 82px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
@@ -192,10 +198,23 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-yr b { font-weight: 600; }
 .pp-yr small { display: block; font-size: 12px; font-weight: 400; line-height: 1.3; color: var(--text-light); white-space: nowrap; }
 .pp-nw { white-space: nowrap; }
-.pp-row--hist .pp-mk { font-size: 13px; color: var(--hist-mark); }
-.pp-row--hist .pp-mk.pp-hm--place, .pp-hm--place { color: var(--hist-place); }
-.pp-row--hist .pp-mk.pp-hm--local, .pp-hm--local { color: var(--hist-local); }
+.pp-hm--place { color: var(--hist-place); }
+.pp-hm--local { color: var(--hist-local); }
 .pp-hm--region { color: var(--hist-mark); }
+/* A history row (round 3 §10, 10c): the kind's symbol in the circle in the origin's colour, the origin
+   (◇ ▲ ■) small at the circle's corner; the circle, its place and the line stay as they are. */
+.pp-mk svg { display: block; }
+.pp-row--own .pp-mk { color: var(--text-light); }
+.pp-mk-h { position: relative; }
+.pp-mk-h.is-region { color: var(--hist-text); }
+.pp-mk-h.is-place { color: var(--hist-place-text); }
+.pp-mk-h.is-local { color: var(--hist-local-text); }
+.pp-mk-o { position: absolute; right: -4px; bottom: -3px; width: 10px; height: 10px; display: flex; align-items: center; justify-content: center; }
+.is-region .pp-mk-o::before { content: ''; width: 5px; height: 5px; border: 1.5px solid var(--hist-mark); background: var(--surface-modal); transform: rotate(45deg); }
+.is-place .pp-mk-o::before { content: ''; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-bottom: 8px solid var(--hist-place); }
+.is-local .pp-mk-o::before { content: ''; width: 6px; height: 6px; background: var(--hist-local); box-shadow: 0 0 0 1.5px var(--surface-modal); }
+/* The page's border-box would shrink the drawn sizes (the diamond's 5 px are its inside, as in the card). */
+.pp-mk-o::before { box-sizing: content-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .pp-hist { padding: 8px 12px; border-radius: 8px; background: var(--hist-bg); font-size: 14.5px; }
 .pp-hist-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; font-size: 12px; color: var(--text-faint); }
 .pp-hist-kind { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
@@ -206,7 +225,7 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-row--kid .pp-y { font-size: 13px; font-weight: 400; color: var(--text-light); }
 .pp-row--kid .pp-mk { font-size: 15px; color: var(--text-faint); }
 .pp-row--kid .pp-t { font-size: 14px; color: var(--text-light); }
-.pp-no-history .pp-row--hist, .pp-no-history .pp-legend, .pp-no-kids .pp-row--kid { display: none; }
+.pp-no-history .pp-row--hist, .pp-no-history .pp-legend, .pp-no-history .pp-legend-kinds, .pp-no-kids .pp-row--kid { display: none; }
 .pp-no-kids .pp-seg:not(.pp-seg--own):not(.pp-seg--hist), .pp-no-history .pp-seg:not(.pp-seg--own):not(.pp-seg--kid),
 .pp-no-history.pp-no-kids .pp-seg:not(.pp-seg--own) { display: none; }
 .pp-fig { display: grid; grid-template-columns: minmax(0, 1fr); margin: 10px 0 4px; max-width: 460px; }

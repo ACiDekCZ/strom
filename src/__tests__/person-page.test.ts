@@ -14,6 +14,8 @@ import {
     personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear,
 } from '../person-page.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
+import { historyKindSvg } from '../history-symbols.js';
+import { lifelineGlyph } from '../lifeline-glyphs.js';
 import { buildFamilyBook } from '../book.js';
 import { getDemoTree } from '../demo-tree.js';
 import { personSourceRows } from '../person-sources.js';
@@ -821,6 +823,25 @@ describe('history layer', () => {
             expect(legend).not.toContain('Dějiny místa');
             expect(legend).not.toContain('Z pramenů');
             expect(legend.match(/class="pp-hm /g)).toHaveLength(1);
+            // Round 3 §10: under it the kinds shown, the symbol and its name (only "war" here).
+            const kinds = html.match(/<p class="pp-legend-kinds">([\s\S]*?)<\/p>/)?.[1] ?? '';
+            expect(kinds).toBe(`<span><span class="pp-lk" aria-hidden="true">${historyKindSvg('war', 12)}</span>válka</span>`);
+        }
+    });
+
+    it('a history row: the kind\'s symbol in the circle in the origin\'s colour, the origin at its corner; own rows carry the card\'s glyphs (round 3 §10)', () => {
+        for (const mode of ['app', 'file'] as const) {
+            const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
+            const page = preparePersonPageData(fiskTree(), op, { history: { payload } });
+            const html = mode === 'app' ? buildPersonPageBody(page, op) : buildPersonPageDocument(page, op);
+            expect(html).toContain(`<span class="pp-mk pp-mk-h is-region" title="válka" aria-hidden="true">${historyKindSvg('war', 14)}<span class="pp-mk-o" aria-hidden="true"></span></span>`);
+            // No Unicode marks left in the circles: the glyphs are SVG (13 px), nothing in the text.
+            const marks = [...html.matchAll(/<span class="pp-mk[^"]*"[^>]*>([\s\S]*?)<\/span><\/span>/g)].map(m => m[1]);
+            expect(marks.length).toBeGreaterThan(3);
+            for (const m of marks) expect(m.replace(/<[^>]*>/g, '')).toBe('');
+            expect(html).toContain(lifelineGlyph({ kind: 'birth' }, 13));
+            expect(html).toContain(lifelineGlyph({ kind: 'death' }, 13));
+            expect(html).toContain(lifelineGlyph({ kind: 'marriage' }, 13));
         }
     });
 });

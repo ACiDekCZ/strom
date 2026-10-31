@@ -57,6 +57,7 @@ import { suggestMarriedSurname, MarriedSurnameSuggestion } from '../married-sugg
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
+import { lifelineGlyph } from '../lifeline-glyphs.js';
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
@@ -1073,58 +1074,9 @@ export const personModalMethods = uiModule({
         }
     },
 
-    /** Small SVG glyph (14×14) chosen by the timeline point's kind / event type. */
+    /** Small SVG glyph (14×14) chosen by the timeline point's kind / event type (one definition: lifeline-glyphs). */
     lifelineGlyph(pt: LifelinePoint): string {
-        const svg = (inner: string): string =>
-            `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
-        switch (pt.kind) {
-            case 'birth':
-                return svg('<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/>');
-            case 'death':
-                return svg('<path d="M12 3v18M6 8h12"/>');
-            case 'marriage':
-                return svg('<circle cx="9" cy="13" r="5"/><circle cx="15" cy="13" r="5"/>');
-            case 'child':
-                return svg('<circle cx="12" cy="7" r="3"/><path d="M7 21c0-3 2.2-5 5-5s5 2 5 5"/>');
-            case 'divorce':
-                // Two rings apart, a bar between them (⚮).
-                return svg('<circle cx="6" cy="13" r="4"/><circle cx="18" cy="13" r="4"/><path d="M12 5v16"/>');
-            case 'childEvent':
-                switch (pt.childEvent) {
-                    case 'marriage':
-                        return svg('<circle cx="9" cy="13" r="5"/><circle cx="15" cy="13" r="5"/>');
-                    case 'divorce':
-                        return svg('<circle cx="6" cy="13" r="4"/><circle cx="18" cy="13" r="4"/><path d="M12 5v16"/>');
-                    case 'burial':
-                        return svg('<path d="M8 21V9a4 4 0 0 1 8 0v12M5 21h14"/>');
-                    default:
-                        return svg('<path d="M12 3v18M6 8h12"/>');
-                }
-            case 'coupleEvent':
-                // Only the wedding carries the rings; the couple's other events no mark.
-                return svg('');
-            default:
-                switch (pt.eventType) {
-                    case 'baptism':
-                        return svg('<path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9z"/>');
-                    case 'occupation':
-                        return svg('<rect x="3" y="8" width="18" height="11" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>');
-                    case 'residence':
-                        return svg('<path d="M4 11l8-6 8 6M6 10v9h12v-9"/>');
-                    case 'military':
-                        return svg('<path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6z"/>');
-                    case 'emigration':
-                        return svg('<path d="M14 5l7 7-7 7M21 12H3"/>');
-                    case 'immigration':
-                        return svg('<path d="M10 5L3 12l7 7M3 12h18"/>');
-                    case 'education':
-                        return svg('<path d="M12 4L2 9l10 5 10-5-10-5zM5 11v5c0 1.5 3 3 7 3s7-1.5 7-3v-5"/>');
-                    case 'burial':
-                        return svg('<path d="M8 21V9a4 4 0 0 1 8 0v12M5 21h14"/>');
-                    default:
-                        return svg('<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>');
-                }
-        }
+        return lifelineGlyph(pt);
     },
 
     /**
