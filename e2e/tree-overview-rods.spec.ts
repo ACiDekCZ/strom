@@ -143,7 +143,7 @@ test.describe('tree overview: family lines', () => {
                 return b.width > 0 && b.height > 0 && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
             }));
         }, others);
-        const chrome = ['#focus-controls', '.descendants-badge', '.fan-controls', '.bottom-bar', '.zoom-controls', '.toolbar'];
+        const chrome = ['#focus-controls', '.descendants-badge', '.fan-toolbar', '.fan-zoom-controls', '.fan-legend', '.fan-legend-chip', '.bottom-bar', '.zoom-controls', '.toolbar'];
         // Desktop: the focus bar (name, both steppers) on the left of the same row.
         await expect(page.locator('#focus-controls')).toBeVisible();
         expect(await apart(chrome)).toEqual([]);

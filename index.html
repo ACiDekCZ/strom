@@ -8338,48 +8338,162 @@
             .map-controls, .map-scope { top: 52px; }
         }
 
+        /* ---- Fan view (src/ui/fan-view.ts, spec 029 §9.5) ----
+           A toolbar over a stage the fan fills; FanZoom (src/fan-zoom.ts)
+           zooms by the SVG's viewBox, the chrome around it stands still.
+           Desktop: one toolbar row (wraps when long), colours as a segment,
+           the legend a card bottom-left, ＋ − ⛶ bottom-right. Tablet: colours
+           as a dropdown. Phone and a phone held sideways: shapes as icons,
+           colours and the legend behind a chip that opens a sheet. */
         .fan-container {
             display: none;
             position: absolute;
             inset: 0;
-            overflow: auto;
+            overflow: hidden;
             background: var(--bg-color, #fff);
             flex-direction: column;
-            align-items: center;
         }
-        .fan-controls {
-            align-self: flex-end;
-            padding: 10px 16px 0;
-            font-size: 13px;
-            color: var(--text-light);
+        .fan-toolbar {
+            flex: none;
+            display: flex; flex-wrap: wrap; align-items: center;
+            gap: 10px 22px;
+            min-height: 52px; padding: 8px 16px; box-sizing: border-box;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            font-size: 13px; color: var(--text);
+            position: relative; z-index: 2;
         }
-        .fan-controls select {
-            margin-left: 6px;
-            padding: 3px 6px;
-            font-size: 13px;
-            border: 1px solid var(--border-color, #ccc);
-            border-radius: 8px;
-            background: var(--input-bg, #fff);
-            color: var(--text);
+        .fan-toolbar-spacer { flex: 1 1 0; min-width: 0; }
+        .fan-shapes, .fan-color-seg {
+            display: inline-flex; align-items: center; gap: 2px;
+            padding: 3px; border-radius: 9px;
+            background: var(--surface-2); border: 1px solid var(--border);
         }
+        .fan-shape-btn, .fan-color-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            height: 30px; padding: 0 11px 0 9px; margin: 0; min-width: 0;
+            border: 0; border-radius: 7px; background: none; box-shadow: none;
+            color: var(--text-light); font: inherit; font-size: 13px; white-space: nowrap;
+            cursor: pointer; -webkit-tap-highlight-color: transparent;
+        }
+        .fan-color-btn { height: 28px; padding: 0 10px; }
+        .fan-shape-icon { width: 18px; height: 18px; flex: none; }
+        .fan-shape-btn[aria-checked="true"], .fan-color-btn[aria-checked="true"] {
+            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: var(--shadow-sm);
+        }
+        @media (hover: hover) {
+            .fan-shape-btn:not([aria-checked="true"]):hover, .fan-color-btn:not([aria-checked="true"]):hover { color: var(--text); background: var(--hover-bg); }
+        }
+        .fan-shape-btn:focus-visible, .fan-color-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .fan-stepper { display: inline-flex; align-items: center; gap: 8px; }
+        .fan-stepper .depth-stepper-label { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
+        .fan-toolbar .fan-stepper .depth-stepper-btn { width: 28px; height: 28px; }
+        .fan-stepper[hidden] { display: none; }
+        .fan-colors { display: inline-flex; align-items: center; gap: 8px; }
+        .fan-colors-label { font-size: 12.5px; color: var(--text-light); }
+        .fan-color-drop { display: none; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-light); }
+        .fan-color-drop select {
+            height: 34px; padding: 0 8px; font-size: 13px;
+            border: 1px solid var(--border); border-radius: 8px;
+            background: var(--input-bg, var(--surface)); color: var(--text);
+        }
+        .fan-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
         .fan-chart {
-            flex: 1 1 auto;
-            width: 100%;
-            min-height: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 8px 16px 20px;
-            box-sizing: border-box;
+            position: absolute; inset: 0;
+            user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+            outline: none;
         }
-        .fan-svg {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
+        .fan-chart:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+        .fan-chart .fan-svg { display: block; width: 100%; height: 100%; }
+        /* Zoom: a card of ＋ − ⛶ bottom-right; on touch only ⛶ (pinch zooms). */
+        .fan-zoom-controls {
+            position: absolute; right: 14px; bottom: 14px; z-index: 3;
+            display: flex; gap: 4px; padding: 4px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg, 12px); box-shadow: var(--shadow-sm);
         }
-        /* The fan SVG carries its own colours (fan-colors.ts, both themes, scoped
-           to its id); the page only adds the pointer and the hover. */
+        .fan-zoom-btn {
+            width: 40px; height: 40px; padding: 0; margin: 0; min-width: 0;
+            border: 0; border-radius: var(--r-md, 8px); background: transparent; box-shadow: none;
+            color: var(--text-light); font-size: 20px; line-height: 1; cursor: pointer;
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        }
+        @media (hover: hover) { .fan-zoom-btn:hover { background: var(--hover-bg); color: var(--text); } }
+        .fan-zoom-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) {
+            .fan-zoom-controls { padding: 0; gap: 0; border: 0; background: none; box-shadow: none; right: 16px; bottom: 16px; }
+            .fan-zoom-in, .fan-zoom-out { display: none; }
+            .fan-zoom-fit {
+                width: 48px; height: 48px; border-radius: 50%;
+                background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+                font-size: 22px;
+            }
+        }
+        /* Legend: a card bottom-left, its head folds it (remembered on the device). */
+        .fan-legend {
+            position: absolute; left: 14px; bottom: 14px; z-index: 3;
+            max-width: 280px; max-height: calc(100% - 28px); overflow: auto; box-sizing: border-box;
+            padding: 6px 12px; border-radius: 10px;
+            background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+            font-size: 12.5px; color: var(--text);
+        }
+        .fan-legend[hidden] { display: none; }
+        .fan-legend-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+            min-height: 28px; padding: 0; margin: 0; border: 0; background: none; box-shadow: none;
+            color: var(--text-light); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
+        }
+        .fan-legend-head:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .fan-legend-items { display: none; padding: 2px 0 4px; }
+        .fan-legend.is-open .fan-legend-items { display: block; }
+        .fan-legend-row { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+        .fan-legend-label { min-width: 0; }
+        .fan-legend-who { color: var(--text-light); margin-left: auto; padding-left: 8px; white-space: nowrap; }
+        /* A swatch carries its colours for the light, dark and print themes. */
+        .fan-sw {
+            flex: none; width: 22px; height: 12px; border-radius: 3px; box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.12);
+            background: linear-gradient(90deg, var(--sl) 0 50%, var(--sl2) 50% 100%);
+        }
+        [data-theme="dark"] .fan-sw:not(.fan-sw-hatch) { background: linear-gradient(90deg, var(--sd) 0 50%, var(--sd2) 50% 100%); border-color: rgba(255,255,255,0.14); }
+        .fan-sw-hatch { background: repeating-linear-gradient(135deg, var(--text-light) 0 2px, transparent 2px 5px); }
+        /* Phone: the colours and the legend behind a chip bottom-left. */
+        .fan-legend-chip {
+            display: none; position: absolute; left: 12px; bottom: 16px; z-index: 3;
+            align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 12px; margin: 0; min-width: 0;
+            border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+            color: var(--text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; max-width: calc(100% - 96px);
+        }
+        .fan-legend-chip[hidden] { display: none !important; }
+        .fan-chip-dots { display: inline-flex; gap: 0; }
+        .fan-chip-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sl); border: 1.5px solid var(--surface); margin-left: -4px; }
+        .fan-chip-dot:first-child { margin-left: 0; }
+        [data-theme="dark"] .fan-chip-dot { background: var(--sd); }
+        .fan-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fan-chip-arrow { color: var(--text-light); font-size: 11px; }
+        .fan-sheet { position: fixed; inset: 0; z-index: 400; }
+        .fan-sheet[hidden] { display: none; }
+        .fan-sheet-scrim { position: absolute; inset: 0; background: rgba(20,16,8,0.32); }
+        .fan-sheet-panel {
+            position: absolute; left: 0; right: 0; bottom: 0; max-height: calc(100% - 48px); overflow: auto;
+            padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box;
+            background: var(--surface); color: var(--text); border-radius: 18px 18px 0 0; box-shadow: var(--shadow-lg);
+        }
+        .fan-sheet-grab { display: block; width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--border); }
+        .fan-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .fan-sheet-title { font-size: 17px; font-weight: 600; }
+        .fan-sheet-close {
+            width: 44px; height: 44px; padding: 0; margin: 0 -10px 0 0; min-width: 0; border: 0; background: none; box-shadow: none;
+            color: var(--text-light); font-size: 24px; cursor: pointer;
+        }
+        .fan-sheet-seg {
+            display: flex; gap: 2px; padding: 3px; margin-bottom: 12px;
+            border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+        }
+        .fan-sheet-seg .fan-color-btn { flex: 1 1 0; height: 40px; padding: 0 6px; font-size: 14px; }
+        .fan-sheet-items .fan-legend-row { min-height: 34px; font-size: 14px; }
+        .fan-sheet-items .fan-sw { width: 28px; height: 14px; }
+        /* The fan's hover and pointer (the SVG carries its own colours,
+           fan-colors.ts, both themes, scoped to its id). */
         .fan-kekule { dominant-baseline: middle; }
         .fan-sector, .fan-focus { cursor: pointer; }
         .fan-unknown-partner { cursor: default; }
@@ -8388,14 +8502,48 @@
             .fan-empty:hover .fan-empty-edge { fill: var(--hover-bg, #f1f1ee); }
             .fan-unknown-partner:hover .fan-fill { filter: none; }
         }
+        /* Back / forward (bottom-left) show: the legend and the chip stand above them. */
+        body.focus-nav-shown .fan-legend { bottom: 76px; max-height: calc(100% - 90px); }
+        /* Tablet: colours as a dropdown. */
+        @media (max-width: 1024px) {
+            .fan-color-seg, .fan-colors-label { display: none; }
+            .fan-color-drop { display: inline-flex; }
+            body.focus-nav-shown .fan-legend { bottom: 68px; }
+        }
+        /* Phone: two rows — shapes (icons) and generations, then descendants on the right. */
         @media (max-width: 640px) {
-            /* Clear the fixed focus bar overlaying the container top. */
-            .fan-controls { padding: 52px 10px 0; }
-            .fan-chart { padding: 4px 6px 12px; }
-            /* Keep the fan readable: minimum drawing width, pan to explore
-               (the container scrolls; render centers the scroll). */
-            .fan-chart { justify-content: flex-start; }
-            .fan-svg { min-width: 640px; }
+            .fan-toolbar { gap: 6px 10px; padding: 8px 12px; min-height: 0; }
+            .fan-toolbar-spacer, .fan-colors { display: none; }
+            .fan-shape-btn { width: 44px; height: 36px; padding: 0; }
+            .fan-shape-icon { width: 22px; height: 22px; }
+            .fan-shape-label { display: none; }
+            #fan-gen-stepper { margin-left: auto; }
+            .fan-desc-stepper { flex: 1 0 100%; justify-content: flex-end; }
+            .fan-toolbar .fan-stepper .depth-stepper-btn { width: 40px; height: 36px; }
+            .fan-legend { display: none; }
+            .fan-legend-chip { display: inline-flex; }
+            body.focus-nav-shown .fan-legend-chip { bottom: 68px; }
+            /* A column at the right edge: the pills of the tree end 80px from it. */
+            .fan-zoom-controls { flex-direction: column; right: 12px; }
+            /* The pills of the tree take the bottom: the chip goes to the top right. */
+            body:has(#evidence-pill) .fan-legend-chip,
+            body:has(#live-follow-pill) .fan-legend-chip { bottom: auto; top: 12px; left: auto; right: 12px; }
+        }
+        /* A phone held sideways: one 48px row of icons and steppers; colours behind the chip. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .fan-toolbar { flex-wrap: nowrap; gap: 12px; min-height: 48px; padding: 4px 12px; }
+            .fan-colors { display: none; }
+            .fan-shape-btn { width: 40px; height: 32px; padding: 0; }
+            .fan-shape-icon { width: 20px; height: 20px; }
+            .fan-shape-label { display: none; }
+            .fan-desc-stepper { flex: none; }
+            .fan-toolbar .fan-stepper .depth-stepper-btn { width: 36px; height: 32px; }
+            .fan-legend { display: none; }
+            .fan-legend-chip { display: inline-flex; bottom: 12px; }
+            body.focus-nav-shown .fan-legend-chip { bottom: 68px; }
+            body:has(#evidence-pill) .fan-legend-chip,
+            body:has(#live-follow-pill) .fan-legend-chip { bottom: auto; top: 8px; left: auto; right: 12px; }
+            .fan-sheet-panel { left: max(var(--side-bar-w, 76px), calc(50% - 280px)); right: max(0px, calc(50% - 280px)); max-height: calc(100% - 16px); }
         }
 
         /* ==================== FOCUS MODE ==================== */
@@ -15029,27 +15177,27 @@
         }
         /* The pills keep clear of what stands at the top of the tree: the
            desktop's focus bar (top-left, as wide as its steppers), the
-           descendants badge (top centre) and the fan's controls (top right).
+           descendants badge (top centre) and the fan's toolbar (a row that may wrap: `--fan-toolbar-bottom`).
            The phone has its pills at the bottom. */
         @media (min-width: 1025px) {
             body.has-focus-panel:not(.standalone-view) .evidence-pill,
             body.descendants-view .evidence-pill,
-            body[data-view-mode="fan"] .evidence-pill { top: 112px; }
+            body[data-view-mode="fan"] .evidence-pill { top: max(112px, calc(var(--fan-toolbar-bottom, 0px) + 8px)); }
             body.has-focus-panel:not(.standalone-view) .evidence-pill ~ .live-follow-pill,
-            body.descendants-view .evidence-pill ~ .live-follow-pill,
-            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 172px; }
+            body.descendants-view .evidence-pill ~ .live-follow-pill { top: 172px; }
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: max(172px, calc(var(--fan-toolbar-bottom, 0px) + 68px)); }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
-            body.descendants-view .evidence-pill,
-            body[data-view-mode="fan"] .evidence-pill { top: 112px; }
-            body.descendants-view .evidence-pill ~ .live-follow-pill,
-            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 172px; }
+            body.descendants-view .evidence-pill { top: 112px; }
+            body[data-view-mode="fan"] .evidence-pill { top: max(112px, calc(var(--fan-toolbar-bottom, 0px) + 8px)); }
+            body.descendants-view .evidence-pill ~ .live-follow-pill { top: 172px; }
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: max(172px, calc(var(--fan-toolbar-bottom, 0px) + 68px)); }
         }
         @media (min-width: 641px) and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            body.descendants-view .evidence-pill,
-            body[data-view-mode="fan"] .evidence-pill { top: 96px; }
-            body.descendants-view .evidence-pill ~ .live-follow-pill,
-            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 156px; }
+            body.descendants-view .evidence-pill { top: 96px; }
+            body[data-view-mode="fan"] .evidence-pill { top: max(96px, calc(var(--fan-toolbar-bottom, 0px) + 8px)); }
+            body.descendants-view .evidence-pill ~ .live-follow-pill { top: 156px; }
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: max(156px, calc(var(--fan-toolbar-bottom, 0px) + 68px)); }
         }
         /* A phone held sideways at most 640 wide keeps the phone's bottom pill, right of the side bar. */
         @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
@@ -19158,11 +19306,26 @@
             .context-menu, .modal-overlay, .rel-link-icon, .card-edge,
             .hidden-partners-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
-            .card-tooltip, .collapse-chain-btn, .fan-controls,
+            .card-tooltip, .collapse-chain-btn, .fan-toolbar, .fan-zoom-controls,
+            .fan-legend-chip, .fan-legend-head, .fan-sheet,
             .tree-tabs, .tree-legend, .gen-labels, #empty-state { display: none !important; }
 
-            /* Fan chart prints as-is (its container scrolls on screen only) */
+            /* The fan prints whole (fan-view.ts redraws it so before printing),
+               the legend expanded under it. */
             .fan-container { position: relative !important; overflow: visible !important; }
+            .fan-stage, .fan-chart { position: static !important; overflow: visible !important; }
+            .fan-chart .fan-svg { width: 100%; height: auto; max-height: 85vh; }
+            .fan-legend {
+                display: block !important; position: static !important; max-width: none; max-height: none;
+                margin: 8px auto 0; border: 0; box-shadow: none; background: none; color: #222;
+            }
+            .fan-legend .fan-legend-items { display: flex !important; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+            .fan-sw:not(.fan-sw-hatch), [data-theme="dark"] .fan-sw:not(.fan-sw-hatch) {
+                background: linear-gradient(90deg, var(--sp) 0 50%, var(--sp2) 50% 100%) !important;
+                border-color: rgba(0,0,0,0.2) !important;
+                -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            }
+            .fan-legend-who { color: #555; }
 
             /* Timeline prints fully (not just the on-screen viewport slice),
                and both extra views force light colours even from dark mode. */
@@ -19531,21 +19694,60 @@
         <div id="timeline-container" class="timeline-container"></div>
         <div id="map-container" class="map-container"></div>
         <div id="fan-container" class="fan-container">
-            <div class="fan-controls">
-                <label><span data-i18n="fan.generations"></span>
-                    <select id="fan-gen-select">
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                    </select>
-                </label>
+            <!-- The Fan view's own toolbar (spec 029 §9.5): shape, generations, descendants (two-way), colours. -->
+            <div class="fan-toolbar" id="fan-toolbar" role="toolbar" data-i18n-aria-label="viewModeSwitch.fan">
+                <div class="fan-shapes" role="radiogroup" data-i18n-aria-label="fan.shape">
+                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="half" aria-checked="false" data-i18n-title="fan.shapeHalf" data-i18n-aria-label="fan.shapeHalf"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 A8 8 0 0 1 18 15 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeHalf"></span></button>
+                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="full" aria-checked="false" data-i18n-title="fan.shapeFull" data-i18n-aria-label="fan.shapeFull"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 A8 8 0 1 1 9.99 2 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeFull"></span></button>
+                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="two" aria-checked="false" data-i18n-title="fan.shapeTwo" data-i18n-aria-label="fan.shapeTwo"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10 A8 8 0 0 1 18 10 Z" fill="currentColor"/><path d="M2 10 A8 8 0 0 0 18 10 Z" fill="currentColor" fill-opacity="0.35"/></svg><span class="fan-shape-label" data-i18n="fan.shapeTwo"></span></button>
+                </div>
+                <div class="depth-stepper fan-stepper" id="fan-gen-stepper">
+                    <span class="depth-stepper-label" data-i18n="fan.generations"></span>
+                    <div class="depth-stepper-group" role="group" data-i18n-aria-label="fan.generations">
+                        <button type="button" class="depth-stepper-btn" data-step="-1" data-i18n-aria-label="fan.fewerGenerations" data-i18n-title="fan.fewerGenerations">&minus;</button>
+                        <span class="depth-stepper-value">5</span>
+                        <button type="button" class="depth-stepper-btn" data-step="1" data-i18n-aria-label="fan.moreGenerations" data-i18n-title="fan.moreGenerations">+</button>
+                    </div>
+                    <select id="fan-gen-native" class="depth-stepper-native" hidden tabindex="-1" aria-hidden="true"><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
+                </div>
+                <div class="depth-stepper fan-stepper fan-desc-stepper" id="fan-desc-stepper">
+                    <span class="depth-stepper-label" data-i18n="fan.descGenerations"></span>
+                    <div class="depth-stepper-group" role="group" data-i18n-aria-label="fan.descGenerations">
+                        <button type="button" class="depth-stepper-btn" data-step="-1" data-i18n-aria-label="fan.fewerGenerations" data-i18n-title="fan.fewerGenerations">&minus;</button>
+                        <span class="depth-stepper-value">3</span>
+                        <button type="button" class="depth-stepper-btn" data-step="1" data-i18n-aria-label="fan.moreGenerations" data-i18n-title="fan.moreGenerations">+</button>
+                    </div>
+                    <select id="fan-desc-native" class="depth-stepper-native" hidden tabindex="-1" aria-hidden="true"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
+                </div>
+                <span class="fan-toolbar-spacer" aria-hidden="true"></span>
+                <div class="fan-colors">
+                    <span class="fan-colors-label" id="fan-colors-label" data-i18n="fan.colors"></span>
+                    <div class="fan-color-seg" role="radiogroup" aria-labelledby="fan-colors-label"><button type="button" role="radio" class="fan-color-btn" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
+                    <label class="fan-color-drop"><span class="fan-color-drop-label" data-i18n="fan.colorsColon"></span><select id="fan-color-select"><option value="gender" data-i18n="fan.colorGender"></option><option value="line" data-i18n="fan.colorLine"></option><option value="rod" data-i18n="fan.colorRod"></option></select></label>
+                </div>
             </div>
-            <div id="fan-chart" class="fan-chart"></div>
+            <div class="fan-stage" id="fan-stage">
+                <div id="fan-chart" class="fan-chart" tabindex="0"></div>
+                <div class="fan-zoom-controls" id="fan-zoom-controls">
+                    <button type="button" class="fan-zoom-btn fan-zoom-in" data-fan-zoom-act="in" data-i18n-aria-label="fan.zoomIn" data-i18n-title="fan.zoomInKey">&#xFF0B;</button>
+                    <button type="button" class="fan-zoom-btn fan-zoom-out" data-fan-zoom-act="out" data-i18n-aria-label="fan.zoomOut" data-i18n-title="fan.zoomOutKey">&#xFF0D;</button>
+                    <button type="button" class="fan-zoom-btn fan-zoom-fit" data-fan-zoom-act="fit" data-i18n-aria-label="fan.zoomFit" data-i18n-title="fan.zoomFitKey">&#x26F6;</button>
+                </div>
+                <div class="fan-legend" id="fan-legend">
+                    <button type="button" class="fan-legend-head" id="fan-legend-head" aria-expanded="true" aria-controls="fan-legend-items"></button>
+                    <div class="fan-legend-items" id="fan-legend-items"></div>
+                </div>
+                <button type="button" class="fan-legend-chip" id="fan-legend-chip" aria-haspopup="dialog" aria-expanded="false"></button>
+                <div class="fan-sheet" id="fan-sheet" hidden>
+                    <div class="fan-sheet-scrim" data-fan-sheet-close></div>
+                    <div class="fan-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fan-sheet-title">
+                        <span class="fan-sheet-grab" aria-hidden="true"></span>
+                        <div class="fan-sheet-head"><span class="fan-sheet-title" id="fan-sheet-title" data-i18n="fan.colors"></span><button type="button" class="fan-sheet-close" data-fan-sheet-close data-i18n-aria-label="buttons.close">&times;</button></div>
+                        <div class="fan-sheet-seg fan-color-seg-sheet" role="radiogroup" aria-labelledby="fan-sheet-title"><button type="button" role="radio" class="fan-color-btn" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
+                        <div class="fan-sheet-items" id="fan-sheet-items"></div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="empty-state" id="empty-state">
             <div class="empty-state-ghosts" aria-hidden="true">

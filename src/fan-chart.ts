@@ -435,6 +435,11 @@ export function fanWedgePath(r1: number, r2: number, lo: number, hi: number): st
 let uidCounter = 0;
 const lineagesByData = new WeakMap<StromData, LineageIndex>();
 
+/** The tree's family lines (cached per data object): the rod colours and the legend's rows. */
+export function fanLineages(data: StromData): LineageIndex {
+    return lineagesOf(data);
+}
+
 function lineagesOf(data: StromData): LineageIndex {
     let index = lineagesByData.get(data);
     if (!index) { index = buildLineages(data); lineagesByData.set(data, index); }

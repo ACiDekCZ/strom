@@ -63,11 +63,11 @@ import { personInitials } from './initials.js';
 import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
 import {
-    buildFanModel, buildFanSvg, FanShape, FAN_SHAPES, FAN_MIN_GENERATIONS, FAN_MAX_GENERATIONS, FAN_DEFAULT_GENERATIONS,
+    FanShape, FAN_SHAPES, FAN_MIN_GENERATIONS, FAN_MAX_GENERATIONS, FAN_DEFAULT_GENERATIONS,
     FAN_MIN_DESC_GENERATIONS, FAN_MAX_DESC_GENERATIONS, FAN_DEFAULT_DESC_GENERATIONS,
 } from './fan-chart.js';
 import { FanColorMode, FAN_COLOR_MODES } from './fan-colors.js';
-import { fanScreenSizes } from './fan-labels.js';
+import { FanViewController } from './ui/fan-view.js';
 import { FAN_STORAGE_KEYS } from './storage-keys.js';
 import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport, TABLET_MAX } from './breakpoints.js';
@@ -5544,70 +5544,44 @@ class TreeRendererClass {
         if (!FAN_COLOR_MODES.includes(mode) || mode === this.fanColorMode) return;
         this.fanColorMode = mode;
         writeFanSetting(FAN_STORAGE_KEYS.color, mode);
-        if (this.viewMode === 'fan') this.render();
+        // Colours do not move a sector: the fan is drawn again with the zoom kept.
+        if (this.viewMode === 'fan') this.fanView?.redraw();
     }
 
-    /** Render the ancestor fan chart into its container (fan view mode). */
+    /** The Fan view (toolbar, zoom, legend, print): created on its first draw. */
+    private fanView: FanViewController | null = null;
+
+    /** The Fan view's controller (tests and the B2 hooks reach the zoom and the model through it). */
+    getFanView(): FanViewController | null {
+        return this.fanView;
+    }
+
+    /** Render the fan chart into its container (fan view mode). */
     private renderFan(container: HTMLElement): void {
-        // Delegate clicks once: sectors refocus, empty slots add a parent.
-        if (!container.dataset.wired) {
-            container.dataset.wired = '1';
-            container.addEventListener('click', (e) => {
-                const el = (e.target as Element).closest('[data-fan-person], [data-fan-add]') as HTMLElement | null;
-                if (!el) return;
-                if (el.dataset.fanPerson) {
-                    this.setFocus(el.dataset.fanPerson as PersonId);
-                } else if (el.dataset.fanAdd && !DataManager.isReadOnly()) {
-                    const slot = el.dataset.fanAddGender;
-                    UI.addRelation(el.dataset.fanAdd as PersonId, 'parent', slot === 'male' || slot === 'female' ? slot : undefined);
-                }
-            });
-            const select = container.querySelector('#fan-gen-select') as HTMLSelectElement | null;
-            select?.addEventListener('change', () => this.setFanGenerations(parseInt(select.value, 10)));
-        }
-
-        const select = container.querySelector('#fan-gen-select') as HTMLSelectElement | null;
-        if (select) select.value = String(this.fanGenerations);
-
-        const chart = container.querySelector('#fan-chart') as HTMLElement | null;
-        if (!chart || !this.focusPersonId) return;
-
-        const model = buildFanModel(DataManager.getData(), this.focusPersonId, {
-            generations: this.fanGenerations, shape: this.fanShape, descGenerations: this.fanDescGenerations,
-        });
-        if (!model) { chart.innerHTML = ''; return; }
-        // Labels are fitted for the drawn scale (screen px per fan unit): estimated
-        // from the chart's box, then measured on the drawn SVG and redrawn once
-        // when the estimate was off.
-        const b = model.bounds;
-        const est = Math.min((chart.clientWidth - 32) / b.w, (chart.clientHeight - 28) / b.h);
-        let ppu = Number.isFinite(est) && est > 0.05 ? est : 1;
-        const draw = () => {
-            chart.innerHTML = buildFanSvg(model, {
+        if (!this.fanView) {
+            this.fanView = new FanViewController({
+                data: () => DataManager.getData(),
+                focusId: () => this.focusPersonId,
+                settings: () => ({
+                    generations: this.fanGenerations, descGenerations: this.fanDescGenerations,
+                    shape: this.fanShape, colorMode: this.fanColorMode,
+                }),
+                setGenerations: n => this.setFanGenerations(n),
+                setDescGenerations: n => this.setFanDescGenerations(n),
+                setShape: shape => this.setFanShape(shape),
+                setColorMode: mode => this.setFanColorMode(mode),
+                active: () => this.viewMode === 'fan',
+                setFocus: id => this.setFocus(id),
+                addParent: (childId, gender) => UI.addRelation(childId, 'parent', gender),
+                editable: () => !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
+                showKekule: () => SettingsManager.isFanKekuleEnabled(),
                 esc: (t) => this.escapeHtml(t),
-                editable: !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
-                addParentLabel: strings.contextMenu.addParent,
-                showKekule: SettingsManager.isFanKekuleEnabled(),
                 relTypeLabel: (t) => strings.parentRelType[t],
-                colorMode: this.fanColorMode,
-                ppu,
-                sizes: fanScreenSizes(isMobileViewport()),
-                uid: 'fan-svg-main',
+                addParentLabel: () => strings.contextMenu.addParent,
+                afterDraw: () => { if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight(); },
             });
-        };
-        draw();
-        const drawnW = chart.querySelector('svg')?.getBoundingClientRect().width ?? 0;
-        if (drawnW > 0) {
-            const real = drawnW / b.w;
-            if (Math.abs(real - ppu) / ppu > 0.15) { ppu = real; draw(); }
         }
-        if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight();
-
-        // Mobile: the fan keeps a minimum drawing width and overflows the
-        // container — start the view centered on the focus person.
-        if (container.scrollWidth > container.clientWidth) {
-            container.scrollLeft = (container.scrollWidth - container.clientWidth) / 2;
-        }
+        this.fanView.render(container);
     }
 
     /** The timeline's last markup (a redraw with nothing new leaves the DOM alone). */

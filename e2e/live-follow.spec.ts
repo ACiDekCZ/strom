@@ -333,7 +333,7 @@ test.describe('follow the agent in the tree', () => {
             const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
             const pills = ['#evidence-pill', '#live-follow-pill'].map(sel => document.querySelector(sel)!.getBoundingClientRect());
             const out = hit(pills[0], pills[1]) ? ['pills'] : [];
-            for (const sel of ['#focus-controls', '.descendants-badge', '.fan-controls', '.bottom-bar', '.zoom-controls', '.toolbar']) {
+            for (const sel of ['#focus-controls', '.descendants-badge', '.fan-toolbar', '.fan-zoom-controls', '.fan-legend', '.fan-legend-chip', '.bottom-bar', '.zoom-controls', '.toolbar']) {
                 for (const o of document.querySelectorAll(sel)) {
                     const b = o.getBoundingClientRect();
                     if (b.width > 0 && b.height > 0 && pills.some(p => hit(p, b))) out.push(sel);
