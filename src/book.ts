@@ -22,12 +22,13 @@ import { shownName } from './person-name.js';
 import { buildLineages } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, buildBookModel } from './book-model.js';
-import { BookLang, BookOptions, BookParts, autoBookTitle, defaultBookOptions, effectiveBookParts } from './book-options.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
 import {
-    BookCtx, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, indexHtml, pairName,
+    BookCtx, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, indexHtml, pairFirstNames, pairName,
     rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
 } from './book-blocks.js';
 import { BOOK_CSS, rodPagesCss } from './book-css.js';
+import { BOOK_WINDOW_CSS, BOOK_WINDOW_SCRIPT, BookSideEntry, bookSideHtml, bookToolbarHtml } from './book-window.js';
 
 export type { BookOptions, BookLang, BookDetail, BookParts, BookPreset, BookSelectionSpec, BookEstimate } from './book-options.js';
 export { estimateBook, defaultBookOptions } from './book-options.js';
@@ -147,6 +148,34 @@ function protectedPeriod(ctx: BookCtx): string {
     return from === to ? String(from) : `${from}–${to}`;
 }
 
+/**
+ * The side contents (§6.1): the title page, the contents, each lineage with
+ * its line tree and chapters ("5 · Jan and Marie"), the back of the book.
+ */
+function bookSideEntries(ctx: BookCtx, parts: BookParts): BookSideEntry[] {
+    const B = getStringsForLang(ctx.lang).book;
+    const out: BookSideEntry[] = [{ kind: 'link', href: '#book-title-page', label: esc(B.win.titlePage) }];
+    if (parts.toc) out.push({ kind: 'link', href: '#book-toc', label: esc(B.contents) });
+    const chapter = (ch: BookChapter, kind: 'link' | 'sub'): BookSideEntry | null => {
+        const u = ctx.tree.partnerships[ch.unionId];
+        return u ? { kind, href: `#kap-${ch.no}`, label: B.win.chapter(ch.no, pairFirstNames(ctx, u)) } : null;
+    };
+    if (ctx.model.groups.length) {
+        ctx.model.groups.forEach((g, i) => {
+            if (!g.chapters.length) return;
+            out.push({ kind: 'link', href: `#rod-${i + 1}`, label: esc(B.rodName(rodLabelOf(ctx, g.rod.id))) });
+            if (parts.tree) out.push({ kind: 'sub', href: `#rod-${i + 1}-tree`, label: esc(B.parts.tree) });
+            for (const ch of g.chapters) { const e = chapter(ch, 'sub'); if (e) out.push(e); }
+        });
+    } else {
+        for (const ch of ctx.model.chapters) { const e = chapter(ch, 'link'); if (e) out.push(e); }
+    }
+    if (parts.smallRods && ctx.model.smallRods.length) out.push({ kind: 'link', href: '#book-small-rods', label: esc(B.parts.smallRods) });
+    if (parts.sources && ctx.sources.no.size) out.push({ kind: 'link', href: '#book-sources', label: esc(B.sources) });
+    if (parts.index) out.push({ kind: 'link', href: '#book-index', label: esc(B.index) });
+    return out;
+}
+
 /** The license notice of the embedded serif (OFL 1.1 asks it to travel with the font). */
 const FONT_NOTICE = 'Strom Serif: a modified (subsetted) version of Source Serif 4 (designed by Frank Grießhammer for Adobe), '
     + 'renamed as its Reserved Font Name requires. Copyright 2014 - 2021 Adobe Systems Incorporated, with Reserved Font Name "Source". '
@@ -234,7 +263,7 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
             if (!g.chapters.length) return;
             const n = i + 1;
             heads[i] = B.rodName(rodLabelOf(ctx, g.rod.id));
-            const lineage = parts.tree ? rodLineageHtml(g.rod, ctx, { breakBefore: rodHasMaleLine(g.rod, ctx) }) : '';
+            const lineage = parts.tree ? rodLineageHtml(g.rod, ctx, { breakBefore: rodHasMaleLine(g.rod, ctx), id: `rod-${n}-tree` }) : '';
             const chapters = g.chapters.map(ch => familyChapterHtml(ch, ctx)).join('');
             body.push(`<section class="book-sheet book-rod rod-${n}" id="rod-${n}">${rodOverviewHtml(g.rod, ctx)}${lineage}${chapters}</section>`);
         });
@@ -264,15 +293,15 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
     const period = protectedPeriod(ctx);
     const persons = [...model.personIds].filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder).length;
     const meta = [B.persons(persons)];
-    const front = `<section class="book-sheet book-front book-title-page"><div class="book-kicker">${esc(B.subtitle)}</div>`
+    const front = `<section class="book-sheet book-front book-title-page" id="book-title-page"><div class="book-kicker">${esc(B.subtitle)}</div>`
         + `<h1>${esc(title)}</h1>${period ? `<div class="book-title-sub">${esc(period)}</div>` : ''}<hr class="book-rule">`
         + `<div class="book-title-meta">${esc(meta.join(' · '))}${env.dateLabel ? `<br>${esc(env.dateLabel)}` : ''}</div></section>`;
     const toc = parts.toc ? `<nav class="book-sheet book-front book-toc" id="book-toc">${tocHtml(ctx, parts)}</nav>` : '';
 
-    const toolbar = `<div class="book-toolbar">`
-        + `<button type="button" onclick="window.print()">${esc(B.toolbarPrint)}</button>`
-        + (env.forSave ? '' : `<button type="button" onclick="window.close(); setTimeout(function(){ if (!window.closed) history.back(); }, 200)">✕ ${esc(B.toolbarClose)}</button>`)
-        + `</div>`;
+    // ── The window: the toolbar, the side contents (§6.1, §6.2) ──
+    const pages = estimateBook(data, opts, { index, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) }).pages;
+    const toolbar = bookToolbarHtml(lang, title, pages, !!env.forSave);
+    const side = bookSideHtml(lang, bookSideEntries(ctx, parts));
     const fonts = (env.fontCss ?? '').replace(/<\//g, '<\\/');
     // The embedded font travels with a saved book: its notice goes with it.
     const fontNotice = fonts ? `<!-- ${FONT_NOTICE} -->\n` : '';
@@ -282,14 +311,19 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
 <title>${esc(title)}</title>
 ${fontNotice}<style>${fonts}
 ${BOOK_CSS}
+${BOOK_WINDOW_CSS}
 ${rodCss}</style></head><body>
 ${toolbar}
+<div class="book-layout">
+${side}
 <main class="book">
 ${front}
 ${toc}
 ${body.join('\n')}
 ${back.join('\n')}
 </main>
+</div>
 ${compareDialogs.join('\n')}
+<script>${BOOK_WINDOW_SCRIPT}</script>
 </body></html>`;
 }

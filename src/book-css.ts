@@ -165,10 +165,7 @@ ${PERSON_PAGE_CHART_CSS}
 .book-sources-page { page: sources; }
 .book-index-page { page: index; }
 
-/* The window's own controls: on screen only */
-.book-toolbar { position: fixed; top: 10px; right: 10px; z-index: 10; display: flex; gap: 8px; font-family: ${SANS}; }
-.book-toolbar button { font: 600 13px/1 ${SANS}; padding: 9px 14px; border-radius: 18px; border: 1px solid #cfc7b8; background: rgba(255,255,255,.94); color: #4a4436; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
-@media (hover: hover) { .book-toolbar button:hover { background: #fff; } }
+/* The window's own controls (the toolbar, the side contents: src/book-window.ts): on screen only */
 .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f6ecd3; color: #7f5500; font: 13px/1.45 ${SANS}; text-align: left; }
 .book-nv > span { flex: 1; min-width: 200px; }
 .book-nv-compare, .bc-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid #e2cf9f; background: #fffdf8; color: #2b2822; font: 500 13px ${SANS}; cursor: pointer; text-decoration: none; }
@@ -208,11 +205,8 @@ ${STORY_COMPARE_CSS}
     .book-clips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .book-index, .book-sources.is-long { column-count: 1; }
     .pp-row { grid-template-columns: 52px 18px minmax(0, 1fr); }
-    .book-toolbar { top: auto; bottom: 12px; right: 12px; }
-    .book-toolbar button { min-height: 44px; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .book-title-page { min-height: auto; padding: 24px 0; } }
-@media (pointer: coarse) { .book-toolbar button { min-height: 44px; padding: 12px 16px; } }
 
 @page { size: A4; margin: 20mm 22mm 22mm; @bottom-center { content: counter(page); font: 10pt 'Strom Serif', Georgia, serif; color: #5c5546; } }
 @page front { @bottom-center { content: none; } @top-left { content: none; } }

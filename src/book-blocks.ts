@@ -201,6 +201,16 @@ function couple(ctx: BookCtx, u: Partnership): PersonId[] {
     return ids.sort((a, b) => (ctx.tree.persons[a].gender === 'female' ? 1 : 0) - (ctx.tree.persons[b].gender === 'female' ? 1 : 0));
 }
 
+/** "{first name} and {first name}" from the protected tree, escaped (the book window's side contents). */
+export function pairFirstNames(ctx: BookCtx, u: Partnership): string {
+    const ids = couple(ctx, u);
+    const first = (id: PersonId): string => {
+        const p = ctx.tree.persons[id];
+        return esc(p?.firstName?.trim() || p?.lastName?.trim() || '?');
+    };
+    return ids.length ? ids.map(first).join(` ${esc(T(ctx).book.and)} `) : '?';
+}
+
 /** "{husband} and {wife}" from the protected tree, escaped. */
 export function pairName(ctx: BookCtx, u: Partnership): string {
     const ids = couple(ctx, u);
@@ -299,7 +309,7 @@ function diedYoung(p: Person): boolean {
 }
 
 /** The lineage's line tree, variant B (§5.3): one row per member, indented by generation. */
-export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boolean } = {}): string {
+export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boolean; id?: string } = {}): string {
     const B = T(ctx).book;
     const index = ctx.model.index;
     const rows: string[] = [];
@@ -353,7 +363,7 @@ export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boo
     }
     flushYoung();
     if (!rows.length) return '';
-    return `<section class="book-rod-lineage${opts.breakBefore ? ' book-break' : ''}"><h2>${esc(B.parts.tree)}</h2>${rows.join('')}</section>`;
+    return `<section class="book-rod-lineage${opts.breakBefore ? ' book-break' : ''}"${opts.id ? ` id="${esc(opts.id)}"` : ''}><h2>${esc(B.parts.tree)}</h2>${rows.join('')}</section>`;
 }
 
 // ─── A person (§5.5) ────────────────────────────────────────────────────────

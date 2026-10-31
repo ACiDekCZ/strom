@@ -170,6 +170,8 @@ export interface BookEstimate {
     pages: number;
     persons: number;
     chapters: number;
+    /** The generations the book spans (the deepest chapter's generation; 0 without chapters). */
+    generations: number;
     /** The outline beside the estimate (§4.7): "Rod Fíšek · kap. 1–19", then Other families, Sources, Index. */
     outline: string[];
 }
@@ -237,7 +239,8 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     if (parts.smallRods && model.smallRods.length) outline.push(B.parts.smallRods);
     if (parts.sources && cited.size) outline.push(B.parts.sources);
     if (parts.index) outline.push(B.parts.index);
-    return { pages: Math.max(1, Math.round(pages)), persons, chapters, outline };
+    const generations = model.chapters.reduce((m, ch) => Math.max(m, ch.gen), 0);
+    return { pages: Math.max(1, Math.round(pages)), persons, chapters, generations, outline };
 }
 
 /** The lineages a whole-tree book tells as chapters (for the dialog's sentence "{r} rods and {m} other families"). */

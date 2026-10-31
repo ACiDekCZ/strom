@@ -12,6 +12,7 @@ import { buildFamilyBook, tocHtml } from '../book.js';
 import { BOOK_PART_KEYS, BookOptions, bookPartAvailability, defaultBookOptions, effectiveBookParts, estimateBook } from '../book-options.js';
 import { buildBookModel } from '../book-model.js';
 import { cssString, rodPagesCss } from '../book-css.js';
+import { BOOK_WINDOW_SCRIPT } from '../book-window.js';
 import { printedUrl } from '../book-blocks.js';
 import { buildLineages, rodPlaceSpans, rods } from '../lineage.js';
 import { cleanWorkNote } from '../person-page.js';
@@ -113,12 +114,14 @@ describe('buildFamilyBook: the document', () => {
         expect(buildFamilyBook(getDemoTree(), { lang: 'en' }, ENV)).toBe(buildFamilyBook(getDemoTree(), { lang: 'en' }, ENV));
         expect(a.startsWith('<!DOCTYPE html>')).toBe(true);
         expect(a).toContain('sestaveno 31. 10. 2026');
-        expect(a).not.toContain('<script');
+        // The only script is the window's own (contents, the "⋯" menu, the current chapter): nothing from the data.
+        expect(a.split('<script').length - 1).toBe(1);
+        expect(a).toContain(`<script>${BOOK_WINDOW_SCRIPT}</script>`);
     });
 
     it('has a title page and contents as front matter, a part per lineage with its named page, the back matter', () => {
         const html = buildFamilyBook(ostruznik(), { lang: 'cs', privacy: 'full' }, { ...ENV, treeName: 'Rodina z Lhoty' });
-        expect(html).toContain('<section class="book-sheet book-front book-title-page">');
+        expect(html).toContain('<section class="book-sheet book-front book-title-page" id="book-title-page">');
         expect(html).toContain('<h1>Rodina z Lhoty</h1>');
         expect(html).toContain('<div class="book-title-sub">1850–1980</div>');
         expect(html).toContain('<nav class="book-sheet book-front book-toc" id="book-toc">');
@@ -165,12 +168,33 @@ describe('buildFamilyBook: the document', () => {
         const screen = buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, env);
         expect(screen).toContain('<p class="book-story-approve"><a href="strom-research://story?tree=x&amp;person=P0001&amp;do=final">Schválit ve výzkumu<span class="book-open-mark"');
         expect(screen).toMatch(/@media print \{[\s\S]*?\.book-story-approve[^{]*\{ display: none !important; \}/);
-        expect(screen).toContain('window.close()');
+        for (const act of ['options', 'save', 'share']) expect(screen).toContain(`data-book-act="${act}"`);
+        expect(screen).toMatch(/<button[^>]*data-book-ui="close"/);
         const saved = buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, { ...env, forSave: true });
         expect(saved).not.toContain('book-story-approve"><a');
-        expect(saved).not.toContain('window.close()');
-        expect(saved).toContain('window.print()');
+        expect(saved).not.toContain('data-book-act="');
+        expect(saved).not.toMatch(/<button[^>]*data-book-ui="close"/);
+        expect(saved).not.toMatch(/<button[^>]*data-book-ui="more"/);
+        expect(saved).toContain('data-book-ui="print"');
+        expect(saved).toContain('class="book-side"');
         expect(saved).toContain('Vojtěch byl kovář.');
+    });
+
+    it('the window has a toolbar with the title and the estimate and a side contents linking every anchor (§6.1)', () => {
+        const html = buildFamilyBook(ostruznik(), { lang: 'cs', privacy: 'full' }, { ...ENV, treeName: 'Rodina z Lhoty' });
+        const pages = estimateBook(ostruznik(), { ...defaultBookOptions('cs'), privacy: 'full' }).pages;
+        expect(html).toContain(`<span class="book-bar-name">Rodina z Lhoty</span><span class="book-bar-pages"> · asi ${pages} `);
+        const start = html.indexOf('<nav class="book-side"');
+        const side = html.slice(start, html.indexOf('</nav>', start));
+        const hrefs = [...side.matchAll(/href="#([^"]+)"/g)].map(m => m[1]);
+        expect(hrefs.slice(0, 5)).toEqual(['book-title-page', 'book-toc', 'rod-1', 'rod-1-tree', 'kap-1']);
+        expect(hrefs).toContain('book-index');
+        // Every link of the side contents has its anchor in the book.
+        for (const id of hrefs) expect(html).toContain(`id="${id}"`);
+        expect(side).toContain('>1 · Bohumil a Ludmila</a>');
+        expect(side).toContain('>Rod Ostružník</a>');
+        // Print hides the window's controls.
+        expect(html).toContain('.book-toolbar, .book-side, .book-more { display: none !important; }');
     });
 });
 
