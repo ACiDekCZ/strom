@@ -135,7 +135,11 @@ export interface LineageIndex {
 // ---------------------------------------------------------------------------
 // Graph helpers (shared with the tree split)
 
-/** Partners of a person across all their unions (missing people included). */
+/**
+ * Partners of a person across all their unions (ids missing from the data
+ * included; an empty partner slot — an import's one-parent union with a null
+ * id — is not a partner).
+ */
 export function partnersOf(data: StromData, id: PersonId): PersonId[] {
     const p = data.persons[id];
     if (!p) return [];
@@ -143,7 +147,8 @@ export function partnersOf(data: StromData, id: PersonId): PersonId[] {
     for (const uid of p.partnerships) {
         const u = data.partnerships[uid];
         if (!u) continue;
-        out.push(u.person1Id === id ? u.person2Id : u.person1Id);
+        const other = u.person1Id === id ? u.person2Id : u.person1Id;
+        if (other) out.push(other);
     }
     return out;
 }
@@ -240,7 +245,7 @@ export function walkSurnameLine(
         for (const sib of sortByBirth(data, siblingsOf(data, id).filter(x => !!data.persons[x]))) {
             if (inLine(sib)) push(sib);
         }
-        for (const sp of sortByBirth(data, partnersOf(data, id))) {
+        for (const sp of sortByBirth(data, partnersOf(data, id).filter(x => !!data.persons[x]))) {
             if (!foundsOwnSurnameLine(data, sp)) push(sp);
         }
     }
