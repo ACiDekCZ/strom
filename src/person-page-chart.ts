@@ -21,6 +21,8 @@ import { isLivingPerson } from './privacy.js';
 import { residencePoints, type LifelineHistoryItem } from './history.js';
 import { placeKey } from './places.js';
 import { lifeEventLabel } from './person-sources.js';
+import { historyKindSvg } from './history-symbols.js';
+import type { HistoryKind } from './history.js';
 
 // ─── Anchors ────────────────────────────────────────────────────────────────
 
@@ -644,8 +646,8 @@ const HIST_CLUSTER_PX = 16;
 const HIST_CLUSTER_PX_NARROW = 14;
 /** A history label's width estimate (10.5 px text). */
 const HIST_CH_PX = 5.6;
-/** The two label lines under the glyphs (px from the row's top). */
-const HIST_LANES = [28, 42];
+/** The two label lines under the glyphs (px from the row's top; under the small origin mark, round 3 §10). */
+const HIST_LANES = [32, 46];
 
 /** Half the touch target of a history glyph (round 4 §2.4: 44 × 44 px on touch). */
 const HIST_TOUCH_HALF = 22;
@@ -676,13 +678,20 @@ export function barsOver(bars: readonly (readonly [number, number])[], left: num
 export interface ChartHistGlyph {
     /** px of the first event. */
     x: number;
+    /** The first event's origin: the colour of its symbol. */
     scope: ChartHistory['scope'];
+    /** The first event's kind: the symbol (round 3 §10, G3). */
+    kind: string;
+    /** The most specific origin in the glyph (■ > ▲ > ◇): the small mark under the symbol. */
+    origin: ChartHistory['scope'];
     anchor: string;
     /** Events in it (a badge with the count from 2 years on). */
     count: number;
     cluster: boolean;
     label: string;
     title: string;
+    /** Accessible name: "1866: war, epidemic". */
+    aria: string;
 }
 
 /**
@@ -712,11 +721,14 @@ export function historyGlyphs(items: readonly ChartHistory[], S: CS, xpx: (y: nu
     return groups.map(g => {
         const count = g.reduce((n, y) => n + y.list.length, 0);
         const cluster = g.length > 1;
-        const label = cluster ? S.personPage.chart.hist.cluster(count)
-            : [...new Set(g[0].list.map(h => kinds[h.kind] ?? h.kind))].join(', ');
+        const names = [...new Set(g.flatMap(y => y.list.map(h => kinds[h.kind] ?? h.kind)))];
+        const label = cluster ? S.personPage.chart.hist.cluster(count) : names.join(', ');
+        const last = g[g.length - 1].year;
+        const origin = g.flatMap(y => y.list).reduce((o, h) => (scopeRank[h.scope] < scopeRank[o] ? h.scope : o), g[0].lead.scope);
         return {
-            x: g[0].x, scope: g[0].lead.scope, anchor: g[0].lead.anchor, count, cluster, label,
+            x: g[0].x, scope: g[0].lead.scope, kind: g[0].lead.kind, origin, anchor: g[0].lead.anchor, count, cluster, label,
             title: g.flatMap(y => y.list.map(h => `${y.year} ${h.text}`)).join('; '),
+            aria: S.personPage.chart.hist.aria(last === g[0].year ? String(last) : `${g[0].year}–${last}`, names.join(', ')),
         };
     });
 }
@@ -759,13 +771,15 @@ function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => n
     const touch = historyTouchHalves(glyphs.map(g => g.x));
     const barSpans = bars.map(h => [xpx(h.from), xpx(h.to! + 1)] as const);
     glyphs.forEach((g, i) => {
-        const glyph = g.scope === 'local' ? '■' : g.scope === 'place' ? '▲' : '◇';
+        // Round 3 §10 (G3): the kind's symbol in the origin's colour, the origin (◇ ▲ ■) small under it.
+        const glyph = `<span class="pp-ch-hg is-${g.scope}" aria-hidden="true">${historyKindSvg(g.kind as HistoryKind, narrow ? 12 : 13)}</span>`
+            + `<span class="pp-ch-ho is-${g.origin}" aria-hidden="true"></span>`;
         const t = touch[i];
         const tv = `${t.l !== undefined ? `;--tl:${t.l}px` : ''}${t.r !== undefined ? `;--tr:${t.r}px` : ''}`;
         // Round 5 (K5-38): the target reaches up into the period bars' line only where no bar lies over it.
         const under = barsOver(barSpans, g.x - (t.l ?? HIST_TOUCH_HALF), g.x + (t.r ?? HIST_TOUCH_HALF));
-        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}${under ? ' pp-ch-hm--ub' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
-            + `<span class="pp-ch-hg">${glyph}</span>${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
+        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}${under ? ' pp-ch-hm--ub' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}" aria-label="${esc(g.aria)}">`
+            + `${glyph}${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
     });
     if (!narrow) {
         historyLabelLanes(glyphs, W).forEach((l, i) => {

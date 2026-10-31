@@ -22,6 +22,7 @@ export const PERSON_PAGE_VIZ_PRINT_TOKENS = [
     '--map-water: #bdbdbd', '--map-ring: #c4c4c4', '--map-anchor: #6d6d6d', '--map-region: #e3e3e3',
     '--chart-young: #e0e0e0', '--chart-life: #d0d0d0', '--chart-married: #b8b8b8', '--chart-band1: #f0f0f0', '--chart-band2: #d9d9d9',
     '--primary: #444444', '--accent: #111111', '--hist-mark: #555555', '--hist-place: #333333', '--hist-local: #777777',
+    '--hist-text: #333333', '--hist-place-text: #222222', '--hist-local-text: #555555',
 ].join('; ') + ';';
 
 const LANDSCAPE = '(max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
@@ -197,16 +198,25 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-ages span, .pp-ch-axis span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
 .pp-ch-ages .pp-ch-age--e { left: auto; right: 0; transform: none; }
 /* History (round 3 §2.4): the bars of periods on a line of their own at the top, the glyphs under them
-   (near ones clustered with a count), their labels in two lines under the glyphs (wide sets only). */
-.pp-ch-hist { height: 54px; }
+   (near ones clustered with a count), their labels in two lines under the glyphs (wide sets only).
+   A glyph (round 3 §10, G3): the kind's symbol (13 px, 12 on a phone) in the origin's colour, the
+   origin (◇ ▲ ■, 6 px) under it; the labels 4 px lower than before, under that mark. */
+.pp-ch-hist { height: 58px; }
 .pp-ch-hist--bl { margin-top: 14px; }
-.pp-ch-hist--n { height: 26px; }
+.pp-ch-hist--n { height: 32px; }
 .pp-ch-hbar { position: absolute; top: 0; height: 6px; border-radius: 3px; background: var(--hist-mark); opacity: .55; }
 .pp-ch-hbl { position: absolute; left: 0; bottom: 8px; font-size: 10px; line-height: 12px; white-space: nowrap; color: var(--text-faint); }
-.pp-ch-hm { position: absolute; top: 12px; width: 0; height: 14px; }
-.pp-ch-hg { position: absolute; left: 0; top: 0; transform: translateX(-50%); font-size: 12px; line-height: 14px; color: var(--hist-mark); }
-.pp-ch-hm--place .pp-ch-hg { color: var(--hist-place); }
-.pp-ch-hm--local .pp-ch-hg { color: var(--hist-local); }
+.pp-ch-hm { position: absolute; top: 12px; width: 0; height: 20px; }
+.pp-ch-hg { position: absolute; left: 0; top: 0; transform: translateX(-50%); line-height: 0; color: var(--hist-text); }
+.pp-ch-hg svg { display: block; }
+.pp-ch-hg.is-place { color: var(--hist-place-text); }
+.pp-ch-hg.is-local { color: var(--hist-local-text); }
+.pp-ch-ho { position: absolute; left: -3px; top: 14px; width: 6px; height: 6px; display: flex; align-items: center; justify-content: center; }
+.pp-ch-hist--n .pp-ch-ho { top: 13px; }
+.pp-ch-ho::before { content: ''; box-sizing: content-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pp-ch-ho.is-region::before { width: 4px; height: 4px; border: 1.2px solid var(--hist-mark); transform: rotate(45deg); }
+.pp-ch-ho.is-place::before { width: 0; height: 0; border-left: 3.5px solid transparent; border-right: 3.5px solid transparent; border-bottom: 6px solid var(--hist-place); }
+.pp-ch-ho.is-local::before { width: 5px; height: 5px; background: var(--hist-local); }
 .pp-ch-hn { position: absolute; left: 6px; top: 0; box-sizing: border-box; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--hist-mark); color: var(--pp-bg, #fff); font-size: 9.5px; font-weight: 600; line-height: 13px; text-align: center; }
 .pp-ch-hl { position: absolute; font-size: 10.5px; line-height: 12px; white-space: nowrap; color: var(--text-faint); }
 .pp-ch-hl--c { font-weight: 600; color: var(--text-light); }
@@ -275,7 +285,7 @@ export const PERSON_PAGE_CHART_CSS = `
   /* The shorter rows keep their labels apart: the ages above the periods, a mark above its year. */
   .pp-ch-ages span { top: 0; }
   .pp-ch-gl { line-height: 10px; }
-  .pp-ch-hist--n { height: 22px; }
+  .pp-ch-hist--n { height: 28px; }
   .pp-ch-hist--n .pp-ch-hm { top: 9px; }
   .pp-ch-plabels { height: 15px; }
   .pp-ch-pl { bottom: 1px; line-height: 14px; }

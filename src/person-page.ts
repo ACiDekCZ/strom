@@ -16,10 +16,11 @@ import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEv
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
-    computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints,
+    computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints, HISTORY_KINDS,
 } from './history.js';
 import { placeKey } from './places.js';
-import { researchOpenSvg } from './history-symbols.js';
+import { researchOpenSvg, historyKindSvg } from './history-symbols.js';
+import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
 import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
@@ -1740,12 +1741,9 @@ function rowText(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string {
     }
 }
 
+/** A row's mark in the circle on the line: the person card's own glyph (one definition), 13 px. */
 function markOf(pt: LifelinePoint): string {
-    if (pt.kind === 'birth' || pt.kind === 'child') return '*';
-    if (pt.kind === 'marriage') return '⚭';
-    if (pt.kind === 'death') return '†';
-    if (pt.kind === 'event' && pt.eventType === 'emigration') return '→';
-    return '·';
+    return lifelineGlyphOrDot(pt, 13);
 }
 
 /** The first excerpt of the first source cited at a birth / marriage / death row. */
@@ -1805,9 +1803,9 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     const { S } = c;
     const ev = item.ev;
     const scope = histScope(ev);
-    const mark = scope === 'local' ? '■' : scope === 'place' ? '▲' : '◇';
+    const kindName = S.history.kinds[ev.kind] ?? ev.kind;
     const meta: string[] = [];
-    meta.push(`<span class="pp-hist-kind">${esc(S.history.kinds[ev.kind] ?? ev.kind)}</span>`);
+    meta.push(`<span class="pp-hist-kind">${esc(kindName)}</span>`);
     // "age 24–39" is one piece: the footer wraps it whole to the next line (round 3 §2.8).
     if (item.age) meta.push(`<span class="pp-nw">${esc(item.age)}</span>`);
     if (item.regionLabel) meta.push(esc(item.regionLabel));
@@ -1824,7 +1822,9 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     }
     const langAttr = item.textLang && item.textLang !== c.page.lang ? ` lang="${esc(item.textLang)}"` : '';
     return `<div class="pp-row pp-row--hist"${anchorAttr(c, chartHistAnchorId(ev.id))}>${yearCell(item.yearLabel ?? String(item.year))}`
-        + `<span class="pp-m"><span class="pp-mk pp-hm--${scope}" aria-hidden="true">${mark}</span></span>`
+        // The kind's symbol in the circle (the origin's colour), the origin (◇ ▲ ■) small at its corner (round 3 §10, 10c).
+        + `<span class="pp-m"><span class="pp-mk pp-mk-h is-${scope}" title="${esc(kindName)}" aria-hidden="true">`
+        + `${historyKindSvg(ev.kind, 14)}<span class="pp-mk-o" aria-hidden="true"></span></span></span>`
         + `<div class="pp-t"><div class="pp-hist"><p${langAttr}>${esc(stripResearchIds(item.text).text)}</p>`
         + `<div class="pp-hist-meta">${meta.join('<span aria-hidden="true">·</span>')}</div></div></div></div>`;
 }
@@ -1879,7 +1879,16 @@ function timelineHtml(c: Ctx): string {
     const scopes = new Set(segs.flatMap(s => s.rows.flatMap(r => r.kind === 'hist' ? [histScope(r.item.ev)] : [])));
     const legendItems = ([['region', '◇'], ['place', '▲'], ['local', '■']] as const).filter(([k]) => scopes.has(k))
         .map(([k, mark]) => `<span><span class="pp-hm pp-hm--${k}" aria-hidden="true">${mark}</span>${esc(P.legend[k])}</span>`);
-    const legend = legendItems.length ? `<p class="pp-legend">${legendItems.join('')}</p>` : '';
+    // Under it the kinds the page shows (text rows and the chart's history row), in HISTORY_KINDS order:
+    // in the file and in print the only key to the symbols (round 3 §10).
+    const kindsShown = new Set<string>([
+        ...segs.flatMap(s => s.rows.flatMap(r => r.kind === 'hist' ? [r.item.ev.kind as string] : [])),
+        ...(chart?.history ?? []).map(h => h.kind),
+    ]);
+    const kindItems = HISTORY_KINDS.filter(k => kindsShown.has(k))
+        .map(k => `<span><span class="pp-lk" aria-hidden="true">${historyKindSvg(k, 12)}</span>${esc(c.S.history.kinds[k] ?? k)}</span>`);
+    const legend = (legendItems.length ? `<p class="pp-legend">${legendItems.join('')}</p>` : '')
+        + (kindItems.length ? `<p class="pp-legend-kinds">${kindItems.join('')}</p>` : '');
     // Slot 7 (§2.1): the life chart above the text timeline.
     const chartHtml = chart
         ? `<div class="pp-chart-host pp-wide">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`

@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, historyTouchHalves, barsOver, residenceLabel } from '../person-page-chart.js';
 import { PERSON_PAGE_CHART_CSS } from '../person-page-viz-css.js';
+import { historyKindSvg } from '../history-symbols.js';
 import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
 import { getStringsForLang } from '../strings.js';
@@ -434,7 +435,12 @@ describe('lifeChartHtml', () => {
         expect(html).toContain('pp-ch-hist');
         expect(html).toContain('válka, epidemie');
         expect(html).toContain('pp-ch-hm--place'); // the place's glyph leads in 1866 (▲ before ◇)
-        expect(html).toContain('>■<');
+        // Round 3 §10 (G3): the kind's symbol (an SVG) in the origin's colour, the origin small under it; no ◇ ▲ ■ text.
+        expect(html).toContain(`<span class="pp-ch-hg is-place" aria-hidden="true">${historyKindSvg('epidemic', 13)}</span><span class="pp-ch-ho is-place" aria-hidden="true"></span>`);
+        expect(html).toContain(`<span class="pp-ch-hg is-local" aria-hidden="true">${historyKindSvg('census', 13)}</span><span class="pp-ch-ho is-local" aria-hidden="true"></span>`);
+        expect(html).toContain(historyKindSvg('census', 12)); // the phone set
+        expect(html).toContain('aria-label="1866: válka, epidemie"');
+        expect(html).not.toMatch(/>[◇▲■]</);
         expect(html).toContain('pp-ch-hbar');
         expect(html).toContain(`href="#${chartHistAnchorId('h3')}"`);
         expect(lifeChartHtml(input(), { lang: 'cs', mode: 'file' })).not.toContain('pp-ch-hist');
@@ -451,6 +457,9 @@ describe('lifeChartHtml', () => {
         const wide = historyGlyphs(items, S, xpx, 16);
         expect(wide.map(g => g.count)).toEqual([3, 2]);
         expect(wide[0]).toMatchObject({ cluster: true, label: '3 události', anchor: 'a-a', x: xpx(1860.5) });
+        // The cluster: the first event's symbol and colour, the most specific origin under it (■ > ▲ > ◇).
+        expect(wide[0]).toMatchObject({ kind: 'war', scope: 'region', origin: 'local', aria: '1860–1863: válka, sčítání, epidemie' });
+        expect(wide[1]).toMatchObject({ kind: 'war', scope: 'region', origin: 'region' });
         expect(wide[0].title).toBe('1860 Text a; 1862 Text b; 1863 Text c');
         // On a phone 15 px is no longer "near".
         const narrow = historyGlyphs(items, S, xpx, 14);
