@@ -134,6 +134,7 @@ import { historyDetailMethods } from './history-detail-ui.js';
 import { historyMapMethods } from './history-map-ui.js';
 import { historyPlaceMethods } from './history-place-ui.js';
 import { historyCardMethods } from './history-card-ui.js';
+import { timelineHistoryMethods } from './timeline-history-ui.js';
 import { researchOthersMethods } from './research-others-ui.js';
 import { researchFollowMethods } from './research-follow-ui.js';
 import { originalsMethods } from './originals-ui.js';
@@ -679,6 +680,10 @@ Object.assign(UIClass.prototype, historyPlaceMethods);
 type HistoryCardMethods = typeof historyCardMethods;
 export interface UIClass extends HistoryCardMethods {}
 Object.assign(UIClass.prototype, historyCardMethods);
+
+type TimelineHistoryMethods = typeof timelineHistoryMethods;
+export interface UIClass extends TimelineHistoryMethods {}
+Object.assign(UIClass.prototype, timelineHistoryMethods);
 
 type ReadHistoryMethods = typeof readHistoryMethods;
 export interface UIClass extends ReadHistoryMethods {}

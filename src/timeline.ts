@@ -12,6 +12,7 @@ import { yearOf, parseFlexDate, yearFraction } from './dates.js';
 import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
 import { shownNameOrEmpty, shownNameFull } from './person-name.js';
+import type { HistoryKind, HistoryScope } from './history.js';
 
 export interface TimelineEvent {
     year: number;
@@ -35,10 +36,49 @@ export interface TimelineRow {
 }
 
 export interface TimelineAxis { minYear: number; maxYear: number; }
+
+/**
+ * One history event of the focused person on the timeline's history row
+ * (DEV symboly-dejin §9, variant 9a): the same events the person card shows
+ * (computePersonHistory: hidings, deletions and the origin switches applied).
+ */
+export interface TimelineHistoryItem {
+    /** The event's id (the card opens on its row). */
+    id: string;
+    /** First year (a period's start). */
+    year: number;
+    /** A period's last year, when it ends after `year`. */
+    year2?: number;
+    kind: HistoryKind;
+    /** Origin: the symbol's colour. */
+    scope: HistoryScope;
+    /** The event's text in the UI language (the tooltip, the phone's sheet). */
+    text: string;
+}
+
+/** The history row of the focused person: drawn only with at least one event and a row of that person. */
+export interface TimelineHistory {
+    personId: string;
+    /** The person's shown name (the row's label). */
+    name: string;
+    /** The person's life span on the axis (the row's tint). */
+    startYear: number;
+    endYear: number;
+    /** Sorted by year (a period by its start); same-year order as given. */
+    events: TimelineHistoryItem[];
+}
+
 export interface TimelineModel {
     axis: TimelineAxis;
     rows: TimelineRow[];
     omittedCount: number;
+    /** The focused person's history row; absent: no row at all (no research, the layer off, no events). */
+    history?: TimelineHistory;
+}
+
+export interface TimelineModelOptions {
+    /** The focused person's history events (only that person's: nothing is computed for the others). */
+    history?: { personId: string; events: readonly TimelineHistoryItem[] };
 }
 
 /** Round down / up to the enclosing decade so the axis has tidy gridlines. */
@@ -50,7 +90,7 @@ function ceilDecade(year: number): number { return Math.ceil(year / 10) * 10; }
  * ordered by birth year, then name, then id for determinism.
  */
 export function computeTimelineModel(
-    data: StromData, personIds: string[], todayYear: number
+    data: StromData, personIds: string[], todayYear: number, opts: TimelineModelOptions = {},
 ): TimelineModel {
     const rows: TimelineRow[] = [];
     let omittedCount = 0;
@@ -121,11 +161,62 @@ export function computeTimelineModel(
     }
     if (!isFinite(minYear)) { minYear = todayYear; maxYear = todayYear; }
 
+    // The history row: the focused person's events, only while that person has a row.
+    const h = opts.history;
+    const focusRow = h && h.events.length > 0 ? rows.find(r => r.personId === h.personId) : undefined;
+    const history: TimelineHistory | undefined = h && focusRow ? {
+        personId: focusRow.personId,
+        name: focusRow.name,
+        startYear: focusRow.startYear,
+        endYear: focusRow.endYear,
+        events: h.events.map((e, i) => ({ e, i })).sort((a, b) => a.e.year - b.e.year || a.i - b.i).map(x => x.e),
+    } : undefined;
+
     return {
         axis: { minYear: floorDecade(minYear), maxYear: ceilDecade(maxYear) },
         rows,
         omittedCount,
+        ...(history ? { history } : {}),
     };
+}
+
+/** A cluster of history events on the timeline's history row. */
+export interface TimelineHistoryCluster {
+    /** Centre: the mean x of the members. */
+    x: number;
+    /** Members in year order; the first one's symbol stands for the cluster. */
+    items: TimelineHistoryItem[];
+}
+
+/**
+ * A cluster's years: "1866", or the first year to the last (a period's end
+ * counts) — "1886–1892".
+ */
+export function timelineHistoryYears(items: readonly TimelineHistoryItem[]): string {
+    if (!items.length) return '';
+    const from = items[0].year;
+    const to = Math.max(...items.map(e => e.year2 ?? e.year));
+    return to > from ? `${from}–${to}` : String(from);
+}
+
+/**
+ * Cluster the history row's events by pixels, not years (§9): in year order,
+ * an event whose x is closer than `minGap` to the FIRST event of the current
+ * cluster joins it; otherwise it starts a new one. The cluster sits at the
+ * mean x of its members. 16 px on a computer, 22 px on a phone (the count
+ * badges must not overlap).
+ */
+export function clusterTimelineHistory(
+    events: readonly TimelineHistoryItem[], xOf: (year: number) => number, minGap: number,
+): TimelineHistoryCluster[] {
+    const out: { x0: number; xs: number[]; items: TimelineHistoryItem[] }[] = [];
+    for (const e of events) {
+        const x = xOf(e.year);
+        const last = out[out.length - 1];
+        if (last && x - last.x0 < minGap) { last.items.push(e); last.xs.push(x); }
+        else out.push({ x0: x, xs: [x], items: [e] });
+    }
+    return out.map(c => ({ x: c.xs.reduce((a, b) => a + b, 0) / c.xs.length, items: c.items }));
 }
 
 // ==================== PERSON LIFELINE (R2) ====================

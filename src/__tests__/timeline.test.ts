@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeTimelineModel, yearToFraction, axisTicks, axisLabelStep } from '../timeline.js';
-import { buildTimelineSvg } from '../timeline-chart.js';
+import { computeTimelineModel, yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears, TimelineHistoryItem } from '../timeline.js';
+import { buildTimelineSvg, historyRowHeight, historyClusterGap } from '../timeline-chart.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender, LifeEvent } from '../types.js';
 
 interface POpts {
@@ -379,5 +379,115 @@ describe('axis labels fit the width', () => {
         expect(labels.length).toBeGreaterThan(2);
         expect(labels.every(l => l.year % 50 === 0 || l.year % 100 === 0)).toBe(true);
         for (let i = 1; i < labels.length; i++) expect(labels[i].x - labels[i - 1].x).toBeGreaterThanOrEqual(40);
+    });
+});
+
+// ==================== HISTORY ROW (DEV symboly-dejin §9) ====================
+
+describe('timeline history row', () => {
+    const ev = (id: string, year: number, o: Partial<TimelineHistoryItem> = {}): TimelineHistoryItem =>
+        ({ id, year, kind: 'war', scope: 'region', text: `Event ${id}.`, ...o });
+    const fam = () => data([
+        person('jan', 'Jan', 'male', { birthDate: '1860', deathDate: '1910' }),
+        person('anna', 'Anna', 'female', { birthDate: '1862', deathDate: '1930' }),
+        person('nob', 'Nobirth', 'male'),
+    ]);
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const svgOf = (model: ReturnType<typeof computeTimelineModel>, narrow = false) =>
+        buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen', narrow });
+
+    it("carries only the focused person's events, sorted by year, with that person's life span", () => {
+        const d = fam();
+        const m = computeTimelineModel(d, ids(d), TODAY_YEAR, {
+            history: { personId: 'jan', events: [ev('b', 1880), ev('a', 1866), ev('c', 1866, { kind: 'epidemic' })] },
+        });
+        expect(m.history?.personId).toBe('jan');
+        expect(m.history?.name).toBe('Jan X');
+        expect([m.history?.startYear, m.history?.endYear]).toEqual([1860, 1910]);
+        // By year; the same year keeps the given order (the card's: region before local).
+        expect(m.history?.events.map(e => e.id)).toEqual(['a', 'c', 'b']);
+    });
+
+    it('is absent without events, without the option, or for a person with no row', () => {
+        const d = fam();
+        expect(computeTimelineModel(d, ids(d), TODAY_YEAR).history).toBeUndefined();
+        expect(computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { personId: 'jan', events: [] } }).history).toBeUndefined();
+        expect(computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { personId: 'nob', events: [ev('a', 1866)] } }).history).toBeUndefined();
+        expect(computeTimelineModel(d, ['anna'], TODAY_YEAR, { history: { personId: 'jan', events: [ev('a', 1866)] } }).history).toBeUndefined();
+    });
+
+    it("clusters by pixels: closer than the gap to the cluster's FIRST event (16 px; a phone 22 px)", () => {
+        expect(historyClusterGap(false)).toBe(16);
+        expect(historyClusterGap(true)).toBe(22);
+        const xOf = (y: number) => (y - 1860) * 9; // 9 px a year (a computer, 140 years)
+        const evs = [ev('a', 1866), ev('b', 1866), ev('c', 1867), ev('d', 1869), ev('e', 1873)];
+        // 1866, 1866, 1867 (9 px) together; 1869 is 27 px from 1866: its own; 1873 its own.
+        const c16 = clusterTimelineHistory(evs, xOf, 16);
+        expect(c16.map(c => c.items.map(e => e.id))).toEqual([['a', 'b', 'c'], ['d'], ['e']]);
+        // The cluster sits at the mean x of its members.
+        expect(c16[0].x).toBeCloseTo((54 + 54 + 63) / 3);
+        // 2 px a year (a phone): 22 px ≈ 11 years.
+        const phone = (y: number) => (y - 1860) * 2;
+        const c22 = clusterTimelineHistory([ev('a', 1866), ev('b', 1873), ev('c', 1876), ev('d', 1877), ev('e', 1887)], phone, 22);
+        expect(c22.map(c => c.items.map(e => e.id))).toEqual([['a', 'b', 'c'], ['d', 'e']]);
+        // The same years with the computer's gap: more clusters.
+        expect(clusterTimelineHistory([ev('a', 1866), ev('b', 1873), ev('c', 1876)], phone, 16).length).toBe(2);
+    });
+
+    it("says a cluster's years, a period's end included", () => {
+        expect(timelineHistoryYears([ev('a', 1866), ev('b', 1866)])).toBe('1866');
+        expect(timelineHistoryYears([ev('a', 1886), ev('b', 1892)])).toBe('1886–1892');
+        expect(timelineHistoryYears([ev('a', 1897, { year2: 1901 })])).toBe('1897–1901');
+    });
+
+    it('draws no row and no extra height without history', () => {
+        const d = fam();
+        const plain = svgOf(computeTimelineModel(d, ids(d), TODAY_YEAR));
+        expect(plain).not.toContain('tl-hist');
+        expect(plain).not.toContain('tl-rows');
+        const withEmpty = svgOf(computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { personId: 'jan', events: [] } }));
+        expect(withEmpty).toBe(plain);
+    });
+
+    it('draws the row under the axis band: label, life tint, a symbol per cluster with its count, aria and tooltip', () => {
+        const d = fam();
+        const model = computeTimelineModel(d, ids(d), TODAY_YEAR, {
+            history: { personId: 'jan', events: [
+                ev('E1', 1866), ev('E6', 1866, { kind: 'epidemic', text: 'Cholera.' }),
+                ev('E9', 1897, { kind: 'economy', scope: 'place', year2: 1901 }),
+            ] },
+        });
+        const plain = svgOf(computeTimelineModel(d, ids(d), TODAY_YEAR));
+        const svg = svgOf(model);
+        const h = (s: string) => Number(/height="(\d+)"/.exec(s)![1]);
+        expect(h(svg) - h(plain)).toBe(historyRowHeight(false));
+        expect(svg).toContain('class="tl-hist-row" data-hist-person="jan"');
+        expect(svg).toContain('<b>History</b> · Jan X');
+        expect(svg).toContain('class="tl-hist-band"');
+        expect(svg).toContain('<g class="tl-rows" transform="translate(0 28)">');
+        // 1866: war + epidemic in one cluster, the first event's symbol, a badge "2".
+        expect(svg).toContain('aria-label="1866: war, epidemic"');
+        expect(svg).toContain('data-hist-ids="E1 E6"');
+        expect(svg).toMatch(/class="tl-hist-n-txt"[^>]*>2<\/text>/);
+        expect(svg).toContain('<title>1866 war – Event E1.\n1866 epidemic – Cholera.</title>');
+        // A period: its years in the name, a stripe in its origin's colour.
+        expect(svg).toContain('aria-label="1897–1901: economy"');
+        expect(svg).toContain('class="tl-hist is-place"');
+        expect(svg).toContain('class="tl-hist-period is-place"');
+        expect((svg.match(/class="hist-kind-svg"/g) ?? []).length).toBe(2);
+        expect((svg.match(/role="button" tabindex="0"/g) ?? []).length).toBe(2);
+        // 44 × 44 touch target.
+        expect(svg).toContain('width="44" height="44"');
+    });
+
+    it('a phone: 26 px, the label without the name; the poster never has the row', () => {
+        const d = fam();
+        const model = computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { personId: 'jan', events: [ev('E1', 1866)] } });
+        const phone = buildTimelineSvg(model, { esc, width: 390, rowH: 28, labelW: 96, mode: 'screen', narrow: true });
+        expect(phone).toContain('translate(0 26)');
+        expect(phone).toContain('<b>History</b></span>');
+        expect(phone).not.toContain(' · Jan X</span>');
+        const poster = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 190, mode: 'poster' });
+        expect(poster).not.toContain('tl-hist');
     });
 });
