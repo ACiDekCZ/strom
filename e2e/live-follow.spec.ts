@@ -408,4 +408,67 @@ test.describe('follow the agent in the tree', () => {
             await page.setViewportSize({ width: 390, height: 844 });
         }
     });
+
+    test('the fan view: the live card keeps below the fan toolbar, clear of its colours, steppers, the legend chip and the original person pill (1031)', async ({ page }) => {
+        await follow(page, { size: { width: 1440, height: 900 }, idle: 60_000, on: true, ged: LINE_GED });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        // Re-centred on the father (it pauses following): the original person pill comes, and the paused pill.
+        await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+        await expect(page.locator('#fan-origin-pill')).toBeVisible();
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        const clash = (): Promise<string[]> => page.evaluate(() => {
+            const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+            const card = document.getElementById('live-panel')!.getBoundingClientRect();
+            const out: string[] = [];
+            for (const el of document.querySelectorAll<HTMLElement>('#fan-toolbar > *, #fan-legend-chip, #fan-legend, #fan-origin-pill, #fan-zoom-controls, #live-follow-pill')) {
+                const b = el.getBoundingClientRect();
+                if (b.width > 0 && b.height > 0 && hit(card, b)) out.push(el.id || el.className);
+            }
+            const origin = document.getElementById('fan-origin-pill')!.getBoundingClientRect();
+            const paused = document.getElementById('live-follow-pill')!.getBoundingClientRect();
+            if (hit(origin, paused)) out.push('fan-origin-pill × live-follow-pill');
+            return out;
+        });
+        for (const [w, h] of [[1440, 900], [1024, 768], [800, 1000], [700, 1000], [844, 390]]) {
+            await page.setViewportSize({ width: w, height: h });
+            for (const shape of ['half', 'two']) {
+                await page.evaluate((s) => window.Strom.TreeRenderer.setFanShape(s as 'half'), shape);
+                await expect(page.locator('#fan-chart .fan-svg')).toHaveAttribute('data-fan-shape', shape);
+                await expect.poll(clash, `${w}×${h} ${shape}`).toEqual([]);
+            }
+        }
+    });
+
+    test.describe('by touch', () => {
+        test.use({ hasTouch: true });
+
+        test('a line\'s pill with "Back to overview" (44px buttons) and the paused pill stand clear of each other on a tablet and held sideways (1031)', async ({ page }) => {
+            await follow(page, { size: { width: 844, height: 390 }, idle: 60_000, on: true, ged: LINE_GED });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId()!, { section: 'rods' }));
+            const sec = page.locator('#tree-overview-modal .tov-sec[data-section="rods"]');
+            await expect(sec).toHaveAttribute('data-ready', 'true');
+            await sec.getByRole('button', { name: 'Show in tree' }).click();
+            const line = page.locator('#evidence-pill');
+            await expect(line.locator('.evidence-pill-back')).toBeVisible();
+            await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+            await expect(page.locator('#live-follow-pill')).toBeVisible();
+            const clash = (): Promise<boolean> => page.evaluate(() => {
+                const a = document.getElementById('evidence-pill')!.getBoundingClientRect();
+                const b = document.getElementById('live-follow-pill')!.getBoundingClientRect();
+                return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+            });
+            for (const [w, h] of [[844, 390], [800, 1000], [1024, 768]]) {
+                await page.setViewportSize({ width: w, height: h });
+                for (const mode of ['family', 'descendants', 'fan']) {
+                    await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                    await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                    await expect.poll(clash, `${w}×${h} ${mode}`).toBe(false);
+                }
+            }
+        });
+    });
 });

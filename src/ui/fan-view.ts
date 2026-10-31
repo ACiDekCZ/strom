@@ -140,6 +140,8 @@ export class FanViewController {
     private swap: Swap | null = null;
     private swapAnims: Animation[] = [];
     private pill: HTMLButtonElement | null = null;
+    /** Where the toolbar ended when last published ('' while it is not shown). */
+    private toolbarBottom = '';
     private pillTimer: ReturnType<typeof setTimeout> | null = null;
 
     // ---- menu (§5.4)
@@ -513,9 +515,9 @@ export class FanViewController {
     }
 
     /**
-     * Keep the pill clear of the tree's pills (evidence, live follow) and of
-     * the legend chip when they stand at the top of the stage: narrower when
-     * one is to its right, otherwise below it.
+     * Keep the pill clear of the tree's pills (evidence, live follow), of a
+     * followed research's card and of the legend chip when they stand at the
+     * top of the stage: narrower when one is to its right, otherwise below it.
      */
     private placePill(): void {
         const pill = this.pill, stage = this.stage();
@@ -524,9 +526,10 @@ export class FanViewController {
         pill.style.maxWidth = '';
         const s = stage.getBoundingClientRect();
         if (s.width === 0) return;
-        const obstacles = ['#evidence-pill', '#live-follow-pill', '#fan-legend-chip', '#fan-legend', '#fan-zoom-controls']
+        const obstacles = ['#evidence-pill', '#live-follow-pill', '#live-panel', '#fan-legend-chip', '#fan-legend', '#fan-zoom-controls']
             .map(sel => document.querySelector<HTMLElement>(sel))
-            .filter((el): el is HTMLElement => !!el && !el.hidden && el.offsetParent !== null)
+            // Not offsetParent: the tree's pills and the card are fixed, whose offsetParent is always null.
+            .filter((el): el is HTMLElement => !!el && !el.hidden && el.getClientRects().length > 0)
             .map(el => el.getBoundingClientRect())
             .filter(r => r.width > 0 && r.height > 0 && r.top < s.top + s.height / 2);
         const GAP = 8;
@@ -953,13 +956,26 @@ export class FanViewController {
             const bar = container.querySelector<HTMLElement>('#fan-toolbar');
             if (bar) new ResizeObserver(() => this.publishToolbarBottom()).observe(bar);
         }
+        // It also moves without changing size (the top bar gives way to the side bar held sideways).
+        window.addEventListener('resize', () => {
+            this.publishToolbarBottom();
+            requestAnimationFrame(() => this.publishToolbarBottom());
+        });
     }
 
     /** `--fan-toolbar-bottom` on the body: where the toolbar ends (the pills keep below it). */
     private publishToolbarBottom(): void {
         const bar = this.container?.querySelector<HTMLElement>('#fan-toolbar');
         const r = bar?.getBoundingClientRect();
-        if (r && r.height > 0) document.body.style.setProperty('--fan-toolbar-bottom', `${Math.round(r.bottom)}px`);
+        const value = r && r.height > 0 ? `${Math.round(r.bottom)}px` : '';
+        if (value === this.toolbarBottom) return;
+        this.toolbarBottom = value;
+        if (value) document.body.style.setProperty('--fan-toolbar-bottom', value);
+        // A followed research's card stands below the toolbar (and back at the top once the
+        // view is left) and the pills move with it: the card is fitted again, then the
+        // original person pill keeps clear of them.
+        window.dispatchEvent(new Event('strom:fan-toolbar-moved'));
+        if (this.pill && !this.pill.hidden) this.placePill();
     }
 
     /** Arrow keys inside a radio group move the choice (roving tabindex). */

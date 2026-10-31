@@ -997,7 +997,7 @@ function placeLivePanel(panel: HTMLElement): void {
         if (overlaps(r) && r.top < window.innerHeight / 3) top = Math.max(top, r.bottom + 8);
     }
     let bottom = window.innerHeight - 12;
-    for (const sel of ['.control-block', '.zoom-controls', '.bottom-bar', '#view-mode-banner.visible']) {
+    for (const sel of ['.control-block', '.zoom-controls', '.fan-zoom-controls', '.bottom-bar', '#view-mode-banner.visible']) {
         const node = document.querySelector<HTMLElement>(sel);
         if (!node) continue;
         const r = node.getBoundingClientRect();
@@ -1051,6 +1051,8 @@ export const researchUiMethods = uiModule({
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
             window.addEventListener('strom:tree-switched', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
+            // The Fan view's toolbar moved (the card stands below it).
+            window.addEventListener('strom:fan-toolbar-moved', () => this.placeLivePanel());
             this.initLaunchQueue(startSearch);
             this.initResearchVersionChannel(importUrl !== null || liveUrl !== null || adoptUrl !== null);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');

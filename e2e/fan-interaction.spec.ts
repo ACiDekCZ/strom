@@ -184,6 +184,22 @@ test('fan: the right click menu re-centres, opens the detail and the page; Esc p
     await expect(focusDisc(page)).toContainText('Rosa');
 });
 
+test('fan: a long name in the menu header wraps instead of being cut (1031)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await seedTree(page, { ...IMPLEX, rosa: { ...IMPLEX.rosa, firstName: 'Wilhelmina', lastName: 'Quellbach-Tarnholm' } }, 'Velden', 'oskar');
+    await page.evaluate(() => {
+        window.Strom.TreeRenderer.setFanGenerations(4);
+        window.Strom.UI.setDisplayViewMode('fan');
+    });
+    await expect(focusDisc(page)).toContainText('Oskar');
+    const p = await keyPoint(page, 'a3');
+    await page.mouse.click(p.x, p.y, { button: 'right' });
+    const name = page.locator('.fan-menu .fan-menu-name');
+    await expect(name).toHaveText('Wilhelmina Quellbach-Tarnholm');
+    expect(await name.evaluate(el => el.scrollWidth <= el.clientWidth && el.getBoundingClientRect().right <= el.closest('.fan-menu')!.getBoundingClientRect().right)).toBe(true);
+});
+
 test('fan: a repeated ancestor shows its first occurrence, outlined and panned into view (1031)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openImplexFan(page);

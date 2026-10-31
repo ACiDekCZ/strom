@@ -8581,7 +8581,8 @@
         /* The sector's context menu (a mouse): 224px, 36px rows, the key on the right. */
         .context-menu.fan-menu { width: 224px; min-width: 224px; padding: 4px 0; }
         .fan-menu .fan-menu-head { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px 8px; white-space: normal; max-width: none; }
-        .fan-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* A long name wraps (the header names the person: never cut). */
+        .fan-menu-name { overflow-wrap: anywhere; }
         .fan-menu-sub { font-family: var(--font-sans); font-size: 12px; font-weight: 400; color: var(--text-light); }
         .fan-menu .context-menu-item { min-height: 36px; padding: 0 14px; justify-content: space-between; box-sizing: border-box; outline: none; }
         .fan-menu .context-menu-item:focus-visible { background: var(--hover-bg); }
@@ -8841,7 +8842,8 @@
         @media (min-width: 641px) and (max-width: 1024px) and (pointer: coarse) {
             body:has(> .evidence-pill--back) .hide-shown-children-chip { top: 126px; }
             body:has(> .evidence-pill--back ~ .evidence-pill) .hide-shown-children-chip { top: 174px; }
-            .evidence-pill--back ~ .live-follow-pill { top: 126px; }
+            /* body: above the later 112px of the follow pill under the highlight pill. */
+            body .evidence-pill--back ~ .live-follow-pill { top: 126px; }
         }
         .focus-controls .btn-export-focus {
             padding: 8px 14px;
@@ -15282,6 +15284,20 @@
         }
         @media (min-width: 1025px) {
             body:has(> #live-panel:not([hidden])) .evidence-pill { max-width: calc(100vw - 664px); }
+        }
+        /* The Fan view's toolbar spans the width under the top bar: the live
+           card stands below it (the colours and steppers stay free). Held
+           sideways the tree's pills stand at the top, so the legend chip keeps
+           the bottom left instead of the card's corner. (placeLivePanel ends
+           the card above the fan's zoom buttons.) */
+        @media (min-width: 641px) {
+            body[data-view-mode="fan"] > #live-panel { top: calc(var(--fan-toolbar-bottom, 112px) + 8px); }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            body:has(> #live-panel:not([hidden])):has(#evidence-pill) .fan-legend-chip,
+            body:has(> #live-panel:not([hidden])):has(#live-follow-pill) .fan-legend-chip { top: auto; right: auto; left: 12px; bottom: 12px; }
+            body.focus-nav-shown:has(> #live-panel:not([hidden])):has(#evidence-pill) .fan-legend-chip,
+            body.focus-nav-shown:has(> #live-panel:not([hidden])):has(#live-follow-pill) .fan-legend-chip { bottom: 68px; }
         }
 
         /* ---- Tree overview (src/ui/tree-overview.ts) ----
