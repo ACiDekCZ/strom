@@ -232,7 +232,8 @@ export const evidenceUiMethods = uiModule({
             pill.id = 'evidence-pill';
             pill.className = 'evidence-pill';
             pill.setAttribute('role', 'region');
-            document.body.appendChild(pill);
+            // Before the live-follow pill: the stylesheet stacks that one after this one (`~`).
+            document.body.insertBefore(pill, document.getElementById('live-follow-pill'));
         }
         pill.setAttribute('aria-label', levelsMode ? s.evidenceMode : s.evidenceTitle);
         pill.replaceChildren();

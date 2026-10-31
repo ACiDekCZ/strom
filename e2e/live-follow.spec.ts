@@ -26,6 +26,14 @@ const GED = [
     '0 TRLR',
 ].join('\n');
 
+/**
+ * The same family under a long surname, one child more: a family line (over
+ * the small threshold) whose pill in the tree wraps on a phone.
+ */
+const LINE_GED = GED.replace(/\/Fíšek\/|\/Fíšková\//g, '/Brandvold-Ekhammarsson Lindenau/')
+    .replace('0 @F0000@ FAM', ['0 @P0014@ INDI', '1 NAME Karl /Brandvold-Ekhammarsson Lindenau/', '1 SEX M', '1 BIRT', '2 DATE 1870', '1 REFN P0014', '1 FAMC @F0001@', '0 @F0000@ FAM'].join('\n'))
+    .replace('1 CHIL @P0013@', '1 CHIL @P0013@\n1 CHIL @P0014@');
+
 interface Bridge {
     person: string; paused: boolean;
     /** The asks of the reconnect chain so far (/events, /status): each comes after the one before it was read. */
@@ -36,7 +44,7 @@ interface Bridge {
  * Follow the bridge. `quick`: the app reconnects every 250 ms instead of 2 s
  * (__LIVE_RECONNECT_MS), so its next status comes soon (nextStatus).
  */
-async function follow(page: Page, o: { size?: { width: number; height: number }; gap?: number; idle?: number; on?: boolean; quick?: boolean } = {}): Promise<Bridge> {
+async function follow(page: Page, o: { size?: { width: number; height: number }; gap?: number; idle?: number; on?: boolean; quick?: boolean; ged?: string } = {}): Promise<Bridge> {
     await page.setViewportSize(o.size ?? { width: 1440, height: 900 });
     await page.addInitScript(([links, gap, idle, on, quick]) => {
         (globalThis as { __LIVE_FOLLOW_MS?: unknown }).__LIVE_FOLLOW_MS = { gap, idle, retry: 150 };
@@ -58,7 +66,7 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/status') || path.endsWith('/events')) bridge.chain++;
         if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
-        if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
+        if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: o.ged ?? GED });
         if (path.endsWith('/events')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
         }
@@ -306,5 +314,58 @@ test.describe('follow the agent in the tree', () => {
             const pill = await page.locator('#live-follow-pill').boundingBox();
             return pill ? pill.y + pill.height : Infinity;
         }).toBeLessThanOrEqual(740 - 60);
+    });
+    test('a family line shown in the tree: its pill and the paused pill stand clear of each other at every size, whichever came first (1031)', async ({ page }) => {
+        await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true, ged: LINE_GED });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const live = page.locator('#live-follow-pill');
+        const line = page.locator('#evidence-pill');
+        const showLine = async (): Promise<void> => {
+            await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId()!, { section: 'rods' }));
+            const sec = page.locator('#tree-overview-modal .tov-sec[data-section="rods"]');
+            await expect(sec).toHaveAttribute('data-ready', 'true');
+            // The only line of the tree: its detail right away.
+            await sec.getByRole('button', { name: 'Show in tree' }).click();
+            await expect(line).toContainText('Brandvold-Ekhammarsson Lindenau family line');
+        };
+        /** The two pills, and each of them with the tree's chrome: what overlaps. */
+        const clash = (): Promise<string[]> => page.evaluate(() => {
+            const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+            const pills = ['#evidence-pill', '#live-follow-pill'].map(sel => document.querySelector(sel)!.getBoundingClientRect());
+            const out = hit(pills[0], pills[1]) ? ['pills'] : [];
+            for (const sel of ['#focus-controls', '.descendants-badge', '.fan-controls', '.bottom-bar', '.zoom-controls', '.toolbar']) {
+                for (const o of document.querySelectorAll(sel)) {
+                    const b = o.getBoundingClientRect();
+                    if (b.width > 0 && b.height > 0 && pills.some(p => hit(p, b))) out.push(sel);
+                }
+            }
+            if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
+            return out;
+        });
+        const sizes = [[390, 844], [360, 740], [844, 390], [640, 360], [1024, 768], [1440, 900]];
+        // The paused pill first, then the line's (the order in the page differs from the other way round).
+        await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+        await expect(live).toBeVisible();
+        await showLine();
+        for (const [w, h] of sizes) {
+            await page.setViewportSize({ width: w, height: h });
+            for (const mode of ['family', 'descendants', 'fan']) {
+                await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                expect(await clash(), `live first, ${w}×${h} ${mode}`).toEqual([]);
+            }
+        }
+        // The line's pill first, then the paused one: a phone upright and held sideways.
+        await line.locator('.evidence-pill-close').click();
+        await page.evaluate(() => window.Strom.UI.resumeLiveFollow());
+        await expect(live).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+        await showLine();
+        await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+        await expect(live).toBeVisible();
+        for (const [w, h] of [[390, 844], [360, 740], [640, 360], [844, 390]]) {
+            await page.setViewportSize({ width: w, height: h });
+            expect(await clash(), `line first, ${w}×${h}`).toEqual([]);
+        }
     });
 });

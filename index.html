@@ -14226,8 +14226,12 @@
         .live-panel.phone-strip .live-panel-summary { align-items: center; }
         /* Its pill sits below the highlight pill when both are up. */
         .evidence-pill ~ .live-follow-pill { top: 112px; }
+        /* Phones: both at the bottom. The live-follow pill (one row, 50px) keeps
+           the bottom place; the highlight pill, one to three rows (a line's pill
+           with "Back to overview" wraps), stands on top of it and grows upwards. */
         @media (max-width: 640px) {
-            .evidence-pill ~ .live-follow-pill { top: auto; bottom: calc(var(--bottom-bar-h, 64px) + 60px); }
+            .evidence-pill ~ .live-follow-pill { top: auto; }
+            .evidence-pill:has(~ .live-follow-pill) { bottom: calc(var(--bottom-bar-h, 64px) + 70px); }
         }
         .live-panel-chip--warn { color: var(--warning-text); background: var(--warning-soft); border-color: transparent; }
         /* Phone: the panel is a strip; a tap opens the overview sheet. */
