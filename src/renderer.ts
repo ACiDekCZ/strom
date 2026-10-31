@@ -62,7 +62,13 @@ import { SettingsManager } from './settings.js';
 import { personInitials } from './initials.js';
 import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
-import { buildFanModel, buildFanSvg } from './fan-chart.js';
+import {
+    buildFanModel, buildFanSvg, FanShape, FAN_SHAPES, FAN_MIN_GENERATIONS, FAN_MAX_GENERATIONS, FAN_DEFAULT_GENERATIONS,
+    FAN_MIN_DESC_GENERATIONS, FAN_MAX_DESC_GENERATIONS, FAN_DEFAULT_DESC_GENERATIONS,
+} from './fan-chart.js';
+import { FanColorMode, FAN_COLOR_MODES } from './fan-colors.js';
+import { fanScreenSizes } from './fan-labels.js';
+import { FAN_STORAGE_KEYS } from './storage-keys.js';
 import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport, TABLET_MAX } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
@@ -211,6 +217,19 @@ function sameCardSizes(a: LayoutConfig, b: LayoutConfig, ids: Iterable<PersonId>
     if (!b.personHeights) return true;
     for (const id of ids) if (personCardHeight(a, id) !== personCardHeight(b, id)) return false;
     return true;
+}
+
+
+/** A fan setting from localStorage, or the default when missing or invalid. */
+function readFanSetting<T>(key: string, parse: (v: string) => T | null, fallback: T): T {
+    try {
+        const v = localStorage.getItem(key);
+        return v == null ? fallback : parse(v) ?? fallback;
+    } catch { return fallback; }
+}
+
+function writeFanSetting(key: string, value: string): void {
+    try { localStorage.setItem(key, value); } catch { /* ignore */ }
 }
 
 class TreeRendererClass {
@@ -456,13 +475,22 @@ class TreeRendererClass {
     /** Signature of the last places datalist, to skip rebuilding it unchanged. */
     private placesDatalistSig: string | null = null;
 
-    /** Fan chart: how many ancestor rings to draw (4–8, persisted globally). */
-    private fanGenerations = ((): number => {
-        try {
-            const v = parseInt(localStorage.getItem('strom-fan-generations') ?? '', 10);
-            return v >= 4 && v <= 8 ? v : 5;
-        } catch { return 5; }
-    })();
+    /** Fan chart: how many ancestor rings to draw (3–10, persisted on the device; older 4–8 values stay). */
+    private fanGenerations = readFanSetting(FAN_STORAGE_KEYS.generations, v => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? Math.max(FAN_MIN_GENERATIONS, Math.min(FAN_MAX_GENERATIONS, n)) : null;
+    }, FAN_DEFAULT_GENERATIONS);
+    /** Fan chart: descendant depth of the two-way shape (1–5). */
+    private fanDescGenerations = readFanSetting(FAN_STORAGE_KEYS.descGenerations, v => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? Math.max(FAN_MIN_DESC_GENERATIONS, Math.min(FAN_MAX_DESC_GENERATIONS, n)) : null;
+    }, FAN_DEFAULT_DESC_GENERATIONS);
+    /** Fan chart: half circle, full circle or two-way. */
+    private fanShape: FanShape = readFanSetting(FAN_STORAGE_KEYS.shape,
+        v => (FAN_SHAPES as readonly string[]).includes(v) ? v as FanShape : null, 'half');
+    /** Fan chart: colour by sex, by grandparent lines or by family lines. */
+    private fanColorMode: FanColorMode = readFanSetting(FAN_STORAGE_KEYS.color,
+        v => (FAN_COLOR_MODES as readonly string[]).includes(v) ? v as FanColorMode : null, 'gender');
 
     /**
      * Set debug options for pipeline visualization.
@@ -5475,10 +5503,47 @@ class TreeRendererClass {
     }
 
     setFanGenerations(gens: number): void {
-        const v = Math.max(4, Math.min(8, Math.floor(gens)));
-        if (v === this.fanGenerations) return;
+        const v = Math.max(FAN_MIN_GENERATIONS, Math.min(FAN_MAX_GENERATIONS, Math.floor(gens)));
+        if (!Number.isFinite(v) || v === this.fanGenerations) return;
         this.fanGenerations = v;
-        try { localStorage.setItem('strom-fan-generations', String(v)); } catch { /* ignore */ }
+        writeFanSetting(FAN_STORAGE_KEYS.generations, String(v));
+        if (this.viewMode === 'fan') this.render();
+    }
+
+    /** Fan chart: descendant depth of the two-way shape (1–5). */
+    getFanDescGenerations(): number {
+        return this.fanDescGenerations;
+    }
+
+    setFanDescGenerations(gens: number): void {
+        const v = Math.max(FAN_MIN_DESC_GENERATIONS, Math.min(FAN_MAX_DESC_GENERATIONS, Math.floor(gens)));
+        if (!Number.isFinite(v) || v === this.fanDescGenerations) return;
+        this.fanDescGenerations = v;
+        writeFanSetting(FAN_STORAGE_KEYS.descGenerations, String(v));
+        if (this.viewMode === 'fan' && this.fanShape === 'two') this.render();
+    }
+
+    /** Fan chart shape: 'half', 'full' or 'two'. */
+    getFanShape(): FanShape {
+        return this.fanShape;
+    }
+
+    setFanShape(shape: FanShape): void {
+        if (!FAN_SHAPES.includes(shape) || shape === this.fanShape) return;
+        this.fanShape = shape;
+        writeFanSetting(FAN_STORAGE_KEYS.shape, shape);
+        if (this.viewMode === 'fan') this.render();
+    }
+
+    /** Fan chart colour mode: 'gender', 'line' or 'rod'. */
+    getFanColorMode(): FanColorMode {
+        return this.fanColorMode;
+    }
+
+    setFanColorMode(mode: FanColorMode): void {
+        if (!FAN_COLOR_MODES.includes(mode) || mode === this.fanColorMode) return;
+        this.fanColorMode = mode;
+        writeFanSetting(FAN_STORAGE_KEYS.color, mode);
         if (this.viewMode === 'fan') this.render();
     }
 
@@ -5507,15 +5572,35 @@ class TreeRendererClass {
         const chart = container.querySelector('#fan-chart') as HTMLElement | null;
         if (!chart || !this.focusPersonId) return;
 
-        const model = buildFanModel(DataManager.getData(), this.focusPersonId, this.fanGenerations);
-        if (!model) { chart.innerHTML = ''; return; }
-        chart.innerHTML = buildFanSvg(model, {
-            esc: (t) => this.escapeHtml(t),
-            editable: !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
-            addParentLabel: strings.contextMenu.addParent,
-            showKekule: SettingsManager.isFanKekuleEnabled(),
-            relTypeLabel: (t) => strings.parentRelType[t],
+        const model = buildFanModel(DataManager.getData(), this.focusPersonId, {
+            generations: this.fanGenerations, shape: this.fanShape, descGenerations: this.fanDescGenerations,
         });
+        if (!model) { chart.innerHTML = ''; return; }
+        // Labels are fitted for the drawn scale (screen px per fan unit): estimated
+        // from the chart's box, then measured on the drawn SVG and redrawn once
+        // when the estimate was off.
+        const b = model.bounds;
+        const est = Math.min((chart.clientWidth - 32) / b.w, (chart.clientHeight - 28) / b.h);
+        let ppu = Number.isFinite(est) && est > 0.05 ? est : 1;
+        const draw = () => {
+            chart.innerHTML = buildFanSvg(model, {
+                esc: (t) => this.escapeHtml(t),
+                editable: !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
+                addParentLabel: strings.contextMenu.addParent,
+                showKekule: SettingsManager.isFanKekuleEnabled(),
+                relTypeLabel: (t) => strings.parentRelType[t],
+                colorMode: this.fanColorMode,
+                ppu,
+                sizes: fanScreenSizes(isMobileViewport()),
+                uid: 'fan-svg-main',
+            });
+        };
+        draw();
+        const drawnW = chart.querySelector('svg')?.getBoundingClientRect().width ?? 0;
+        if (drawnW > 0) {
+            const real = drawnW / b.w;
+            if (Math.abs(real - ppu) / ppu > 0.15) { ppu = real; draw(); }
+        }
         if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight();
 
         // Mobile: the fan keeps a minimum drawing width and overflows the

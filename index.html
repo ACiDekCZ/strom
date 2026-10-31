@@ -333,6 +333,11 @@
             --male: #5b7f9e;
             --female: #a1706e;
             --unknown: #857d6c;
+            /* fan chart sector fills (text --text >= 7:1) and the hatching of repeats */
+            --fan-male: #d3dce4;
+            --fan-female: #ead8d4;
+            --fan-unknown: #e2ddd2;
+            --fan-hatch: #2b2822;
             --avatar-bg: #f0e9da;
 
             /* branches (logic unchanged) */
@@ -494,6 +499,10 @@
             --male: #7da3c4;
             --female: #c49290;
             --unknown: #a39a88;
+            --fan-male: #3f4c56;
+            --fan-female: #56443f;
+            --fan-unknown: #3f3b33;
+            --fan-hatch: #ece6d8;
             --avatar-bg: #3a362c;
 
             --border: #3e3a30;
@@ -8369,56 +8378,15 @@
             width: auto;
             height: auto;
         }
-        .fan-kekule {
-            font-size: 9px; fill: var(--text-light, #999);
-            dominant-baseline: middle; pointer-events: none;
-        }
-        .fan-sector path {
-            stroke: var(--line-color, #b9b9b9);
-            stroke-width: 1;
-            cursor: pointer;
-        }
-        .fan-sector.male path { fill: var(--male); }
-        .fan-sector.female path { fill: var(--female); }
-        .fan-sector.unknown path { fill: var(--unknown); }
-        /* Adoptive/step/foster parent: dashed like non-biological tree lines. */
-        .fan-sector.fan-nonbio path { stroke-dasharray: 5 3; }
-        @media (hover: hover) { .fan-sector:hover path { filter: brightness(0.94); } }
-        .fan-focus circle {
-            stroke: var(--primary);
-            stroke-width: 2;
-            cursor: pointer;
-        }
-        .fan-focus.male circle { fill: var(--male); }
-        .fan-focus.female circle { fill: var(--female); }
-        .fan-focus.unknown circle { fill: var(--unknown); }
-        .fan-name { fill: var(--text, #222); font-weight: 600; }
-        .fan-years { fill: var(--text-light, #777); font-weight: 400; }
-        .fan-name.g0 { font-size: 14px; }
-        .fan-years.g0 { font-size: 11px; }
-        .fan-name.g1 { font-size: 14px; }
-        .fan-years.g1 { font-size: 11px; }
-        .fan-name.g2 { font-size: 12.5px; }
-        .fan-years.g2 { font-size: 10.5px; }
-        .fan-name.g3 { font-size: 11px; }
-        .fan-name.g3 .fan-years, .fan-name.g4 .fan-years { font-size: 9.5px; }
-        .fan-name.g4 { font-size: 10.5px; }
-        .fan-name.g5 { font-size: 9.5px; }
-        .fan-name.g6 { font-size: 8.5px; }
-        .fan-name.g7 { font-size: 8px; }
-        .fan-name.g8 { font-size: 7.5px; }
-        .fan-empty path {
-            fill: transparent;
-            stroke-dasharray: 4 3;
-            cursor: pointer;
-        }
-        @media (hover: hover) { .fan-empty:hover path { fill: var(--hover-bg, #f1f1ee); } }
-        .fan-plus {
-            fill: var(--text-light, #aaa);
-            font-size: 15px;
-            text-anchor: middle;
-            dominant-baseline: middle;
-            cursor: pointer;
+        /* The fan SVG carries its own colours (fan-colors.ts, both themes, scoped
+           to its id); the page only adds the pointer and the hover. */
+        .fan-kekule { dominant-baseline: middle; }
+        .fan-sector, .fan-focus { cursor: pointer; }
+        .fan-unknown-partner { cursor: default; }
+        @media (hover: hover) {
+            .fan-sector:hover .fan-fill, .fan-focus:hover .fan-focus-disc { filter: brightness(0.94); }
+            .fan-empty:hover .fan-empty-edge { fill: var(--hover-bg, #f1f1ee); }
+            .fan-unknown-partner:hover .fan-fill { filter: none; }
         }
         @media (max-width: 640px) {
             /* Clear the fixed focus bar overlaying the container top. */
@@ -15010,7 +14978,7 @@
         @media (hover: hover) { .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); } }
         .evidence-pill-level:disabled { opacity: 0.5; cursor: default; }
         .evidence-pill-level:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        .fan-sector.evidence-hit path { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+        .fan-svg .fan-sector.evidence-hit .fan-fill { stroke: var(--accent) !important; stroke-width: 1.5; stroke-dasharray: 4 3; }
         .evidence-pill {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
             display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 32px);
@@ -19566,11 +19534,14 @@
             <div class="fan-controls">
                 <label><span data-i18n="fan.generations"></span>
                     <select id="fan-gen-select">
+                        <option value="3">3</option>
                         <option value="4">4</option>
                         <option value="5">5</option>
                         <option value="6">6</option>
                         <option value="7">7</option>
                         <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
                     </select>
                 </label>
             </div>

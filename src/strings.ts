@@ -2951,6 +2951,35 @@ const stringsEN = {
 
     fan: {
         generations: 'Generations',
+        descGenerations: 'Descendants',
+        living: 'Living person',
+        about: 'c.',
+        repeatsFirstAs: (n: number) => `Repeats, first as no. ${n}`,
+        repeatsShownBefore: 'Repeats, shown before',
+        unknownPartner: 'Unknown partner',
+        partner: 'Partner',
+        shapeHalf: 'Half circle',
+        shapeFull: 'Full circle',
+        shapeTwo: 'Two-way',
+        colors: 'Colours',
+        colorGender: 'Sex',
+        colorLine: 'Lines',
+        colorRod: 'Family lines',
+        legendMen: 'men',
+        legendWomen: 'women',
+        legendSexUnknown: 'sex not recorded',
+        lineFatherFather: "father's father",
+        lineFatherMother: "father's mother",
+        lineMotherFather: "mother's father",
+        lineMotherMother: "mother's mother",
+        legendOtherRods: 'small and other lines',
+        legendRepeats: '↻ repeats (pedigree collapse)',
+        posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'ancestors and descendants' : 'ancestors'}`,
+        posterShape: { half: 'half circle', full: 'full circle', two: 'two-way' } as Record<'half' | 'full' | 'two', string>,
+        posterColors: { gender: 'coloured by sex', line: 'coloured by lines', rod: 'coloured by family lines' } as Record<'gender' | 'line' | 'rod', string>,
+        posterGenerations: (gens: number, desc: number | null) => desc == null
+            ? nEn(gens, 'generation', 'generations')
+            : `${nEn(gens, 'generation', 'generations')} of ancestors, ${desc} of descendants`,
     },
 
     // Timeline view
@@ -9057,6 +9086,35 @@ const stringsCZ: StringsType = {
 
     fan: {
         generations: 'Generace',
+        descGenerations: 'Potomci',
+        living: 'Žijící osoba',
+        about: 'asi',
+        repeatsFirstAs: (n: number) => `Opakuje se, poprvé jako č. ${n}`,
+        repeatsShownBefore: 'Opakuje se, už zobrazeno',
+        unknownPartner: 'Neznámý partner',
+        partner: 'Partner',
+        shapeHalf: 'Půlkruh',
+        shapeFull: 'Celý kruh',
+        shapeTwo: 'Oboustranný',
+        colors: 'Barvy',
+        colorGender: 'Pohlaví',
+        colorLine: 'Linie',
+        colorRod: 'Rody',
+        legendMen: 'muži',
+        legendWomen: 'ženy',
+        legendSexUnknown: 'pohlaví neuvedeno',
+        lineFatherFather: 'otcův otec',
+        lineFatherMother: 'otcova matka',
+        lineMotherFather: 'matčin otec',
+        lineMotherMother: 'matčina matka',
+        legendOtherRods: 'malé a další rody',
+        legendRepeats: '↻ opakuje se (implex)',
+        posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'předci a potomci' : 'předci'}`,
+        posterShape: { half: 'půlkruh', full: 'celý kruh', two: 'oboustranný' } as Record<'half' | 'full' | 'two', string>,
+        posterColors: { gender: 'barvy podle pohlaví', line: 'barvy podle linií', rod: 'barvy podle rodů' } as Record<'gender' | 'line' | 'rod', string>,
+        posterGenerations: (gens: number, desc: number | null) => desc == null
+            ? nCs(gens, 'generace', 'generace', 'generací')
+            : `${nCs(gens, 'generace', 'generace', 'generací')} předků, ${desc} potomků`,
     },
 
     // Timeline view
@@ -15090,6 +15148,35 @@ const stringsDE: StringsType = {
 
     fan: {
         generations: 'Generationen',
+        descGenerations: 'Nachkommen',
+        living: 'Lebende Person',
+        about: 'um',
+        repeatsFirstAs: (n: number) => `Wiederholt, zuerst als Nr. ${n}`,
+        repeatsShownBefore: 'Wiederholt, bereits gezeigt',
+        unknownPartner: 'Unbekannter Partner',
+        partner: 'Partner',
+        shapeHalf: 'Halbkreis',
+        shapeFull: 'Vollkreis',
+        shapeTwo: 'Beidseitig',
+        colors: 'Farben',
+        colorGender: 'Geschlecht',
+        colorLine: 'Linien',
+        colorRod: 'Stammlinien',
+        legendMen: 'Männer',
+        legendWomen: 'Frauen',
+        legendSexUnknown: 'Geschlecht unbekannt',
+        lineFatherFather: 'Vater des Vaters',
+        lineFatherMother: 'Mutter des Vaters',
+        lineMotherFather: 'Vater der Mutter',
+        lineMotherMother: 'Mutter der Mutter',
+        legendOtherRods: 'kleine und weitere Stammlinien',
+        legendRepeats: '↻ wiederholt (Ahnenschwund)',
+        posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'Vorfahren und Nachkommen' : 'Vorfahren'}`,
+        posterShape: { half: 'Halbkreis', full: 'Vollkreis', two: 'beidseitig' } as Record<'half' | 'full' | 'two', string>,
+        posterColors: { gender: 'Farben nach Geschlecht', line: 'Farben nach Linien', rod: 'Farben nach Stammlinien' } as Record<'gender' | 'line' | 'rod', string>,
+        posterGenerations: (gens: number, desc: number | null) => desc == null
+            ? nDe(gens, 'Generation', 'Generationen')
+            : `${nDe(gens, 'Generation', 'Generationen')} Vorfahren, ${nDe(desc, 'Generation', 'Generationen')} Nachkommen`,
     },
 
     // Timeline view

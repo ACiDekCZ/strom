@@ -235,15 +235,24 @@ function buildCurrentPoster(): PosterBuild | null {
     if (mode === 'fan') {
         const focusId = TreeRenderer.getFocusPersonId();
         if (!focusId) return null;
-        const model = buildFanModel(data, focusId, TreeRenderer.getFanGenerations());
+        // Shape, generations and colours as the view shows them (spec 029 §9.3).
+        const model = buildFanModel(data, focusId, {
+            generations: TreeRenderer.getFanGenerations(),
+            shape: TreeRenderer.getFanShape(),
+            descGenerations: TreeRenderer.getFanDescGenerations(),
+        });
         if (!model) return null;
+        const colorMode = TreeRenderer.getFanColorMode();
         const svg = buildFanPosterSvg(model, {
             esc: escapeXml,
             editable: false,
             addParentLabel: '',
             showKekule: SettingsManager.isFanKekuleEnabled(),
+            colorMode,
+            mmPerPx: MM_PER_PX,
+            fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, true);
+        const geom = fanPosterGeometry(model, true, { colorMode });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 

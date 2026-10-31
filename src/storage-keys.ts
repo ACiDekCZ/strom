@@ -29,3 +29,17 @@ export function qualityBridgeKey(researchId: string): string {
 export function surnamesBridgeKey(researchId: string): string {
     return `surnames:${researchId.toLowerCase()}`;
 }
+
+/** Fan chart settings of this device (localStorage, spec 029 §0.5). */
+export const FAN_STORAGE_KEYS = {
+    /** Ancestor rings, 3–10 (older 4–8 values stay valid). */
+    generations: 'strom-fan-generations',
+    /** Descendant depth of the two-way fan, 1–5. */
+    descGenerations: 'strom-fan-desc-generations',
+    /** 'half' / 'full' / 'two'. */
+    shape: 'strom-fan-shape',
+    /** 'gender' / 'line' / 'rod'. */
+    color: 'strom-fan-color',
+    /** Legend card open: '1' / '0'. */
+    legendOpen: 'strom-fan-legend-open',
+} as const;

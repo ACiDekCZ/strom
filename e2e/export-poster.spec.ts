@@ -123,8 +123,8 @@ test('fan view: poster downloads an SVG containing fan sectors', async ({ page }
     // self-contained light colours, and NOT the tree card layout.
     expect(svg).toContain('class="fan-svg"');
     expect(svg).toContain('fan-sector');
-    expect(svg).toContain('#e3f2fd');       // embedded light male fill
-    expect(svg).toMatch(/<path d="M /);      // sector geometry
+    expect(svg).toContain('{fill:#d3dce4}'); // embedded print male fill (FAN_PALETTES.print)
+    expect(svg).toMatch(/<path class="fan-fill[^"]*" d="M/); // sector geometry
 });
 
 test('timeline view: poster downloads an SVG containing timeline bars', async ({ page }) => {
