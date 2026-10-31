@@ -34,6 +34,15 @@ export const HISTORY_KIND_SVG: Record<HistoryKind, { d: string; fill?: string }>
     other: { d: 'M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7z' },
 };
 
+/**
+ * Optical centring of a kind's symbol in the person page's 24 px circle
+ * (`.pp-mk-h`): px at 14 px, positive = down. The flag and the sabres carry
+ * their weight high and read as sitting too high in a round frame; the other
+ * kinds are centred (or weigh low, the ship) and stay put. Only the circle
+ * uses it: the card, the chart and the timeline draw the symbols unshifted.
+ */
+export const HISTORY_KIND_OPTICAL_DY: Partial<Record<HistoryKind, number>> = { war: 1, state: 1 };
+
 /** A terminal window with the prompt ">_": the action opens the research. */
 export const RESEARCH_OPEN_SVG = 'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM7 9l3 3-3 3M13 15h4';
 
