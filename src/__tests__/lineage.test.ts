@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildLineages, rods, rodOf, rodMembers, rodSpouses, marriedInto, branch, selection,
-    SMALL_ROD_MAX_MEMBERS, RodId, LineageIndex,
+    SMALL_ROD_MAX_MEMBERS, RodId, LineageIndex, rodGenerations,
 } from '../lineage.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 
@@ -376,5 +376,34 @@ describe('selection for outputs', () => {
     it('an unknown person or lineage selects nothing', () => {
         expect(selection(idx, { kind: 'rods', rodIds: ['nope' as RodId] }).personIds).toEqual([]);
         expect(branch(brumlak, P('nope')).personIds).toEqual([]);
+    });
+});
+
+describe('lineage: members by generation (tree overview detail)', () => {
+    it('generation I is the founder, then each line one step down; daughters with their brothers', () => {
+        const idx = buildLineages(brumlak);
+        const rod = rodIdOf(idx, 'hostivit');
+        expect(rodGenerations(idx, rod)).toEqual([['hostivit'], ['borivoj', 'radoslava'], ['bozetech']].map(g => g.map(P)));
+    });
+
+    it('a placeholder above the founder is left out; the founder stays generation I', () => {
+        const data = tree({
+            ph: { first: '', last: 'Brumlák', sex: 'male', placeholder: true },
+            vlastimil: { first: 'Vlastimil', last: 'Brumlák', sex: 'male', born: '1790', parents: ['ph'] },
+            jaromir: { first: 'Jaromír', last: 'Brumlák', sex: 'male', born: '1792', parents: ['ph'] },
+            kvetoslav: { first: 'Květoslav', last: 'Brumlák', sex: 'male', born: '1820', parents: ['jaromir'] },
+        });
+        const idx = buildLineages(data);
+        const rod = rodIdOf(idx, 'jaromir');
+        const gens = rodGenerations(idx, rod);
+        expect(gens.flat()).not.toContain(P('ph'));
+        expect(gens.flat().sort()).toEqual(['jaromir', 'kvetoslav', 'vlastimil'].map(P).sort());
+        const founder = idx.rods.get(rod)!.founderId;
+        expect(gens[0]).toContain(founder);
+        expect(gens[gens.length - 1]).toEqual([P('kvetoslav')]);
+    });
+
+    it('an unknown lineage has no generations', () => {
+        expect(rodGenerations(buildLineages(brumlak), 'nope' as RodId)).toEqual([]);
     });
 });

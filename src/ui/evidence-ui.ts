@@ -29,7 +29,7 @@ import { uiModule } from './module.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'ancestorGap';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'ancestorGap' | 'rod';
     label: string;
     ids: PersonId[];
     index: number;
@@ -41,6 +41,8 @@ interface Highlight {
     cite?: boolean;
     /** "Back to overview": ends the highlight and reopens where it was started from. */
     returnTo?: () => void;
+    /** People shown faintly beside the group, recounted with it (a lineage's spouses). */
+    faint?: () => PersonId[];
 }
 
 /** One group of people to highlight with the pill (the tree overview's cards and line ends). */
@@ -52,6 +54,8 @@ export interface HighlightGroup {
     recount: (() => PersonId[]) | null;
     cite: boolean;
     returnTo?: () => void;
+    /** People shown faintly beside the group (neither framed nor dimmed), recounted with it. */
+    faint?: () => PersonId[];
 }
 
 /** The highlight being shown (null: none). */
@@ -126,10 +130,10 @@ export const evidenceUiMethods = uiModule({
         levelsMode = false;
         evidence = {
             kind: group.kind, label: group.title(group.personIds.length), ids: [...group.personIds], index: -1,
-            recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo,
+            recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo, faint: group.faint,
         };
         TreeRenderer.setEvidenceLevels(null);
-        TreeRenderer.setEvidenceHighlight(new Set(evidence.ids));
+        TreeRenderer.setEvidenceHighlight(new Set(evidence.ids), group.faint ? new Set(group.faint()) : null);
         this.renderEvidencePill();
     },
 
@@ -187,7 +191,7 @@ export const evidenceUiMethods = uiModule({
         }
         const current = evidence.ids[evidence.index];
         evidence = { ...evidence, ids, index: current ? ids.indexOf(current) : -1 };
-        TreeRenderer.setEvidenceHighlight(new Set(ids));
+        TreeRenderer.setEvidenceHighlight(new Set(ids), evidence.faint ? new Set(evidence.faint()) : null);
         this.renderEvidencePill();
     },
 

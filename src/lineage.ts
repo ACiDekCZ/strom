@@ -53,7 +53,9 @@
  */
 
 import { LineageOverrides, Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
-import { addSurnameGroup, removeSurnameForm, sameSurname, surnameKey, withSurnameRules } from './surnames.js';
+import {
+    addSurnameGroup, czechRulesApply, feminineForm, removeSurnameForm, sameSurname, surnameKey, withSurnameRules,
+} from './surnames.js';
 import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
 
@@ -696,6 +698,42 @@ export function rodMembers(index: LineageIndex, rodId: RodId): PersonId[] {
     return index.rods.get(rodId)?.memberIds ?? [];
 }
 
+/**
+ * The lineage's real members by generation: index 0 = the founder's
+ * generation (I), then each step down the line. Depth is counted along the
+ * line parents, so a placeholder bridging two generations keeps the people
+ * below it in their own generation (it is left out itself, which can leave a
+ * generation empty). Members above the founder (a placeholder root, a nameless
+ * person) count as the founder's generation. Line order within a generation.
+ */
+export function rodGenerations(index: LineageIndex, rodId: RodId): PersonId[][] {
+    const rod = index.rods.get(rodId);
+    if (!rod) return [];
+    const depth = new Map<PersonId, number>();
+    const depthOf = (id: PersonId): number => {
+        const path: PersonId[] = [];
+        let cur: PersonId | null = id;
+        while (cur && !depth.has(cur) && cur !== rod.rootId) {
+            if (path.includes(cur)) break;   // a cycle in bad data
+            path.push(cur);
+            cur = index.lineParent.get(cur) ?? null;
+        }
+        if (cur === rod.rootId && !depth.has(cur)) depth.set(cur, 0);
+        let d = cur && depth.has(cur) ? depth.get(cur)! : -1;
+        for (let i = path.length - 1; i >= 0; i--) depth.set(path[i], ++d);
+        return depth.get(id) ?? 0;
+    };
+    const top = depthOf(rod.founderId);
+    const out: PersonId[][] = [];
+    for (const id of rod.memberIds) {
+        if (index.data.persons[id]?.isPlaceholder) continue;
+        const g = Math.max(0, depthOf(id) - top);
+        while (out.length <= g) out.push([]);
+        out[g].push(id);
+    }
+    return out;
+}
+
 /** The spouses who married into the lineage, each with a link to their birth lineage. */
 export function rodSpouses(index: LineageIndex, rodId: RodId): RodSpouse[] {
     return index.rods.get(rodId)?.spouses ?? [];
@@ -828,8 +866,11 @@ export type LineageChange =
     | { kind: 'revert'; rodId: RodId }
     /** Group another spelling with the lineage's name (whole tree). */
     | { kind: 'addForm'; rodId: RodId; form: string }
-    /** Take a spelling out of the name's group (whole tree). */
-    | { kind: 'removeForm'; rodId: RodId; form: string };
+    /**
+     * Take a spelling out of the name's group (whole tree). `rodId` = the
+     * lineage the dialog is about (null: the group concerns no lineage).
+     */
+    | { kind: 'removeForm'; rodId: RodId | null; form: string };
 
 /** What a change stores (only the fields it touches). */
 export interface LineagePatch {
@@ -857,16 +898,17 @@ export type PreviewLine =
     | { kind: 'startsWith'; personId: PersonId; year: number | null; members: number; spouses: number }
     | { kind: 'toSmall'; personIds: PersonId[] }
     | { kind: 'becomeRod'; personIds: PersonId[]; label: string }
-    | { kind: 'ownLine'; personId: PersonId; label: string; members: number }
+    | { kind: 'ownLine'; personId: PersonId; year: number | null; label: string; members: number; spouses: number }
     | { kind: 'wholeTreeKeeps' }
-    | { kind: 'newRod'; personId: PersonId; label: string; members: number; spouses: number }
+    | { kind: 'newRod'; personId: PersonId; year: number | null; label: string; members: number; spouses: number }
     | { kind: 'splitMoves'; personId: PersonId; label: string; members: number; spouses: number }
     | { kind: 'merge'; label: string; otherLabel: string; members: number; otherMembers: number }
     | { kind: 'staySeparate' }
     | { kind: 'formWholeTree' }
     | { kind: 'splitByForm'; label: string; before: number; after: number; newLabel: string; personId: PersonId; year: number | null; members: number }
     | { kind: 'groupGone'; forms: string[] }
-    | { kind: 'linkedByRelation' }
+    /** The line is joined by a parent–child link; `personId` = the first member carrying the form. */
+    | { kind: 'linkedByRelation'; personId: PersonId | null }
     | { kind: 'restored'; label: string; members: number; spouses: number }
     | { kind: 'noChange' };
 
@@ -894,6 +936,62 @@ function lineAncestors(index: LineageIndex, personId: PersonId): PersonId[] {
         cur = index.lineParent.get(cur) ?? null;
     }
     return out;
+}
+
+/**
+ * The first real member (in line order) who writes the lineage's name in this
+ * form, or null. Same spelling as search compares (case and diacritics aside).
+ */
+export function formCarrier(index: LineageIndex, rod: Rod, form: string): PersonId | null {
+    const key = surnameKey(form);
+    if (!key) return null;
+    const p = index.data.persons;
+    return rod.memberIds.find(m => !!p[m] && !p[m].isPlaceholder && surnameKey(p[m].lastName ?? '') === key) ?? null;
+}
+
+/**
+ * The name forms a lineage's edit dialog lists (spec 1031 §2.1): the main
+ * form first, then the other spellings — those members carry and those the
+ * name's group in the tree holds. On a tree where the Czech rules apply, a
+ * feminine form of a listed one is not listed: it pairs by itself, and
+ * `feminine` names those pairs for the sentence under the forms.
+ */
+export function rodNameForms(rod: Rod, data: StromData): { forms: string[]; feminine: string[] } {
+    return withSurnameRules(data, () => {
+        const rules = czechRulesApply(data);
+        const forms: string[] = [];
+        const add = (f: string): void => {
+            const t = f.trim();
+            if (t && !forms.some(o => surnameKey(o) === surnameKey(t))) forms.push(t);
+        };
+        add(rod.surname);
+        const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === surnameKey(rod.surname)));
+        [...rod.forms, ...(group ?? []), ...rod.otherForms].forEach(add);
+        const isFeminineOf = (f: string, of: string): boolean => {
+            const fem = feminineForm(of);
+            return !!fem && surnameKey(fem) === surnameKey(f);
+        };
+        const kept = rules ? forms.filter((f, i) => i === 0 || !forms.some(o => o !== f && isFeminineOf(f, o))) : forms;
+        const feminine: string[] = [];
+        if (rules) {
+            for (const f of kept) {
+                const fem = feminineForm(f);
+                if (fem && !feminine.some(o => surnameKey(o) === surnameKey(fem))) feminine.push(fem);
+            }
+        }
+        return { forms: kept, feminine };
+    });
+}
+
+/**
+ * The lineages (over the small threshold) a spelling group concerns: those
+ * whose name or forms are in it, largest first (spec 1031 §2.7).
+ */
+export function rodsOfSurnameGroup(index: LineageIndex, group: readonly string[]): RodId[] {
+    const keys = new Set(group.map(surnameKey));
+    return rods(index)
+        .filter(r => !r.small && [r.surname, ...r.forms].some(f => keys.has(surnameKey(f))))
+        .map(r => r.id);
 }
 
 /**
@@ -945,9 +1043,9 @@ export function applyLineageChange(index: LineageIndex, change: LineageChange): 
             return { surnameVariants: variants, fields: ['surnameVariants'] };
         }
         case 'removeForm': {
-            const rod = index.rods.get(change.rodId);
-            if (!rod) return null;
-            const r = removeSurnameForm(data, change.form, rod.surname);
+            const rod = change.rodId ? index.rods.get(change.rodId) : undefined;
+            if (change.rodId && !rod) return null;
+            const r = removeSurnameForm(data, change.form, rod?.surname);
             if (!r) return null;
             return { surnameVariants: r.variants.length ? r.variants : undefined, rejection: r.rejection, fields: ['surnameVariants'] };
         }
@@ -976,7 +1074,14 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
     const bLabels = rodLabels(bi);
     const before = rods(bi).map(r => summaryOf(r, bLabels));
     const patch = applyLineageChange(bi, change);
-    if (!patch) return { before, after: before, lines: [{ kind: 'noChange' }], patch: null };
+    if (!patch) {
+        // A spelling outside every group that members carry: the line is held
+        // together by a parent–child link, not by the form (§2.2).
+        const rod = change.kind === 'removeForm' && change.rodId ? bi.rods.get(change.rodId) : undefined;
+        const carrier = rod && change.kind === 'removeForm' ? formCarrier(bi, rod, change.form) : null;
+        const lines: PreviewLine[] = carrier ? [{ kind: 'linkedByRelation', personId: carrier }] : [{ kind: 'noChange' }];
+        return { before, after: before, lines, patch: null };
+    }
     const ai = buildLineages(withLineagePatch(data, patch));
     const aLabels = rodLabels(ai);
     const after = rods(ai).map(r => summaryOf(r, aLabels));
@@ -1000,7 +1105,7 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
         for (const [rid, ids] of own) {
             const r = ai.rods.get(rid)!;
             if (ids.includes(r.founderId) && r.founderId !== (bi.rods.get(rid)?.founderId ?? null)) {
-                lines.push({ kind: 'ownLine', personId: r.founderId, label: label(r), members: r.realMemberCount });
+                lines.push({ kind: 'ownLine', personId: r.founderId, year: r.founderYear, label: label(r), members: r.realMemberCount, spouses: r.realSpouseCount });
             } else {
                 lines.push({ kind: 'becomeRod', personIds: ids, label: label(r) });
             }
@@ -1020,7 +1125,7 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
         case 'split': {
             const r = afterRodOf(change.personId);
             const was = beforeRodOf(change.personId);
-            if (r) lines.push({ kind: 'newRod', personId: change.personId, label: label(r), members: r.realMemberCount, spouses: r.realSpouseCount });
+            if (r) lines.push({ kind: 'newRod', personId: change.personId, year: r.founderYear, label: label(r), members: r.realMemberCount, spouses: r.realSpouseCount });
             const rest = was ? afterRodOf(was.founderId) : null;
             if (rest && rest.id !== r?.id) {
                 lines.push({ kind: 'splitMoves', personId: change.personId, label: label(rest), members: rest.realMemberCount, spouses: rest.realSpouseCount });
@@ -1051,7 +1156,13 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
             break;
         }
         case 'removeForm': {
-            const rod = bi.rods.get(change.rodId)!;
+            const rod = change.rodId ? bi.rods.get(change.rodId) : undefined;
+            if (!rod) {
+                lines.push({ kind: 'formWholeTree' });
+                const g = (data.surnameVariants ?? []).find(gr => gr.some(n => n.normalize('NFC').trim().toLowerCase() === change.form.normalize('NFC').trim().toLowerCase()));
+                if (g && g.length <= 2) lines.push({ kind: 'groupGone', forms: g });
+                break;
+            }
             const kept = afterRodOf(rod.founderId);
             const gone = rod.memberIds.filter(m => real(m) && afterRodOf(m)?.id !== kept?.id);
             const newRods = [...new Set(gone.map(m => afterRodOf(m)).filter((r): r is Rod => !!r))];
@@ -1063,8 +1174,8 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
                 });
             }
             if (!newRods.length) {
-                const carriers = rod.memberIds.some(m => real(m) && same((data.persons[m].lastName ?? '').trim(), change.form, data));
-                lines.push(carriers ? { kind: 'linkedByRelation' } : { kind: 'formWholeTree' });
+                const carrier = formCarrier(bi, rod, change.form);
+                lines.push(carrier ? { kind: 'linkedByRelation', personId: carrier } : { kind: 'formWholeTree' });
             }
             const exact = (v: string): string => v.normalize('NFC').trim().toLowerCase();
             const group = (data.surnameVariants ?? []).find(g => g.some(n => exact(n) === exact(change.form)));

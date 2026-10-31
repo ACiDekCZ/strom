@@ -354,6 +354,11 @@ export interface ResearchHeader {
     name: string | null;
     /** The header `1 DATE` (when the file was written), raw GEDCOM. */
     date: string | null;
+    /**
+     * `1 _STROM_ASOF`: when the research wrote it, raw — an ISO instant in UTC
+     * (`2026-10-31T06:12:05Z`) or, from older research, a bare day. Absent: none.
+     */
+    asOf?: string;
     /** `1 _STROM_HEAD`: the research commit the file was written from. */
     head: string | null;
     /** `1 _STROM_LINKS`: strom-research:// actions this computer handles (Strom Research files only). */
@@ -408,6 +413,7 @@ export function readResearchHeader(text: string): ResearchHeader {
     let inLinks = false;
     let modeRaw = '';
     let date: string | null = null;
+    let asOf = '';
     let noteLines: string[] | null = null;
     let inFirstNote = false;
 
@@ -427,6 +433,7 @@ export function readResearchHeader(text: string): ResearchHeader {
             else if (tag === STROM_LINKS_TAG) linksRaw = value;
             else if (tag === '_STROM_MODE') modeRaw = value.trim().toLowerCase();
             else if (tag === 'DATE') date = value.trim() || null;
+            else if (tag === '_STROM_ASOF') asOf = cleanText(value, 64);
             else if (tag === 'NOTE' && noteLines === null) {
                 noteLines = [value];
                 inFirstNote = true;
@@ -446,6 +453,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         treeId: isStromResearch ? normalizeResearchId(treeRaw) : null,
         name: cleanText(firstLine, MAX_NAME) || null,
         date,
+        ...(isStromResearch && asOf ? { asOf } : {}),
         head: isStromResearch ? isResearchHead(headRaw) : null,
         links: isStromResearch ? sanitizeResearchLinks(linksRaw) : [],
         ...(isStromResearch && researchLinkScheme(schemeRaw) !== DEFAULT_RESEARCH_SCHEME ? { scheme: researchLinkScheme(schemeRaw) } : {}),

@@ -292,6 +292,7 @@
             --chart-life: #d6cebe;      /* life chart: one bar when no union has a date */
             --chart-married: #a8c0ad;
             --card-bg-2: #f6f1e6;       /* tinted second surface (couple story chapters) */
+            --rod-bar: #9fb8a6;         /* a family line's period bar (tree overview) */
             --chart-band1: #efe8da;
             --chart-band2: #ddd2bc;
             --read-illegible-bg: #e3ddd0;
@@ -454,6 +455,7 @@
             --chart-life: #4a4538;
             --chart-married: #4f6d58;
             --card-bg-2: #26241f;
+            --rod-bar: #6f8f78;
             --chart-band1: #34312a;
             --chart-band2: #433e33;
             --read-illegible-bg: #3e3a30;
@@ -15314,6 +15316,141 @@
             .tov-tile-value { font-size: 20px; }
             .tov-rem-aside { display: none; }
             .tov-month-col { height: 56px; }
+        }
+
+        /* Family lines (spec 1031 §1, 1a–1f): a row per lineage (label, founder, counts, the
+           period bar on a shared axis), one detail open at a time, "Other families" folded
+           under them. Grid 14px | text | 150px bar, as the section's other rows. */
+        .tov-rods { display: flex; flex-direction: column; gap: 10px; }
+        .tov-rod-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .tov-rod-intro { flex: 1; min-width: 220px; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .tov-rod-sort { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--card-bg-2); }
+        .modal.tov .tov-rod-sort-btn {
+            padding: 5px 10px; border: 0; border-radius: 7px; background: none; color: var(--text-light);
+            font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; min-height: 0;
+        }
+        .modal.tov .tov-rod-sort-btn[aria-pressed="true"] {
+            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(60, 50, 30, 0.15);
+        }
+        .tov-rod-sort-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tov-rod-search {
+            height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 14px; box-sizing: border-box; width: 100%;
+        }
+        .tov-rod-axis { display: grid; grid-template-columns: 14px minmax(0, 1fr) 150px; gap: 12px; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .tov-rod-axis-marks { position: relative; display: flex; justify-content: space-between; height: 14px; }
+        .tov-rod-axis-mid { position: absolute; top: 0; transform: translateX(-50%); }
+        .tov-rod-list { display: flex; flex-direction: column; border-top: 1px solid var(--divider); }
+        .tov-rod { border-bottom: 1px solid var(--divider); }
+        .modal.tov .tov-rod-row {
+            display: grid; grid-template-columns: 14px minmax(0, 1fr) 150px; gap: 12px; align-items: start; width: 100%;
+            padding: 10px 0; border: 0; border-radius: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-height: 0;
+        }
+        @media (hover: hover) { .modal.tov .tov-rod-row:hover { background: var(--hover-bg); } }
+        .tov-rod-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .tov-rod-row .tov-chev { padding-top: 3px; }
+        .tov-rod-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .tov-rod-l1 { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+        .tov-rod-label { font-weight: 600; }
+        .tov-rod-period { font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .tov-rod-founder { font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+        .tov-rod-counts { font-size: 12.5px; color: var(--text-faint); }
+        .tov-rod-short { display: none; }
+        .tov-rod-mark { margin-left: 6px; font-size: 11px; color: var(--text-faint); }
+        .tov-rod-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        .tov-rod-bar { position: relative; display: block; height: 8px; margin-top: 7px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+        .tov-rod-bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--rod-bar); }
+        .tov-rod-detail {
+            margin: 0 0 14px 26px; padding: 14px 16px; border-radius: 10px; background: var(--card-bg-2);
+            display: flex; flex-direction: column; gap: 12px; font-size: 13px; min-width: 0;
+        }
+        .tov-rod--single .tov-rod-detail { margin: 8px 0 0; }
+        .tov-rod-single-head { font-size: 15px; overflow-wrap: anywhere; }
+        .tov-rod-facts { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 5px 12px; margin: 0; line-height: 1.45; }
+        .tov-rod-fact { display: contents; }
+        .tov-rod-fact dt { color: var(--text-light); }
+        .tov-rod-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+        .tov-rod-manual { font-size: 12px; }
+        .tov-rod-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .tov-rod-sub { font-size: 12px; font-weight: 600; color: var(--accent-text); }
+        .tov-rod-gen { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; line-height: 1.45; }
+        .tov-rod-gen-n { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .tov-rod-gen-names { min-width: 0; overflow-wrap: anywhere; }
+        .tov-rod-allgens { display: none; align-self: flex-start; }
+        .tov-rod-spouse { line-height: 1.45; overflow-wrap: anywhere; }
+        .tov-rod-detail .tov-link { color: var(--primary); }
+        .tov-rod-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+        /* `.modal button` (0,1,1) takes the border and padding of `.tov-btn`: the design's outlined buttons. */
+        .modal.tov .tov-rod-act { padding: 6px 12px; border: 1px solid var(--primary); font-size: 13px; }
+        .modal.tov .tov-rod-act--plain { border-color: var(--border); color: var(--text); }
+        .tov-rod-block > .tov-link { align-self: flex-start; text-align: left; }
+        .tov-rod-actions .tov-disabled-wrap { align-items: flex-start; }
+        .tov-rod-actions .tov-disabled-hint { text-align: left; }
+        .tov-rod-more { align-self: flex-start; margin-top: 8px; }
+        .tov-rod-others:empty { display: none; }
+        .modal.tov .tov-rod-other {
+            display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%;
+            padding: 12px 0; border: 0; border-radius: 0; background: none;
+            color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; min-height: 0;
+        }
+        /* Right under the last lineage row, as one more row of the list. */
+        .tov-rod-listwrap + .tov-rod-others { margin-top: -10px; }
+        @media (hover: hover) { .modal.tov .tov-rod-other:hover { background: var(--hover-bg); } }
+        .tov-rod-other:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .tov-rod-other-main strong { font-weight: 600; }
+        .tov-rod-other-upto { font-size: 13px; color: var(--text-light); }
+        .tov-rod-other-n { font-size: 12.5px; color: var(--text-faint); white-space: nowrap; }
+        .tov-rod-small { margin: 8px 0 8px 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 16px; font-size: 13px; }
+        .tov-rods > .tov-rod-others > .tov-rod-small:first-child { margin-left: 0; }
+        .tov-rod-small-item { min-width: 0; overflow-wrap: anywhere; border-radius: 4px; }
+        .tov-rod-small-item.is-marked { background: var(--primary-soft); box-shadow: 0 0 0 3px var(--primary-soft); }
+        .tov-rod-small-facts { color: var(--text-faint); white-space: nowrap; }
+        .tov-rod-none { font-size: 14px; }
+        .tov-rod-nomatch { padding: 10px 0; }
+        /* "Show in tree" on a lineage: the spouses who married in, between highlighted and dimmed. */
+        .person-card.evidence-faint { opacity: 0.75; }
+        .fan-sector.evidence-faint, .fan-focus.evidence-faint { opacity: 0.75; }
+        @media (pointer: coarse) {
+            .modal.tov .tov-rod-sort-btn { min-height: 44px; padding: 0 12px; }
+            .tov-rod-search { height: 44px; }
+            .modal.tov .tov-rod-other { min-height: 48px; }
+            .tov-rod-actions .tov-btn { min-height: 44px; }
+        }
+        /* Phone: rows of two lines (no bar), the detail stacked, two generations first, full-width buttons. */
+        @media (max-width: 640px) {
+            .tov-rod-intro { min-width: 0; flex-basis: 100%; }
+            .tov-rod-sort { width: 100%; }
+            .modal.tov .tov-rod-sort-btn { flex: 1; min-height: 44px; padding: 0 6px; }
+            .tov-rod-axis { display: none; }
+            .modal.tov .tov-rod-row { grid-template-columns: 14px minmax(0, 1fr); min-height: 64px; align-items: center; }
+            .tov-rod-row .tov-chev { padding-top: 0; }
+            .tov-rod-bar, .tov-rod-founder, .tov-rod-counts { display: none; }
+            .tov-rod-l1 { display: flex; align-items: baseline; gap: 6px; overflow-wrap: normal; }
+            .tov-rod-l1 .tov-rod-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .tov-rod-l1 .tov-rod-period { margin-left: auto; flex: none; }
+            .tov-rod-period-sep { display: none; }
+            .tov-rod-short { display: block; font-size: 12.5px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .tov-rod-detail { margin: 0 0 12px; padding: 12px; }
+            .tov-rod-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+            .tov-rod-fact dt { font-size: 12.5px; }
+            .tov-rod-fact dd { margin-bottom: 6px; }
+            .tov-rod-detail:not(.is-all-gens) .tov-rod-gen--late { display: none; }
+            .tov-rod-detail:not(.is-all-gens) .tov-rod-allgens { display: inline; }
+            .tov-rod-actions { flex-direction: column; align-items: stretch; }
+            .tov-rod-actions .tov-btn, .tov-rod-actions .tov-disabled-wrap { width: 100%; min-height: 48px; }
+            .tov-rod-actions .tov-disabled-wrap { align-items: stretch; }
+            .modal.tov .tov-rod-other { min-height: 52px; }
+            .tov-rod-small { grid-template-columns: minmax(0, 1fr); margin-left: 0; gap: 4px; }
+            .tov-rod-small-item { min-height: 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+        }
+        /* Phone held sideways: the list in two columns, an open detail across both. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tov-rod-axis { display: none; }
+            .tov-rod-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+            .tov-rod.is-open { grid-column: 1 / -1; }
+            .modal.tov .tov-rod-row { grid-template-columns: 14px minmax(0, 1fr); min-height: 52px; }
+            .tov-rod-bar { display: none; }
+            .tov-rod-small { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         /* Undo toast — paper pill raised after each single user mutation. */

@@ -497,3 +497,22 @@ export function ageReached(birth?: string, end?: string): AgeReached | null {
     const max = yearsFromTo(firstDay(b), lastDay(e));
     return max > 0 ? { kind: 'atMost', years: max } : null;
 }
+
+/**
+ * The local calendar day (`YYYY-MM-DD`) of an ISO instant with a time and a
+ * zone (`2026-10-31T06:12:05Z`, `…+02:00`, `…+0200`), or null when the value
+ * is not such an instant (a bare day, a GEDCOM date, a time without a zone).
+ * The research writes its stamps in UTC: near midnight the UTC day is not the
+ * day the user is in.
+ */
+export function instantLocalDay(value: string | null | undefined): string | null {
+    if (typeof value !== 'string') return null;
+    const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})$/i.exec(value.trim());
+    if (!m) return null;
+    const zone = m[2].toUpperCase() === 'Z' ? 'Z' : m[2].replace(/^([+-]\d{2}):?(\d{2})$/, '$1:$2');
+    const ts = Date.parse(m[1].toUpperCase() + zone);
+    if (!Number.isFinite(ts)) return null;
+    const d = new Date(ts);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${String(d.getFullYear()).padStart(4, '0')}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
