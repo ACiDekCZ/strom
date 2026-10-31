@@ -600,6 +600,21 @@ const stringsEN = {
                 `The ${label} line will be as computed again: ${nEn(members, 'member', 'members')}${spouses ? `, ${spouses} married in` : ''}.`,
             noChange: 'Nothing will change.',
         },
+        label: 'Family line',
+        row: {
+            /** Templates: {rod} = one lineage's name, {rods} = a list of them. */
+            marriedInto: (_gender: string, _n: number) => '\u00b7 married into {rods}',
+            spouseIn: (gender: string): string => gender === 'female' ? 'wife in {rod} line'
+                : gender === 'male' ? 'husband in {rod} line' : 'by marriage in {rod} line',
+            bornInto: '\u00b7 born into {rod}',
+            menu: 'Family line actions',
+            showInTree: 'Show family line in tree',
+            edit: 'Edit family line\u2026',
+            split: 'Start a family line from this person\u2026',
+            book: 'Family line book\u2026',
+            readOnly: 'The tree is read-only. The family line can be viewed, not edited.',
+            followed: 'A followed tree is read-only. The family line can be viewed, not edited.',
+        },
     },
 
     // Spellings suggested by the research in the "Surname spellings" dialog (spec 021 §4).
@@ -5864,24 +5879,6 @@ const stringsEN = {
         placesRowQueued: 'queued',
         errRetracted: 'The research removed this event itself; it cannot be restored here.',
     },
-    /** Family lines at a person (spec 1031 §3): the "Family line" row of the person card and page. */
-    lineage: {
-        label: 'Family line',
-        row: {
-            /** Templates: {rod} = one lineage's name, {rods} = a list of them. */
-            marriedInto: (_gender: string, _n: number) => '\u00b7 married into {rods}',
-            spouseIn: (gender: string): string => gender === 'female' ? 'wife in {rod} line'
-                : gender === 'male' ? 'husband in {rod} line' : 'by marriage in {rod} line',
-            bornInto: '\u00b7 born into {rod}',
-            menu: 'Family line actions',
-            showInTree: 'Show family line in tree',
-            edit: 'Edit family line\u2026',
-            split: 'Start a family line from this person\u2026',
-            book: 'Family line book\u2026',
-            readOnly: 'The tree is read-only. The family line can be viewed, not edited.',
-            followed: 'A followed tree is read-only. The family line can be viewed, not edited.',
-        },
-    },
     /** The person page (spec 025): a read-only page of one person, in a window and as a file. */
     personPage: {
         menu: 'Person page',
@@ -6603,6 +6600,21 @@ const stringsCZ: StringsType = {
             restored: (label: string, members: number, spouses: number) =>
                 `Rod ${label} bude zase podle výpočtu: ${nCs(members, 'člen', 'členové', 'členů')}${spouses ? `, ${nCs(spouses, 'přivdaná', 'přivdané', 'přivdaných')}` : ''}.`,
             noChange: 'Nic se nezmění.',
+        },
+        label: 'Rod',
+        row: {
+            marriedInto: (gender: string, n: number) => (gender === 'female' ? '\u00b7 vdala se do '
+                : gender === 'male' ? '\u00b7 přiženil se do ' : '\u00b7 sňatkem do ') + (n > 1 ? 'rodů {rods}' : 'rodu {rods}'),
+            spouseIn: (gender: string) => gender === 'female' ? 'manželka v rodu {rod}'
+                : gender === 'male' ? 'manžel v rodu {rod}' : 'sňatkem v rodu {rod}',
+            bornInto: '\u00b7 rodný rod {rod}',
+            menu: 'Akce rodu',
+            showInTree: 'Ukázat rod ve stromu',
+            edit: 'Upravit rod\u2026',
+            split: 'Založit rod od této osoby\u2026',
+            book: 'Kniha rodu\u2026',
+            readOnly: 'Strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
+            followed: 'Sledovaný strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
         },
     },
 
@@ -11813,23 +11825,6 @@ const stringsCZ: StringsType = {
         placesRowQueued: 've frontě',
         errRetracted: 'Tuto událost odebral sám výzkum, obnovit ji tady nejde.',
     },
-    lineage: {
-        label: 'Rod',
-        row: {
-            marriedInto: (gender: string, n: number) => (gender === 'female' ? '\u00b7 vdala se do '
-                : gender === 'male' ? '\u00b7 přiženil se do ' : '\u00b7 sňatkem do ') + (n > 1 ? 'rodů {rods}' : 'rodu {rods}'),
-            spouseIn: (gender: string) => gender === 'female' ? 'manželka v rodu {rod}'
-                : gender === 'male' ? 'manžel v rodu {rod}' : 'sňatkem v rodu {rod}',
-            bornInto: '\u00b7 rodný rod {rod}',
-            menu: 'Akce rodu',
-            showInTree: 'Ukázat rod ve stromu',
-            edit: 'Upravit rod\u2026',
-            split: 'Založit rod od této osoby\u2026',
-            book: 'Kniha rodu\u2026',
-            readOnly: 'Strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
-            followed: 'Sledovaný strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
-        },
-    },
     personPage: {
         menu: 'Stránka osoby',
         title: 'Stránka osoby',
@@ -12529,6 +12524,20 @@ const stringsDE: StringsType = {
             restored: (label: string, members: number, spouses: number) =>
                 `Die Stammlinie ${label} ist wieder wie berechnet: ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? `, ${spouses} eingeheiratet` : ''}.`,
             noChange: 'Es ändert sich nichts.',
+        },
+        label: 'Stammlinie',
+        row: {
+            marriedInto: (_gender: string, n: number) => n > 1 ? '\u00b7 heiratete in Stammlinien {rods}' : '\u00b7 heiratete in Stammlinie {rods}',
+            spouseIn: (gender: string) => gender === 'female' ? 'Ehefrau in Stammlinie {rod}'
+                : gender === 'male' ? 'Ehemann in Stammlinie {rod}' : 'durch Heirat in Stammlinie {rod}',
+            bornInto: '\u00b7 Herkunft: {rod}',
+            menu: 'Aktionen zur Stammlinie',
+            showInTree: 'Stammlinie im Baum zeigen',
+            edit: 'Stammlinie bearbeiten\u2026',
+            split: 'Stammlinie ab dieser Person beginnen\u2026',
+            book: 'Buch der Stammlinie\u2026',
+            readOnly: 'Der Baum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht bearbeiten.',
+            followed: 'Ein verfolgter Baum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht bearbeiten.',
         },
     },
 
@@ -17674,22 +17683,6 @@ const stringsDE: StringsType = {
         placesRowRunning: 'wird gesucht',
         placesRowQueued: 'in der Warteschlange',
         errRetracted: 'Die Forschung hat dieses Ereignis selbst entfernt; es lässt sich hier nicht wiederherstellen.',
-    },
-    lineage: {
-        label: 'Stammlinie',
-        row: {
-            marriedInto: (_gender: string, n: number) => n > 1 ? '\u00b7 heiratete in Stammlinien {rods}' : '\u00b7 heiratete in Stammlinie {rods}',
-            spouseIn: (gender: string) => gender === 'female' ? 'Ehefrau in Stammlinie {rod}'
-                : gender === 'male' ? 'Ehemann in Stammlinie {rod}' : 'durch Heirat in Stammlinie {rod}',
-            bornInto: '\u00b7 Herkunft: {rod}',
-            menu: 'Aktionen zur Stammlinie',
-            showInTree: 'Stammlinie im Baum zeigen',
-            edit: 'Stammlinie bearbeiten\u2026',
-            split: 'Stammlinie ab dieser Person beginnen\u2026',
-            book: 'Buch der Stammlinie\u2026',
-            readOnly: 'Der Baum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht bearbeiten.',
-            followed: 'Ein verfolgter Baum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht bearbeiten.',
-        },
     },
     personPage: {
         menu: 'Personenseite',
