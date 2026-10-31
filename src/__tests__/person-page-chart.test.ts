@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, historyTouchHalves, barsOver, residenceLabel } from '../person-page-chart.js';
-import { PERSON_PAGE_CHART_CSS } from '../person-page-viz-css.js';
+import { PERSON_PAGE_CHART_CSS, HIST_TOUCH_MIN_H } from '../person-page-viz-css.js';
 import { historyKindSvg } from '../history-symbols.js';
 import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -530,6 +530,16 @@ describe('lifeChartHtml', () => {
         expect(coarse).toContain('.pp-ch-hm--ub::before { top: -3px; height: 32px; }');
         // The phone held sideways: the bar of life 14 px under the glyph, the target 7 px of it.
         expect(coarse).toMatch(/@media \(max-width: 1024px\) and \(max-height: 500px\) and \(orientation: landscape\) and \(pointer: coarse\) \{[^}]*\.pp-ch-hist--n \.pp-ch-hm::before \{ top: -15px; height: 36px; \}/);
+    });
+
+    it('history (round 6, point 45): a glyph\'s target is at least 24 px tall; clipped sideways under a period bar it grows down, the period bar keeps its half', () => {
+        expect(HIST_TOUCH_MIN_H).toBe(24);
+        const rules = [...PERSON_PAGE_CHART_CSS.matchAll(/\.pp-ch-hm[^{,]*::before \{[^}]*?height: ([\d.]+)px/g)];
+        expect(rules.length).toBeGreaterThanOrEqual(4);
+        for (const r of rules) expect(Number(r[1])).toBeGreaterThanOrEqual(HIST_TOUCH_MIN_H);
+        // The phone held sideways under a period bar: the top stays 1.5 px above the glyph, 24 px from there.
+        const sideways = PERSON_PAGE_CHART_CSS.slice(PERSON_PAGE_CHART_CSS.indexOf('(orientation: landscape) and (pointer: coarse)'));
+        expect(sideways).toContain('.pp-ch-hist--n .pp-ch-hm--ub::before { top: -1.5px; height: 24px; }');
     });
 
     it('escapes names', () => {

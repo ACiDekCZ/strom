@@ -26,6 +26,8 @@ export const PERSON_PAGE_VIZ_PRINT_TOKENS = [
 ].join('; ') + ';';
 
 const LANDSCAPE = '(max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
+/** A history glyph's touch target is never shorter than this, however it is clipped (round 6, point 45). */
+export const HIST_TOUCH_MIN_H = 24;
 
 /** The places map (§1). */
 export const PERSON_PAGE_MAP_CSS = `
@@ -318,9 +320,11 @@ export const PERSON_PAGE_CHART_CSS = `
 }
 @media ${LANDSCAPE} and (pointer: coarse) {
   /* The phone's set held sideways: the glyph 9 px down a 22 px row, the bar of life 15 px under the row. The target
-     stops half way to the bar (7 px under the glyph) and to a period bar over it (1.5 px above the glyph). */
+     stops half way to the bar (7 px under the glyph) and to a period bar over it (1.5 px above the glyph); clipped
+     there it stays HIST_TOUCH_MIN_H tall (round 6, point 45): the missing height is taken downwards, from the bar of
+     life's side (the larger target), the period bar keeps its half. */
   .pp-ch-hist--n .pp-ch-hm::before { top: -15px; height: 36px; }
-  .pp-ch-hist--n .pp-ch-hm--ub::before { top: -1.5px; height: 22.5px; }
+  .pp-ch-hist--n .pp-ch-hm--ub::before { top: -1.5px; height: ${HIST_TOUCH_MIN_H}px; }
 }
 @media print {
   .pp-chart { break-inside: avoid; }

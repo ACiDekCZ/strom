@@ -206,6 +206,8 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-mk svg { display: block; }
 .pp-row--own .pp-mk { color: var(--text-light); }
 .pp-mk-h { position: relative; }
+/* Optical centring in the circle only (HISTORY_KIND_OPTICAL_DY, set as --dy on the circle). */
+.pp-mk-h svg { transform: translateY(var(--dy, 0)); }
 .pp-mk-h.is-region { color: var(--hist-text); }
 .pp-mk-h.is-place { color: var(--hist-place-text); }
 .pp-mk-h.is-local { color: var(--hist-local-text); }

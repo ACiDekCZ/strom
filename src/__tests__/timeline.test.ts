@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { computeTimelineModel, yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears, TimelineHistoryItem } from '../timeline.js';
-import { buildTimelineSvg, historyRowHeight, historyClusterGap } from '../timeline-chart.js';
+import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap } from '../timeline-chart.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender, LifeEvent } from '../types.js';
 
 interface POpts {
@@ -489,5 +489,11 @@ describe('timeline history row', () => {
         expect(phone).not.toContain(' · Jan X</span>');
         const poster = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 190, mode: 'poster' });
         expect(poster).not.toContain('tl-hist');
+        // Kolo 4 point 2: the row's label is a <foreignObject> on screen only; the export builder never inserts one.
+        expect(buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 190, mode: 'screen' })).toContain('class="tl-hist-label"');
+        expect(poster).not.toContain('<foreignObject');
+        const full = buildTimelinePosterSvg(model, { esc }, { treeName: 'T' });
+        expect(full).not.toContain('<foreignObject');
+        expect(full).not.toContain('tl-hist');
     });
 });

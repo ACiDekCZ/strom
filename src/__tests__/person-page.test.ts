@@ -11,10 +11,10 @@ import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageFileToggles, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
-    personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear,
+    personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear, CHILD_GAP,
 } from '../person-page.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
-import { historyKindSvg } from '../history-symbols.js';
+import { historyKindSvg, HISTORY_KIND_OPTICAL_DY } from '../history-symbols.js';
 import { lifelineGlyph } from '../lifeline-glyphs.js';
 import { buildFamilyBook } from '../book.js';
 import { getDemoTree } from '../demo-tree.js';
@@ -357,6 +357,47 @@ describe('family', () => {
         const trunk = vs.find(v => v.top + v.h === lastBus && v.h > 50)!;
         const last = hs.find(h => h.top === lastBus)!;
         expect(Math.abs(last.left + last.w / 2 - trunk.left)).toBeLessThan(0.5);
+    });
+    it('children\'s cards are CHILD_GAP (10 px) apart in the 680 px tree too, narrowed cards included (round 6, point 44)', () => {
+        expect(CHILD_GAP).toBe(10);
+        const d = fiskTree();
+        const kids = ['k1', 'k2', 'k3', 'k4', 'k5'];
+        for (const [i, k] of kids.entries()) {
+            d.persons[k as PersonId] = p(k, `Dítě${i + 1}`, 'Fíšek', 'male', { birthDate: `${1889 + i}`, deathDate: '1950', parentIds: ids('jan', 'marie') });
+        }
+        d.persons['jan' as PersonId].childIds = ids(...kids);
+        d.persons['marie' as PersonId].childIds = ids(...kids);
+        d.partnerships['u1' as PartnershipId].childIds = ids(...kids);
+        delete d.persons['petr' as PersonId];
+        delete d.persons['rosa' as PersonId];
+        const boxes = (ft: string, ks: string[]) => ks.map(k => {
+            const m = ft.match(new RegExp(`data-pp-person="${k}" style="left:([\\d.]+)%;top:(\\d+)px;width:([\\d.]+)%`))!;
+            return { left: +m[1] * 6.8, top: +m[2], w: +m[3] * 6.8 };
+        });
+        const html = body(d);
+        // Five 126 px cards fit 680 in one row (5 × 126 + 4 × 10 = 670).
+        const row = boxes(tree(html), kids);
+        expect(new Set(row.map(r => r.top)).size).toBe(1);
+        expect(row.every(r => Math.abs(r.w - 126) < 0.5)).toBe(true);
+        for (let i = 1; i < row.length; i++) expect(row[i].left - row[i - 1].left - row[i - 1].w).toBeCloseTo(CHILD_GAP, 0);
+        // A second union with children: the cards narrow, the gap stays 10 px.
+        const jan = d.persons['jan' as PersonId];
+        d.persons['w2' as PersonId] = p('w2', 'Ludmila', 'Fíšková', 'female', { birthDate: '1862', deathDate: '1931', partnerships: ['u2' as PartnershipId] });
+        const more = ['m1', 'm2', 'm3'];
+        for (const [i, k] of more.entries()) {
+            d.persons[k as PersonId] = p(k, `Druhé${i + 1}`, 'Fíšek', 'male', { birthDate: `${1900 + i}`, deathDate: '1960', parentIds: ids('jan', 'w2') });
+        }
+        d.partnerships['u2' as PartnershipId] = { id: 'u2' as PartnershipId, person1Id: 'jan' as PersonId, person2Id: 'w2' as PersonId, status: 'married', childIds: ids(...more) };
+        jan.partnerships.push('u2' as PartnershipId);
+        jan.childIds.push(...ids(...more));
+        const narrowed = boxes(tree(body(d)), [...kids, ...more]);
+        expect(narrowed[0].w).toBeLessThan(126);
+        for (const grp of [narrowed.slice(0, 5), narrowed.slice(5)]) {
+            for (let i = 1; i < grp.length; i++) {
+                if (grp[i].top !== grp[i - 1].top) continue;
+                expect(grp[i].left - grp[i - 1].left - grp[i - 1].w).toBeCloseTo(CHILD_GAP, 0);
+            }
+        }
     });
     it('in the 960 px column the tree keeps 680 px in the middle, only the children\'s row is wider: up to 7 cards (round 5, K5-37)', () => {
         const d = fiskTree();
@@ -834,7 +875,7 @@ describe('history layer', () => {
             const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
             const page = preparePersonPageData(fiskTree(), op, { history: { payload } });
             const html = mode === 'app' ? buildPersonPageBody(page, op) : buildPersonPageDocument(page, op);
-            expect(html).toContain(`<span class="pp-mk pp-mk-h is-region" title="válka" aria-hidden="true">${historyKindSvg('war', 14)}<span class="pp-mk-o" aria-hidden="true"></span></span>`);
+            expect(html).toContain(`<span class="pp-mk pp-mk-h is-region" style="--dy:1px" title="válka" aria-hidden="true">${historyKindSvg('war', 14)}<span class="pp-mk-o" aria-hidden="true"></span></span>`);
             // No Unicode marks left in the circles: the glyphs are SVG (13 px), nothing in the text.
             const marks = [...html.matchAll(/<span class="pp-mk[^"]*"[^>]*>([\s\S]*?)<\/span><\/span>/g)].map(m => m[1]);
             expect(marks.length).toBeGreaterThan(3);
@@ -843,6 +884,42 @@ describe('history layer', () => {
             expect(html).toContain(lifelineGlyph({ kind: 'death' }, 13));
             expect(html).toContain(lifelineGlyph({ kind: 'marriage' }, 13));
         }
+    });
+});
+
+describe('history symbols: optical centring in the circle (Kolo 4 point 5)', () => {
+    const event = (id: string, kind: string) => ({
+        id, from: 1866, kind, scope: 'region',
+        region: { id: 'cz-bohemia', name: { cs: 'Čechy' } }, text: { cs: `Událost ${id}` },
+        source: { title: 'Zdroj', publisher: 'Wikipedie', url: 'https://cs.wikipedia.org/wiki/X', checked: '2026-10-27' },
+    });
+    const payload = parseHistoryPayload({
+        state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
+        events: [event('h-war', 'war'), event('h-state', 'state'), event('h-epi', 'epidemic')],
+        places: { 'Čapkov': { events: ['h-war', 'h-state', 'h-epi'] } },
+    }, '2026-10-27T14:05:00Z')!;
+
+    it('the table: war and state 1 px down, the other kinds stay put', () => {
+        expect(HISTORY_KIND_OPTICAL_DY).toEqual({ war: 1, state: 1 });
+    });
+
+    it('war and state circles carry --dy:1px, other kinds none; the circle CSS moves only the glyph inside .pp-mk-h', () => {
+        for (const mode of ['app', 'file', 'print'] as const) {
+            const op = opts({ mode, links: mode === 'app' ? 'app' : 'plain' });
+            const page = preparePersonPageData(fiskTree(), op, { history: { payload } });
+            const html = mode === 'app' ? buildPersonPageBody(page, op) : buildPersonPageDocument(page, op);
+            const circles = [...html.matchAll(/<span class="pp-mk pp-mk-h [^"]*"([^>]*)>(<svg[\s\S]*?<\/svg>)/g)];
+            const byKind = (kind: 'war' | 'state' | 'epidemic') => circles.find(m => m[2] === historyKindSvg(kind, 14))?.[1] ?? '';
+            expect(byKind('war')).toContain('style="--dy:1px"');
+            expect(byKind('state')).toContain('style="--dy:1px"');
+            expect(byKind('epidemic')).not.toContain('--dy');
+            expect(byKind('epidemic')).toContain('title="epidemie"');
+            // Kolo 4 point 2: the saved and printed page never carry a <foreignObject> (dropped when an SVG is rasterised).
+            expect(html).not.toContain('foreignObject');
+        }
+        expect(PERSON_PAGE_CSS).toContain('.pp-mk-h svg { transform: translateY(var(--dy, 0)); }');
+        // The symbol itself is unshifted (the card, the chart and the timeline use it as is).
+        expect(historyKindSvg('war', 14)).not.toContain('transform');
     });
 });
 

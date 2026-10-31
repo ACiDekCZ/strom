@@ -19,7 +19,7 @@ import {
     computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints, HISTORY_KINDS,
 } from './history.js';
 import { placeKey } from './places.js';
-import { researchOpenSvg, historyKindSvg } from './history-symbols.js';
+import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
 import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
@@ -966,13 +966,13 @@ const FT_CARD = 150;
 const FT_CARD_H = 50;
 const FT_KID = 126;
 const FT_KID_MIN = 110;
-const FT_KID_GAP = 8;
+/** The gap between children's cards (round 6, point 44): 10 px everywhere, 680 and 960, narrowed cards too (5 × 126 + 4 × 10 = 670). */
+export const CHILD_GAP = 10;
 const FT_GROUP_GAP = 20;
 const FT_KIDS_PER_ROW = 5;
-/** The tree in the 960 px column (round 5 §0.8, K5-37): only the children's row is wider, up to 7 cards 10 px apart. */
+/** The tree in the 960 px column (round 5 §0.8, K5-37): only the children's row is wider, up to 7 cards (CHILD_GAP apart). */
 const FT_W_WIDE = 960;
 const FT_KIDS_PER_ROW_WIDE = 7;
-const FT_KID_GAP_WIDE = 10;
 /** A wrapped row of children: ticks from its bus to the cards, the gap from a row's cards to the next row's bus (K2-2b). */
 const FT_TICK = 12;
 const FT_ROW_GAP = 40;
@@ -1110,7 +1110,8 @@ function familyTreeData(c: Ctx): FtData {
  * column's; `off` moves them into the wider one. `kids` describes the children's placement (in the 680 px coordinates),
  * to tell whether the wide variant places them otherwise at all.
  */
-function familyTreeDesktopHtml(c: Ctx, d: FtData, wide = false, gap = wide ? FT_KID_GAP_WIDE : FT_KID_GAP): { html: string; kids: string } {
+function familyTreeDesktopHtml(c: Ctx, d: FtData, wide = false): { html: string; kids: string } {
+    const gap = CHILD_GAP;
     const W = wide ? FT_W_WIDE : FT_W;
     const off = (W - FT_W) / 2;
     const pct = (x: number): string => `${+(x / W * 100).toFixed(3)}%`;
@@ -1310,12 +1311,12 @@ function familyTreeMoreHtml(c: Ctx, d: FtData): string {
 /**
  * The desktop tree, and when its children would sit otherwise in the 960 px column (more than 5 in a union, a group
  * pushed inward at 680) also the wide variant `.pp-ft9` (round 5, K5-37); the CSS shows it from a 1280 px window.
- * The wide gap alone (10 px instead of 8) is no reason for a second tree.
+ * Both use the same gap (CHILD_GAP), so the children sitting where they sit at 680 need no second tree.
  */
 function familyTreeDesktopBothHtml(c: Ctx, d: FtData): string {
     const narrow = familyTreeDesktopHtml(c, d);
-    if (familyTreeDesktopHtml(c, d, true, FT_KID_GAP).kids === narrow.kids) return narrow.html;
-    return familyTreeDesktopHtml(c, d, true).html + narrow.html;
+    const wide = familyTreeDesktopHtml(c, d, true);
+    return wide.kids === narrow.kids ? narrow.html : wide.html + narrow.html;
 }
 
 /**
@@ -1804,6 +1805,7 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     const ev = item.ev;
     const scope = histScope(ev);
     const kindName = S.history.kinds[ev.kind] ?? ev.kind;
+    const opticalDy = HISTORY_KIND_OPTICAL_DY[ev.kind] ?? 0;
     const meta: string[] = [];
     meta.push(`<span class="pp-hist-kind">${esc(kindName)}</span>`);
     // "age 24–39" is one piece: the footer wraps it whole to the next line (round 3 §2.8).
@@ -1823,7 +1825,8 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
     const langAttr = item.textLang && item.textLang !== c.page.lang ? ` lang="${esc(item.textLang)}"` : '';
     return `<div class="pp-row pp-row--hist"${anchorAttr(c, chartHistAnchorId(ev.id))}>${yearCell(item.yearLabel ?? String(item.year))}`
         // The kind's symbol in the circle (the origin's colour), the origin (◇ ▲ ■) small at its corner (round 3 §10, 10c).
-        + `<span class="pp-m"><span class="pp-mk pp-mk-h is-${scope}" title="${esc(kindName)}" aria-hidden="true">`
+        // Optically centred in the circle (Kolo 4 point 5): a per-kind nudge, via --dy on the circle.
+        + `<span class="pp-m"><span class="pp-mk pp-mk-h is-${scope}"${opticalDy ? ` style="--dy:${opticalDy}px"` : ''} title="${esc(kindName)}" aria-hidden="true">`
         + `${historyKindSvg(ev.kind, 14)}<span class="pp-mk-o" aria-hidden="true"></span></span></span>`
         + `<div class="pp-t"><div class="pp-hist"><p${langAttr}>${esc(stripResearchIds(item.text).text)}</p>`
         + `<div class="pp-hist-meta">${meta.join('<span aria-hidden="true">·</span>')}</div></div></div></div>`;

@@ -79,7 +79,9 @@ for (const vp of [{ name: 'desktop 1440', width: 1440, height: 900 }, { name: 'p
         const marks = await rows.evaluateAll(els => els.map(r => {
             const mk = r.querySelector('.pp-m .pp-mk')!;
             const box = mk.getBoundingClientRect();
+            const sym = mk.querySelector(':scope > svg')?.getBoundingClientRect();
             return {
+                title: mk.getAttribute('title'), dy: sym ? Math.round(sym.top - box.top) : -1,
                 cls: mk.className, svg: mk.querySelectorAll(':scope > svg').length, corner: mk.querySelectorAll('.pp-mk-o').length,
                 text: (mk.textContent ?? '').trim(), hidden: mk.getAttribute('aria-hidden'), w: Math.round(box.width), h: Math.round(box.height),
             };
@@ -91,6 +93,8 @@ for (const vp of [{ name: 'desktop 1440', width: 1440, height: 900 }, { name: 'p
             expect(m.text).toBe('');
             expect(m.hidden).toBe('true');
             expect([m.w, m.h]).toEqual([24, 24]);
+            // Optical centring (Kolo 4 point 5): the 14 px symbol 5 px down the circle, war and state 1 px lower.
+            expect(m.dy).toBe(m.title === 'war' || m.title === 'state and borders' ? 6 : 5);
         }
         for (const o of ['region', 'place', 'local']) expect(marks.some(m => m.cls.endsWith(`is-${o}`))).toBe(true);
         // The symbol takes the origin's text colour; the corner draws the origin's shape.
@@ -168,7 +172,7 @@ test('person page file: the symbols inline in currentColor, the kinds legend, no
     const dlg = page.locator('#person-page-export-modal');
     const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
     const html = readFileSync(await download.path(), 'utf-8');
-    expect(html).toMatch(/<span class="pp-mk pp-mk-h is-region" title="war" aria-hidden="true"><svg class="hist-kind-svg"[^>]*stroke="currentColor"/);
+    expect(html).toMatch(/<span class="pp-mk pp-mk-h is-region" style="--dy:1px" title="war" aria-hidden="true"><svg class="hist-kind-svg"[^>]*stroke="currentColor"/);
     expect(html).toContain('<p class="pp-legend-kinds">');
     expect(html).toContain('--hist-place-text: #245868');
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
