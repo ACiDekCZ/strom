@@ -84,11 +84,14 @@ describe('buildFanModel', () => {
         expect(model.sectors.find(s => s.ahnentafel === 3)?.person?.id).toBe('m');
     });
 
-    it('caps generations to the 4–8 range and returns null for a missing focus', () => {
+    it('keeps generations in the 1–8 range (whole rings) and returns null for a missing focus', () => {
         const d = data([person('me')]);
         expect(buildFanModel(d, 'nobody' as PersonId, 5)).toBeNull();
-        const model = buildFanModel(d, 'me' as PersonId, 99)!;
-        expect(model.generations).toBe(8);
+        expect(buildFanModel(d, 'me' as PersonId, 99)!.generations).toBe(8);
+        expect(buildFanModel(d, 'me' as PersonId, 0)!.generations).toBe(1);
+        expect(buildFanModel(d, 'me' as PersonId, -3)!.generations).toBe(1);
+        expect(buildFanModel(d, 'me' as PersonId, 4.7)!.generations).toBe(4);
+        expect(buildFanModel(d, 'me' as PersonId, 6)!.generations).toBe(6);
     });
 });
 
