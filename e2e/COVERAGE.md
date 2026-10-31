@@ -90,7 +90,7 @@ the table honest.
 | Descendants view (toolbar + badge) | `descendants-view.spec.ts` | covered | ancestors hidden, badge, ✕ returns to family |
 | Descendants via context menu | `descendants-view.spec.ts` | covered | "Show descendants" enters the mode |
 | Timeline view (third mode) | `timeline.spec.ts` | covered | segment switches to life-bars on a year axis; back restores the tree |
-| Family book generation | `book.spec.ts` | covered | dialog → new window with chapters + index |
+| Family book (1031 §4, §6): options dialog (presets → Custom, four kinds + House later, parts with reasons, no lineage → Open book disabled, estimate, memory per tree incl. reload, entries from overview / person card / person), window (toolbar, side contents ≥ 1100 px, Contents below, #kap-N anchors, Save as HTML with Print only, Change options rewrites the same window, ✕), phone sub-sheets and ⋯ menu | `book.spec.ts` | covered | the dialog's other-families count matches the tree overview's; card settings untouched by the book's options |
 | Flex date accepted/normalized/rejected | `edit-undo-lock.spec.ts` | covered | `about 1880` → `~1880`; nonsense rejected |
 | Delete person (context menu) + undo / redo | `person-crud.spec.ts` | covered | confirm dialog, undo restores, Ctrl+Shift+Z deletes again |
 | Delete person (Delete key) | `person-crud.spec.ts` | covered | deletes the focused person after confirm |

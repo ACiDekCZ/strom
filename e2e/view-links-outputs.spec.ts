@@ -70,7 +70,7 @@ async function posterSvg(page: Page): Promise<string> {
 async function bookTree(page: Page, context: BrowserContext): Promise<string> {
     await page.evaluate(() => window.Strom.UI.showBookDialog());
     const dialog = page.locator('#book-modal');
-    await dialog.locator('#book-privacy-mode').selectOption('full');
+    await dialog.locator('input[name="book-privacy"][value="full"]').check();
     const [book] = await Promise.all([
         context.waitForEvent('page'),
         dialog.getByRole('button', { name: 'Open book' }).click(),

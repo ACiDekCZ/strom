@@ -359,7 +359,7 @@ test.describe('a story\'s new version', () => {
     test('the family book: banners for the person and the couple, the comparison in the book\'s window, nothing printed', async ({ page, context }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showBookDialog());
-        await page.locator('#book-privacy-mode').selectOption('full');
+        await page.locator('#book-modal input[name="book-privacy"][value="full"]').check();
         const [book] = await Promise.all([
             context.waitForEvent('page'),
             page.locator('#book-modal').getByRole('button', { name: 'Open book' }).click(),
