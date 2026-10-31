@@ -333,16 +333,25 @@ test.describe('follow the agent in the tree', () => {
             const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
             const pills = ['#evidence-pill', '#live-follow-pill'].map(sel => document.querySelector(sel)!.getBoundingClientRect());
             const out = hit(pills[0], pills[1]) ? ['pills'] : [];
-            for (const sel of ['#focus-controls', '.descendants-badge', '.fan-toolbar', '.fan-zoom-controls', '.fan-legend', '.fan-legend-chip', '.bottom-bar', '.zoom-controls', '.toolbar']) {
+            // The live panel too: on a phone its strip above the bottom bar, else its card at the top right (1031 D1, D2).
+            for (const sel of ['#live-panel', '#focus-controls', '.descendants-badge', '.fan-toolbar', '.fan-zoom-controls', '.fan-legend', '.fan-legend-chip', '#fan-origin-pill', '.bottom-bar', '.zoom-controls', '.toolbar']) {
                 for (const o of document.querySelectorAll(sel)) {
                     const b = o.getBoundingClientRect();
                     if (b.width > 0 && b.height > 0 && pills.some(p => hit(p, b))) out.push(sel);
                 }
             }
+            // The strip itself keeps clear of the bars and the zoom buttons (held sideways: right of the side bar).
+            const strip = document.getElementById('live-panel')!.getBoundingClientRect();
+            for (const sel of ['.bottom-bar', '.zoom-controls', '.fan-zoom-controls']) {
+                for (const o of document.querySelectorAll(sel)) {
+                    const b = o.getBoundingClientRect();
+                    if (strip.width > 0 && b.width > 0 && b.height > 0 && hit(strip, b)) out.push(`strip × ${sel}`);
+                }
+            }
             if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
             return out;
         });
-        const sizes = [[390, 844], [360, 740], [844, 390], [640, 360], [1024, 768], [1440, 900]];
+        const sizes = [[390, 844], [360, 780], [360, 740], [844, 390], [640, 360], [1024, 768], [1440, 900]];
         // The paused pill first, then the line's (the order in the page differs from the other way round).
         await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
         await expect(live).toBeVisible();
@@ -352,7 +361,7 @@ test.describe('follow the agent in the tree', () => {
             for (const mode of ['family', 'descendants', 'fan']) {
                 await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
                 await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
-                expect(await clash(), `live first, ${w}×${h} ${mode}`).toEqual([]);
+                await expect.poll(clash, `live first, ${w}×${h} ${mode}`).toEqual([]);
             }
         }
         // The line's pill first, then the paused one: a phone upright and held sideways.
@@ -363,9 +372,40 @@ test.describe('follow the agent in the tree', () => {
         await showLine();
         await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
         await expect(live).toBeVisible();
-        for (const [w, h] of [[390, 844], [360, 740], [640, 360], [844, 390]]) {
+        for (const [w, h] of [[390, 844], [360, 780], [360, 740], [640, 360], [844, 390]]) {
             await page.setViewportSize({ width: w, height: h });
-            expect(await clash(), `line first, ${w}×${h}`).toEqual([]);
+            await expect.poll(clash, `line first, ${w}×${h}`).toEqual([]);
+        }
+    });
+
+    test('phone: the paused pill shows its whole text in every language, its height kept (1031)', async ({ page }) => {
+        await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const pill = page.locator('#live-follow-pill');
+        for (const lang of ['de', 'cs', 'en']) {
+            // The pill takes its words when it comes: the language first.
+            await page.evaluate(() => window.Strom.UI.resumeLiveFollow());
+            await expect(pill).toHaveCount(0);
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+            await expect(pill).toBeVisible();
+            for (const [w, h] of [[390, 844], [360, 780]]) {
+                await page.setViewportSize({ width: w, height: h });
+                const cut = await page.evaluate(() => {
+                    const p = document.getElementById('live-follow-pill')!;
+                    const out: string[] = [];
+                    for (const part of p.querySelectorAll<HTMLElement>('.evidence-pill-label, .live-follow-back')) {
+                        if (part.scrollWidth > part.clientWidth || part.scrollHeight > part.clientHeight) out.push(`cut: ${part.textContent}`);
+                    }
+                    const r = p.getBoundingClientRect();
+                    if (r.right > window.innerWidth || p.scrollWidth > p.clientWidth) out.push('wider than the window');
+                    // The highlight pill stands 58px above it (index.html): one row of 40px buttons.
+                    if (r.height > 52) out.push(`height ${Math.round(r.height)}`);
+                    return out;
+                });
+                expect(cut, `${lang} ${w}×${h}`).toEqual([]);
+            }
+            await page.setViewportSize({ width: 390, height: 844 });
         }
     });
 });

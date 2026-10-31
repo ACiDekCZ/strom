@@ -964,6 +964,20 @@ export function waitsOnUser(on: string | undefined): boolean {
 }
 
 /**
+ * `--live-strip-h` on the root: how much room the phone's strip takes above
+ * the bottom bar (its height and the 8px gap above it; 0 without a strip, or
+ * when the panel is a card at the top). The tree's pills stand on top of it.
+ */
+function publishLiveStrip(): void {
+    const panel = document.getElementById('live-panel');
+    const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
+    const h = panel && !panel.hidden && phone ? panel.getBoundingClientRect().height : 0;
+    const value = h > 0 ? `${Math.ceil(h) + 8}px` : '0px';
+    const root = document.documentElement.style;
+    if (root.getPropertyValue('--live-strip-h') !== value) root.setProperty('--live-strip-h', value);
+}
+
+/**
  * Where the panel may be: below whatever sits at the top on its side (the
  * standalone-file banner, the collaboration bar or badge), above whatever
  * sits at the bottom (zoom controls, bottom bar). Top-anchored layouts only;
@@ -2886,6 +2900,8 @@ export const researchUiMethods = uiModule({
             panel.setAttribute('role', 'region');
             holdFollowNoteIn(panel, 'panel');
             document.body.appendChild(panel);
+            // Its size (the strip grows with a note, hides, goes) moves the tree's pills on a phone.
+            if (typeof ResizeObserver === 'function') new ResizeObserver(publishLiveStrip).observe(panel);
         }
         return panel;
     },
@@ -3093,6 +3109,7 @@ export const researchUiMethods = uiModule({
         const s = live;
         if (!s && !idlePanel) {
             document.getElementById('live-panel')?.remove();
+            publishLiveStrip();
             this.renderResearchOverview();
             return;
         }
@@ -3615,5 +3632,6 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (panel) placeLivePanel(panel);
+        publishLiveStrip();
     },
 });
