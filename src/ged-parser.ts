@@ -63,7 +63,7 @@ import {
     uniqueIdSuffix,
     PrimaryName,
 } from './types';
-import { dateSortKey, formatFlexDate } from './dates';
+import { dateSortKey, formatFlexDate, instantLocalDay } from './dates';
 import { gedcomDatePhrase, parseGedcomDate } from './gedcom-date-read';
 import { localAge } from './recorded-age';
 import { isGedcomDateFormOf } from './gedcom-date-form';
@@ -243,9 +243,15 @@ function researchYears(date: string): { from?: number; to?: number } {
     return { from: years[0], to: years[years.length - 1] };
 }
 
-/** An ISO date from what the research wrote (ISO or a GEDCOM date); '' when neither. */
+/**
+ * An ISO date from what the research wrote (ISO or a GEDCOM date); '' when
+ * neither. An instant with a time and a zone gives its local day; a bare day
+ * stays as written.
+ */
 function researchIsoDate(value: string): string {
     const v = value.trim();
+    const local = instantLocalDay(v);
+    if (local) return local;
     const iso = v.match(/^(\d{4}-\d{2}-\d{2})/);
     if (iso) return iso[1];
     const parsed = v ? parseGedcomDate(v) : '';

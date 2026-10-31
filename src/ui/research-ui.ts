@@ -28,7 +28,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { StromData, TreeId, PersonId, SourceExcerpt } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
-import { formatFlexDate } from '../dates.js';
+import { formatFlexDate, instantLocalDay } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
@@ -74,6 +74,8 @@ export interface ResearchSource {
     treeId: string | null;
     name: string | null;
     date: string | null;
+    /** Header `_STROM_ASOF` (an ISO instant in UTC, or a bare day from older research). */
+    asOf?: string;
     /** The research commit (file header `_STROM_HEAD`); the bridge passes it in opts. */
     head?: string | null;
     /** `_STROM_MODE archive`: the research works without an agent. */
@@ -849,8 +851,14 @@ function todayIso(): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** "23. 9. 2026" / "23 Sep 2026": the file's header date, else today. */
-export function researchDateLabel(gedDate: string | null): string {
+/**
+ * "23. 9. 2026" / "23 Sep 2026": the local day of the header `_STROM_ASOF`
+ * instant when it carries a time, else the header `1 DATE` (a GEDCOM day,
+ * UTC), else today.
+ */
+export function researchDateLabel(gedDate: string | null, asOf?: string | null): string {
+    const local = instantLocalDay(asOf);
+    if (local) return formatFlexDate(local);
     let iso = '';
     try {
         iso = gedDate ? parseGedcomDate(gedDate) : '';
@@ -1511,7 +1519,7 @@ export const researchUiMethods = uiModule({
         /** "Load the new version" from the running research: the very same tree under a new head is only taken (no question). */
         takeSame?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
-        const dateLabel = researchDateLabel(source.date);
+        const dateLabel = researchDateLabel(source.date, source.asOf);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
 
         let previous: StromData | null = null;
@@ -2380,7 +2388,7 @@ export const researchUiMethods = uiModule({
             }
             const treeId = await this.applyResearch(
                 data,
-                { treeId: status.treeId, name, date: header.date, mode: header.mode },
+                { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode },
                 { head: status.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}) }
             );
             if (!treeId) {
