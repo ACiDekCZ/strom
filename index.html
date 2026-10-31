@@ -4564,6 +4564,20 @@
         }
         .surname-group-names { font-size: 13px; font-weight: 600; min-width: 0; }
         .surname-group button { padding: 4px 9px; font-size: 12px; white-space: nowrap; }
+        /* × beside every form but the group's first (package 1031 §2.7): takes out that
+           form alone, after a preview under the group. The × is drawn by CSS so the
+           names keep reading "A  =  B". */
+        .surname-group { flex-wrap: wrap; }
+        .surname-form { white-space: nowrap; }
+        .surname-group button.surname-form-x { width: 24px; height: 24px; padding: 0; margin-left: 2px; vertical-align: middle;
+            border: none; border-radius: 12px; background: none; color: var(--text-light); font-size: 15px; font-weight: 400; line-height: 1; }
+        .surname-form-x::before { content: '\00d7'; }
+        @media (hover: hover) { .surname-group button.surname-form-x:hover { background: var(--hover-bg); color: var(--text); } }
+        @media (pointer: coarse) { .surname-group button.surname-form-x { width: 44px; height: 44px; border-radius: 22px; margin: -10px -10px -10px -6px; } }
+        .surname-group-rod { font-size: 12px; color: var(--text-light); }
+        .surname-form-preview { flex: 1 0 100%; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .surname-form-preview .le-actions button { padding: 6px 12px; font-size: 13px; }
+        @media (max-width: 640px) { .surname-form-preview .le-actions { flex-direction: column-reverse; align-items: stretch; } }
         .surnames-none.empty-block { margin: 0 0 4px; }
         .surnames-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
         .surnames-hint { margin: 0 0 8px; font-size: 12px; color: var(--text-light); }
@@ -4608,6 +4622,94 @@
         .surnames-add-row input { flex: 1; min-width: 0; }
         .surnames-add-row button { padding: 6px 12px; }
         @media (max-width: 1024px) { .surnames-modal { max-width: 94vw; } }
+
+        /* "Edit family line" (package 1031 §2): 540 px; a full-screen sheet on phones.
+           Founder / name forms / separate line; each action opens its choice and
+           "What will change" (--card-bg-2) inside its section. */
+        @media (min-width: 641px) { .modal.modal--md.lineage-edit-modal { width: 540px; max-width: min(540px, 94vw); } }
+        .lineage-edit-modal .modal-header { align-items: flex-start; gap: 12px; }
+        .le-head { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .le-head h2 { overflow-wrap: anywhere; }
+        .le-sub { margin: 0; font-size: 13px; color: var(--text-light); }
+        .lineage-edit-modal .modal-content { padding: 4px 24px 12px; font-size: 13.5px; }
+        .le-sec { padding: 12px 0; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--divider); min-width: 0; }
+        .le-sec:last-child { border-bottom: none; }
+        .le-sec-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--accent-text); }
+        .le-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .le-founder, .le-hint { flex: 1; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; }
+        .le-founder-name { color: var(--text); }
+        .le-hint, .le-faint { color: var(--text-light); }
+        .le-chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap;
+            color: var(--accent-text); background: color-mix(in srgb, var(--accent-text) 14%, transparent); }
+        .lineage-edit-modal button.le-btn { padding: 6px 12px; font-size: 13.5px; white-space: nowrap; }
+        .lineage-edit-modal button.le-link { background: none; border: none; padding: 0; color: var(--primary);
+            font-size: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+        .le-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .le-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border);
+            border-radius: 16px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+        .le-pill:has(> .le-x) { padding-right: 4px; }
+        .le-pill.is-chosen { border-color: var(--primary); background: var(--primary-soft); }
+        .lineage-edit-modal button.le-x { width: 24px; height: 24px; padding: 0; border-radius: 12px; background: none; flex: none;
+            color: var(--text-light); font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+        .lineage-edit-modal button.le-pill--add { padding: 4px 10px; border: 1px dashed var(--primary); border-radius: 16px;
+            background: none; color: var(--primary); font-size: inherit; font-weight: 500; }
+        .le-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .le-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+        .le-panel-title { font-size: 12.5px; font-weight: 600; }
+        .lineage-edit-modal input.le-search, .lineage-edit-modal input.le-addform-input { width: 100%; box-sizing: border-box; height: 36px;
+            padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 14px; }
+        .le-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+        .lineage-edit-modal button.le-item { display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+            padding: 7px 10px; border-radius: 7px; background: none; color: var(--text); font-size: 13.5px; }
+        .lineage-edit-modal button.le-item.is-chosen { background: var(--primary-soft); font-weight: 500; }
+        .lineage-edit-modal button.le-item:disabled { color: var(--text-light); cursor: default; }
+        .le-gen { flex: 0 0 30px; color: var(--text-light); font-weight: 400; }
+        .le-item-name { min-width: 0; overflow-wrap: anywhere; }
+        .le-empty { margin: 0; padding: 7px 10px; color: var(--text-light); }
+        .le-preview { padding: 12px 14px; border-radius: 10px; background: var(--card-bg-2); display: flex; flex-direction: column;
+            gap: 6px; line-height: 1.5; overflow-wrap: anywhere; }
+        .le-preview p { margin: 0; }
+        .le-preview p.le-faint { font-size: 12.5px; }
+        .le-preview-title { font-weight: 600; }
+        .le-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+        .le-bar { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 12px; border-radius: 9px;
+            background: var(--card-bg-2); font-size: 13px; line-height: 1.45; }
+        .le-bar > span { flex: 1; min-width: 0; }
+        .le-bar--info { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+        .le-undo-note { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-light); }
+        .lineage-edit-modal .is-disabled { opacity: 0.5; cursor: not-allowed; }
+        /* What Apply did, with the undo pill's "Undo" riding in it: over the dialog. */
+        .toast[data-kind="lineage-edit"] { z-index: 250; }
+        .le-gone { color: var(--text-light); }
+        @media (hover: hover) {
+            .lineage-edit-modal button.le-x:not(.is-disabled):hover { background: var(--hover-bg); color: var(--text); }
+            .lineage-edit-modal button.le-item:not(:disabled):not(.is-chosen):hover { background: var(--hover-bg); }
+            .lineage-edit-modal button.le-pill--add:not(.is-disabled):hover { background: var(--primary-soft); }
+            .lineage-edit-modal button.le-btn.is-disabled:hover { background: transparent; }
+        }
+        @media (max-width: 640px) {
+            .modal.lineage-edit-modal { height: 100vh; height: 100dvh; max-height: none; border-radius: 0; }
+            .lineage-edit-modal .modal-header { padding: 16px 16px 10px; }
+            .lineage-edit-modal .modal-content { padding: 4px 16px 12px; }
+            .le-row { flex-wrap: wrap; }
+            .le-row > .le-btn { width: 100%; }
+            .le-list { max-height: 40vh; }
+            .le-actions { flex-direction: column-reverse; align-items: stretch; }
+            .le-bar { flex-wrap: wrap; }
+            .le-undo-note { order: 1; text-align: center; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal.lineage-edit-modal { max-height: 100dvh; }
+            .le-list { max-height: 45vh; }
+        }
+        @media (pointer: coarse) {
+            .le-pills { gap: 10px; }
+            .lineage-edit-modal button.le-x { width: 44px; height: 44px; border-radius: 22px; margin: -10px -4px -10px -10px; }
+            .lineage-edit-modal button.le-pill--add, .lineage-edit-modal button.le-btn { min-height: 44px; }
+            .lineage-edit-modal button.le-item { min-height: 44px; align-items: center; }
+            .lineage-edit-modal button.le-link { min-height: 44px; padding: 0 4px; }
+            .lineage-edit-modal input.le-search, .lineage-edit-modal input.le-addform-input { height: 44px; font-size: 16px; }
+        }
         /* Mobile: the add-row stacks, chips get finger-sized. */
         @media (max-width: 640px) {
             .surnames-add-row { flex-direction: column; }
@@ -20011,6 +20113,24 @@
             <div class="buttons about-footer">
                 <button type="button" class="secondary" onclick="window.Strom.UI.startTour()" data-i18n="tour.menu"></button>
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeAboutDialog()" data-i18n="buttons.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit family line (package 1031 §2): the body is drawn by src/ui/lineage-edit-ui.ts -->
+    <div class="modal-overlay" id="lineage-edit-modal">
+        <div class="modal lineage-edit-modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="lineage-edit-title">
+            <div class="modal-header">
+                <div class="le-head">
+                    <h2 id="lineage-edit-title"></h2>
+                    <p class="le-sub" id="lineage-edit-sub"></p>
+                </div>
+                <button type="button" class="close-btn" data-le="close" aria-label="Close" data-i18n-aria-label="buttons.close">&times;</button>
+            </div>
+            <div class="modal-content le-body" id="lineage-edit-body"></div>
+            <div class="buttons">
+                <span class="le-undo-note" data-i18n="lineage.edit.undoNote"></span>
+                <button type="button" class="secondary" data-dismiss data-le="close" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>

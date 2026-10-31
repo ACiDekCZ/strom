@@ -1065,6 +1065,11 @@ export const miscMethods = uiModule({
                         this.closeSurnamesDialog();
                         return;
                     }
+                    // "Edit family line": an open choice or preview first, then the dialog.
+                    if (currentDialog === 'lineage-edit-modal') {
+                        this.lineageEditEscape();
+                        return;
+                    }
 
                     // Special handling for person-merge-modal: closePersonMergeDialog handles stack and parent
                     if (currentDialog === 'person-merge-modal') {

@@ -18,7 +18,13 @@ import { surnamesInTree, surnameKey, marriedSurnameHolders } from '../surnames.j
 import { shownNameFull } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { PersonId } from '../types.js';
+import { buildLineages, previewOverride, rodLabels, rodsOfSurnameGroup, type LineageChange, type RodId } from '../lineage.js';
+import { lineagePreviewTexts } from '../lineage-preview.js';
+import { shownName } from '../person-name.js';
 import { uiModule } from './module.js';
+
+/** The form whose × was pressed: its preview stands under its group until Cancel or Remove. */
+let formPreview: string | null = null;
 import { emptyStateHtml } from './empty-state.js';
 
 export const surnamesMethods = uiModule({
@@ -26,6 +32,7 @@ export const surnamesMethods = uiModule({
     showSurnamesDialog(parentDialogId?: string): void {
         this.surnamesParentDialog = parentDialogId ?? null;
         this.surnamePicks = [];
+        formPreview = null;
         this.surnameMarriedOpen = null;
 
         document.getElementById('surnames-modal')?.remove();
@@ -118,26 +125,106 @@ export const surnamesMethods = uiModule({
             return;
         }
         const ro = DataManager.isReadOnly() || DataManager.isTreeLocked();
+        const data = DataManager.getData();
+        const esc = (s: string): string => this.escapeHtml(s);
+        // Which lineages each group concerns (grey "… line" after it), and the
+        // lineage a removed form's preview is about.
+        const index = buildLineages(data);
+        const labels = rodLabels(index);
+        const rodText = (ids: RodId[]): string => {
+            if (ids.length === 0) return '';
+            const names = ids.slice(0, 3).map(id => labels.get(id) ?? '');
+            const text = ids.length === 1 ? strings.surnames.rodOf(names[0]) : strings.surnames.rodsOf(`${names.join(', ')}${ids.length > 3 ? ', …' : ''}`);
+            return ` <span class="surname-group-rod">${esc(text)}</span>`;
+        };
+        const changeFor = (group: string[], form: string): LineageChange => {
+            const rodId = rodsOfSurnameGroup(index, group)
+                .find(id => surnameKey(index.rods.get(id)!.surname) !== surnameKey(form)) ?? null;
+            return { kind: 'removeForm', rodId, form };
+        };
         box.innerHTML = `<div class="surnames-groups-title">${strings.surnames.groupsTitle}</div>`
             + groups.map(group => {
                 const marks = this.surnameGroupMarks(group);
+                // × on every form but the first (the group's name): takes out that form alone.
+                const names = group.map((n, i) => i === 0 || ro
+                    ? `<span class="surname-form">${esc(n)}</span>`
+                    : `<span class="surname-form">${esc(n)}<button type="button" class="surname-form-x" data-form="${esc(n)}"
+                        aria-label="${esc(strings.surnames.removeForm(n))}" title="${esc(strings.surnames.removeForm(n))}"></button></span>`).join('  =  ');
+                const open = !ro && formPreview !== null && group.some(n => surnameKey(n) === surnameKey(formPreview!));
+                let preview = '';
+                if (open) {
+                    const form = group.find(n => surnameKey(n) === surnameKey(formPreview!))!;
+                    const pv = previewOverride(data, changeFor(group, form), index);
+                    const texts = lineagePreviewTexts(pv.lines, data, p => shownName(p));
+                    const relation = pv.lines.find(l => l.kind === 'linkedByRelation');
+                    const split = relation && relation.kind === 'linkedByRelation' && relation.personId
+                        ? `<button type="button" class="secondary surname-form-split" data-id="${esc(relation.personId)}">${esc(strings.lineage.edit.splitBtn)}</button>` : '';
+                    preview = `<div class="surname-form-preview" data-form="${esc(form)}">
+                        <div class="le-preview" role="status">
+                            <div class="le-preview-title">${esc(strings.lineage.preview.title)}</div>
+                            ${texts.map((t, i) => `<p class="${pv.lines[i]?.kind === 'formWholeTree' ? 'le-faint' : ''}">${esc(t)}</p>`).join('')}
+                        </div>
+                        <div class="le-actions">
+                            <button type="button" class="secondary surname-form-cancel">${esc(strings.buttons.cancel)}</button>
+                            ${split}
+                            <button type="button" class="primary surname-form-remove" data-form="${esc(form)}"${pv.patch ? '' : ' disabled'}>${esc(strings.lineage.edit.removeFormBtn)}</button>
+                        </div>
+                    </div>`;
+                }
                 return `
                 <div class="surname-group${marks.isNew ? ' is-new' : ''}">
                     <span class="surname-group-text">
-                        <span class="surname-group-names">${group.map(n => this.escapeHtml(n)).join('  =  ')}</span>${marks.html}
+                        <span class="surname-group-names">${names}</span>${rodText(rodsOfSurnameGroup(index, group))}${marks.html}
                     </span>
-                    ${ro ? '' : `<button type="button" class="secondary surname-unlink" data-name="${this.escapeHtml(group[0])}">
+                    ${ro ? '' : `<button type="button" class="secondary surname-unlink" data-name="${esc(group[0])}">
                         ${strings.surnames.unlink}
                     </button>`}
+                    ${preview}
                 </div>`;
             }).join('');
 
         box.querySelectorAll('.surname-unlink').forEach(btn => {
             (btn as HTMLButtonElement).onclick = () => {
+                formPreview = null;
                 DataManager.removeSurnameGroup(btn.getAttribute('data-name') ?? '');
                 this.renderSurnamesDialogParts();
                 TreeRenderer.render();
             };
+        });
+        box.querySelectorAll<HTMLButtonElement>('.surname-form-x').forEach(btn => {
+            btn.onclick = () => {
+                formPreview = btn.dataset.form ?? null;
+                this.renderSurnameGroups();
+                box.querySelector<HTMLElement>('.surname-form-remove:not([disabled]), .surname-form-cancel')?.focus();
+            };
+        });
+        box.querySelector<HTMLButtonElement>('.surname-form-cancel')?.addEventListener('click', () => {
+            const form = formPreview;
+            formPreview = null;
+            this.renderSurnameGroups();
+            if (form) box.querySelector<HTMLElement>(`.surname-form-x[data-form="${CSS.escape(form)}"]`)?.focus();
+        });
+        box.querySelector<HTMLButtonElement>('.surname-form-remove')?.addEventListener('click', (e) => {
+            const form = (e.currentTarget as HTMLElement).dataset.form ?? '';
+            const group = groups.find(g => g.some(n => surnameKey(n) === surnameKey(form)));
+            if (!group) return;
+            const pv = previewOverride(data, changeFor(group, form), index);
+            formPreview = null;
+            if (pv.patch) {
+                const done = strings.auditLog.surnameFormRemoved(form, group.join(' · '));
+                DataManager.applyLineagePatch(pv.patch, strings.undo.removeSurnameForm(form), { action: 'surnames.removeForm', text: done });
+                // The undo pill's "Undo" rides in the toast over the dialog.
+                this.showToast(`${done}.`, 6000, { kind: 'lineage-edit', clearOf: '#surnames-modal .buttons' });
+            }
+            this.renderSurnamesDialogParts();
+            TreeRenderer.render();
+        });
+        // The form is joined to the line by a parent–child link: a line of its own instead.
+        box.querySelector<HTMLButtonElement>('.surname-form-split')?.addEventListener('click', (e) => {
+            const id = (e.currentTarget as HTMLElement).dataset.id as PersonId;
+            formPreview = null;
+            this.closeSurnamesDialog();
+            this.openLineageSplitFrom(id);
         });
     },
 

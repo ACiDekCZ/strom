@@ -1468,8 +1468,9 @@ export const treeOverviewMethods = uiModule({
             `<button type="button" class="tov-link" data-tov="rod-go" data-id="${esc(id)}">${esc(d.labels.get(id) ?? '')}</button>`;
         const founder = data.persons[rod.founderId];
         const facts = this.treeOverviewRodFounderFacts(rod, data);
+        // Set by hand: the way back to the computed line (the edit dialog's preview first).
         const how = rod.manual
-            ? ` <span class="tov-chip tov-rod-manual">${esc(r.founderManual)}</span>`
+            ? ` <span class="tov-chip tov-rod-manual">${esc(r.founderManual)}</span> ${this.treeOverviewActionHtml('rod-revert', strings.lineage.edit.revert, 'tov-link tov-rod-revert', `data-id="${esc(rod.id)}"`)}`
             : ` <span class="tov-faint">· ${esc(r.founderAuto)}</span>`;
         const placeNames = rod.places.map(p => p.name);
         const places = placeNames.length >= ROD_PLACES_LIST_FROM
@@ -1591,6 +1592,18 @@ export const treeOverviewMethods = uiModule({
         if (!el) return;
         scrollBelowHeader(el);
         el.querySelector<HTMLElement>(small ? '.tov-link' : '.tov-rod-row')?.focus({ preventScroll: true });
+    },
+
+    /**
+     * A lineage was changed from its edit dialog: the open detail follows it
+     * (a new founder gives the lineage a new id) and the overview shows the
+     * new state at once.
+     */
+    followTreeOverviewRod(before: RodId, after: RodId): void {
+        if (!state || !state.active || !this.isTreeOverviewOpen()) return;
+        const ui = rodsUiOf(state.treeId);
+        if (ui.open === before && before !== after) openRodDetail(ui, after);
+        this.refreshTreeOverview();
     },
 
     /**
@@ -2239,8 +2252,12 @@ export const treeOverviewMethods = uiModule({
                 void this.openTreeOverviewRodBook(target.dataset.id as RodId);
                 return;
             case 'rod-edit':
-                // The edit dialog decides whether it opens over the overview.
-                this.openLineageEdit(target.dataset.id as RodId);
+            case 'rod-revert':
+                // Over the overview, on the overview's tree.
+                this.openLineageEdit(target.dataset.id as RodId, {
+                    context: { treeId: st.treeId, data: st.data, active: st.active, research: st.research },
+                    action: target.dataset.tov === 'rod-revert' ? 'revert' : undefined,
+                });
                 return;
         }
     },
