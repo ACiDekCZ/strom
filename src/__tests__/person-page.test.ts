@@ -89,6 +89,9 @@ function doc(data: StromData, o: Partial<PersonPageOptions> = {}): string {
     return buildPersonPageDocument(preparePersonPageData(data, op), op);
 }
 
+/** The page without its Ancestors fan (whose labels have their own short year form). */
+const withoutFan = (html: string) => html.replace(/<section class="pp-sec pp-sec--ancestors"[\s\S]*?<\/section>/, '');
+
 const sectionIds = (html: string) => [...html.matchAll(/<section class="pp-sec[^"]*" id="(pp-sec-[a-z]+)"/g)].map(m => m[1]);
 
 describe('sections', () => {
@@ -96,8 +99,8 @@ describe('sections', () => {
         const html = body(fiskTree(), { open: new Set(['research']) });
         expect(html.startsWith('<article class="pp"')).toBe(true);
         expect(html.indexOf('<header class="pp-hero"')).toBeLessThan(html.indexOf('pp-sec-family'));
-        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
-        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'places', 'timeline', 'materials', 'notes', 'sources', 'research']);
+        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-ancestors', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
+        expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'ancestors', 'story', 'places', 'timeline', 'materials', 'notes', 'sources', 'research']);
     });
 
     it('a person with only a name has a header and nothing empty', () => {
@@ -476,8 +479,8 @@ describe('family', () => {
         expect(html).toContain('<span class="pp-ft-years" title="1802–1804 – před 1850">1802–1804 – před 1850</span>');
         expect(html).toContain('<span class="pp-chip-years">* po 1862</span>');
         expect(html).toContain('<span>⚭ asi 1888</span>');
-        expect(html).not.toContain('1798–1890');
-        expect(html).not.toContain('1802–1850');
+        expect(withoutFan(html)).not.toContain('1798–1890');
+        expect(withoutFan(html)).not.toContain('1802–1850');
         // Plain years stay as they were; the English page in its words.
         expect(html).toContain('<span class="pp-ft-years">1865–1930</span>');
         expect(body(d, { lang: 'en' })).toContain('<span class="pp-ft-years" title="1802–1804 – before 1850">1802–1804 – before 1850</span>');
@@ -970,7 +973,7 @@ describe('history spans and the folded sources', () => {
             for (const t of titles) expect(t.length).toBeLessThanOrEqual(60);
             expect(titles.every(t => /[^\s,(]…$/.test(t))).toBe(true);
             // Not inside the heading (where it took the heading's font and pushed it aside).
-            const heading = html.match(/<h2 class="pp-fold-h">((?:(?!<\/h2>).)*)<\/h2>/)?.[1] ?? '';
+            const heading = html.slice(html.indexOf('id="pp-sec-sources"')).match(/<h2 class="pp-fold-h">((?:(?!<\/h2>).)*)<\/h2>/)?.[1] ?? '';
             expect(heading).toContain('Prameny');
             expect(heading).not.toContain('pp-peek');
         }
@@ -1554,7 +1557,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
 
     it('the Places section sits between the story and the timeline; the chart opens the timeline above its rows', () => {
         const html = body(geoTree(), { open: new Set(['research']) });
-        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
+        expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-ancestors', 'pp-sec-story', 'pp-sec-places', 'pp-sec-timeline', 'pp-sec-materials', 'pp-sec-notes', 'pp-sec-sources', 'pp-sec-research']);
         expect(html).toContain('class="pp-map pp-wide');
         const tl = html.slice(html.indexOf('id="pp-sec-timeline"'));
         expect(tl.indexOf('class="pp-chart-host pp-wide"')).toBeGreaterThan(0);
@@ -1755,5 +1758,112 @@ describe('the family line row in the header (spec 1031 §3)', () => {
 
     it('no lineage, no row', () => {
         expect(rodDd(body(withLiving(), { personId: 'cizi' as PersonId }))).toBeNull();
+    });
+});
+
+describe('the Ancestors section: a four-generation fan under the family (1031, §8)', () => {
+    const anc = (html: string) => html.match(/<section class="pp-sec pp-sec--ancestors"[\s\S]*?<\/section>/)?.[0] ?? '';
+    /** Jan's grandparents on his father's side; a placeholder mother of Anna. */
+    function deepTree(): StromData {
+        const d = fiskTree();
+        d.persons['deda' as PersonId] = p('deda', 'Matěj', 'Fíšek', 'male', { birthDate: '1800', deathDate: '1860', childIds: ids('otec') });
+        d.persons['baba' as PersonId] = p('baba', 'Dorota', 'Fíšková', 'female', { birthDate: '1805', deathDate: '1870', childIds: ids('otec') });
+        d.persons['nik' as PersonId] = { ...p('nik', '', '', 'female'), isPlaceholder: true, childIds: ids('matka') };
+        d.persons['otec' as PersonId].parentIds = ids('deda', 'baba');
+        d.persons['matka' as PersonId].parentIds = ids('nik');
+        return d;
+    }
+
+    it('sits right under the family, with an entry in the contents and the count of known ancestors', () => {
+        const html = body(deepTree());
+        expect(sectionIds(html).slice(0, 2)).toEqual(['pp-sec-family', 'pp-sec-ancestors']);
+        expect(personPageSections(html, 'cs').find(s => s.key === 'ancestors')).toEqual({ key: 'ancestors', id: 'pp-sec-ancestors', label: 'Předci' });
+        // Father, mother and the father's parents; the placeholder counts as unknown.
+        expect(anc(html)).toContain('<span class="pp-anc-meta">4 generace · 4 osoby</span>');
+        expect(anc(body(fiskTree(), { lang: 'en' }))).toContain('<span class="pp-anc-meta">4 generations · 2 people</span>');
+        expect(anc(body(fiskTree(), { lang: 'de' }))).toContain('<span class="pp-anc-meta">4 Generationen · 2 Personen</span>');
+        expect(anc(html)).toContain('data-fan-person="deda"');
+        expect(anc(html)).not.toContain('data-fan-person="nik"');
+    });
+
+    it('a person with no known parent has no section and no entry', () => {
+        for (const personId of ['cizi', 'marie'] as const) {
+            const html = body(fiskTree(), { personId: personId as PersonId });
+            expect(sectionIds(html)).not.toContain('pp-sec-ancestors');
+            expect(personPageSections(html, 'cs').map(s => s.key)).not.toContain('ancestors');
+            expect(doc(fiskTree(), { personId: personId as PersonId })).not.toContain('data-fan-zoom');
+        }
+    });
+
+    it('the window: zoom buttons, the Ctrl hint and the tap line; the theme from the app (no embedded colours)', () => {
+        const html = anc(body(fiskTree()));
+        expect(html).toContain('data-fan-zoom ');
+        for (const act of ['in', 'out', 'fit']) expect(html).toContain(`data-fan-zoom-act="${act}"`);
+        expect(html).toMatch(/<div class="pp-anc-hint" data-fan-zoom-hint hidden aria-live="polite" data-mac="[^"]*⌘[^"]*">[^<]*Ctrl/);
+        expect(html).toContain('<p class="pp-anc-tap">Klepnutím na předka se otevře jeho stránka.</p>');
+        expect(html).not.toContain('<a href=');
+        expect(html).toContain('[data-theme="dark"]');
+    });
+
+    it('print: the whole fan, no buttons and no hint', () => {
+        const html = anc(body(fiskTree(), { mode: 'print', links: 'plain' }));
+        expect(html).toContain('<svg');
+        expect(html).not.toContain('data-fan-zoom');
+        expect(html).not.toContain('pp-anc-hint');
+        expect(html).not.toContain('pp-anc-tap');
+    });
+
+    it('a living ancestor is "Living person" in the label and the title, without years; the export asks about them', () => {
+        const d = fiskTree();
+        d.persons['vnuk' as PersonId] = p('vnuk', 'Ota', 'Fíšek', 'male', { birthDate: '1990', deathDate: '2010', parentIds: ids('tata') });
+        d.persons['tata' as PersonId] = p('tata', 'Radek', 'Fíšek', 'male', { birthDate: '1965', childIds: ids('vnuk'), parentIds: ids('deda2') });
+        d.persons['deda2' as PersonId] = p('deda2', 'Bohumil', 'Fíšek', 'male', { birthDate: '1930', deathDate: '1999', childIds: ids('tata') });
+        const o = { personId: 'vnuk' as PersonId, privacy: 'initials' as const };
+        const html = anc(body(d, o));
+        const tata = html.match(/<g[^>]*data-fan-person="tata"[\s\S]*?<\/g>/)?.[0] ?? '';
+        expect(tata).toContain('Žijící osoba');
+        expect(tata.match(/<title>([^<]*)<\/title>/)?.[1]).toBe('#2 · Žijící osoba');
+        expect(tata).not.toContain('Radek');
+        expect(tata).not.toContain('1965');
+        expect(html).toContain('Bohumil');
+        // The export's privacy question names living ancestors from the fan too.
+        const live = { ...d, persons: { ...d.persons } };
+        live.persons['deda2' as PersonId] = { ...live.persons['deda2' as PersonId], deathDate: undefined, birthDate: '1940' };
+        expect(personPageLivingNames(preparePersonPageData(live, opts({ personId: 'vnuk' as PersonId })))).toEqual(expect.arrayContaining([expect.stringContaining('Radek Fíšek'), expect.stringContaining('Bohumil Fíšek')]));
+        // Full privacy shows the name.
+        expect(anc(body(d, { personId: 'vnuk' as PersonId }))).toContain('Radek');
+    });
+
+    it('the file links a sector only to a page of the same set, never a protected living one', () => {
+        const d = deepTree();
+        const plain = anc(doc(d));
+        expect(plain).not.toContain('<a href=');
+        expect(plain).not.toContain('pp-anc-tap');
+        const set = anc(doc(d, { links: 'set', setMembers: new Set(ids('jan', 'otec', 'deda')) }));
+        const hrefs = [...set.matchAll(/<a href="([^"]+)"/g)].map(m => m[1]);
+        expect(hrefs).toEqual(['#vaclav-fisek-1830-1890', '#matej-fisek-1800-1860']);
+        expect(set).toContain('<p class="pp-anc-tap">');
+    });
+
+    it('the file carries the zoom script once, and only with a fan', () => {
+        const file = doc(deepTree());
+        expect(file.split('class="pp-anc-hint"').length).toBe(2);
+        const scripts = [...file.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+        expect(scripts.filter(s => s.includes('data-fan-zoom')).length).toBe(1);
+        expect(file).not.toMatch(/<script[^>]+src=/);
+        expect(file).toContain('[data-fan-zoom]');
+        expect(doc(fiskTree(), { personId: 'cizi' as PersonId })).not.toContain('[data-fan-zoom]');
+        // The file embeds light colours (no dark rule) and keeps the page's language in the fan.
+        expect(anc(file)).not.toContain('[data-theme="dark"]');
+        // No address in the file but its links (not even the SVG namespace).
+        expect(anc(file)).not.toContain('http');
+    });
+
+    it('the fan speaks the page language, not the interface one', () => {
+        const d = fiskTree();
+        d.persons['otec' as PersonId].birthDate = '~1830';
+        const html = anc(body(d, { lang: 'de' }));
+        expect(html).toContain('um 1830');
+        expect(anc(body(d))).toContain('asi 1830');
     });
 });

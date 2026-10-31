@@ -614,6 +614,127 @@ test.describe('desktop', () => {
         expect(await margins(filePage)).toEqual(expected.map(e => e[2]));
         await ctx.close();
     });
+
+    test('Ancestors (1031): the fan under the family; a tap opens the ancestor, Back returns; ＋ zooms; the wheel scrolls with a hint, Ctrl zooms; print shows it whole', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await openPageFromMenu(page);
+        const w = win(page);
+        const sec = w.locator('#pp-sec-ancestors');
+        await expect(sec).toBeVisible();
+        await expect(sec.locator('.pp-anc-meta')).toHaveText('4 generations · 2 people');
+        await expect(w.locator('.pp-toc .pp-toc-link', { hasText: 'Ancestors' })).toHaveCount(1);
+        const fan = sec.locator('.pp-anc-fan');
+        expect(Math.round((await fan.boundingBox())!.height)).toBe(380);
+        const svg = fan.locator('svg').first();
+        // The whole fan as the zoom fits it to the surface.
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await page.waitForTimeout(400);
+        const vb0 = await svg.getAttribute('viewBox');
+        // Desktop: ＋ − ⛶; no tap line (a mouse).
+        await expect(fan.locator('[data-fan-zoom-act]')).toHaveCount(3);
+        await expect(sec.locator('.pp-anc-tap')).toBeHidden();
+
+        // ＋ zooms in, ⛶ returns to the whole fan.
+        await fan.locator('[data-fan-zoom-act="in"]').click();
+        await expect.poll(() => svg.getAttribute('viewBox')).not.toBe(vb0);
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await expect.poll(() => svg.getAttribute('viewBox')).toBe(vb0);
+
+        // The wheel without Ctrl scrolls the page and shows the hint; the fan stays.
+        const body = w.locator('.pp-body');
+        await fan.scrollIntoViewIfNeeded();
+        const box = (await fan.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        const top0 = await body.evaluate((el) => el.scrollTop);
+        await page.mouse.wheel(0, 120);
+        await expect(fan.locator('[data-fan-zoom-hint]')).toBeVisible();
+        await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(top0);
+        expect(await svg.getAttribute('viewBox')).toBe(vb0);
+        await expect(fan.locator('[data-fan-zoom-hint]')).toBeHidden({ timeout: 3000 });
+        // With Ctrl it zooms.
+        const box2 = (await fan.boundingBox())!;
+        await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+        await page.keyboard.down('Control');
+        await page.mouse.wheel(0, -120);
+        await page.keyboard.up('Control');
+        await expect.poll(() => svg.getAttribute('viewBox')).not.toBe(vb0);
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await expect.poll(() => svg.getAttribute('viewBox')).toBe(vb0);
+
+        // A tap on the father's sector opens his page in the same window; Back returns.
+        const father = fan.locator('.fan-sector[data-fan-ahnentafel="2"]');
+        await expect(father).toHaveAttribute('data-fan-person', /.+/);
+        const fb = (await father.locator('text').first().boundingBox())!;
+        await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2);
+        await expect(w.locator('h1')).toContainText('Vaclav Fisek');
+        // The father has no known parent: no Ancestors section.
+        await expect(w.locator('#pp-sec-ancestors')).toHaveCount(0);
+        await w.locator('.pp-back').click();
+        await expect(w.locator('h1')).toContainText('Jan Fisek');
+        // The centre does nothing.
+        const focus = w.locator('#pp-sec-ancestors .fan-focus');
+        const cb = (await focus.boundingBox())!;
+        await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height * 0.75);
+        await page.waitForTimeout(400);
+        await expect(w.locator('h1')).toContainText('Jan Fisek');
+        await expect(w.locator('.pp-back')).toBeHidden();
+
+        // Print: the section open, the whole fan, no buttons and no hint.
+        await w.locator('#pp-sec-ancestors [data-fan-zoom-act="in"]').click();
+        await page.evaluate(() => { window.print = () => {}; });
+        await w.locator('.pp-print').click();
+        await page.emulateMedia({ media: 'print' });
+        const psec = w.locator('#pp-sec-ancestors');
+        await expect(psec.locator('svg').first()).toBeVisible();
+        await expect.poll(() => psec.locator('svg').first().getAttribute('viewBox')).toBe(vb0);
+        await expect(psec.locator('.pp-anc-zoom')).toBeHidden();
+        await expect(psec.locator('[data-fan-zoom-hint]')).toBeHidden();
+        expect(await psec.evaluate((el) => getComputedStyle(el).breakInside)).toBe('avoid');
+        await page.emulateMedia({ media: 'screen' });
+    });
+
+    test('Ancestors (1031): the saved file carries the fan with its zoom; the wheel needs Ctrl there too; print hides the buttons', async ({ page, browser }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await openPageFromMenu(page);
+        await win(page).locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('id="pp-sec-ancestors"');
+        expect(html).toContain('data-fan-zoom ');
+        // A single page is not a set: the sectors carry titles, no links.
+        expect(html.match(/<section class="pp-sec pp-sec--ancestors"[\s\S]*?<\/section>/)![0]).not.toContain('<a href=');
+
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        const file = await ctx.newPage();
+        await file.setContent(html, { waitUntil: 'load' });
+        const fan = file.locator('#pp-sec-ancestors .pp-anc-fan');
+        await expect(fan).toBeVisible();
+        const svg = fan.locator('svg').first();
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await file.waitForTimeout(400);
+        const vb0 = await svg.getAttribute('viewBox');
+        await fan.locator('[data-fan-zoom-act="in"]').click();
+        await expect.poll(() => svg.getAttribute('viewBox')).not.toBe(vb0);
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await expect.poll(() => svg.getAttribute('viewBox')).toBe(vb0);
+        await fan.scrollIntoViewIfNeeded();
+        const box = (await fan.boundingBox())!;
+        await file.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await file.mouse.wheel(0, 120);
+        await expect(fan.locator('[data-fan-zoom-hint]')).toBeVisible();
+        expect(await svg.getAttribute('viewBox')).toBe(vb0);
+        await file.keyboard.down('Control');
+        await file.mouse.wheel(0, -120);
+        await file.keyboard.up('Control');
+        await expect.poll(() => svg.getAttribute('viewBox')).not.toBe(vb0);
+        await file.emulateMedia({ media: 'print' });
+        await expect(fan.locator('.pp-anc-zoom')).toBeHidden();
+        await expect(svg).toBeVisible();
+        await ctx.close();
+    });
 });
 
 /**
@@ -1067,6 +1188,30 @@ test.describe('a phone', () => {
         // Save and Print in ⋯ on a phone.
         await w.locator('.pp-more').click();
         await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
+    });
+
+    test('Ancestors (1031): the fan across the screen, 236 px, only ⛶, the tap line; a tap opens the ancestor', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await card(page, 'Jan').click();
+        await page.locator('.bottom-sheet-person .bs-page-btn').click();
+        const w = win(page);
+        const fan = w.locator('#pp-sec-ancestors .pp-anc-fan');
+        await fan.scrollIntoViewIfNeeded();
+        const box = (await fan.boundingBox())!;
+        expect(Math.round(box.height)).toBe(236);
+        expect(Math.round(box.width)).toBe(390);
+        await expect(fan.locator('[data-fan-zoom-act="fit"]')).toBeVisible();
+        await expect(fan.locator('[data-fan-zoom-act="in"]')).toBeHidden();
+        await expect(fan.locator('[data-fan-zoom-act="out"]')).toBeHidden();
+        await expect(w.locator('#pp-sec-ancestors .pp-anc-tap')).toHaveText('Tapping an ancestor opens their page.');
+        expect(await w.locator('.pp-body').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+        const mother = fan.locator('.fan-sector[data-fan-ahnentafel="3"] text').first();
+        const mb = (await mother.boundingBox())!;
+        await page.touchscreen.tap(mb.x + mb.width / 2, mb.y + mb.height / 2);
+        await expect(w.locator('h1')).toContainText('Anna Nova');
+        await w.locator('.pp-back').click();
+        await expect(w.locator('h1')).toContainText('Jan Fisek');
     });
 
     test('the header follows the window\'s size: Save on a phone, Save as HTML once wider, Save again when narrow', async ({ page }) => {

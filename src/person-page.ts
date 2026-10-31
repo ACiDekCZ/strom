@@ -21,7 +21,7 @@ import {
 import { placeKey } from './places.js';
 import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
-import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
+import { getStringsForLang, getCurrentLanguage, setLanguage, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
@@ -38,6 +38,9 @@ import { buildLineages, rodLabels, LineageIndex, RodId } from './lineage.js';
 import { personRodRowValue, rodRowShown, RodRowValue } from './lineage-row.js';
 import { collectPersonPlacePoints, placesMapHtml, PlacePoint, PLACES_MAP_SCRIPT } from './person-page-map.js';
 import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeChartInput } from './person-page-chart.js';
+import { buildFanModel, buildFanSvg, FanBounds, FanModel } from './fan-chart.js';
+import { fanScreenSizes } from './fan-labels.js';
+import { fanZoomInlineScript } from './fan-zoom.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -174,7 +177,23 @@ export interface PersonPageData {
     geo: Readonly<Record<string, PlaceGeo>>;
     /** The header's "Family line" row (spec 1031 §3); null: not drawn (no lineage, or a living person under privacy). */
     rod: RodRowValue | null;
+    /**
+     * The Ancestors fan (spec 029 §8): the person and the known ancestors of
+     * its rings, taken from the whole protected tree (names, dates, sex and
+     * the parent links only); null: no known parent, no section.
+     */
+    ancestors: PersonPageAncestors | null;
 }
+
+/** The people of the Ancestors fan and how many of them the rings show. */
+export interface PersonPageAncestors {
+    tree: StromData;
+    /** Distinct known ancestors in the rings (the heading's "30 people"). */
+    count: number;
+}
+
+/** Rings of the Ancestors fan (§8.2): four generations, a half circle. */
+export const PERSON_PAGE_FAN_GENERATIONS = 4;
 
 export interface PersonPageGroupCounts {
     history: number;
@@ -188,7 +207,7 @@ export interface PersonPageGroupCounts {
 
 /** A section that is on the page (for the window's table of contents). */
 export interface PersonPageSection {
-    key: 'family' | 'story' | 'question' | 'places' | 'timeline' | 'materials' | 'people' | 'notes' | 'sources' | 'research';
+    key: 'family' | 'ancestors' | 'story' | 'question' | 'places' | 'timeline' | 'materials' | 'people' | 'notes' | 'sources' | 'research';
     id: string;
     label: string;
 }
@@ -422,7 +441,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
             living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
             readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-            godchildren: [], places: [], geo: {}, rod: null,
+            godchildren: [], places: [], geo: {}, rod: null, ancestors: null,
         };
     }
     const person: Person = structuredClone(src);
@@ -509,7 +528,11 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     }
     godchildren.sort((a, b) => (a.year ?? Infinity) - (b.year ?? Infinity) || String(a.id).localeCompare(String(b.id)));
 
+    // The Ancestors fan: from the whole protected tree, not the page's subset (§8.2).
+    const ancestors = ancestorFanData(full, id);
     const living = new Set<PersonId>([...Object.keys(tree.persons)].filter(p => prot.living.has(p as PersonId)) as PersonId[]);
+    // A living grandparent in the fan is a living person of the page (the export's privacy question names them).
+    for (const pid of Object.keys(ancestors?.tree.persons ?? {}) as PersonId[]) if (prot.living.has(pid)) living.add(pid);
     // The places map (§1): points from the whole protected tree, the coordinates of those places alone.
     const places = collectPersonPlacePoints(full, id, {
         living: prot.living, protect: opts.privacy !== 'full', now: opts.now.getFullYear(),
@@ -531,9 +554,53 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         godchildren, places, geo,
         // A lineage's name is a surname: with initials or hidden names a living person's row is left out (§3.4).
         rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
+        ancestors,
     };
     page.counts = countGroups(page);
     return page;
+}
+
+/** Of an ancestor only what the fan draws: names, dates, sex and the links to the known parents. */
+function ancestorView(p: Person, known: (id: PersonId) => boolean): Person {
+    const parentIds = p.parentIds.filter(known);
+    const keep: Person = {
+        id: p.id, firstName: p.firstName, lastName: p.lastName, gender: p.gender, isPlaceholder: p.isPlaceholder,
+        partnerships: [], parentIds, childIds: [],
+    };
+    for (const k of ['titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'birthDate', 'deathDate', 'isDeceased'] as const) {
+        if (p[k] !== undefined) (keep as unknown as Record<string, unknown>)[k] = p[k];
+    }
+    const rel = parentIds.filter(pid => p.parentRelTypes?.[pid] && p.parentRelTypes[pid] !== 'biological');
+    if (rel.length) keep.parentRelTypes = Object.fromEntries(rel.map(pid => [pid, p.parentRelTypes![pid]]));
+    return keep;
+}
+
+/**
+ * The Ancestors fan's people (§8.2, §8.6): the person and the known
+ * ancestors up to the fan's rings; a stand-in ("?") parent counts as unknown.
+ * Null when not one parent is known.
+ */
+function ancestorFanData(full: StromData, id: PersonId): PersonPageAncestors | null {
+    const known = (pid: PersonId) => !!full.persons[pid] && !full.persons[pid].isPlaceholder;
+    const persons: Record<string, Person> = {};
+    let ring: PersonId[] = [id];
+    persons[id] = ancestorView(full.persons[id], known);
+    for (let g = 1; g <= PERSON_PAGE_FAN_GENERATIONS && ring.length; g++) {
+        const next: PersonId[] = [];
+        for (const pid of ring) {
+            for (const parent of persons[pid].parentIds) {
+                if (persons[parent]) continue;
+                persons[parent] = ancestorView(full.persons[parent], known);
+                next.push(parent);
+            }
+        }
+        ring = next;
+    }
+    const tree: StromData = { persons: persons as StromData['persons'], partnerships: {} };
+    const model = buildFanModel(tree, id, { generations: PERSON_PAGE_FAN_GENERATIONS, shape: 'half' });
+    const shown = new Set<PersonId>();
+    for (const s of model?.sectors ?? []) if (s.person) shown.add(s.person.id);
+    return shown.size ? { tree, count: shown.size } : null;
 }
 
 function countGroups(page: PersonPageData): PersonPageGroupCounts {
@@ -771,11 +838,14 @@ function extLink(url: string | undefined, label: string): string {
 /** A fold: a button + region in the window, <details> in the file. */
 function fold(c: Ctx, o: {
     key: string; id: string; cls: string; head: string; heading?: boolean; after?: string; body: string; detailsOpen?: boolean;
+    /** Open until folded (the window's open set then holds the key while it is closed). */
+    defaultOpen?: boolean;
 }): string {
-    const open = isOpen(c, o.key) || !!o.detailsOpen;
+    const open = o.defaultOpen ? !isOpen(c, o.key) : isOpen(c, o.key) || !!o.detailsOpen;
     const h = (inner: string) => (o.heading ? `<h2 class="pp-fold-h">${inner}</h2>` : inner);
     if (c.app) {
-        const btn = `<button type="button" class="pp-disc" aria-expanded="${open}" aria-controls="${o.id}-body" data-pp-toggle="${esc(o.key)}">${o.head}</button>`;
+        const btn = `<button type="button" class="pp-disc" aria-expanded="${open}" aria-controls="${o.id}-body" data-pp-toggle="${esc(o.key)}"`
+            + `${o.defaultOpen ? ' data-pp-fold-default="open"' : ''}>${o.head}</button>`;
         return `<div class="pp-coll ${o.cls}" id="${o.id}">${h(btn)}${o.after ?? ''}`
             + `<div class="pp-fold-body" id="${o.id}-body"${open ? '' : ' hidden'}>${o.body}</div></div>`;
     }
@@ -1378,6 +1448,101 @@ function familyTreeHtml(c: Ctx): string {
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
         : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopBothHtml(c, d) + familyTreeRailHtml(c, d);
     return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>`);
+}
+
+// ── Ancestors (spec 029 §8) ──
+
+/** Screen px of the section's fan surface on a desktop (§8.2): the labels of a file are fitted for it. */
+const FAN_BOX_W = 680;
+const FAN_BOX_H = 380;
+
+/** A protected living ancestor: "Living person", no years (§8.3); the page's own person follows the page. */
+function fanProtect(page: PersonPageData): ((p: Person) => boolean) | undefined {
+    if (page.privacy === 'full') return undefined;
+    return p => p.id !== page.personId && page.living.has(p.id);
+}
+
+/** A sector's anchor in a set of pages (§8.4): an ancestor whose page is in the set, never a protected living one. */
+function fanLinkFor(page: PersonPageData, opts: PersonPageOptions): ((pid: PersonId) => string | null) | undefined {
+    const a = page.ancestors;
+    if (!a || opts.mode !== 'file' || opts.links !== 'set' || !opts.setMembers) return undefined;
+    const prot = fanProtect(page);
+    return pid => {
+        const p = a.tree.persons[pid];
+        if (!p || pid === page.personId || !opts.setMembers!.has(pid) || prot?.(p)) return null;
+        return `#${personPageFileName({ ...page, personId: pid, tree: a.tree }).replace(/\.html$/, '')}`;
+    };
+}
+
+/** The fan's model (null: no section). */
+export function personPageFanModel(page: PersonPageData): FanModel | null {
+    const a = page.ancestors;
+    return a ? buildFanModel(a.tree, page.personId, { generations: PERSON_PAGE_FAN_GENERATIONS, shape: 'half' }) : null;
+}
+
+/** The SVG id of a page's fan (unique among the pages of a set). */
+export function personPageFanUid(page: PersonPageData): string {
+    return `ppfan-${asciiSlug(String(page.personId)) || 'x'}`;
+}
+
+/**
+ * The Ancestors fan's SVG (§8.2): colours by sex, never editable; the file
+ * embeds its light colours, the window follows the app's theme. The window
+ * draws it again for the zoom's scale and visible part (`view`).
+ */
+export function personPageFanSvg(page: PersonPageData, opts: PersonPageOptions, view: { ppu?: number; viewport?: FanBounds; phone?: boolean } = {}): string {
+    const model = personPageFanModel(page);
+    if (!model) return '';
+    const b = model.bounds;
+    const ppu = view.ppu && view.ppu > 0 ? view.ppu : Math.min((opts.chartWidth ?? FAN_BOX_W) / b.w, FAN_BOX_H / b.h);
+    const protect = fanProtect(page);
+    const linkFor = fanLinkFor(page, opts);
+    const S = getStringsForLang(page.lang);
+    // The fan speaks the interface's language; a page in another one lends it its own for the drawing.
+    const ui = getCurrentLanguage();
+    if (ui !== page.lang) setLanguage(page.lang);
+    try {
+        // Inline SVG in HTML needs no namespace; the file then names no address but its links.
+        return buildFanSvg(model, {
+            esc, editable: false, addParentLabel: '', colorMode: 'gender', embedStyles: opts.mode !== 'app',
+            uid: personPageFanUid(page), ppu, sizes: fanScreenSizes(!!view.phone),
+            relTypeLabel: t => S.parentRelType[t],
+            ...(view.viewport ? { viewport: view.viewport } : {}),
+            ...(protect ? { protect } : {}),
+            ...(linkFor ? { linkFor } : {}),
+        }).replace(' xmlns="http://www.w3.org/2000/svg"', '');
+    } finally {
+        if (ui !== page.lang) setLanguage(ui);
+    }
+}
+
+/**
+ * The Ancestors section (§8.1): under the family, "4 generations · 30 people",
+ * the fan with ＋ − ⛶ and the Ctrl hint (none in print), on touch a line on
+ * what a tap does. No known parent: no section (§8.6).
+ */
+function ancestorsHtml(c: Ctx): string {
+    const a = c.page.ancestors;
+    if (!a) return '';
+    const svg = personPageFanSvg(c.page, c.opts);
+    if (!svg) return '';
+    const { P } = c;
+    const F = c.S.fan;
+    const print = c.opts.mode === 'print';
+    const btn = (act: string, glyph: string, label: string) =>
+        `<button type="button" class="pp-anc-zbtn pp-anc-z${act}" data-fan-zoom-act="${act}" title="${esc(label)}" aria-label="${esc(label)}">${glyph}</button>`;
+    const controls = print ? '' : `<div class="pp-anc-zoom">${btn('in', '＋', F.zoomIn)}${btn('out', '−', F.zoomOut)}${btn('fit', '⛶', F.zoomFit)}</div>`
+        + `<div class="pp-anc-hint" data-fan-zoom-hint hidden aria-live="polite" data-mac="${esc(F.ctrlHint('⌘'))}">${esc(F.ctrlHint('Ctrl'))}</div>`;
+    // A tap leads somewhere in the window, and in a file only through the anchors of a set.
+    const taps = c.app || svg.includes('<a href=');
+    const head = `<span class="pp-sum-main"><span class="pp-h2-text">${esc(P.sec.ancestors)}</span> `
+        + `<span class="pp-anc-meta">${esc(P.ancestors.meta(PERSON_PAGE_FAN_GENERATIONS, a.count))}</span></span>`
+        + foldState('▸', '▾');
+    const body = `<div class="pp-anc-fan${taps ? ' pp-anc-fan--links' : ''}"${print ? '' : ' data-fan-zoom'} role="group" aria-label="${esc(P.ancestors.fanLabel)}">${svg}${controls}</div>`
+        + (taps && !print ? `<p class="pp-anc-tap">${esc(P.ancestors.tapHint)}</p>` : '');
+    return `<section class="pp-sec pp-sec--ancestors" id="pp-sec-ancestors">`
+        + fold(c, { key: 'ancestors', id: c.app ? 'pp-ancestors' : 'pp-ancestors-fold', cls: 'pp-ancestors', head, heading: true, body, defaultOpen: true })
+        + `</section>`;
 }
 
 function section(key: PersonPageSection['key'], title: string, body: string, head = ''): string {
@@ -2715,6 +2880,7 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const header = headerHtml(c, differs);
     const summary = summaryHtml(c);
     const family = familyTreeHtml(c);
+    const ancestors = ancestorsHtml(c);
     const story = storyHtml(c);
     const question = questionHtml(c);
     // Slot 6, the places of a life (placesMapHtml, §1), after the question; slot 7, the life chart, opens the timeline.
@@ -2727,7 +2893,7 @@ export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOption
     const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
     // Last: every image of the page is registered by now.
     const styles = imgStyles(c);
-    const content = `${summary}${family}${story}${question}${places}${timeline}${gallery}${people}${notes}${sources}${research}`;
+    const content = `${summary}${family}${ancestors}${story}${question}${places}${timeline}${gallery}${people}${notes}${sources}${research}`;
     // The file's contents on a phone and in a narrow window (§0.7): a fold under the header.
     const tocM = opts.toc && !c.app ? tocFoldHtml(personPageTocItems(content, page.lang), page.lang) : '';
     return `${open}${styles}${header}${tocM}${content}${footer}${boxes}</article>`;
@@ -2767,7 +2933,7 @@ function tocFoldHtml(items: readonly { id: string; label: string }[], lang: Lang
 export function personPageSections(body: string, lang: Language): PersonPageSection[] {
     const P = getStringsForLang(lang).personPage;
     // The open question is part of the story's reading, not an entry of its own.
-    const keys = ['family', 'story', 'places', 'timeline', 'materials', 'people', 'notes', 'sources', 'research'] as const;
+    const keys = ['family', 'ancestors', 'story', 'places', 'timeline', 'materials', 'people', 'notes', 'sources', 'research'] as const;
     return keys.filter(k => body.includes(`id="pp-sec-${k}"`))
         .map(k => ({ key: k, id: `pp-sec-${k}`, label: k === 'people' ? P.people.title : k === 'places' ? P.map.title : P.sec[k] }));
 }
@@ -2812,6 +2978,8 @@ export function personPageDocumentShell(lang: Language, title: string, body: str
         + (toc ? `<div class="pp-file-layout">${toc}<main class="pp-file">${body}</main></div>` : `<main class="pp-file">${body}</main>`)
         + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script>`
         + (body.includes('class="pp-sec pp-sec--places') ? `<script>${PLACES_MAP_SCRIPT}</script>` : '')
+        // One zoom script for every fan of the document (a set of pages has one per page).
+        + (body.includes(' data-fan-zoom ') ? `<script>${fanZoomInlineScript()}</script>` : '')
         + '</body></html>';
 }
 
@@ -2874,7 +3042,8 @@ export function personPageSizeMb(bytes: number, lang: Language): string {
  * itself, or someone no relation connects, is the name alone.
  */
 export function personPageLivingNames(page: PersonPageData, data?: StromData): string[] {
-    return [...page.living].map(id => page.tree.persons[id]).filter((p): p is Person => !!p).map(p => {
+    // A living ancestor of the fan is not among the page's people: its view in the fan's tree.
+    return [...page.living].map(id => page.tree.persons[id] ?? page.ancestors?.tree.persons[id]).filter((p): p is Person => !!p).map(p => {
         const relation = p.id === page.personId ? null
             : (data?.persons[page.personId] && data.persons[p.id] ? findRelationship(data, page.personId, p.id) : null)
                 ?? findRelationship(page.tree, page.personId, p.id);

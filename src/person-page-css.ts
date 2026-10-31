@@ -22,6 +22,53 @@ export const PERSON_PAGE_LIGHT_TOKENS = [
 /** The font stacks of the app (the file falls back to Georgia / the system sans without the embedded faces). */
 const FONT_STACKS = "--font-serif: 'Strom Serif', Georgia, 'Times New Roman', serif; --font-sans: 'Instrument Sans', -apple-system, 'Segoe UI', sans-serif;";
 
+/**
+ * The Ancestors section (spec 029 §8): the fan on a tinted surface (desktop
+ * 380 px high, a phone the column's full width × 236 px), ＋ − ⛶ bottom
+ * right (touch: ⛶ only), the Ctrl hint bottom centre, on touch a line on
+ * what a tap does. The SVG fills the surface; its viewBox is the zoom.
+ * Print: light, unfolded, the whole fan, no controls (§8.6).
+ */
+const PERSON_PAGE_FAN_CSS = `
+.pp-anc-meta { font-size: 13px; color: var(--text-faint); font-weight: 400; font-family: var(--font-sans); }
+.pp-anc-fan { position: relative; height: 380px; margin-top: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pp-anc-fan:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+.pp-anc-fan .fan-svg { display: block; width: 100%; height: 100%; }
+.pp-anc-fan a { cursor: pointer; }
+.pp-anc-fan--links .fan-sector[data-fan-kind="anc"] { cursor: pointer; }
+.pp-anc-zoom { position: absolute; right: 14px; bottom: 14px; z-index: 2; display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(43, 40, 34, 0.12)); }
+.pp .pp-anc-zbtn { width: 40px; height: 40px; padding: 0; margin: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-light); font-family: var(--font-sans); font-size: 20px; line-height: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.pp .pp-anc-zbtn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.pp-anc-hint { position: absolute; left: 50%; bottom: 14px; z-index: 3; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 12px; border-radius: 8px; background: rgba(43, 40, 34, 0.88); color: #fffdf8; font-family: var(--font-sans); font-size: 13px; line-height: 1.35; text-align: center; pointer-events: none; }
+.pp-anc-hint[hidden] { display: none; }
+.pp .pp-anc-tap { display: none; margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-faint); }
+@media (hover: hover) {
+  .pp .pp-anc-zbtn:hover { background: var(--hover-bg); color: var(--text); }
+}
+@media (pointer: coarse) {
+  .pp-anc-zoom { padding: 0; gap: 0; border: 0; background: none; box-shadow: none; right: 12px; bottom: 12px; }
+  .pp .pp-anc-zin, .pp .pp-anc-zout { display: none; }
+  .pp .pp-anc-zfit { width: 48px; height: 48px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm, 0 1px 3px rgba(43, 40, 34, 0.12)); font-size: 22px; }
+  .pp .pp-anc-tap { display: block; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .pp-anc-fan { height: 340px; }
+}
+@media (max-width: 640px) {
+  .pp-anc-fan { height: 236px; margin-inline: -16px; border-radius: 0; }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+  .pp-anc-fan { height: 260px; margin-inline: 0; border-radius: 10px; }
+}
+@media print {
+  #pp-sec-ancestors { break-inside: avoid; }
+  #pp-sec-ancestors .pp-fold-body { display: block !important; }
+  details#pp-ancestors-fold::details-content { content-visibility: visible; display: contents; }
+  .pp-anc-fan { height: 90mm; margin-inline: 0; border-radius: 0; background: none; }
+  .pp-anc-zoom, .pp-anc-hint, .pp-anc-tap { display: none !important; }
+}
+`;
+
 /** The page's content rules (`.pp-*`), for the window and the file alike. */
 export const PERSON_PAGE_CSS = `
 .pp { flex: 1 1 auto; min-width: 0; max-width: 680px; display: flex; flex-direction: column; gap: 32px; color: var(--text); font-family: var(--font-sans); font-size: 15px; line-height: 1.5; }
@@ -448,7 +495,7 @@ a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }
   details.pp-ch-fold > summary { display: none !important; }
   details.pp-ch-fold::details-content { content-visibility: visible; display: contents; }
 }
-` + PERSON_PAGE_VIZ_CSS;
+` + PERSON_PAGE_FAN_CSS + PERSON_PAGE_VIZ_CSS;
 
 /** The saved file's own frame (paper look, centred column) and the no-JS rules. */
 const FILE_FRAME_CSS = `
@@ -518,7 +565,7 @@ var opened=false;
 d.addEventListener('click',function(e){var l=e.target.closest?e.target.closest('a[href^="#obr-"]'):null;if(!l)return;if(l.hasAttribute('data-pp-lb')){e.preventDefault();location.replace(l.getAttribute('href'));return}opened=true});
 q('a[data-pp-lb="close"]').forEach(function(c){c.addEventListener('click',function(e){if(opened){e.preventDefault();opened=false;history.back()}})});
 d.addEventListener('keydown',function(e){var h=location.hash,t=h.indexOf('#obr-')===0?d.getElementById(h.slice(1)):null;if(!t)return;var k=e.key==='Escape'?'close':e.key==='ArrowLeft'?'prev':e.key==='ArrowRight'?'next':'';var l=k?t.querySelector('[data-pp-lb="'+k+'"]'):null;if(l){e.preventDefault();l.click()}});
-var folds=q('#pp-sources-fold, details.pp-gal-more, details.pp-sibs, details.pp-grand'),was=[];
+var folds=q('#pp-sources-fold, #pp-ancestors-fold, details.pp-gal-more, details.pp-sibs, details.pp-grand'),was=[];
 window.addEventListener('beforeprint',function(){was=folds.map(function(f){var o=f.open;f.open=true;return o})});
 window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.open=!!was[i]})});
 })();`;

@@ -6146,6 +6146,13 @@ const stringsEN = {
         sec: {
             facts: 'Details', family: 'Family', story: 'Story', notes: 'Notes', timeline: 'Life timeline',
             materials: 'Images and documents', sources: 'Sources', research: 'For researchers',
+            ancestors: 'Ancestors',
+        },
+        /** The Ancestors section (spec 029 §8): a half-circle fan of four generations. */
+        ancestors: {
+            meta: (gens: number, people: number) => `${nEn(gens, 'generation', 'generations')} · ${nEn(people, 'person', 'people')}`,
+            tapHint: 'Tapping an ancestor opens their page.',
+            fanLabel: 'Fan chart of the ancestors',
         },
         story: {
             // A couple's story as a chapter of the person page and the story reader (spec 027).
@@ -12269,6 +12276,12 @@ const stringsCZ: StringsType = {
         sec: {
             facts: 'Údaje', family: 'Rodina', story: 'Vyprávění', notes: 'Poznámky', timeline: 'Časová osa života',
             materials: 'Obrázky a dokumenty', sources: 'Prameny', research: 'Pro badatele',
+            ancestors: 'Předci',
+        },
+        ancestors: {
+            meta: (gens: number, people: number) => `${nCs(gens, 'generace', 'generace', 'generací')} · ${nCs(people, 'osoba', 'osoby', 'osob')}`,
+            tapHint: 'Klepnutím na předka se otevře jeho stránka.',
+            fanLabel: 'Vějíř předků',
         },
         story: {
             // Vyprávění páru jako kapitola stránky osoby a okna Vyprávění (spec 027).
@@ -18307,6 +18320,12 @@ const stringsDE: StringsType = {
         sec: {
             facts: 'Angaben', family: 'Familie', story: 'Erzählung', notes: 'Notizen', timeline: 'Lebenslauf',
             materials: 'Bilder und Dokumente', sources: 'Quellen', research: 'Für Forschende',
+            ancestors: 'Vorfahren',
+        },
+        ancestors: {
+            meta: (gens: number, people: number) => `${nDe(gens, 'Generation', 'Generationen')} · ${nDe(people, 'Person', 'Personen')}`,
+            tapHint: 'Ein Tippen auf einen Vorfahren öffnet seine Seite.',
+            fanLabel: 'Fächer der Vorfahren',
         },
         story: {
             // A couple's story as a chapter of the person page and the story reader (spec 027).

@@ -17,16 +17,18 @@ import { placeKey } from '../places.js';
 import { researchPersonRef } from '../research-link.js';
 import { personSourceRows } from '../person-sources.js';
 import { shownName } from '../person-name.js';
-import { isDesktop, isTablet, MQ_PHONE_BAR } from '../breakpoints.js';
+import { isDesktop, isTablet, isMobile, MQ_PHONE_BAR } from '../breakpoints.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
     preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageTocItems,
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
     PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput, personPageFileToggles,
+    personPageFanModel, personPageFanSvg,
 } from '../person-page.js';
 import { selectMapPlace, placeOrderKey, PlacePoint, KEY_SEP } from '../person-page-map.js';
 import { lifeChartHtml } from '../person-page-chart.js';
+import { FanZoom, fanZoomModifier } from '../fan-zoom.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
 import { openImageViewer } from './image-viewer.js';
@@ -134,6 +136,8 @@ let resizeHandler: (() => void) | null = null;
 let chartObserver: ResizeObserver | null = null;
 /** The last measured width of the life chart (the next page starts with it). */
 let chartWidth = 0;
+/** The Ancestors fan's zoom (spec 029 §8.5), the current page's. */
+let fanZoom: FanZoom | null = null;
 /** The current page's places map points (the place clicked in the text, Open in map). */
 let pagePlaces: readonly PlacePoint[] = [];
 /** How long a timeline row stays highlighted after a jump from the chart or the places list (ms). */
@@ -287,6 +291,8 @@ export const personPageMethods = uiModule({
         editObserver = null;
         chartObserver?.disconnect();
         chartObserver = null;
+        fanZoom?.destroy();
+        fanZoom = null;
         pagePlaces = [];
         if (userChangeHandler) {
             window.removeEventListener('strom:user-change', userChangeHandler);
@@ -352,6 +358,48 @@ export const personPageMethods = uiModule({
         scroller.scrollTop = entry.scrollTop;
         this.watchPersonPageToc();
         this.watchPersonPageChart(personPageChartInput(page, opts.now), lang);
+        this.watchPersonPageFan(page, opts);
+    },
+
+    /**
+     * The Ancestors fan (spec 029 §8.4–§8.5): the zoom in page mode (the wheel
+     * only with Ctrl/⌘, else the hint; one finger scrolls the page until the
+     * fan is zoomed in), labels fitted again for each scale, and a tap on an
+     * ancestor opens that ancestor's page in this window (Back returns).
+     */
+    watchPersonPageFan(page: PersonPageData, opts: PersonPageOptions): void {
+        fanZoom?.destroy();
+        fanZoom = null;
+        const surface = bodyEl()?.querySelector<HTMLElement>('.pp-anc-fan[data-fan-zoom]');
+        const model = surface ? personPageFanModel(page) : null;
+        if (!surface || !model) return;
+        const hint = surface.querySelector<HTMLElement>('[data-fan-zoom-hint]');
+        if (hint?.dataset.mac && fanZoomModifier() === '⌘') hint.textContent = hint.dataset.mac;
+        const zoom = new FanZoom({
+            surface, mode: 'page', bounds: model.bounds, controls: surface,
+            onTap: (target) => {
+                const sector = target?.closest?.<SVGElement>('[data-fan-person]');
+                // The centre is the page itself: nothing.
+                if (!sector || sector.dataset.fanKind !== 'anc' || !sector.dataset.fanPerson) return;
+                this.navigatePersonPage(sector.dataset.fanPerson as PersonId);
+            },
+            onHint: (visible) => { if (hint) hint.hidden = !visible; },
+            onViewChange: () => redraw(),
+        });
+        fanZoom = zoom;
+        const redraw = (): void => {
+            if (fanZoom !== zoom) return;
+            const svg = surface.querySelector('svg.fan-svg');
+            const { W, H } = zoom.size();
+            if (!svg || !W || !H) return;
+            const vb = zoom.viewBox();
+            const tpl = document.createElement('template');
+            tpl.innerHTML = personPageFanSvg(page, opts, { ppu: vb.ppu, viewport: vb, phone: isMobile() });
+            const next = tpl.content.firstElementChild;
+            if (next) svg.replaceWith(next);
+            zoom.applyNow();
+        };
+        redraw();
     },
 
     /** The life chart follows the column's width (§2.2): one set of labels for the width it has. */
@@ -620,7 +668,9 @@ export const personPageMethods = uiModule({
         if (region) region.hidden = !open;
         const key = btn.dataset.ppToggle;
         if (key && state) {
-            if (open) state.current.open.add(key);
+            // A fold open by default (Ancestors) keeps its key while it is closed.
+            const keep = btn.dataset.ppFoldDefault === 'open' ? !open : open;
+            if (keep) state.current.open.add(key);
             else state.current.open.delete(key);
         }
     },
@@ -789,6 +839,8 @@ export const personPageMethods = uiModule({
 
     /** Print the page only (the tree and the window's controls stay out, §6.2). */
     printPersonPage(): void {
+        // The whole fan on paper (§8.6), not the part zoomed into.
+        fanZoom?.reset();
         document.body.classList.add('printing-person-page');
         const done = (): void => {
             document.body.classList.remove('printing-person-page');
