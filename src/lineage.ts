@@ -696,6 +696,42 @@ export function rodMembers(index: LineageIndex, rodId: RodId): PersonId[] {
     return index.rods.get(rodId)?.memberIds ?? [];
 }
 
+/**
+ * The lineage's real members by generation: index 0 = the founder's
+ * generation (I), then each step down the line. Depth is counted along the
+ * line parents, so a placeholder bridging two generations keeps the people
+ * below it in their own generation (it is left out itself, which can leave a
+ * generation empty). Members above the founder (a placeholder root, a nameless
+ * person) count as the founder's generation. Line order within a generation.
+ */
+export function rodGenerations(index: LineageIndex, rodId: RodId): PersonId[][] {
+    const rod = index.rods.get(rodId);
+    if (!rod) return [];
+    const depth = new Map<PersonId, number>();
+    const depthOf = (id: PersonId): number => {
+        const path: PersonId[] = [];
+        let cur: PersonId | null = id;
+        while (cur && !depth.has(cur) && cur !== rod.rootId) {
+            if (path.includes(cur)) break;   // a cycle in bad data
+            path.push(cur);
+            cur = index.lineParent.get(cur) ?? null;
+        }
+        if (cur === rod.rootId && !depth.has(cur)) depth.set(cur, 0);
+        let d = cur && depth.has(cur) ? depth.get(cur)! : -1;
+        for (let i = path.length - 1; i >= 0; i--) depth.set(path[i], ++d);
+        return depth.get(id) ?? 0;
+    };
+    const top = depthOf(rod.founderId);
+    const out: PersonId[][] = [];
+    for (const id of rod.memberIds) {
+        if (index.data.persons[id]?.isPlaceholder) continue;
+        const g = Math.max(0, depthOf(id) - top);
+        while (out.length <= g) out.push([]);
+        out[g].push(id);
+    }
+    return out;
+}
+
 /** The spouses who married into the lineage, each with a link to their birth lineage. */
 export function rodSpouses(index: LineageIndex, rodId: RodId): RodSpouse[] {
     return index.rods.get(rodId)?.spouses ?? [];
