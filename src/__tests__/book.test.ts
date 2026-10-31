@@ -195,8 +195,11 @@ describe('buildFamilyBook: the document', () => {
         expect(side).toContain('>Rod Ostružník</a>');
         // Print hides the window's controls.
         expect(html).toContain('.book-toolbar, .book-side, .book-more { display: none !important; }');
-        // On a phone the life chart's axis shows every other year (laid out for the printed column).
-        expect(html).toMatch(/@media \(max-width: 640px\) \{[^@]*\.book \.pp-ch-axis span:nth-child\(2n\) \{ display: none; \}/);
+        // Each life chart carries the printed column's set and the phone's set (switched by @media), as a saved file does.
+        const chart = html.slice(html.indexOf('<div class="book-chart">'));
+        expect(chart).toMatch(/^<div class="book-chart"><div class="pp-chart"[^>]*><div class="pp-chart-set pp-chart-set--wide">/);
+        expect(chart).toContain('<div class="pp-chart-set pp-chart-set--narrow" aria-hidden="true">');
+        expect(html).toMatch(/@media \(max-width: 640px\) \{\s*\.pp-chart-set--wide \{ display: none; \}\s*\.pp-chart-set--narrow \{ display: block; \}/);
     });
 });
 

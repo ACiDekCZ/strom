@@ -403,6 +403,23 @@ test.describe('family book: phone', () => {
     });
 });
 
+test.describe('family book: phone, German', () => {
+    test.use({ viewport: { width: 390, height: 844 }, locale: 'de' });
+
+    test('the whole tree: the phone\'s set of each life chart, no label past the right edge, no sideways scroll', async ({ page, context }) => {
+        await setup(page);
+        await openDialog(page);
+        const book = await openBook(page, context);
+        await expect(book.locator('.pp-chart-set--narrow').first()).toBeVisible();
+        await expect(book.locator('.pp-chart-set--wide').first()).toBeHidden();
+        const past = await book.evaluate(() => [...document.querySelectorAll('.pp-chart *')]
+            .filter(e => e.getClientRects().length > 0 && e.getBoundingClientRect().right > innerWidth + 0.5)
+            .map(e => (e.textContent ?? '').trim()));
+        expect(past).toEqual([]);
+        expect(await book.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    });
+});
+
 test.describe('family book: the content', () => {
     test('the sample tree: the book in a new window with its structure', async ({ page, context }) => {
         await openApp(page);

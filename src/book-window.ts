@@ -210,8 +210,6 @@ html { scroll-padding-top: 64px; }
     .book-side { top: auto; right: 0; width: auto; max-height: 72vh; border-right: 0; border-radius: 16px 16px 0 0;
         box-shadow: 0 -8px 30px rgba(20,16,8,.2); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
     .book-side a { display: flex; align-items: center; min-height: 44px; padding-top: 0; padding-bottom: 0; }
-    /* The life chart is laid out for the printed column: on a phone every other year of its axis, or they run together. */
-    .book .pp-ch-axis span:nth-child(2n) { display: none; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .book-title-page { min-height: auto; } }
 @media (pointer: coarse) {

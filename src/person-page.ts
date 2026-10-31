@@ -2057,9 +2057,12 @@ export function personBookClipsHtml(page: PersonPageData, opts: PersonPageOption
     return figs.length ? `<div class="book-clips">${figs.join('')}</div>` : '';
 }
 
-/** The person's life chart for the family book: one set of `width` px for paper ('' when not drawn). */
+/**
+ * The person's life chart for the family book ('' when not drawn): the set of
+ * `width` px for paper and a wide screen, the phone's set under 640 px.
+ */
 export function personBookChartHtml(page: PersonPageData, now: Date, width: number): string {
-    return lifeChartHtml(personPageChartInput(page, now), { lang: page.lang, mode: 'print', width });
+    return lifeChartHtml(personPageChartInput(page, now), { lang: page.lang, mode: 'book', width });
 }
 
 /**

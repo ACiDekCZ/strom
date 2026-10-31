@@ -367,9 +367,13 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
 
 export interface LifeChartCtx {
     lang: Language;
-    /** 'app': one set for `width`; 'file': two sets switched by @media; 'print': one set for `width`, as a file reads it (the family book). */
-    mode: 'app' | 'file' | 'print';
-    /** The chart's width in px (app; from a ResizeObserver). Default 680. */
+    /**
+     * 'app': one set for `width`; 'file': two sets switched by @media; 'print': one set for `width`;
+     * 'book': two sets switched by @media as in a file, the wide one for `width` (the family book's
+     * printed column), so a phone reading the book gets the phone's set.
+     */
+    mode: 'app' | 'file' | 'print' | 'book';
+    /** The chart's width in px (app; from a ResizeObserver; the book's column). Default 680. */
     width?: number;
 }
 
@@ -409,8 +413,9 @@ export function lifeChartHtml(input: LifeChartInput | null, ctx: LifeChartCtx): 
         return `<div class="pp-chart" role="group" aria-label="${esc(C.aria)}">`
             + `<div class="pp-chart-set pp-chart-set--one">${chartSet(input, S, ctx, w, w <= CHART_NARROW_MAX)}</div>${legend}</div>`;
     }
+    const wide = ctx.mode === 'book' ? Math.max(240, ctx.width ?? CHART_WIDE) : CHART_WIDE;
     return `<div class="pp-chart" role="group" aria-label="${esc(C.aria)}">`
-        + `<div class="pp-chart-set pp-chart-set--wide">${chartSet(input, S, ctx, CHART_WIDE, false)}</div>`
+        + `<div class="pp-chart-set pp-chart-set--wide">${chartSet(input, S, ctx, wide, false)}</div>`
         + `<div class="pp-chart-set pp-chart-set--narrow" aria-hidden="true">${chartSet(input, S, ctx, CHART_NARROW, true)}</div>${legend}</div>`;
 }
 
