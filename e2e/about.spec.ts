@@ -133,10 +133,13 @@ test('the serif is embedded as "Strom Serif" and no face is declared under the r
     expect(srcs.length).toBeGreaterThanOrEqual(5);
     for (const src of srcs) expect(src).toMatch(/^url\("data:font\/woff2;base64,/);
 
-    // Outside the license comment at the top of <head> the reserved name does not appear.
+    // Outside the license comment at the top of <head> the reserved name appears only in the same notice that the
+    // family book carries with its fonts (OFL 1.1 asks the notice to travel with the font), never as a face's name.
     const html = await (await page.request.get('/strom.html')).text();
     const notice = html.indexOf('-->');
     expect(html.slice(0, notice)).toContain('Source Serif 4');
-    expect(html.slice(notice)).not.toMatch(/Source Serif/);
+    const bookNotice = /Strom Serif: a modified \(subsetted\) version of Source Serif 4 \(designed by /g;
+    expect(html.slice(notice).match(bookNotice)).toHaveLength(1);
+    expect(html.slice(notice).replace(bookNotice, '')).not.toMatch(/Source Serif/);
 });
 
