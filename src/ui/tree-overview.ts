@@ -1449,8 +1449,8 @@ export const treeOverviewMethods = uiModule({
     /**
      * A lineage's detail: founder (computed or set by hand), places, name
      * forms, members by generation (daughters' marriages into other lineages
-     * linked), the spouses who married in with their birth lineages, and the
-     * actions (show in tree, the book, edit).
+     * linked), the spouses who married in with their birth lineages; the
+     * actions (show in tree, the book, edit) right under the facts.
      */
     treeOverviewRodDetailHtml(d: RodsData, rod: Rod, domId: string): string {
         const st = state!;
@@ -1532,7 +1532,8 @@ export const treeOverviewMethods = uiModule({
             <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-book" ${id}>${esc(r.book)}</button>
             ${this.treeOverviewActionHtml('rod-edit', r.edit, 'tov-btn tov-rod-act tov-rod-act--plain', id)}
         </div>`;
-        return `<div class="tov-rod-detail${ui.allGens ? ' is-all-gens' : ''}" id="${domId}">${factsHtml}${membersBlock}${spousesBlock}${actions}</div>`;
+        // The actions right under the facts: a long line's members and spouses would push them below the fold.
+        return `<div class="tov-rod-detail${ui.allGens ? ' is-all-gens' : ''}" id="${domId}">${factsHtml}${actions}${membersBlock}${spousesBlock}</div>`;
     },
 
     /**

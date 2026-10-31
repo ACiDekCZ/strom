@@ -8678,6 +8678,12 @@
             body:has(> .evidence-pill) .hide-shown-children-chip { position: fixed; top: 112px; }
             body:has(> .evidence-pill ~ .evidence-pill) .hide-shown-children-chip { top: 160px; }
         }
+        /* By touch the pill with "Back to overview" is 54px tall (its 44px button): what stands below it moves down. */
+        @media (min-width: 641px) and (max-width: 1024px) and (pointer: coarse) {
+            body:has(> .evidence-pill--back) .hide-shown-children-chip { top: 126px; }
+            body:has(> .evidence-pill--back ~ .evidence-pill) .hide-shown-children-chip { top: 174px; }
+            .evidence-pill--back ~ .live-follow-pill { top: 126px; }
+        }
         .focus-controls .btn-export-focus {
             padding: 8px 14px;
             border: none;
@@ -15039,7 +15045,8 @@
         @media (hover: hover) { .evidence-pill-back:hover { background: var(--hover-bg); } }
         .evidence-pill-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (max-width: 640px) {
-            .evidence-pill.evidence-pill--back { flex-wrap: wrap; border-radius: 16px; padding: 6px 6px 6px 14px; right: 16px; }
+            /* Clear of the zoom button in the bottom-right corner (44px at 12px from the edge). */
+            .evidence-pill.evidence-pill--back { flex-wrap: wrap; border-radius: 16px; padding: 6px 6px 6px 14px; right: 64px; }
             .evidence-pill--back .evidence-pill-label { flex: 1 1 calc(100% - 56px); order: 0; }
             .evidence-pill--back .evidence-pill-close { order: 1; }
             .evidence-pill--back .evidence-pill-back { order: 2; height: 44px; margin-right: auto; }
@@ -15047,6 +15054,34 @@
         }
         @media (pointer: coarse) {
             .evidence-pill-back { min-height: 44px; }
+        }
+        /* The pills keep clear of what stands at the top of the tree: the
+           desktop's focus bar (top-left, as wide as its steppers), the
+           descendants badge (top centre) and the fan's controls (top right).
+           The phone has its pills at the bottom. */
+        @media (min-width: 1025px) {
+            body.has-focus-panel:not(.standalone-view) .evidence-pill,
+            body.descendants-view .evidence-pill,
+            body[data-view-mode="fan"] .evidence-pill { top: 112px; }
+            body.has-focus-panel:not(.standalone-view) .evidence-pill ~ .live-follow-pill,
+            body.descendants-view .evidence-pill ~ .live-follow-pill,
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 172px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body.descendants-view .evidence-pill,
+            body[data-view-mode="fan"] .evidence-pill { top: 112px; }
+            body.descendants-view .evidence-pill ~ .live-follow-pill,
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 172px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            body.descendants-view .evidence-pill,
+            body[data-view-mode="fan"] .evidence-pill { top: 96px; }
+            body.descendants-view .evidence-pill ~ .live-follow-pill,
+            body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: 156px; }
+        }
+        /* A phone held sideways at most 640 wide keeps the phone's bottom pill, right of the side bar. */
+        @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+            .evidence-pill, .evidence-pill.evidence-pill--back { left: calc(var(--side-bar-w, 76px) + 12px); }
         }
 
         /* ---- Tree overview (src/ui/tree-overview.ts) ----

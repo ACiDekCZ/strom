@@ -129,6 +129,54 @@ test.describe('tree overview: family lines', () => {
         await expect(page.locator('.person-card.evidence-faint')).toHaveCount(0);
     });
 
+    test('the pill of a line in the tree stands clear of the focus bar, the badge, the side bar and the zoom button (1031)', async ({ page }) => {
+        const treeId = await setup(page, 1440, 900, rodsTree({ long: true }));
+        const sec = await openRods(page, treeId);
+        await sec.locator('.tov-rod-row').first().click();
+        await sec.locator('.tov-rod.is-open').getByRole('button', { name: 'Show in tree' }).click();
+        const pill = page.locator('#evidence-pill');
+        await expect(pill).toContainText('Brandvold-Ekhammarsson Lindenau family line');
+        const apart = async (others: string[]): Promise<string[]> => pill.evaluate((el, sels) => {
+            const a = el.getBoundingClientRect();
+            return sels.filter(sel => [...document.querySelectorAll(sel)].some(o => {
+                const b = o.getBoundingClientRect();
+                return b.width > 0 && b.height > 0 && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+            }));
+        }, others);
+        const chrome = ['#focus-controls', '.descendants-badge', '.fan-controls', '.bottom-bar', '.zoom-controls', '.toolbar'];
+        // Desktop: the focus bar (name, both steppers) on the left of the same row.
+        await expect(page.locator('#focus-controls')).toBeVisible();
+        expect(await apart(chrome)).toEqual([]);
+        for (const [w, h] of [[1440, 900], [1024, 768], [844, 390]]) {
+            await page.setViewportSize({ width: w, height: h });
+            for (const mode of ['family', 'descendants', 'fan']) {
+                await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                expect(await apart(chrome), `${w}×${h} ${mode}`).toEqual([]);
+            }
+        }
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+        // Phone, upright and held sideways: the pill at the bottom, clear of the zoom button and the side bar.
+        for (const [w, h] of [[390, 844], [640, 360]]) {
+            await page.setViewportSize({ width: w, height: h });
+            expect(await apart(chrome), `${w}×${h}`).toEqual([]);
+        }
+    });
+
+    test('the detail of a long line: its actions in view without scrolling (1031)', async ({ page }) => {
+        for (const [w, h] of [[1440, 900], [390, 844]]) {
+            const treeId = await setup(page, w, h);
+            const sec = await openRods(page, treeId);
+            await sec.locator('.tov-rod-row').first().click();
+            const act = sec.locator('.tov-rod.is-open .tov-rod-act').first();
+            await expect(act).toBeVisible();
+            const box = (await act.boundingBox())!;
+            const view = (await page.locator('#tree-overview-modal .tov-scroll').boundingBox())!;
+            expect(box.y + box.height, `${w}×${h}`).toBeLessThanOrEqual(view.y + view.height);
+            await page.keyboard.press('Escape');
+        }
+    });
+
     test('opened at a lineage: its detail expanded; a small one marked among the others', async ({ page }) => {
         const treeId = await setup(page);
         const first = await openRods(page, treeId);
