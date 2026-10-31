@@ -27,7 +27,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { coupleEventLabel, newestLifeEvent } from '../events.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
 import { personInitials } from '../initials.js';
@@ -58,6 +58,8 @@ import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dat
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 import { lifelineGlyph } from '../lifeline-glyphs.js';
+import { buildLineages, rodLabels, RodId } from '../lineage.js';
+import { personRodRowValue } from '../lineage-row.js';
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
@@ -69,6 +71,8 @@ import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDe
  * breakpoint.
  */
 let deleteLinkWatch = false;
+/** The open "Family line" menu's outside-click listener (null: the menu is closed). */
+let rodMenuAway: ((ev: Event) => void) | null = null;
 function placePersonDeleteLink(): void {
     const btn = document.getElementById('btn-delete');
     const slot = document.getElementById('pm-delete-slot');
@@ -342,6 +346,141 @@ export const personModalMethods = uiModule({
         }
         this.bindLivePersonModalName();
         this.updatePersonModalName();
+        this.updatePersonModalRod(person);
+    },
+
+    /**
+     * The "Family line" row under the header's context (spec 1031 §3.1): the
+     * person's lineage as saved, the names linking to the tree overview, and
+     * a ⋯ menu of the lineage's actions. No row for a new person or one
+     * without a lineage.
+     */
+    updatePersonModalRod(person: Person | null): void {
+        const el = document.getElementById('pm-rod');
+        if (!el) return;
+        this.closePersonModalRodMenu();
+        const index = person && DataManager.getPerson(person.id) ? buildLineages(DataManager.getData()) : null;
+        const value = index && person ? personRodRowValue(index, rodLabels(index), person.id, getCurrentLanguage()) : null;
+        if (!value) {
+            el.hidden = true;
+            el.innerHTML = '';
+            delete el.dataset.rod;
+            return;
+        }
+        const esc = (s: string): string => this.escapeHtml(s);
+        const R = strings.lineage.row;
+        const parts = value.parts.map(p => 'rodId' in p
+            ? `<a href="#" class="pm-rod-link" data-rod="${esc(p.rodId)}">${esc(p.label)}</a>`
+            : `<span class="pm-rod-join">${esc(p.text)}</span>`).join('');
+        const followed = DataManager.isLiveFollowing();
+        const locked = followed || DataManager.isReadOnly() || DataManager.isTreeLocked();
+        const hint = followed ? R.followed : R.readOnly;
+        const item = (act: string, label: string, off = false): string => off
+            ? `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="${act}" aria-disabled="true" title="${esc(hint)}">${esc(label)}</button>`
+            : `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="${act}">${esc(label)}</button>`;
+        el.dataset.rod = value.row.rodId;
+        el.innerHTML = `<span class="pm-rod-label">${esc(value.label)}</span>`
+            + `<span class="pm-rod-value">${parts}</span>`
+            + `<span class="pm-rod-more"><button type="button" class="pm-rod-more-btn" aria-haspopup="menu" aria-expanded="false"`
+            + ` aria-label="${esc(R.menu)}" title="${esc(R.menu)}">⋯</button>`
+            + `<div class="pm-rod-menu" role="menu" aria-label="${esc(R.menu)}" hidden>`
+            + item('show', R.showInTree) + item('edit', R.edit, locked) + item('split', R.split, locked) + item('book', R.book)
+            + (locked ? `<p class="pm-rod-menu-note">${esc(hint)}</p>` : '')
+            + `</div></span>`;
+        el.hidden = false;
+        if (!el.dataset.bound) {
+            el.dataset.bound = '1';
+            el.addEventListener('click', (e) => this.onPersonModalRodClick(e));
+            el.addEventListener('keydown', (e) => this.onPersonModalRodKey(e));
+        }
+    },
+
+    /** A click in the row: a lineage's name, the ⋯ button or an item of its menu. */
+    onPersonModalRodClick(e: MouseEvent): void {
+        const target = e.target as HTMLElement;
+        const link = target.closest<HTMLElement>('.pm-rod-link');
+        // The names are links in the text flow: never follow their "#".
+        if (link) e.preventDefault();
+        const el = document.getElementById('pm-rod');
+        const personId = this.currentId;
+        const treeId = DataManager.getCurrentTreeId();
+        if (!el || !personId || !treeId) return;
+        if (link?.dataset.rod) {
+            const rodId = link.dataset.rod as RodId;
+            this.leavePersonModalThen(() => void this.showTreeOverviewRod(treeId, rodId));
+            return;
+        }
+        if (target.closest('.pm-rod-more-btn')) {
+            const menu = el.querySelector<HTMLElement>('.pm-rod-menu');
+            if (menu?.hidden) this.openPersonModalRodMenu();
+            else this.closePersonModalRodMenu();
+            return;
+        }
+        const itemEl = target.closest<HTMLElement>('.pm-rod-item');
+        if (!itemEl || itemEl.getAttribute('aria-disabled') === 'true') return;
+        const rodId = el.dataset.rod as RodId | undefined;
+        if (!rodId) return;
+        this.closePersonModalRodMenu();
+        switch (itemEl.dataset.rodAct) {
+            case 'show':
+                this.leavePersonModalThen(() => {
+                    const group = this.rodHighlightGroup(rodId);
+                    if (group) this.highlightGroup(group);
+                });
+                break;
+            case 'edit':
+                this.leavePersonModalThen(() => this.openLineageEdit(rodId));
+                break;
+            case 'split':
+                this.leavePersonModalThen(() => this.openLineageSplitFrom(personId));
+                break;
+            case 'book':
+                this.leavePersonModalThen(() => this.openBookForRods([rodId]));
+                break;
+        }
+    },
+
+    /** Escape closes the menu (not the card); the arrows move between its items. */
+    onPersonModalRodKey(e: KeyboardEvent): void {
+        const menu = document.querySelector<HTMLElement>('#pm-rod .pm-rod-menu');
+        if (!menu || menu.hidden) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            this.closePersonModalRodMenu();
+            document.querySelector<HTMLElement>('#pm-rod .pm-rod-more-btn')?.focus();
+            return;
+        }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const items = [...menu.querySelectorAll<HTMLElement>('.pm-rod-item')];
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+        items[next]?.focus();
+    },
+
+    openPersonModalRodMenu(): void {
+        const btn = document.querySelector<HTMLElement>('#pm-rod .pm-rod-more-btn');
+        const menu = document.querySelector<HTMLElement>('#pm-rod .pm-rod-menu');
+        if (!btn || !menu) return;
+        menu.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+        menu.querySelector<HTMLElement>('.pm-rod-item')?.focus();
+        // A click anywhere else closes it (the listener goes with it).
+        const away = (ev: Event): void => {
+            if ((ev.target as HTMLElement).closest?.('#pm-rod .pm-rod-more')) return;
+            this.closePersonModalRodMenu();
+        };
+        rodMenuAway = away;
+        setTimeout(() => { if (rodMenuAway === away) document.addEventListener('pointerdown', away, true); }, 0);
+    },
+
+    closePersonModalRodMenu(): void {
+        const menu = document.querySelector<HTMLElement>('#pm-rod .pm-rod-menu');
+        if (menu) menu.hidden = true;
+        document.querySelector<HTMLElement>('#pm-rod .pm-rod-more-btn')?.setAttribute('aria-expanded', 'false');
+        if (rodMenuAway) document.removeEventListener('pointerdown', rodMenuAway, true);
+        rodMenuAway = null;
     },
 
     /**
@@ -1668,6 +1807,7 @@ export const personModalMethods = uiModule({
     },
 
     forceCloseModal(): void {
+        this.closePersonModalRodMenu();
         this.closeResearchConflictPanel({ focus: false });
         this.closeLifelineHistoryPopups();
         this.dropLifelineHistoryToastLift();

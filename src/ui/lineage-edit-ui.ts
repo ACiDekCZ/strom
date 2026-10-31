@@ -15,4 +15,5 @@ export const lineageEditUiMethods = uiModule({
     openLineageEdit(rodId: RodId): void {
         void rodId;
     },
+    openLineageSplitFrom(personId: import('../types.js').PersonId): void { void personId; },
 });

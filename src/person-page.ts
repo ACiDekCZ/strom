@@ -34,6 +34,8 @@ import { recordedAgeGap, readRecordedAge, ageBirthDate } from './recorded-age.js
 import { clipText } from './text-clip.js';
 import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { findRelationship } from './kinship.js';
+import { buildLineages, rodLabels, LineageIndex, RodId } from './lineage.js';
+import { personRodRowValue, rodRowShown, RodRowValue } from './lineage-row.js';
 import { collectPersonPlacePoints, placesMapHtml, PlacePoint, PLACES_MAP_SCRIPT } from './person-page-map.js';
 import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeChartInput } from './person-page-chart.js';
 
@@ -133,6 +135,9 @@ export interface ProtectedPersonPageTree {
     living: ReadonlySet<PersonId>;
     /** People whose approved story has a new version waiting (dropped from the tree). */
     drafts: ReadonlySet<PersonId>;
+    /** The lineages, computed on the data before protection (names stay whole; §3.4 decides per row). */
+    lineages: LineageIndex;
+    rodLabels: ReadonlyMap<RodId, string>;
 }
 
 /** One person's page, ready to render. */
@@ -167,6 +172,8 @@ export interface PersonPageData {
     places: readonly PlacePoint[];
     /** Coordinates of those places only (placeKey → geo), from the tree's places. */
     geo: Readonly<Record<string, PlaceGeo>>;
+    /** The header's "Family line" row (spec 1031 §3); null: not drawn (no lineage, or a living person under privacy). */
+    rod: RodRowValue | null;
 }
 
 export interface PersonPageGroupCounts {
@@ -335,7 +342,8 @@ export function protectPersonPageTree(data: StromData, privacy: PrivacyMode, now
     const drafts = new Set<PersonId>();
     for (const p of Object.values(tree.persons)) if (p.story?.draft) drafts.add(p.id);
     stripResearchWork(tree);
-    return { tree, privacy, living, drafts };
+    const lineages = buildLineages(data);
+    return { tree, privacy, living, drafts, lineages, rodLabels: rodLabels(lineages) };
 }
 
 /** The page's family: parents, partners, children, siblings (ids in the tree). */
@@ -397,7 +405,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
             living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
             readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-            godchildren: [], places: [], geo: {},
+            godchildren: [], places: [], geo: {}, rod: null,
         };
     }
     const person: Person = structuredClone(src);
@@ -504,6 +512,8 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         readOnly: !!ctx.readOnly,
         counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
         godchildren, places, geo,
+        // A lineage's name is a surname: with initials or hidden names a living person's row is left out (§3.4).
+        rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
     };
     page.counts = countGroups(page);
     return page;
@@ -906,7 +916,7 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
             ? ` <button type="button" class="pp-differs" data-pp-differs aria-controls="pp-research-body">${esc(P.differs)} ↓</button>`
             : ` <a class="pp-differs js-only" href="#pp-research">${esc(P.differs)} ↓</a>`;
     };
-    const facts: [string, string][] = [];
+    const facts: [string, string, string?][] = [];
     const withPlace = (date: string, place: string | undefined) =>
         [esc(date), placeLink(c, place)].filter(Boolean).join(', ');
     if (person.birthDate || person.birthPlace) {
@@ -935,6 +945,8 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
         return [what, years ? `(${years})` : ''].filter(Boolean).join(' ');
     }).filter(Boolean);
     if (jobs.length) facts.push([P.occupation, esc(jobs.join(', '))]);
+    // The family line (spec 1031 §3): last; links into the app's overview in the window, plain text in a file.
+    if (page.rod) facts.push([page.rod.label, rodRowHtml(c, page.rod), 'pp-fact-rod']);
 
     // The portrait (§3.1): a rounded square; a click shows it large (the window's viewer, the file's light box).
     let avatar: string;
@@ -953,9 +965,23 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
         + (c.app ? '' : `<p class="pp-eyebrow">${esc(P.eyebrow)}</p>`)
         + `<h1 class="pp-name">${nameHtml(person, { former: true })}</h1>`
         + (aka.length ? `<p class="pp-aka">${esc(P.alsoKnown)} ${esc(aka.join(', '))}</p>` : '')
-        + (facts.length ? `<dl class="pp-facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>` : '')
+        + (facts.length ? `<dl class="pp-facts">${facts.map(([k, v, cls]) => {
+            const a = cls ? ` class="${cls}"` : '';
+            return `<dt${a}>${esc(k)}</dt><dd${a}>${v}</dd>`;
+        }).join('')}</dl>` : '')
         + (shield ? `<p class="pp-living-note">${esc(P.livingNote)}</p>` : '')
         + `</div></header>`;
+}
+
+/** The "Family line" value: lineage names as buttons into the app (window), else text (file, print). */
+function rodRowHtml(c: Ctx, rod: RodRowValue): string {
+    const links = c.app && c.opts.links === 'app';
+    return rod.parts.map(p => {
+        if ('text' in p) return `<span class="pp-rod-join">${esc(p.text)}</span>`;
+        return links
+            ? `<button type="button" class="pp-link pp-rod-link" data-pp-rod="${esc(p.rodId)}">${esc(p.label)}</button>`
+            : `<span class="pp-rod-name">${esc(p.label)}</span>`;
+    }).join('');
 }
 
 // ── Family tree (§4) ──

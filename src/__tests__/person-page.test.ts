@@ -1703,3 +1703,57 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         expect(file).toMatch(/@media print \{\s*\.pp-places, \.pp-chart \{[^}]*--map-land: #ffffff/);
     });
 });
+
+describe('the family line row in the header (spec 1031 §3)', () => {
+    /** Jan's line down to a living great-granddaughter (Eva Fíšková, * 1952). */
+    function withLiving(): StromData {
+        const d = fiskTree();
+        d.persons['karel' as PersonId].childIds = ids('jiri');
+        d.persons['jiri' as PersonId] = p('jiri', 'Jiří', 'Fíšek', 'male', { birthDate: '1900', deathDate: '1975', parentIds: ids('karel'), childIds: ids('eva') });
+        d.persons['eva' as PersonId] = p('eva', 'Eva', 'Fíšková', 'female', { birthDate: '1952', parentIds: ids('jiri') });
+        return d;
+    }
+    const rodDd = (html: string): string | null => /<dd class="pp-fact-rod">(.*?)<\/dd>/.exec(html)?.[1] ?? null;
+    const plain = (html: string | null): string | null => html === null ? null : html.replace(/<[^>]+>/g, '');
+
+    it('is the last row of the facts; in the window the names are buttons to the overview', () => {
+        const html = body(withLiving());
+        const facts = /<dl class="pp-facts">(.*?)<\/dl>/.exec(html)![1];
+        expect(facts.endsWith('</dd>')).toBe(true);
+        expect([...facts.matchAll(/<dt[^>]*>(.*?)<\/dt>/g)].map(m => m[1]).pop()).toBe('Rod');
+        expect(rodDd(html)).toContain('data-pp-rod="otec"');
+        expect(plain(rodDd(html))).toBe('Fíšek');
+    });
+
+    it('a wife who married in: wife in the lineage (en, de)', () => {
+        expect(plain(rodDd(body(withLiving(), { personId: 'marie' as PersonId, lang: 'en' })))).toBe('wife in Fíšek line');
+        expect(plain(rodDd(body(withLiving(), { personId: 'marie' as PersonId, lang: 'de' })))).toBe('Ehefrau in Stammlinie Fíšek');
+    });
+
+    it('a saved file says it as text, no links', () => {
+        const html = doc(withLiving());
+        expect(rodDd(html)).not.toContain('data-pp-rod');
+        expect(rodDd(html)).not.toContain('<button');
+        expect(plain(rodDd(html))).toBe('Fíšek');
+    });
+
+    it('a living person: full data and surname only keep it; initials and hidden names leave it out (§3.4)', () => {
+        const d = withLiving();
+        const eva = (privacy: PersonPageOptions['privacy']) => rodDd(doc(d, { personId: 'eva' as PersonId, privacy }));
+        expect(plain(eva('full'))).toBe('Fíšek');
+        expect(plain(eva('minimal'))).toBe('Fíšek');
+        expect(eva('initials')).toBeNull();
+        expect(eva('anonymous')).toBeNull();
+    });
+
+    it('the dead keep it in every mode', () => {
+        const d = withLiving();
+        for (const privacy of ['full', 'minimal', 'initials', 'anonymous'] as const) {
+            expect(plain(rodDd(doc(d, { privacy })))).toBe('Fíšek');
+        }
+    });
+
+    it('no lineage, no row', () => {
+        expect(rodDd(body(withLiving(), { personId: 'cizi' as PersonId }))).toBeNull();
+    });
+});

@@ -11,6 +11,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, StromData, Attachment } from '../types.js';
+import type { RodId } from '../lineage.js';
 import { PrivacyMode } from '../privacy.js';
 import { placeKey } from '../places.js';
 import { researchPersonRef } from '../research-link.js';
@@ -549,6 +550,15 @@ export const personPageMethods = uiModule({
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
         if (placeBtn) { this.showPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
+        // A family line (spec 1031 §3.3): the tree overview at that lineage, the window closed.
+        const rodBtn = target.closest<HTMLElement>('[data-pp-rod]');
+        if (rodBtn) {
+            const treeId = DataManager.getCurrentTreeId();
+            if (!treeId) return;
+            this.closePersonPage({ focus: false });
+            void this.showTreeOverviewRod(treeId, rodBtn.dataset.ppRod as RodId);
+            return;
+        }
         const fold = target.closest<HTMLElement>('[data-pp-toggle]');
         if (fold) { this.togglePersonPageFold(fold, fold.getAttribute('aria-expanded') !== 'true'); return; }
         const sw = target.closest<HTMLElement>('[data-pp-switch]');
