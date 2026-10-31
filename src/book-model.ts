@@ -6,7 +6,7 @@
  */
 
 import { PartnershipId, PersonId, StromData } from './types.js';
-import { buildLineages, LineageIndex, Rod, RodId, rodLabels, rods, selection, Selection, SelectionSpec } from './lineage.js';
+import { buildLineages, LineageIndex, otherFamilyRods, Rod, RodId, rodLabels, rods, selection, Selection, SelectionSpec } from './lineage.js';
 
 /** What goes into the book (§4.2). */
 export type BookSelectionSpec =
@@ -50,7 +50,7 @@ export interface BookModel {
     ownChapters: Map<PersonId, number[]>;
     /** The chapter of the family the person is a child of. */
     birthChapter: Map<PersonId, number>;
-    /** The small lineages (whole tree only): "Other families". */
+    /** The other families not told as chapters (whole tree only, see otherFamilyRods). */
     smallRods: Rod[];
     /** The people the book names (its index). */
     personIds: Set<PersonId>;
@@ -140,7 +140,7 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
         }
         if (spec.kind === 'tree') {
             const toldIds = new Set(told.map(r => r.id));
-            smallRods = rods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0);
+            smallRods = otherFamilyRods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0);
         }
     } else {
         const members = new Set(sel.memberIds);

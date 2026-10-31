@@ -688,6 +688,41 @@ export function rods(index: LineageIndex): Rod[] {
     return [...index.rods.values()];
 }
 
+const marriedInCache = new WeakMap<LineageIndex, Set<PersonId>>();
+
+/** Everyone who married into some lineage (computed once per index). */
+function marriedInPersons(index: LineageIndex): Set<PersonId> {
+    let set = marriedInCache.get(index);
+    if (!set) {
+        set = new Set();
+        for (const rod of index.rods.values()) for (const sp of rod.spouses) set.add(sp.personId);
+        marriedInCache.set(index, set);
+    }
+    return set;
+}
+
+/**
+ * A lineage that is only a spouse who married in: one real member, without
+ * recorded parents, married into another lineage. Not a family of its own —
+ * it is shown with the lineage of the marriage (spec 1031 §1, decided for the
+ * tree overview and the family book alike).
+ */
+export function isMarriedInOnly(index: LineageIndex, rod: Rod): boolean {
+    if (!rod.solitary) return false;
+    const married = marriedInPersons(index);
+    return rod.memberIds.every(id => !index.data.persons[id] || index.data.persons[id].isPlaceholder || married.has(id));
+}
+
+/**
+ * "Other families": the small lineages (at most SMALL_ROD_MAX_MEMBERS real
+ * members) without the married-in spouses' one-person lineages, largest
+ * first. The one definition of the tree overview, the book dialog's count,
+ * the book's "Other families" part and its estimate.
+ */
+export function otherFamilyRods(index: LineageIndex): Rod[] {
+    return rods(index).filter(r => r.small && !isMarriedInOnly(index, r));
+}
+
 /** A person's birth lineage (Q2), or null when it is not known. */
 export function rodOf(index: LineageIndex, personId: PersonId): RodId | null {
     return index.rodByPerson.get(personId) ?? null;

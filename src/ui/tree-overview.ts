@@ -59,7 +59,7 @@ import { yearOf } from '../dates.js';
 import { uiModule } from './module.js';
 import { evidenceIds, type HighlightGroup } from './evidence-ui.js';
 import {
-    LineageIndex, Rod, RodId, SMALL_ROD_MAX_MEMBERS, buildLineages, marriedInto, rodGenerations, rodLabels, rodOf,
+    LineageIndex, Rod, RodId, SMALL_ROD_MAX_MEMBERS, buildLineages, marriedInto, otherFamilyRods, rodGenerations, rodLabels, rodOf,
 } from '../lineage.js';
 import {
     RodSort, ROD_SORTS, ROD_SEARCH_FROM, isRodSort, sortRods, rodAxis, rodBar, searchRods, romanNumeral, founderPlace,
@@ -1237,15 +1237,12 @@ export const treeOverviewMethods = uiModule({
             const bounds = inferBirthUpperBounds(st.data);
             const living = new Map<RodId, number>();
             for (const rod of all) if (!rod.small) living.set(rod.id, rodLivingCount(rod, st.data, year, bounds));
-            // A spouse who married in and has no parents recorded is a one-person
-            // lineage: shown with the lineage she married into, not as a family of her own.
-            const marriedIn = new Set<PersonId>();
-            for (const rod of all) for (const sp of rod.spouses) marriedIn.add(sp.personId);
-            const lone = (r: Rod): boolean => r.solitary && realRodMembers(index, r.id).every(id => marriedIn.has(id));
+            // A spouse who married in and has no parents recorded is shown with the
+            // lineage she married into, not as a family of her own (otherFamilyRods).
             return {
                 index, labels, living, generations: new Map(),
                 big: all.filter(r => !r.small),
-                small: all.filter(r => r.small && !lone(r)),
+                small: otherFamilyRods(index),
             };
         });
     },

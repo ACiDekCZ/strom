@@ -10,7 +10,7 @@ import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
 import { yearOf } from './dates.js';
 import { shownNameOrEmpty } from './person-name.js';
-import { LineageIndex, buildLineages, rodLabels, selection } from './lineage.js';
+import { LineageIndex, buildLineages, otherFamilyRods, rodLabels, selection } from './lineage.js';
 import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './book-model.js';
 
 export type { BookSelectionSpec } from './book-model.js';
@@ -243,9 +243,14 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     return { pages: Math.max(1, Math.round(pages)), persons, chapters, generations, outline };
 }
 
-/** The lineages a whole-tree book tells as chapters (for the dialog's sentence "{r} rods and {m} other families"). */
+/**
+ * The dialog's sentence "{r} lineages and {m} other families": the lineages a
+ * whole-tree book tells as chapters and the other families it lists (the
+ * tree overview's count, see otherFamilyRods).
+ */
 export function bookRodCounts(data: StromData, env: BookEnv = {}): { rods: number; other: number } {
     const index = indexOf(data, env);
-    const told = chapterRods(index).length;
-    return { rods: told, other: index.rods.size - told };
+    const told = chapterRods(index);
+    const toldIds = new Set(told.map(r => r.id));
+    return { rods: told.length, other: otherFamilyRods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0).length };
 }

@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildLineages, rods, rodOf, rodMembers, rodSpouses, marriedInto, branch, selection,
-    SMALL_ROD_MAX_MEMBERS, RodId, LineageIndex, rodGenerations,
+    SMALL_ROD_MAX_MEMBERS, RodId, LineageIndex, rodGenerations, isMarriedInOnly, otherFamilyRods,
 } from '../lineage.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 
@@ -295,6 +295,42 @@ describe('lineage: two lineages of one surname, and small lineages', () => {
         expect(list.map(r => r.realMemberCount)).toEqual([5, 2]);
         expect(list.map(r => r.small)).toEqual([false, true]);
         expect(list.map(r => r.solitary)).toEqual([false, false]);
+    });
+});
+
+describe('lineage: other families (one definition for the overview and the book)', () => {
+    // Vrbovec: five members; both wives married in without parents. Ostrožan:
+    // father and son. Bodlák: one person, never married.
+    const t = tree({
+        v1: { first: 'Hostivít', last: 'Vrbovec', sex: 'male', born: '1700' },
+        w1: { first: 'Zdislava', last: 'Kvítková', sex: 'female', born: '1705' },
+        v2: { first: 'Bořivoj', last: 'Vrbovec', sex: 'male', born: '1730', parents: ['v1', 'w1'] },
+        w2: { first: 'Dobroslava', last: 'Pelyňková', sex: 'female', born: '1733' },
+        v3: { first: 'Bolemír', last: 'Vrbovec', sex: 'male', born: '1732', parents: ['v1', 'w1'] },
+        v4: { first: 'Svatoboj', last: 'Vrbovec', sex: 'male', born: '1760', parents: ['v2', 'w2'] },
+        v5: { first: 'Radoslava', last: 'Vrbovcová', sex: 'female', born: '1762', parents: ['v2', 'w2'] },
+        o1: { first: 'Dobroslav', last: 'Ostrožan', sex: 'male', born: '1750' },
+        o2: { first: 'Bolemír', last: 'Ostrožan', sex: 'male', born: '1780', parents: ['o1'] },
+        x1: { first: 'Svatoboj', last: 'Bodlák', sex: 'male', born: '1790' },
+    }, [
+        ['u1', 'v1', 'w1', ['v2', 'v3']],
+        ['u2', 'v2', 'w2', ['v4', 'v5']],
+    ]);
+    const idx = buildLineages(t);
+
+    it('a married-in spouse without parents is no family of her own; a single unmarried person is', () => {
+        expect(isMarriedInOnly(idx, idx.rods.get(rodIdOf(idx, 'w1'))!)).toBe(true);
+        expect(isMarriedInOnly(idx, idx.rods.get(rodIdOf(idx, 'w2'))!)).toBe(true);
+        expect(isMarriedInOnly(idx, idx.rods.get(rodIdOf(idx, 'x1'))!)).toBe(false);
+        expect(isMarriedInOnly(idx, idx.rods.get(rodIdOf(idx, 'o1'))!)).toBe(false);
+        expect(isMarriedInOnly(idx, idx.rods.get(rodIdOf(idx, 'v1'))!)).toBe(false);
+    });
+
+    it('otherFamilyRods: the small lineages without the married-in ones', () => {
+        const other = otherFamilyRods(idx).map(r => r.founderId).sort();
+        expect(other).toEqual([P('o1'), P('x1')]);
+        // Every small lineage is still a lineage (the person's own row stays).
+        expect(rods(idx).filter(r => r.small).length).toBe(4);
     });
 });
 
