@@ -4,7 +4,7 @@
 
 ## 3.19.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 31. Oktober 2026.*
 
 - **Stammlinien**: Der *Stammbaum-Überblick* hat einen Abschnitt *Stammlinien*: jede Stammlinie des Stammbaums (die Abstammung in männlicher Linie, nach ihrem Begründer benannt) mit ihren Jahren, den Mitgliedern nach Generationen und den eingeheirateten Partnern, mit Suche und Sortierung; das Detail einer Linie zeigt sie im Stammbaum, und *Stammlinie bearbeiten…* korrigiert sie (ein anderer Begründer, eine eigene Linie, Namensformen und Schreibweisen des Nachnamens, zurück zur automatischen Linie), mit einer Vorschau jeder Änderung vor dem Übernehmen. Familien mit zu wenigen Personen für eine eigene Linie stehen unter *Weitere Familien*.
 - **Stammlinie einer Person**: Die Personenkarte und die Personenseite haben eine Zeile *Stammlinie* mit einem Link zur Linie im Stammbaum-Überblick und einem Menü: die Linie im Stammbaum zeigen, sie bearbeiten, eine Stammlinie ab dieser Person beginnen, das Buch der Linie.
@@ -17,7 +17,7 @@
 - **Stammbaum aus einer neueren Version**: Ein mit einer neueren Version der App gespeicherter Stammbaum öffnet sich schreibgeschützt, beim Start und beim Wechsel zu ihm; eine Leiste sagt warum und dass er nach einem Update der App wieder bearbeitbar ist, und nichts wird in ihn geschrieben.
 - **Menü Forschung**: *Weitere Aktionen* kommen in neuer Reihenfolge, *Forschung aktualisieren* direkt nach dem Laden einer neuen Version. Wo die Forschung Sammelkorrekturen der Daten anbietet, hat das Menü den Eintrag *Baumkorrekturen* mit der Zahl der verfügbaren; jede Korrektur nennt ihre Anzahl (in Personen, Familien, Ereignissen oder Quellen), eine kurze Beschreibung und ihren Stand und wird im Terminal der Forschung geöffnet oder rückgängig gemacht. *Forschungswerkzeuge* listet die eigenen Werkzeuge der Forschung nach ihrem Zweck gruppiert, zuerst die Prüfung der Forschung. Ein einmal gesehenes *In die Forschung geschrieben* kommt nicht mehr bei jedem Start wieder, und eine Löschung, die die Forschung nur vermerkt hat, sagt, dass sie in der Forschung gelöscht werden kann.
 - **Zeichen der Forschung**: Aktionen, die das Terminal der Forschung öffnen, enden mit ihrem Zeichen statt mit ↗, das nur für das Web bleibt.
-- **Kleinere Änderungen**: Das Datum der Version der Forschung ist der lokale Tag ihres Zeitpunkts; Beim Lesen eines Dokuments zeigt sich ein Unterschied der Lesenden in Rolle, Name oder Anwesenheit einer Person bei dieser Person; das Familienbuch lässt Verstorbenen beim Schutz durch Initialen ihre Quellen; der Hinweis auf eine neue Version wartet, solange ein Dialog offen ist; ein quer gehaltenes Telefon bis 640 px zeigt den Stammbaum direkt unter dem Kopf; weitere Korrekturen an Anordnung und Texten.
+- **Kleinere Änderungen**: Das Datum der Version der Forschung ist der lokale Tag ihres Zeitpunkts; beim Lesen eines Dokuments zeigt sich ein Unterschied der Lesenden in Rolle, Name oder Anwesenheit einer Person bei dieser Person; das Familienbuch lässt Verstorbenen beim Schutz durch Initialen ihre Quellen; der Hinweis auf eine neue Version wartet, solange ein Dialog offen ist; ein quer gehaltenes Telefon bis 640 px zeigt den Stammbaum direkt unter dem Kopf; weitere Korrekturen an Anordnung und Texten.
 - **Daten**: Datenversion 14 (der Stammbaum behält die Korrekturen seiner Stammlinien); Stammbäume früherer Versionen öffnen sich ohne Änderung.
 
 ## 3.18.0

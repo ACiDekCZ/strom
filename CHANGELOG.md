@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.19.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 31 October 2026.*
 
 - **Family lines**: *Tree overview* has a *Family lines* section: every family line of the tree (the birth line along the male line, named after its founder) with its years, members by generation and married-in spouses, a search and an order; the detail of a line shows it in the tree and *Edit family line…* corrects it (another founder, a separate line, name forms and surname spellings, back to the automatic line), with a preview of each change before it is applied. Families with too few people for a line of their own are listed as *Other families*.
 - **Family line of a person**: the person card and the person page have a *Family line* row with a link to the line in the tree overview and a menu: show the line in the tree, edit it, start a family line from this person, the line's book.

@@ -4,7 +4,7 @@
 
 ## 3.19.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 31. října 2026.*
 
 - **Rody**: *Přehled stromu* má oddíl *Rody*: každý rod stromu (rodová linie po meči, pojmenovaná podle zakladatele) s roky, členy po generacích a přivdanými a přiženěnými, s hledáním a řazením; detail rodu ho ukáže ve stromu a *Upravit rod…* ho opraví (jiný zakladatel, samostatná linie, tvary jména a zápisy příjmení, návrat k automatickému rodu), s náhledem každé změny před použitím. Rodiny s příliš málo lidmi na vlastní rod se uvádějí jako *Další rodiny*.
 - **Rod osoby**: karta osoby i stránka osoby mají řádek *Rod* s odkazem na rod v přehledu stromu a nabídkou: ukázat rod ve stromu, upravit ho, založit rod od této osoby, kniha rodu.
