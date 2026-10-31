@@ -367,8 +367,8 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
 
 export interface LifeChartCtx {
     lang: Language;
-    /** 'app': one set for `width`; 'file': two sets switched by @media. */
-    mode: 'app' | 'file';
+    /** 'app': one set for `width`; 'file': two sets switched by @media; 'print': one set for `width`, as a file reads it (the family book). */
+    mode: 'app' | 'file' | 'print';
     /** The chart's width in px (app; from a ResizeObserver). Default 680. */
     width?: number;
 }
@@ -404,7 +404,7 @@ export function lifeChartHtml(input: LifeChartInput | null, ctx: LifeChartCtx): 
     const S = getStringsForLang(ctx.lang);
     const C = S.personPage.chart;
     const legend = legendHtml(input, S);
-    if (ctx.mode === 'app') {
+    if (ctx.mode === 'app' || ctx.mode === 'print') {
         const w = Math.max(240, ctx.width ?? CHART_WIDE);
         return `<div class="pp-chart" role="group" aria-label="${esc(C.aria)}">`
             + `<div class="pp-chart-set pp-chart-set--one">${chartSet(input, S, ctx, w, w <= CHART_NARROW_MAX)}</div>${legend}</div>`;

@@ -400,8 +400,8 @@ describe('merges, privacy, CSV, the book and the search', () => {
         const book = (p: Person) => buildFamilyBook(tree(p), { lang: 'cs', privacyMode: 'full' });
         const dead = { birthDate: '1921', isDeceased: true };
         expect(book(jana('birth', dead))).toMatch(/Lhotová, Jana<span class="book-muted">, dříve Zástěrová<\/span>/);
-        expect(book(jana('married', dead))).toMatch(/Lhotová, Jana<span class="book-muted">, po sňatku Zástěrová<\/span>/);
-        expect(book(jana(undefined, dead))).toMatch(/Lhotová, Jana<span class="book-muted">, po sňatku Zástěrová<\/span>/);
+        expect(book(jana('married', dead))).toMatch(/Lhotová, Jana<span class="book-muted">, provd. Zástěrová<\/span>/);
+        expect(book(jana(undefined, dead))).toMatch(/Lhotová, Jana<span class="book-muted">, provd. Zástěrová<\/span>/);
         expect(buildFamilyBook(tree(jana('birth', dead)), { lang: 'en', privacyMode: 'full' })).toContain(', formerly Zástěrová</span>');
     });
 

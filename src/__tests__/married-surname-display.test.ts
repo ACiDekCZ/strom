@@ -108,10 +108,10 @@ describe('the family book index', () => {
 
     it('lists the person under the birth surname with the married one, and a cross-reference under the married one', () => {
         const html = buildFamilyBook(data(), { lang: 'cs', privacyMode: 'full' });
-        expect(html).toMatch(/Dvořáková, Marie<span class="book-muted">, po sňatku Nováková<\/span>/);
-        expect(html).toContain('<div class="book-index-row book-index-see">Nováková, Marie → viz Dvořáková, Marie</div>');
+        expect(html).toMatch(/Dvořáková, Marie<span class="book-muted">, provd. Nováková<\/span>/);
+        expect(html).toContain('<div class="book-index-row book-index-see">Nováková, Marie → Dvořáková, Marie</div>');
         // Sorted under N: after "Novák, Jan".
-        expect(html.indexOf('Novák, Jan')).toBeLessThan(html.indexOf('Nováková, Marie → viz'));
+        expect(html.indexOf('Novák, Jan')).toBeLessThan(html.indexOf('Nováková, Marie → Dvořáková'));
         expect(html.indexOf('Dvořáková, Marie')).toBeLessThan(html.indexOf('Novák, Jan'));
     });
 

@@ -649,7 +649,6 @@ ${STORY_COMPARE_CSS}
 ${options.treeSvg ? `<div class="book-page book-tree-page book-page-break">
     <h2>${esc(B.tree)}</h2>
     <div class="book-tree-wrap">${options.treeSvg}</div>
-    <div class="book-tree-hint">${esc(B.treeHint)}</div>
 </div>` : ''}
 
 <div class="book-page book-families book-page-break">
