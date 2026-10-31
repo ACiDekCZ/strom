@@ -252,7 +252,7 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
         ...(env.personHistory ? { personHistory: env.personHistory } : {}),
         ...(extras ? { extras } : {}),
         described: new Map(),
-        protectedTree: { tree, privacy: opts.privacy, living, drafts: new Set(personDrafts.keys()) },
+        protectedTree: { tree, privacy: opts.privacy, living, drafts: new Set(personDrafts.keys()), lineages: model.index, rodLabels: model.labels },
     };
 
     // ── The body: lineages (or the families of a book of ancestors / descendants) ──
