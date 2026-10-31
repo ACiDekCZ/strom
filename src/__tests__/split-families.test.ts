@@ -417,19 +417,19 @@ for (const fixture of ['devel-demo.json', 'comprehensive.json']) {
 // or WIFE) arrives with person2Id null; the split must not trip over it.
 describe('a union with one partner missing (person2Id null)', () => {
     const data = tree([
-        person('vojmir', 'Vojmír', 'male', { lastName: 'Klapka', birthDate: '1850', partnerships: [U('u1')], childIds: [P('sobeslav')] }),
-        person('sobeslav', 'Soběslav', 'male', { lastName: 'Klapka', birthDate: '1880', parentIds: [P('vojmir')], partnerships: [U('u2')] }),
-        person('ludmila', 'Ludmila', 'female', { lastName: 'Šulcová', birthDate: '1882', partnerships: [U('u2')] }),
+        person('vojmir', 'Vojmír', 'male', { lastName: 'Kmínek', birthDate: '1850', partnerships: [U('u1')], childIds: [P('sobeslav')] }),
+        person('sobeslav', 'Soběslav', 'male', { lastName: 'Kmínek', birthDate: '1880', parentIds: [P('vojmir')], partnerships: [U('u2')] }),
+        person('radmila', 'Radmila', 'female', { lastName: 'Rozinková', birthDate: '1882', partnerships: [U('u2')] }),
     ], [
         { ...union('u1', 'vojmir', 'x', ['sobeslav']), person2Id: null as unknown as PersonId },
-        union('u2', 'sobeslav', 'ludmila'),
+        union('u2', 'sobeslav', 'radmila'),
     ]);
 
     for (const mode of [...MODES, 'perspective' as SplitMode]) {
         it(`${mode}: splits without a crash and covers every person`, () => {
             const families = decomposeIntoFamilies(data, P('sobeslav'), mode);
             const covered = new Set(families.flatMap(f => f.personIds));
-            expect([...covered].sort()).toEqual(['ludmila', 'sobeslav', 'vojmir']);
+            expect([...covered].sort()).toEqual(['radmila', 'sobeslav', 'vojmir']);
         });
     }
 });
