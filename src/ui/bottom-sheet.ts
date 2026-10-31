@@ -288,6 +288,9 @@ export const bottomSheetMethods = uiModule({
             this.researchNoteMenuWrittenSeen();
             this.bottomSheet.remove();
             this.bottomSheet = null;
+            const onClose = this.bottomSheetOnClose;
+            this.bottomSheetOnClose = null;
+            onClose?.();
             this.exportReminderClosed();
             this.closeResearchTrialNote();
             // Focus back to what opened the sheet — unless the row's action
@@ -455,9 +458,17 @@ export const bottomSheetMethods = uiModule({
      * headers, flat action rows (no emoji), optional side-by-side "pair" row,
      * overlay + swipe-to-dismiss chrome. Shared by the "More" and "Tree" sheets.
      */
-    presentMenuSheet(titleText: string, blocks: MenuBlock[], opts: { research?: boolean; more?: boolean } = {}): void {
+    presentMenuSheet(titleText: string, blocks: MenuBlock[], opts: {
+        research?: boolean; more?: boolean;
+        /** A quiet line under the title (the fan's sector: years and number). */
+        subtitle?: string;
+        /** Extra class of the overlay (its own scrim). */
+        overlayClass?: string;
+        /** Called once when the sheet closes (any way). */
+        onClose?: () => void;
+    } = {}): void {
         const overlay = document.createElement('div');
-        overlay.className = 'bottom-sheet-overlay';
+        overlay.className = 'bottom-sheet-overlay' + (opts.overlayClass ? ` ${opts.overlayClass}` : '');
         const sheet = document.createElement('div');
         // More: no visible title (its name stays for assistive technology), the window's height when needed.
         sheet.className = 'bottom-sheet bottom-sheet-menu' + (opts.more ? ' bottom-sheet-more' : '');
@@ -472,6 +483,12 @@ export const bottomSheetMethods = uiModule({
         title.className = 'bottom-sheet-menu-title';
         title.textContent = titleText;
         sheet.appendChild(title);
+        if (opts.subtitle) {
+            const sub = document.createElement('div');
+            sub.className = 'bottom-sheet-menu-sub';
+            sub.textContent = opts.subtitle;
+            sheet.appendChild(sub);
+        }
 
         const list = document.createElement('div');
         list.className = 'bottom-sheet-items';
@@ -862,6 +879,7 @@ export const bottomSheetMethods = uiModule({
 
         document.body.appendChild(overlay);
         this.bottomSheet = overlay;
+        this.bottomSheetOnClose = opts.onClose ?? null;
         // Opened for the research (its state in the toolbar, a narrow window): straight on its page.
         if (opts.research) showResearchPage();
         requestAnimationFrame(() => overlay.classList.add('active'));

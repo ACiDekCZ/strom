@@ -651,6 +651,8 @@ class TreeRendererClass {
             map: { id: 'map-container', display: 'block', draw: el => UI.renderMapView?.(el) },
         };
         const active = standalone[this.viewMode];
+        // §5.2: leaving the Fan view forgets its way back.
+        if (this.viewMode !== 'fan') this.fanView?.deactivate();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
         document.body.dataset.viewMode = this.viewMode;
         for (const [mode, view] of Object.entries(standalone)) {
@@ -3136,6 +3138,7 @@ class TreeRendererClass {
      * from another tree would be skipped anyway, this just keeps it tidy.
      */
     resetFocusHistory(): void {
+        this.fanView?.deactivate();
         this.history = emptyViewHistory();
         this.viewStandIn = null;
         this.historySeq++;
@@ -5579,6 +5582,13 @@ class TreeRendererClass {
                 relTypeLabel: (t) => strings.parentRelType[t],
                 addParentLabel: () => strings.contextMenu.addParent,
                 afterDraw: () => { if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight(); },
+                personDetail: id => UI.runPersonMenuAction(id, 'edit'),
+                personPage: id => UI.runPersonMenuAction(id, 'page'),
+                menuSheet: (menu, onClose) => UI.presentMenuSheet(menu.title, [
+                    { rows: menu.items.map(it => ({ label: it.label, run: it.run, id: `fan-menu-${it.id}` })) },
+                    { divider: true, rows: [{ label: strings.fan.menuCancel, run: () => { /* closes */ }, id: 'fan-menu-cancel' }] },
+                ], { subtitle: menu.sub, overlayClass: 'fan-menu-sheet', onClose }),
+                hideMenuSheet: () => UI.hideBottomSheet(),
             });
         }
         this.fanView.render(container);

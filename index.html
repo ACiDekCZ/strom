@@ -8546,6 +8546,49 @@
             .fan-sheet-panel { left: max(var(--side-bar-w, 76px), calc(50% - 280px)); right: max(0px, calc(50% - 280px)); max-height: calc(100% - 16px); }
         }
 
+        /* Re-centring (§5.2): the way back to the person the view opened with, top left of the stage
+           (fan-view.ts keeps it clear of the tree's pills and the legend chip). */
+        .fan-origin-pill {
+            position: absolute; left: 12px; top: 12px; z-index: 4;
+            display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box;
+            height: 36px; max-width: calc(100% - 24px); padding: 0 14px 0 10px; margin: 0; min-width: 0;
+            border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+            color: var(--text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: opacity 0.2s ease;
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        }
+        .fan-origin-pill[hidden] { display: none; }
+        .fan-origin-pill.is-leaving { opacity: 0; pointer-events: none; }
+        .fan-origin-icon { color: var(--primary); font-size: 15px; line-height: 1; }
+        .fan-origin-label { white-space: nowrap; }
+        .fan-origin-name { color: var(--text-light); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .fan-origin-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .fan-origin-pill:hover { background: var(--hover-bg); } }
+        @media (pointer: coarse) { .fan-origin-pill { height: 44px; padding: 0 16px 0 12px; } }
+        @media (prefers-reduced-motion: reduce) { .fan-origin-pill { transition: none; } }
+        /* §5.5: the old fan over the new one while they swap. */
+        .fan-swap-old { position: absolute; inset: 0; z-index: 1; pointer-events: none; will-change: transform, opacity; }
+        .fan-swap-old > svg { display: block; width: 100%; height: 100%; }
+        /* §5.4: where the finger pressed, while the sector's sheet is open. */
+        .fan-press-ring {
+            position: absolute; z-index: 4; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+            box-sizing: border-box; border-radius: 50%; pointer-events: none;
+            border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent);
+        }
+        .bottom-sheet-overlay.fan-menu-sheet.active { background: rgba(20, 16, 8, 0.32); }
+        .bottom-sheet-menu-sub { padding: 0 16px 8px; margin-top: -4px; font-size: 13px; color: var(--text-light); }
+        .fan-menu-sheet #fan-menu-cancel { color: var(--text-light); justify-content: center; }
+        /* The sector's context menu (a mouse): 224px, 36px rows, the key on the right. */
+        .context-menu.fan-menu { width: 224px; min-width: 224px; padding: 4px 0; }
+        .fan-menu .fan-menu-head { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px 8px; white-space: normal; max-width: none; }
+        .fan-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fan-menu-sub { font-family: var(--font-sans); font-size: 12px; font-weight: 400; color: var(--text-light); }
+        .fan-menu .context-menu-item { min-height: 36px; padding: 0 14px; justify-content: space-between; box-sizing: border-box; outline: none; }
+        .fan-menu .context-menu-item:focus-visible { background: var(--hover-bg); }
+        /* Keys: one sector in the tab order; its outline instead of the browser's ring. */
+        #fan-chart [data-fan-key]:focus { outline: none; }
+        #fan-chart .fan-key-ring { stroke: var(--primary); stroke-width: 2.5px; }
+
         /* ==================== FOCUS MODE ==================== */
         .person-card.focused {
             border-color: var(--primary);
@@ -19307,7 +19350,7 @@
             .hidden-partners-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
             .card-tooltip, .collapse-chain-btn, .fan-toolbar, .fan-zoom-controls,
-            .fan-legend-chip, .fan-legend-head, .fan-sheet,
+            .fan-legend-chip, .fan-legend-head, .fan-sheet, .fan-origin-pill, .fan-press-ring, .fan-swap-old,
             .tree-tabs, .tree-legend, .gen-labels, #empty-state { display: none !important; }
 
             /* The fan prints whole (fan-view.ts redraws it so before printing),
@@ -19728,6 +19771,7 @@
             </div>
             <div class="fan-stage" id="fan-stage">
                 <div id="fan-chart" class="fan-chart" tabindex="0"></div>
+                <button type="button" class="fan-origin-pill" id="fan-origin-pill" hidden><span class="fan-origin-icon" aria-hidden="true">&#x21BA;</span><span class="fan-origin-label" data-i18n="fan.originPerson"></span><span class="fan-origin-name"></span></button>
                 <div class="fan-zoom-controls" id="fan-zoom-controls">
                     <button type="button" class="fan-zoom-btn fan-zoom-in" data-fan-zoom-act="in" data-i18n-aria-label="fan.zoomIn" data-i18n-title="fan.zoomInKey">&#xFF0B;</button>
                     <button type="button" class="fan-zoom-btn fan-zoom-out" data-fan-zoom-act="out" data-i18n-aria-label="fan.zoomOut" data-i18n-title="fan.zoomOutKey">&#xFF0D;</button>

@@ -157,6 +157,8 @@ export class UIClass {
     bottomSheet: HTMLElement | null = null;
     /** What had focus when the sheet opened: it gets it back on close. */
     bottomSheetTrigger: HTMLElement | null = null;
+    /** Called when the open sheet closes (the fan's sector menu puts the focus back on its sector). */
+    bottomSheetOnClose: (() => void) | null = null;
     linkMode = false;
     gedcomResult: GedcomConversionResult | null = null;
     /** This GEDCOM import brings images (null until the result dialog decides). */
