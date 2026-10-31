@@ -6,6 +6,9 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Rody**: *Přehled stromu* má oddíl *Rody*: každý rod stromu (rodová linie po meči, pojmenovaná podle zakladatele) s roky, členy po generacích a přivdanými a přiženěnými, s hledáním a řazením; detail rodu ho ukáže ve stromu a *Upravit rod…* ho opraví (jiný zakladatel, samostatná linie, tvary jména a zápisy příjmení, návrat k automatickému rodu), s náhledem každé změny před použitím. Rodiny s příliš málo lidmi na vlastní rod se uvádějí jako *Další rodiny*.
+- **Rod osoby**: karta osoby i stránka osoby mají řádek *Rod* s odkazem na rod v přehledu stromu a nabídkou: ukázat rod ve stromu, upravit ho, založit rod od této osoby, kniha rodu.
+- **Kniha rodu**: nový výstup, kniha vybraných rodů, celého stromu nebo předků či potomků osoby. Volby určí části, podrobnost u osoby, poznámky a data badatele, ochranu žijících, jazyk a název, ukážou odhad stran a pamatují se pro každý strom. Kniha se otevře v okně s obsahem po straně, *Uložit jako HTML*, tiskem a *Změnit volby*, i na telefonu.
 - **Stránka osoby**: pod každým výřezem z matriky vede odkaz *Sken v archivu* na jeho sken, u události i v kartě pramene, v okně i v uloženém souboru. Blízká místa se na mapě spojí do jednoho číslovaného shluku s jedním popiskem; galerie ukáže zápis z matriky nebo dokument celý na papírovém podkladu, široký přes dva sloupce; na širokém displeji zaberou obrazové bloky celý sloupec vedle obsahu. Shluky na mapě zahrnou i místa dětí a partnerů, tečka vložené mapy světa je klikací jako hlavní mapa a široká stránka dá řadě dětí v rodokmenu celou šířku.
 - **Místa**: dialog řadí místa *Podle názvu*, *Podle počtu osob* nebo *Bez polohy napřed*.
 - **Dějiny v kartě osoby**: dosud nehledaný region a vlastní dějiny místa se nabízejí spolu (*Najít dějiny regionu …* · *Najít dějiny místa a okolí…*); rozpětí let už nerozšiřuje sloupec roků.
@@ -14,7 +17,8 @@
 - **Strom z novější verze**: strom uložený novější verzí aplikace se otevře jen ke čtení, při startu i po přepnutí; lišta řekne proč a že po aktualizaci aplikace půjde zase upravovat, a nic se do něj nezapíše.
 - **Nabídka Výzkum**: *Další* mají nové pořadí, *Aktualizovat výzkum* hned po načtení nové verze. Kde výzkum nabízí hromadné opravy dat, má nabídka položku *Opravy stromu* s počtem dostupných; každá oprava uvádí počet (osob, rodin, událostí nebo pramenů), krátký popis a stav a otevře se nebo vrátí v terminálu výzkumu. *Nástroje výzkumu* uvádějí vlastní nástroje výzkumu seskupené podle toho, co dělají, jako první kontrolu výzkumu. Jednou zhlédnuté *Zapsáno ve výzkumu* se už nevrací při každém startu a odstranění, které si výzkum jen poznamenal, říká, že jde smazat ve výzkumu.
 - **Značka výzkumu**: akce, které otevírají terminál výzkumu, končí jeho značkou místo ↗, které zůstává jen pro web.
-- **Drobnější změny**: při čtení dokumentu se rozdíl čtenářů v roli, jménu nebo přítomnosti osoby ukáže u té osoby; kniha rodu při ochraně iniciálami ponechá zemřelým jejich prameny; nabídka nové verze počká, dokud je otevřený dialog; telefon na šířku do 640 px ukazuje strom hned pod hlavičkou; další opravy rozložení a textů.
+- **Drobnější změny**: datum verze výzkumu je místní den jejího času; při čtení dokumentu se rozdíl čtenářů v roli, jménu nebo přítomnosti osoby ukáže u té osoby; kniha rodu při ochraně iniciálami ponechá zemřelým jejich prameny; nabídka nové verze počká, dokud je otevřený dialog; telefon na šířku do 640 px ukazuje strom hned pod hlavičkou; další opravy rozložení a textů.
+- **Data**: datová verze 14 (strom si pamatuje opravy svých rodů); stromy starších verzí se otevřou beze změny.
 
 ## 3.18.0
 
