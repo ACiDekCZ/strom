@@ -5403,6 +5403,54 @@
             font-variant-numeric: tabular-nums;
         }
         .pm-header .close-btn { flex: none; align-self: flex-start; }
+        /* "Family line" row (spec 1031 §3.1): label, value with lineage links, ⋯ menu. */
+        .pm-rod {
+            display: flex; align-items: baseline; gap: 8px; margin-top: 4px;
+            font-size: 13px; line-height: 1.45; color: var(--text);
+        }
+        .pm-rod[hidden] { display: none; }
+        .pm-rod-label { flex: none; color: var(--text-light); }
+        .pm-rod-value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .pm-rod-join { color: var(--text-light); }
+        /* The names are links in the text flow (not buttons), so a long name wraps with the sentence.
+           The ⋯ button and the menu items read (0,2,1) to beat the generic `.modal button` padding. */
+        .pm-rod-link {
+            color: var(--primary); text-decoration: underline; text-underline-offset: 2px;
+            cursor: pointer; overflow-wrap: anywhere;
+        }
+        .pm-rod-more { position: relative; flex: none; align-self: center; }
+        .modal button.pm-rod-more-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 32px; height: 32px; margin: -8px 0; padding: 0 6px;
+            border: 0; border-radius: 6px; background: none; color: var(--text-faint);
+            font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .pm-rod-menu {
+            position: absolute; right: 0; top: calc(100% + 10px); z-index: 20;
+            width: max-content; min-width: 220px; max-width: min(320px, 86vw);
+            padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+            box-shadow: var(--shadow-lg);
+        }
+        .pm-rod-menu[hidden] { display: none; }
+        .modal button.pm-rod-item {
+            display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: none;
+            text-align: left; font: inherit; font-size: 14px; color: var(--text); cursor: pointer;
+        }
+        .modal button.pm-rod-item[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .pm-rod-menu-note { margin: 4px 10px 6px; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+        @media (hover: hover) {
+            .pm-rod-link:hover { text-decoration-thickness: 2px; }
+            .modal button.pm-rod-more-btn:hover, .modal button.pm-rod-item:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .modal button.pm-rod-more-btn { min-width: 44px; height: 44px; margin: -14px -6px -14px 0; }
+            .modal button.pm-rod-item { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .pm-rod { flex-wrap: wrap; row-gap: 0; }
+            .pm-rod-label { flex-basis: 100%; }
+            .pm-rod-value { flex-basis: 0; }
+        }
 
         /* The person modal keeps its own 24px section margins, so its scroll
            wrapper carries no padding — layout stays pixel-identical to before. */
@@ -19390,6 +19438,7 @@
                 <div class="pm-header-text">
                     <div class="pm-name" id="pm-name"></div>
                     <div class="pm-context" id="modal-title"></div>
+                    <div class="pm-rod" id="pm-rod" hidden></div>
                 </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeModal()">&times;</button>
             </div>

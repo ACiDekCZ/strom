@@ -52,6 +52,9 @@ span.pp-portrait { cursor: default; }
 .pp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 6px 0 0; font-size: 15px; }
 .pp-facts dt { color: var(--text-light); }
 .pp-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* The family line (spec 1031 §3): in the window the names lead to the overview; a file and print say it as text. */
+.pp .pp-rod-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.pp-fact-rod:has(.pp-rod-link) .pp-rod-join { color: var(--text-light); }
 .pp-differs { display: inline-block; margin-left: 6px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--accent-text); font: inherit; font-size: 12px; line-height: 20px; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .pp-link { display: inline; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
 a.pp-link { color: inherit; }
@@ -303,6 +306,7 @@ span.pp-gal-thumb { cursor: default; }
 /* Narrow page (a phone, a window under 641 px): the window's body and the file's column are containers. */
 @container (max-width: 640px) {
   .pp-hero--photo { flex-direction: column; }
+  .pp-facts .pp-fact-rod { grid-column: 1 / -1; }
   .pp-portrait { width: 96px; height: 96px; }
   .pp-initials { width: 64px; height: 64px; font-size: 23px; }
   .pp-initials--small { width: 52px; height: 52px; font-size: 19px; }
@@ -336,6 +340,7 @@ span.pp-gal-thumb { cursor: default; }
 }
 @media (max-width: 640px) {
   .pp-hero--photo { flex-direction: column; }
+  .pp-facts .pp-fact-rod { grid-column: 1 / -1; }
   .pp-portrait { width: 96px; height: 96px; }
   .pp-initials { width: 64px; height: 64px; font-size: 23px; }
   .pp-initials--small { width: 52px; height: 52px; font-size: 19px; }

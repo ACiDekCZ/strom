@@ -1623,20 +1623,30 @@ export const treeOverviewMethods = uiModule({
     showTreeOverviewRodInTree(id: RodId): void {
         if (!state) return;
         const d = this.treeOverviewRodsData();
-        const rod = d.index.rods.get(id);
-        if (!rod) return;
-        const label = d.labels.get(id) ?? rod.surname;
+        const group = this.rodHighlightGroup(id, d.index, d.labels);
+        if (group) void this.startTreeOverviewHighlight(group);
+    },
+
+    /**
+     * The highlight of a lineage: its members framed, the spouses who married
+     * in faintly, recounted after a change. Without an index: the open tree's.
+     */
+    rodHighlightGroup(id: RodId, index?: LineageIndex, labels?: ReadonlyMap<RodId, string>): Omit<HighlightGroup, 'returnTo'> | null {
+        const idx = index ?? buildLineages(DataManager.getData());
+        const rod = idx.rods.get(id);
+        if (!rod) return null;
+        const label = (labels ?? rodLabels(idx)).get(id) ?? rod.surname;
         let latest: LineageIndex | null = null;
-        void this.startTreeOverviewHighlight({
+        return {
             kind: 'rod', cite: false,
-            personIds: realRodMembers(d.index, id),
+            personIds: realRodMembers(idx, id),
             title: (n) => strings.treeOverview.rods.highlight(label, n),
             recount: () => {
                 latest = buildLineages(DataManager.getData());
                 return realRodMembers(latest, id);
             },
-            faint: () => realRodSpouses(latest ?? d.index, id),
-        });
+            faint: () => realRodSpouses(latest ?? idx, id),
+        };
     },
 
     /** "Family line book…": the book dialog for this lineage (its tree opened first). */

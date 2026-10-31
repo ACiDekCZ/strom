@@ -760,6 +760,69 @@ export function marriedInto(index: LineageIndex, personId: PersonId): RodMarriag
     return out;
 }
 
+/**
+ * What the "Family line" row of a person's card and page says (spec 1031
+ * §3.1). A member: their birth lineage, with the other lineages they married
+ * into. A spouse who married in: the lineage of the marriage, with the birth
+ * lineage when it is one worth naming. Null: no row.
+ */
+export type PersonRodRow =
+    | { kind: 'member'; rodId: RodId; marriedInto: RodId[] }
+    | { kind: 'spouse'; rodId: RodId; birthRodId: RodId | null };
+
+/** Per index: each spouse who married in → the lineages they married into (see spouseRodsOf). */
+const spouseRodsCache = new WeakMap<LineageIndex, Map<PersonId, { rodId: RodId; partnershipId: PartnershipId }[]>>();
+
+/**
+ * The lineages a person is a spouse in (each lineage's `spouses`, as the
+ * overview shows them), in the order of the person's unions.
+ */
+export function spouseRodsOf(index: LineageIndex, personId: PersonId): RodId[] {
+    let map = spouseRodsCache.get(index);
+    if (!map) {
+        map = new Map();
+        for (const rod of index.rods.values()) {
+            for (const s of rod.spouses) {
+                const list = map.get(s.personId) ?? [];
+                list.push({ rodId: rod.id, partnershipId: s.partnershipId });
+                map.set(s.personId, list);
+            }
+        }
+        spouseRodsCache.set(index, map);
+    }
+    const unions = index.data.persons[personId]?.partnerships ?? [];
+    const pos = (uid: PartnershipId): number => { const i = unions.indexOf(uid); return i < 0 ? unions.length : i; };
+    const list = [...(map.get(personId) ?? [])].sort((a, b) => pos(a.partnershipId) - pos(b.partnershipId));
+    const out: RodId[] = [];
+    for (const e of list) if (!out.includes(e.rodId)) out.push(e.rodId);
+    return out;
+}
+
+/**
+ * The row of a person (see PersonRodRow). A person is told as a spouse who
+ * married in when their own lineage says little — none, one person only, or
+ * a small family while the marriage is into a lineage over the threshold —
+ * and as a member otherwise (a daughter of a lineage keeps it and "married
+ * into" the other). The birth lineage of a spouse is named only when it has
+ * more than one person. A placeholder, or a person with no lineage of more
+ * than themselves and no marriage into one, has no row.
+ */
+export function personRodRow(index: LineageIndex, personId: PersonId): PersonRodRow | null {
+    const p = index.data.persons[personId];
+    if (!p || p.isPlaceholder) return null;
+    const ownId = rodOf(index, personId);
+    const own = ownId ? index.rods.get(ownId) ?? null : null;
+    const into = spouseRodsOf(index, personId).filter(id => id !== ownId);
+    const big = into.filter(id => !index.rods.get(id)!.small);
+    const asSpouse = into.length > 0 && (!own || own.solitary || (own.small && big.length > 0));
+    if (asSpouse) {
+        const rodId = big[0] ?? into[0];
+        return { kind: 'spouse', rodId, birthRodId: own && !own.solitary && own.id !== rodId ? own.id : null };
+    }
+    if (!own || own.solitary) return null;
+    return { kind: 'member', rodId: own.id, marriedInto: into };
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 
