@@ -526,6 +526,80 @@ const stringsEN = {
         introShort: 'Say once that spellings mean the same family, and search and merging find them all.',
         more: 'More',
         addSpelling: 'Add',
+        removeForm: (form: string) => `Remove the form ${form}`,
+        rodOf: (label: string) => `${label} line`,
+        rodsOf: (labels: string) => `${labels} lines`,
+    },
+
+    // "Edit family line" (package 1031 §2): founder, name forms, a separate line, each with a preview.
+    lineage: {
+        edit: {
+            title: (label: string) => `Edit ${label} family line`,
+            founder: (_gender: string) => 'Founder',
+            auto: 'set automatically',
+            manual: 'set manually',
+            revert: 'Restore automatic',
+            change: 'Change…',
+            forms: 'Name forms',
+            main: 'main',
+            removeForm: (form: string) => `Remove the form ${form}`,
+            addForm: '+ form',
+            addFormTitle: (label: string) => `Add a form to the ${label} family line`,
+            addFormPlaceholder: 'A form from the tree or another…',
+            addFormUse: (form: string) => `Use “${form}”`,
+            addFormRod: (label: string) => `${label} line`,
+            feminine: (forms: string) => `Feminine forms (${forms}) pair by themselves.`,
+            formsWholeTree: 'Forms apply to the whole tree',
+            split: 'Separate line',
+            splitHint: 'A branch that should be its own line (e.g. a son who moved away).',
+            splitBtn: 'Start a line from a person…',
+            searchMembers: 'Search the line…',
+            noMatch: 'No member matches.',
+            now: 'now',
+            undoNote: 'Every change can be undone (Undo, Change history).',
+            notOpen: 'The tree is not open. Only the open tree can be changed.',
+            followed: 'A followed tree is read-only. The line can be viewed, not changed.',
+            readOnly: 'The tree is read-only. The line can be viewed, not changed.',
+            research: 'The tree is linked with a research. A change of the line is written into the tree and the research gets it the same way as spelling groups.',
+            gone: 'This family line is no longer in the tree.',
+            apply: 'Apply',
+            startLine: 'Start the line',
+            linkForms: 'Link the forms',
+            removeFormBtn: 'Remove the form',
+            restore: 'Restore',
+        },
+        preview: {
+            title: 'What will change',
+            more: (n: number) => `${n} more`,
+            startsWith: (who: string, members: number, spouses: number) =>
+                `The line will begin with ${who}: ${nEn(members, 'member', 'members')}${spouses ? `, ${spouses} married in` : ''}.`,
+            toSmall: (names: string, n: number) => n === 1
+                ? `${names} will move to Other families.`
+                : `${names} (${n} people) will move to Other families.`,
+            becomeRod: (names: string, n: number, label: string) => n === 1
+                ? `${names} will be the ${label} family line.`
+                : `${names} (${n} people) will be the ${label} family line.`,
+            ownLine: (who: string, label: string, members: number, spouses: number) =>
+                `The line of ${who} will be a separate family line, ${label}: ${nEn(members, 'member', 'members')}${spouses ? `, ${spouses} married in` : ''}.`,
+            wholeTreeKeeps: 'The book of the whole tree keeps every person.',
+            newRod: (label: string, who: string, members: number, spouses: number) =>
+                `A new family line ${label} will begin with ${who}: ${nEn(members, 'member', 'members')}${spouses ? `, ${spouses} married in` : ''}.`,
+            splitMoves: (name: string, gender: string, label: string, members: number, spouses: number) => {
+                const [his, he, son] = gender === 'male' ? ['his', 'he stays', 'son'] : gender === 'female' ? ['her', 'she stays', 'daughter'] : ['their', 'they stay', 'child'];
+                return `${name} and ${his} descendants will move to the new line. In the parents’ family ${he} as a ${son} with a link to the new line. The ${label} line will have ${nEn(members, 'member', 'members')}${spouses ? ` and ${spouses} married in` : ''}.`;
+            },
+            merge: (label: string, other: string, a: number, b: number) =>
+                `Linking the forms merges the ${label} and ${other} lines (${a} + ${nEn(b, 'person', 'people')}). The ${other} line ends.`,
+            staySeparate: 'The lines stay separate; the form only helps search.',
+            formWholeTree: 'The form applies to the whole tree: search, merging people and the research see it too.',
+            splitByForm: (label: string, before: number, after: number, newLabel: string, from: string, members: number) =>
+                `The line splits: ${label} ${before} → ${nEn(after, 'member', 'members')}, new line ${newLabel} (from ${from}): ${nEn(members, 'member', 'members')}.`,
+            groupGone: (forms: string) => `The group of forms ${forms} ends (only one form would be left).`,
+            linkedByRelation: 'The lines are joined by a parent–child link, not by the form.',
+            restored: (label: string, members: number, spouses: number) =>
+                `The ${label} line will be as computed again: ${nEn(members, 'member', 'members')}${spouses ? `, ${spouses} married in` : ''}.`,
+            noChange: 'Nothing will change.',
+        },
     },
 
     // Spellings suggested by the research in the "Surname spellings" dialog (spec 021 §4).
@@ -4782,6 +4856,10 @@ const stringsEN = {
         surnameUnrejected: (forms: string) => `Spelling suggestion no longer rejected: ${forms}`,
         surnameAccepted: (forms: string) => `Spelling suggestion accepted: ${forms}`,
         surnameUnaccepted: (forms: string) => `Accepted spellings taken back: ${forms}`,
+        lineageFounder: (label: string, name: string) => `Family line ${label} begins with ${name}`,
+        lineageSplit: (label: string, name: string) => `Family line ${label} started from ${name}`,
+        lineageRevert: (label: string) => `Family line ${label} as computed again`,
+        surnameFormRemoved: (form: string, group: string) => `Form ${form} taken out of the spellings ${group}`,
         addedSource: (title: string) => `Added source "${title}"`,
         updatedSource: (title: string) => `Updated source "${title}"`,
         removedSource: (title: string) => `Removed source "${title}"`,
@@ -4813,6 +4891,10 @@ const stringsEN = {
         unrejectSurnameGroup: (names: string) => `taking back the rejection of ${names}`,
         acceptSurnameGroups: (names: string) => `accepting the spellings ${names}`,
         unacceptSurnameGroups: (names: string) => `taking back the accepted spellings ${names}`,
+        lineageFounder: (label: string) => `the new founder of the ${label} line`,
+        lineageSplit: (name: string) => `the line started from ${name}`,
+        lineageRevert: (label: string) => `restoring the automatic ${label} line`,
+        removeSurnameForm: (form: string) => `removing the form ${form}`,
         dismissQualityFinding: (finding: string) => `marking as not an error: ${finding}`,
         restoreQualityFinding: (finding: string) => `reporting again: ${finding}`,
         loadedData: 'importing data',
@@ -6431,6 +6513,79 @@ const stringsCZ: StringsType = {
         introShort: 'Stačí jednou určit, že tvary příjmení znamenají tentýž rod, a hledání i slučování je najdou všechny.',
         more: 'Více',
         addSpelling: 'Přidat',
+        removeForm: (form: string) => `Odebrat tvar ${form}`,
+        rodOf: (label: string) => `rod ${label}`,
+        rodsOf: (labels: string) => `rody ${labels}`,
+    },
+
+    lineage: {
+        edit: {
+            title: (label: string) => `Upravit rod ${label}`,
+            founder: (gender: string) => gender === 'female' ? 'Zakladatelka' : 'Zakladatel',
+            auto: 'určeno automaticky',
+            manual: 'určeno ručně',
+            revert: 'Vrátit automatického',
+            change: 'Změnit…',
+            forms: 'Tvary jména',
+            main: 'hlavní',
+            removeForm: (form: string) => `Odebrat tvar ${form}`,
+            addForm: '+ tvar',
+            addFormTitle: (label: string) => `Přidat tvar k rodu ${label}`,
+            addFormPlaceholder: 'Tvar ze stromu nebo jiný…',
+            addFormUse: (form: string) => `Použít „${form}“`,
+            addFormRod: (label: string) => `rod ${label}`,
+            feminine: (forms: string) => `Ženské tvary (${forms}) se párují samy.`,
+            formsWholeTree: 'Tvary platí pro celý strom',
+            split: 'Samostatná linie',
+            splitHint: 'Větev, která má být vlastním rodem (např. syn, který se odstěhoval).',
+            splitBtn: 'Založit rod od osoby…',
+            searchMembers: 'Hledat v rodu…',
+            noMatch: 'Nikdo z rodu neodpovídá.',
+            now: 'nyní',
+            undoNote: 'Každou změnu jde vrátit (Zpět, Historie změn).',
+            notOpen: 'Strom není otevřený. Měnit lze jen otevřený strom.',
+            followed: 'Sledovaný strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
+            readOnly: 'Strom je jen ke čtení. Rod jde prohlížet, ne upravit.',
+            research: 'Strom je propojený s výzkumem. Změna rodu se zapíše do stromu a výzkum ji dostane stejně jako skupiny tvarů.',
+            gone: 'Tento rod už ve stromu není.',
+            apply: 'Použít',
+            startLine: 'Založit rod',
+            linkForms: 'Spojit tvary',
+            removeFormBtn: 'Odebrat tvar',
+            restore: 'Vrátit',
+        },
+        preview: {
+            title: 'Co se stane',
+            more: (n: number) => `${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
+            startsWith: (who: string, members: number, spouses: number) =>
+                `Rod bude začínat osobou ${who}: ${nCs(members, 'člen', 'členové', 'členů')}${spouses ? `, ${nCs(spouses, 'přivdaná', 'přivdané', 'přivdaných')}` : ''}.`,
+            toSmall: (names: string, n: number) => n === 1
+                ? `${names} přejde do Dalších rodin.`
+                : `${names} (${nCs(n, 'osoba', 'osoby', 'osob')}) přejdou do Dalších rodin.`,
+            becomeRod: (names: string, n: number, label: string) => n === 1
+                ? `${names} bude rod ${label}.`
+                : `${names} (${nCs(n, 'osoba', 'osoby', 'osob')}) budou rod ${label}.`,
+            ownLine: (who: string, label: string, members: number, spouses: number) =>
+                `Linie osoby ${who} bude samostatný rod ${label}: ${nCs(members, 'člen', 'členové', 'členů')}${spouses ? `, ${nCs(spouses, 'přivdaná', 'přivdané', 'přivdaných')}` : ''}.`,
+            wholeTreeKeeps: 'V knize celého stromu zůstanou všechny osoby.',
+            newRod: (label: string, who: string, members: number, spouses: number) =>
+                `Vznikne rod ${label} od osoby ${who}: ${nCs(members, 'člen', 'členové', 'členů')}${spouses ? `, ${nCs(spouses, 'přivdaná', 'přivdané', 'přivdaných')}` : ''}.`,
+            splitMoves: (name: string, gender: string, label: string, members: number, spouses: number) => {
+                const [his, son] = gender === 'female' ? ['její', 'dcera'] : gender === 'male' ? ['jeho', 'syn'] : ['jeho', 'dítě'];
+                return `${name} a ${his} potomci přejdou do nového rodu. V rodině rodičů zůstane jako ${son} s odkazem na nový rod. Rod ${label} bude mít ${nCs(members, 'člena', 'členy', 'členů')}${spouses ? ` a ${nCs(spouses, 'přivdanou', 'přivdané', 'přivdaných')}` : ''}.`;
+            },
+            merge: (label: string, other: string, a: number, b: number) =>
+                `Spojením se rody ${label} a ${other} sloučí (${a} + ${nCs(b, 'osoba', 'osoby', 'osob')}). Rod ${other} zanikne.`,
+            staySeparate: 'Rody zůstanou oddělené, tvar jen pomůže hledání.',
+            formWholeTree: 'Tvar platí v celém stromu: hledání, slučování osob a výzkum ho uvidí také.',
+            splitByForm: (label: string, before: number, after: number, newLabel: string, from: string, members: number) =>
+                `Rod se rozdělí: ${label} ${before} → ${nCs(after, 'člen', 'členové', 'členů')}, nový rod ${newLabel} (od ${from}): ${nCs(members, 'člen', 'členové', 'členů')}.`,
+            groupGone: (forms: string) => `Skupina tvarů ${forms} zanikne (zbyl by jen jeden tvar).`,
+            linkedByRelation: 'Linie nespojuje tvar, ale vztah rodič–dítě.',
+            restored: (label: string, members: number, spouses: number) =>
+                `Rod ${label} bude zase podle výpočtu: ${nCs(members, 'člen', 'členové', 'členů')}${spouses ? `, ${nCs(spouses, 'přivdaná', 'přivdané', 'přivdaných')}` : ''}.`,
+            noChange: 'Nic se nezmění.',
+        },
     },
 
     surnameSuggest: {
@@ -10642,6 +10797,10 @@ const stringsCZ: StringsType = {
         surnameUnrejected: (forms: string) => `Vráceno odmítnutí tvarů: ${forms}`,
         surnameAccepted: (forms: string) => `Přijat návrh tvarů: ${forms}`,
         surnameUnaccepted: (forms: string) => `Vráceno přijetí tvarů: ${forms}`,
+        lineageFounder: (label: string, name: string) => `Rod ${label} začíná osobou ${name}`,
+        lineageSplit: (label: string, name: string) => `Založen rod ${label} od osoby ${name}`,
+        lineageRevert: (label: string) => `Rod ${label} znovu podle výpočtu`,
+        surnameFormRemoved: (form: string, group: string) => `Tvar ${form} odebrán ze skupiny ${group}`,
         addedSource: (title: string) => `Přidán pramen „${title}“`,
         updatedSource: (title: string) => `Upraven pramen „${title}“`,
         removedSource: (title: string) => `Odebrán pramen „${title}“`,
@@ -10673,6 +10832,10 @@ const stringsCZ: StringsType = {
         unrejectSurnameGroup: (names: string) => `vrácení odmítnutí tvarů ${names}`,
         acceptSurnameGroups: (names: string) => `přijetí tvarů ${names}`,
         unacceptSurnameGroups: (names: string) => `vrácení přijetí tvarů ${names}`,
+        lineageFounder: (label: string) => `změna zakladatele rodu ${label}`,
+        lineageSplit: (name: string) => `založení rodu od osoby ${name}`,
+        lineageRevert: (label: string) => `vrácení automatického rodu ${label}`,
+        removeSurnameForm: (form: string) => `odebrání tvaru ${form}`,
         dismissQualityFinding: (finding: string) => `označení „není chyba“: ${finding}`,
         restoreQualityFinding: (finding: string) => `vrácení nálezu: ${finding}`,
         loadedData: 'import dat',
@@ -12259,6 +12422,79 @@ const stringsDE: StringsType = {
         introShort: 'Einmal festgelegt, dass Schreibweisen dieselbe Familie meinen, finden Suche und Zusammenführen sie alle.',
         more: 'Mehr',
         addSpelling: 'Hinzufügen',
+        removeForm: (form: string) => `Form ${form} entfernen`,
+        rodOf: (label: string) => `Stammlinie ${label}`,
+        rodsOf: (labels: string) => `Stammlinien ${labels}`,
+    },
+
+    lineage: {
+        edit: {
+            title: (label: string) => `Stammlinie ${label} bearbeiten`,
+            founder: (gender: string) => gender === 'male' ? 'Stammvater' : gender === 'female' ? 'Stammmutter' : 'Ältester Träger',
+            auto: 'automatisch bestimmt',
+            manual: 'manuell festgelegt',
+            revert: 'Automatisch wiederherstellen',
+            change: 'Ändern…',
+            forms: 'Namensformen',
+            main: 'Hauptform',
+            removeForm: (form: string) => `Form ${form} entfernen`,
+            addForm: '+ Form',
+            addFormTitle: (label: string) => `Form zur Stammlinie ${label} hinzufügen`,
+            addFormPlaceholder: 'Form aus dem Stammbaum oder eine andere…',
+            addFormUse: (form: string) => `„${form}“ verwenden`,
+            addFormRod: (label: string) => `Stammlinie ${label}`,
+            feminine: (forms: string) => `Weibliche Formen (${forms}) werden von selbst zugeordnet.`,
+            formsWholeTree: 'Formen gelten für den ganzen Stammbaum',
+            split: 'Eigene Linie',
+            splitHint: 'Ein Zweig, der eine eigene Linie sein soll (z. B. ein weggezogener Sohn).',
+            splitBtn: 'Linie ab Person beginnen…',
+            searchMembers: 'In der Stammlinie suchen…',
+            noMatch: 'Kein Mitglied passt.',
+            now: 'derzeit',
+            undoNote: 'Jede Änderung lässt sich rückgängig machen (Rückgängig, Änderungsverlauf).',
+            notOpen: 'Der Stammbaum ist nicht geöffnet. Nur der geöffnete Stammbaum lässt sich ändern.',
+            followed: 'Ein verfolgter Stammbaum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht ändern.',
+            readOnly: 'Der Stammbaum ist schreibgeschützt. Die Stammlinie lässt sich ansehen, nicht ändern.',
+            research: 'Der Stammbaum ist mit einer Forschung verbunden. Eine Änderung der Stammlinie wird in den Stammbaum geschrieben, und die Forschung erhält sie wie Schreibweisengruppen.',
+            gone: 'Diese Stammlinie gibt es im Stammbaum nicht mehr.',
+            apply: 'Anwenden',
+            startLine: 'Linie beginnen',
+            linkForms: 'Formen verbinden',
+            removeFormBtn: 'Form entfernen',
+            restore: 'Wiederherstellen',
+        },
+        preview: {
+            title: 'Was sich ändert',
+            more: (n: number) => `${n} weitere`,
+            startsWith: (who: string, members: number, spouses: number) =>
+                `Die Stammlinie beginnt dann mit ${who}: ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? `, ${spouses} eingeheiratet` : ''}.`,
+            toSmall: (names: string, n: number) => n === 1
+                ? `${names} kommt zu den weiteren Familien.`
+                : `${names} (${nDe(n, 'Person', 'Personen')}) kommen zu den weiteren Familien.`,
+            becomeRod: (names: string, n: number, label: string) => n === 1
+                ? `${names} wird die Stammlinie ${label}.`
+                : `${names} (${nDe(n, 'Person', 'Personen')}) werden die Stammlinie ${label}.`,
+            ownLine: (who: string, label: string, members: number, spouses: number) =>
+                `Die Linie von ${who} wird eine eigene Stammlinie ${label}: ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? `, ${spouses} eingeheiratet` : ''}.`,
+            wholeTreeKeeps: 'Im Buch des ganzen Stammbaums bleiben alle Personen.',
+            newRod: (label: string, who: string, members: number, spouses: number) =>
+                `Es entsteht die Stammlinie ${label} ab ${who}: ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? `, ${spouses} eingeheiratet` : ''}.`,
+            splitMoves: (name: string, gender: string, label: string, members: number, spouses: number) => {
+                const [his, he, son] = gender === 'male' ? ['seine', 'bleibt er', 'Sohn'] : gender === 'female' ? ['ihre', 'bleibt sie', 'Tochter'] : ['die', 'bleibt die Person', 'Kind'];
+                return `${name} und ${his} Nachkommen wechseln in die neue Stammlinie. In der Familie der Eltern ${he} als ${son} mit Verweis auf die neue Linie. Die Stammlinie ${label} hat dann ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? ` und ${spouses} Eingeheiratete` : ''}.`;
+            },
+            merge: (label: string, other: string, a: number, b: number) =>
+                `Die Verbindung führt die Stammlinien ${label} und ${other} zusammen (${a} + ${nDe(b, 'Person', 'Personen')}). Die Stammlinie ${other} entfällt.`,
+            staySeparate: 'Die Stammlinien bleiben getrennt, die Form hilft nur bei der Suche.',
+            formWholeTree: 'Die Form gilt im ganzen Stammbaum: Suche, Zusammenführen von Personen und die Forschung sehen sie auch.',
+            splitByForm: (label: string, before: number, after: number, newLabel: string, from: string, members: number) =>
+                `Die Stammlinie teilt sich: ${label} ${before} → ${nDe(after, 'Mitglied', 'Mitglieder')}, neue Stammlinie ${newLabel} (ab ${from}): ${nDe(members, 'Mitglied', 'Mitglieder')}.`,
+            groupGone: (forms: string) => `Die Formengruppe ${forms} entfällt (es bliebe nur eine Form).`,
+            linkedByRelation: 'Die Linien verbindet keine Namensform, sondern eine Eltern-Kind-Beziehung.',
+            restored: (label: string, members: number, spouses: number) =>
+                `Die Stammlinie ${label} ist wieder wie berechnet: ${nDe(members, 'Mitglied', 'Mitglieder')}${spouses ? `, ${spouses} eingeheiratet` : ''}.`,
+            noChange: 'Es ändert sich nichts.',
+        },
     },
 
     surnameSuggest: {
@@ -16408,6 +16644,10 @@ const stringsDE: StringsType = {
         surnameUnrejected: (forms: string) => `Ablehnung der Schreibweisen zurückgenommen: ${forms}`,
         surnameAccepted: (forms: string) => `Vorschlag für Schreibweisen übernommen: ${forms}`,
         surnameUnaccepted: (forms: string) => `Übernahme der Schreibweisen zurückgenommen: ${forms}`,
+        lineageFounder: (label: string, name: string) => `Stammlinie ${label} beginnt mit ${name}`,
+        lineageSplit: (label: string, name: string) => `Stammlinie ${label} ab ${name} begonnen`,
+        lineageRevert: (label: string) => `Stammlinie ${label} wieder wie berechnet`,
+        surnameFormRemoved: (form: string, group: string) => `Form ${form} aus den Schreibweisen ${group} entfernt`,
         addedSource: (title: string) => `Quelle „${title}“ hinzugefügt`,
         updatedSource: (title: string) => `Quelle „${title}“ aktualisiert`,
         removedSource: (title: string) => `Quelle „${title}“ entfernt`,
@@ -16438,6 +16678,10 @@ const stringsDE: StringsType = {
         unrejectSurnameGroup: (names: string) => `die Ablehnung von ${names} zurücknehmen`,
         acceptSurnameGroups: (names: string) => `die Schreibweisen ${names} übernehmen`,
         unacceptSurnameGroups: (names: string) => `die Übernahme von ${names} zurücknehmen`,
+        lineageFounder: (label: string) => `der neue Beginn der Stammlinie ${label}`,
+        lineageSplit: (name: string) => `die Linie ab ${name}`,
+        lineageRevert: (label: string) => `die automatische Stammlinie ${label}`,
+        removeSurnameForm: (form: string) => `das Entfernen der Form ${form}`,
         dismissQualityFinding: (finding: string) => `als kein Fehler markieren: ${finding}`,
         restoreQualityFinding: (finding: string) => `wieder melden: ${finding}`,
         loadedData: 'Daten importieren',

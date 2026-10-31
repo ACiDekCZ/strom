@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     buildLineages, rods, rodOf, rodLabel, rodLabels, previewOverride, applyLineageChange, cleanLineageOverrides,
     lineageOverridesOf, withLineagePatch, marriedInto, selection, RodId, LineageIndex, Rod,
+    rodNameForms, rodsOfSurnameGroup, formCarrier,
 } from '../lineage.js';
 import { removeSurnameForm } from '../surnames.js';
 import { DataManager, migrateData } from '../data.js';
@@ -269,7 +270,78 @@ describe('forms that join lines: adding and removing one', () => {
         data.persons[P('dobroslav')].lastName = 'Pštrossek';
         const idx = buildLineages(data);
         const pv = previewOverride(data, { kind: 'removeForm', rodId: rodIdOf(idx, 'mstivoj'), form: 'Pštrossek' }, idx);
-        expect(pv.lines[0]).toEqual({ kind: 'linkedByRelation' });
+        expect(pv.lines[0]).toEqual({ kind: 'linkedByRelation', personId: 'dobroslav' });
+    });
+
+    it('a form outside every group that a member carries: nothing to store, the relation named', () => {
+        const data = pstrosek();
+        data.persons[P('dobroslav')].lastName = 'Pštrossek';
+        const idx = buildLineages(data);
+        const rod = rodOfPerson(idx, 'mstivoj');
+        expect(rod.otherForms).toContain('Pštrossek');
+        const pv = previewOverride(data, { kind: 'removeForm', rodId: rod.id, form: 'Pštrossek' }, idx);
+        expect(pv.patch).toBeNull();
+        expect(pv.lines).toEqual([{ kind: 'linkedByRelation', personId: 'dobroslav' }]);
+    });
+
+    it('a grouped form nobody carries: the group shrinks, the line stays', () => {
+        const data = pstrosek({ surnameVariants: [['Pštrosek', 'Pštrossek', 'Pstrossek']] });
+        const idx = buildLineages(data);
+        const pv = previewOverride(data, { kind: 'removeForm', rodId: rodIdOf(idx, 'mstivoj'), form: 'Pstrossek' }, idx);
+        expect(pv.lines).toEqual([{ kind: 'formWholeTree' }]);
+        expect(pv.patch?.surnameVariants).toEqual([['Pštrosek', 'Pštrossek']]);
+    });
+
+    it('a group no lineage carries: removing a form without a lineage', () => {
+        const data = pstrosek({ surnameVariants: [['Ořechovec', 'Orechovec']] });
+        const idx = buildLineages(data);
+        const pv = previewOverride(data, { kind: 'removeForm', rodId: null, form: 'Orechovec' }, idx);
+        expect(pv.lines).toEqual([{ kind: 'formWholeTree' }, { kind: 'groupGone', forms: ['Ořechovec', 'Orechovec'] }]);
+        expect(pv.patch).toMatchObject({ surnameVariants: undefined, rejection: ['Orechovec', 'Ořechovec'] });
+    });
+});
+
+describe('the forms and lineages the edit dialogs list', () => {
+    it('main form first, group and carried spellings after, feminine forms paired by the rules', () => {
+        const data = pstrosek({ surnameVariants: [['Pštrosek', 'Pštrossek']] });
+        data.persons[P('dobroslav')].lastName = 'Pštrosík';
+        const idx = buildLineages(data);
+        const rod = rodOfPerson(idx, 'mstivoj');
+        const { forms, feminine } = rodNameForms(rod, data);
+        expect(forms[0]).toBe('Pštrosek');
+        expect(forms).toContain('Pštrossek');
+        expect(forms).toContain('Pštrosík');
+        // Pštrosková (the daughters) pairs by itself: not a form of its own.
+        expect(forms).not.toContain('Pštrosková');
+        expect(feminine).toEqual(expect.arrayContaining(['Pštrosková', 'Pštrossková']));
+    });
+
+    it('without the Czech rules every carried spelling is a form and no feminine pairs are named', () => {
+        const data = tree({
+            a: { first: 'Arvo', last: 'Lindqvist', sex: 'male', born: '1800' },
+            b: { first: 'Berit', last: 'Lindqvista', sex: 'female', born: '1830', parents: ['a'] },
+            c: { first: 'Cnut', last: 'Lindqvist', sex: 'male', born: '1832', parents: ['a'] },
+        });
+        const idx = buildLineages(data);
+        const rod = rodOfPerson(idx, 'c');
+        const r = rodNameForms(rod, data);
+        expect(r.forms[0]).toBe('Lindqvist');
+        expect(r.feminine).toEqual([]);
+    });
+
+    it('a spelling group names the lineages it concerns, largest first', () => {
+        const data = pstrosek({ surnameVariants: [['Pštrosek', 'Pštrossek'], ['Ořechovec', 'Orechovec']] });
+        const idx = buildLineages(data);
+        expect(rodsOfSurnameGroup(idx, ['Pštrosek', 'Pštrossek'])).toEqual([rodIdOf(idx, 'mstivoj')]);
+        expect(rodsOfSurnameGroup(idx, ['Ořechovec', 'Orechovec'])).toEqual([]);
+    });
+
+    it('formCarrier: the first member in line order writing the form', () => {
+        const data = pstrosek();
+        data.persons[P('dobroslav')].lastName = 'Pštrossek';
+        const idx = buildLineages(data);
+        expect(formCarrier(idx, rodOfPerson(idx, 'mstivoj'), 'pstrossek')).toBe('dobroslav');
+        expect(formCarrier(idx, rodOfPerson(idx, 'mstivoj'), 'Nikdo')).toBeNull();
     });
 });
 
