@@ -38,6 +38,30 @@ async function autoTree(page: Page, init: Partial<FakeBridge> = {}): Promise<Fak
     return bridge;
 }
 
+/**
+ * Wait until the app has taken in the answer to the send the research took
+ * in as `intake` (the post is counted when it goes): a load asked before that
+ * found the send still out, sent instead (which does nothing while a send is
+ * out) and the tree stayed on its old head.
+ */
+async function sendTakenIn(page: Page, intake: string): Promise<void> {
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.intake)).toBe(intake);
+}
+
+/**
+ * Load the research's version, confirming "Update" whenever it is asked, until
+ * the tree stands on `head` (a dialog that came only after a fixed wait under
+ * load used to be left open).
+ */
+async function loadNewerAsked(page: Page, head: string): Promise<void> {
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const update = page.locator('.dialog-confirm').getByRole('button', { name: 'Update' });
+    await expect.poll(async () => {
+        if (await update.isVisible()) await update.click({ timeout: 1000 }).catch(() => undefined);
+        return page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+    }).toBe(head);
+}
+
 const mark = (page: Page) => page.locator('#research-sync-mark');
 const pill = (page: Page) => page.locator('#research-sync-pill');
 const treeId = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
@@ -933,9 +957,8 @@ test('rc.23 / N1: a copy built on a written send whose version was not loaded sa
     expect(bridge.posts[2]).toContain(`1 _STROM_SINCE ${second}`);
     // The research's version loaded here (asked): it is the base — no SINCE of an older copy.
     const loaded = bridge.head;
-    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    await sendTakenIn(page, bridge.sends[0].intake);
+    await loadNewerAsked(page, loaded);
     await janBirthPlace(page, 'Kolín');
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(4);
@@ -995,9 +1018,8 @@ test('a restored backup sends the base it kept: _STROM_HEAD and _STROM_SINCE of 
     expect(snap).toBeTruthy();
     // Then the research's version is loaded here (a newer head) and an edit goes on it.
     const loaded = bridge.head;
-    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    await sendTakenIn(page, first);
+    await loadNewerAsked(page, loaded);
     bridge.syncReply = WRITE;
     await janBirthPlace(page, 'Praha');
     await page.clock.fastForward(QUIET + 1000);
