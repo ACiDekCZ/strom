@@ -51,6 +51,7 @@ import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from './surnames.js';
+import { cleanLineageOverrides, LineagePatch } from './lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
@@ -242,6 +243,14 @@ export function migrateData(data: unknown): StromData {
 
     if (typeof d.researchAsOf === 'string') {
         result.researchAsOf = d.researchAsOf;
+    }
+
+    // v14: manual lineage corrections; ids of people no longer in the tree go.
+    if (d.lineageOverrides && typeof d.lineageOverrides === 'object') {
+        const o = d.lineageOverrides as Record<string, unknown>;
+        const list = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+        const clean = cleanLineageOverrides(result, { founders: list(o.founders), notCarriers: list(o.notCarriers) });
+        if (clean) result.lineageOverrides = clean;
     }
 
     // Preserve default person settings if present
@@ -1587,6 +1596,47 @@ class DataManagerClass {
         if (this.currentTreeId) {
             AuditLogManager.log(this.currentTreeId, 'surname.unaccept', strings.auditLog.surnameUnaccepted(forms.join(', ')));
         }
+        return true;
+    }
+
+    // ==================== LINEAGES ====================
+
+    /**
+     * Store a lineage correction (package 1031 §2): the fields a
+     * `LineagePatch` sets (lineage.ts applyLineageChange), one undo step and,
+     * with `action`, a change-log entry. A removed spelling is remembered as
+     * rejected too, so the research does not suggest the pair again. Ids of
+     * people no longer in the tree are dropped. Returns false when nothing
+     * changed.
+     */
+    applyLineagePatch(
+        patch: LineagePatch,
+        undoLabel: string,
+        audit?: { action: 'lineage.founder' | 'lineage.split' | 'surnames.removeForm'; text: string }
+    ): boolean {
+        if (!patch.fields.length) return false;
+        this.beginMutation();
+        for (const f of patch.fields) {
+            if (f === 'lineageOverrides') {
+                const clean = cleanLineageOverrides(this.data, patch.lineageOverrides);
+                if (clean) this.data.lineageOverrides = clean;
+                else delete this.data.lineageOverrides;
+            } else {
+                const groups = (patch.surnameVariants ?? []).filter(g => g.length >= 2);
+                if (groups.length) this.data.surnameVariants = groups.map(g => [...g]);
+                else delete this.data.surnameVariants;
+            }
+        }
+        if (patch.rejection && patch.rejection.length >= 2) {
+            const key = surnameRejectionKey(patch.rejection);
+            const list = this.data.surnameRejections ?? [];
+            if (!list.some(r => surnameRejectionKey(r.forms) === key)) {
+                this.data.surnameRejections = [...list, { forms: [...patch.rejection], at: new Date().toISOString() }];
+            }
+        }
+        // Not silent: the usual Undo toast follows the change.
+        this.commitMutation(undoLabel);
+        if (audit && this.currentTreeId) AuditLogManager.log(this.currentTreeId, audit.action, audit.text);
         return true;
     }
 

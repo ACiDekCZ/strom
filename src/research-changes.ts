@@ -267,6 +267,19 @@ export interface OtherChanges {
     places?: { count: number; items: PlaceChange[] };
     /** undefined: the copy has no surname variants (kept before they were). */
     surnameVariants?: { count: number; items: VariantChange[] };
+    /** People whose lineage correction changed (data v14); undefined: none. */
+    lineage?: { count: number; items: LineageMarkChange[] };
+}
+
+/** A person's lineage correction now (null: none any more). */
+export interface LineageMarkChange { personId: PersonId; name: string; now: 'founder' | 'notCarrier' | null }
+
+/** Each person's correction in a tree (founders wins, as in lineage.ts). */
+function lineageMarks(d: StromData): Map<string, 'founder' | 'notCarrier'> {
+    const out = new Map<string, 'founder' | 'notCarrier'>();
+    for (const id of d.lineageOverrides?.notCarriers ?? []) out.set(id, 'notCarrier');
+    for (const id of d.lineageOverrides?.founders ?? []) out.set(id, 'founder');
+    return out;
 }
 
 /** Every source a person cites (the person, the birth, the death, the events). */
@@ -443,13 +456,27 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
         surnameVariants = { count: items.length, items };
     }
 
-    return { sources, couples, ...(places ? { places } : {}), ...(surnameVariants ? { surnameVariants } : {}) };
+    // Lineage corrections: the people whose mark differs (a copy kept before
+    // they existed has none, the same as a tree without any).
+    const la = lineageMarks(base);
+    const lb = lineageMarks(current);
+    const lineageItems: LineageMarkChange[] = [];
+    for (const id of new Set([...la.keys(), ...lb.keys()])) {
+        if (la.get(id) === lb.get(id)) continue;
+        const p = cp[id] ?? bp[id];
+        if (!p) continue;
+        lineageItems.push({ personId: id as PersonId, name: fullName(p), now: lb.get(id) ?? null });
+    }
+    lineageItems.sort((x, y) => x.name.localeCompare(y.name));
+    const lineage = lineageItems.length ? { count: lineageItems.length, items: lineageItems } : undefined;
+
+    return { sources, couples, ...(places ? { places } : {}), ...(surnameVariants ? { surnameVariants } : {}), ...(lineage ? { lineage } : {}) };
 }
 
 /** Rows beyond the people (the places and the surname variants are one row each). */
 export function otherRowCount(o: OtherChanges | null): number {
     if (!o) return 0;
-    return o.sources.length + o.couples.length + (o.places?.count ? 1 : 0) + (o.surnameVariants?.count ? 1 : 0);
+    return o.sources.length + o.couples.length + (o.places?.count ? 1 : 0) + (o.surnameVariants?.count ? 1 : 0) + (o.lineage?.count ? 1 : 0);
 }
 
 /**
@@ -477,7 +504,7 @@ export function previewInexact(persons: readonly PersonChange[] | null, other: O
 export const RESEARCH_UNREAD_KINDS: ReadonlySet<string> = new Set([
     'source.excerptAdded', 'source.excerptRemoved', 'source.attachment',
     'couple.childOrder', 'couple.mainMarriage', 'couple.marriageEvidence',
-    'places.removed', 'variants',
+    'places.removed', 'variants', 'lineage',
 ]);
 
 /** Every one of a row's kinds is one the research does not read (a row with none is read). */
@@ -502,6 +529,11 @@ export function variantsAppOnly(unread: ReadonlySet<string> = RESEARCH_UNREAD_KI
     return unread.has('variants');
 }
 
+/** The lineage corrections' row: read by a research that says `lineage.read`. */
+export function lineageAppOnly(unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): boolean {
+    return unread.has('lineage');
+}
+
 // ==================== WHAT A SEND CARRIED BEYOND THE PEOPLE ====================
 
 /**
@@ -510,7 +542,7 @@ export function variantsAppOnly(unread: ReadonlySet<string> = RESEARCH_UNREAD_KI
  * (their count). `appOnly`: the research does not read it.
  */
 export interface SentOtherRow {
-    type: 'source' | 'couple' | 'places' | 'variants';
+    type: 'source' | 'couple' | 'places' | 'variants' | 'lineage';
     /** The source's id, the partnership's id; '' for a summary. */
     id: string;
     /** The source's title as sent ('' for the others: told from the tree). */
@@ -546,6 +578,10 @@ export function sentOtherRows(other: OtherChanges | null, unread: ReadonlySet<st
         out.push({ type: 'variants', id: '', title: '', kinds: [], count: v.count, ...(surnames.size === 1 ? { surname: [...surnames][0] } : {}),
             ...(variantsAppOnly(unread) ? { appOnly: true as const } : {}) });
     }
+    if (other.lineage?.count) {
+        out.push({ type: 'lineage', id: '', title: '', kinds: [], count: other.lineage.count,
+            ...(lineageAppOnly(unread) ? { appOnly: true as const } : {}) });
+    }
     return out;
 }
 
@@ -553,7 +589,7 @@ export function sentOtherRows(other: OtherChanges | null, unread: ReadonlySet<st
 export function sanitizeSentOtherRow(v: unknown): SentOtherRow | null {
     const r = v as Record<string, unknown> | null;
     if (!r || typeof r !== 'object') return null;
-    const type = r.type === 'source' || r.type === 'couple' || r.type === 'places' || r.type === 'variants' ? r.type : null;
+    const type = r.type === 'source' || r.type === 'couple' || r.type === 'places' || r.type === 'variants' || r.type === 'lineage' ? r.type : null;
     if (!type) return null;
     const str = (x: unknown, max: number): string => (typeof x === 'string' ? x.slice(0, max) : '');
     const count = typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : undefined;

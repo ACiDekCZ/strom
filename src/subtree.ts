@@ -13,6 +13,7 @@
 import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds, partnershipSourceIds } from './types.js';
 import { placeKey } from './places.js';
 import { dismissalsWithin } from './quality-dismiss.js';
+import { cleanLineageOverrides } from './lineage.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -124,6 +125,10 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     }
     const marks = dismissalsWithin(data.qualityDismissed, id => !!persons[id as PersonId]);
     if (marks) result.qualityDismissed = marks;
+    // Lineage corrections of the people who came along (cleanLineageOverrides
+    // keeps the ids inside the new tree only).
+    const lineage = cleanLineageOverrides(result, data.lineageOverrides);
+    if (lineage) result.lineageOverrides = lineage;
     if (data.researchAsOf) result.researchAsOf = data.researchAsOf;
     return result;
 }

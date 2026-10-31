@@ -253,6 +253,32 @@ export function removeSurnameGroup(data: StromData, surname: string): string[][]
     return (data.surnameVariants ?? []).filter(g => !g.some(n => surnameKey(n) === key));
 }
 
+/**
+ * Take one form out of its spelling group (spec 1031 §2.4). A group left with
+ * one form is gone (as removeSurnameGroup). `rejection` is what goes into
+ * `surnameRejections`, so the research does not suggest the pair again:
+ * [the removed form, the group's main form] — `main` when given and still in
+ * the group, else the group's first remaining form. Null when the form is in
+ * no group (nothing to do).
+ */
+export function removeSurnameForm(
+    data: StromData,
+    form: string,
+    main?: string
+): { variants: string[][]; rejection: string[] } | null {
+    const key = surnameKey(form);
+    const exact = (s: string): string => s.normalize('NFC').trim().toLowerCase();
+    const groups = data.surnameVariants ?? [];
+    const group = groups.find(g => g.some(n => exact(n) === exact(form)))
+        ?? groups.find(g => g.some(n => surnameKey(n) === key));
+    if (!group) return null;
+    const removed = group.find(n => exact(n) === exact(form)) ?? group.find(n => surnameKey(n) === key)!;
+    const kept = group.filter(n => n !== removed);
+    const head = main && kept.some(n => exact(n) === exact(main)) ? kept.find(n => exact(n) === exact(main))! : kept[0];
+    const variants = groups.flatMap(g => g !== group ? [g] : kept.length >= 2 ? [kept] : []);
+    return { variants, rejection: head ? [removed, head] : [removed] };
+}
+
 /** Surnames actually used in the tree, most common first — for suggesting groups. */
 export function surnamesInTree(data: StromData): { surname: string; count: number }[] {
     const counts = new Map<string, { surname: string; count: number }>();

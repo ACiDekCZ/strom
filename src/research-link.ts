@@ -560,6 +560,9 @@ function fingerprintParts(raw: StromData): unknown[] {
         // keeps the fingerprint it had. The "not an error" marks are not here:
         // they go by the bridge, never in the file.
         ...(data.surnameRejections?.length ? [data.surnameRejections.map(r => r.forms)] : []),
+        // Lineage corrections (data v14) likewise: only when there are some.
+        ...(data.lineageOverrides?.founders?.length || data.lineageOverrides?.notCarriers?.length
+            ? [{ lineage: [data.lineageOverrides.founders ?? [], data.lineageOverrides.notCarriers ?? []] }] : []),
     ];
 }
 
@@ -936,6 +939,25 @@ export function keepSurnameVariants(next: StromData, previous: StromData): Strom
     const rejections = withRejectionDetails(next.surnameRejections, previous.surnameRejections);
     if (rejections !== next.surnameRejections) out = { ...out, surnameRejections: rejections };
     return out;
+}
+
+/**
+ * The lineage corrections (StromData.lineageOverrides) the same way as the
+ * surname groups: a version whose file has the `_STROM_LINES` header mark is
+ * the research's word, even with no person tagged (parsed as an empty
+ * object); one without the mark keeps the previous state's corrections.
+ * Returns `next` itself when nothing is carried; neither input is changed.
+ */
+export function keepLineageOverrides(next: StromData, previous: StromData): StromData {
+    const o = previous.lineageOverrides;
+    if (next.lineageOverrides !== undefined || !(o?.founders?.length || o?.notCarriers?.length)) return next;
+    return {
+        ...next,
+        lineageOverrides: {
+            ...(o.founders?.length ? { founders: [...o.founders] } : {}),
+            ...(o.notCarriers?.length ? { notCarriers: [...o.notCarriers] } : {}),
+        },
+    };
 }
 
 /**

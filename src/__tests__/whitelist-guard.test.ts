@@ -97,6 +97,7 @@ function fullTree(): Required<StromData> {
         surnameVariants: [['Fíšek', 'Fyšek', 'Fischek']],
         surnameRejections: [{ forms: ['Lhoták', 'Lhota'], id: 'sg_lhotak_lhota', at: '2026-10-20T10:00:00.000Z' }],
         qualityDismissed: [{ kind: 'possibleDuplicate', persons: [ALICE, BOB].sort(), at: '2026-10-21T09:00:00.000Z', sync: 'sent' }],
+        lineageOverrides: { founders: [BOB], notCarriers: [ALICE] },
         researchAsOf: '2026-09-20',
         defaultPersonId: LAST_FOCUSED,
         lastFocusPersonId: ALICE,

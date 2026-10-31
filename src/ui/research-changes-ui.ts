@@ -18,14 +18,14 @@ import { formatLiveClock } from '../live-time.js';
 import {
     ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
     SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
-    sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
+    sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, lineageAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
 } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
-import { surnamesReadByResearch } from './surname-suggest-ui.js';
+import { surnamesReadByResearch, lineageReadByResearch } from './surname-suggest-ui.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
@@ -186,10 +186,11 @@ function coordText(p: PlaceChange): string {
  * The kinds of change the research does not read: the spelling groups are
  * read by a research that says `surnames.read` (spec 021 §4.4).
  */
-function researchUnread(readsSurnames: boolean): ReadonlySet<string> {
-    if (!readsSurnames) return RESEARCH_UNREAD_KINDS;
+function researchUnread(readsSurnames: boolean, readsLineage = false): ReadonlySet<string> {
+    if (!readsSurnames && !readsLineage) return RESEARCH_UNREAD_KINDS;
     const out = new Set(RESEARCH_UNREAD_KINDS);
-    out.delete('variants');
+    if (readsSurnames) out.delete('variants');
+    if (readsLineage) out.delete('lineage');
     return out;
 }
 
@@ -253,6 +254,9 @@ function otherRowOf(r: SentOtherRow, as: 'written' | 'appOnly', data: StromData)
     } else if (r.type === 'places') {
         type = c.typePlaces;
         name = `<span class="research-changes-name">${esc(c.placesRow(r.count ?? 0))}</span>`;
+    } else if (r.type === 'lineage') {
+        type = c.typeLineage;
+        name = `<span class="research-changes-name">${esc(c.lineageRow(r.count ?? 0))}</span>`;
     } else {
         type = c.typeVariants;
         name = `<span class="research-changes-name">${esc(c.variantsRow(r.count ?? 0))}</span>`;
@@ -393,7 +397,7 @@ export const researchChangesMethods = uiModule({
     /** A send is about to go: what it carries (for "What was written" once written). */
     researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
         const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;
-        const other = list ? sentOtherRows(this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId))) : [];
+        const other = list ? sentOtherRows(this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId), lineageReadByResearch(treeId))) : [];
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
         pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands });
@@ -649,13 +653,24 @@ export const researchChangesMethods = uiModule({
                 const of = surnames.size === 1 ? c.variantsOf([...surnames][0]) : c.variantsOfN(surnames.size);
                 return summaryRow('variants', esc(label), of, c.show, variantsAppOnly(researchUnread(surnamesReadByResearch())));
             }] : [];
-            const others = sourceRows.length + coupleRows.length + placesRow.length + variantsRow.length;
+            // Lineage corrections: one row per person (a founder set or taken back).
+            const lineageRows = (other?.lineage?.items ?? []).map(ch => (): string => {
+                const name = data.persons[ch.personId]
+                    ? `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`
+                    : `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`;
+                const kind = ch.now === 'founder' ? c.lineageFounder : ch.now === 'notCarrier' ? c.lineageNotCarrier : c.lineageCleared;
+                return `<li class="research-changes-row" data-kind="lineage"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
+                    + `<span class="research-changes-text">${rowLine(name, '', lineageAppOnly(researchUnread(surnamesReadByResearch(), lineageReadByResearch())))}`
+                    + `<span class="research-changes-kinds">${esc(kind)}</span></span></li>`;
+            });
+            const others = sourceRows.length + coupleRows.length + placesRow.length + variantsRow.length + lineageRows.length;
             bodyHtml = (inexact ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : '')
                 + section('persons', others ? c.sectionPersons(list.length) : '', list.map(ch => () => personRow(ch)))
                 + section('sources', c.sectionSources(sourceRows.length), sourceRows)
                 + section('couples', c.sectionCouples(coupleRows.length), coupleRows)
                 + section('places', places ? c.sectionPlaces(places.count) : '', placesRow)
-                + section('variants', variants ? c.sectionVariants(variants.count) : '', variantsRow);
+                + section('variants', variants ? c.sectionVariants(variants.count) : '', variantsRow)
+                + section('lineage', lineageRows.length ? c.sectionLineage(lineageRows.length) : '', lineageRows);
         } else {
             const rows = writtenRows.join('');
             bodyHtml = notWrittenHtml

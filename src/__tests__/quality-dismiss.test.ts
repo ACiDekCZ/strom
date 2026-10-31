@@ -68,8 +68,8 @@ function reset(data: StromData = lhotakTree()): void {
 }
 
 describe('data version 13', () => {
-    it('is 13', () => {
-        expect(STROM_DATA_VERSION).toBe(13);
+    it('is 13 or later (the lists came with 13)', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(13);
     });
 
     it('a v12 tree loads unchanged, without either list', () => {

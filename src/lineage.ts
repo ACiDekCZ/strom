@@ -39,15 +39,22 @@
  * her husband's lineage with a link to her own birth lineage (`RodSpouse`). A
  * woman's birth and married surnames are never forms of one lineage.
  *
+ * MANUAL CORRECTIONS (package 1031, `StromData.lineageOverrides`): a person in
+ * `founders` starts a lineage of their own (their line parent is cut); the
+ * children of a person in `notCarriers` start their own lines (that person
+ * passes nothing on — how a lineage's founder is moved down the line). Unknown
+ * ids are ignored. `previewOverride` says what a change would do before it is
+ * made; `applyLineageChange` gives the fields to store.
+ *
  * The tree split (src/split-families.ts, mode 'surname') carves DISJOINT
  * families by first claim for creating separate trees. It uses the surname-
  * line walk and the "unnamed person" rule from here (walkSurnameLine), but its
  * cut stays its own: a disjoint partition cannot hold a woman in two lineages.
  */
 
-import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
-import { sameSurname, surnameKey, withSurnameRules } from './surnames.js';
-import { yearOf } from './dates.js';
+import { LineageOverrides, Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
+import { addSurnameGroup, removeSurnameForm, sameSurname, surnameKey, withSurnameRules } from './surnames.js';
+import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
 
 /** A lineage's id: the id of the person at the top of its line. */
@@ -119,6 +126,16 @@ export interface Rod {
     small: boolean;
     /** One real member only (typically a wife whose parents are not recorded). */
     solitary: boolean;
+    /** The founder's birth year (else the year of their earliest own record). */
+    founderYear: number | null;
+    /** That year is not exact: about / before / after, a period, or not a birth. */
+    founderYearApprox: boolean;
+    /**
+     * Shaped by a manual correction (lineageOverrides): 'split' = the root is
+     * in `founders` (a line split off by hand); 'founder' = the root's line
+     * parent is in `notCarriers` (the founder moved down). Null = as computed.
+     */
+    manual: 'founder' | 'split' | null;
 }
 
 /** Everything about the lineages of one tree, computed once (see buildLineages). */
@@ -130,6 +147,8 @@ export interface LineageIndex {
     readonly rods: ReadonlyMap<RodId, Rod>;
     /** The parent each person's lineage passes through (null at a line's top). */
     readonly lineParent: ReadonlyMap<PersonId, PersonId | null>;
+    /** Line parents a correction cut (lineageOverrides): person → the parent it would follow. */
+    readonly cutParent: ReadonlyMap<PersonId, PersonId>;
 }
 
 // ---------------------------------------------------------------------------
@@ -344,8 +363,36 @@ function same(a: string, b: string, data: StromData): boolean {
     return hit;
 }
 
+/** The tree's lineage corrections as sets (a person in both lists is a founder). */
+export function lineageOverridesOf(data: StromData): { founders: Set<PersonId>; notCarriers: Set<PersonId> } {
+    const o = data.lineageOverrides;
+    const founders = new Set<PersonId>((o?.founders ?? []).filter(id => !!data.persons[id as PersonId]) as PersonId[]);
+    const notCarriers = new Set<PersonId>((o?.notCarriers ?? [])
+        .filter(id => !!data.persons[id as PersonId] && !founders.has(id as PersonId)) as PersonId[]);
+    return { founders, notCarriers };
+}
+
+/**
+ * The corrections as they are worth storing: known ids only, each person in
+ * one list (founders wins), sorted; undefined when nothing is left.
+ */
+export function cleanLineageOverrides(data: StromData, o: LineageOverrides | undefined = data.lineageOverrides): LineageOverrides | undefined {
+    const known = (id: unknown): id is string => typeof id === 'string' && !!data.persons[id as PersonId];
+    const founders = [...new Set((o?.founders ?? []).filter(known))].sort();
+    const fset = new Set(founders);
+    const notCarriers = [...new Set((o?.notCarriers ?? []).filter(known))].filter(id => !fset.has(id)).sort();
+    if (!founders.length && !notCarriers.length) return undefined;
+    return {
+        ...(founders.length ? { founders } : {}),
+        ...(notCarriers.length ? { notCarriers } : {}),
+    };
+}
+
 function computeLineages(data: StromData): LineageIndex {
     const ids = sortByBirth(data, Object.keys(data.persons) as PersonId[]);
+    const { founders, notCarriers } = lineageOverridesOf(data);
+    // The line parent a correction cut (what the computation would have chosen).
+    const cut = new Map<PersonId, PersonId>();
     const surnameOf = new Map<PersonId, string>();
     for (const id of ids) surnameOf.set(id, birthSurname(data, data.persons[id]));
 
@@ -379,6 +426,10 @@ function computeLineages(data: StromData): LineageIndex {
         } else if (mother && same(own, (mother.lastName ?? '').trim(), data)) {
             via = mother;
         } else {
+            via = null;
+        }
+        if (via && (founders.has(id) || notCarriers.has(via.id))) {
+            cut.set(id, via.id);
             via = null;
         }
         if (via && !lineParent.has(id)) resolve(via.id);
@@ -452,10 +503,15 @@ function computeLineages(data: StromData): LineageIndex {
     }
 
     // 5. Families, spouses and the overview of each lineage.
-    const rodsList: Rod[] = drafts.map(d => summarise(data, d, rodByPerson, lineParent, surnameOf));
+    const rodsList: Rod[] = drafts.map(d => {
+        const rod = summarise(data, d, rodByPerson, lineParent, surnameOf);
+        const cutFrom = cut.get(d.root);
+        rod.manual = !cutFrom ? null : founders.has(d.root) ? 'split' : 'founder';
+        return rod;
+    });
     rodsList.sort((a, b) => b.realMemberCount - a.realMemberCount || compareByBirth(data, a.founderId, b.founderId));
     const rods = new Map<RodId, Rod>(rodsList.map(r => [r.id, r]));
-    return { data, rodByPerson, rods, lineParent };
+    return { data, rodByPerson, rods, lineParent, cutParent: cut };
 }
 
 /**
@@ -586,6 +642,7 @@ function summarise(
     }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
     const realMemberCount = d.ordered.filter(m => !data.persons[m].isPlaceholder).length;
+    const fy = founderYearOf(founder);
     return {
         id,
         rootId: d.root,
@@ -603,7 +660,25 @@ function summarise(
         generations: Math.max(...d.ordered.map(m => d.depth.get(m)!)) + 1,
         small: realMemberCount <= SMALL_ROD_MAX_MEMBERS,
         solitary: realMemberCount === 1,
+        founderYear: fy.year,
+        founderYearApprox: fy.approx,
+        manual: null,
     };
+}
+
+/** The founder's year for labels: birth, else baptism, else the earliest own record (approx). */
+function founderYearOf(p: Person): { year: number | null; approx: boolean } {
+    const exactOf = (v?: string): boolean => {
+        const d = parseFlexDate(v);
+        return !!d && !d.qualifier && !d.end && !d.period;
+    };
+    const birth = yearOf(p.birthDate);
+    if (birth != null) return { year: birth, approx: !exactOf(p.birthDate) };
+    const events = (p.events ?? []).filter(e => yearOf(e.date) != null);
+    const baptism = events.find(e => e.type === 'baptism');
+    if (baptism) return { year: yearOf(baptism.date), approx: true };
+    const years = [...events.map(e => yearOf(e.date)!), yearOf(p.deathDate)].filter((y): y is number => y != null);
+    return years.length ? { year: Math.min(...years), approx: true } : { year: null, approx: false };
 }
 
 /** The lineages of the tree, largest first. */
@@ -645,6 +720,303 @@ export function marriedInto(index: LineageIndex, personId: PersonId): RodMarriag
         if (rodId && rodId !== own) out.push({ partnershipId: uid, spouseId, rodId });
     }
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Labels
+
+/**
+ * The lineage's name for people (spec 1031 §0.3): its surname, and when other
+ * lineages share it a qualifier in brackets — the place it lived most, else
+ * its founder's year, else the founder's first name. A big lineage is told
+ * apart from the other big ones only (a one-person "Fíšek" elsewhere does not
+ * rename the main Fíšek line); a small one from every lineage of its name.
+ */
+export function rodLabel(rod: Rod, all: readonly Rod[], data?: StromData): string {
+    const key = surnameKey(rod.surname);
+    const peers = all.filter(r => r.id !== rod.id && surnameKey(r.surname) === key && (rod.small || !r.small));
+    if (!peers.length || !rod.surname) return rod.surname;
+    const place = rod.places[0]?.name;
+    const pk = place ? placeKey(place) : '';
+    const placeOf = (r: Rod): string => r.places[0] ? placeKey(r.places[0].name) : '';
+    if (pk && !peers.some(r => placeOf(r) === pk)) return `${rod.surname} (${place})`;
+    const year = rod.founderYear;
+    if (year != null && !peers.some(r => r.founderYear === year)) return `${rod.surname} (${year})`;
+    const first = (data ?? null)?.persons[rod.founderId]?.firstName?.trim() ?? '';
+    if (first) {
+        const firstOf = (r: Rod): string => (data?.persons[r.founderId]?.firstName ?? '').trim();
+        if (!peers.some(r => firstOf(r) === first) || year == null) return `${rod.surname} (${first})`;
+        return `${rod.surname} (${first}, ${year})`;
+    }
+    if (year != null) return `${rod.surname} (${year})`;
+    return pk ? `${rod.surname} (${place})` : rod.surname;
+}
+
+/** Every lineage's label, by id (see rodLabel). */
+export function rodLabels(index: LineageIndex): Map<RodId, string> {
+    const all = rods(index);
+    return new Map(all.map(r => [r.id, rodLabel(r, all, index.data)]));
+}
+
+// ---------------------------------------------------------------------------
+// Corrections and their preview (package 1031 §2)
+
+/** A change of a lineage's boundary or name forms, as the edit dialog offers it. */
+export type LineageChange =
+    /** Make a member the founder: the line above them passes nothing on. */
+    | { kind: 'founder'; personId: PersonId }
+    /** A member and their line start a lineage of their own. */
+    | { kind: 'split'; personId: PersonId }
+    /** Take back the correction that shaped this lineage. */
+    | { kind: 'revert'; rodId: RodId }
+    /** Group another spelling with the lineage's name (whole tree). */
+    | { kind: 'addForm'; rodId: RodId; form: string }
+    /** Take a spelling out of the name's group (whole tree). */
+    | { kind: 'removeForm'; rodId: RodId; form: string };
+
+/** What a change stores (only the fields it touches). */
+export interface LineagePatch {
+    lineageOverrides?: LineageOverrides | undefined;
+    surnameVariants?: string[][] | undefined;
+    /** For removeForm: the pair to remember as rejected ([removed, main]). */
+    rejection?: string[];
+    /** Which fields the patch sets (an undefined value clears the field). */
+    fields: ('lineageOverrides' | 'surnameVariants')[];
+}
+
+/** A lineage in a preview: what the sentences need. */
+export interface RodSummary {
+    id: RodId;
+    label: string;
+    founderId: PersonId;
+    founderYear: number | null;
+    members: number;
+    spouses: number;
+    small: boolean;
+}
+
+/** One sentence of the preview (texts in strings.lineage.preview). */
+export type PreviewLine =
+    | { kind: 'startsWith'; personId: PersonId; year: number | null; members: number; spouses: number }
+    | { kind: 'toSmall'; personIds: PersonId[] }
+    | { kind: 'becomeRod'; personIds: PersonId[]; label: string }
+    | { kind: 'ownLine'; personId: PersonId; label: string; members: number }
+    | { kind: 'wholeTreeKeeps' }
+    | { kind: 'newRod'; personId: PersonId; label: string; members: number; spouses: number }
+    | { kind: 'splitMoves'; personId: PersonId; label: string; members: number; spouses: number }
+    | { kind: 'merge'; label: string; otherLabel: string; members: number; otherMembers: number }
+    | { kind: 'staySeparate' }
+    | { kind: 'formWholeTree' }
+    | { kind: 'splitByForm'; label: string; before: number; after: number; newLabel: string; personId: PersonId; year: number | null; members: number }
+    | { kind: 'groupGone'; forms: string[] }
+    | { kind: 'linkedByRelation' }
+    | { kind: 'restored'; label: string; members: number; spouses: number }
+    | { kind: 'noChange' };
+
+export interface LineagePreview {
+    before: RodSummary[];
+    after: RodSummary[];
+    lines: PreviewLine[];
+    /** What applying it stores; null when the change does nothing. */
+    patch: LineagePatch | null;
+}
+
+const summaryOf = (r: Rod, labels: ReadonlyMap<RodId, string>): RodSummary => ({
+    id: r.id, label: labels.get(r.id) ?? r.surname, founderId: r.founderId, founderYear: r.founderYear,
+    members: r.realMemberCount, spouses: r.realSpouseCount, small: r.small,
+});
+
+/** The ids above a person along their line, nearest first (cut links followed too). */
+function lineAncestors(index: LineageIndex, personId: PersonId): PersonId[] {
+    const out: PersonId[] = [];
+    const seen = new Set<PersonId>([personId]);
+    let cur = index.lineParent.get(personId) ?? null;
+    while (cur && !seen.has(cur)) {
+        seen.add(cur);
+        out.push(cur);
+        cur = index.lineParent.get(cur) ?? null;
+    }
+    return out;
+}
+
+/**
+ * The fields a change stores, computed on `index` (built from the tree as it
+ * is now). Null when it would change nothing.
+ */
+export function applyLineageChange(index: LineageIndex, change: LineageChange): LineagePatch | null {
+    const { data } = index;
+    const { founders, notCarriers } = lineageOverridesOf(data);
+    const withSets = (): LineagePatch => {
+        const next = cleanLineageOverrides(data, { founders: [...founders], notCarriers: [...notCarriers] });
+        const same = JSON.stringify(next ?? null) === JSON.stringify(cleanLineageOverrides(data) ?? null);
+        return same ? { fields: [] } : { lineageOverrides: next, fields: ['lineageOverrides'] };
+    };
+    switch (change.kind) {
+        case 'founder': {
+            if (!data.persons[change.personId]) return null;
+            for (const id of lineAncestors(index, change.personId)) { notCarriers.add(id); founders.delete(id); }
+            founders.delete(change.personId);
+            notCarriers.delete(change.personId);
+            break;
+        }
+        case 'split': {
+            if (!data.persons[change.personId]) return null;
+            founders.add(change.personId);
+            notCarriers.delete(change.personId);
+            break;
+        }
+        case 'revert': {
+            const rod = index.rods.get(change.rodId);
+            if (!rod) return null;
+            founders.delete(rod.rootId);
+            let up: PersonId | null = index.cutParent.get(rod.rootId) ?? null;
+            const seen = new Set<PersonId>();
+            while (up && notCarriers.has(up) && !seen.has(up)) {
+                seen.add(up);
+                notCarriers.delete(up);
+                up = index.lineParent.get(up) ?? index.cutParent.get(up) ?? null;
+            }
+            break;
+        }
+        case 'addForm': {
+            const rod = index.rods.get(change.rodId);
+            const form = change.form.trim();
+            if (!rod || !form || !rod.surname) return null;
+            const before = JSON.stringify(data.surnameVariants ?? []);
+            const variants = addSurnameGroup(data, [rod.surname, form]);
+            if (JSON.stringify(variants) === before) return null;
+            return { surnameVariants: variants, fields: ['surnameVariants'] };
+        }
+        case 'removeForm': {
+            const rod = index.rods.get(change.rodId);
+            if (!rod) return null;
+            const r = removeSurnameForm(data, change.form, rod.surname);
+            if (!r) return null;
+            return { surnameVariants: r.variants.length ? r.variants : undefined, rejection: r.rejection, fields: ['surnameVariants'] };
+        }
+    }
+    const patch = withSets();
+    return patch.fields.length ? patch : null;
+}
+
+/** The tree with a patch applied (a shallow copy; the tree itself is untouched). */
+export function withLineagePatch(data: StromData, patch: LineagePatch): StromData {
+    const next: StromData = { ...data };
+    for (const f of patch.fields) {
+        if (f === 'lineageOverrides') next.lineageOverrides = patch.lineageOverrides;
+        else next.surnameVariants = patch.surnameVariants;
+    }
+    return next;
+}
+
+/**
+ * What a change would do, before it is made (spec 1031 §2.2): the lineages
+ * before and after, and the sentences of the preview. Pure: the same
+ * computation on a copy with the changed fields.
+ */
+export function previewOverride(data: StromData, change: LineageChange, beforeIndex?: LineageIndex): LineagePreview {
+    const bi = beforeIndex && beforeIndex.data === data ? beforeIndex : buildLineages(data);
+    const bLabels = rodLabels(bi);
+    const before = rods(bi).map(r => summaryOf(r, bLabels));
+    const patch = applyLineageChange(bi, change);
+    if (!patch) return { before, after: before, lines: [{ kind: 'noChange' }], patch: null };
+    const ai = buildLineages(withLineagePatch(data, patch));
+    const aLabels = rodLabels(ai);
+    const after = rods(ai).map(r => summaryOf(r, aLabels));
+    const lines: PreviewLine[] = [];
+    const real = (id: PersonId): boolean => !!data.persons[id] && !data.persons[id].isPlaceholder;
+    const afterRodOf = (id: PersonId): Rod | null => { const r = rodOf(ai, id); return r ? ai.rods.get(r)! : null; };
+    const beforeRodOf = (id: PersonId): Rod | null => { const r = rodOf(bi, id); return r ? bi.rods.get(r)! : null; };
+    const label = (r: Rod): string => aLabels.get(r.id) ?? r.surname;
+
+    // The people of a before-lineage, grouped by where they end up.
+    const scatter = (from: Rod, except: RodId | null): void => {
+        const toSmall: PersonId[] = [];
+        const own = new Map<RodId, PersonId[]>();
+        for (const id of from.memberIds) {
+            if (!real(id)) continue;
+            const r = afterRodOf(id);
+            if (r && r.id === except) continue;
+            if (!r || r.small) toSmall.push(id);
+            else own.set(r.id, [...(own.get(r.id) ?? []), id]);
+        }
+        for (const [rid, ids] of own) {
+            const r = ai.rods.get(rid)!;
+            if (ids.includes(r.founderId) && r.founderId !== (bi.rods.get(rid)?.founderId ?? null)) {
+                lines.push({ kind: 'ownLine', personId: r.founderId, label: label(r), members: r.realMemberCount });
+            } else {
+                lines.push({ kind: 'becomeRod', personIds: ids, label: label(r) });
+            }
+        }
+        if (toSmall.length) lines.push({ kind: 'toSmall', personIds: toSmall });
+    };
+
+    switch (change.kind) {
+        case 'founder': {
+            const r = afterRodOf(change.personId);
+            const was = beforeRodOf(change.personId);
+            if (r) lines.push({ kind: 'startsWith', personId: change.personId, year: r.founderYear, members: r.realMemberCount, spouses: r.realSpouseCount });
+            if (was) scatter(was, r?.id ?? null);
+            lines.push({ kind: 'wholeTreeKeeps' });
+            break;
+        }
+        case 'split': {
+            const r = afterRodOf(change.personId);
+            const was = beforeRodOf(change.personId);
+            if (r) lines.push({ kind: 'newRod', personId: change.personId, label: label(r), members: r.realMemberCount, spouses: r.realSpouseCount });
+            const rest = was ? afterRodOf(was.founderId) : null;
+            if (rest && rest.id !== r?.id) {
+                lines.push({ kind: 'splitMoves', personId: change.personId, label: label(rest), members: rest.realMemberCount, spouses: rest.realSpouseCount });
+            }
+            break;
+        }
+        case 'revert': {
+            const was = bi.rods.get(change.rodId);
+            const r = was ? afterRodOf(was.founderId) : null;
+            if (r) lines.push({ kind: 'restored', label: label(r), members: r.realMemberCount, spouses: r.realSpouseCount });
+            lines.push({ kind: 'wholeTreeKeeps' });
+            break;
+        }
+        case 'addForm': {
+            const rod = bi.rods.get(change.rodId)!;
+            const merged = afterRodOf(rod.founderId);
+            const joined = merged
+                ? rods(bi).filter(o => o.id !== rod.id && o.memberIds.some(m => afterRodOf(m)?.id === merged.id))
+                : [];
+            if (joined.length) {
+                for (const o of joined) {
+                    lines.push({ kind: 'merge', label: bLabels.get(rod.id)!, otherLabel: bLabels.get(o.id)!, members: rod.realMemberCount, otherMembers: o.realMemberCount });
+                }
+            } else {
+                lines.push({ kind: 'staySeparate' });
+            }
+            lines.push({ kind: 'formWholeTree' });
+            break;
+        }
+        case 'removeForm': {
+            const rod = bi.rods.get(change.rodId)!;
+            const kept = afterRodOf(rod.founderId);
+            const gone = rod.memberIds.filter(m => real(m) && afterRodOf(m)?.id !== kept?.id);
+            const newRods = [...new Set(gone.map(m => afterRodOf(m)).filter((r): r is Rod => !!r))];
+            for (const nr of newRods) {
+                lines.push({
+                    kind: 'splitByForm', label: bLabels.get(rod.id)!, before: rod.realMemberCount,
+                    after: kept?.realMemberCount ?? 0, newLabel: label(nr), personId: nr.founderId,
+                    year: nr.founderYear, members: nr.realMemberCount,
+                });
+            }
+            if (!newRods.length) {
+                const carriers = rod.memberIds.some(m => real(m) && same((data.persons[m].lastName ?? '').trim(), change.form, data));
+                lines.push(carriers ? { kind: 'linkedByRelation' } : { kind: 'formWholeTree' });
+            }
+            const exact = (v: string): string => v.normalize('NFC').trim().toLowerCase();
+            const group = (data.surnameVariants ?? []).find(g => g.some(n => exact(n) === exact(change.form)));
+            if (group && group.length <= 2) lines.push({ kind: 'groupGone', forms: group });
+            break;
+        }
+    }
+    if (!lines.length) lines.push({ kind: 'noChange' });
+    return { before, after, lines, patch };
 }
 
 // ---------------------------------------------------------------------------

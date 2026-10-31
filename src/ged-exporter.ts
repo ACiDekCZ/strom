@@ -34,6 +34,7 @@ import { noName, PRIMARY_NAME_TAG } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
+import { lineageOverridesOf } from './lineage.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -80,6 +81,10 @@ const GEDCOM_STAT: Partial<Record<Partnership['status'], string>> = {
  * which imports this constant.
  */
 export const SURNAME_GROUPS_MARKER = 'Strom surname-variant groups';
+/** Under INDI: the person's lineage correction (FOUNDER or NOCARRY, data v14). */
+export const STROM_LINE_TAG = '_STROM_LINE';
+/** In the header: the file says which lineage corrections there are (any person without the tag has none). */
+export const STROM_LINES_TAG = '_STROM_LINES';
 /** Separates spellings within one group inside the header NOTE. */
 export const SURNAME_GROUP_SEP = ' | ';
 /**
@@ -635,6 +640,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
     }
 
+    // Lineage corrections (data v14): `1 _STROM_LINE FOUNDER|NOCARRY` under the
+    // person. The header mark says the file speaks about them: always in the
+    // file for the research (no tag = no correction), in a plain export only
+    // when someone carries the tag.
+    const { founders: lineFounders, notCarriers: lineNotCarriers } = lineageOverridesOf(data);
+    const lineTagOf = (id: PersonId): string | null =>
+        lineFounders.has(id) ? 'FOUNDER' : lineNotCarriers.has(id) ? 'NOCARRY' : null;
+    const anyLineTag = (Object.keys(data.persons) as PersonId[]).some(id => personIdMap.has(id) && lineTagOf(id));
+    if (options.research || anyLineTag) lines.push(`1 ${STROM_LINES_TAG} Y`);
+
     // ==================== SUBMITTER ====================
     lines.push('0 @SUBM1@ SUBM');
     pushWrapped(lines, 1, 'NAME', treeName || 'Strom User');
@@ -673,6 +688,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Sex: M, F, or U for a sex the records do not give.
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : person.gender === 'female' ? 'F' : 'U'}`);
+        const lineTag = lineTagOf(personId);
+        if (lineTag) lines.push(`1 ${STROM_LINE_TAG} ${lineTag}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
         if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {

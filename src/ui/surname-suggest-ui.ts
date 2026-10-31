@@ -24,7 +24,7 @@ import { surnameKey } from '../surnames.js';
 import { surnameRejectionKey } from '../quality-dismiss.js';
 import type { BaseCopy } from '../research-changes.js';
 import {
-    SURNAMES_SUGGEST_FEATURE, SURNAMES_READ_FEATURE, visibleSuggestions, isDiacriticsOnly, peopleWithForm, newlyLinked, evidenceInOrder,
+    SURNAMES_SUGGEST_FEATURE, SURNAMES_READ_FEATURE, LINEAGE_READ_FEATURE, visibleSuggestions, isDiacriticsOnly, peopleWithForm, newlyLinked, evidenceInOrder,
     reasonText, formsKey, decidedInResearch, type ShownSuggestion, type SurnameSuggestion, type SuggestionEvidence,
 } from '../surname-suggest.js';
 import {
@@ -106,6 +106,13 @@ export function surnamesReadByResearch(treeId?: string | null): boolean {
     const id = treeId ?? DataManager.getCurrentTreeId();
     const rid = id ? TreeManager.getTreeMetadata(id as TreeId)?.research?.id?.toLowerCase() : undefined;
     return !!rid && featuresOf(rid).includes(SURNAMES_READ_FEATURE);
+}
+
+/** Does the tree's research read the lineage corrections (bridge feature `lineage.read`)? */
+export function lineageReadByResearch(treeId?: string | null): boolean {
+    const id = treeId ?? DataManager.getCurrentTreeId();
+    const rid = id ? TreeManager.getTreeMetadata(id as TreeId)?.research?.id?.toLowerCase() : undefined;
+    return !!rid && featuresOf(rid).includes(LINEAGE_READ_FEATURE);
 }
 
 function dialogOpen(): boolean {

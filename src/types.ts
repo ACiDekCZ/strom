@@ -989,8 +989,26 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   '>'/'<') and Person/Partnership.gedcomDates (the file's own form of a
  *   date, see there). A v12 app reads neither: it shows the period as
  *   written and drops it from its GEDCOM export — hence under the same warning.
+ * v14 (2026-10, package 1031): StromData.lineageOverrides (a lineage's
+ *   founder moved down, a line split off by hand). A tree-level field; an
+ *   older app (v13) would drop it on a re-save (migrateData builds field by
+ *   field), so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 13;
+export const STROM_DATA_VERSION = 14;
+
+/**
+ * Manual corrections of the lineages (rody, see src/lineage.ts), by person id.
+ * A person is in at most one list (founders wins when both name it).
+ */
+export interface LineageOverrides {
+    /** People who start a lineage of their own: their line parent is cut. */
+    founders?: string[];
+    /**
+     * People who do not pass their lineage on: their children's lines start
+     * with the children (used to move a lineage's founder down the line).
+     */
+    notCarriers?: string[];
+}
 
 /**
  * A finding of the tree check marked "not an error" ("two different people"
@@ -1091,6 +1109,12 @@ export interface StromData {
      * version 13): not reported again. Newest last.
      */
     qualityDismissed?: QualityDismissal[];
+
+    /**
+     * Manual corrections of the lineages (data version 14): founders set by
+     * hand and lines split off. Absent or empty = the lineages as computed.
+     */
+    lineageOverrides?: LineageOverrides;
 
     /**
      * When Strom Research wrote what the people's `research` says (GEDCOM
@@ -1284,6 +1308,9 @@ export type AuditAction =
     | 'surname.unreject'
     | 'surname.accept'
     | 'surname.unaccept'
+    | 'lineage.founder'
+    | 'lineage.split'
+    | 'surnames.removeForm'
     | 'undo'
     | 'redo';
 

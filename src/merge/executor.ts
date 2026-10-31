@@ -22,6 +22,7 @@ import {
     PERSON_CITATION_FIELDS, isGender, mergedPrimaryName,
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
+import { cleanLineageOverrides } from '../lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
 import {
     MergeState,
@@ -739,6 +740,18 @@ function mergeTreeDecisions(merged: StromData, incoming: StromData, personMap: M
     const marks = sanitizeQualityDismissed([...brought, ...own]);
     if (marks?.length) merged.qualityDismissed = marks;
     else delete merged.qualityDismissed;
+    // Lineage corrections of both trees, the incoming ones under their merged
+    // ids; the existing tree's list wins for a person in both (founders first).
+    const mapIds = (ids?: string[]): string[] => (ids ?? []).map(id => personMap.get(id as PersonId) ?? '').filter(Boolean);
+    const inc = incoming.lineageOverrides;
+    const own2 = merged.lineageOverrides;
+    const ownIds = new Set([...(own2?.founders ?? []), ...(own2?.notCarriers ?? [])]);
+    const lineage = cleanLineageOverrides(merged, {
+        founders: [...(own2?.founders ?? []), ...mapIds(inc?.founders).filter(id => !ownIds.has(id))],
+        notCarriers: [...(own2?.notCarriers ?? []), ...mapIds(inc?.notCarriers).filter(id => !ownIds.has(id))],
+    });
+    if (lineage) merged.lineageOverrides = lineage;
+    else delete merged.lineageOverrides;
 }
 
 /**

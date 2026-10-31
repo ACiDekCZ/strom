@@ -20,6 +20,8 @@ import type { StromData, SurnameRejection } from './types.js';
 export const SURNAMES_SUGGEST_FEATURE = 'surnames.suggest';
 /** The research reads the groups and the rejections in the file's header NOTEs. */
 export const SURNAMES_READ_FEATURE = 'surnames.read';
+/** The bridge feature of a research that reads the lineage corrections (`_STROM_LINE`, package 1031). */
+export const LINEAGE_READ_FEATURE = 'lineage.read';
 
 /** The most suggestions read from one reply (the research sends at most 200). */
 const MAX_SUGGESTIONS = 500;

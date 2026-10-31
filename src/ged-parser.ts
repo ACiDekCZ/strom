@@ -938,6 +938,8 @@ interface GedcomIndividual {
     titleBefore?: string;
     titleAfter?: string;
     sex: string;
+    /** `1 _STROM_LINE`: the person's lineage correction. */
+    stromLine?: 'FOUNDER' | 'NOCARRY';
     birthDate: string;
     birthPlace: string;
     deathDate: string;
@@ -1079,6 +1081,8 @@ export interface ParsedGedcom {
      * nothing of that list (an older writer): the tree's own list stays.
      */
     surnameMarkers?: { groups: boolean; rejections: boolean };
+    /** Header `1 _STROM_LINES`: the file says which lineage corrections there are. */
+    lineageMarker?: boolean;
     /** Header `1 SOUR STROM_RESEARCH`: written by Strom Research. */
     stromResearch?: boolean;
     /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
@@ -1764,6 +1768,7 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** The header line being read is under HEAD > SOUR STROM. */
     let inStromSour = false;
     let researchAsOf = '';
+    let lineageMarker = false;
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
 
@@ -1980,6 +1985,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (tag === 'SOUR' && value.trim() === 'STROM_RESEARCH') stromResearch = true;
                 else if (inStromSour) stromApp = true;
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
+                else if (tag === '_STROM_LINES') lineageMarker = true;
             } else if (level === 2 && inStromSour && tag === 'VERS') {
                 stromAppVersion = value.trim();
             } else if (inSurnameNote && level === 2 && tag === 'CONT') {
@@ -2126,6 +2132,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'SEX':
                             indi.sex = value;
                             break;
+                        case '_STROM_LINE': {
+                            // The person's lineage correction (data v14); an
+                            // unknown value is ignored.
+                            const v = value.trim().toUpperCase();
+                            if (v === 'FOUNDER' || v === 'NOCARRY') indi.stromLine = v;
+                            break;
+                        }
                         case 'FAMS':
                             indi.fams.push(value);
                             break;
@@ -2914,6 +2927,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         individuals, families, sources, repositories, droppedTags, places, surnameGroups,
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
+        ...(lineageMarker ? { lineageMarker } : {}),
         ...(stromResearch ? { stromResearch, ...(researchAsOf ? { researchAsOf } : {}) } : {}),
     };
 }
@@ -3684,6 +3698,18 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // A parent alone with children (Strom's own _STROM_NO_COUPLE families): the "?" family the app keeps.
     normalizeSingleParents({ persons, partnerships } as StromData);
 
+    // Lineage corrections (`1 _STROM_LINE`), under the people's new ids.
+    const lineFounders: string[] = [];
+    const lineNotCarriers: string[] = [];
+    for (const [gedId, indi] of validIndividuals) {
+        const pid = personIdMap.get(gedId);
+        if (!pid || !persons[pid] || !indi.stromLine) continue;
+        (indi.stromLine === 'FOUNDER' ? lineFounders : lineNotCarriers).push(pid);
+    }
+    const lineageOverrides = lineFounders.length || lineNotCarriers.length
+        ? { ...(lineFounders.length ? { founders: lineFounders } : {}), ...(lineNotCarriers.length ? { notCarriers: lineNotCarriers } : {}) }
+        : null;
+
     const result: GedcomConversionResult = {
         externalMedia,
         data: {
@@ -3700,6 +3726,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 ? { surnameRejections: (gedcom.surnameRejections ?? []).map(forms => ({ forms })) } : {}),
             ...(gedcom.stromResearch && gedcom.researchAsOf && researchIsoDate(gedcom.researchAsOf)
                 ? { researchAsOf: researchIsoDate(gedcom.researchAsOf) } : {}),
+            // Like the surname markers: with the header mark the file's list
+            // (even an empty one) is what it says; without it, nothing said.
+            ...(lineageOverrides || gedcom.lineageMarker ? { lineageOverrides: lineageOverrides ?? {} } : {}),
         },
         stats: {
             otherFamilyLinks,
