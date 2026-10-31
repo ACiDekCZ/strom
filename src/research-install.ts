@@ -113,6 +113,9 @@ export function installLine(os: InstallOs, token: string, appUrl: string | null 
     const beta = channel === 'beta';
     const from = beta ? BETA_DOWNLOAD : DOWNLOAD;
     if (os !== 'win') return `curl -fsSL ${from}/install.sh | ${beta ? 'STROM_CHANNEL=beta ' : ''}STROM_FROM=${shQuote(installFromValue(token, appUrl, name, extra))} sh`;
+    // `-ExecutionPolicy Bypass` stays on purpose: it applies only to this one
+    // powershell process and changes nothing in the system, so the installer
+    // runs as people expect even where the default policy blocks scripts.
     const line = (n: string): string =>
         `powershell -ExecutionPolicy Bypass -c "${beta ? winSet('STROM_CHANNEL', 'beta') : ''}${winSet('STROM_FROM', installFromValue(token, appUrl, n, extra).replace(/'/g, "''"))}irm ${from}/install.ps1 | iex"`;
     // Win + R takes 259 characters: only the name is shortened (or left out under 3 characters).
@@ -136,6 +139,7 @@ const shQuote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
 export function legacyInstallLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
     const name = installTreeName(treeName);
     if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
+    // `-ExecutionPolicy Bypass`: see installLine (this one process only).
     const line = (n: string, x: InstallExtra, url: string | null = appUrl): string =>
         `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM_APP', token)}${winName(n, winSet)}${winExtra(x, winSet)}${url ? winSet('STROM_APP_URL', url) : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
     // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one);
