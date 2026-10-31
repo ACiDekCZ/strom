@@ -2003,6 +2003,34 @@ export function personBookTimelineHtml(page: PersonPageData, opts: PersonPageOpt
     }).join('');
 }
 
+/**
+ * Every excerpt of the person's sources for the family book's "all" detail
+ * (§4.4): a grid of three, each captioned with its event and the book's
+ * source number. '' for a shielded person or without excerpts.
+ */
+export function personBookClipsHtml(page: PersonPageData, opts: PersonPageOptions, cite?: (sourceId: string) => string): string {
+    const c = makeCtx(page, opts);
+    if (!c || shielded(c, c.person.id) || !c.page.groups.excerpts) return '';
+    const { P } = c;
+    const figs: string[] = [];
+    for (const row of personSourceRows(page.tree, page.personId, c.S)) {
+        const s = page.tree.sources?.[row.source.id];
+        if (!s?.excerpts?.length) continue;
+        const ev = excerptEvent(c, s.id);
+        const title = peekTitle(s.title);
+        for (const e of s.excerpts) {
+            const src = shownExcerpt(e);
+            if (!src || !safeImage(e.dataUrl)) continue;
+            const caption = ev?.event
+                ? P.excerptCaption(ev.event, registerKindOf(s.title), ev.place, ev.year)
+                : stripResearchIds(e.caption?.trim() ?? '').text || [ev?.label ?? '', title].filter(Boolean).join(', ');
+            figs.push(`<figure class="pp-fig book-clip"><img src="${esc(src)}" alt="${esc(caption)}">`
+                + `<figcaption>${esc(caption)}${cite?.(s.id) ?? ''}</figcaption></figure>`);
+        }
+    }
+    return figs.length ? `<div class="book-clips">${figs.join('')}</div>` : '';
+}
+
 /** The person's life chart for the family book: one set of `width` px for paper ('' when not drawn). */
 export function personBookChartHtml(page: PersonPageData, now: Date, width: number): string {
     return lifeChartHtml(personPageChartInput(page, now), { lang: page.lang, mode: 'print', width });

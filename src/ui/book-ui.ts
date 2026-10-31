@@ -1,20 +1,19 @@
 /**
  * Family book UI: a dialog in the export menu that generates the printable book
- * (src/book.ts) and opens it in a new window for the user to print. The tree
- * SVG is produced here (via the poster layout) and handed to the pure generator.
+ * (src/book.ts) and opens it in a new window for the user to print. The
+ * dialog's fields map onto the book's options (defaultBookOptions); the full
+ * options dialog (1031 §4) will replace it.
  *
  * See src/ui/module.ts for the composition pattern.
  */
 
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
-import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PrivacyMode, applyLivingPrivacy } from '../privacy.js';
-import { stripMedia } from '../attachments.js';
-import { buildFamilyBook } from '../book.js';
-import { buildTreeSvg } from '../export-image.js';
-import { treeCardDrawing } from './export-image-ui.js';
+import { PrivacyMode } from '../privacy.js';
+import { buildFamilyBook, defaultBookOptions } from '../book.js';
+import { bookItalicFontCss } from '../book-font.js';
+import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { uiModule } from './module.js';
 
 export const bookUiMethods = uiModule({
@@ -28,8 +27,6 @@ export const bookUiMethods = uiModule({
         // Books are printed and lent out — default to hiding living-person detail.
         const privacy = document.getElementById('book-privacy-mode') as HTMLSelectElement | null;
         if (privacy) privacy.value = 'initials';
-        const maxGen = document.getElementById('book-max-gen') as HTMLInputElement | null;
-        if (maxGen) maxGen.value = '';
         const dropMedia = document.getElementById('book-drop-media') as HTMLInputElement | null;
         if (dropMedia) dropMedia.checked = false;
 
@@ -57,40 +54,22 @@ export const bookUiMethods = uiModule({
         const title = (document.getElementById('book-title') as HTMLInputElement | null)?.value.trim() || undefined;
         const privacyMode = ((document.getElementById('book-privacy-mode') as HTMLSelectElement | null)?.value || 'initials') as PrivacyMode;
         const dropMedia = (document.getElementById('book-drop-media') as HTMLInputElement | null)?.checked || false;
-        const maxGenRaw = (document.getElementById('book-max-gen') as HTMLInputElement | null)?.value.trim() || '';
-        const maxGenerations = maxGenRaw ? Math.max(1, parseInt(maxGenRaw, 10)) : undefined;
         const cur = getCurrentLanguage();
         const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
-
-        // The tree overview SVG (drop media strips photos there too, if requested).
-        let treeSvg: string | undefined;
-        const layout = TreeRenderer.getPosterLayout();
-        if (layout.positions.size > 0) {
-            // The overview SVG must honour the same privacy/media choices as
-            // the book body — otherwise the tree page leaks living names.
-            let svgData = applyLivingPrivacy(data, privacyMode);
-            if (dropMedia) svgData = stripMedia(svgData);
-            // The cards drawn as the layout was made for them (the poster's
-            // drawing): every density's card size and look (compact 150x44,
-            // a card of details' width, heights, columns and
-            // lines), not the default 188x64 card on lines laid out for another.
-            treeSvg = buildTreeSvg(svgData, layout, {
-                treeName: TreeManager.getActiveTreeMetadata()?.name,
-                dateLabel: new Date().toLocaleDateString(),
-                ...treeCardDrawing(svgData, layout).drawing,
-                // Marriage-order pills numbered as on screen (T13).
-                orderData: data,
-            });
-        }
+        const defaults = defaultBookOptions(lang);
+        const firstId = Object.keys(data.persons)[0];
 
         const html = buildFamilyBook(data, {
-            title,
             lang,
-            privacyMode,
-            dropMedia,
-            maxGenerations,
-            treeSvg,
+            privacy: privacyMode,
+            parts: { ...defaults.parts, media: !dropMedia },
+            ...(title ? { title } : {}),
+        }, {
+            treeName: TreeManager.getActiveTreeMetadata()?.name,
             dateLabel: strings.book.compiled(new Date().toLocaleDateString()),
+            fontCss: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(),
+            hasHistory: !!(firstId && this.personPageHistory(firstId)),
+            personHistory: (id) => this.personPageHistory(id),
             approveStoryUrl: (p) => this.storyApproveUrl(p.id),
             storyDraftUrls: (owner) => this.storyCompareUrls('person' in owner
                 ? { personId: owner.person.id } : { partnershipId: owner.couple.id }),

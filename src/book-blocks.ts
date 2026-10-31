@@ -21,7 +21,7 @@ import { proseHtml, coupleStoryYears } from './story-text.js';
 import { marriedInto, Rod, RodId, rodPlaceSpans, sortByBirth } from './lineage.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageOptions, ProtectedPersonPageTree,
-    cleanWorkNote, personBookChartHtml, personBookResearchHtml, personBookTimelineHtml, personPageDate,
+    cleanWorkNote, personBookChartHtml, personBookClipsHtml, personBookResearchHtml, personBookTimelineHtml, personPageDate,
     preparePersonPageData, stripResearchIds,
 } from './person-page.js';
 import { BookChapter, BookModel } from './book-model.js';
@@ -201,7 +201,8 @@ function couple(ctx: BookCtx, u: Partnership): PersonId[] {
     return ids.sort((a, b) => (ctx.tree.persons[a].gender === 'female' ? 1 : 0) - (ctx.tree.persons[b].gender === 'female' ? 1 : 0));
 }
 
-function pairName(ctx: BookCtx, u: Partnership): string {
+/** "{husband} and {wife}" from the protected tree, escaped. */
+export function pairName(ctx: BookCtx, u: Partnership): string {
     const ids = couple(ctx, u);
     const and = esc(T(ctx).book.and);
     return ids.length ? ids.map(id => bookName(ctx, id)).join(` ${and} `) : '?';
@@ -447,7 +448,8 @@ export function personBookHtml(id: PersonId, ctx: BookCtx, opts: { chapter: numb
     const parts: string[] = [h3];
     if (ctx.parts.media && p.photo && /^data:image\//.test(p.photo)) parts.unshift(`<img class="book-photo" src="${esc(p.photo)}" alt="">`);
     parts.push(factsHtml(ctx, p));
-    const needPage = ctx.detail !== 'brief' && (ctx.parts.chart || (ctx.research && ctx.detail === 'all'));
+    const all = ctx.detail === 'all';
+    const needPage = ctx.detail !== 'brief' && (ctx.parts.chart || (all && (ctx.research || ctx.parts.media)));
     if (needPage) {
         const history = ctx.parts.history ? ctx.personHistory?.(id) : undefined;
         const page = preparePersonPageData(ctx.tree, pageOptions(ctx, id), { protected: ctx.protectedTree, ...(history ? { history } : {}) });
@@ -456,14 +458,19 @@ export function personBookHtml(id: PersonId, ctx: BookCtx, opts: { chapter: numb
             if (chart) parts.push(`<div class="book-chart">${chart}</div>`);
             parts.push(personBookTimelineHtml(page, pageOptions(ctx, id), {
                 rows: ctx.detail === 'all' ? 'all' : 'main',
-                figures: ctx.parts.media,
+                // "All" shows every excerpt in a grid of three below the timeline instead.
+                figures: ctx.parts.media && !all,
                 people: ctx.detail === 'all',
                 historyMax: ctx.parts.history ? (ctx.detail === 'all' ? 6 : 3) : 0,
                 moreChildren: B.moreChildren,
                 cite: sid => ctx.sources.cite(sid),
             }));
         }
-        if (ctx.research && ctx.detail === 'all') {
+        if (all && ctx.parts.media) {
+            const clips = personBookClipsHtml(page, pageOptions(ctx, id), sid => ctx.sources.cite(sid));
+            if (clips) parts.push(clips);
+        }
+        if (ctx.research && all) {
             const r = personBookResearchHtml(page, pageOptions(ctx, id));
             if (r) parts.push(`<div class="book-research"><h4 class="book-sub">${esc(B.forResearchers)}</h4>${r}</div>`);
         }

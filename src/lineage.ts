@@ -802,7 +802,8 @@ export function rodPlaceSpans(index: LineageIndex, rodId: RodId, skip?: (personI
     }
     for (const uid of rod.familyIds) {
         const u = data.partnerships[uid];
-        if (!u) continue;
+        // A family of a skipped (living, protected) partner says nothing of where they wed either.
+        if (!u || (skip && (skip(u.person1Id) || (!!u.person2Id && skip(u.person2Id))))) continue;
         const who = rod.memberIds.includes(u.person1Id) ? u.person1Id : u.person2Id;
         note(u.startPlace, u.startDate, who);
     }

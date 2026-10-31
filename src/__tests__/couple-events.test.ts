@@ -243,14 +243,17 @@ describe('what reads a couple sees its events', () => {
             data.partnerships[UNION].childIds.push(kid);
             return data;
         };
-        const html = buildFamilyBook(withChild(tree()), { lang: 'en', privacyMode: 'full', dateLabel: 'x' });
+        // The people around (witnesses) come with the detail "All" (§4.4).
+        const html = buildFamilyBook(withChild(tree()), { lang: 'en', privacy: 'full', detail: 'all' }, { dateLabel: 'x' });
         expect(html).toContain('Other events of the couple');
+        expect(buildFamilyBook(withChild(tree()), { lang: 'en', privacy: 'full' }, { dateLabel: 'x' }))
+            .toContain('Banns, Dolní Lhota čp. 7. Ohlášky třikrát.');
         expect(html).toContain('Banns, Dolní Lhota čp. 7. Witnesses Josef Kříž and Václav Dvořák (soused). Ohlášky třikrát.');
-        expect(html).toMatch(/Křest dítěte manželů\. Jméno dítěte ani datum na snímku nejsou\.<sup class="book-fn-ref">\[\d\]<\/sup>/);
+        expect(html).toMatch(/Křest dítěte manželů\. Jméno dítěte ani datum na snímku nejsou\.<sup class="book-p">P\d+<\/sup>/);
         expect(html.indexOf('Banns')).toBeLessThan(html.indexOf('Křest dítěte manželů'));
         const bare = withChild(tree());
         delete bare.partnerships[UNION].events;
-        expect(buildFamilyBook(bare, { lang: 'en', privacyMode: 'full', dateLabel: 'x' })).not.toContain('Other events of the couple');
+        expect(buildFamilyBook(bare, { lang: 'en', privacy: 'full' }, { dateLabel: 'x' })).not.toContain('Other events of the couple');
     });
 
     it('the tree check flags a dangling witness and a missing source on a couple event', () => {
