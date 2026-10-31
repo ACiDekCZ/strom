@@ -21,6 +21,12 @@ import { getDemoTree } from '../demo-tree.js';
 import { setLanguage } from '../strings.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Source, Gender } from '../types.js';
 import { PrivacyMode } from '../privacy.js';
+import { calibrationWorkload, normalizedMs } from './helpers/perf-budget.js';
+
+/** Calibration rounds for the estimate's budget: about as long as the estimate itself. */
+const ESTIMATE_CALIBRATION_ROUNDS = 4;
+/** Best time of those rounds on the reference machine at rest (Apple M-series laptop, vitest). */
+const ESTIMATE_CALIBRATION_REFERENCE_MS = 22;
 
 const NOW = new Date('2026-10-31T12:00:00Z');
 const ENV = { now: NOW, dateLabel: 'sestaveno 31. 10. 2026' };
@@ -442,13 +448,21 @@ describe('the book options', () => {
         const persons = Object.keys(big.persons).length;
         expect(persons).toBeGreaterThan(950);
         const index = buildLineages(big);
-        estimateBook(big, opts(), { index }); // warm up
-        // The best of three runs: a busy machine must not fail the budget.
+        // Warm-up (JIT) of both, then each measured run right after a
+        // calibration run (helpers/perf-budget.ts): a slower machine or a
+        // busy one (CI runners, parallel workers) scales the run by its
+        // slowdown at that moment, at most 5×; a slower estimate does not
+        // slow the calibration, so it still fails. The best normalized run counts.
+        estimateBook(big, opts(), { index });
+        calibrationWorkload(ESTIMATE_CALIBRATION_ROUNDS);
         let ms = Infinity;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 5; i++) {
+            const c0 = performance.now();
+            calibrationWorkload(ESTIMATE_CALIBRATION_ROUNDS);
+            const calMs = performance.now() - c0;
             const t0 = performance.now();
             estimateBook(big, opts(), { index });
-            ms = Math.min(ms, performance.now() - t0);
+            ms = Math.min(ms, normalizedMs(performance.now() - t0, calMs, ESTIMATE_CALIBRATION_REFERENCE_MS));
         }
         expect(ms).toBeLessThan(50);
         const normal = estimateBook(big, opts(), { index });
