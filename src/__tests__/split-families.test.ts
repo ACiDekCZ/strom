@@ -258,6 +258,25 @@ describe('decomposeIntoFamilies — surname lines ("rody")', () => {
         expect(comps).toHaveLength(1);
         expect(comps[0].personIds).toHaveLength(3);
     });
+
+    it('same-name siblings stay together under a differently written father; a group joins the lines', () => {
+        // Grandfather and father are written Zvonýlek, the sons Zvonílek.
+        const people = [
+            person('g', 'Hostivít', 'male', { lastName: 'Zvonýlek', birthDate: '1800', childIds: [P('f')] }),
+            person('f', 'Bořivoj', 'male', { lastName: 'Zvonýlek', birthDate: '1830', parentIds: [P('g')], childIds: [P('s1'), P('s2')] }),
+            person('s1', 'Bolemír', 'male', { lastName: 'Zvonílek', birthDate: '1860', parentIds: [P('f')] }),
+            person('s2', 'Božetěch', 'male', { lastName: 'Zvonílek', birthDate: '1862', parentIds: [P('f')] }),
+        ];
+        const split = tree(people, []);
+        expectFocusInvariant(split);
+        expectCleanPartition(split, P('s1'), 'surname');
+        const groups = decomposeIntoFamilies(split, P('g'), 'surname').map(c => [...c.personIds].sort());
+        expect(groups).toEqual([['f', 'g'], ['s1', 's2']]);
+
+        const grouped = { ...tree(people, []), surnameVariants: [['Zvonílek', 'Zvonýlek']] } as StromData;
+        expectFocusInvariant(grouped);
+        expect(decomposeIntoFamilies(grouped, P('g'), 'surname').map(c => c.personIds.length)).toEqual([4]);
+    });
 });
 
 describe("decomposeIntoFamilies — one person's view ('perspective')", () => {

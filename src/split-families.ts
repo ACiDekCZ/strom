@@ -29,6 +29,7 @@
 import { PersonId, StromData } from './types.js';
 import { selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
 import { sameSurname, surnameKey } from './surnames.js';
+import { partnersOf, siblingsOf, sortByBirth, walkSurnameLine } from './lineage.js';
 
 /**
  * How the tree is cut into families — both are focus-invariant (invariant #0):
@@ -114,34 +115,6 @@ export interface FamilyComponent {
     personal?: boolean;
 }
 
-/** Partners of a person across all their unions. */
-function partnersOf(data: StromData, id: PersonId): PersonId[] {
-    const p = data.persons[id];
-    if (!p) return [];
-    const out: PersonId[] = [];
-    for (const uid of p.partnerships) {
-        const u = data.partnerships[uid];
-        if (!u) continue;
-        out.push(u.person1Id === id ? u.person2Id : u.person1Id);
-    }
-    return out;
-}
-
-/** Siblings of a person (sharing at least one parent). */
-function siblingsOf(data: StromData, id: PersonId): PersonId[] {
-    const p = data.persons[id];
-    if (!p) return [];
-    const out = new Set<PersonId>();
-    for (const parentId of p.parentIds) {
-        const parent = data.persons[parentId];
-        if (!parent) continue;
-        for (const childId of parent.childIds) {
-            if (childId !== id) out.add(childId);
-        }
-    }
-    return [...out];
-}
-
 /** Every first-degree relative of a person that exists in the data. */
 function relativesOf(data: StromData, id: PersonId): PersonId[] {
     const p = data.persons[id];
@@ -151,14 +124,7 @@ function relativesOf(data: StromData, id: PersonId): PersonId[] {
 }
 
 /** Deterministic order: birthdate, then id, so the split never wobbles. */
-function sortIds(data: StromData, ids: PersonId[]): PersonId[] {
-    return ids.slice().sort((a, b) => {
-        const ba = data.persons[a]?.birthDate ?? '9999';
-        const bb = data.persons[b]?.birthDate ?? '9999';
-        if (ba !== bb) return ba < bb ? -1 : 1;
-        return a < b ? -1 : a > b ? 1 : 0;
-    });
-}
+const sortIds = sortByBirth;
 
 function isReal(data: StromData, id: PersonId): boolean {
     const p = data.persons[id];
@@ -263,58 +229,10 @@ export function decomposeIntoFamilies(
         push(root);
 
         if (mode === 'surname') {
-            // A family LINE ("rod"): everyone joined to the root by parent–child
-            // links along ONE surname (sameSurname — feminine forms and grouped
-            // spellings count), up to the founder and down to the last bearer.
-            // A person with no surname stays with whichever line reaches them
-            // first — an unnamed slot must not break a line in two. A spouse is
-            // absorbed only when they have no line of their own here: no parents
-            // in the data and no child after their own name. Antonín Krevčík
-            // (no parents recorded, children named after him) FOUNDS the
-            // Krevčík line; Zdena the childless in-law stays with her husband.
-            const rodSurname = data.persons[root]?.lastName ?? '';
-            const rodKey = surnameKey(rodSurname);
-            // Placeholders count as unnamed even when a surname was guessed for
-            // them (GEDCOM slots often inherit one) — an unknown person must
-            // never break a line in two, nor found one.
-            const isUnnamed = (id: PersonId): boolean => {
-                const p = data.persons[id];
-                return !!p && (!!p.isPlaceholder || !surnameKey(p.lastName ?? ''));
-            };
-            const inLine = (id: PersonId): boolean => {
-                if (isUnnamed(id)) return true;
-                return !!rodKey && sameSurname(data.persons[id]!.lastName!, rodSurname, data);
-            };
-            const foundsOwnLine = (sp: PersonId): boolean => {
-                const p = data.persons[sp]!;
-                if (isUnnamed(sp)) return false;
-                if (p.parentIds.some(x => !!data.persons[x])) return true;
-                const n = p.lastName ?? '';
-                if (!surnameKey(n)) return false;
-                return p.childIds.some(ch =>
-                    data.persons[ch] && sameSurname(data.persons[ch]!.lastName ?? '', n, data));
-            };
-            while (work.length > 0) {
-                const id = work.shift()!;
-                const p = data.persons[id];
-                for (const ch of sortIds(data, p.childIds.filter(x => !!data.persons[x]))) {
-                    if (inLine(ch)) push(ch);
-                }
-                for (const par of sortIds(data, p.parentIds.filter(x => !!data.persons[x]))) {
-                    if (inLine(par)) push(par);
-                }
-                // Same-name SIBLINGS belong to the line even when the shared
-                // parent is written differently (Fíšek brothers under a father
-                // registered as Fýsek) — the parent stays free to found the
-                // differently-written line; grouping the spellings in the
-                // surname register merges the two lines into one.
-                for (const sib of sortIds(data, siblingsOf(data, id).filter(x => !!data.persons[x]))) {
-                    if (inLine(sib)) push(sib);
-                }
-                for (const sp of sortIds(data, partnersOf(data, id))) {
-                    if (!foundsOwnLine(sp)) push(sp);
-                }
-            }
+            // A family LINE ("rod"): everyone joined to the root along ONE
+            // surname, first claim — the walk and its rules for unnamed
+            // people and in-law spouses live in lineage.ts (walkSurnameLine).
+            walkSurnameLine(data, data.persons[root]?.lastName ?? '', work, push);
         } else {
             // 'lineage' branches: the root, every blood DESCENDANT, the spouses
             // who married in, and those spouses' children from any union —
