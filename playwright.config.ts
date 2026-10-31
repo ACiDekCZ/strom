@@ -29,6 +29,17 @@ const PORT = e2ePort();
  */
 export default defineConfig({
     testDir: './e2e',
+    // Not on CI, on purpose (they only skipped there, and were listed as files
+    // with no test run):
+    // - mobile-webkit: needs WebKit, and CI installs Chromium only. WebKit's
+    //   system libraries (GStreamer & co.) are an apt install on every shard,
+    //   the step that once took up to 5 minutes. Run it locally after
+    //   `npx playwright install webkit`; the Android phone (Chromium,
+    //   mobile-android.spec.ts) covers the same screens on CI.
+    // - research-real-bridge: needs a real research release installed by its
+    //   own install.sh (STROM_E2E_ADOPT_BRIDGE, STROM_E2E_RELEASES), which only
+    //   a computer with the research's release folders has.
+    testIgnore: process.env.CI ? ['**/mobile-webkit.spec.ts', '**/research-real-bridge.spec.ts'] : [],
     globalSetup: './e2e/global-setup.ts',
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
