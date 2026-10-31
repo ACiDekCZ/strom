@@ -53,6 +53,7 @@ import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
+import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
 import { sortLifeEvents } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet } from './privacy.js';
@@ -5514,19 +5515,44 @@ class TreeRendererClass {
         }
     }
 
+    /** The timeline's last markup (a redraw with nothing new leaves the DOM alone). */
+    private timelineHtml = '';
+
     private renderTimeline(container: HTMLElement): void {
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
             container.dataset.wired = '1';
+            // A cluster of the history row (§9): the card on its first event, a sheet on a phone.
+            const histCluster = (e: Event): boolean => {
+                const c = (e.target as Element).closest('.tl-hist[data-hist-ids]');
+                const personId = c?.closest('[data-hist-person]')?.getAttribute('data-hist-person');
+                if (!c || !personId) return false;
+                const ids = (c.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
+                UI.openTimelineHistory(personId, ids);
+                return true;
+            };
             container.addEventListener('click', (e) => {
+                if (histCluster(e)) return;
                 const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
                 if (g?.dataset.personId) this.setFocus(g.dataset.personId as PersonId);
+            });
+            container.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                if (!(e.target as Element).matches?.('.tl-hist')) return;
+                e.preventDefault();
+                histCluster(e);
+            });
+            // The history row follows what the card's layer shows (a read, a hiding, the chip, Settings).
+            window.addEventListener(HISTORY_CHANGED_EVENT, () => {
+                if (this.viewMode === 'timeline' && container.isConnected) this.renderTimeline(container);
             });
         }
 
         const ids = [...this.positions.keys()] as unknown as string[];
         const todayYear = new Date().getFullYear();
-        const model = computeTimelineModel(DataManager.getData(), ids, todayYear);
+        // Only the focused person's history (the card's events): nothing is computed for the others.
+        const history = UI.timelineHistory(this.focusPersonId);
+        const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
         const S = strings.timeline;
 
         const isMobile = isMobileViewport();
@@ -5555,9 +5581,19 @@ class TreeRendererClass {
             maleColor: 'var(--male)',
             femaleColor: 'var(--female)',
             unknownColor: 'var(--unknown)',
+            narrow: isMobile,
         });
 
-        container.innerHTML = `${omitted}${empty}${svg}`;
+        // Nothing changed (a status that brought nothing new for the row): the DOM stays.
+        const html = `${omitted}${empty}${svg}`;
+        if (html === this.timelineHtml && container.firstElementChild) return;
+        this.timelineHtml = html;
+        // A redraw keeps the keyboard on the history cluster it was on.
+        const focusedCluster = (document.activeElement as Element | null)?.closest?.('#timeline-container .tl-hist')?.getAttribute('data-hist-ids');
+        container.innerHTML = html;
+        if (focusedCluster) {
+            container.querySelector<SVGGElement>(`.tl-hist[data-hist-ids="${CSS.escape(focusedCluster)}"]`)?.focus({ preventScroll: true });
+        }
     }
 
     /**

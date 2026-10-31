@@ -7860,6 +7860,35 @@
         .tl-dot-wedding { fill: #fff; stroke: #d4a017; stroke-width: 2; }
         .tl-arrow { fill: var(--text-light, #aaa); }
         .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
+        /* The focused person's history row (DEV symboly-dejin §9, 9a): under the axis band;
+           the kind's symbol coloured by the origin, a count badge, a period's stripe. */
+        .tl-hist-label {
+            height: 100%; display: flex; align-items: center; box-sizing: border-box; padding-right: 4px;
+            font-size: 11.5px; line-height: 1.2; color: var(--hist-meta);
+        }
+        .tl-hist-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tl-hist-txt b { font-weight: 600; color: var(--text); }
+        .tl-hist-band { fill: var(--hist-bg); }
+        .tl-hist { cursor: pointer; outline: none; color: var(--hist-text); }
+        .tl-hist-period { fill: currentColor; opacity: 0.6; color: var(--hist-text); }
+        .tl-hist.is-place, .tl-hist-period.is-place { color: var(--hist-place-text); }
+        .tl-hist.is-local, .tl-hist-period.is-local { color: var(--hist-local-text); }
+        .tl-hist-ring { fill: none; stroke: none; }
+        .tl-hist:focus-visible .tl-hist-ring { stroke: var(--primary); stroke-width: 2; }
+        @media (hover: hover) { .tl-hist:hover .tl-hist-ring { fill: var(--surface); stroke: var(--border); stroke-width: 1; } }
+        .tl-hist-n { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+        .tl-hist-n-txt { fill: var(--text); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        /* The phone's sheet of a cluster (9g): year · symbol · text, "Open in the person card". */
+        .tl-hsheet-title { padding: 2px 16px 8px; font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .tl-hsheet-list { list-style: none; margin: 0; padding: 0 16px 6px; display: flex; flex-direction: column; gap: 8px; }
+        .tl-hsheet-row { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.4; color: var(--text); min-width: 0; }
+        .tl-hsheet-year { flex: none; min-width: 40px; color: var(--hist-meta); font-variant-numeric: tabular-nums; }
+        .tl-hsheet-sym { flex: none; display: flex; margin-top: 2px; color: var(--hist-text); }
+        .tl-hsheet-sym.is-place { color: var(--hist-place-text); }
+        .tl-hsheet-sym.is-local { color: var(--hist-local-text); }
+        .tl-hsheet-text { min-width: 0; overflow-wrap: anywhere; }
+        .tl-hsheet .bottom-sheet-item.tl-hsheet-open { font-size: 15px; color: var(--primary); border-top: 1px solid var(--divider); border-radius: 0; }
+        .tl-hsheet .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
         /* Fan chart view */
         /* ---- Map view (A6) ---- */
@@ -18606,6 +18635,9 @@
             .tl-name { color: #222 !important; }
             .tl-tick { fill: #666 !important; }
             .tl-dot { fill: #444 !important; }
+            /* The history row is the screen's (one person's, by the focus): not printed, the rows back up. */
+            .tl-hist-row { display: none !important; }
+            .tl-rows { transform: none !important; }
 
             #canvas { transform: none !important; position: relative !important; }
             #tree-container { overflow: visible !important; height: auto !important; }
