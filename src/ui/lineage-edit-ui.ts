@@ -70,6 +70,10 @@ let revision = 0;
 /** The dialogs under this one when it opened (the Surnames dialog resets the stack). */
 let stackBelow: string[] = [];
 let listening = false;
+/** The lineage drawn last: an undo that gives it another id moves the overview's detail along. */
+let shownRodId: RodId | null = null;
+/** Apply is storing its change: the dialog draws (and moves the overview) itself afterwards. */
+let applying = false;
 
 const fold = (s: string): string => normalizeSearchText(s);
 
@@ -145,8 +149,14 @@ export const lineageEditUiMethods = uiModule({
         }
         this.dialogStack = [...this.dialogStack.filter(id => id !== DIALOG_ID), DIALOG_ID];
         this.renderLineageEdit();
-        const focus = overlay.querySelector<HTMLElement>('.le-search, .le-addform-input, [data-le="apply"]:not([disabled])')
+        // A person chosen already (the person card's "Start a family line from
+        // this person…"): the preview's button, else the choice's search.
+        const preset = panel && 'chosen' in panel && panel.chosen !== null
+            ? overlay.querySelector<HTMLElement>('[data-le="apply"]:not([disabled])') : null;
+        const focus = preset
+            ?? overlay.querySelector<HTMLElement>('.le-search, .le-addform-input, [data-le="apply"]:not([disabled])')
             ?? overlay.querySelector<HTMLElement>('.close-btn');
+        preset?.scrollIntoView({ block: 'nearest' });
         focus?.focus({ preventScroll: true });
     },
 
@@ -160,6 +170,7 @@ export const lineageEditUiMethods = uiModule({
         panel = null;
         ctx = null;
         anchor = null;
+        shownRodId = null;
         const body = document.getElementById('lineage-edit-body');
         if (body) body.innerHTML = '';
     },
@@ -182,11 +193,14 @@ export const lineageEditUiMethods = uiModule({
         const changed = (): void => {
             revision++;
             // Also while the Surnames dialog stands over it (it comes back with the new forms).
-            if (!ctx?.active) return;
+            if (!ctx?.active || applying) return;
             ctx.data = DataManager.getData();
             if (panel && panel.kind !== 'founder' && panel.kind !== 'split' && panel.kind !== 'addForm') panel = null;
             else if (panel && 'chosen' in panel) panel.chosen = null;
+            const before = shownRodId;
             this.renderLineageEdit();
+            // The overview behind keeps the lineage's detail open (an undone founder gives the old id back).
+            if (before && shownRodId && before !== shownRodId) this.followTreeOverviewRod(before, shownRodId);
         };
         window.addEventListener('strom:user-change', changed);
         window.addEventListener('strom:data-changed', changed);
@@ -242,6 +256,7 @@ export const lineageEditUiMethods = uiModule({
         const t = strings.lineage.edit;
         const r = strings.treeOverview.rods;
         const found = this.lineageEditRod();
+        shownRodId = found?.rod.id ?? null;
         if (!found) {
             title.textContent = strings.treeOverview.sections.rods;
             sub.textContent = '';
@@ -566,33 +581,39 @@ export const lineageEditUiMethods = uiModule({
         let nextAnchor: PersonId = rod.founderId;
         // The toast says what was done; the undo pill's "Undo" rides in it over the dialog.
         let done = '';
-        switch (change.kind) {
-            case 'founder':
-                done = a.lineageFounder(label, nameOf(change.personId));
-                DataManager.applyLineagePatch(pv.patch, u.lineageFounder(label), { action: 'lineage.founder', text: done });
-                nextAnchor = change.personId;
-                break;
-            case 'split': {
-                const after = pv.after.find(s => s.founderId === change.personId);
-                done = a.lineageSplit(after?.label ?? rod.surname, nameOf(change.personId));
-                DataManager.applyLineagePatch(pv.patch, u.lineageSplit(nameOf(change.personId)), { action: 'lineage.split', text: done });
-                break;
+        // The change events of the store come while the dialog still shows the old state: it draws itself below.
+        applying = true;
+        try {
+            switch (change.kind) {
+                case 'founder':
+                    done = a.lineageFounder(label, nameOf(change.personId));
+                    DataManager.applyLineagePatch(pv.patch, u.lineageFounder(label), { action: 'lineage.founder', text: done });
+                    nextAnchor = change.personId;
+                    break;
+                case 'split': {
+                    const after = pv.after.find(s => s.founderId === change.personId);
+                    done = a.lineageSplit(after?.label ?? rod.surname, nameOf(change.personId));
+                    DataManager.applyLineagePatch(pv.patch, u.lineageSplit(nameOf(change.personId)), { action: 'lineage.split', text: done });
+                    break;
+                }
+                case 'revert':
+                    done = a.lineageRevert(label);
+                    DataManager.applyLineagePatch(pv.patch, u.lineageRevert(label),
+                        { action: rod.manual === 'split' ? 'lineage.split' : 'lineage.founder', text: done });
+                    break;
+                case 'addForm':
+                    done = strings.surnames.linked;
+                    DataManager.applyLineagePatch(pv.patch, u.addSurnameGroup([rod.surname, change.form].join(' = ')));
+                    break;
+                case 'removeForm': {
+                    const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === surnameKey(change.form))) ?? [];
+                    done = a.surnameFormRemoved(change.form, group.join(' · '));
+                    DataManager.applyLineagePatch(pv.patch, u.removeSurnameForm(change.form), { action: 'surnames.removeForm', text: done });
+                    break;
+                }
             }
-            case 'revert':
-                done = a.lineageRevert(label);
-                DataManager.applyLineagePatch(pv.patch, u.lineageRevert(label),
-                    { action: rod.manual === 'split' ? 'lineage.split' : 'lineage.founder', text: done });
-                break;
-            case 'addForm':
-                done = strings.surnames.linked;
-                DataManager.applyLineagePatch(pv.patch, u.addSurnameGroup([rod.surname, change.form].join(' = ')));
-                break;
-            case 'removeForm': {
-                const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === surnameKey(change.form))) ?? [];
-                done = a.surnameFormRemoved(change.form, group.join(' · '));
-                DataManager.applyLineagePatch(pv.patch, u.removeSurnameForm(change.form), { action: 'surnames.removeForm', text: done });
-                break;
-            }
+        } finally {
+            applying = false;
         }
         this.showToast(/[.!?]$/.test(done) ? done : `${done}.`, 6000, { kind: 'lineage-edit', clearOf: `#${DIALOG_ID} .buttons` });
         revision++;

@@ -195,7 +195,8 @@ export const surnamesMethods = uiModule({
             btn.onclick = () => {
                 formPreview = btn.dataset.form ?? null;
                 this.renderSurnameGroups();
-                box.querySelector<HTMLElement>('.surname-form-remove:not([disabled]), .surname-form-cancel')?.focus();
+                // Remove when it can, else Cancel (querySelector with a list takes the first in document order).
+                (box.querySelector<HTMLElement>('.surname-form-remove:not([disabled])') ?? box.querySelector<HTMLElement>('.surname-form-cancel'))?.focus();
             };
         });
         box.querySelector<HTMLButtonElement>('.surname-form-cancel')?.addEventListener('click', () => {
