@@ -279,6 +279,10 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
 
     test('"Show as linked" at B: five ghosts, the hollow line and its label, the stub gone, a notice, both in view — and no change of the tree', async ({ page }) => {
         await setup(page);
+        // The import's own save lands on its own time (an IndexedDB write) and
+        // stamps the tree's modified time then: under load after this read, it
+        // looked like a change made by "Show as linked". Settled first.
+        await page.evaluate(() => window.Strom.TreeManager.flush());
         const before = await treeState(page);
         const version = await treeVersion(page);
         expect(version.core).not.toMatch(/unsent/i);
