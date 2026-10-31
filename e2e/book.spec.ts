@@ -381,6 +381,13 @@ test.describe('family book: phone', () => {
         await expect(bar.getByRole('button', { name: 'Save as HTML' })).toBeHidden();
         await expect(bar.locator('.book-bar-pages')).toBeHidden();
         expect(await book.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        // The life charts' year axes: no two years run together.
+        await expect(book.locator('.pp-ch-axis').first()).toBeAttached();
+        const crowded = await book.evaluate(() => [...document.querySelectorAll('.pp-ch-axis')].filter(ax => {
+            const r = [...ax.querySelectorAll('span')].filter(s => s.getClientRects().length > 0).map(s => s.getBoundingClientRect());
+            return r.some((a, i) => i > 0 && a.left < r[i - 1].right + 2);
+        }).length);
+        expect(crowded).toBe(0);
         await bar.getByRole('button', { name: 'More actions' }).click();
         const more = book.locator('.book-more');
         await expect(more).toBeVisible();

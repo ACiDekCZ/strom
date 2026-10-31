@@ -179,6 +179,17 @@ function rodOfPerson(ctx: BookCtx, id: PersonId): RodId | null {
     return ctx.model.index.rodByPerson.get(id) ?? null;
 }
 
+/**
+ * A spouse's birth lineage when it is worth naming beside the marriage: not
+ * a one-person lineage (a wife who married in without recorded parents is
+ * not a family of her own; the person card's row says the same).
+ */
+function birthRodNamed(ctx: BookCtx, id: PersonId): RodId | null {
+    const rodId = rodOfPerson(ctx, id);
+    const rod = rodId ? ctx.model.index.rods.get(rodId) : undefined;
+    return rod && !rod.solitary ? rod.id : null;
+}
+
 function marriageText(ctx: BookCtx, u: Partnership): string {
     const B = T(ctx).book;
     const start = [u.startDate ? formatFlexDate(u.startDate, ctx.lang) : '', u.startPlace ?? ''].filter(Boolean).join(', ');
@@ -344,7 +355,7 @@ export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boo
                 const other = u.person1Id === id ? u.person2Id : u.person1Id;
                 const op = person(ctx, other);
                 const y = yearOf(u.startDate);
-                const otherRod = other && rodShown(ctx, other) ? rodOfPerson(ctx, other) : null;
+                const otherRod = other && rodShown(ctx, other) ? birthRodNamed(ctx, other) : null;
                 const rodTxt = otherRod && otherRod !== rod.id ? ` ${esc(B.spouseRod(rodLabelOf(ctx, otherRod)))}` : '';
                 return `<span class="book-marr">⚭ ${y !== null ? `${y} ` : ''}${op && !op.isPlaceholder ? bookName(ctx, other) : '?'}${rodTxt}</span>`;
             }).join('');
@@ -607,7 +618,7 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     const head = `<header class="book-family-head"><div class="book-kicker">${esc(B.chapterKicker(ch.no, ch.gen))}</div>`
         + `<h2>${pairName(ctx, u)}</h2>${line}${origins}</header>`;
     const people = ids.map(id => {
-        const fromRodId = ch.rodId && ch.memberId !== id ? rodOfPerson(ctx, id) : null;
+        const fromRodId = ch.rodId && ch.memberId !== id ? birthRodNamed(ctx, id) : null;
         const fromRod = fromRodId && fromRodId !== ch.rodId
             ? { label: rodLabelOf(ctx, fromRodId), ...(ctx.model.birthChapter.get(id) ? { chapter: ctx.model.birthChapter.get(id)! } : {}) }
             : undefined;

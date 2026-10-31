@@ -195,6 +195,8 @@ describe('buildFamilyBook: the document', () => {
         expect(side).toContain('>Rod Ostružník</a>');
         // Print hides the window's controls.
         expect(html).toContain('.book-toolbar, .book-side, .book-more { display: none !important; }');
+        // On a phone the life chart's axis shows every other year (laid out for the printed column).
+        expect(html).toMatch(/@media \(max-width: 640px\) \{[^@]*\.book \.pp-ch-axis span:nth-child\(2n\) \{ display: none; \}/);
     });
 });
 
@@ -345,6 +347,22 @@ describe('chapters along the line', () => {
         expect(toc).toContain('<li class="book-toc-fam book-toc-sub" style="padding-left:36px"><a href="#kap-4">');
         // No page numbers: browsers cannot count them.
         expect(toc).not.toContain('target-counter');
+    });
+
+    it('a married-in spouse is "from the … line" only when that line has more than the spouse in it', () => {
+        setLanguage('en');
+        const d = line();
+        // Bára comes from the Hvozdecký family (her parents are recorded); Cecílie married in alone.
+        d.persons['h' as PersonId] = p('h', 'Hynek', 'Hvozdecký', 'male', { birthDate: '1805', deathDate: '1870', partnerships: ['uh'], childIds: ['bw'] });
+        d.persons['hw' as PersonId] = p('hw', 'Hana', 'Sejková', 'female', { birthDate: '1808', deathDate: '1872', partnerships: ['uh'], childIds: ['bw'] });
+        d.persons['bw' as PersonId]!.parentIds = ['h', 'hw'] as PersonId[];
+        d.partnerships['uh' as PartnershipId] = u('uh', 'h', 'hw', ['bw']);
+        const html = buildFamilyBook(d, { lang: 'en', privacy: 'full' }, ENV);
+        const { lineage, text } = regions(html);
+        expect(text).toMatch(/class="book-from">· from the Hvozdeck[^<]* line/);
+        expect(lineage).toMatch(/\(Hvozdeck[^)<]* line\)/);
+        expect(text).not.toMatch(/from the Mlhovc/);
+        expect(lineage).not.toMatch(/Mlhovc[^)<]* line\)/);
     });
 
     it('children point to their own chapter', () => {
