@@ -1618,7 +1618,8 @@ class DataManagerClass {
         this.beginMutation();
         for (const f of patch.fields) {
             if (f === 'lineageOverrides') {
-                const clean = cleanLineageOverrides(this.data, patch.lineageOverrides);
+                // `?? {}`: no corrections left must not fall back to the tree's current ones (the parameter's default).
+                const clean = cleanLineageOverrides(this.data, patch.lineageOverrides ?? {});
                 if (clean) this.data.lineageOverrides = clean;
                 else delete this.data.lineageOverrides;
             } else {

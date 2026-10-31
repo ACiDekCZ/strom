@@ -465,6 +465,18 @@ describe('DataManager.applyLineagePatch: one undo step, the change log, a reject
         expect(DataManager.getData().lineageOverrides).toBeUndefined();
     });
 
+    it('restoring the automatic line clears the last correction', () => {
+        let idx = buildLineages(DataManager.getData());
+        DataManager.applyLineagePatch(applyLineageChange(idx, { kind: 'founder', personId: P('mstivoj') })!, 'founder');
+        expect(DataManager.getData().lineageOverrides).toBeDefined();
+        idx = buildLineages(DataManager.getData());
+        const patch = applyLineageChange(idx, { kind: 'revert', rodId: rodIdOf(idx, 'mstivoj') })!;
+        expect(patch.lineageOverrides).toBeUndefined();
+        expect(DataManager.applyLineagePatch(patch, 'revert', { action: 'lineage.founder', text: 'revert' })).toBe(true);
+        expect(DataManager.getData().lineageOverrides).toBeUndefined();
+        expect(rodOfPerson(buildLineages(DataManager.getData()), 'mstivoj').manual).toBeFalsy();
+    });
+
     it('a removed form leaves its group and is remembered as rejected', () => {
         const idx = buildLineages(DataManager.getData());
         const patch = applyLineageChange(idx, { kind: 'removeForm', rodId: rodIdOf(idx, 'mstivoj'), form: 'Pstrosek' })!;
