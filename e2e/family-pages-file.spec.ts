@@ -14,12 +14,14 @@
  */
 
 import { test, expect, Page } from '@playwright/test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildPageSet, PageSet } from '../src/family-pages';
-import { buildPageSetHtml } from '../src/family-pages-html';
+import { buildPageSetFilesAsync, buildPageSetHtml } from '../src/family-pages-html';
+import { buildZip } from '../src/zip';
 import { buildLineages, rods } from '../src/lineage';
 import { familyPagesFixture, FP_NOW } from '../src/__tests__/helpers/family-pages-fixture';
 
@@ -35,6 +37,8 @@ const { data, ids, unions } = familyPagesFixture();
 const rodIds = rods(buildLineages(data)).filter(r => !r.small).map(r => r.id);
 const set = buildPageSet(data, { kind: 'rods', rods: rodIds }, { lang: 'cs', now: FP_NOW });
 const url = saveSet('Rody.html', set);
+/** The same lineages without the places' positions: no map, the places lead to the index of places. */
+const urlNoGeo = saveSet('Rody-bez-poloh.html', buildPageSet({ ...data, places: {} }, { kind: 'rods', rods: rodIds }, { lang: 'cs', now: FP_NOW }));
 const josef = set.personSlug.get(ids.josef)!;
 const rodFisek = set.rodSlug.get(rodIds[0])!;
 const f9 = set.familySlug.get(unions.f9)!;
@@ -233,7 +237,7 @@ test.describe('family pages file: the bar and the search (§3.1, §3.4)', () => 
         await expect(q).toBeVisible();
         await expect(page.locator('.sp-fbar-lupa')).toBeHidden();
         await expect(page.locator('.sp-fbar-nav a', { hasText: 'Rejstřík' })).toBeVisible();
-        await expect(page.locator('.sp-fbar-nav a', { hasText: 'Mapa obcí' })).toHaveCount(0);
+        await expect(page.locator('.sp-fbar-nav a', { hasText: 'Mapa obcí' })).toBeVisible();
         await q.fill('fis');
         await expect(page.locator('#sp-results')).toBeVisible();
         await expect.poll(() => shown(page)).toEqual([]);
@@ -287,12 +291,12 @@ test.describe('family pages file: the bar and the search (§3.1, §3.4)', () => 
         await expect(bar.locator('.sp-q')).toBeHidden();
         await expect(bar.locator('.sp-fbar-home')).toBeVisible();
         await expect.poll(() => shown(page)).toEqual(['uvod']);
-        // Menu: the panel under the bar, rows of 48 px, no map while it is not drawn.
+        // Menu: the panel under the bar, rows of 48 px, the map last.
         const menuBtn = bar.locator('.sp-fbar-menu');
         await menuBtn.click();
         await expect(menuBtn).toHaveAttribute('aria-expanded', 'true');
         const items = bar.locator('.sp-menu .sp-menu-a');
-        await expect(items).toHaveText(['Úvod', 'Osoby', 'Rodiny', 'Příjmení', 'Obce']);
+        await expect(items).toHaveText(['Úvod', 'Osoby', 'Rodiny', 'Příjmení', 'Obce', 'Mapa obcí']);
         expect((await items.first().boundingBox())!.height).toBeGreaterThanOrEqual(48);
         await expect(items.first()).toHaveAttribute('aria-current', 'page');
         await items.filter({ hasText: 'Obce' }).click();
@@ -355,8 +359,8 @@ test.describe('family pages file: the indexes (§3.5)', () => {
         await capkov.locator('.sp-ix-sum').click();
         await expect(capkov.locator('.sp-ix-sub a', { hasText: 'Josef Fíšek' }).first()).toBeVisible();
         await capkov.locator('.sp-ix-sum').click();
-        // From the lineage's header: the places index with the place's row unfolded.
-        await page.goto(`${url}#${rodFisek}`);
+        // From the lineage's header, without positions (no map): the places index with the place's row unfolded.
+        await page.goto(`${urlNoGeo}#${rodFisek}`);
         await page.locator(`#${rodFisek} a.sp-place`, { hasText: 'Kvasín' }).click();
         await expect.poll(() => shown(page)).toEqual(['rejstrik-obce']);
         const row = page.locator(`#${new URL(page.url()).hash.slice(1)}`);
@@ -376,5 +380,156 @@ test.describe('family pages file: the indexes (§3.5)', () => {
         // The tabs scroll within their row on a narrow screen.
         const tabs = page.locator('#rejstrik-osoby .sp-tabs');
         expect(await tabs.evaluate(e => e.getBoundingClientRect().right <= window.innerWidth + 1)).toBe(true);
+    });
+});
+
+test.describe('family pages file: the light boxes (§3.6)', () => {
+    const lb = (page: Page, slug: string) => page.locator(`[id="${slug}--obr-1"]`);
+
+    test('opening pushes --obr-, the browser\'s Back closes it and the page stays; ×, Escape and a click beside the image close it', async ({ page }) => {
+        await page.goto(`${url}#${f9}`);
+        await expect.poll(() => shown(page)).toEqual([f9]);
+        const clip = page.locator(`#${f9} a.sp-clip`);
+        await clip.scrollIntoViewIfNeeded();
+        const y = await page.evaluate(() => window.scrollY);
+        const before = await page.evaluate(() => history.length);
+        await clip.click();
+        expect(new URL(page.url()).hash).toBe(`#${f9}--obr-1`);
+        await expect(lb(page, f9)).toBeVisible();
+        await expect(lb(page, f9).locator('.sp-lb-hint')).toHaveText('Zavře se ×, klávesou Esc, klepnutím mimo obrázek nebo tlačítkem Zpět.');
+        expect(await page.evaluate(() => history.length)).toBe(before + 1);
+        // The browser's Back: closed, the same page where it was.
+        await page.goBack();
+        await expect(lb(page, f9)).toBeHidden();
+        expect(new URL(page.url()).hash).toBe(`#${f9}`);
+        await expect.poll(() => shown(page)).toEqual([f9]);
+        await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - y)).toBeLessThan(2);
+        // ×: back where it was opened.
+        await clip.click();
+        await expect(lb(page, f9)).toBeVisible();
+        await lb(page, f9).locator('.pp-lb-close').click();
+        await expect(lb(page, f9)).toBeHidden();
+        await expect.poll(() => new URL(page.url()).hash).toBe(`#${f9}`);
+        // Escape.
+        await clip.click();
+        await expect(lb(page, f9)).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(lb(page, f9)).toBeHidden();
+        await expect.poll(() => new URL(page.url()).hash).toBe(`#${f9}`);
+        // A click beside the image (the hint's row).
+        await clip.click();
+        await lb(page, f9).locator('.sp-lb-hint').click();
+        await expect(lb(page, f9)).toBeHidden();
+        await expect.poll(() => new URL(page.url()).hash).toBe(`#${f9}`);
+        expect(await page.evaluate(() => history.length)).toBe(before + 1);
+        await expect.poll(() => shown(page)).toEqual([f9]);
+    });
+
+    test('a link with --obr-N opens its page and the image; × replaces the address with the page', async ({ page }) => {
+        await page.goto(`${url}#${f9}--obr-1`);
+        await expect.poll(() => shown(page)).toEqual([f9]);
+        await expect(lb(page, f9)).toBeVisible();
+        const before = await page.evaluate(() => history.length);
+        await lb(page, f9).locator('.pp-lb-close').click();
+        await expect(lb(page, f9)).toBeHidden();
+        expect(new URL(page.url()).hash).toBe(`#${f9}`);
+        expect(await page.evaluate(() => history.length)).toBe(before);
+        await expect.poll(() => shown(page)).toEqual([f9]);
+        // A person page's image (the portrait, prefixed by the page's slug).
+        await page.goto(`${url}#${josef}`);
+        await page.locator(`#${josef} a.pp-portrait`).click();
+        expect(new URL(page.url()).hash).toBe(`#${josef}--obr-p`);
+        await expect(page.locator(`[id="${josef}--obr-p"]`)).toBeVisible();
+        await page.goBack();
+        await expect(page.locator(`[id="${josef}--obr-p"]`)).toBeHidden();
+        await expect.poll(() => shown(page)).toEqual([josef]);
+    });
+});
+
+test.describe('family pages file: the map of places (§3.7)', () => {
+    test('the bar leads to the map; its points; a point selects its row with the people; a lineage header\'s place selects it', async ({ page }) => {
+        await page.goto(url);
+        await page.locator('.sp-fbar-nav a[data-sp-nav="map"]').click();
+        await expect.poll(() => shown(page)).toEqual([set.mapSlug]);
+        await expect(page.locator('.sp-fbar-nav a[data-sp-nav="map"]')).toHaveAttribute('aria-current', 'page');
+        const map = page.locator(`#${set.mapSlug}`);
+        const points = map.locator('.pp-map-pt');
+        expect(await points.count()).toBeGreaterThanOrEqual(3);
+        await expect(points.first()).toBeVisible();
+        // No row of a protected living person.
+        await expect(map.locator('.sp-map-who', { hasText: /\bEva\b|Petr/ })).toHaveCount(0);
+        const row = map.locator('li.pp-map-row[data-pp-map-place="capkov"]');
+        await expect(row.locator('.sp-map-people')).toBeHidden();
+        await map.locator('.pp-map-pt[data-pp-map-place="capkov"]').click();
+        await expect(row).toHaveClass(/is-sel/);
+        await expect(row.locator('.sp-map-people')).toBeVisible();
+        await expect(row.locator('.sp-map-who a', { hasText: 'Josef Fíšek' }).first()).toBeVisible();
+        // A person of the row opens the person's page.
+        await row.locator(`.sp-map-who a[href="#${josef}"]`).click();
+        await expect.poll(() => shown(page)).toEqual([josef]);
+        // From the lineage's header: the map with the place selected.
+        await page.goto(`${url}#${rodFisek}`);
+        await page.locator(`#${rodFisek} a.sp-place`, { hasText: 'Kvasín' }).click();
+        await expect.poll(() => shown(page)).toEqual([set.mapSlug]);
+        await expect(map.locator('li.pp-map-row[data-pp-map-place="kvasin"]')).toHaveClass(/is-sel/);
+        await expect(map.locator('li.pp-map-row.is-sel')).toHaveCount(1);
+    });
+
+    test('a phone at 390 px: the map and its list without sideways scrolling', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${url}#${set.mapSlug}`);
+        await expect.poll(() => shown(page)).toEqual([set.mapSlug]);
+        await expect(page.locator(`#${set.mapSlug} .pp-map-pt`).first()).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+});
+
+test.describe('family pages file: the set of files (§6.4)', () => {
+    test('unpacked into a folder and opened over file://: the introduction, a person\'s page, an anchor, the search, the map, an image', async ({ page }) => {
+        const zipDir = mkdtempSync(join(tmpdir(), 'strom-family-pages-zip-'));
+        const zipFile = join(zipDir, 'Rody.zip');
+        writeFileSync(zipFile, buildZip(await buildPageSetFilesAsync(set), FP_NOW));
+        const out = join(zipDir, 'Rody');
+        execFileSync('unzip', ['-q', zipFile, '-d', out]);
+        expect(existsSync(join(out, 'index.html'))).toBe(true);
+        const errors: string[] = [];
+        page.on('pageerror', e => errors.push(e.message));
+        const home = pathToFileURL(join(out, 'index.html')).href;
+        await page.goto(home);
+        await expect(page.locator('section.sp-page')).toHaveCount(1);
+        await expect(page.locator('section.sp-page')).toBeVisible();
+        await expect(page).toHaveTitle('Rody Fíšek, Řepík a Kvapil');
+        // A lineage, then a person in it: their own files.
+        await page.locator(`a.sp-card[href="${rodFisek}.html"]`).click();
+        await expect(page).toHaveURL(new RegExp(`/${rodFisek}\\.html$`));
+        await expect(page.locator(`section#${rodFisek}`)).toBeVisible();
+        const link = page.locator(`.sp-row-main a.pp-link[href="${josef}.html"]`).first();
+        await link.scrollIntoViewIfNeeded();
+        await link.click();
+        await expect(page).toHaveURL(new RegExp(`/${josef}\\.html$`));
+        await expect(page.locator(`section#${josef}`)).toBeVisible();
+        await expect(page.locator(`#${josef} h1`)).toContainText('Josef');
+        // The portrait: an image file from obrazky/.
+        const photo = page.locator(`#${josef} a.pp-portrait .pp-photo`);
+        expect(await photo.evaluate(e => getComputedStyle(e).backgroundImage)).toMatch(/obrazky\/img-\d+\.jpg/);
+        expect(await photo.evaluate(e => e.getBoundingClientRect().width)).toBeGreaterThan(20);
+        // An anchor inside the page.
+        await page.goto(`${pathToFileURL(join(out, `${josef}.html`)).href}#${josef}--pp-sec-family`);
+        await expect(page.locator(`[id="${josef}--pp-sec-family"]`)).toBeInViewport();
+        // The search reads the index from hledani.js (no fetch over file://); a result opens the person's file.
+        await page.goto(home);
+        await page.locator('.sp-q').fill('fisek jose');
+        const res = page.locator('#sp-results');
+        await expect(res).toBeVisible();
+        await expect(res.locator('.sp-res-n').first()).toHaveText(/Josef Fíšek/);
+        await expect(res.locator('.sp-res-row a', { hasText: 'Josef Fíšek' }).first()).toHaveAttribute('href', /\.html$/);
+        await res.locator(`a[href="${josef}.html"]`).click();
+        await expect(page).toHaveURL(new RegExp(`/${josef}\\.html$`));
+        // A place of the lineage's header: the map's file with the place selected.
+        await page.goto(pathToFileURL(join(out, `${rodFisek}.html`)).href);
+        await page.locator(`#${rodFisek} a.sp-place`, { hasText: 'Kvasín' }).click();
+        await expect(page).toHaveURL(new RegExp(`/${set.mapSlug}\\.html#${set.mapSlug}--m-kvasin$`));
+        await expect(page.locator('li.pp-map-row[data-pp-map-place="kvasin"]')).toHaveClass(/is-sel/);
+        expect(errors).toEqual([]);
     });
 });

@@ -3,7 +3,8 @@
  * output switch (the book's rows give way to the pages' rows, the whole tree
  * off with its reason), the estimate and its recount, the warning about the
  * living under full data, the large file (> 15 MB: the offers with their own
- * estimates, the set of files later; > 50 MB: one file is not saved), the
+ * estimates and the set of files as a choice; > 50 MB: the set of files only,
+ * saved as a .zip that unpacks), the
  * memory of the choices per tree, the file built and saved (it opens on the
  * lineage's page), the pages' window's "Save as file", a phone's sheet,
  * the dark theme and German without overflow; the entries (026 §7: the
@@ -15,6 +16,7 @@
  */
 
 import { test, expect, Page, Locator } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -143,7 +145,7 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('.fp-warn')).toBeHidden();
     });
 
-    test('over 15 MB the offers with their own estimates and the set of files later; over 50 MB one file is not saved', async ({ page }) => {
+    test('over 15 MB the offers with their own estimates and the set of files as a choice; over 50 MB the set of files only', async ({ page }) => {
         await setup(page);
         await injectPhoto(page, 20_000_000);
         const dialog = await openDialog(page, 'pages');
@@ -154,8 +156,19 @@ test.describe('family pages: the dialog', () => {
         await expect(big.locator('[data-offer="small"]')).toHaveText(/^Reduce images \(about \d(\.\d)? MB\)$/);
         // No record excerpts in this tree: nothing to leave out.
         await expect(big.locator('[data-offer="noclips"]')).toBeHidden();
-        await expect(big.locator('[data-offer="zip"]')).toBeDisabled();
-        await expect(dialog.locator('.fp-zip-note')).toHaveText('The set of files is not available yet.');
+        const zip = big.locator('[data-offer="zip"]');
+        await expect(zip).toHaveText('Set of files (.zip)');
+        await expect(zip).toHaveAttribute('aria-pressed', 'false');
+        await expect(dialog.locator('.fp-est-t')).toHaveText('One .html file');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
+        // The set of files as a choice, and back.
+        await zip.click();
+        await expect(zip).toHaveAttribute('aria-pressed', 'true');
+        await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.zip');
+        await zip.click();
+        await expect(zip).toHaveAttribute('aria-pressed', 'false');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
         await expect(dialog.locator('#book-open')).toBeEnabled();
         // The offer takes its choice: the photos reduced, the warning gone.
         await big.locator('[data-offer="small"]').click();
@@ -168,10 +181,40 @@ test.describe('family pages: the dialog', () => {
         await dialog.locator('[data-photos="full"]').click();
         await expect(dialog.locator('.fp-big-t')).toHaveText(/^One file would have 6\d MB; it is saved as a set of files\.$/);
         await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
-        await expect(dialog.locator('.fp-zip-note')).toHaveText(/^The set of files is not available yet: reduced images/);
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.zip');
         await expect(big.locator('[data-offer="zip"]')).toHaveAttribute('aria-pressed', 'true');
-        await expect(dialog.locator('#book-open')).toBeDisabled();
+        // The only way over 50 MB: a click does not turn it off.
+        await big.locator('[data-offer="zip"]').click();
+        await expect(big.locator('[data-offer="zip"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(dialog.locator('#book-open')).toBeEnabled();
         await expect(dialog.locator('.fp-open')).toBeEnabled();
+    });
+
+    test('the set of files: Save downloads Brandvold-family-line.zip; it unpacks and its index.html opens the lineage\'s page', async ({ page, context }) => {
+        await setup(page);
+        await injectPhoto(page, 20_000_000);
+        const dialog = await openDialog(page, 'pages');
+        await dialog.locator('.fp-big [data-offer="zip"]').click();
+        await dialog.locator('#book-open').click();
+        const res = dialog.locator('.fp-res');
+        await expect(res).toBeVisible();
+        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold-family-line\.zip · \d+\.\d MB$/);
+        const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
+        expect(download.suggestedFilename()).toBe('Brandvold-family-line.zip');
+        const dir = mkdtempSync(join(tmpdir(), 'strom-pages-zip-'));
+        const saved = join(dir, download.suggestedFilename());
+        await download.saveAs(saved);
+        expect(execFileSync('unzip', ['-t', saved]).toString()).toMatch(/No errors detected/);
+        const list = execFileSync('unzip', ['-Z1', saved]).toString().trim().split('\n');
+        expect(list[0]).toBe('index.html');
+        expect(list).toEqual(expect.arrayContaining(['styl.css', 'skript.js', 'hledani.js', expect.stringMatching(/^obrazky\/img-\d+\.jpg$/)]));
+        execFileSync('unzip', ['-q', saved, '-d', join(dir, 'out')]);
+        const file = await context.newPage();
+        await file.goto(pathToFileURL(join(dir, 'out', 'index.html')).href);
+        await expect(file.locator('section.sp-page')).toHaveCount(1);
+        await expect(file.locator('section.sp-page')).toHaveClass(/sp-page--rod/);
+        await expect(file.locator('section.sp-page')).toBeVisible();
+        await file.close();
     });
 
     test('memory per tree: the output and the pages\' choices come back after closing and after a reload', async ({ page }) => {
