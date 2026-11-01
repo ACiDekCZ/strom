@@ -36,11 +36,13 @@ const CLOSE_SVG = '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="
 export function bookToolbarHtml(lang: BookLang, title: string, pages: number, forSave: boolean): string {
     const B = getStringsForLang(lang).book;
     const W = B.win;
-    const act = (key: 'options' | 'save', label: string): string =>
-        `<button type="button" class="book-bar-btn book-bar-wide book-bar-${key}" data-book-act="${key}">${esc(label)}</button>`;
+    const F = getStringsForLang(lang).familyPages;
+    const act = (key: 'options' | 'save' | 'pages', label: string): string =>
+        `<button type="button" class="book-bar-btn book-bar-wide book-bar-${key === 'pages' ? 'site' : key}" data-book-act="${key}">${esc(label)}</button>`;
     const actions = [
         `<button type="button" class="book-bar-btn book-bar-toc" data-book-ui="toc" aria-expanded="false" aria-controls="book-side">${esc(W.toc)}</button>`,
         forSave ? '' : act('options', W.options),
+        forSave ? '' : act('pages', F.bookWinPages),
         forSave ? '' : act('save', W.save),
         `<button type="button" class="book-bar-btn book-bar-wide book-bar-primary" data-book-ui="print">${esc(B.toolbarPrint)}</button>`,
         forSave ? '' : `<button type="button" class="book-bar-icon book-bar-more" data-book-ui="more" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(W.more)}" title="${esc(W.more)}">⋯</button>`,
@@ -50,7 +52,8 @@ export function bookToolbarHtml(lang: BookLang, title: string, pages: number, fo
         + `<button type="button" role="menuitem" data-book-act="save">${esc(W.save)}</button>`
         + `<button type="button" role="menuitem" data-book-act="share" hidden>${esc(W.share)}</button>`
         + `<button type="button" role="menuitem" data-book-ui="print">${esc(B.toolbarPrint)}</button>`
-        + `<button type="button" role="menuitem" data-book-act="options">${esc(W.options)}</button></div>`;
+        + `<button type="button" role="menuitem" data-book-act="options">${esc(W.options)}</button>`
+        + `<button type="button" role="menuitem" data-book-act="pages">${esc(F.bookWinPages)}</button></div>`;
     return `<header class="book-toolbar${forSave ? ' book-toolbar--saved' : ''}">`
         + `<div class="book-bar-title"><span class="book-bar-name">${esc(title)}</span><span class="book-bar-pages"> · ${esc(W.pages(pages))}</span></div>`
         + `<div class="book-bar-actions">${actions}</div>${menu}</header>`;

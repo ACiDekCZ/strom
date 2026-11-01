@@ -293,6 +293,7 @@
             --chart-married: #a8c0ad;
             --card-bg-2: #f6f1e6;       /* tinted second surface (couple story chapters) */
             --rod-bar: #9fb8a6;         /* a family line's period bar (tree overview) */
+            --sp-frame: #d0c6b2;        /* the family pages' frames (lineage cards, boxes) */
             --chart-band1: #efe8da;
             --chart-band2: #ddd2bc;
             --read-illegible-bg: #e3ddd0;
@@ -461,6 +462,7 @@
             --chart-married: #4f6d58;
             --card-bg-2: #26241f;
             --rod-bar: #6f8f78;
+            --sp-frame: #575143;
             --chart-band1: #34312a;
             --chart-band2: #433e33;
             --read-illegible-bg: #3e3a30;
@@ -17722,6 +17724,9 @@
             background: transparent; border: 0; text-align: left; font: inherit; font-size: 14.5px; color: var(--text); cursor: pointer;
         }
         .pp-menu-item--narrow { display: none !important; }
+        /* A page of the family pages (spec 026 §0.8): Save as file, Print and the Family book in the header, ⋯ only on a phone. */
+        .pp-is-set .modal--page .pp-head .pp-more { display: none; }
+        .modal--page .pp-head .pp-book { font-weight: 500; }
         @media (pointer: coarse) {
             .modal .pp-menu-item { min-height: 44px; }
             .modal--page .pp-head button { min-height: 44px; }
@@ -17741,7 +17746,8 @@
                 position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; border-radius: 0;
             }
             .pp-head { min-height: 52px; padding: 0 2px 0 4px; gap: 0; }
-            .pp-titles, .modal--page .pp-head .pp-print, .modal--page .pp-head .pp-save { display: none; }
+            .pp-titles, .modal--page .pp-head .pp-print, .modal--page .pp-head .pp-save, .modal--page .pp-head .pp-book { display: none; }
+            .pp-is-set .modal--page .pp-head .pp-more { display: inline-flex; }
             .pp-mtitle {
                 display: block; flex: 1 1 auto; min-width: 0; padding: 0 6px;
                 font-family: var(--font-serif); font-size: 16.5px; font-weight: 600; color: var(--text);

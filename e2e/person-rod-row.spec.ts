@@ -140,7 +140,7 @@ test.describe('person family line row', () => {
         await expect(page.locator('#person-modal')).toHaveClass(/active/);
     });
 
-    test('the person page: the last fact, a name opens the overview at that lineage', async ({ page }) => {
+    test('the person page: the last fact, a name opens that lineage\'s page in the window, Back returns', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
         const win = page.locator('#person-page-modal');
@@ -149,8 +149,12 @@ test.describe('person family line row', () => {
         await expect(dd).toHaveText('wife in Brandvold line · born into Ostrander');
         await expect(dd.locator('[data-pp-rod]')).toHaveText(['Brandvold', 'Ostrander']);
         await dd.locator('[data-pp-rod]', { hasText: 'Brandvold' }).click();
-        await expect(rods(page).locator('.tov-rod.is-open .tov-rod-label')).toHaveText('Brandvold');
-        await expect(page.locator('#person-page-modal')).toHaveCount(0);
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toContainText('Brandvold');
+        await expect(win.locator('.pp-body .sp-app')).toBeVisible();
+        await win.locator('.pp-back').click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await expect(win.locator('.pp-facts dd.pp-fact-rod')).toBeVisible();
     });
 
     test('phone: the card row wraps under its label, nothing overflows', async ({ page }) => {

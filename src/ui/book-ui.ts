@@ -30,7 +30,7 @@ import {
     applyBookPreset, autoBookTitle, bookPartAvailability, bookPeriod, bookPresetOf, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
-    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry,
+    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput,
     bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, saveBookMemory,
 } from '../book-memory.js';
 import { LineageIndex, RodId, buildLineages, rodLabels } from '../lineage.js';
@@ -352,7 +352,7 @@ export const bookUiMethods = uiModule({
      * ("Change options"): that book's options, and "Open book" rewrites that
      * window.
      */
-    openBookDialog(entry: BookEntry, reuse?: { options: BookOptions; win: Window }): void {
+    openBookDialog(entry: BookEntry, reuse?: { options: BookOptions; win: Window }, over?: { output?: BookOutput; selection?: BookSelectionSpec }): void {
         this.closeMobileMenu?.();
         // Take over the dialog stack from the export menu (same pattern as poster).
         document.getElementById('export-modal')?.classList.remove('active');
@@ -365,7 +365,7 @@ export const bookUiMethods = uiModule({
         const memory = loadBookMemory(storage(), treeId);
         const opts = reuse
             ? { ...reuse.options, parts: { ...reuse.options.parts } }
-            : bookOptionsFromMemory(appLang, memory, bookEntrySelection(entry, index, memory?.lastRods));
+            : bookOptionsFromMemory(appLang, memory, over?.selection ?? bookEntrySelection(entry, index, memory?.lastRods));
         const sel = opts.selection;
         const choosable = new Set(bookRodChoices(index));
         const real = (id: PersonId | null | undefined): PersonId | null => {
@@ -569,6 +569,20 @@ export const bookUiMethods = uiModule({
         });
     },
 
+    /** The book's window straight away for a selection (from the pages' window): the remembered options. */
+    openFamilyBookFor(spec: BookSelectionSpec): void {
+        const data = DataManager.getData();
+        if (Object.keys(data.persons).length === 0) { this.showAlert(strings.book.empty, 'warning'); return; }
+        const options = bookOptionsFromMemory(appBookLang(), loadBookMemory(storage(), TreeManager.getActiveTreeId()), spec);
+        const win = window.open('', '_blank');
+        if (!win) { this.showAlert(strings.export.failed, 'warning'); return; }
+        win.document.open();
+        win.document.write(this.familyBookHtml(options, false));
+        win.document.close();
+        this.wireBookWindow(win, options);
+        try { win.focus(); } catch { /* the browser decides */ }
+    },
+
     /** "Open book": the window opens (or the one being changed is rewritten). */
     generateFamilyBook(): void {
         const s = st;
@@ -610,6 +624,11 @@ export const bookUiMethods = uiModule({
             if (act === 'options') {
                 try { window.focus(); } catch { /* the browser decides */ }
                 this.openBookDialog({ kind: 'menu' }, { options, win });
+                return;
+            }
+            if (act === 'pages') {
+                try { window.focus(); } catch { /* the browser decides */ }
+                this.openFamilyPages(options.selection);
                 return;
             }
             try {

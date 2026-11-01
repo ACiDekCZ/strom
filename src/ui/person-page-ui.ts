@@ -31,6 +31,7 @@ import { lifeChartHtml } from '../person-page-chart.js';
 import { FanZoom, fanZoomModifier } from '../fan-zoom.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
+import type { SetRef } from './family-pages-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { HISTORY_CHANGED_EVENT } from './history-ui.js';
@@ -50,16 +51,20 @@ const LIVING_DROPS: ReadonlySet<keyof PersonPageGroups> = new Set(['excerpts', '
 const SHRINK_EDGE_PX = 1600;
 const SHRINK_QUALITY = 0.82;
 
-/** One image reduced to SHRINK_EDGE_PX on its longer side (JPEG), or null when it is small enough or cannot be read. */
-function shrinkImage(dataUrl: string): Promise<string | null> {
+/**
+ * One image reduced to `edgePx` on its longer side (JPEG at `quality`), or
+ * null when it is small enough or cannot be read. Shared with the family
+ * pages' file (1600 px photos, 1200 px record excerpts).
+ */
+export function shrinkImage(dataUrl: string, edgePx = SHRINK_EDGE_PX, quality = SHRINK_QUALITY): Promise<string | null> {
     return new Promise(resolve => {
         const img = new Image();
         img.onload = () => {
             const w = img.naturalWidth;
             const h = img.naturalHeight;
             const edge = Math.max(w, h);
-            if (!w || !h || edge <= SHRINK_EDGE_PX) { resolve(null); return; }
-            const k = SHRINK_EDGE_PX / edge;
+            if (!w || !h || edge <= edgePx) { resolve(null); return; }
+            const k = edgePx / edge;
             const canvas = document.createElement('canvas');
             canvas.width = Math.round(w * k);
             canvas.height = Math.round(h * k);
@@ -70,7 +75,7 @@ function shrinkImage(dataUrl: string): Promise<string | null> {
             g.fillRect(0, 0, canvas.width, canvas.height);
             g.drawImage(img, 0, 0, canvas.width, canvas.height);
             try {
-                const out = canvas.toDataURL('image/jpeg', SHRINK_QUALITY);
+                const out = canvas.toDataURL('image/jpeg', quality);
                 resolve(out.length < dataUrl.length ? out : null);
             } catch {
                 resolve(null);
@@ -112,6 +117,8 @@ interface PageEntry {
     toggles: { history: boolean; childEvents: boolean; kidPlaces: boolean };
     /** The place selected in the places map (placeKey). */
     place: string | null;
+    /** A page of the family pages instead of a person (spec 026 §0.8): personId is then ''. */
+    set?: SetRef;
 }
 
 interface PageState {
@@ -154,7 +161,16 @@ function freshEntry(personId: PersonId): PageEntry {
 }
 
 function cloneEntry(e: PageEntry): PageEntry {
-    return { personId: e.personId, scrollTop: e.scrollTop, open: new Set(e.open), toggles: { ...e.toggles }, place: e.place };
+    return { personId: e.personId, scrollTop: e.scrollTop, open: new Set(e.open), toggles: { ...e.toggles }, place: e.place, ...(e.set ? { set: e.set } : {}) };
+}
+
+function setEntry(ref: SetRef): PageEntry {
+    return { ...freshEntry('' as PersonId), set: ref };
+}
+
+/** "‹ Name": the person's name or the set page's title. */
+function entryLabel(e: PageEntry): string {
+    return e.set ? e.set.title : nameOf(e.personId);
 }
 
 function reducedMotion(): boolean {
@@ -236,6 +252,7 @@ export const personPageMethods = uiModule({
                     <button type="button" class="pp-hbtn pp-print">${esc(P.print)}</button>
                     <button type="button" class="pp-hbtn pp-save">${esc(P.save)}</button>
                     <button type="button" class="pp-hbtn pp-share" hidden></button>
+                    <button type="button" class="pp-hbtn pp-book" hidden>${esc(strings.familyPages.winBook)}</button>
                     <button type="button" class="pp-hbtn pp-more" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(P.moreActions)}">⋯</button>
                     <button type="button" class="pp-close" aria-label="${esc(P.close)}">&times;</button>
                 </header>
@@ -316,8 +333,37 @@ export const personPageMethods = uiModule({
         const overlay = overlayEl();
         if (!overlay || !state) return;
         const entry = state.current;
-        if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }
         const P = strings.personPage;
+        const prevEntry = state.back[state.back.length - 1];
+        const backBtn = overlay.querySelector('.pp-back') as HTMLButtonElement;
+        backBtn.hidden = !prevEntry;
+        if (prevEntry) {
+            const prevName = entryLabel(prevEntry);
+            (backBtn.querySelector('.pp-back-name') as HTMLElement).textContent = prevName;
+            backBtn.setAttribute('aria-label', P.back(prevName));
+            backBtn.title = P.back(prevName);
+        }
+        (overlay.querySelector('.pp-book') as HTMLElement).hidden = !entry.set;
+        // A set's page keeps its actions in the header; ⋯ only on a phone (index.html: .pp-is-set).
+        overlay.classList.toggle('pp-is-set', !!entry.set);
+        (overlay.querySelector('.pp-save') as HTMLElement).textContent = entry.set ? strings.familyPages.winSave : P.save;
+        if (entry.set) {
+            // A page of the family pages: the person page's own watchers stop, the set draws the body.
+            tocCleanup?.();
+            tocCleanup = null;
+            chartObserver?.disconnect();
+            chartObserver = null;
+            fanZoom?.destroy();
+            fanZoom = null;
+            pagePlaces = [];
+            syncShareButton();
+            this.closePersonPageMenu(false);
+            this.renderFamilyPagesEntry(overlay, entry.set);
+            (overlay.querySelector('.pp-body') as HTMLElement).scrollTop = entry.scrollTop;
+            return;
+        }
+        if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }
+        (overlay.querySelector('#pp-title') as HTMLElement).textContent = P.title;
         const lang = getCurrentLanguage();
         const opts = this.personPageOptions(entry.personId, {
             mode: 'app', links: 'app', toggles: entry.toggles, open: entry.open, selectedPlace: entry.place,
@@ -341,15 +387,6 @@ export const personPageMethods = uiModule({
         (overlay.querySelector('.pp-mname') as HTMLElement).textContent = name;
         const years = sub.slice(name.length);
         (overlay.querySelector('.pp-myears') as HTMLElement).textContent = years;
-        const back = overlay.querySelector('.pp-back') as HTMLButtonElement;
-        const prev = state.back[state.back.length - 1];
-        back.hidden = !prev;
-        if (prev) {
-            const prevName = nameOf(prev.personId);
-            (back.querySelector('.pp-back-name') as HTMLElement).textContent = prevName;
-            back.setAttribute('aria-label', P.back(prevName));
-            back.title = P.back(prevName);
-        }
         syncShareButton();
         this.closePersonPageMenu(false);
 
@@ -516,6 +553,24 @@ export const personPageMethods = uiModule({
         bodyEl()?.focus({ preventScroll: true });
     },
 
+    /**
+     * A page of the family pages (spec 026 §0.8): on top of the open window's
+     * stack (persons, lineages and families mix in one stack), else a new window.
+     */
+    openPersonPageSet(ref: SetRef): void {
+        if (!state || !overlayEl()) {
+            this.openPersonPageState({ origin: '' as PersonId, current: setEntry(ref), back: [] });
+            return;
+        }
+        const cur = state.current.set;
+        if (cur && cur.slug === ref.slug && JSON.stringify(cur.spec) === JSON.stringify(ref.spec)) return;
+        this.snapshotPersonPage();
+        state.back.push(state.current);
+        state.current = setEntry(ref);
+        this.renderPersonPage();
+        bodyEl()?.focus({ preventScroll: true });
+    },
+
     /** "‹ Name" / Alt+←: the previous page with its scroll, folds and switches. */
     personPageBack(): void {
         if (!state || state.back.length === 0) return;
@@ -569,6 +624,9 @@ export const personPageMethods = uiModule({
         if (target.closest('.pp-close')) { this.closePersonPage(); return; }
         if (target.closest('.pp-back')) { this.personPageBack(); return; }
         if (target.closest('.pp-print')) { this.printPersonPage(); return; }
+        const setRef = state.current.set;
+        if (setRef && (target.closest('.pp-save') || target.closest('.pp-share'))) { this.familyPagesWindowSave(setRef); return; }
+        if (setRef && target.closest('.pp-book')) { this.familyPagesWindowBook(setRef); return; }
         if (target.closest('.pp-save')) { this.showPersonPageExport(false); return; }
         if (target.closest('.pp-share')) { this.showPersonPageExport(canShareFiles()); return; }
         if (target.closest('.pp-more')) { this.togglePersonPageMenu(); return; }
@@ -592,19 +650,19 @@ export const personPageMethods = uiModule({
         // The life chart (§2.1): a period, mark or line leads to its timeline row.
         const osa = target.closest<HTMLElement>('.pp-chart [data-pp-osa]');
         if (osa) { e.preventDefault(); this.scrollPersonPageOsa(osa.dataset.ppOsa ?? ''); return; }
+        // A link of a family pages' page (or of a person page to the set): the target's page in this window.
+        const spOpen = target.closest<HTMLElement>('[data-sp-open]');
+        if (spOpen) { e.preventDefault(); this.openFamilyPagesTarget(setRef ?? null, spOpen.dataset.spOpen ?? ''); return; }
         const storyJump = target.closest<HTMLElement>('[data-pp-story]');
         if (storyJump) { e.preventDefault(); this.openPersonPageStory(storyJump.dataset.ppStory ?? ''); return; }
         const personBtn = target.closest<HTMLElement>('[data-pp-person]');
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
         if (placeBtn) { this.showPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
-        // A family line (spec 1031 §3.3): the tree overview at that lineage, the window closed.
+        // A family line (spec 026 §3.3): the lineage's page in this window (Back returns to the person).
         const rodBtn = target.closest<HTMLElement>('[data-pp-rod]');
         if (rodBtn) {
-            const treeId = DataManager.getCurrentTreeId();
-            if (!treeId) return;
-            this.closePersonPage({ focus: false });
-            void this.showTreeOverviewRod(treeId, rodBtn.dataset.ppRod as RodId);
+            this.openRodPage(rodBtn.dataset.ppRod as RodId);
             return;
         }
         const fold = target.closest<HTMLElement>('[data-pp-toggle]');
@@ -797,6 +855,17 @@ export const personPageMethods = uiModule({
         if (!state) return;
         const P = strings.personPage;
         const personId = state.current.personId;
+        if (state.current.set) {
+            // A page of the family pages: Save as file, Print and the Family book (on a phone all of them here).
+            const F = strings.familyPages;
+            const it = (key: string, label: string): string =>
+                `<button type="button" class="pp-menu-item pp-menu-item--narrow" role="menuitem" data-pp-menu="${key}">${esc(label)}</button>`;
+            menu.innerHTML = it('set-save', F.winSave) + it('print', P.print) + it('set-book', F.winBook);
+            menu.hidden = false;
+            overlayEl()?.querySelector('.pp-more')?.setAttribute('aria-expanded', 'true');
+            [...menu.querySelectorAll<HTMLElement>('.pp-menu-item')].find(el => el.getClientRects().length > 0)?.focus();
+            return;
+        }
         const canEdit = !DataManager.isReadOnly() && !DataManager.isPersonLocked(personId);
         const item = (key: string, label: string, narrow = false): string =>
             `<button type="button" class="pp-menu-item${narrow ? ' pp-menu-item--narrow' : ''}" role="menuitem" data-pp-menu="${key}">${esc(label)}</button>`;
@@ -823,6 +892,13 @@ export const personPageMethods = uiModule({
         this.closePersonPageMenu(false);
         if (!state) return;
         const personId = state.current.personId;
+        const setRef = state.current.set;
+        if (setRef) {
+            if (key === 'set-save') this.familyPagesWindowSave(setRef);
+            else if (key === 'set-book') this.familyPagesWindowBook(setRef);
+            else if (key === 'print') this.printPersonPage();
+            return;
+        }
         if (key === 'save') this.showPersonPageExport(false);
         else if (key === 'print') this.printPersonPage();
         else if (key === 'edit') {

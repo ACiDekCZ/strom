@@ -32,10 +32,18 @@ const DARK_TOKENS = [
     '--rod-bar: #6f8f78', '--sp-frame: #575143',
 ].join('; ') + ';';
 
-export const FAMILY_PAGES_CSS = `
+/** The file's tokens: the lineage bars and the frame, the system's dark scheme. */
+const ROOT_CSS = `
 :root { ${LIGHT_EXTRA} }
 @media screen and (prefers-color-scheme: dark) { :root { ${DARK_TOKENS} color-scheme: dark; } }
-.pp-file.sp-file { max-width: 960px; padding: 28px 40px 40px; }
+`;
+
+/** Paper's tokens in print (the file only: the app keeps its own). */
+const PRINT_ROOT_CSS = `  :root { ${PERSON_PAGE_LIGHT_TOKENS} ${PERSON_PAGE_VIZ_LIGHT_TOKENS} ${LIGHT_EXTRA} color-scheme: light; }
+`;
+
+/** The pages' rules without the file's tokens (the app's window takes them, on the app's tokens). */
+export const FAMILY_PAGES_BODY_CSS = `.pp-file.sp-file { max-width: 960px; padding: 28px 40px 40px; }
 .sp-page { display: block; }
 .sp-on .sp-page { display: none; }
 .sp-on .sp-page.sp-cur, .sp-on .sp-page:target { display: block; }
@@ -164,8 +172,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 }
 /* §8.3: the shown page only (all of them without the script), no breadcrumbs or folds, links as text, paper. */
 @media print {
-  :root { ${PERSON_PAGE_LIGHT_TOKENS} ${PERSON_PAGE_VIZ_LIGHT_TOKENS} ${LIGHT_EXTRA} color-scheme: light; }
-  body { background: #fff; }
+${PRINT_ROOT_CSS}  body { background: #fff; }
   .pp-file.sp-file { max-width: none; padding: 0; }
   .sp-crumbs, .sp-bar, .sp-toc-file { display: none !important; }
   .sp-body a, .sp-body .pp-link, .sp-crumbs a { color: inherit !important; text-decoration: none !important; }
@@ -175,6 +182,30 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
   .sp-card, .sp-row, .sp-union { break-inside: avoid; }
 }
+`;
+
+export const FAMILY_PAGES_CSS = ROOT_CSS + FAMILY_PAGES_BODY_CSS;
+
+/**
+ * The window's rules (§0.8): the pages' rules on the app's tokens (light and
+ * dark from the app's theme), print without the file's paper tokens, and the
+ * links as buttons (the window's `data-sp-open`) looking like the file's links.
+ */
+export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS, '') + `
+.sp-app { max-width: 960px; margin: 0 auto; padding: 24px 32px 40px; }
+.sp-app button.pp-link, .sp-app button.sp-crumb, .sp-app button.sp-crumb-back, .sp-app button.sp-toc-a {
+  font: inherit; color: var(--primary); background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;
+}
+.sp-app .sp-crumbs button { display: inline-flex; align-items: center; min-height: 32px; }
+.sp-app button.sp-card { width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.sp-app button.sp-btn { font: inherit; cursor: pointer; }
+.sp-app button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (hover: hover) { .sp-app button.pp-link:hover, .sp-app .sp-crumbs button:hover { text-decoration-thickness: 2px; } }
+@media (min-width: 641px) and (max-width: 1024px) { .sp-app { padding: 20px 24px 32px; } }
+@media (max-width: 640px) { .sp-app { padding: 16px 16px 28px; } }
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-app { padding: 12px 24px 24px; } }
+@media (pointer: coarse) { .sp-app .sp-crumbs button { min-height: 44px; } }
 `;
 
 /**

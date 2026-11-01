@@ -392,7 +392,7 @@ test.describe('family book: phone', () => {
         const more = book.locator('.book-more');
         await expect(more).toBeVisible();
         // Share only where files can be shared (not in this browser).
-        await expect(more.getByRole('menuitem')).toHaveText(['Save as HTML', 'Print', 'Change options']);
+        await expect(more.getByRole('menuitem')).toHaveText(['Save as HTML', 'Print', 'Change options', 'Family pages']);
         await book.keyboard.press('Escape');
         await expect(more).toBeHidden();
         await bar.getByRole('button', { name: 'Contents' }).click();
