@@ -13,15 +13,15 @@
  */
 
 import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
-import { getStringsForLang } from './strings.js';
+import { getStringsForLang, Language } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { Rod, RodId, marriedInto, rodGenerations, sortByBirth } from './lineage.js';
+import { Rod, RodId, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty, shownNameParts, shownSurnameIsBirth } from './person-name.js';
 import { buildBookModel, BookModel } from './book-model.js';
 import { BOOK_PART_KEYS, BookParts } from './book-options.js';
 import {
-    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, birthRodNamed, diedYoung, founderNote, branchPageLine, indexHtml,
+    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, birthRodNamed, diedYoung, founderNote, branchPageLine,
     occupationOf, pageLineGenerationsHtml, pageLineHeadHtml, pageLinePeriod, pairFirstNames, rodLabelOf, rodLineageHtml, rodOverviewHtml,
     rodPageLine, roman,
 } from './book-blocks.js';
@@ -29,8 +29,12 @@ import {
     PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, coupleChapterData, coupleChapterHtml,
     personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, safeImage, shownExcerpt,
 } from './person-page.js';
-import { PageSet, SetPage, familyFirstNames, familyTitle, isProtectedPerson, pageSetFileName, pageSetLivingNames } from './family-pages.js';
+import {
+    PageSet, PageSetIndexKind, SetPage, SetPlaceRow, familyFirstNames, familyTitle, isProtectedPerson, pageSetFileName, pageSetLivingNames,
+    pageSetPlaces, pageSetSearchPeople, surnameFirst,
+} from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
+import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -54,6 +58,8 @@ interface Render {
     foot: string;
     /** Members' generations per lineage, as asked for. */
     gens: Map<RodId, Map<PersonId, number>>;
+    /** The index of places' rows, once asked for (the index and the lineages' headers). */
+    places?: SetPlaceRow[];
 }
 
 function esc(text: string): string {
@@ -108,7 +114,16 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
     };
     const lines = [`<p>${esc(S.personPage.created(formatFlexDate(localDay(set.options.now), lang)))}</p>`];
     if (pageSetLivingNames(set).length) lines.push(`<p>${esc(S.familyPages.privacyNote[set.options.privacy])}</p>`);
-    return { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>`, gens: new Map() };
+    const r: Render = { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>`, gens: new Map() };
+    // A place of a lineage's header leads to its row of the index of places (§3.5; the map of places in step 6).
+    base.placeLink = (key: string): string | null => {
+        const slug = drawnSlug(r, set.indexSlug.places);
+        if (!slug) return null;
+        if (mode === 'app') return pageSetAppTarget(set.bySlug.get(slug)!);
+        const i = placeRows(r).findIndex(p => p.key === key);
+        return `#${i < 0 ? slug : placeAnchor(slug, i)}`;
+    };
+    return r;
 }
 
 /** §3.2: where the page stands; a phone shows only "‹ the page above". */
@@ -129,13 +144,23 @@ function rodOf(r: Render, id: string | undefined): Rod | undefined {
     return id ? r.model.index.rods.get(id as Rod['id']) : undefined;
 }
 
-/** "Index of this line" (§1.7): in P1 the people's index only (step E adds the others). */
+/** The pages a link of the bar, the menu or the teaser may lead to: an index or the map, when the file draws it. */
+function drawnSlug(r: Render, slug: string): string {
+    const page = slug ? r.set.bySlug.get(slug) : undefined;
+    return page && rendered(page) ? slug : '';
+}
+
+/** "Index of this line" (§1.7): People · Families · Surnames · Places · Map of places. */
 function teaserHtml(r: Render, branch: boolean): string {
     const F = r.S.familyPages;
-    const slug = r.set.indexSlug.persons;
-    if (!slug) return '';
+    const links = (['persons', 'families', 'surnames', 'places'] as const)
+        .map(k => [drawnSlug(r, r.set.indexSlug[k]), F.idxTabs[k]] as const)
+        .concat([[drawnSlug(r, r.set.mapSlug), F.map] as const])
+        .filter(([slug]) => !!slug)
+        .map(([slug, label]) => pageLink(r, slug, esc(label), 'sp-btn'));
+    if (!links.length) return '';
     return `<section class="sp-teaser"><h2 class="sp-teaser-h">${esc(branch ? F.idxTeaserBranch : F.idxTeaser)}</h2>`
-        + `<div class="sp-btns">${pageLink(r, slug, esc(F.idxTabs.persons), 'sp-btn')}</div></section>`;
+        + `<div class="sp-btns">${links.join('')}</div></section>`;
 }
 
 function rodPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
@@ -505,15 +530,272 @@ function familyPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
         + `${familyStoryHtml(r, u, ps, page.slug)}${familySourcesHtml(r, u)}</div>`;
 }
 
-/** The index of people (§1.7): the book's index, the names leading to the pages. */
-function indexPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
-    const F = r.S.familyPages;
-    return `<header class="sp-head"><div class="sp-kicker">${esc(F.index)}</div><h1 class="sp-h1">${esc(page.title)}</h1></header>${indexHtml(ctx)}`;
+// ─── The bar and the search (§3.1, §3.4) ───────────────────────────────────
+
+/** Which item of the bar a page lights up. */
+function barCurrent(page: SetPage | null): 'index' | 'map' | '' {
+    return page?.kind === 'index' ? 'index' : page?.kind === 'map' ? 'map' : '';
 }
 
-/** The pages this step draws: the people's index only among the indexes, no map yet (step E). */
+/**
+ * The file's bar (§3.1): the file's name (the introduction), the search
+ * field, Index and Map of places (the map only when the file draws it); on a
+ * phone the name, the magnifier that turns the bar into the field with
+ * Cancel, and Menu with its panel under the bar. One bar for the file (the
+ * script marks the current item), one per page in the window (`page`).
+ */
+function barHtml(r: Render, page: SetPage | null): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const intro = set.bySlug.get(set.introSlug);
+    const cur = barCurrent(page);
+    const mark = (html: string, on: boolean): string => on ? html.replace(/^<(a|button) /, '<$1 aria-current="page" ') : html;
+    const navLink = (slug: string, label: string, kind: 'index' | 'map'): string =>
+        slug ? mark(pageLink(r, slug, esc(label), 'sp-fbar-a').replace(/^<(a|button) /, `<$1 data-sp-nav="${kind}" `), cur === kind) : '';
+    const idx = drawnSlug(r, set.indexSlug.persons);
+    const map = drawnSlug(r, set.mapSlug);
+    const home = intro ? pageLink(r, intro.slug, esc(intro.title), 'sp-fbar-home') : '';
+    const menuItems: [string, string][] = [
+        [set.introSlug, F.start],
+        ...(['persons', 'families', 'surnames', 'places'] as const).map(k => [drawnSlug(r, set.indexSlug[k]), F.idxTabs[k]] as [string, string]),
+        [map, F.map],
+    ];
+    const menu = menuItems.filter(([slug]) => !!slug)
+        .map(([slug, label]) => mark(pageLink(r, slug, esc(label), 'sp-menu-a'), page?.slug === slug)).join('');
+    return `<div class="sp-fbar"><div class="sp-fbar-in">${home}<span class="sp-fbar-gap"></span>`
+        + `<label class="sp-search"><span class="sp-ico" aria-hidden="true"></span>`
+        + `<input class="sp-q" type="search" placeholder="${esc(F.searchPh)}" aria-label="${esc(F.searchLabel)}" autocomplete="off" spellcheck="false" enterkeyhint="search"></label>`
+        + `<button type="button" class="sp-fbar-cancel">${esc(F.searchCancel)}</button>`
+        + `<nav class="sp-fbar-nav" aria-label="${esc(F.navLabel)}">${navLink(idx, F.index, 'index')}${navLink(map, F.map, 'map')}</nav>`
+        + `<button type="button" class="sp-fbar-lupa" aria-label="${esc(F.searchOpen)}"><span class="sp-ico" aria-hidden="true"></span></button>`
+        + `<button type="button" class="sp-fbar-menu" aria-expanded="false" aria-controls="sp-menu">${esc(F.menu)}</button>`
+        + `</div><nav class="sp-menu" id="sp-menu" aria-label="${esc(F.menu)}" hidden>${menu}</nav></div>`;
+}
+
+/** The texts of the search for the file's script (counts per plural category, "{n}" and "{q}" to fill in). */
+function searchStrings(r: Render): Record<string, unknown> {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const hint = [F.searchHint(set.searchIndex.length), pageSetLivingNames(set).length && set.options.privacy !== 'full' ? F.searchHintLiving : '']
+        .filter(Boolean).join(' ');
+    return {
+        res: pluralTemplates(lang, n => F.searchResults(n, '{q}')),
+        more: pluralTemplates(lang, n => F.searchMore(n)),
+        none: F.none('{q}'), hint, toIdx: F.toIdx, idx: drawnSlug(r, set.indexSlug.persons),
+    };
+}
+
+function jsonForScript(value: unknown): string {
+    return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+}
+
+/**
+ * The search's results (§3.4) as the file's script draws them: the count,
+ * up to ten people (the name leading to the page, the protected as text,
+ * the years, the tag), "N more in the index →"; nothing found: why, and the
+ * index of people. '' for an empty query.
+ */
+export function pageSetSearchHtml(set: PageSet, query: string, opts: PageSetHtmlOptions & { mode?: 'file' | 'app' } = {}): string {
+    const r = makeRender(set, opts.mode ?? 'app', opts);
+    const q = query.trim();
+    if (!q) return '';
+    const F = r.S.familyPages;
+    const t = searchStrings(r) as { hint: string; idx: string };
+    const res = searchPageSetIndex(set.searchIndex, q, set.options.lang);
+    const toIndex = (html: string): string => t.idx ? pageLink(r, t.idx, html) : html;
+    if (!res.total) {
+        return `<div class="sp-res-none"><p class="sp-res-none-t">${esc(F.none(q))}</p><p class="sp-res-hint">${esc(t.hint)}</p>`
+            + `<p>${toIndex(esc(F.toIdx))}</p></div>`;
+    }
+    const rows = res.hits.map(e => `<li class="sp-res-row">${e.s && set.bySlug.has(e.s) ? pageLink(r, e.s, esc(e.n), 'pp-link sp-res-n') : `<span class="sp-res-n">${esc(e.n)}</span>`}`
+        + `${e.y ? ` <span class="sp-res-y">${esc(e.y)}</span>` : ''}${e.t ? ` <span class="sp-res-t">${esc(e.t)}</span>` : ''}</li>`).join('');
+    const more = res.total > res.hits.length ? `<p class="sp-res-more">${toIndex(esc(F.searchMore(res.total - res.hits.length)))}</p>` : '';
+    return `<p class="sp-res-head">${esc(F.searchResults(res.total, q))}</p><ul class="sp-res-list">${rows}</ul>${more}`;
+}
+
+/** The bar of a page in the app's window (§3.3): the file's bar, its links `data-sp-open` buttons. */
+export function pageSetBarHtml(set: PageSet, slug: string, opts: PageSetHtmlOptions = {}): string {
+    return barHtml(makeRender(set, 'app', opts), set.bySlug.get(slug) ?? null);
+}
+
+// ─── The indexes (§3.5) ─────────────────────────────────────────────────────
+
+/**
+ * The letter an index groups a name under: Czech "Ch" is a letter of its own
+ * (after H); a letter the language does not tell from its base letter goes
+ * with it (Á with A in Czech, Ä with A in German), one that it does stays
+ * apart (Č, Ř, Š in Czech).
+ */
+export function indexLetter(text: string, lang: Language): string {
+    const t = text.trim();
+    if (!t) return '';
+    if (lang === 'cs' && /^ch/i.test(t)) return 'Ch';
+    const ch = Array.from(t)[0].toLocaleUpperCase(lang);
+    const base = ch.normalize('NFD').replace(/\p{M}/gu, '');
+    return base && base !== ch && new Intl.Collator(lang, { sensitivity: 'base' }).compare(ch, base) === 0 ? base : ch;
+}
+
+function placeRows(r: Render): SetPlaceRow[] {
+    if (!r.places) r.places = pageSetPlaces(r.set);
+    return r.places;
+}
+
+/** The anchor of a place's row in the index of places. */
+function placeAnchor(slug: string, i: number): string {
+    return `${slug}--o-${i + 1}`;
+}
+
+/** A person's name leading to the page; the protected and those without a page as text. */
+function personNameLink(r: Render, id: PersonId, html: string, cls = 'pp-link'): string {
+    if (isProtectedPerson(r.set.protectedTree, id)) return html;
+    const slug = r.set.personSlug.get(id);
+    return slug ? pageLink(r, slug, html, cls) : html;
+}
+
+function emptyIndex(r: Render): string {
+    return `<p class="sp-ix-empty">${esc(r.S.familyPages.idxEmpty)}</p>`;
+}
+
+/** People: "Surname, Given · years · tag" by initial letter, the letters above filter (anchors without the script). */
+function personsIndexHtml(r: Render, slug: string): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const tree = set.protectedTree.tree;
+    const ids = pageSetSearchPeople(set);
+    const items = ids.map((id, i) => {
+        const e = set.searchIndex[i];
+        const parts = shownNameParts(tree.persons[id]!);
+        const sur = parts.surname.trim();
+        const giv = parts.given.trim();
+        const prot = isProtectedPerson(set.protectedTree, id);
+        const shown = prot ? e.n : sur && giv ? `${sur}, ${giv}` : sur || giv || e.n;
+        return { id, e, shown, sort: `${sur ? '0' : '1'} ${e.o}`, letter: indexLetter(sur, lang) };
+    }).sort((a, b) => a.sort.localeCompare(b.sort, lang) || a.e.y.localeCompare(b.e.y));
+    if (!items.length) return emptyIndex(r);
+    const groups = new Map<string, typeof items>();
+    for (const it of items) {
+        const g = groups.get(it.letter);
+        if (g) g.push(it); else groups.set(it.letter, [it]);
+    }
+    const keys = [...groups.keys()];
+    const label = (k: string): string => k || S.book.noSurname;
+    const letter = (key: string, n: number | null, text: string): string => {
+        const cur = n === null ? ' aria-current="true"' : '';
+        const val = n === null ? '' : String(n);
+        return r.mode === 'file'
+            ? `<a class="sp-letter" href="#${esc(n === null ? slug : `${slug}--pis-${n}`)}" data-sp-letter="${val}"${cur}>${esc(text)}</a>`
+            : `<button type="button" class="sp-letter" data-sp-letter="${val}"${cur}>${esc(text)}</button>`;
+    };
+    const letters = `<nav class="sp-letters" aria-label="${esc(F.idxLetters)}">${letter(slug, null, F.idxAll)}`
+        + `${keys.map((k, i) => letter(slug, i + 1, label(k))).join('')}</nav>`;
+    const body = keys.map((k, i) => {
+        const rows = groups.get(k)!.map(it => `<li class="sp-ix-row">${personNameLink(r, it.id, esc(it.shown), 'pp-link sp-ix-n')}`
+            + `${it.e.y ? ` <span class="sp-ix-y">${esc(it.e.y)}</span>` : ''}${it.e.t ? ` <span class="sp-ix-t">${esc(it.e.t)}</span>` : ''}</li>`).join('');
+        return `<div class="sp-ix-group" id="${esc(`${slug}--pis-${i + 1}`)}" data-sp-group="${i + 1}"><h2 class="sp-ix-letter">${esc(label(k))}</h2>`
+            + `<ul class="sp-ix-list">${rows}</ul></div>`;
+    }).join('');
+    return letters + body;
+}
+
+/** Families with a page: "Josef Fíšek ⚭ Anna Kvapilová · 1846 · 7 children". */
+function familiesIndexHtml(r: Render): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const tree = set.protectedTree.tree;
+    const fams = set.selection.familyIds.filter(fid => set.familySlug.has(fid) && tree.partnerships[fid]).map(fid => {
+        const u = tree.partnerships[fid];
+        const ps = coupleOf(tree, u);
+        return { u, ps, sort: ps.map(p => surnameFirst(p)).join(' '), year: isWedding(u) ? yearOf(u.startDate) : null };
+    }).sort((a, b) => a.sort.localeCompare(b.sort, lang) || (a.year ?? 9999) - (b.year ?? 9999));
+    if (!fams.length) return emptyIndex(r);
+    const rows = fams.map(({ u, ps, year }) => {
+        const names = ps.map(p => esc(shownNameOrEmpty(p) || '?')).join(year !== null || isWedding(u) ? ' ⚭ ' : ` ${esc(S.book.and)} `);
+        const kids = (u.childIds ?? []).filter(id => realIn(tree, id)).length;
+        return `<li class="sp-ix-row">${pageLink(r, set.familySlug.get(u.id)!, names, 'pp-link sp-ix-n')}`
+            + `${year !== null ? ` <span class="sp-ix-y">${year}</span>` : ''} <span class="sp-ix-t">${esc(kids ? F.nKids(kids) : F.noKids)}</span></li>`;
+    }).join('');
+    return `<ul class="sp-ix-list">${rows}</ul>`;
+}
+
+/** A row that unfolds the people it stands for (open without the script). */
+function foldRowHtml(r: Render, id: string, head: string, people: readonly PersonId[]): string {
+    const tree = r.set.protectedTree.tree;
+    const sub = people.map(pid => {
+        const p = tree.persons[pid];
+        const y = p ? bookYears(p) : '';
+        return `<li>${personNameLink(r, pid, esc(p ? shownNameOrEmpty(p) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}</li>`;
+    }).join('');
+    return `<details class="sp-ix-more"${id ? ` id="${esc(id)}"` : ''} open><summary class="sp-ix-sum">${head}</summary><ul class="sp-ix-sub">${sub}</ul></details>`;
+}
+
+/** Surnames: a row per lineage with its forms, then the birth surnames of those who married in. */
+function surnamesIndexHtml(r: Render): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const tree = set.protectedTree.tree;
+    const inSel = new Set(set.selection.personIds);
+    const rodRows = set.rodIds.map(rid => {
+        const rod = rodOf(r, rid);
+        if (!rod) return '';
+        const label = set.rodLabels.get(rid) ?? '';
+        const n = rod.memberIds.filter(id => inSel.has(id) && realIn(tree, id)).length;
+        if (!n) return '';
+        const nf = label ? rodNameForms(rod, tree) : { forms: [], feminine: [] };
+        const forms = nf.forms.length ? nf.forms.join(' · ') : label || F.rodGeneric;
+        const fem = nf.feminine.length ? ` <span class="sp-ix-y">${esc(F.feminine(nf.feminine.join(', ')))}</span>` : '';
+        return `<li class="sp-ix-row">${rodLinkHtml(r, rid, `<span class="sp-ix-n">${esc(forms)}</span>`)}${fem}`
+            + ` <span class="sp-ix-t">${esc(`${F.rodRef(label || F.rodGeneric)} · ${F.nPersons(n)}`)}</span></li>`;
+    }).filter(Boolean);
+    const bySurname = new Map<string, PersonId[]>();
+    for (const id of set.selection.spouseIds) {
+        const p = realIn(tree, id);
+        if (!p || isProtectedPerson(set.protectedTree, id)) continue;
+        const last = p.lastName?.trim();
+        if (!last) continue;
+        const list = bySurname.get(last);
+        if (list) list.push(id); else bySurname.set(last, [id]);
+    }
+    const birth = [...bySurname.entries()].sort((a, b) => a[0].localeCompare(b[0], lang)).map(([last, ids]) =>
+        foldRowHtml(r, '', `<span class="sp-ix-n">${esc(last)}</span> <span class="sp-ix-y">${esc(F.nPersons(ids.length))}</span>`, sortByBirth(tree, ids)));
+    if (!rodRows.length && !birth.length) return emptyIndex(r);
+    return `${rodRows.length ? `<ul class="sp-ix-list">${rodRows.join('')}</ul>` : ''}`
+        + `${birth.length ? `<h2 class="sp-ix-h2">${esc(F.birthSurnames)}</h2><div class="sp-ix-folds">${birth.join('')}</div>` : ''}`;
+}
+
+/** Places: "Čapkov · 1702–2010 · 37 people", unfolding who had a record there (the protected left out). */
+function placesIndexHtml(r: Render, slug: string): string {
+    const F = r.S.familyPages;
+    const rows = placeRows(r);
+    if (!rows.length) return emptyIndex(r);
+    return `<div class="sp-ix-folds">${rows.map((p, i) => foldRowHtml(r, placeAnchor(slug, i),
+        `<span class="sp-ix-n">${esc(p.name)}</span> <span class="sp-ix-dot" aria-hidden="true">·</span> <span class="sp-ix-y">${p.from === p.to ? p.from : `${p.from}–${p.to}`}</span>`
+        + ` <span class="sp-ix-dot" aria-hidden="true">·</span> <span class="sp-ix-t">${esc(F.nPersons(p.personIds.length))}</span>`, p.personIds)).join('')}</div>`;
+}
+
+/** One index (§3.5): "Index", the four tabs, its rows. */
+function indexPageHtml(r: Render, page: SetPage): string {
+    const F = r.S.familyPages;
+    const kind = page.id as PageSetIndexKind;
+    const tabs = (['persons', 'families', 'surnames', 'places'] as const).map(k => {
+        const slug = drawnSlug(r, r.set.indexSlug[k]);
+        if (!slug) return '';
+        return k === kind ? `<span class="sp-tab" aria-current="page">${esc(F.idxTabs[k])}</span>` : pageLink(r, slug, esc(F.idxTabs[k]), 'sp-tab');
+    }).join('');
+    let body = '';
+    if (kind === 'persons') body = personsIndexHtml(r, page.slug);
+    else if (kind === 'families') body = familiesIndexHtml(r);
+    else if (kind === 'surnames') body = surnamesIndexHtml(r);
+    else body = placesIndexHtml(r, page.slug);
+    return `<header class="sp-head"><h1 class="sp-h1">${esc(F.index)}</h1></header>`
+        + `<nav class="sp-tabs" aria-label="${esc(F.idxNav)}">${tabs}</nav><div class="sp-ix sp-ix--${kind}">${body}</div>`;
+}
+
+/** The pages this step draws: every page but the map and the whole tree (not yet). */
 function rendered(page: SetPage): boolean {
-    if (page.kind === 'index') return page.id === 'persons';
     return page.kind !== 'map' && page.kind !== 'tree';
 }
 
@@ -550,7 +832,7 @@ function pageInnerHtml(r: Render, page: SetPage): string {
     else if (page.kind === 'branch') body = branchPageHtml(r, page, ctx);
     else if (page.kind === 'hub') body = hubPageHtml(r, page, ctx);
     else if (page.kind === 'family') body = familyPageHtml(r, page, ctx);
-    else if (page.kind === 'index') body = indexPageHtml(r, page, ctx);
+    else if (page.kind === 'index') body = indexPageHtml(r, page);
     return `${crumbs}<div class="sp-body">${body}</div>${r.foot}`;
 }
 
@@ -579,7 +861,7 @@ function fileTocHtml(r: Render, pages: readonly SetPage[]): string {
 
 /** The search index for the file's script (§0.7): JSON that never closes its <script> early. */
 function searchIndexJson(set: PageSet): string {
-    return JSON.stringify(set.searchIndex).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    return jsonForScript(set.searchIndex);
 }
 
 function assemble(r: Render, pages: readonly SetPage[], sections: readonly string[]): string {
@@ -587,12 +869,15 @@ function assemble(r: Render, pages: readonly SetPage[], sections: readonly strin
     const intro = set.bySlug.get(set.introSlug);
     const fileName = pageSetFileName(set);
     // Last: every image of every page is in the registry by now.
-    const body = `<style>${set.images.css()}</style>${fileTocHtml(r, pages)}${sections.join('')}`
+    const body = `<style>${set.images.css()}</style>${fileTocHtml(r, pages)}`
+        + `<div class="sp-results" id="sp-results" aria-live="polite" hidden></div>${sections.join('')}`
         + `<p class="sp-print-foot">${esc(r.S.familyPages.printFoot(fileName))}</p>`;
     return personPageDocumentShell(set.options.lang, intro?.title ?? fileName, body, r.opts.fontCss ?? '', '', {
         css: FAMILY_PAGES_CSS,
         mainClass: 'pp-file sp-file',
-        afterMain: `<script type="application/json" id="sp-index">${searchIndexJson(set)}</script>`,
+        beforeMain: barHtml(r, null),
+        afterMain: `<script type="application/json" id="sp-index">${searchIndexJson(set)}</script>`
+            + `<script type="application/json" id="sp-strings">${jsonForScript(searchStrings(r))}</script>`,
         ...(pages.length > 1 ? { script: PAGE_SET_SCRIPT } : {}),
     });
 }

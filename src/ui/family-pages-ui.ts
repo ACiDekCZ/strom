@@ -24,7 +24,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
-import { buildPageSetHtmlAsync, pageSetRenderedPages, pageSetSectionHtml } from '../family-pages-html.js';
+import { buildPageSetHtmlAsync, pageSetBarHtml, pageSetRenderedPages, pageSetSearchHtml, pageSetSectionHtml } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
 import { RodId, buildLineages, rodOf } from '../lineage.js';
@@ -241,6 +241,75 @@ export async function sharePagesFile(file: PagesFile): Promise<void> {
     await navigator.share({ files: [f], title: file.title || file.name });
 }
 
+/**
+ * The window's bar (§3.1, §3.4): the search draws its results over the page
+ * while the field holds a query (Escape or Cancel brings the page back where
+ * it was, the window stays open), the magnifier and Menu of a narrow window,
+ * the alphabet of the index of people. Its links are `data-sp-open` buttons
+ * the window's delegation follows; a new page draws a new bar.
+ */
+function wireWindowBar(scroller: HTMLElement, set: PageSet): void {
+    const root = scroller.querySelector<HTMLElement>('.sp-appset');
+    const bar = root?.querySelector<HTMLElement>('.sp-fbar');
+    const input = bar?.querySelector<HTMLInputElement>('.sp-q');
+    const results = root?.querySelector<HTMLElement>('.sp-results');
+    const menu = bar?.querySelector<HTMLElement>('.sp-menu');
+    const menuBtn = bar?.querySelector<HTMLElement>('.sp-fbar-menu');
+    if (!root || !bar || !input || !results || !menu || !menuBtn) return;
+    // The folds of the indexes start folded, as in the file (open in its markup for a file without the script).
+    root.querySelectorAll<HTMLDetailsElement>('details.sp-ix-more[open]').forEach(f => { f.open = false; });
+    let on = false;
+    let saved = 0;
+    const setQuery = (value: string, keep = false): void => {
+        const q = value.trim();
+        bar.classList.toggle('sp-fbar--has', value !== '');
+        if (q) {
+            if (!on) { on = true; saved = scroller.scrollTop; root.classList.add('sp-searching'); results.hidden = false; scroller.scrollTop = 0; }
+            results.innerHTML = pageSetSearchHtml(set, q);
+        } else if (on) {
+            on = false;
+            root.classList.remove('sp-searching');
+            results.hidden = true;
+            results.innerHTML = '';
+            if (!keep) scroller.scrollTop = saved;
+        }
+    };
+    const shutMenu = (): void => { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); };
+    const cancel = (): void => { input.value = ''; setQuery(''); bar.classList.remove('sp-fbar--q'); };
+    input.addEventListener('input', () => setQuery(input.value));
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        // The search's Escape only: the window stays open.
+        e.preventDefault();
+        e.stopPropagation();
+        cancel();
+    });
+    root.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !menu.hidden) { e.preventDefault(); e.stopPropagation(); shutMenu(); menuBtn.focus(); }
+    });
+    root.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.sp-fbar-cancel')) { cancel(); input.blur(); return; }
+        if (target.closest('.sp-fbar-lupa')) { shutMenu(); bar.classList.add('sp-fbar--q'); input.focus(); return; }
+        if (target.closest('.sp-fbar-menu')) {
+            const open = menu.hidden;
+            menu.hidden = !open;
+            menuBtn.setAttribute('aria-expanded', String(open));
+            return;
+        }
+        if (!target.closest('.sp-fbar')) shutMenu();
+        const letter = target.closest<HTMLElement>('[data-sp-letter]');
+        if (letter) {
+            const v = letter.dataset.spLetter ?? '';
+            const box = letter.closest('.sp-ix') ?? root;
+            box.querySelectorAll<HTMLElement>('[data-sp-letter]').forEach(x => {
+                if (x === letter) x.setAttribute('aria-current', 'true'); else x.removeAttribute('aria-current');
+            });
+            box.querySelectorAll<HTMLElement>('[data-sp-group]').forEach(g => { g.hidden = v !== '' && g.dataset.spGroup !== v; });
+        }
+    });
+}
+
 export const familyPagesMethods = uiModule({
     /** A set's page in the window (the introduction by default): on top of the window's stack, or a new window. */
     openFamilyPages(spec: BookSelectionSpec, slug?: string): void {
@@ -278,7 +347,9 @@ export const familyPagesMethods = uiModule({
         (overlay.querySelector('.pp-mname') as HTMLElement).textContent = title;
         (overlay.querySelector('.pp-myears') as HTMLElement).textContent = '';
         const scroller = overlay.querySelector('.pp-body') as HTMLElement;
-        scroller.innerHTML = `<div class="sp-app" lang="${esc(set.options.lang)}">${html}</div>`;
+        scroller.innerHTML = `<div class="sp-appset" lang="${esc(set.options.lang)}">${pageSetBarHtml(set, slug)}`
+            + `<div class="sp-app"><div class="sp-results" aria-live="polite" hidden></div>${html}</div></div>`;
+        wireWindowBar(scroller, set);
     },
 
     /** "Save as file": the dialog with the pages output and this set's selection. */

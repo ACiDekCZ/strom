@@ -15,7 +15,8 @@ import { Partnership, PartnershipId, Person, PersonId, StromData, personSourceId
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
 import { yearOf } from './dates.js';
-import { shownNameOrEmpty } from './person-name.js';
+import { placeKey } from './places.js';
+import { shownNameOrEmpty, shownNameParts } from './person-name.js';
 import { feminineForm } from './surnames.js';
 import { asciiSlug } from './filenames.js';
 import { normalizeSearchText, searchableSurnames, alternateNames } from './name-search.js';
@@ -58,6 +59,8 @@ export interface SearchEntry {
     t: string;
     /** Normalized search keys, space-separated, each once. */
     k: string;
+    /** The sort key: the shown surname, then the given name (plain text). */
+    o: string;
 }
 
 export interface PageSetOptions {
@@ -202,6 +205,12 @@ export function windowFamilyPages(data: StromData, index: LineageIndex, personId
 function nameOf(tree: StromData, id: PersonId): string {
     const p = tree.persons[id];
     return p ? shownNameOrEmpty(p) || '?' : '?';
+}
+
+/** "Fíšek Josef": a person's sort key in the search and the index of people (plain text). */
+export function surnameFirst(p: Person): string {
+    const parts = shownNameParts(p);
+    return [parts.surname.trim(), parts.given.trim()].filter(Boolean).join(' ') || shownNameOrEmpty(p) || '?';
 }
 
 /** "Josef and Anna": the first names, husband first (§3.2), plain text. */
@@ -432,6 +441,11 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     return out;
 }
 
+/** The people of the search index, in its order: `set.searchIndex[i]` is `pageSetSearchPeople(set)[i]`. */
+export function pageSetSearchPeople(set: Pick<PageSet, 'selection' | 'protectedTree'>): PersonId[] {
+    return set.selection.personIds.filter(id => !!realPerson(set.protectedTree.tree, id));
+}
+
 /** The search index (§0.7) over the selection's people, in its order. */
 function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
     const prot = set.protectedTree;
@@ -451,9 +465,8 @@ function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
     const memberSet = new Set(set.selection.memberIds);
 
     const out: SearchEntry[] = [];
-    for (const id of set.selection.personIds) {
-        const p = realPerson(tree, id);
-        if (!p) continue;
+    for (const id of pageSetSearchPeople(set)) {
+        const p = realPerson(tree, id)!;
         const n = shownNameOrEmpty(p) || '?';
         const keys: string[] = [];
         const add = (text: string): void => {
@@ -461,7 +474,7 @@ function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
         };
         add(n);
         if (isProtectedPerson(prot, id)) {
-            out.push({ s: '', n, y: yearsOf(p), t: '', k: keys.join(' ') });
+            out.push({ s: '', n, y: yearsOf(p), t: '', k: keys.join(' '), o: surnameFirst(p) });
             continue;
         }
         searchableSurnames(p, tree).forEach(add);
@@ -480,7 +493,7 @@ function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
             const sr = spouseRod.get(id);
             if (sr) t = F.spouseIn[genderKey(p)](set.rodLabels.get(sr) || F.rodGeneric);
         }
-        out.push({ s: set.personSlug.get(id) ?? '', n, y: yearsOf(p), t, k: keys.join(' ') });
+        out.push({ s: set.personSlug.get(id) ?? '', n, y: yearsOf(p), t, k: keys.join(' '), o: surnameFirst(p) });
     }
     return out;
 }
@@ -646,4 +659,65 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
         }
     }
     return { bytes: text + img, textBytes: text, imageBytes: img, pages: set.pages.length, persons: set.personSlug.size, images: count };
+}
+
+/** A place of the set's people (§3.5 the index of places): who has a dated record there, and when. */
+export interface SetPlaceRow {
+    /** placeKey of the name (the same grouping as rodPlaceSpans). */
+    key: string;
+    /** The spelling used most. */
+    name: string;
+    from: number;
+    to: number;
+    /** The people with a record there, by birth. */
+    personIds: PersonId[];
+}
+
+/**
+ * The places of the set's people with a page (§3.5, §5: the protected living
+ * say nothing): each person's birth, death and events, each family's wedding
+ * for both partners; only dated records (a span on the axis). Most people
+ * first, then the earlier start, then the name — as "Where the line lived".
+ */
+export function pageSetPlaces(set: PageSet): SetPlaceRow[] {
+    const tree = set.protectedTree.tree;
+    const shown = (id: PersonId | undefined | null): boolean => !!id && set.personSlug.has(id);
+    const acc = new Map<string, { names: Map<string, number>; from: number; to: number; ids: Set<PersonId> }>();
+    const note = (place: string | undefined, date: string | undefined, who: PersonId): void => {
+        const name = place?.trim();
+        const year = yearOf(date);
+        if (!name || year === null) return;
+        const key = placeKey(name) || name.toLowerCase();
+        let a = acc.get(key);
+        if (!a) { a = { names: new Map(), from: year, to: year, ids: new Set() }; acc.set(key, a); }
+        a.names.set(name, (a.names.get(name) ?? 0) + 1);
+        a.from = Math.min(a.from, year);
+        a.to = Math.max(a.to, year);
+        a.ids.add(who);
+    };
+    for (const id of set.selection.personIds) {
+        const p = realPerson(tree, id);
+        if (!p || !shown(id)) continue;
+        note(p.birthPlace, p.birthDate, id);
+        note(p.deathPlace, p.deathDate, id);
+        for (const ev of p.events ?? []) note(ev.place, ev.date, id);
+    }
+    for (const uid of set.selection.familyIds) {
+        const u = tree.partnerships[uid];
+        if (!u) continue;
+        const ids = [u.person1Id, u.person2Id].filter((x): x is PersonId => !!x);
+        // A family of a protected partner says nothing of where they wed.
+        if (ids.some(id => isProtectedPerson(set.protectedTree, id))) continue;
+        for (const id of ids) if (shown(id)) note(u.startPlace, u.startDate, id);
+    }
+    const born = (id: PersonId): number => yearOf(tree.persons[id]?.birthDate) ?? 9999;
+    const lang = set.options.lang;
+    return [...acc.entries()]
+        .map(([key, a]) => ({
+            key,
+            name: [...a.names.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], lang))[0][0],
+            from: a.from, to: a.to,
+            personIds: [...a.ids].sort((x, y) => born(x) - born(y) || nameOf(tree, x).localeCompare(nameOf(tree, y), lang)),
+        }))
+        .sort((x, y) => y.personIds.length - x.personIds.length || x.from - y.from || x.name.localeCompare(y.name, lang));
 }

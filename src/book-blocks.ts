@@ -98,6 +98,12 @@ export interface BookCtx {
     linkTo: (target: BookLinkTarget, ctx: BookCtx) => string | null;
     /** Pages of a set (spec 026 §0.3): every id of a block as `{idPrefix}--{id}`; none in the book. */
     idPrefix?: string;
+    /**
+     * Pages of a set (spec 026 §3.5): where a place of a lineage's header
+     * leads (`#slug--anchor` in the file, a `data-sp-open` value in the
+     * window); none: the page's own "Where the line lived".
+     */
+    placeLink?: (placeKey: string) => string | null;
     /** The tree after privacy (and without media when the part is off). */
     tree: StromData;
     /** Living people, judged before protection. */
@@ -1024,9 +1030,10 @@ export function pageLineHeadHtml(line: PageLine, ctx: BookCtx): string {
         const to = `#${bookId(ctx, 'sp-places')}`;
         const names = spans.slice(0, 3).map(s => {
             const key = esc(placeKey(s.name));
-            return ctx.mode === 'file'
-                ? `<a class="pp-link sp-place" href="${esc(to)}" data-sp-place="${key}">${esc(s.name)}</a>`
-                : `<span class="sp-place" data-sp-place="${key}">${esc(s.name)}</span>`;
+            const target = ctx.placeLink ? ctx.placeLink(placeKey(s.name)) : (ctx.mode === 'file' ? to : null);
+            if (target && ctx.mode === 'file') return `<a class="pp-link sp-place" href="${esc(target)}" data-sp-place="${key}">${esc(s.name)}</a>`;
+            if (target && ctx.mode === 'app') return `<button type="button" class="pp-link sp-place" data-sp-open="${esc(target)}" data-sp-place="${key}">${esc(s.name)}</button>`;
+            return `<span class="sp-place" data-sp-place="${key}">${esc(s.name)}</span>`;
         });
         const more = spans.length > 3 ? ` <span class="sp-faint">${esc(F.morePlaces(spans.length - 3))}</span>` : '';
         rows.push(`<dt>${esc(F.places)}</dt><dd>${names.join(', ')}${more}</dd>`);
