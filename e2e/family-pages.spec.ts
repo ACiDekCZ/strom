@@ -8,7 +8,9 @@
  * lineage's page), the pages' window's "Save as file", a phone's sheet,
  * the dark theme and German without overflow; the entries (026 §7: the
  * overview's lineage detail, the card's ⋯ menu, Export, a followed tree,
- * Escape over the window, a phone). Invented names only
+ * Escape over the window, a phone); the family pages in the app (026 §2.4,
+ * §7: the card's ⋯ Family page, several marriages under one item, Back in
+ * the window's stack, the person page's card Family page). Invented names only
  * (e2e/rods-fixture.ts).
  */
 
@@ -20,7 +22,7 @@ import { pathToFileURL } from 'node:url';
 import { openApp } from './helpers.js';
 import { rodsTree } from './rods-fixture.js';
 
-async function setup(page: Page): Promise<void> {
+async function setup(page: Page, tree: ReturnType<typeof rodsTree> = rodsTree()): Promise<void> {
     await openApp(page);
     await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.evaluate(async (data) => {
@@ -29,7 +31,7 @@ async function setup(page: Page): Promise<void> {
         S.UI.updateTreeSwitcher?.();
         S.TreeRenderer.setFocus(data.defaultPersonId);
         await S.TreeRenderer.renderAsync();
-    }, rodsTree());
+    }, tree);
 }
 
 async function openDialog(page: Page, output?: 'book' | 'pages'): Promise<Locator> {
@@ -494,5 +496,93 @@ test.describe('family pages: the entries on a phone', () => {
         await menu.locator('[data-rod-act="page"]').click();
         await expect(win).toHaveClass(/pp-is-set/);
         await expect(win.locator('#pp-title')).toContainText('Brandvold');
+    });
+});
+
+/** The fixture with a second marriage of Karl (b14): Vera Lindqvist, no children. */
+function twoMarriages(): ReturnType<typeof rodsTree> {
+    const tree = rodsTree();
+    const P = tree.persons as Record<string, Record<string, unknown>>;
+    P.b14v = { id: 'b14v', firstName: 'Vera', lastName: 'Lindqvist', gender: 'female', isPlaceholder: false, birthDate: '1930', partnerships: ['bu9'], parentIds: [], childIds: [] };
+    (tree.partnerships as Record<string, unknown>).bu9 = { id: 'bu9', person1Id: 'b14', person2Id: 'b14v', childIds: [], status: 'married', startDate: '1975' };
+    (P.b14.partnerships as string[]).push('bu9');
+    return tree;
+}
+
+test.describe('family pages: the families in the app', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the card\'s ⋯ menu: Family page (Karl and Ester) after Family line page opens the family\'s page; Back from a partner\'s page returns to it', async ({ page }) => {
+        await setup(page);
+        const menu = await openCardRodMenu(page, 'b14');
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            'Show family line in tree', 'Family line page', 'Family page (Karl and Ester)', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+        ]);
+        await menu.locator('[data-rod-act="family"][data-fam="bu8"]').click();
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
+        await expect(win.locator('.pp-body .sp-partner')).toHaveCount(2);
+        // A partner's person page in the same window; Back returns to the family.
+        await win.locator('.pp-body .sp-go[data-sp-open="person:b14"]').click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await expect(win.locator('.pp-mname')).toContainText('Karl');
+        await win.locator('.pp-back').click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
+    });
+
+    test('several marriages: one item Family pages unfolds them; each opens its family; closing the menu folds it', async ({ page }) => {
+        await setup(page, twoMarriages());
+        let menu = await openCardRodMenu(page, 'b14');
+        const many = menu.locator('[data-rod-act="families"]');
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            'Show family line in tree', 'Family line page', 'Family pages', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+        ]);
+        await expect(many).toHaveAttribute('aria-expanded', 'false');
+        await many.click();
+        await expect(many).toHaveAttribute('aria-expanded', 'true');
+        const sub = menu.locator('.pm-rod-sub');
+        await expect(sub.getByRole('menuitem')).toHaveText(['Family page (Karl and Ester)', 'Family page (Karl and Vera)']);
+        await expect(sub.getByRole('menuitem').first()).toBeFocused();
+        // Closing the menu folds the item again.
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await page.locator('#pm-rod .pm-rod-more-btn').click();
+        await expect(many).toHaveAttribute('aria-expanded', 'false');
+        await expect(sub).toBeHidden();
+        await many.click();
+        await sub.locator('[data-fam="bu9"]').click();
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Vera Lindqvist');
+        // The other marriage leads to the first family in the same window; Back returns.
+        await win.locator('.pp-body .sp-other [data-sp-open="family:bu8"]').click();
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
+        await win.locator('.pp-back').click();
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Vera Lindqvist');
+        await page.keyboard.press('Escape');
+        await expect(win).toHaveCount(0);
+        menu = await openCardRodMenu(page, 'b16');
+        await expect(menu.locator('[data-rod-act="family"], [data-rod-act="families"]')).toHaveCount(0);
+    });
+
+    test('the person page\'s window: a card Family page at the own family and at the parents\'; it opens the family, Back the person', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('b14' as never));
+        const win = page.locator('#person-page-modal');
+        await expect(win).toBeVisible();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        const own = win.locator('.pp-body .sp-famcard[data-sp-open="family:bu8"]');
+        await expect(own).toContainText('Family page →');
+        await expect(win.locator('.pp-body .sp-famcard[data-sp-open="family:bu7"]')).toBeVisible();
+        await own.click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
+        await win.locator('.pp-back').click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await expect(win.locator('.pp-mname')).toContainText('Karl');
+        await expect(own).toBeVisible();
     });
 });
