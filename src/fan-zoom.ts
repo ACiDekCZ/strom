@@ -10,7 +10,9 @@
  *   viewBox = [cx − W/2ppu, cy − H/2ppu, W/ppu, H/ppu]
  * (the viewBox has the surface's aspect ratio). z ∈ [1, 8]; the centre is
  * clamped so the view never leaves the frame, and a view larger than the
- * frame is centred on it.
+ * frame is centred on it. The Fan view lets a drag go past that, like the
+ * family tree's pan, by a share of the view (`FAN_VIEW_OVERSCROLL`), so one
+ * finger moves the whole fan too; the fan never leaves the screen.
  *
  * Two modes: 'view' (the Fan view: the wheel always zooms, the surface owns
  * every touch) and 'page' (a person page, a saved page: the wheel zooms only
@@ -47,6 +49,14 @@ export const FAN_LONG_PRESS_MS = 500;
 export const FAN_RELABEL_MS = 120;
 export const FAN_ANIM_MS = 240;
 export const FAN_HINT_MS = 1500;
+/**
+ * The Fan view's pan past the strict clamp, as a share of the smaller of the
+ * view and the frame on each axis: at 0.5 at least half of that stays covered
+ * by the fan (the whole fan moves by up to half its size; zoomed in, the
+ * view's centre reaches the frame's edge). Pages keep 0 (their one finger
+ * scrolls the page while the fan is whole).
+ */
+export const FAN_VIEW_OVERSCROLL = 0.5;
 /** Arrow keys move the view by this share of it. */
 export const FAN_PAN_STEP = 0.15;
 /** Wheel: `k = exp(−deltaY · speed)`; a trackpad pinch arrives with ctrlKey. */
@@ -83,20 +93,27 @@ export function fanBasePpu(b: FanBounds, W: number, H: number): number {
     return Math.min(W / b.w, H / b.h);
 }
 
-/** z within [1, 8]; the centre keeps the view inside the frame (a larger view is centred). */
-export function clampFanView(v: FanView, b: FanBounds, W: number, H: number): FanView {
+/**
+ * z within [1, 8]; the centre keeps the view inside the frame (a larger view
+ * is centred), widened on each side by `over` × min(view, frame) (the Fan
+ * view's overscroll; 0 = strict).
+ */
+export function clampFanView(v: FanView, b: FanBounds, W: number, H: number, over = 0): FanView {
     const z = Math.max(FAN_ZOOM_MIN, Math.min(FAN_ZOOM_MAX, Number.isFinite(v.z) ? v.z : 1));
     const ppu = fanBasePpu(b, W, H) * z;
     const axis = (c: number, min: number, size: number, span: number): number => {
-        if (!Number.isFinite(c) || span >= size) return min + size / 2;
-        return Math.max(min + span / 2, Math.min(min + size - span / 2, c));
+        const lo = span >= size ? min + size / 2 : min + span / 2;
+        const hi = span >= size ? min + size / 2 : min + size - span / 2;
+        if (!Number.isFinite(c)) return min + size / 2;
+        const m = over > 0 ? over * Math.min(span, size) : 0;
+        return Math.max(lo - m, Math.min(hi + m, c));
     };
     return { z, cx: axis(v.cx, b.x, b.w, W / ppu), cy: axis(v.cy, b.y, b.h, H / ppu) };
 }
 
 /** The viewBox of a (clamped) view on a W × H surface. */
-export function fanViewBox(v: FanView, b: FanBounds, W: number, H: number): FanViewBox {
-    const c = clampFanView(v, b, W, H);
+export function fanViewBox(v: FanView, b: FanBounds, W: number, H: number, over = 0): FanViewBox {
+    const c = clampFanView(v, b, W, H, over);
     const ppu = fanBasePpu(b, W, H) * c.z;
     const w = W / ppu, h = H / ppu;
     return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, ppu };
@@ -106,19 +123,19 @@ export function fanViewBox(v: FanView, b: FanBounds, W: number, H: number): FanV
  * Zoom by `k` keeping the fan point under the surface point (sx, sy) where
  * it is: p = vb.x + sx/ppu, then cx' = p − (sx − W/2)/ppu'.
  */
-export function fanZoomAt(v: FanView, k: number, sx: number, sy: number, b: FanBounds, W: number, H: number): FanView {
-    const vb = fanViewBox(v, b, W, H);
+export function fanZoomAt(v: FanView, k: number, sx: number, sy: number, b: FanBounds, W: number, H: number, over = 0): FanView {
+    const vb = fanViewBox(v, b, W, H, over);
     const px = vb.x + sx / vb.ppu, py = vb.y + sy / vb.ppu;
     const z = Math.max(FAN_ZOOM_MIN, Math.min(FAN_ZOOM_MAX, (vb.ppu / fanBasePpu(b, W, H)) * k));
     const ppu2 = fanBasePpu(b, W, H) * z;
-    return clampFanView({ z, cx: px - (sx - W / 2) / ppu2, cy: py - (sy - H / 2) / ppu2 }, b, W, H);
+    return clampFanView({ z, cx: px - (sx - W / 2) / ppu2, cy: py - (sy - H / 2) / ppu2 }, b, W, H, over);
 }
 
 /** Move the content by (dx, dy) screen px (a drag to the right shows more of the left). */
-export function fanPanBy(v: FanView, dx: number, dy: number, b: FanBounds, W: number, H: number): FanView {
-    const c = clampFanView(v, b, W, H);
+export function fanPanBy(v: FanView, dx: number, dy: number, b: FanBounds, W: number, H: number, over = 0): FanView {
+    const c = clampFanView(v, b, W, H, over);
     const ppu = fanBasePpu(b, W, H) * c.z;
-    return clampFanView({ z: c.z, cx: c.cx - dx / ppu, cy: c.cy - dy / ppu }, b, W, H);
+    return clampFanView({ z: c.z, cx: c.cx - dx / ppu, cy: c.cy - dy / ppu }, b, W, H, over);
 }
 
 /** Two fingers: their distance `d` and midpoint (mx, my) in surface px. */
@@ -133,9 +150,9 @@ export interface FanPinch {
  * by the change of their distance around it (the point between the fingers
  * stays between them).
  */
-export function fanPinchStep(v: FanView, prev: FanPinch, next: FanPinch, b: FanBounds, W: number, H: number): FanView {
-    let out = fanPanBy(v, next.mx - prev.mx, next.my - prev.my, b, W, H);
-    if (prev.d > 0 && next.d > 0) out = fanZoomAt(out, next.d / prev.d, next.mx, next.my, b, W, H);
+export function fanPinchStep(v: FanView, prev: FanPinch, next: FanPinch, b: FanBounds, W: number, H: number, over = 0): FanView {
+    let out = fanPanBy(v, next.mx - prev.mx, next.my - prev.my, b, W, H, over);
+    if (prev.d > 0 && next.d > 0) out = fanZoomAt(out, next.d / prev.d, next.mx, next.my, b, W, H, over);
     return out;
 }
 
@@ -218,6 +235,8 @@ const systemReducedMotion = (): boolean =>
  */
 export class FanZoom {
     private readonly o: FanZoomOptions;
+    /** The pan past the strict clamp (the Fan view only). */
+    private readonly over: number;
     private bounds: FanBounds;
     private view: FanView;
     private W = 0;
@@ -241,6 +260,7 @@ export class FanZoom {
 
     constructor(o: FanZoomOptions) {
         this.o = o;
+        this.over = o.mode === 'view' ? FAN_VIEW_OVERSCROLL : 0;
         this.bounds = o.bounds;
         this.view = fanFitView(o.bounds);
         const s = o.surface;
@@ -290,7 +310,7 @@ export class FanZoom {
 
     /** The current view (clamped). */
     getView(): FanView {
-        return clampFanView(this.view, this.bounds, this.W || 1, this.H || 1);
+        return clampFanView(this.view, this.bounds, this.W || 1, this.H || 1, this.over);
     }
 
     /** z (1 = the whole fan). */
@@ -307,7 +327,7 @@ export class FanZoom {
     viewBox(): FanViewBox {
         if (!this.W || !this.H) this.measure();
         if (!this.W || !this.H) return { ...this.bounds, ppu: 1 };
-        return fanViewBox(this.view, this.bounds, this.W, this.H);
+        return fanViewBox(this.view, this.bounds, this.W, this.H, this.over);
     }
 
     /** Surface size in px. */
@@ -344,14 +364,14 @@ export class FanZoom {
     zoomBy(k: number, sx?: number, sy?: number): void {
         this.stopAnim();
         this.ensureSize();
-        this.view = fanZoomAt(this.view, k, sx ?? this.W / 2, sy ?? this.H / 2, this.bounds, this.W, this.H);
+        this.view = fanZoomAt(this.view, k, sx ?? this.W / 2, sy ?? this.H / 2, this.bounds, this.W, this.H, this.over);
         this.changed();
     }
 
     /** Move the content by screen px. */
     panBy(dx: number, dy: number): void {
         this.ensureSize();
-        this.view = fanPanBy(this.view, dx, dy, this.bounds, this.W, this.H);
+        this.view = fanPanBy(this.view, dx, dy, this.bounds, this.W, this.H, this.over);
         this.changed();
     }
 
@@ -359,7 +379,7 @@ export class FanZoom {
     animateTo(to: FanView, ms = FAN_ANIM_MS): void {
         this.stopAnim();
         this.ensureSize();
-        const target = clampFanView(to, this.bounds, this.W, this.H);
+        const target = clampFanView(to, this.bounds, this.W, this.H, this.over);
         const from = this.getView();
         if (sameFanView(from, target)) { this.view = target; this.apply(true); return; }
         if ((this.o.reducedMotion ?? systemReducedMotion)() || typeof requestAnimationFrame !== 'function') {
@@ -438,7 +458,7 @@ export class FanZoom {
 
     /** viewBox + touch-action; `now` writes at once, else once per frame. */
     private apply(now: boolean): void {
-        this.view = clampFanView(this.view, this.bounds, this.W || 1, this.H || 1);
+        this.view = clampFanView(this.view, this.bounds, this.W || 1, this.H || 1, this.over);
         this.applyTouchAction();
         if (now || typeof requestAnimationFrame !== 'function') { this.writeViewBox(); return; }
         if (this.frame) return;
@@ -526,7 +546,7 @@ export class FanZoom {
             const [a, b] = [...this.pointers.values()];
             const d = Math.hypot(a.x - b.x, a.y - b.y);
             const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            this.view = fanPinchStep(this.view, this.pinch, { d, mx, my }, this.bounds, this.W, this.H);
+            this.view = fanPinchStep(this.view, this.pinch, { d, mx, my }, this.bounds, this.W, this.H, this.over);
             this.pinch = { d, mx, my };
             this.changed();
             return;

@@ -397,8 +397,92 @@ for (const [w, h] of [[390, 844], [844, 390]]) {
             await expect(page.locator('.fan-menu-sheet .bottom-sheet')).toBeVisible();
             await touch('touchEnd', []);
         });
+
+        test(`fan: one finger pans the whole fan without a zoom too, never off the screen; a tap still re-centres at ${w}×${h} (1101)`, async ({ page }) => {
+            await openImplexFan(page);
+            const cdp = await page.context().newCDPSession(page);
+            const touch = (type: string, points: Array<{ x: number; y: number }>) =>
+                cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p, i) => ({ ...p, id: i + 1 })) });
+            const viewBox = async () => (await page.locator('#fan-chart .fan-svg').getAttribute('viewBox'))!.split(' ').map(Number);
+            const box = (await page.locator('#fan-chart').boundingBox())!;
+            const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+            const whole = await viewBox();
+
+            // One finger at the whole fan: the view moves in even steps, the zoom stays.
+            const xs: number[] = [], ys: number[] = [];
+            await touch('touchStart', [{ x: cx, y: cy }]);
+            for (let i = 1; i <= 16; i++) {
+                await touch('touchMove', [{ x: cx - i * 6, y: cy - i * 2 }]);
+                await page.evaluate(() => new Promise(requestAnimationFrame));
+                const vb = await viewBox();
+                xs.push(vb[0]);
+                ys.push(vb[1]);
+            }
+            await touch('touchEnd', []);
+            const steps = xs.slice(1).map((x, i) => x - xs[i]);
+            expect(steps.filter(d => d > 0.01).length, `steps ${steps.join(', ')}`).toBeGreaterThanOrEqual(12);
+            expect(steps.every(d => d >= -0.01), `steps ${steps.join(', ')}`).toBe(true);
+            const moving = steps.filter(d => d > 0.01);
+            expect(Math.max(...moving), `steps ${steps.join(', ')}`).toBeLessThan(3 * Math.min(...moving));
+            expect(ys[ys.length - 1]).toBeGreaterThan(whole[1]);
+            expect((await viewBox())[2]).toBeCloseTo(whole[2], 1);
+            await page.waitForTimeout(350);
+            await expect(focusDisc(page)).toContainText('Oskar');
+
+            // A long drag far away: the fan stays on the surface (about half of it at the least).
+            await touch('touchStart', [{ x: cx, y: cy }]);
+            for (let i = 1; i <= 20; i++) await touch('touchMove', [{ x: cx - i * 40, y: cy - i * 40 }]);
+            await touch('touchEnd', []);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
+            const cover = await page.evaluate(() => {
+                const chart = document.querySelector('#fan-chart')!.getBoundingClientRect();
+                let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+                for (const el of document.querySelectorAll('#fan-chart .fan-svg path')) {
+                    const q = el.getBoundingClientRect();
+                    if (!q.width && !q.height) continue;
+                    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+                }
+                const ix = Math.max(0, Math.min(r, chart.right) - Math.max(l, chart.left));
+                const iy = Math.max(0, Math.min(b, chart.bottom) - Math.max(t, chart.top));
+                return { x: ix / Math.min(r - l, chart.width), y: iy / Math.min(b - t, chart.height) };
+            });
+            expect(cover.x, JSON.stringify(cover)).toBeGreaterThanOrEqual(0.4);
+            expect(cover.y, JSON.stringify(cover)).toBeGreaterThanOrEqual(0.4);
+
+            // ⛶ brings the whole fan back in the middle; a tap on a sector still re-centres.
+            await page.waitForTimeout(350);
+            await page.locator('#fan-zoom-controls [data-fan-zoom-act="fit"]').click();
+            await expect.poll(async () => (await viewBox()).map(n => Math.round(n))).toEqual(whole.map(n => Math.round(n)));
+            await settled(page);
+            const p = await keyPoint(page, 'a2');
+            await touch('touchStart', [p]);
+            await touch('touchEnd', []);
+            await expect(focusDisc(page)).toContainText('Emil');
+        });
     });
 }
+
+test('fan: a mouse drag moves the whole fan without a zoom, like the family tree (1101)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openImplexFan(page);
+    const viewBox = async () => (await page.locator('#fan-chart .fan-svg').getAttribute('viewBox'))!.split(' ').map(Number);
+    const box = (await page.locator('#fan-chart').boundingBox())!;
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+    const whole = await viewBox();
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 60, cy + 20, { steps: 6 });
+    await page.mouse.move(cx + 120, cy + 40, { steps: 6 });
+    await page.mouse.up();
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    const moved = await viewBox();
+    expect(moved[0]).toBeLessThan(whole[0] - 20);
+    expect(moved[1]).toBeLessThan(whole[1] - 5);
+    expect(moved[2]).toBeCloseTo(whole[2], 1);
+    // The drag was no tap.
+    await page.waitForTimeout(350);
+    await expect(focusDisc(page)).toContainText('Oskar');
+});
 
 for (const [w, h] of [[390, 844], [844, 390], [800, 1100], [1440, 900]]) {
     test(`fan: the original person pill stays clear of the evidence pill, the chip and the toolbar at ${w}×${h} (1031)`, async ({ page }) => {

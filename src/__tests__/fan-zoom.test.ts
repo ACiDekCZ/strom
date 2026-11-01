@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { transformSync } from 'esbuild';
 import {
     fanFitView, fanBasePpu, clampFanView, fanViewBox, fanZoomAt, fanPanBy, fanWheelFactor, fanPinchStep,
-    fanEase, fanLerpView, fanZoomInlineScript, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FanView,
+    fanEase, fanLerpView, fanZoomInlineScript, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
 } from '../fan-zoom.js';
 import type { FanBounds } from '../fan-chart.js';
 
@@ -94,6 +94,29 @@ describe('fan zoom: the clamp keeps the view inside the frame', () => {
         const v = clampFanView({ z: 1, cx: 4000, cy: -4000 }, G, W, H);
         near(v.cx, G.x + G.w / 2);
         near(v.cy, G.y + G.h / 2);
+    });
+
+    it('the Fan view pans the whole fan too, by at most half of it; zoomed in, up to the frame edge (1101)', () => {
+        const o = FAN_VIEW_OVERSCROLL;
+        const fit = fanFitView(G);
+        const ppu = fanBasePpu(G, W, H);
+        // z = 1: a small drag moves the whole fan with the finger (both axes).
+        const small = fanPanBy(fit, 40, -30, G, W, H, o);
+        near(small.cx, fit.cx - 40 / ppu);
+        near(small.cy, fit.cy + 30 / ppu);
+        // A huge drag stops when the fan has moved by half of the smaller of view and frame.
+        const vb0 = fanViewBox(fit, G, W, H, o);
+        const far = fanPanBy(fit, 1e6, -1e6, G, W, H, o);
+        near(far.cx, fit.cx - o * Math.min(vb0.w, G.w));
+        near(far.cy, fit.cy + o * Math.min(vb0.h, G.h));
+        // Zoomed in: the view's centre reaches the frame's edge, no further.
+        const z3 = fanPanBy(fanZoomAt(fit, 3, 500, 300, G, W, H, o), 1e6, 1e6, G, W, H, o);
+        near(z3.cx, G.x);
+        near(z3.cy, G.y);
+        // Without overscroll (pages) z = 1 stays put.
+        const page = fanPanBy(fit, 40, -30, G, W, H);
+        near(page.cx, fit.cx);
+        near(page.cy, fit.cy);
     });
 
     it('a drag moves the content with the pointer', () => {
