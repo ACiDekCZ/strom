@@ -108,6 +108,8 @@ interface DialogState {
     pages: PagesChoices;
     /** The whole tree turned into lineages by the pages (it comes back with the book). */
     treeForced: boolean;
+    /** The lineage the switch to the pages chose in place of the whole tree: its line shows until the next change (§6.1, §9.8). */
+    treeMoved: RodId | null;
     phase: Phase;
     est: PagesEstimate | null;
     estTimer: number | null;
@@ -240,7 +242,7 @@ function optionsHtml(s: DialogState): string {
         + `<div class="book-kinds" role="radiogroup" aria-labelledby="book-what-h">${kinds}`
         + (pages ? '' : `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
             + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div>`)
-        + `</div></section>`
+        + `</div>${pages ? '<p class="book-tree-moved" role="status" hidden></p>' : ''}</section>`
         + `<section class="book-sec book-sec-sel" data-sec="sel"><h3 class="book-sec-h book-sub-only" data-sub-title></h3>`
         + `<div class="book-sel book-sel-tree"><p class="book-hint">${esc(D.treeSentence)}</p></div>`
         + `<div class="book-sel book-sel-rods">`
@@ -351,6 +353,12 @@ function sync(s: DialogState): void {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
         if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
     });
+    const moved = modal.querySelector<HTMLElement>('.book-tree-moved');
+    if (moved) {
+        const l = pages && s.treeMoved ? labels.get(s.treeMoved) ?? '' : '';
+        moved.hidden = !l;
+        moved.textContent = l ? F.treeMoved(l) : '';
+    }
 
     const title = pages ? '' : syncBook(s, modal);
     if (pages) syncPages(s, modal);
@@ -525,7 +533,8 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
     estEl.classList.toggle('is-stale', s.estTimer !== null);
     setText(foot, '.fp-est-t', !ready ? (s.kind === 'rods' ? strings.book.noRodSelected : strings.book.dlg.noPerson) : zip ? F.estZip : F.estFile);
     setText(foot, '.fp-est-d', ready && est ? F.estDetail(est.size.pages, est.size.persons, est.size.images) : '');
-    setText(foot, '.fp-est-s', ready && est ? F.estSize(mbText(est.size.bytes)) : '');
+    // The set of files is reckoned as the one file: an upper bound (§6.3, §9.4).
+    setText(foot, '.fp-est-s', ready && est ? (zip ? F.estAtMost : F.estSize)(mbText(est.size.bytes)) : '');
     setText(foot, '.fp-file', ready && est ? (zip ? pageSetZipName(est.set) : est.name) : '');
     const big = foot.querySelector<HTMLElement>('.fp-big')!;
     big.hidden = !ready || !est || verdict === 'ok';
@@ -631,15 +640,32 @@ function scheduleEstimate(s: DialogState, now = false): void {
     s.estTimer = window.setTimeout(run, ESTIMATE_DEBOUNCE_MS);
 }
 
-/** The pages need lineages or a person: the whole tree turns into lineages (the first, when none is chosen). */
+/**
+ * The lineage of the context (§6.1, §9.8): the lineage of the person in
+ * focus (listed when small), else the largest lineage a book can choose.
+ */
+function contextRod(s: DialogState): RodId | null {
+    const focus = TreeRenderer.getFocusPersonId();
+    const row = focus && s.data.persons[focus] ? personRodRow(s.index, focus) : null;
+    if (row && s.index.rods.has(row.rodId)) {
+        if (!s.rodChoices.includes(row.rodId)) s.rodChoices.push(row.rodId);
+        return row.rodId;
+    }
+    let best: Rod | null = null;
+    for (const id of s.rodChoices) {
+        const r = s.index.rods.get(id);
+        if (r && (!best || r.realMemberCount > best.realMemberCount)) best = r;
+    }
+    return best?.id ?? null;
+}
+
+/** The pages need lineages or a person: the whole tree turns into the lineage of the context. */
 function fitSelectionToOutput(s: DialogState): void {
     if (s.output === 'pages' && s.kind === 'tree') {
         s.kind = 'rods';
         s.treeForced = true;
-        if (!s.rods.length) {
-            const first = s.rodChoices[0];
-            if (first) s.rods = [first];
-        }
+        const rod = contextRod(s);
+        s.rods = rod ? [rod] : [];
     } else if (s.output === 'book' && s.treeForced) {
         if (s.kind === 'rods') s.kind = 'tree';
         s.treeForced = false;
@@ -654,6 +680,7 @@ function renderOptions(s: DialogState): void {
 
 /** A change: remember the options (not the selection's person or the title) and refresh. */
 function changed(s: DialogState): void {
+    s.treeMoved = null;
     saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
     // A file made for other options is not the one to save.
     if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
@@ -681,6 +708,23 @@ export const bookUiMethods = uiModule({
         const focus = TreeRenderer.getFocusPersonId();
         const row = focus && data.persons[focus] ? personRodRow(buildLineages(data), focus) : null;
         this.openBookDialog({ kind: 'menu' }, undefined, { output: 'pages', selection: row ? { kind: 'rods', rods: [row.rodId] } : undefined });
+    },
+
+    /**
+     * Actions → For the family and the phone's bottom sheet (026 §7, §9.6):
+     * the pages' window with the lineage of the person in focus; a person
+     * without a lineage → the dialog with that person's branch; nobody in
+     * focus → the dialog as Export opens it.
+     */
+    openFamilyPagesForFocus(): void {
+        this.closeMobileMenu?.();
+        const data = DataManager.getData();
+        const focus = TreeRenderer.getFocusPersonId();
+        const p = focus ? data.persons[focus] : undefined;
+        if (!p || p.isPlaceholder) { this.showFamilyPagesDialog(); return; }
+        const row = personRodRow(buildLineages(data), p.id);
+        if (row) { this.openRodPage(row.rodId); return; }
+        this.openBookDialog({ kind: 'person', person: p.id }, undefined, { output: 'pages' });
     },
 
     /** The book of a person's descendants, 4 generations (§4.8). */
@@ -741,6 +785,7 @@ export const bookUiMethods = uiModule({
             output,
             pages: pagesChoicesFromMemory(memory),
             treeForced: false,
+            treeMoved: null,
             phase: 'options',
             est: null,
             estTimer: null,
@@ -807,9 +852,12 @@ export const bookUiMethods = uiModule({
                 st.sub = null;
                 st.phase = 'options';
                 st.file = null;
+                const fromTree = out === 'pages' && st.kind === 'tree';
                 fitSelectionToOutput(st);
                 renderOptions(st);
                 changed(st);
+                // The whole tree is the book's alone so far: say once which lineage took its place.
+                if (fromTree && st.kind === 'rods' && st.rods.length) { st.treeMoved = st.rods[0]; sync(st); }
                 if (out === 'pages') scheduleEstimate(st, true);
                 return;
             }

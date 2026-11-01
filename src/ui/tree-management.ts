@@ -686,6 +686,11 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         this.showBookDialog();
     },
+    /** For the family → Family pages (026 §9.6): right after the book. */
+    treeActionPages(): void {
+        this.closeActionsMenu();
+        this.openFamilyPagesForFocus();
+    },
     treeActionExport(): void {
         // The one export hub for the active tree (JSON / App / GEDCOM / CSV /
         // Poster / Book / Share); its switch picks the whole tree or the view.

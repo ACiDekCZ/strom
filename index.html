@@ -15553,6 +15553,9 @@
         #book-modal .book-sec-h { margin: 0 0 10px; font-size: 13.5px; font-weight: 600; color: var(--accent-text); }
         #book-modal .book-sec-h label { font: inherit; color: inherit; }
         #book-modal .book-hint { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        /* The switch to the pages moved the whole tree to a lineage: said once, gone at the next change (026 §9.8). */
+        #book-modal .book-tree-moved { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        #book-modal .book-tree-moved[hidden] { display: none; }
         /* What goes in the book: four cards 2 × 2 and the "House · later" placeholder */
         #book-modal .book-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         #book-modal .book-kind {
@@ -19824,7 +19827,7 @@
                 </div>
                 <!-- "Export all" now and then (a research tree, not backed up; research-actions-ui.ts). -->
                 <div class="export-reminder" id="actions-export-reminder" hidden></div>
-                <!-- "For the family ›": what is made for the relatives (book, poster, TV slideshow). -->
+                <!-- "For the family ›": what is made for the relatives (book, family pages, poster, TV slideshow). -->
                 <div class="actions-submenu-wrap actions-family-wrap" id="actions-family-wrap">
                     <div class="tree-switcher-action actions-submenu-row actions-family-row" id="actions-family-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="actions-family-submenu" onclick="window.Strom.UI.toggleActionsSubmenu('family')">
                         <span data-i18n="menu.forFamily"></span>
@@ -19833,6 +19836,9 @@
                     <div class="actions-submenu actions-family-submenu" id="actions-family-submenu" role="menu" data-i18n-aria-label="menu.forFamily">
                         <div class="tree-switcher-action" id="actions-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
                             <span data-i18n="book.menu"></span>
+                        </div>
+                        <div class="tree-switcher-action" id="actions-pages-row" onclick="window.Strom.UI.treeActionPages()" tabindex="0" role="menuitem">
+                            <span data-i18n="familyPages.menuItem"></span>
                         </div>
                         <div class="tree-switcher-action" id="actions-poster-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
                             <span data-i18n="menu.poster"></span>

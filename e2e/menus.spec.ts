@@ -103,7 +103,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(new Set(merges).size).toBe(merges.length);
     });
 
-    test('For the family ›: Family book, Poster…, Slideshow (TV); hover opens it, one flyout at a time', async ({ page }) => {
+    test('For the family ›: Family book, Family pages, Poster…, Slideshow (TV); hover opens it, one flyout at a time', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.locator('.actions-menu-btn').click();
@@ -115,7 +115,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(family).toBeVisible();
         await expect(family).toHaveAttribute('role', 'menu');
         expect((await family.locator('[role="menuitem"]').allInnerTexts()).map(t => t.trim()))
-            .toEqual(['Family book', 'Poster…', 'Slideshow (TV)']);
+            .toEqual(['Family book', 'Family pages', 'Poster…', 'Slideshow (TV)']);
         // Opened by a click, then the other flyout: only one is open.
         await page.locator('#actions-family-row').click();
         await expect(page.locator('#actions-family-wrap')).toHaveClass(/submenu-open/);
@@ -141,9 +141,12 @@ test.describe('actions menu "Tree:" submenu', () => {
         await row.press('ArrowRight');
         await expect(wrap).toHaveClass(/submenu-open/);
         await expect(page.locator('#actions-book-row')).toBeFocused();
-        // ↓ / ↑ walk inside the flyout only.
+        // ↓ / ↑ walk inside the flyout only (the family pages right after the book, 026 §9.6).
+        await page.keyboard.press('ArrowDown');
+        await expect(page.locator('#actions-pages-row')).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-poster-row')).toBeFocused();
+        await page.keyboard.press('ArrowUp');
         await page.keyboard.press('ArrowUp');
         await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-slideshow-row')).toBeFocused();
