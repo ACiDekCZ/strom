@@ -343,6 +343,18 @@ describe('labels of wide short sectors on a phone (1101)', () => {
         }
     });
 
+    it('the focus disc keeps the given name where only a cut surname would fit', () => {
+        const d = withUnions([
+            person('me', 'male', [], { firstName: 'Johann', lastName: 'Oberwaldenburger-Kreuzfeldt' }), person('w', 'female'),
+            person('c1', 'female'),
+        ], [union('u1', 'me', 'w', ['c1'])]);
+        const m = buildFanModel(d, 'me' as PersonId, { generations: 3, shape: 'two', descGenerations: 2 })!;
+        const svg = buildFanSvg(m, { ...svgOpts, editable: false, ppu: 0.45, measure: estimate, sizes: fanScreenSizes(true) });
+        const disc = svg.match(/<g class="fan-focus[^]*?<\/g>/)![0];
+        expect(disc).toMatch(/>Johann</);
+        expect(disc).not.toContain('…');
+    });
+
     it('a sector whose own box holds the name keeps that direction', () => {
         const m = buildFanModel(fam(), 'me' as PersonId, { generations: 3, shape: 'two', descGenerations: 2 })!;
         const before = buildFanSvg(m, { ...svgOpts, editable: false, ppu: 3, measure: estimate });

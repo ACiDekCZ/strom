@@ -120,6 +120,19 @@ export function fanReservedBounds(b: FanBounds, floor: number, W: number, H: num
 }
 
 /**
+ * The px a W × H surface must grow by so that the whole fan keeps its size
+ * (the fit without the corner) and still leaves `px` free under y = `floor`:
+ * the buttons get a band of their own under the drawing instead of the fan
+ * shrinking for them (1101: on a phone it lost 11 % and its labels). 0 when
+ * the surface already has the room.
+ */
+export function fanReserveGrowPx(b: FanBounds, floor: number, W: number, H: number, px: number): number {
+    if (!(px > 0 && W > 0 && H > 0 && b.w > 0 && b.h > 0)) return 0;
+    const u = fanBasePpu(b, W, H);
+    return Math.max(0, Math.ceil((floor - b.y) * u + px - H - 0.01));
+}
+
+/**
  * The px the buttons `el` take from the bottom of `surface` (with the gap);
  * 0 while they are not shown (print, a closed section).
  */
@@ -249,9 +262,11 @@ export interface FanZoomOptions {
     /** The motion is reduced: views change at once. Default: the OS setting. */
     reducedMotion?: () => boolean;
     /**
-     * Buttons over a bottom corner: the whole fan keeps clear of them (the
-     * frame grows at the bottom, see fanReservedBounds), measured with every
-     * new size. `floor`: the lowest y of the drawing beside the focus disc.
+     * Buttons over a bottom corner: the whole fan keeps clear of them,
+     * measured with every new size. The surface grows by the px it lacks
+     * (`--fan-grow` on it, which its CSS height adds; fanReserveGrowPx), so the
+     * fan keeps its size; the frame grows at the bottom (fanReservedBounds).
+     * `floor`: the lowest y of the drawing beside the focus disc.
      */
     reserve?: { el: HTMLElement; floor: number } | null;
 }
@@ -283,6 +298,8 @@ export class FanZoom {
     /** The fan's own frame; `bounds` is it grown for the reserved corner. */
     private frameBounds: FanBounds;
     private bounds: FanBounds;
+    /** The px the surface grew by for the reserved corner (its `--fan-grow`). */
+    private grow = 0;
     private view: FanView;
     private W = 0;
     private H = 0;
@@ -478,9 +495,17 @@ export class FanZoom {
     /** The frame for this size: grown so the whole fan keeps clear of the corner's buttons. */
     private reserveCorner(): void {
         const r = this.o.reserve;
-        this.bounds = r && this.W && this.H
-            ? fanReservedBounds(this.frameBounds, r.floor, this.W, this.H, fanReservePx(this.o.surface, r.el))
-            : this.frameBounds;
+        if (!r || !this.W || !this.H) { this.bounds = this.frameBounds; return; }
+        const s = this.o.surface;
+        const px = fanReservePx(s, r.el);
+        const grow = fanReserveGrowPx(this.frameBounds, r.floor, this.W, this.H - this.grow, px);
+        if (grow !== this.grow) {
+            this.grow = grow;
+            s.style.setProperty('--fan-grow', `${grow}px`);
+            this.W = s.clientWidth;
+            this.H = s.clientHeight;
+        }
+        this.bounds = fanReservedBounds(this.frameBounds, r.floor, this.W, this.H, px);
     }
 
     private ensureSize(): void {
@@ -737,10 +762,11 @@ export function fanZoomInlineScript(): string {
 // Kept hand-compact (no build step for it): a test checks its size, that it
 // parses, and that it uses nothing outside the page.
 const FAN_ZOOM_INLINE = `(function(){var M=Math,R=matchMedia('(prefers-reduced-motion: reduce)').matches,mac=/mac|iphone|ipad/i.test(navigator.platform||'');
-function F(el){var s=el.querySelector('svg.fan-svg');if(!s||el.__fz)return;el.__fz=1;var b=s.getAttribute('viewBox').split(/[ ,]+/).map(Number),G0={x:b[0],y:b[1],w:b[2],h:b[3]},G=G0,v,W,H,P={},n=0,pd=null,pin=null,sup=0,an=0,ht,hint=el.querySelector('[data-fan-zoom-hint]'),rk=el.querySelector('[data-fan-zoom-reserve]');
+function F(el){var s=el.querySelector('svg.fan-svg');if(!s||el.__fz)return;el.__fz=1;var b=s.getAttribute('viewBox').split(/[ ,]+/).map(Number),G0={x:b[0],y:b[1],w:b[2],h:b[3]},G=G0,v,W,H,P={},n=0,pd=null,pin=null,sup=0,an=0,ht,gd=0,hint=el.querySelector('[data-fan-zoom-hint]'),rk=el.querySelector('[data-fan-zoom-reserve]');
 if(hint&&mac&&hint.getAttribute('data-mac'))hint.textContent=hint.getAttribute('data-mac');
 function fit(){return{z:1,cx:G.x+G.w/2,cy:G.y+G.h/2}}
-function sz(){W=el.clientWidth||1;H=el.clientHeight||1;G=G0;var r=rk&&rk.getBoundingClientRect(),q=r&&r.height?el.getBoundingClientRect().bottom-r.top+6:0,f=rk?+rk.getAttribute('data-fan-zoom-reserve')||0:0,lo=0,hi=G0.h,i,m;
+function sz(){W=el.clientWidth||1;H=el.clientHeight||1;G=G0;var r=rk&&rk.getBoundingClientRect(),q=r&&r.height?el.getBoundingClientRect().bottom-r.top+6:0,f=rk?+rk.getAttribute('data-fan-zoom-reserve')||0:0,lo=0,hi=G0.h,i,m,g;
+if(rk){H-=gd;g=q?M.max(0,M.ceil((f-G0.y)*M.min(W/G0.w,H/G0.h)+q-H-.01)):0;if(g!=gd){gd=g;el.style.setProperty('--fan-grow',g+'px')}W=el.clientWidth||1;H=el.clientHeight||1}
 function fr(e){var h=G0.h+e,u=M.min(W/G0.w,H/h);return(H-h*u)/2+(G0.y+h-f)*u}
 if(!q||q>=H||fr(0)>=q)return;while(fr(hi)<q)hi*=2;for(i=0;i<40;i++){m=(lo+hi)/2;if(fr(m)>=q)hi=m;else lo=m}G={x:G0.x,y:G0.y,w:G0.w,h:G0.h+hi}}
 function p0(){return M.min(W/G.w,H/G.h)}

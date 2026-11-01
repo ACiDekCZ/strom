@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { transformSync } from 'esbuild';
 import {
     fanFitView, fanBasePpu, clampFanView, fanViewBox, fanZoomAt, fanPanBy, fanWheelFactor, fanPinchStep,
-    fanEase, fanLerpView, fanZoomInlineScript, fanReservedBounds, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
+    fanEase, fanLerpView, fanZoomInlineScript, fanReservedBounds, fanReserveGrowPx, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
 } from '../fan-zoom.js';
 import type { FanBounds } from '../fan-chart.js';
 
@@ -184,9 +184,28 @@ describe('fan zoom: the buttons\' corner stays free (1101)', () => {
         expect(fanReservedBounds(F, 0, 680, 60, 68)).toBe(F);
     });
 
+    it('the fan keeps its size: the surface grows by the px the corner lacks, the frame then leaves them under the foot (1101)', () => {
+        // On a phone the fan lost 11 % (and its labels) when only the frame grew.
+        for (const [W, H, px] of [[680, 380, 70], [600, 340, 70], [390, 236, 66], [760, 260, 66], [320, 236, 66]]) {
+            const u0 = fanBasePpu(F, W, H);
+            const g = fanReserveGrowPx(F, 0, W, H, px);
+            expect(g, `${W}×${H}`).toBeGreaterThanOrEqual(0);
+            const b = fanReservedBounds(F, 0, W, H + g, px);
+            expect(fanBasePpu(b, W, H + g), `${W}×${H}`).toBeGreaterThanOrEqual(u0 - 1e-9);
+            expect(freeUnder(b, W, H + g), `${W}×${H}`).toBeGreaterThanOrEqual(px - 1e-6);
+            // No more than that: one px of rounding.
+            expect(freeUnder(b, W, H + g), `${W}×${H}`).toBeLessThan(px + 1.5);
+        }
+        // The phone: 25 px more, the fan as wide as the screen as before.
+        expect(fanReserveGrowPx(F, 0, 390, 236, 66)).toBe(25);
+        expect(fanReserveGrowPx(F, 0, 680, 900, 68)).toBe(0);
+        expect(fanReserveGrowPx(F, 0, 680, 380, 0)).toBe(0);
+    });
+
     it('the saved page\'s script does the same from its buttons\' corner', () => {
         const src = fanZoomInlineScript();
         expect(src).toContain('[data-fan-zoom-reserve]');
+        expect(src).toContain('--fan-grow');
     });
 });
 

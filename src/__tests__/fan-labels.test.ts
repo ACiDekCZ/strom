@@ -86,6 +86,37 @@ describe('label ladder (§4.4)', () => {
         expect(fit(p, box(15, 14))).toBeNull();
     });
 
+    it('breaks a double surname after its hyphen before shortening it (1101)', () => {
+        const p2 = person({ firstName: 'Anna', lastName: 'Oberwaldenburger-Kreuzfeldt', birthDate: '1931-01-14', deathDate: '2019-06-02' });
+        const l = fit(p2, box(110, 60));
+        expect(texts(l)).toEqual(['Anna', 'Oberwaldenburger-', 'Kreuzfeldt', '1931–2019']);
+        expect(l!.level).toBe(2);
+        // Two lines only: the initial goes before the first half, then the halves alone.
+        expect(texts(fit(p2, box(115, 26)))).toEqual(['A. Oberwaldenburger-', 'Kreuzfeldt']);
+        expect(texts(fit(p2, box(100, 26)))).toEqual(['Oberwaldenburger-', 'Kreuzfeldt']);
+    });
+
+    it('cuts a long surname short rather than leaving the sector empty (1101)', () => {
+        // §4.4 kept 60 % of a cut surname: a double surname in a small sector then showed nothing.
+        const p2 = person({ firstName: 'Anna', lastName: 'Oberwaldenburger-Kreuzfeldt' });
+        const l = fit(p2, box(50, 14));
+        expect(texts(l)).toEqual(['Oberwald…']);
+        expect(l!.level).toBe(6);
+        // Never under four letters.
+        expect(texts(fit(person(), box(27, 14)))).toEqual(['Laro…']);
+    });
+
+    it('where not even four letters fit, the initials (1101)', () => {
+        const narrow = (t: string, fs: number) => [...t].reduce((w, c) => w + (c === '.' || c === ' ' ? 0.25 : 0.6), 0) * fs;
+        const l = fit(person({ firstName: 'Ursula', lastName: 'Hengstler' }), box(24, 14), { measure: narrow });
+        expect(texts(l)).toEqual(['U. H.']);
+        expect(l!.level).toBe(7);
+        // A protected living person never: the initials would name them.
+        expect(fit(person({ firstName: 'Ursula', lastName: 'Hengstler', deathDate: undefined }), box(24, 14), { measure: narrow, protect: true })).toBeNull();
+        // An unknown person has none.
+        expect(fit(person({ firstName: '', lastName: '' }), box(24, 14), { measure: narrow })?.rows.map(r => r.text) ?? []).not.toContain('?.');
+    });
+
     it('breaks a long name into given names over the surname before shortening it', () => {
         expect(texts(fit(person({ firstName: 'Johannes Jacobus', deathDate: undefined, birthDate: undefined }), box(100, 30)))).toEqual(['Johannes Jacobus', 'Laroulek']);
     });

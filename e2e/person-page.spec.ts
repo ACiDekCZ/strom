@@ -625,7 +625,11 @@ test.describe('desktop', () => {
         await expect(sec.locator('.pp-anc-meta')).toHaveText('4 generations · 2 people');
         await expect(w.locator('.pp-toc .pp-toc-link', { hasText: 'Ancestors' })).toHaveCount(1);
         const fan = sec.locator('.pp-anc-fan');
-        expect(Math.round((await fan.boundingBox())!.height)).toBe(380);
+        // 380 px, and the band the buttons' corner needs under the fan's foot (1101: the fan keeps its size).
+        const grow = await fan.evaluate(f => parseFloat(f.style.getPropertyValue('--fan-grow')) || 0);
+        expect(grow).toBeGreaterThan(0);
+        expect(grow).toBeLessThanOrEqual(20);
+        expect(Math.round((await fan.boundingBox())!.height)).toBe(380 + grow);
         const svg = fan.locator('svg').first();
         // The whole fan as the zoom fits it to the surface.
         await fan.locator('[data-fan-zoom-act="fit"]').click();
@@ -1211,7 +1215,7 @@ test.describe('a phone', () => {
         await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
     });
 
-    test('Ancestors (1031): the fan across the screen, 236 px, only ⛶, the tap line; a tap opens the ancestor', async ({ page }) => {
+    test('Ancestors (1031): the fan across the screen, 236 px (+ the band for ⛶), only ⛶, the tap line; a tap opens the ancestor', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);
         await card(page, 'Jan').click();
@@ -1220,7 +1224,11 @@ test.describe('a phone', () => {
         const fan = w.locator('#pp-sec-ancestors .pp-anc-fan');
         await fan.scrollIntoViewIfNeeded();
         const box = (await fan.boundingBox())!;
-        expect(Math.round(box.height)).toBe(236);
+        // 236 px and the band for ⛶ under the fan's foot: the fan stays as wide as the screen (1101).
+        const grow = await fan.evaluate(f => parseFloat(f.style.getPropertyValue('--fan-grow')) || 0);
+        expect(grow).toBeGreaterThan(0);
+        expect(grow).toBeLessThanOrEqual(30);
+        expect(Math.round(box.height)).toBe(236 + grow);
         expect(Math.round(box.width)).toBe(390);
         await expect(fan.locator('[data-fan-zoom-act="fit"]')).toBeVisible();
         await expect(fan.locator('[data-fan-zoom-act="in"]')).toBeHidden();
@@ -1382,5 +1390,77 @@ test.describe('Ancestors: the buttons cover no ancestor (1101)', () => {
             expect(await sectorsUnderButtons(file), `${s.width}×${s.height}`).toEqual([]);
             await ctx.close();
         }
+    });
+});
+
+test.describe('Ancestors: every ancestor carries a label (1101)', () => {
+    /** Julia's four generations (Ahnentafel numbers), a long double surname on her mother's line. */
+    const PEDIGREE: Array<[number, string, string, string, string]> = [
+        [1, 'Julia', 'Klein', '1956', ''], [2, 'Peter', 'Klein', '1929', '2004'], [3, 'Anna', 'Oberwaldenburger-Kreuzfeldt', '1931', '2019'],
+        [4, 'Anton', 'Klein', '1898', '1962'], [5, 'Maria', 'Kaiser', '1902', '1979'],
+        [6, 'Johann', 'Oberwaldenburger-Kreuzfeldt', '1898', '1967'], [7, 'Maria', 'Lindauer', '1902', '1988'],
+        [8, 'Jakob', 'Klein', '1870', '1935'], [9, 'Elisabeth', 'Wolf', '1874', '1949'], [10, 'Paul', 'Kaiser', '1868', '1930'],
+        [11, 'Johanna', 'Fischer', '1872', '1950'], [12, 'Georg', 'Oberwaldenburger-Kreuzfeldt', '1865', '1931'],
+        [13, 'Katharina', 'Vogel', '1870', '1944'], [14, 'Franz', 'Lindauer', '1874', '1940'], [15, 'Theresia', 'Huber', '1876', '1950'],
+        [16, 'Andreas', 'Klein', '1841', '1903'], [17, 'Barbara', 'Sauter', '1845', '1912'], [18, 'Matthias', 'Wolf', '1846', '1915'],
+        [19, 'Kreszentia', 'Haag', '1850', '1921'], [20, 'Xaver', 'Kaiser', '1839', '1899'], [21, 'Agatha', 'Moosmann', '1843', '1908'],
+        [22, 'Konrad', 'Fischer', '1842', '1910'], [23, 'Genoveva', 'Rapp', '1847', '1913'],
+        [24, 'Josef', 'Oberwaldenburger-Kreuzfeldt', '1838', '1901'], [25, 'Anna', 'Bauer', '1840', '1905'],
+        [26, 'Lorenz', 'Vogel', '1841', '1900'], [27, 'Magdalena', 'Brunnhuber', '1845', '1910'],
+        [28, 'Martin', 'Lindauer', '1846', '1910'], [29, 'Rosalia', 'Schwarz', '1849', '1920'],
+        [30, 'Sebastian', 'Huber', '1848', '1919'], [31, 'Ursula', 'Hengstler', '1851', '1925'],
+    ];
+
+    const open = async (page: Page) => {
+        await openApp(page);
+        await page.evaluate(async (rows) => {
+            const persons: Record<string, unknown> = {};
+            for (const [n, firstName, lastName, b, d] of rows) {
+                persons[`a${n}`] = {
+                    id: `a${n}`, firstName, lastName, gender: n === 1 || n % 2 === 1 ? 'female' : 'male', isPlaceholder: false,
+                    parentIds: n < 16 ? [`a${2 * n}`, `a${2 * n + 1}`] : [], childIds: n > 1 ? [`a${n >> 1}`] : [], partnerships: [],
+                    birthDate: b, ...(d ? { deathDate: d } : {}),
+                };
+            }
+            await window.Strom.DataManager.importAsNewTree({ persons, partnerships: {} } as never, 'Pedigree');
+            await window.Strom.TreeRenderer.setFocus('a1' as never);
+        }, PEDIGREE);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('a1' as never));
+        const fan = win(page).locator('#pp-sec-ancestors .pp-anc-fan');
+        await fan.scrollIntoViewIfNeeded();
+        await expect(fan.locator('.fan-sector[data-fan-ahnentafel="31"]')).toHaveCount(1);
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await page.waitForTimeout(400);
+        return fan;
+    };
+
+    /** The text of every ancestor's sector, by Ahnentafel number. */
+    const labels = (fan: ReturnType<Page['locator']>) => fan.evaluate(f => Object.fromEntries(
+        [...f.querySelectorAll<SVGGElement>('.fan-sector[data-fan-ahnentafel]')]
+            .map(g => [g.dataset.fanAhnentafel!, [...g.querySelectorAll('text')].map(t => t.textContent).join(' ').trim()]),
+    ));
+
+    for (const s of [{ width: 1440, height: 900, touch: false }, { width: 390, height: 844, touch: true }]) {
+        test(`at ${s.width}: no ancestor's sector is empty, a long double surname included`, async ({ browser }) => {
+            const ctx = await browser.newContext({ viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch });
+            const page = await ctx.newPage();
+            const got = await labels(await open(page));
+            for (let n = 2; n < 32; n++) expect(got[String(n)], `#${n} ${PEDIGREE[n - 1][2]}`).toMatch(/\S/);
+            // The mother's line is named, cut short where its sector is small.
+            expect(got['3']).toContain('Oberwald');
+            if (s.width > 640) expect(got['3']).toContain('Kreuzfeldt');
+            await ctx.close();
+        });
+    }
+
+    test('at 390 the parents and grandparents keep their names with the years (the fan keeps its size for ⛶)', async ({ browser }) => {
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        const page = await ctx.newPage();
+        const got = await labels(await open(page));
+        expect(got['2']).toBe('Peter Klein 1929–2004');
+        expect(got['4']).toBe('Anton Klein 1898–1962');
+        expect(got['5']).toBe('Maria Kaiser 1902–1979');
+        expect(got['7']).toBe('Maria Lindauer 1902–1988');
+        await ctx.close();
     });
 });

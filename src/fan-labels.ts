@@ -2,7 +2,8 @@
  * Fan chart labels (spec 029 §4): the box a sector offers its text at the
  * current scale (along the arc or along the radius), the reading direction
  * (never upside down), and the ladder that picks the most text that fits —
- * full name with full dates first, down to a cut surname or nothing at all.
+ * full name with full dates first, down to a cut surname, the initials, or
+ * nothing where not even those fit.
  *
  * Pure apart from the default text measurer, which uses a canvas when one is
  * available and an estimate otherwise (tests inject their own).
@@ -226,6 +227,21 @@ export function fanYears(p: Person): string {
     return '';
 }
 
+/**
+ * A double surname broken after the hyphen nearest its middle, the hyphen
+ * staying on the first line; null without one (or with an empty half).
+ */
+function hyphenHalves(surname: string): [string, string] | null {
+    const mid = surname.length / 2;
+    let at = -1;
+    for (let i = surname.indexOf('-'); i >= 0; i = surname.indexOf('-', i + 1)) {
+        if (at < 0 || Math.abs(i + 0.5 - mid) < Math.abs(at + 0.5 - mid)) at = i;
+    }
+    if (at <= 0 || at >= surname.length - 1) return null;
+    const a = surname.slice(0, at + 1).trim(), b = surname.slice(at + 1).trim();
+    return a.length > 1 && b ? [a, b] : null;
+}
+
 /** Initials of the given names: "Bohumil Karel" → "B. K.". */
 function initials(given: string): string {
     return given.split(/\s+/).filter(Boolean).map(w => `${[...w][0]}.`).join(' ');
@@ -244,7 +260,8 @@ export interface FanLabel {
     rows: FanLabelRow[];
     /**
      * Ladder step (§4.4): 1 full name + full dates, 2 name + years, 3 initials
-     * + years, 4 name without years, 5 surname, 6 cut surname.
+     * + years, 4 name without years, 5 surname, 6 cut surname, 7 the initials
+     * alone (1101).
      */
     level: number;
 }
@@ -264,6 +281,16 @@ export interface FitFanLabelOptions {
 }
 
 const LINE_HEIGHT = 1.18;
+
+/** The fewest characters a cut surname keeps before its "…" (step 6). */
+export const FAN_CUT_KEEP = 4;
+
+/** All the characters a label shows (to compare two of the same step). */
+function labelChars(l: FanLabel): number {
+    let n = 0;
+    for (const r of l.rows) n += [...r.text.replace(/…$/, '')].length;
+    return n;
+}
 
 interface Candidate {
     lines: string[];
@@ -285,6 +312,10 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
     const yr = fanYears(p) || null;
     const two = given && surname ? [rep + given, surname] : null;
     const ini = given && surname ? `${rep}${initials(given)} ${surname}` : null;
+    // A double surname may break after its hyphen: "Oberwaldenburger-" / "Kreuzfeldt" (1101).
+    const halves = hyphenHalves(surname);
+    const three = given && halves ? [rep + given, ...halves] : null;
+    const iniTwo = given && halves ? [`${rep}${initials(given)} ${halves[0]}`, halves[1]] : null;
     const out: Candidate[] = [];
     const push = (lines: string[] | null, sub: string | null, n: string | null, level: number) => {
         // Without dates a "+ dates" step (1-3) equals a step below it, which may shrink further.
@@ -294,20 +325,27 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
     const named = (n: string | null) => {
         push([rep + full], fd, n, 1);
         push(two, fd, n, 1);
+        push(three, fd, n, 1);
         push([rep + full], yr, n, 2);
         push(two, yr, n, 2);
+        push(three, yr, n, 2);
     };
     if (note) named(note);
     named(null);
     push(ini ? [ini] : null, yr, null, 3);
+    push(iniTwo, yr, null, 3);
     if (note) {
         push([rep + full], null, note, 4);
         push(two, null, note, 4);
+        push(three, null, note, 4);
     }
     push([rep + full], null, null, 4);
     push(two, null, null, 4);
+    push(three, null, null, 4);
     push(ini ? [ini] : null, null, null, 4);
+    push(iniTwo, null, null, 4);
     push([rep + (surname || full)], null, null, 5);
+    if (halves) push([rep + halves[0], halves[1]], null, null, 5);
     // Only exact repeats go (same rows and the same font floor).
     const seen = new Set<string>();
     return out.filter(c => {
@@ -321,7 +359,7 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
 /**
  * The most text of a person that fits a box: the first ladder step whose
  * every row fits, trying sizes from the base down by 0.5 px. Null = the
- * sector shows only its colour (its title stays).
+ * sector shows only its colour (its title stays): not even the initials fit.
  */
 export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOptions): FanLabel | null {
     const { base, min } = opts;
@@ -352,14 +390,19 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
         }
     }
 
-    // Step 6: the surname cut with "…", only while at least 6 characters and 60 % stay.
+    // Step 6: the surname cut with "…", while at least FAN_CUT_KEEP characters stay —
+    // a long double surname cut short still names the line, an empty sector names
+    // nobody (1101; §4.4 kept 6 characters and 60 %, which left such sectors empty).
     if (box.cross >= min * LINE_HEIGHT) {
         const parts = shownNameParts(p, '?');
         const s = [...(opts.protect ? strings.fan.living : (opts.repeat ? '↻ ' : '') + (parts.surname.trim() || parts.given.trim() || '?'))];
-        for (let n = s.length - 1; n >= Math.max(6, Math.ceil(s.length * 0.6)); n--) {
+        for (let n = s.length - 1; n >= FAN_CUT_KEEP; n--) {
             const text = s.slice(0, n).join('') + '…';
             if (measure(text, min, true) <= box.len) return { rows: [{ text, fs: min, bold: true }], level: 6 };
         }
+        // Step 7: the initials ("W. S."), the card's monogram — still somebody, not an empty sector (1101).
+        const mono = opts.protect ? '' : [parts.given, parts.surname].map(w => [...w.trim()][0]).filter(c => c && c !== '?').map(c => `${c}.`).join(' ');
+        if (mono && measure(mono, min, true) <= box.len) return { rows: [{ text: mono, fs: min, bold: true }], level: 7 };
     }
     return null;
 }
@@ -367,7 +410,7 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
 /**
  * The label of a person's sector: the ladder in the box fanLabelBox chose,
  * and where that gives nothing or only a cut surname, in the turned box when
- * it holds more (1101: a wide short sector on a phone had no name at all,
+ * it holds more — a better step, or more of the cut surname (1101: a wide short sector on a phone had no name at all,
  * surnames were cut where the other direction had room). `adjust` shrinks a
  * box for what else the sector carries (the Kekulé number).
  */
@@ -382,7 +425,9 @@ export function fitFanSectorLabel(
     if (turned) {
         const tbox = adjust(turned);
         const tlabel = fitFanLabel(p, tbox, opts);
-        if (tlabel && (!label || tlabel.level < label.level)) return { label: tlabel, box: tbox };
+        if (tlabel && (!label || tlabel.level < label.level || (tlabel.level === label.level && labelChars(tlabel) > labelChars(label)))) {
+            return { label: tlabel, box: tbox };
+        }
     }
     return label ? { label, box } : null;
 }

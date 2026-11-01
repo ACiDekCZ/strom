@@ -664,7 +664,9 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             curved: false, anchor: 0, aspan: 0, upper: false, mid: 0, rc: 0,
             len: FOCUS_R * 1.7 * ppu - 6, cross: FOCUS_R * 1.25 * ppu - (back ? 14 : 0),
         };
-        const lab = fitFanLabel(f, box, { base: sizes.focus, min: sizes.min, yearsDrop: sizes.yearsDrop, protect: fprot, measure });
+        const fit = fitFanLabel(f, box, { base: sizes.focus, min: sizes.min, yearsDrop: sizes.yearsDrop, protect: fprot, measure });
+        // A cut surname or the initials name the focus worse than the given name below (1101).
+        const lab = fit && (fit.level < 6 || fprot || !f.firstName) ? fit : null;
         const rows: Array<{ text: string; fs: number; bold: boolean; cls?: string }> = lab
             ? lab.rows.slice()
             : [{ text: fprot ? strings.fan.living : (f.firstName || shownNameFull(f)), fs: sizes.min, bold: true }];

@@ -24,14 +24,15 @@ const FONT_STACKS = "--font-serif: 'Strom Serif', Georgia, 'Times New Roman', se
 
 /**
  * The Ancestors section (spec 029 §8): the fan on a tinted surface (desktop
- * 380 px high, a phone the column's full width × 236 px), ＋ − ⛶ bottom
+ * 380 px high, a phone the column's full width × 236 px; the zoom adds
+ * `--fan-grow` where the buttons' corner needs room), ＋ − ⛶ bottom
  * right (touch: ⛶ only), the Ctrl hint bottom centre, on touch a line on
  * what a tap does. The SVG fills the surface; its viewBox is the zoom.
  * Print: light, unfolded, the whole fan, no controls (§8.6).
  */
 const PERSON_PAGE_FAN_CSS = `
 .pp-anc-meta { font-size: 13px; color: var(--text-faint); font-weight: 400; font-family: var(--font-sans); }
-.pp-anc-fan { position: relative; height: 380px; margin-top: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pp-anc-fan { position: relative; height: calc(380px + var(--fan-grow, 0px)); margin-top: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .pp-anc-fan:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
 .pp-anc-fan .fan-svg { display: block; width: 100%; height: 100%; }
 .pp-anc-fan a { cursor: pointer; }
@@ -52,13 +53,13 @@ const PERSON_PAGE_FAN_CSS = `
   .pp .pp-anc-tap { display: block; }
 }
 @media (min-width: 641px) and (max-width: 1024px) {
-  .pp-anc-fan { height: 340px; }
+  .pp-anc-fan { height: calc(340px + var(--fan-grow, 0px)); }
 }
 @media (max-width: 640px) {
-  .pp-anc-fan { height: 236px; margin-inline: -16px; border-radius: 0; }
+  .pp-anc-fan { height: calc(236px + var(--fan-grow, 0px)); margin-inline: -16px; border-radius: 0; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-  .pp-anc-fan { height: 260px; margin-inline: 0; border-radius: 10px; }
+  .pp-anc-fan { height: calc(260px + var(--fan-grow, 0px)); margin-inline: 0; border-radius: 10px; }
 }
 @media print {
   #pp-sec-ancestors { break-inside: avoid; }
