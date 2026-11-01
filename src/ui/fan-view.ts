@@ -486,6 +486,7 @@ export class FanViewController {
 
     /** "↺ Original person · Name" while the focus is another person (fades when it returns). */
     private updatePill(now = false): void {
+        this.placeChip();
         const pill = this.pill;
         if (!pill) return;
         const origin = this.origin;
@@ -512,6 +513,22 @@ export class FanViewController {
             pill.hidden = true;
             pill.classList.remove('is-leaving');
         }, FADE_MS);
+    }
+
+    /**
+     * The legend chip keeps left of the tree's paused pill when both stand at
+     * the top right (a phone held sideways with a followed research's strip).
+     */
+    private placeChip(): void {
+        const chip = this.container?.querySelector<HTMLElement>('#fan-legend-chip');
+        const stage = this.stage();
+        if (!chip || !stage) return;
+        chip.style.right = '';
+        const paused = document.getElementById('live-follow-pill');
+        if (!paused || chip.getClientRects().length === 0) return;
+        const c = chip.getBoundingClientRect(), p = paused.getBoundingClientRect();
+        if (c.width === 0 || p.width === 0 || !(c.left < p.right && p.left < c.right && c.top < p.bottom && p.top < c.bottom)) return;
+        chip.style.right = `${Math.ceil(stage.getBoundingClientRect().right - p.left + 8)}px`;
     }
 
     /**
@@ -551,7 +568,7 @@ export class FanViewController {
         const pill = this.pill;
         if (!pill) return;
         pill.addEventListener('click', () => this.goOrigin());
-        const replace = () => { if (!pill.hidden) this.placePill(); };
+        const replace = () => { this.placeChip(); if (!pill.hidden) this.placePill(); };
         if (typeof MutationObserver === 'function') new MutationObserver(replace).observe(document.body, { childList: true });
         if (typeof ResizeObserver === 'function') {
             const stage = this.stage();

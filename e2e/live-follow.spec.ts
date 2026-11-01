@@ -496,4 +496,90 @@ test.describe('follow the agent in the tree', () => {
         expect(first).toBe(later.h);
         expect(later.clear).toBe(true);
     });
+
+    test.describe('a phone, touch (1101)', () => {
+        test.use({ hasTouch: true });
+
+        const TOAST = 'Recherche Fíškovi aus Strom Research geöffnet — 6 Personen, 2 Familien (Stand 30.09.2026)';
+        /** What the toast covers (pills, the strip, the fan's chrome), and whether it leaves the window. */
+        const toastClash = (page: Page): Promise<string[]> => page.evaluate(() => {
+            const t = document.querySelector('body > .toast.show')!.getBoundingClientRect();
+            const out: string[] = [];
+            for (const sel of ['#live-panel', '#evidence-pill', '#live-follow-pill', '#fan-origin-pill', '#fan-legend-chip', '#fan-toolbar', '.bottom-bar']) {
+                const el = document.querySelector(sel);
+                const b = el?.getBoundingClientRect();
+                if (b && b.width > 0 && b.height > 0 && t.left < b.right && b.left < t.right && t.top < b.bottom && b.top < t.bottom) out.push(sel);
+            }
+            if (t.top < 0 || t.bottom > window.innerHeight) out.push('outside');
+            return out;
+        });
+
+        test('a toast stands above the strip and the pills on it, upright and held sideways (1101)', async ({ page }) => {
+            await follow(page, { size: { width: 640, height: 360 }, idle: 60_000, on: true, ged: LINE_GED });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            for (const paused of [false, true]) {
+                if (paused) await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+                await expect(page.locator('#live-follow-pill')).toHaveCount(paused ? 1 : 0);
+                for (const [w, h] of [[640, 360], [390, 844], [844, 390]]) {
+                    await page.setViewportSize({ width: w, height: h });
+                    for (const mode of ['family', 'fan']) {
+                        await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                        await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                        await page.evaluate((text) => window.Strom.UI.showToast(text, 10000), TOAST);
+                        await expect(page.locator('body > .toast.show')).toBeVisible();
+                        await expect.poll(() => toastClash(page), `${paused ? 'paused' : 'following'} ${w}×${h} ${mode}`).toEqual([]);
+                    }
+                }
+                await page.setViewportSize({ width: 640, height: 360 });
+            }
+        });
+
+        test('held sideways at 640×360 the fan stays in view: it ends above the strip, the paused pill folds into a chip on the top row (1101)', async ({ page }) => {
+            await follow(page, { size: { width: 640, height: 360 }, idle: 60_000, on: true, ged: LINE_GED });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+            await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+            await expect(page.locator('#live-follow-pill')).toBeVisible();
+            await expect(page.locator('#fan-origin-pill')).toBeVisible();
+            const layout = (): Promise<string[]> => page.evaluate(() => {
+                const rect = (sel: string) => {
+                    const el = document.querySelector(sel);
+                    const r = el?.getBoundingClientRect();
+                    return r && r.width > 0 && r.height > 0 ? r : null;
+                };
+                const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+                const sels = ['#live-follow-pill', '#fan-origin-pill', '#fan-legend-chip', '#fan-toolbar', '#live-panel', '#fan-zoom-controls'];
+                const out: string[] = [];
+                for (let i = 0; i < sels.length; i++) {
+                    for (let j = i + 1; j < sels.length; j++) {
+                        const a = rect(sels[i]), b = rect(sels[j]);
+                        if (a && b && hit(a, b)) out.push(`${sels[i]} × ${sels[j]}`);
+                    }
+                }
+                const chart = rect('#fan-chart')!, strip = rect('#live-panel')!;
+                if (chart.bottom > strip.top) out.push('the fan under the strip');
+                // Rows of the fan's surface no pill covers (its middle half: the corners are empty).
+                const covers = ['#live-follow-pill', '#fan-origin-pill', '#fan-legend-chip', '#evidence-pill'].map(rect).filter((r): r is DOMRect => !!r)
+                    .filter(r => r.right > chart.left + chart.width / 4 && r.left < chart.right - chart.width / 4);
+                let free = 0;
+                for (let y = Math.ceil(chart.top); y < chart.bottom; y++) if (!covers.some(r => r.top <= y && r.bottom > y)) free++;
+                if (free < 0.6 * chart.height) out.push(`free ${free} of ${Math.round(chart.height)}`);
+                for (const b of document.querySelectorAll<HTMLElement>('#live-follow-pill button')) {
+                    if (b.getBoundingClientRect().height < 44) out.push(`small ${b.className}`);
+                }
+                if (window.innerWidth < document.documentElement.scrollWidth) out.push('scrollWidth');
+                return out;
+            });
+            for (const lang of ['de', 'cs', 'en']) {
+                await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+                await expect.poll(layout, lang).toEqual([]);
+            }
+            // The label is still there for a screen reader.
+            await expect(page.locator('#live-follow-pill .evidence-pill-label')).toHaveText(/\S/);
+            // Tablet held sideways and upright keep the full pill.
+            await page.setViewportSize({ width: 390, height: 844 });
+            await expect(page.locator('#live-follow-pill .evidence-pill-label')).toBeVisible();
+        });
+    });
 });

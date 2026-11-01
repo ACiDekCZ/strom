@@ -15281,6 +15281,13 @@
         @media (max-width: 640px) {
             .evidence-pill { bottom: calc(var(--bottom-bar-h, 64px) + 12px + var(--live-strip-h, 0px)); }
             .evidence-pill:has(~ .live-follow-pill) { bottom: calc(var(--bottom-bar-h, 64px) + 70px + var(--live-strip-h, 0px)); }
+            /* A toast (any slot) stands above the strip and the pill on it; above both pills when two are up. */
+            body:has(> #live-panel.phone-strip:not([hidden])) > .toast,
+            body:has(> #live-panel.phone-strip:not([hidden])) > .undo-toast,
+            body:has(> #live-panel.phone-strip:not([hidden])) .focus-toast { bottom: calc(var(--bottom-bar-h, 64px) + 68px + var(--live-strip-h, 0px)); }
+            body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) > .toast,
+            body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) > .undo-toast,
+            body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) .focus-toast { bottom: calc(var(--bottom-bar-h, 64px) + 128px + var(--live-strip-h, 0px)); }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             body:has(> #live-panel:not([hidden])) .evidence-pill {
@@ -15304,6 +15311,29 @@
             body:has(> #live-panel:not([hidden])):has(#live-follow-pill) .fan-legend-chip { top: auto; right: auto; left: 12px; bottom: 12px; }
             body.focus-nav-shown:has(> #live-panel:not([hidden])):has(#evidence-pill) .fan-legend-chip,
             body.focus-nav-shown:has(> #live-panel:not([hidden])):has(#live-follow-pill) .fan-legend-chip { bottom: 68px; }
+        }
+
+        /* A phone held sideways (at most 640 wide), the Fan view with a followed
+           research's strip: the fan ends above the strip, the paused pill folds
+           into a chip ("Back to the agent", ×; its label stays for screen
+           readers) at the top right beside the original person pill and the
+           legend chip. */
+        @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])) .fan-chart { bottom: calc(var(--live-strip-h, 0px) + 12px); }
+            body[data-view-mode="fan"] > .live-follow-pill { top: calc(var(--fan-toolbar-bottom, 93px) + 8px); bottom: auto; left: auto; right: 12px; padding: 4px; }
+            body[data-view-mode="fan"] > .live-follow-pill button { min-height: 44px; min-width: 44px; }
+            body[data-view-mode="fan"] > .live-follow-pill .evidence-pill-label {
+                position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+            }
+            body[data-view-mode="fan"] .evidence-pill:has(~ .live-follow-pill) { bottom: calc(var(--bottom-bar-h, 64px) + 12px + var(--live-strip-h, 0px)); }
+            /* The top right is the paused chip's, the legend chip left of it (fan-view.ts placeChip); the band
+               above the strip is free for a toast. */
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #live-follow-pill) > .toast,
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #live-follow-pill) > .undo-toast,
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #live-follow-pill) .focus-toast { bottom: calc(12px + var(--live-strip-h, 0px)); }
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #evidence-pill):has(> #live-follow-pill) > .toast,
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #evidence-pill):has(> #live-follow-pill) > .undo-toast,
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):has(> #evidence-pill):has(> #live-follow-pill) .focus-toast { bottom: calc(68px + var(--live-strip-h, 0px)); }
         }
 
         /* ---- Tree overview (src/ui/tree-overview.ts) ----
