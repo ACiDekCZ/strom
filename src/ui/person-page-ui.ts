@@ -653,13 +653,22 @@ export const personPageMethods = uiModule({
         // The page's content (delegation on .pp-body).
         // The places map (§1.4): a point or a row selects; the selected row again leads to the timeline.
         const mapPlace = target.closest<HTMLElement>('.pp-places [data-pp-map-place]');
-        if (mapPlace) { this.pickPersonPageMapPlace(mapPlace); return; }
+        // A person in a row of the family pages' map of places opens the person (spec 026 §3.7).
+        if (mapPlace && !target.closest('[data-sp-open]')) { this.pickPersonPageMapPlace(mapPlace); return; }
         // The life chart (§2.1): a period, mark or line leads to its timeline row.
         const osa = target.closest<HTMLElement>('.pp-chart [data-pp-osa]');
         if (osa) { e.preventDefault(); this.scrollPersonPageOsa(osa.dataset.ppOsa ?? ''); return; }
         // A link of a family pages' page (or of a person page to the set): the target's page in this window.
         const spOpen = target.closest<HTMLElement>('[data-sp-open]');
-        if (spOpen) { e.preventDefault(); this.openFamilyPagesTarget(setRef ?? null, spOpen.dataset.spOpen ?? ''); return; }
+        if (spOpen) {
+            e.preventDefault();
+            this.openFamilyPagesTarget(setRef ?? null, spOpen.dataset.spOpen ?? '');
+            // A place of a lineage's header: the map of places with the place selected (spec 026 §3.7).
+            const place = spOpen.dataset.spPlace;
+            const body = bodyEl();
+            if (place && body?.querySelector('.sp-page--map')) selectMapPlace(body, place);
+            return;
+        }
         const storyJump = target.closest<HTMLElement>('[data-pp-story]');
         if (storyJump) { e.preventDefault(); this.openPersonPageStory(storyJump.dataset.ppStory ?? ''); return; }
         const personBtn = target.closest<HTMLElement>('[data-pp-person]');

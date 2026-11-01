@@ -12,7 +12,7 @@
  * are `data-sp-open` buttons in the app's window (pageSetSectionHtml).
  */
 
-import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
+import { Partnership, PartnershipId, Person, PersonId, PlaceGeo, StromData } from './types.js';
 import { getStringsForLang, Language } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { Rod, RodId, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
@@ -35,6 +35,7 @@ import {
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
+import { RodPlacePoint, collectRodPlacePoints, planPlacesMap, placesMapHtml, rodPlacePointSize } from './person-page-map.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -115,8 +116,10 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
     const lines = [`<p>${esc(S.personPage.created(formatFlexDate(localDay(set.options.now), lang)))}</p>`];
     if (pageSetLivingNames(set).length) lines.push(`<p>${esc(S.familyPages.privacyNote[set.options.privacy])}</p>`);
     const r: Render = { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>`, gens: new Map() };
-    // A place of a lineage's header leads to its row of the index of places (§3.5; the map of places in step 6).
+    // A place of a lineage's header leads to the map with the place selected (§3.7), else to its row of the index of places (§3.5).
     base.placeLink = (key: string): string | null => {
+        const map = drawnSlug(r, set.mapSlug);
+        if (map && setMap(set).geo[key]) return mode === 'app' ? pageSetAppTarget(set.bySlug.get(map)!) : `#${map}`;
         const slug = drawnSlug(r, set.indexSlug.places);
         if (!slug) return null;
         if (mode === 'app') return pageSetAppTarget(set.bySlug.get(slug)!);
@@ -147,7 +150,7 @@ function rodOf(r: Render, id: string | undefined): Rod | undefined {
 /** The pages a link of the bar, the menu or the teaser may lead to: an index or the map, when the file draws it. */
 function drawnSlug(r: Render, slug: string): string {
     const page = slug ? r.set.bySlug.get(slug) : undefined;
-    return page && rendered(page) ? slug : '';
+    return page && rendered(r.set, page) ? slug : '';
 }
 
 /** "Index of this line" (§1.7): People · Families · Surnames · Places · Map of places. */
@@ -795,14 +798,74 @@ function indexPageHtml(r: Render, page: SetPage): string {
         + `<nav class="sp-tabs" aria-label="${esc(F.idxNav)}">${tabs}</nav><div class="sp-ix sp-ix--${kind}">${body}</div>`;
 }
 
-/** The pages this step draws: every page but the map and the whole tree (not yet). */
-function rendered(page: SetPage): boolean {
-    return page.kind !== 'map' && page.kind !== 'tree';
+// ─── The map of places (§3.7) ───────────────────────────────────────────────
+
+interface SetMap {
+    points: RodPlacePoint[];
+    byKey: Map<string, RodPlacePoint>;
+    geo: Record<string, PlaceGeo>;
+    /** The set asks for the map and its places make one (two places or more with a position, not all within 3 km). */
+    drawn: boolean;
 }
 
-/** The pages of the file, in its order (those drawn so far). */
+const setMaps = new WeakMap<PageSet, SetMap>();
+
+/** The map's places, once per set: the own events of the people with a page, no protected living (§5). */
+function setMap(set: PageSet): SetMap {
+    let m = setMaps.get(set);
+    if (m) return m;
+    const prot = set.protectedTree;
+    const tree = prot.tree;
+    const points = collectRodPlacePoints(tree, set.selection.personIds.filter(id => set.personSlug.has(id)), {
+        hidden: id => isProtectedPerson(prot, id), unionIds: set.selection.familyIds,
+    });
+    const geo: Record<string, PlaceGeo> = {};
+    for (const p of points) {
+        const g = tree.places?.[p.placeKey];
+        if (g) geo[p.placeKey] = { lat: g.lat, lon: g.lon };
+    }
+    const drawn = !!set.mapSlug && planPlacesMap(points, geo, { kidPlaces: false, lang: set.options.lang }).state === 'map';
+    m = { points, byKey: new Map(points.map(p => [p.placeKey, p])), geo, drawn };
+    setMaps.set(set, m);
+    return m;
+}
+
+/**
+ * Map of places (§3.7): the places where the line's people lived, a point
+ * about the square root of its people; a click selects the place and its row
+ * under the map unfolds its people (the person page's map and its script).
+ */
+function mapPageHtml(r: Render, page: SetPage): string {
+    const F = r.S.familyPages;
+    const m = setMap(r.set);
+    const tree = r.set.protectedTree.tree;
+    const row = (key: string): string => {
+        const p = m.byKey.get(key);
+        if (!p) return '';
+        const people = p.personIds.map(pid => {
+            const x = tree.persons[pid];
+            const y = x ? bookYears(x) : '';
+            return `<span class="sp-map-who">${personNameLink(r, pid, esc(x ? shownNameOrEmpty(x) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}</span>`;
+        }).join('');
+        const period = p.from === p.to ? String(p.from) : `${p.from}–${p.to}`;
+        return ` · <span class="pp-map-ev">${esc(period)} · ${esc(F.nPersons(p.personIds.length))}</span><span class="sp-map-people">${people}</span>`;
+    };
+    const map = placesMapHtml(m.points, m.geo, {
+        lang: r.set.options.lang, mode: r.mode, kidPlaces: false, id: `${page.slug}--pp-sec-places`,
+        group: { title: '', size: key => rodPlacePointSize(m.byKey.get(key)?.personIds.length ?? 1), row },
+    });
+    return `<header class="sp-head"><h1 class="sp-h1">${esc(F.map)}</h1></header>${map}<p class="sp-map-note">${esc(F.mapNote)}</p>`;
+}
+
+/** The pages drawn: every page but the whole tree (not yet), the map when its places make one. */
+function rendered(set: PageSet, page: SetPage): boolean {
+    if (page.kind === 'map') return setMap(set).drawn;
+    return page.kind !== 'tree';
+}
+
+/** The pages of the file, in its order (those drawn). */
 export function pageSetRenderedPages(set: PageSet): SetPage[] {
-    return set.pages.filter(rendered);
+    return set.pages.filter(p => rendered(set, p));
 }
 
 function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
@@ -834,6 +897,7 @@ function pageInnerHtml(r: Render, page: SetPage): string {
     else if (page.kind === 'hub') body = hubPageHtml(r, page, ctx);
     else if (page.kind === 'family') body = familyPageHtml(r, page, ctx);
     else if (page.kind === 'index') body = indexPageHtml(r, page);
+    else if (page.kind === 'map') body = mapPageHtml(r, page);
     return `${crumbs}<div class="sp-body">${body}</div>${r.foot}`;
 }
 
@@ -912,6 +976,6 @@ export async function buildPageSetHtmlAsync(set: PageSet, opts: PageSetHtmlOptio
 /** One page for the app's window (§0.8): its section, links as `data-sp-open` buttons; '' for a slug the set does not draw. */
 export function pageSetSectionHtml(set: PageSet, slug: string, opts: PageSetHtmlOptions = {}): string {
     const page = set.bySlug.get(slug);
-    if (!page || !rendered(page)) return '';
+    if (!page || !rendered(set, page)) return '';
     return sectionHtml(makeRender(set, 'app', opts), page);
 }

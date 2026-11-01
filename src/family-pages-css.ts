@@ -299,6 +299,13 @@ html:not(.sp-on) body > .sp-fbar { display: none; }
   .sp-letter { min-width: 44px; height: 44px; }
   .sp-ix-sub li { padding: 4px 0; }
 }
+/* §3.7: the map of places - a point about the square root of its people, a selected place's row unfolds them. */
+.pp-map-pt.sp-map-sz { width: var(--pt); height: var(--pt); margin: calc(var(--pt) / -2) 0 0 calc(var(--pt) / -2); line-height: calc(var(--pt) - 4px); }
+.pp-map-pt.sp-map-sz.is-sel { width: calc(var(--pt) + 4px); height: calc(var(--pt) + 4px); margin: calc(var(--pt) / -2 - 2px) 0 0 calc(var(--pt) / -2 - 2px); line-height: var(--pt); }
+.sp-map-people { display: none; }
+.pp-map-row.is-sel .sp-map-people, html:not(.sp-on) .sp-file .sp-map-people { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; font-size: 14px; line-height: 1.5; }
+.sp-map-note { margin: 10px 0 0; font-size: 13px; color: var(--text-faint); }
+@media (pointer: coarse) { .sp-map-who { display: inline-flex; align-items: center; min-height: 44px; } }
 /* §3.6: the light boxes of the file's pages follow the script (opened by pushState, so not by :target); a hint under the image. */
 html.sp-on .pp-lb:target:not(.sp-lb-on) { display: none; }
 html.sp-on .pp-lb.sp-lb-on { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: #1c1a15; color: #e8e3d6; }
@@ -315,6 +322,7 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   details.sp-kids > summary { display: none !important; }
   details.sp-kids::details-content { content-visibility: visible; display: contents; }
   .sp-letters, .sp-tabs, .sp-ix-sum::after { display: none !important; }
+  .sp-map-people { display: flex !important; flex-wrap: wrap; gap: 0 12px; }
   details.sp-ix-more::details-content { content-visibility: visible; display: contents; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
   .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kid, .sp-mar { break-inside: avoid; }
@@ -466,6 +474,9 @@ if(lbEl&&lbEl.contains(t)&&!t.closest('a,button,.pp-lb-img')){e.preventDefault()
 window.addEventListener('keydown',function(e){if(!lbEl)return;var k=e.key;
 if(k==='Escape'||k==='Esc'){e.preventDefault();e.stopPropagation();lbClose();return}
 if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();e.stopPropagation();var l=lbEl.querySelector('[data-pp-lb="'+(k==='ArrowLeft'?'prev':'next')+'"]');if(l)l.click()}},true);
+d.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-sp-place]');if(!a)return;
+var m=d.getElementById((a.getAttribute('href')||'').slice(1));if(!m||!m.classList.contains('sp-page--map'))return;var k=a.getAttribute('data-sp-place');
+q('[data-pp-map-place]',m).forEach(function(x){x.classList.toggle('is-sel',x.getAttribute('data-pp-map-place').split('\\t').indexOf(k)>=0)})});
 window.addEventListener('popstate',lbSync);
 lbSync();
 window.addEventListener('hashchange',function(){if(on)cancel(true);shut();route(false);lbSync()});

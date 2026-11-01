@@ -108,7 +108,7 @@ describe('the search (§3.4)', () => {
 });
 
 describe('the bar (§3.1)', () => {
-    it('the file: one bar before the pages, the field, Index, Menu with the indexes; no map link while there is no map', () => {
+    it('the file: one bar before the pages, the field, Index, Map of places, Menu with the indexes; no map link without a map', () => {
         const set = rodsSet(familyPagesFixture().data);
         const html = buildPageSetHtml(set);
         expect(html.match(/<div class="sp-fbar">/g)).toHaveLength(1);
@@ -116,7 +116,7 @@ describe('the bar (§3.1)', () => {
         expect(bar).toContain('class="sp-fbar-home" href="#uvod"');
         expect(bar).toContain('placeholder="Hledat jméno…"');
         expect(bar).toContain('data-sp-nav="index"');
-        expect(bar).not.toContain('data-sp-nav="map"');
+        expect(bar).toContain('data-sp-nav="map" class="sp-fbar-a" href="#mapa-obci"');
         expect(bar).toContain('href="#rejstrik-osoby"');
         expect(bar).toContain('href="#rejstrik-obce"');
         expect(bar).toContain('>Menu</button>');
@@ -125,6 +125,9 @@ describe('the bar (§3.1)', () => {
         expect(strs.idx).toBe('rejstrik-osoby');
         expect(strs.res.few).toContain('{n}');
         expect(strs.none).toContain('{q}');
+        // Without positions there is no map, so no link to it.
+        const noGeo = buildPageSetHtml(rodsSet({ ...familyPagesFixture().data, places: {} }));
+        expect(noGeo).not.toContain('data-sp-nav="map"');
     });
 
     it('the window: buttons, the current index marked', () => {
@@ -200,10 +203,12 @@ describe('the indexes (§3.5)', () => {
         const obce = section(html, 'rejstrik-obce');
         expect(obce).toContain('id="rejstrik-obce--o-1"');
         expect(obce).toMatch(/<span class="sp-ix-n">Čapkov<\/span> <span class="sp-ix-dot" aria-hidden="true">·<\/span> <span class="sp-ix-y">\d{4}–\d{4}<\/span>/);
-        const rod = section(html, 'rod-fisek');
+        // With a map the header leads to the map (family-pages-map.test.ts); without one to the index.
+        const plain = rodsSet({ ...data, places: {} });
+        const rod = section(buildPageSetHtml(plain), 'rod-fisek');
         expect(rod).toContain('<a class="pp-link sp-place" href="#rejstrik-obce--o-1" data-sp-place="capkov">Čapkov</a>');
         // The window: the places index as a button.
-        const win = pageSetSectionHtml(set, 'rod-fisek');
+        const win = pageSetSectionHtml(plain, 'rod-fisek');
         expect(win).toContain('data-sp-open="page:rejstrik-obce" data-sp-place="capkov"');
     });
 

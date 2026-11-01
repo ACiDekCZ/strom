@@ -24,7 +24,7 @@
 
 import type { Language } from './strings.js';
 import { getStringsForLang } from './strings.js';
-import type { StromData, PersonId, PlaceGeo, LifeEventType, CoupleEventType, Person } from './types.js';
+import type { StromData, PersonId, PartnershipId, PlaceGeo, LifeEventType, CoupleEventType, Person } from './types.js';
 import { computePersonLifeline } from './timeline.js';
 import { placeKey } from './places.js';
 import { yearOf, yearFraction, parseFlexDate } from './dates.js';
@@ -215,6 +215,81 @@ export function collectPersonPlacePoints(tree: StromData, personId: PersonId, op
     }
 
     return out;
+}
+
+/** A place of a family line's map (spec 026 §3.7): one point per place, its people and its period. */
+export interface RodPlacePoint extends PlacePoint {
+    /** The people with an event there, the earliest born first. */
+    personIds: PersonId[];
+    from: number;
+    to: number;
+}
+
+export interface CollectRodPlacesOptions {
+    /** A person left out with everything of theirs (a protected living person). */
+    hidden?: (id: PersonId) => boolean;
+    /** The unions whose wedding place counts (default: every union of the people). */
+    unionIds?: Iterable<PartnershipId>;
+}
+
+/**
+ * The places of a family line's map (spec 026 §3.7): the dated own events of
+ * the people given (members and those who married in) — birth, death, the
+ * life events with a place, a wedding of a union where no partner is hidden —
+ * grouped by place: the people there and the period. The place's name is its
+ * most frequent spelling; the order: the earliest first. A hidden person
+ * gives nothing, and a wedding with a hidden partner gives nothing either.
+ */
+export function collectRodPlacePoints(tree: StromData, personIds: Iterable<PersonId>, opts: CollectRodPlacesOptions = {}): RodPlacePoint[] {
+    const hidden = (id: PersonId | undefined | null): boolean => !id || !!opts.hidden?.(id);
+    const ids = new Set<PersonId>();
+    for (const id of personIds) {
+        const p = tree.persons[id];
+        if (p && !p.isPlaceholder && !hidden(id)) ids.add(id);
+    }
+    const acc = new Map<string, { names: Map<string, number>; from: number; to: number; ids: Set<PersonId> }>();
+    const note = (place: string | undefined, date: string | undefined, who: PersonId): void => {
+        const name = place?.trim();
+        const year = yearOf(date);
+        const key = name ? placeKey(name) : '';
+        if (!name || !key || year === null) return;
+        let a = acc.get(key);
+        if (!a) { a = { names: new Map(), from: year, to: year, ids: new Set() }; acc.set(key, a); }
+        a.names.set(name, (a.names.get(name) ?? 0) + 1);
+        a.from = Math.min(a.from, year);
+        a.to = Math.max(a.to, year);
+        a.ids.add(who);
+    };
+    const unions = new Set<PartnershipId>();
+    for (const id of ids) {
+        const p = tree.persons[id]!;
+        note(p.birthPlace, p.birthDate, id);
+        note(p.deathPlace, p.deathDate, id);
+        for (const ev of p.events ?? []) note(ev.place, ev.date, id);
+        if (!opts.unionIds) for (const uid of p.partnerships) unions.add(uid);
+    }
+    if (opts.unionIds) for (const uid of opts.unionIds) unions.add(uid);
+    for (const uid of unions) {
+        const u = tree.partnerships[uid];
+        if (!u) continue;
+        const partners = [u.person1Id, u.person2Id].filter((x): x is PersonId => !!x);
+        if (partners.some(x => hidden(x) && !!tree.persons[x])) continue;
+        for (const x of partners) if (ids.has(x)) note(u.startPlace, u.startDate, x);
+    }
+    const born = (id: PersonId): number => yearOf(tree.persons[id]?.birthDate) ?? 9999;
+    return [...acc.entries()].map(([key, a]) => {
+        const place = [...a.names.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0];
+        return {
+            placeKey: key, place, sortKey: a.from, year: a.from, ...(a.to !== a.from ? { yearLabel: `${a.from}–${a.to}` } : {}),
+            kind: 'event' as const, personIds: [...a.ids].sort((x, y) => born(x) - born(y) || String(x).localeCompare(String(y))),
+            from: a.from, to: a.to,
+        };
+    }).sort((x, y) => x.from - y.from || x.place.localeCompare(y.place));
+}
+
+/** A family line's point (px): about the square root of its people, 22 for one, at most 40. */
+export function rodPlacePointSize(people: number): number {
+    return Math.round(Math.min(40, 18 + 4 * Math.sqrt(Math.max(1, people))));
 }
 
 function personName(p: Person): string {
@@ -1127,6 +1202,17 @@ export interface PlacesMapCtx {
     ambiguous?: ReadonlySet<string>;
     /** Section id (default 'pp-sec-places'). */
     id?: string;
+    /**
+     * A family line's map (spec 026 §3.7): no path between the places, no
+     * switch or button, a point's size by `size` (px), the list's row after
+     * the place's name from `row` (HTML), the label's years the place's
+     * period; the heading `title` ('' none).
+     */
+    group?: {
+        title: string;
+        size: (placeKey: string) => number;
+        row: (placeKey: string) => string;
+    };
 }
 
 function esc(text: string): string {
@@ -1231,13 +1317,16 @@ export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Recor
     const hasRel = points.some(p => p.rel && geo?.[p.placeKey]);
     const tools: string[] = [];
     const mapLike = plan.state === 'map' || plan.state === 'tiny';
-    if (app && mapLike && hasRel) {
+    const group = ctx.group;
+    if (app && mapLike && hasRel && !group) {
         tools.push(`<button type="button" class="pp-toggle" role="switch" aria-checked="${ctx.kidPlaces}" data-pp-switch="kidPlaces">${esc(M.kids)}</button>`);
     }
-    if (app && mapLike) tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
-    const head = `<div class="pp-sec-head"><h2>${esc(M.title)}</h2>${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>`;
+    if (app && mapLike && !group) tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
+    const title = group ? group.title : M.title;
+    const head = title || tools.length
+        ? `<div class="pp-sec-head">${title ? `<h2>${esc(title)}</h2>` : ''}${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>` : '';
 
-    const map = plan.state === 'map' ? mapHtml(plan, S, sel, ctx.lang) : '';
+    const map = plan.state === 'map' ? mapHtml(plan, S, sel, ctx.lang, group) : '';
     const list = listHtml(plan, S, ctx, sel);
     const note = plan.state === 'noGeo'
         ? `<p class="pp-map-note">${esc(M.noGeo)}${app ? ` ${esc(M.noGeoHint)}` : ''}</p>` : '';
@@ -1310,7 +1399,7 @@ function smallHtml(plan: MapPlan, S: MapStrings, lang: Language): { svg: string;
     return { svg, html, box };
 }
 
-function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Language): string {
+function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Language, group?: PlacesMapCtx['group']): string {
     const M = S.personPage.map;
     const v = plan.view!;
     const b = viewBounds(v);
@@ -1336,7 +1425,7 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
     const path = (pts: { x: number; y: number }[], cls = '') => (pts.length >= 2
         ? `<path class="pp-map-route${cls}" d="M${pts.map(p => `${f1(p.x)} ${f1(p.y)}`).join('L')}"/>` : '');
     const rd = plan.routes?.d ?? plan.route, rp = plan.routes?.p ?? plan.route;
-    const route = path(rd) === path(rp) ? path(rd) : path(rd, ' r-d') + path(rp, ' r-p');
+    const route = group ? '' : path(rd) === path(rp) ? path(rd) : path(rd, ' r-d') + path(rp, ' r-p');
     const svg = `<svg class="pp-map-svg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`
         + (grid ? `<path class="pp-map-grid" d="${grid}"/>` : '')
         + (small?.svg ?? '')
@@ -1356,9 +1445,11 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
         if (p.rel) {
             pts += `<button type="button" class="pp-map-pt pp-map-pt--rel${inCl}${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${esc(p.full)}"></button>`;
         } else {
-            pts += `<button type="button" class="pp-map-pt${inCl}${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${p.num} ${esc(p.full)}">${p.num}</button>`;
+            const sized = group ? ` sp-map-sz" style="${pos};--pt:${group.size(p.placeKey)}px` : `" style="${pos}`;
+            pts += `<button type="button" class="pp-map-pt${inCl}${isSel}${sized}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${p.num} ${esc(p.full)}">${p.num}</button>`;
         }
-        const yrs = labelYears(p.points);
+        const period = group ? yearText(p.points[0]) : '';
+        const yrs = group ? { d: period, p: period } : labelYears(p.points);
         const side = p.side ?? { d: 'r', p: 'r' };
         if (side.d === 'hide' && side.p === 'hide') continue;
         labels += `<span class="pp-map-lb lb-d-${side.d} lb-p-${side.p}${p.rel ? ' pp-map-lb--rel' : ''}" style="${pos}" aria-hidden="true">`
@@ -1545,9 +1636,11 @@ function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string |
     const ambiguous = (p: PlannedPlace) => (ctx.ambiguous?.has(p.placeKey) ? ` <span class="pp-map-amb">– ${esc(M.ambiguous)}</span>` : '');
     const listed = plan.state === 'map' ? plan.places.filter(p => !p.rel || p.x !== undefined || p.inset) : plan.places;
     const ordered = [...listed.filter(p => !p.rel), ...listed.filter(p => p.rel)];
+    const group = ctx.group;
     for (const p of ordered) {
-        const text = p.rel ? relativeEventsText(p.points, S) : ownEventsText(p.points, S, ctx.lang);
-        const osa = p.rel ? '' : osaOf(p);
+        const text = group ? '' : p.rel ? relativeEventsText(p.points, S) : ownEventsText(p.points, S, ctx.lang);
+        const extra = group ? group.row(p.placeKey) : '';
+        const osa = p.rel || group ? '' : osaOf(p);
         const selectable = plan.state === 'map' || plan.state === 'tiny';
         // Distance and direction from place 1, named by its badge (round 4: no inflected place name).
         const mini = `<span class="pp-mini" role="img" aria-label="${esc(M.placeN(1))}">1</span>`;
@@ -1555,12 +1648,12 @@ function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string |
         const attrs = selectable
             ? ` tabindex="0" data-pp-map-place="${esc(p.placeKey)}"${osa ? ` data-pp-osa="${osa}"` : ''}` : osa ? ` data-pp-osa="${osa}"` : '';
         rows.push(`<li class="pp-map-row${p.rel ? ' pp-map-row--rel' : ''}${selectable && isSelected(sel, [p.placeKey]) ? ' is-sel' : ''}"${attrs}>`
-            + `${badge(p)}<span class="pp-map-rt"><b class="pp-map-name">${esc(p.full)}</b>${from}${text ? ` · <span class="pp-map-ev">${esc(text)}</span>` : ''}${plan.state !== 'map' ? ambiguous(p) : ''}</span></li>`);
+            + `${badge(p)}<span class="pp-map-rt"><b class="pp-map-name">${esc(p.full)}</b>${from}${text ? ` · <span class="pp-map-ev">${esc(text)}</span>` : ''}${extra}${plan.state !== 'map' ? ambiguous(p) : ''}</span></li>`);
     }
     if (plan.noPos.length) {
         const items = plan.noPos.map(p => {
             const first = p.points[0];
-            const ev = ownEventsText([first], S, ctx.lang);
+            const ev = group ? yearText(first) : ownEventsText([first], S, ctx.lang);
             return `${esc(p.full)}${ev ? ` (${esc(ev)}${ctx.ambiguous?.has(p.placeKey) ? ` – ${esc(M.ambiguous)}` : ''})`
                 : ctx.ambiguous?.has(p.placeKey) ? ` (${esc(M.ambiguous)})` : ''}`;
         }).join(', ');
