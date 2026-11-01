@@ -223,14 +223,14 @@ async function waitForPersistGone(page: Page, needle: string): Promise<void> {
     }), needle);
 }
 
-test('a specific default person is the focus after a reload; "First person" goes back to the first', async ({ page }) => {
+test('a specific default person is the focus at the next start; "First person" goes back to the first', async ({ page }) => {
     await openApp(page);
     await family(page);
     const tree = await activeTreeName(page);
     const dialog = page.locator('#default-person-modal');
 
     // Default: "First person" (named) is selected, the picker hidden.
-    await rowAction(page, tree, 'Default person');
+    await rowAction(page, tree, 'Default person and view');
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('#default-person-first')).toBeChecked();
     await expect(dialog.locator('#default-person-first-label')).toHaveText('First person (Jan Novak)');
@@ -248,14 +248,14 @@ test('a specific default person is the focus after a reload; "First person" goes
     await expect(row(page, tree).locator('.tree-manager-item-stats-row')).toContainText('Marie Novak');
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
 
-    // Focus someone else, reload: Marie is the focus.
+    // Focus someone else, start again (a reload would keep Petr, 1101): Marie is the focus.
     await focusViaSearch(page, 'Petr');
     await waitForPersist(page, '"defaultPersonId"');
-    await page.reload();
+    await page.goto(page.url());
     await expect(card(page, 'Marie')).toHaveClass(/focused/);
 
     // The dialog reopens with Marie preselected; back to "First person".
-    await rowAction(page, tree, 'Default person');
+    await rowAction(page, tree, 'Default person and view');
     await expect(dialog.locator('#default-person-specific')).toBeChecked();
     await expect(dialog.locator('#default-person-picker-container')).toBeVisible();
     await dialog.locator('#default-person-first').check();
@@ -265,17 +265,17 @@ test('a specific default person is the focus after a reload; "First person" goes
     await expect(row(page, tree).locator('.tree-manager-item-stats-row')).not.toContainText('Marie');
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
     await waitForPersistGone(page, '"defaultPersonId"');
-    await page.reload();
+    await page.goto(page.url());
     await expect(card(page, 'Jan')).toHaveClass(/focused/);
 });
 
-test('"Last focused" as the default person restores the last focused person after a reload', async ({ page }) => {
+test('"Last focused" as the default person restores the last focused person at the next start', async ({ page }) => {
     await openApp(page);
     await family(page);
     const tree = await activeTreeName(page);
     const dialog = page.locator('#default-person-modal');
 
-    await rowAction(page, tree, 'Default person');
+    await rowAction(page, tree, 'Default person and view');
     await dialog.locator('#default-person-last').check();
     await expect(dialog.locator('#default-person-picker-container')).toBeHidden();
     await dialog.getByRole('button', { name: 'Save' }).click();
@@ -288,11 +288,12 @@ test('"Last focused" as the default person restores the last focused person afte
         .find((p: { firstName: string }) => p.firstName === 'Petr').id);
     await waitForPersist(page, '"defaultPersonId":"__last_focused__"');
     await waitForPersist(page, `"lastFocusPersonId":"${petrId}"`);
-    await page.reload();
+    // A new start, not a reload (a reload keeps the person anyway, 1101).
+    await page.goto(page.url());
     await expect(card(page, 'Petr')).toHaveClass(/focused/);
 
     // The dialog remembers the choice.
-    await rowAction(page, tree, 'Default person');
+    await rowAction(page, tree, 'Default person and view');
     await expect(dialog.locator('#default-person-last')).toBeChecked();
 });
 
@@ -303,7 +304,7 @@ test('a default person set for another tree is the focus when switching to it', 
     await createTree(page, 'Second');
 
     // Set the first (non-active) tree's start person from its row.
-    await rowAction(page, first, 'Default person');
+    await rowAction(page, first, 'Default person and view');
     const dialog = page.locator('#default-person-modal');
     await expect(dialog.locator('#default-person-first-label')).toHaveText('First person (Jan Novak)');
     await dialog.locator('#default-person-specific').check();
