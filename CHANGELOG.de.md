@@ -4,7 +4,7 @@
 
 ## 3.20.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 1. November 2026.*
 
 - **Familienseiten**: eine Linie als verknüpfte Seiten der Linie, ihrer Familien und Personen, im Fenster der App oder gespeichert als eine Datei oder ein Satz von Dateien (.zip), der sich ohne Internet im Browser öffnet. Sie haben eine Suche, Register, eine Karte der Orte und Bilder, und lebende Personen behalten den gewählten Schutz. Sie öffnen sich aus der Übersicht der Linien, aus der Zeile *Stammlinie* einer Personenkarte, aus *Aktionen → Für die Familie* und aus dem Export.
 - **Fächer**: Die Ansicht *Fächer* hat drei Formen, *Halbkreis*, *Vollkreis* und *Beidseitig* mit den Nachkommen unten, 3 bis 10 Generationen von Vorfahren und 1 bis 5 von Nachkommen und Farben nach *Geschlecht*, *Linien* (die vier Großeltern) oder *Stammlinien*, mit einer einklappbaren Legende. Er zoomt und verschiebt sich mit dem Mausrad, zwei Fingern, Ziehen und den Tasten, auch auf einem Telefon, wo ein Finger ihn verschiebt. Ein Tippen zentriert den Fächer auf diese Person, *Ursprüngliche Person* führt zurück; langes Drücken oder ein Rechtsklick öffnet ein Menü des Sektors. Ein wiederholter Vorfahre (Ahnenschwund) ist markiert und wird nicht erneut gezeichnet, sein erstes Vorkommen lässt sich zeigen. Druck und Poster zeigen den ganzen Fächer jeder Form mit seiner Legende.

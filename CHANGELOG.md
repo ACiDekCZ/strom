@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.20.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 1 November 2026.*
 
 - **Family pages**: a family line as linked pages of the line, its families and people, in the app's window or saved as one file or a set of files (.zip) that opens in a browser without internet. They have a search, indexes, a map of places and images, and living people keep the chosen privacy. They open from the overview of family lines, from the *Family line* row of a person card, from *Actions → For the family* and from the export.
 - **Fan chart**: the *Fan* view has three shapes, *Half circle*, *Full circle* and *Two-way* with the descendants below, 3 to 10 generations of ancestors and 1 to 5 of descendants, and colours by *Sex*, *Lines* (the four grandparents) or *Family lines*, with a foldable legend. It zooms and pans with the wheel, a pinch, dragging and the keys, also on a phone, where one finger pans it. A tap re-centres the fan on that person, *Original person* leads back; a long press or a right click opens a menu of the sector. A repeated ancestor (pedigree collapse) is marked and not drawn again, its first occurrence can be shown. Printing and posters show the whole fan of every shape with its legend.

@@ -4,7 +4,7 @@
 
 ## 3.20.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 1. listopadu 2026.*
 
 - **Stránky rodu**: rod jako propojené stránky rodu, jeho rodin a osob, v okně aplikace nebo uložené jako jeden soubor či sada souborů (.zip), která se otevře v prohlížeči bez internetu. Mají hledání, rejstříky, mapu obcí a obrázky a žijící lidé mají zvolenou ochranu. Otevírají se z přehledu rodů, z řádku *Rod* na kartě osoby, z *Akce → Pro rodinu* a z exportu.
 - **Vějíř**: pohled *Vějíř* má tři tvary, *Půlkruh*, *Celý kruh* a *Oboustranný* s potomky dole, 3 až 10 generací předků a 1 až 5 generací potomků a barvy podle *Pohlaví*, *Linie* (čtyři prarodiče) nebo *Rody*, se sklápěcí legendou. Přibližuje se a posouvá kolečkem, sevřením prstů, tažením i klávesami, i na telefonu, kde se posouvá jedním prstem. Klepnutí vějíř přecentruje na danou osobu, *Původní osoba* vede zpět; dlouhý stisk nebo pravé tlačítko otevře nabídku výseče. Opakovaný předek (ztráta předků) je označený a nekreslí se znovu, jeho první výskyt jde ukázat. Tisk a plakáty ukážou celý vějíř každého tvaru i s legendou.
