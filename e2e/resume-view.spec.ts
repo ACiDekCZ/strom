@@ -5,7 +5,9 @@ import { openApp, seedTree, card } from './helpers.js';
  * Where a start opens (1101): the family view with the tree's start person,
  * never the view left on screen (descendants, timeline, fan, map), which used
  * to come back with the tree's start person instead of the person it was left
- * with. Invented families only.
+ * with. Settings → "Continue where work ended" on: the last tree, in the last
+ * view, with the person the work ended with. A link to a person opens that
+ * person either way. Invented families only.
  */
 
 async function twoTrees(page: Page): Promise<void> {
@@ -31,8 +33,8 @@ async function fanOn(page: Page, name: string): Promise<void> {
     await expect(fan.locator('.fan-focus')).toContainText(name);
 }
 
-async function reopen(page: Page): Promise<void> {
-    await page.goto('/strom.html');
+async function reopen(page: Page, query = ''): Promise<void> {
+    await page.goto(`/strom.html${query}`);
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
 }
 
@@ -74,3 +76,84 @@ test('a tree switch opens the family view of a tree left in the fan or the desce
     await switchTo('Lhotákovi');
     await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
 });
+
+const currentTree = (page: Page) => page.evaluate(() => {
+    const id = window.Strom.DataManager.getCurrentTreeId();
+    return id ? window.Strom.TreeManager.getTreeMetadata(id)?.name ?? null : null;
+});
+
+test('setting on: the next start opens the last tree in the fan with the person the work ended with', async ({ page }) => {
+    await twoTrees(page);
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const toggle = page.locator('#resume-last-view-toggle');
+    await expect(toggle).not.toBeChecked();
+    await expect(page.locator('#settings-modal')).toContainText('Continue where work ended');
+    await toggle.check();
+    await page.keyboard.press('Escape');
+
+    // The work ends in the second tree, the fan centred on the grandfather;
+    // a start opens the first tree otherwise.
+    expect(await currentTree(page)).toBe('Hollerbachovi');
+    await fanOn(page, 'Radomil');
+    await reopen(page);
+    expect(await currentTree(page)).toBe('Hollerbachovi');
+    await expect(page.locator('#view-mode-fan')).toHaveClass(/active/);
+    await expect(page.locator('#fan-container .fan-focus')).toContainText('Radomil');
+
+    // The family view with its person comes back the same way.
+    await page.locator('#view-mode-family').click();
+    await expect(card(page, 'Radomil')).toBeVisible();
+    await reopen(page);
+    await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+    await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Radomil');
+
+    // The descendants chart too, with its person.
+    await page.locator('#view-mode-descendants').click();
+    await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
+    await reopen(page);
+    await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
+    await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Radomil');
+
+    // The person gone: the family view with the tree's start person, never the fan.
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocus('ho_c' as never));
+    await fanOn(page, 'Kvido');
+    await page.evaluate(() => {
+        const raw = JSON.parse(localStorage.getItem('strom-resume-points') ?? '{}');
+        for (const p of Object.values(raw.trees ?? {}) as { person: string }[]) p.person = 'p_gone';
+        localStorage.setItem('strom-resume-points', JSON.stringify(raw));
+    });
+    await reopen(page);
+    await expect(page.locator('#fan-container')).toBeHidden();
+    await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+    await expect(card(page, 'Zbyňka')).toBeVisible();
+
+    // Off again: the tree view at the next start.
+    await fanOn(page, 'Kvido');
+    await page.evaluate(() => window.Strom.UI.toggleResumeLastView(false));
+    await reopen(page);
+    await expect(page.locator('#fan-container')).toBeHidden();
+    await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+});
+
+for (const resume of [false, true]) {
+    test(`a link to a person opens that person, setting ${resume ? 'on' : 'off'}`, async ({ page }) => {
+        await twoTrees(page);
+        if (resume) await page.evaluate(() => window.Strom.UI.toggleResumeLastView(true));
+        await fanOn(page, 'Radomil');
+        const slug = await page.evaluate(() => window.Strom.TreeManager.getTreeSlug(window.Strom.DataManager.getCurrentTreeId()!));
+        await reopen(page, `?tree=${encodeURIComponent(slug)}&person=ho_b`);
+        const personPage = page.locator('#person-page-modal');
+        await expect(personPage).toBeVisible();
+        await expect(personPage).toContainText('Kvido');
+        await page.keyboard.press('Escape');
+        await expect(personPage).toBeHidden();
+        if (resume) {
+            // The view the work ended in, with the person of the link.
+            await expect(page.locator('#view-mode-fan')).toHaveClass(/active/);
+            await expect(page.locator('#fan-container .fan-focus')).toContainText('Kvido');
+        } else {
+            await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+            await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Kvido');
+        }
+    });
+}

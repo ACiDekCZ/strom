@@ -59,6 +59,7 @@ import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
+import { readResumePoint, recordResumePoint } from './resume-view.js';
 import { personInitials } from './initials.js';
 import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
@@ -1207,6 +1208,10 @@ class TreeRendererClass {
             return;
         }
 
+        // "Continue where work ended" (1101): the view with the person it
+        // ended with, never with the tree's start person.
+        if (this.restoreResumePoint()) return;
+
         // Get startup focus based on tree's defaultPersonId setting
         const startupFocus = DataManager.getStartupFocus();
 
@@ -1280,6 +1285,7 @@ class TreeRendererClass {
             // Save to tree data if setting is LAST_FOCUSED (this DOES export)
             if (saveToData) {
                 DataManager.saveLastFocus(personId, this.focusDepthUp, this.focusDepthDown);
+                this.recordResume();
             }
         }
 
@@ -3053,6 +3059,7 @@ class TreeRendererClass {
         // Save to tree data if setting is LAST_FOCUSED (this DOES export)
         if (this.focusPersonId) {
             DataManager.saveLastFocus(this.focusPersonId, up, down);
+            this.recordResume();
             this.render();
         }
     }
@@ -3117,16 +3124,9 @@ class TreeRendererClass {
         else ZoomPan.centerOnFocusWithContext();
     }
 
-    private viewModeStorageKey(): string | null {
-        const treeId = DataManager.getCurrentTreeId();
-        return treeId ? `strom-viewmode-${treeId}` : null;
-    }
-
+    /** The view is remembered only as where the work stands (1101, resume points). */
     private persistViewMode(): void {
-        const key = this.viewModeStorageKey();
-        try {
-            if (key) localStorage.setItem(key, this.viewMode);
-        } catch { /* ignore storage errors */ }
+        this.recordResume();
     }
 
     /**
@@ -3137,6 +3137,36 @@ class TreeRendererClass {
      */
     loadViewModeForCurrentTree(): void {
         this.viewMode = 'family';
+    }
+
+    /**
+     * With "Continue where work ended" on: the open tree's last view and
+     * person (and depths). False (nothing changed) when off, without a point
+     * or when its person is gone.
+     */
+    private restoreResumePoint(): boolean {
+        if (!SettingsManager.isResumeLastViewEnabled()) return false;
+        const treeId = DataManager.getCurrentTreeId();
+        const point = treeId ? readResumePoint(treeId) : null;
+        if (!point) return false;
+        const person = DataManager.getPerson(point.person as PersonId);
+        if (!person || person.isPlaceholder) return false;
+        this.viewMode = point.view;
+        this.focusPersonId = person.id;
+        const maxGen = this.maxGenerations(person.id);
+        this.focusDepthUp = point.up ?? maxGen.up;
+        this.focusDepthDown = point.down ?? maxGen.down;
+        return true;
+    }
+
+    /** Note where the work stands (view, person, depths) for the next start (1101). */
+    recordResume(): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || !this.focusPersonId || DataManager.isViewMode()) return;
+        recordResumePoint(treeId, {
+            person: this.focusPersonId, view: this.viewMode,
+            up: this.focusDepthUp, down: this.focusDepthDown,
+        });
     }
 
     /**

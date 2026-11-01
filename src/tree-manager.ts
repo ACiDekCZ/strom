@@ -24,6 +24,7 @@ import {
 import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js';
 import { SettingsManager } from './settings.js';
+import { lastResumeTreeId } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
@@ -1363,6 +1364,12 @@ class TreeManagerClass {
 
     getStartupTreeId(): TreeId | null {
         // Every branch must respect visibility — a hidden tree never opens.
+        // "Continue where work ended" (1101): the tree the work went on in last.
+        if (SettingsManager.isResumeLastViewEnabled()) {
+            const resumed = lastResumeTreeId() as TreeId | null;
+            if (resumed && this.isUsable(resumed)) return resumed;
+        }
+
         const setting = this.index.defaultTreeId;
 
         if (setting === LAST_FOCUSED) {

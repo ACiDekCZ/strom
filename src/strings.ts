@@ -1217,6 +1217,12 @@ const stringsEN = {
         settingHint: 'Show a short overview of the changes at the first start of a new version',
     },
 
+    // Settings: open where the work ended (1101)
+    resumeView: {
+        settingLabel: 'Continue where work ended',
+        settingHint: 'At start, open the last tree in the last view (descendants, timeline, fan, map) with the same person; off: the Family view with the tree\'s start person',
+    },
+
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Add family…',
@@ -7668,6 +7674,12 @@ const stringsCZ: StringsType = {
         settingHint: 'Při prvním spuštění nové verze ukázat krátký přehled změn',
     },
 
+    // Settings: open where the work ended (1101)
+    resumeView: {
+        settingLabel: 'Pokračovat tam, kde práce skončila',
+        settingHint: 'Po spuštění otevřít poslední strom v posledním pohledu (potomci, časová osa, vějíř, mapa) se stejnou osobou; vypnuto: pohled Rodina s výchozí osobou stromu',
+    },
+
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Přidat rodinu…',
@@ -14039,6 +14051,12 @@ const stringsDE: StringsType = {
         dontShowAgain: 'Nächstes Mal nicht anzeigen',
         settingLabel: '„Was ist neu“ nach einem Update',
         settingHint: 'Beim ersten Start einer neuen Version eine kurze Übersicht der Änderungen anzeigen',
+    },
+
+    // Settings: open where the work ended (1101)
+    resumeView: {
+        settingLabel: 'Dort weitermachen, wo die Arbeit endete',
+        settingHint: 'Beim Start den letzten Stammbaum in der letzten Ansicht (Nachkommen, Zeitleiste, Fächer, Karte) mit derselben Person öffnen; aus: die Ansicht Familie mit der Startperson des Stammbaums',
     },
 
     // Family wizard (add a whole family at once)
