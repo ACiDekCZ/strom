@@ -272,6 +272,39 @@ describe('a family\'s page (§2.2)', () => {
     });
 });
 
+describe('the families on a person\'s page of the set (§2.4)', () => {
+    it('a family with a page is a card, one without a tinted block; the parents first', () => {
+        const { data, ids, unions } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const html = buildPageSetHtml(set);
+        const josef = section(html, set.personSlug.get(ids.josef)!);
+        const f9 = set.familySlug.get(unions.f9)!, f10 = set.familySlug.get(unions.f10)!;
+        expect(josef).toContain(`<a class="sp-famcard" href="#${f9}"><span class="sp-famcard-t">⚭ 1846 Anna Kvapilová</span><span class="sp-famcard-m">7 dětí</span><span class="sp-famcard-go">Stránka rodiny →</span></a>`);
+        expect(josef).toContain(`<a class="sp-famcard" href="#${f10}"><span class="sp-famcard-t">⚭ 1876 Terezie Lhotáková</span>`);
+        expect(josef).toMatch(/<a class="sp-famcard" href="#rodina-jakub-[^"]+"><span class="sp-famcard-t">Rodiče: Jakub a Magdalena<\/span>/);
+        expect(josef.indexOf('Rodiče: Jakub')).toBeLessThan(josef.indexOf('⚭ 1846 Anna'));
+        // Marie's son, the father not recorded: a section of her page.
+        const marie = section(html, set.personSlug.get(ids.marie)!);
+        expect(marie).toContain('<span class="sp-oddil-k">Rodina · bez vlastní stránky</span><span class="sp-oddil-t">otec neuveden · 1 dítě</span>');
+        expect(marie).toMatch(/<ul class="sp-oddil-l"><li><a class="pp-link" href="#alois-[^"]+">Alois Fíšek<\/a> <span class="sp-yrs">\(1885–1950\)<\/span><\/li><\/ul>/);
+        // In the window the cards are buttons.
+        const win = pageSetSectionHtml(set, set.personSlug.get(ids.josef)!);
+        expect(win).toContain(`<button type="button" class="sp-famcard" data-sp-open="family:${unions.f9}">`);
+    });
+
+    it('families as a section: blocks instead of cards, the breadcrumbs lineage › person', () => {
+        const { data, ids } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full', families: 'section' });
+        const html = buildPageSetHtml(set);
+        const slug = set.personSlug.get(ids.antonin)!;
+        const page = section(html, slug);
+        expect(page).not.toContain('sp-famcard');
+        expect(page).toContain('<span class="sp-oddil-k">Rodiče</span>');
+        expect(page).toContain('<span class="sp-oddil-t">⚭ 1905 Ludmila Řepíková · 1 dítě</span>');
+        expect(set.bySlug.get(slug)!.crumbs.map(c => c.slug)).toEqual(['rod-fisek', slug]);
+    });
+});
+
 describe('the living (§5)', () => {
     it('a protected person has no section and the real name is nowhere in the file', () => {
         const { data, ids } = familyPagesFixture();

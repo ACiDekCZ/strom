@@ -129,6 +129,11 @@ export interface PersonPageOptions {
     selectedPlace?: string | null;
     /** Window: the life chart's width in px (the column, measured by the window); default 680. */
     chartWidth?: number;
+    /**
+     * The app's window (links 'app', spec 026 §2.4): the families whose page
+     * of a set exists; each gets a card "Family page →" (`data-sp-open`).
+     */
+    familyPages?: ReadonlySet<PartnershipId>;
     /** Open folds: 'sources', 'research', 'sibs', 'basis', 's:<source id>'. */
     open?: ReadonlySet<string>;
     /** The tree is linked to Strom Research (history, materials, the researchers' section). */
@@ -1503,7 +1508,75 @@ function familyTreeHtml(c: Ctx): string {
     const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
         : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopBothHtml(c, d) + familyTreeRailHtml(c, d);
-    return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>`);
+    return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>${familyPageBlocksHtml(c)}`);
+}
+
+/**
+ * The person's families in a set of family pages (spec 026 §2.4), under the
+ * family tree: a family with a page is a card leading to it, one without a
+ * page (a single parent, a section of the person page) a tinted block with
+ * the partner and the children; the parents' family first. In the app's
+ * window (025) only the cards of the families whose page exists
+ * (`familyPages`). Elsewhere nothing: the standalone page stays as it is.
+ */
+function familyPageBlocksHtml(c: Ctx): string {
+    const set = setLinksOf(c.opts);
+    const win = !set && c.app && c.opts.links === 'app' ? c.opts.familyPages : undefined;
+    if (!set && !win?.size) return '';
+    const F = c.S.familyPages;
+    const tree = c.tree;
+    const p = c.person;
+    const real = (id: PersonId | undefined | null): Person | undefined => {
+        const x = id ? tree.persons[id] : undefined;
+        return x && !x.isPlaceholder ? x : undefined;
+    };
+    const hasPage = (uid: PartnershipId): boolean => set ? !!set.familySlug?.get(uid) : win!.has(uid);
+    const card = (uid: PartnershipId, title: string, meta: string): string => {
+        const inner = `<span class="sp-famcard-t">${title}</span>${meta ? `<span class="sp-famcard-m">${esc(meta)}</span>` : ''}`
+            + `<span class="sp-famcard-go">${esc(F.fam.card)}</span>`;
+        return set ? setLinkHtml(c, 'sp-famcard', { family: uid }, inner)
+            : `<button type="button" class="sp-famcard" data-sp-open="family:${esc(uid)}">${inner}</button>`;
+    };
+    const line = (id: PersonId): string => {
+        const x = tree.persons[id];
+        const yrs = x ? yearsOf(x, c.opts.lang) : '';
+        return `<li>${personLink(c, esc(nameOf(c, id) || '?'), id)}${yrs ? ` <span class="sp-yrs">(${esc(yrs)})</span>` : ''}</li>`;
+    };
+    const block = (label: string, title: string, lines: string[]): string =>
+        `<div class="sp-oddil"><span class="sp-oddil-k">${esc(label)}</span>${title ? `<span class="sp-oddil-t">${title}</span>` : ''}`
+        + (lines.length ? `<ul class="sp-oddil-l">${lines.join('')}</ul>` : '') + '</div>';
+    const husbandFirst = (u: Partnership): Person[] => [u.person1Id, u.person2Id].map(real).filter((x): x is Person => !!x)
+        .sort((a, b) => (a.gender === 'female' ? 1 : 0) - (b.gender === 'female' ? 1 : 0));
+    const out: string[] = [];
+    // The parents' family (the page's tree keeps the parents' marriage without its children).
+    const pids = (p.parentIds ?? []).filter(id => !!real(id));
+    const parents = pids.length === 2
+        ? (tree.persons[pids[0]]?.partnerships ?? []).map(id => tree.partnerships[id]).find(u => !!u && (u.person1Id === pids[1] || u.person2Id === pids[1]))
+        : undefined;
+    if (parents && hasPage(parents.id)) {
+        const names = husbandFirst(parents).map(x => x.firstName?.trim() || x.lastName?.trim() || '?').join(` ${c.S.book.and} `);
+        out.push(card(parents.id, esc(F.fam.parentsOf(names)), ''));
+    } else if (set && pids.length) {
+        const ps = pids.map(id => tree.persons[id]).sort((a, b) => (a.gender === 'female' ? 1 : 0) - (b.gender === 'female' ? 1 : 0));
+        const lines = ps.map(x => line(x.id));
+        if (ps.length === 1) lines.push(`<li>${esc(ps[0].gender === 'female' ? F.fatherUnknown : F.motherUnknown)}</li>`);
+        out.push(block(F.fam.parents, '', lines));
+    }
+    // The person's own families, in their order.
+    const unions = partnershipsInOrder(tree, p.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u));
+    for (const u of unions) {
+        const other = real(u.person1Id === p.id ? u.person2Id : u.person1Id);
+        const kids = (u.childIds ?? []).filter(id => !!real(id));
+        if (!other && !kids.length) continue;
+        const wedding = u.status === 'married' || u.status === 'divorced';
+        const y = wedding ? yearOf(u.startDate) : null;
+        const title = other ? `${y !== null ? `⚭ ${y} ` : ''}${esc(nameOf(c, other.id) || '?')}`
+            : esc(p.gender === 'female' ? F.fatherUnknown : F.motherUnknown);
+        const meta = kids.length ? F.nKids(kids.length) : F.noKids;
+        if (hasPage(u.id)) out.push(card(u.id, title, meta));
+        else if (set) out.push(block(F.famOddil, `${title} · ${esc(meta)}`, kids.map(line)));
+    }
+    return out.length ? `<div class="sp-pfam">${out.join('')}</div>` : '';
 }
 
 // ── Ancestors (spec 029 §8) ──

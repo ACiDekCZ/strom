@@ -158,6 +158,15 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-kid-name { font-size: 15px; font-weight: 600; }
 .sp-kid-note { font-size: 13px; color: var(--text-light); }
 .sp-story .pp-couple-story { margin: 0; }
+.sp-pfam { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.sp-famcard { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; width: 100%; box-sizing: border-box; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: none; font: inherit; color: var(--text); text-align: left; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; }
+.sp-famcard-t { font-size: 15px; font-weight: 600; }
+.sp-famcard-m { font-size: 13.5px; color: var(--text-light); }
+.sp-famcard-go { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var(--primary); }
+.sp-oddil { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: 10px; background: var(--card-bg-2); }
+.sp-oddil-k { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.sp-oddil-t { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.sp-oddil-l { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
 .sp-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
 .sp-list > li { padding: 8px 0; border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
 .sp-foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--text-faint); }
@@ -167,11 +176,11 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-body .book-index-row { break-inside: avoid; overflow-wrap: anywhere; }
 .sp-body .book-index-see { color: var(--text-faint); font-style: italic; }
 @media (hover: hover) {
-  .sp-card:hover { border-color: var(--primary); }
+  .sp-card:hover, .sp-famcard:hover { border-color: var(--primary); }
   .sp-btn:hover, .sp-go:hover { background: var(--hover-bg); }
   .sp-body .pp-link:hover, .sp-crumbs a:hover { text-decoration-thickness: 2px; }
 }
-.sp-card:focus-visible, .sp-btn:focus-visible, .sp-go:focus-visible, .sp-clip:focus-visible, .sp-crumbs a:focus-visible, .sp-toc-row a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sp-card:focus-visible, .sp-famcard:focus-visible, .sp-btn:focus-visible, .sp-go:focus-visible, .sp-clip:focus-visible, .sp-crumbs a:focus-visible, .sp-toc-row a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* Tablet: a narrower margin. */
 @media (min-width: 641px) and (max-width: 1024px) { .pp-file.sp-file { padding: 24px 28px 36px; } }
 /* Phone: 16 px margins, a smaller heading, cards under each other, the breadcrumb only "‹ the page above". */
@@ -197,7 +206,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 }
 @media (pointer: coarse) {
   .sp-crumbs a, .sp-crumbs [aria-current], .sp-crumb-back { min-height: 44px; }
-  .sp-btn, .sp-kids > summary, .sp-go { min-height: 44px; }
+  .sp-btn, .sp-kids > summary, .sp-go, .sp-famcard { min-height: 44px; }
   .sp-toc-row a { display: inline-block; padding: 10px 0; }
 }
 /* §8.3: the shown page only (all of them without the script), no breadcrumbs or folds, links as text, paper. */
@@ -206,7 +215,7 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   .pp-file.sp-file { max-width: none; padding: 0; }
   .sp-crumbs, .sp-bar, .sp-toc-file { display: none !important; }
   .sp-body a, .sp-body .pp-link, .sp-crumbs a { color: inherit !important; text-decoration: none !important; }
-  .sp-btns, .sp-card-go, .sp-go { display: none !important; }
+  .sp-btns, .sp-card-go, .sp-go, .sp-famcard-go { display: none !important; }
   details.sp-kids > summary { display: none !important; }
   details.sp-kids::details-content { content-visibility: visible; display: contents; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
