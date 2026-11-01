@@ -15,7 +15,7 @@
  * Pure functions, no I/O. Every input is NFC-normalized first.
  */
 
-import streetsFile from './terms/streets.json';
+import streetsFile from './terms/streets.json' with { type: 'json' };
 
 interface TermsFile {
     words?: Record<string, string[]>;
