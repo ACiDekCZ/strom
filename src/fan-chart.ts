@@ -461,7 +461,7 @@ function themeRules(scope: string, T: FanPalette, fills: readonly string[], edit
     return css;
 }
 
-/** Sector title: "#241 · Anna Vondráčková (1781–1840)" + the tie, the repeat or the partner note. */
+/** Sector title: "#241 · Marie Trnkopalová (1781–1840)" + the tie, the repeat or the partner note. */
 function sectorTitle(p: Person | null, o: {
     ahnentafel?: number; protect: boolean; extra: string[];
 }): string {

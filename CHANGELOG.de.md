@@ -2,6 +2,16 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.20.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Fächer**: Die Ansicht *Fächer* hat drei Formen, *Halbkreis*, *Vollkreis* und *Beidseitig* mit den Nachkommen unten, 3 bis 10 Generationen von Vorfahren und 1 bis 5 von Nachkommen und Farben nach *Geschlecht*, *Linien* (die vier Großeltern) oder *Stammlinien*, mit einer einklappbaren Legende. Er zoomt und verschiebt sich mit dem Mausrad, zwei Fingern, Ziehen und den Tasten, auch auf einem Telefon. Ein Tippen zentriert den Fächer auf diese Person, *Ursprüngliche Person* führt zurück; langes Drücken oder ein Rechtsklick öffnet ein Menü des Sektors. Ein wiederholter Vorfahre (Ahnenschwund) ist markiert und wird nicht erneut gezeichnet, sein erstes Vorkommen lässt sich zeigen. Druck und Poster zeigen den ganzen Fächer jeder Form mit seiner Legende.
+- **Personenseite**: Ein Abschnitt *Vorfahren* unter der Familie zeigt einen Halbkreis-Fächer von vier Generationen, nach Geschlecht gefärbt, mit der Zahl der bekannten Vorfahren; ein Tippen öffnet die Seite des Vorfahren. Er lässt sich zoomen und ist auch in der gespeicherten Datei und im Druck; lebende Vorfahren behalten den gewählten Schutz.
+- **Live-Verfolgung auf einem Telefon**: Die Pillen des Stammbaums stehen über dem Live-Streifen und verdecken sich nicht mehr gegenseitig oder die Bedienelemente.
+- **Familienbuch**: Die Zahlen einer Linie bleiben in einer Zeile, die Namensformen nennen die weibliche Form einmal, ein ungefähres Jahr des Begründers lautet *um*, und eine unbekannte Ehefrau hinterlässt kein *⚭ ?*.
+- **Kleinere Änderungen**: weitere Korrekturen von Layout und Texten.
+
 ## 3.19.0
 
 *Veröffentlicht am 31. Oktober 2026.*

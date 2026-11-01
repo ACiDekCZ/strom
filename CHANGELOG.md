@@ -2,6 +2,16 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.20.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Fan chart**: the *Fan* view has three shapes, *Half circle*, *Full circle* and *Two-way* with the descendants below, 3 to 10 generations of ancestors and 1 to 5 of descendants, and colours by *Sex*, *Lines* (the four grandparents) or *Family lines*, with a foldable legend. It zooms and pans with the wheel, a pinch, dragging and the keys, also on a phone. A tap re-centres the fan on that person, *Original person* leads back; a long press or a right click opens a menu of the sector. A repeated ancestor (pedigree collapse) is marked and not drawn again, its first occurrence can be shown. Printing and posters show the whole fan of every shape with its legend.
+- **Person page**: an *Ancestors* section under the family shows a half fan of four generations coloured by sex, with the count of known ancestors; a tap opens the ancestor's page. It zooms and is in the saved file and in print too; living ancestors keep the chosen privacy.
+- **Live follow on a phone**: the tree's pills stand above the live strip and no longer cover each other or the controls.
+- **Family book**: a line's counts stay on one line, the name forms list the female form once, an approximate founder year reads *about* and an unknown wife leaves no *⚭ ?*.
+- **Smaller changes**: further fixes of layout and texts.
+
 ## 3.19.0
 
 *Released 31 October 2026.*
