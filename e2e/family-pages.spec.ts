@@ -251,6 +251,10 @@ test.describe('family pages: the dialog', () => {
     });
 
     test('the file: built, Save downloads it, it opens on the lineage\'s page; Cancel during the build saves nothing', async ({ page, context }) => {
+        // A browser that cannot share files (Chrome Canary on a Mac can): no Share.
+        await page.addInitScript(() => {
+            Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true });
+        });
         await setup(page);
         const dialog = await openDialog(page, 'pages');
         await dialog.locator('#book-open').click();
@@ -259,7 +263,7 @@ test.describe('family pages: the dialog', () => {
         await expect(res.locator('.fp-res-t')).toHaveText('The file is ready');
         await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold-family-line\.html · \d+\.\d MB$/);
         await expect(res.locator('.fp-res-n')).toContainText('Family book');
-        // Share only where files can be shared (not in this browser).
+        // Share only where files can be shared.
         await expect(res.locator('.fp-res-share')).toBeHidden();
         await expect(dialog.locator('.book-dlg-foot .buttons')).toBeHidden();
         const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
@@ -297,6 +301,27 @@ test.describe('family pages: the dialog', () => {
         await page.waitForTimeout(1500);
         await expect(res).toHaveCount(0);
         expect(downloads).toBe(0);
+    });
+
+    test('the file where files can be shared: Share hands over the built file by its name', async ({ page }) => {
+        await page.addInitScript(() => {
+            const shared: { name: string; type: string; size: number }[] = [];
+            (window as unknown as { __shared: typeof shared }).__shared = shared;
+            Object.defineProperty(Navigator.prototype, 'canShare', { value: (d: { files?: File[] }) => !!d.files?.length, configurable: true });
+            Object.defineProperty(Navigator.prototype, 'share', {
+                value: async (d: { files?: File[] }) => { for (const f of d.files ?? []) shared.push({ name: f.name, type: f.type, size: f.size }); },
+                configurable: true,
+            });
+        });
+        await setup(page);
+        const dialog = await openDialog(page, 'pages');
+        await dialog.locator('#book-open').click();
+        const res = dialog.locator('.fp-res');
+        await expect(res.locator('.fp-res-t')).toHaveText('The file is ready');
+        await expect(res.locator('.fp-res-share')).toBeVisible();
+        await res.locator('.fp-res-share').click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: { name: string; type: string; size: number }[] }).__shared))
+            .toEqual([{ name: 'Brandvold-family-line.html', type: expect.stringMatching(/^text\/html/), size: expect.any(Number) }]);
     });
 
     test('the pages\' window: Save as file opens the dialog with the pages and the window\'s lineage', async ({ page }) => {
