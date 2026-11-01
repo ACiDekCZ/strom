@@ -250,7 +250,12 @@ export class FanZoom {
         this.on(s, 'pointermove', e => this.move(e as PointerEvent));
         this.on(s, 'pointerup', e => this.up(e as PointerEvent));
         this.on(s, 'pointercancel', e => this.cancel(e as PointerEvent));
-        this.on(s, 'lostpointercapture', e => { if (this.pointers.has((e as PointerEvent).pointerId)) this.cancel(e as PointerEvent); });
+        // Only the surface's own capture counts: a touch is implicitly captured by the
+        // sector it lands on, and taking it over for a drag makes that sector lose it
+        // (the event bubbles here) — cancelling then froze a one-finger drag after a step.
+        this.on(s, 'lostpointercapture', e => {
+            if (e.target === s && this.pointers.has((e as PointerEvent).pointerId)) this.cancel(e as PointerEvent);
+        });
         this.on(s, 'contextmenu', e => this.contextMenu(e as MouseEvent));
         this.on(s, 'wheel', e => this.wheel(e as WheelEvent), { passive: false });
         this.on(s, 'keydown', e => this.key(e as KeyboardEvent));

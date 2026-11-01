@@ -339,6 +339,67 @@ test.describe('phone', () => {
     });
 });
 
+/**
+ * Real touches (CDP): the browser's own pointer events with their implicit
+ * capture, touch-action and timing, unlike a dispatched PointerEvent.
+ */
+for (const [w, h] of [[390, 844], [844, 390]]) {
+    test.describe(`touch ${w}×${h}`, () => {
+        test.use({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
+
+        test(`fan: one finger pans the zoomed fan smoothly; a tap still re-centres, a long press opens the sheet at ${w}×${h} (1101)`, async ({ page }) => {
+            await openImplexFan(page);
+            const cdp = await page.context().newCDPSession(page);
+            const touch = (type: string, points: Array<{ x: number; y: number }>) =>
+                cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p, i) => ({ ...p, id: i + 1 })) });
+            const viewBox = async () => (await page.locator('#fan-chart .fan-svg').getAttribute('viewBox'))!.split(' ').map(Number);
+            const box = (await page.locator('#fan-chart').boundingBox())!;
+            const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+
+            // Pinch in.
+            await touch('touchStart', [{ x: cx - 20, y: cy }, { x: cx + 20, y: cy }]);
+            for (let i = 1; i <= 10; i++) await touch('touchMove', [{ x: cx - 20 - i * 6, y: cy }, { x: cx + 20 + i * 6, y: cy }]);
+            await touch('touchEnd', []);
+            await page.waitForTimeout(400);
+            const zoomed = await viewBox();
+            expect(zoomed[2]).toBeLessThan(box.width);
+
+            // One finger: every step moves the view the same way, no jump, no freeze after the first one.
+            const xs: number[] = [];
+            await touch('touchStart', [{ x: cx, y: cy }]);
+            for (let i = 1; i <= 16; i++) {
+                await touch('touchMove', [{ x: cx - i * 6, y: cy - i * 2 }]);
+                await page.evaluate(() => new Promise(requestAnimationFrame));
+                xs.push((await viewBox())[0]);
+            }
+            await touch('touchEnd', []);
+            const steps = xs.slice(1).map((x, i) => x - xs[i]);
+            expect(steps.filter(d => d > 0.01).length, `steps ${steps.join(', ')}`).toBeGreaterThanOrEqual(12);
+            expect(steps.every(d => d >= -0.01), `steps ${steps.join(', ')}`).toBe(true);
+            const moving = steps.filter(d => d > 0.01);
+            expect(Math.max(...moving), `steps ${steps.join(', ')}`).toBeLessThan(3 * Math.min(...moving));
+            expect(xs[xs.length - 1]).toBeGreaterThan(zoomed[0]);
+            // The drag did not re-centre.
+            await page.waitForTimeout(350);
+            await expect(focusDisc(page)).toContainText('Oskar');
+
+            // A tap on a sector still re-centres.
+            await settled(page);
+            const p = await keyPoint(page, 'a2');
+            await touch('touchStart', [p]);
+            await touch('touchEnd', []);
+            await expect(focusDisc(page)).toContainText('Emil');
+
+            // A long press still opens the sheet.
+            await settled(page);
+            const q = await keyPoint(page, 'a2');
+            await touch('touchStart', [q]);
+            await expect(page.locator('.fan-menu-sheet .bottom-sheet')).toBeVisible();
+            await touch('touchEnd', []);
+        });
+    });
+}
+
 for (const [w, h] of [[390, 844], [844, 390], [800, 1100], [1440, 900]]) {
     test(`fan: the original person pill stays clear of the evidence pill, the chip and the toolbar at ${w}×${h} (1031)`, async ({ page }) => {
         await page.setViewportSize({ width: w, height: h });
