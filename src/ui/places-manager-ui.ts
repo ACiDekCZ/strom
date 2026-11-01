@@ -544,7 +544,7 @@ export const placesManagerMethods = uiModule({
                 <div class="place-bare-examples">${bareExamples.map(e => `<span>${this.escapeHtml(e.display)}</span>`).join('')}</div>
                 <p class="place-card-note">${this.escapeHtml(m.bareExplain)}</p>
                 <div class="place-card-buttons">
-                    <button type="button" class="place-bare-yes">${this.escapeHtml(m.bareYes)}</button>
+                    <button type="button" class="place-bare-yes primary">${this.escapeHtml(m.bareYes)}</button>
                     <button type="button" class="place-bare-no secondary">${this.escapeHtml(m.bareNo)}</button>
                 </div>
             </div>`;
@@ -590,7 +590,7 @@ export const placesManagerMethods = uiModule({
                 ${dry.noHouseField > 0 ? `<p class="place-card-warn">${this.escapeHtml(m.splitNoHouseField(dry.noHouseField))}</p>` : ''}
                 <p class="place-card-note">${this.escapeHtml(m.undoableUndo)}</p>
                 <div class="place-card-buttons">
-                    <button type="button" class="place-split-go"${dry.changed === 0 ? ' disabled' : ''}>${this.escapeHtml(m.splitGo(dry.changed))}</button>
+                    <button type="button" class="place-split-go primary"${dry.changed === 0 ? ' disabled' : ''}>${this.escapeHtml(m.splitGo(dry.changed))}</button>
                     <button type="button" class="place-split-cancel secondary">${this.escapeHtml(strings.buttons.cancel)}</button>
                 </div>
             </div>`;
@@ -631,7 +631,7 @@ export const placesManagerMethods = uiModule({
             <p class="place-card-warn place-rename-merge" hidden>${this.escapeHtml(m.renameMerge)}</p>
             <p class="place-card-note">${this.escapeHtml(m.undoableUndo)}</p>
             <div class="place-card-buttons">
-                <button type="button" class="place-rename-go" disabled>${this.escapeHtml(m.renameGo(uses))}</button>
+                <button type="button" class="place-rename-go primary" disabled>${this.escapeHtml(m.renameGo(uses))}</button>
                 <button type="button" class="place-rename-cancel secondary">${this.escapeHtml(strings.buttons.cancel)}</button>
             </div>`;
         const to = preview.querySelector('.place-rename-to') as HTMLElement;
@@ -951,7 +951,7 @@ export const placesManagerMethods = uiModule({
             <p class="place-offer-done"><span aria-hidden="true">✓ </span>${this.escapeHtml(m.attachedByTown(usage?.display ?? offer.town))}</p>
             ${n > 0 ? `
                 <div class="place-card-buttons">
-                    <button type="button" class="place-offer-go">${this.escapeHtml(m.useForOthers(offer.town, n))}</button>
+                    <button type="button" class="place-offer-go primary">${this.escapeHtml(m.useForOthers(offer.town, n))}</button>
                     <button type="button" class="place-offer-skip secondary">${this.escapeHtml(m.justThis)}</button>
                 </div>
                 <p class="place-card-note">${this.escapeHtml(m.othersNote)}</p>` : ''}`;

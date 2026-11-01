@@ -196,6 +196,13 @@ export const mapMethods = uiModule({
                 if (r.height > 0) floor = Math.max(floor, window.innerHeight - r.top);
             }
             document.documentElement.style.setProperty('--map-floor', `${Math.round(floor)}px`);
+            // The time bar stands above the status bar, whose height grows when
+            // its sentence wraps (a phone, the family path note): publish how
+            // far up the status bar reaches inside the map.
+            const status = bars[0]?.matches('.map-status') ? bars[0] : null;
+            const sr = status?.getBoundingClientRect();
+            const reach = sr && sr.height > 0 ? container.getBoundingClientRect().bottom - sr.top : 0;
+            container.style.setProperty('--map-status-reach', `${Math.round(reach)}px`);
         };
         const ro = new ResizeObserver(update);
         bars.forEach(el => ro.observe(el));

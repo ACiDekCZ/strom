@@ -8483,7 +8483,7 @@
         .map-timebar {
             position: absolute;
             left: 50%;
-            bottom: 62px;
+            bottom: max(62px, calc(var(--map-status-reach, 0px) + 8px));
             transform: translateX(-50%);
             display: flex;
             align-items: center;
@@ -8729,7 +8729,7 @@
             .map-timebar {
                 left: 8px;
                 right: 8px;
-                bottom: 74px;
+                bottom: max(74px, calc(var(--map-status-reach, 0px) + 8px));
                 width: auto;
                 transform: none;
                 gap: 8px;

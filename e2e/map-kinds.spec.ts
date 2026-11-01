@@ -195,6 +195,29 @@ test.describe('kinds on a phone', () => {
         await expect(people).toHaveCount(2);
         for (const p of await people.all()) await expect(p.locator('.map-popup-marks')).toHaveText('⚭');
     });
+
+    test('time mode without Births: the two-line status bar leaves the whole time bar visible', async ({ page }) => {
+        await stubTiles(page);
+        await openApp(page);
+        await seedKindsTree(page);
+        await openMap(page);
+        await page.getByRole('button', { name: 'Migration over time' }).tap();
+        await page.locator('.map-kinds-btn').tap();
+        await page.locator('.map-kinds-menu').getByRole('checkbox', { name: /Births/ }).tap();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.map-kinds-menu')).toBeHidden();
+        await expect(page.locator('#map-status')).toContainText('The family path shows only with Births.');
+
+        // The status bar grew by the family-path sentence; the time bar stands above it.
+        await expect.poll(async () => {
+            const bar = (await page.locator('.map-timebar').boundingBox())!;
+            const status = (await page.locator('#map-status').boundingBox())!;
+            return Math.round(status.y - (bar.y + bar.height));
+        }).toBeGreaterThanOrEqual(0);
+        const play = (await page.locator('.map-time-play').boundingBox())!;
+        const status = (await page.locator('#map-status').boundingBox())!;
+        expect(play.y + play.height).toBeLessThanOrEqual(status.y);
+    });
 });
 
 /** Houses of one town, each a place "Town N" located by the town (byTown). */
