@@ -15281,6 +15281,9 @@
         @media (max-width: 640px) {
             .evidence-pill { bottom: calc(var(--bottom-bar-h, 64px) + 12px + var(--live-strip-h, 0px)); }
             .evidence-pill:has(~ .live-follow-pill) { bottom: calc(var(--bottom-bar-h, 64px) + 70px + var(--live-strip-h, 0px)); }
+            /* Without the strip too, ↩ / ↪ stand above the pill (under it they took no tap); the rules below take the strip's case. */
+            body:not([data-view-mode="timeline"]):not([data-view-mode="map"]):has(> .evidence-pill) .focus-nav-btn { bottom: calc(var(--bottom-bar-h, 64px) + 72px); }
+            body:not([data-view-mode="timeline"]):not([data-view-mode="map"]):has(> .evidence-pill ~ .live-follow-pill) .focus-nav-btn { bottom: calc(var(--bottom-bar-h, 64px) + 132px); }
             /* ↩ / ↪ stand on the strip too (under it they took no tap), above the pill or the two pills on it. */
             body:has(> #live-panel.phone-strip:not([hidden])) .focus-nav-btn { bottom: calc(var(--bottom-bar-h, 64px) + 16px + var(--live-strip-h, 0px)); }
             body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill) .focus-nav-btn { bottom: calc(var(--bottom-bar-h, 64px) + 72px + var(--live-strip-h, 0px)); }
@@ -15295,6 +15298,9 @@
         }
         /* Upright, a toast spans the phone's width: it stands above ↩ / ↪ where they stand on a pill. */
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
+            body.focus-nav-shown:not([data-view-mode="timeline"]):not([data-view-mode="map"]):has(> .evidence-pill) > .toast,
+            body.focus-nav-shown:not([data-view-mode="timeline"]):not([data-view-mode="map"]):has(> .evidence-pill) > .undo-toast,
+            body.focus-nav-shown:not([data-view-mode="timeline"]):not([data-view-mode="map"]):has(> .evidence-pill) .focus-toast { bottom: calc(var(--bottom-bar-h, 64px) + 124px); }
             body.focus-nav-shown:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill) > .toast,
             body.focus-nav-shown:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill) > .undo-toast,
             body.focus-nav-shown:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill) .focus-toast { bottom: calc(var(--bottom-bar-h, 64px) + 124px + var(--live-strip-h, 0px)); }

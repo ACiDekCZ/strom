@@ -437,6 +437,58 @@ test.describe('card signals', () => {
         await expect(page.locator('.person-card.evl-full')).toHaveCount(0);
     });
 
+    test('phone without the live strip: back and forward stand above the Evidence pill and take a tap, in the tree and the fan (1101)', async ({ page }) => {
+        await setup(page, 390);
+        const idOf = (first: string) => page.evaluate((f) =>
+            window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === f)!.id, first);
+        const focusName = () => page.evaluate(() => window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId()!)?.firstName ?? null);
+        const navClash = (): Promise<string[]> => page.evaluate(() => {
+            const rect = (el: Element | null) => {
+                const r = el?.getBoundingClientRect();
+                return r && r.width > 0 && r.height > 0 && getComputedStyle(el!).visibility !== 'hidden' ? r : null;
+            };
+            const out: string[] = [];
+            if (!rect(document.querySelector('#evidence-pill'))) out.push('no pill');
+            for (const nav of ['#focus-back-btn', '#focus-forward-btn']) {
+                const n = rect(document.querySelector(nav));
+                if (!n) { if (nav === '#focus-back-btn') out.push('no back'); continue; }
+                if (n.top < 0 || n.bottom > window.innerHeight || n.left < 0 || n.right > window.innerWidth) out.push(`${nav} outside`);
+                const hit = document.elementFromPoint(n.left + n.width / 2, n.top + n.height / 2);
+                if (!hit?.closest(nav)) out.push(`${nav} under ${hit?.id || hit?.className}`);
+                for (const sel of ['#evidence-pill', '#fan-origin-pill', '#fan-legend-chip', '#fan-legend', '#fan-zoom-controls', '#fan-toolbar',
+                    '.zoom-controls', '.control-block', '.bottom-bar', '.tree-legend', 'body > .toast.show']) {
+                    for (const el of document.querySelectorAll(sel)) {
+                        const b = rect(el);
+                        if (b && n.left < b.right && b.left < n.right && n.top < b.bottom && b.top < n.bottom) out.push(`${nav} × ${sel}`);
+                    }
+                }
+            }
+            return out;
+        });
+        await page.evaluate(() => window.Strom.UI.showEvidenceLevels());
+        await expect(page.locator('#evidence-pill')).toBeVisible();
+        await expect(page.locator('#live-panel.phone-strip:not([hidden])')).toHaveCount(0);
+        for (const [w, h] of [[390, 844], [844, 390]]) {
+            await page.setViewportSize({ width: w, height: h });
+            for (const mode of ['family', 'fan']) {
+                await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                const start = await focusName();
+                // A step to another person shows the back button.
+                const other = start === 'Eva' ? 'Jan' : 'Eva';
+                await page.evaluate((p) => window.Strom.TreeRenderer.setFocus(p as never), await idOf(other));
+                await expect(page.locator('#focus-back-btn')).toBeVisible();
+                await expect.poll(navClash, `${w}×${h} ${mode}`).toEqual([]);
+                // A toast keeps clear of the buttons too.
+                await page.evaluate(() => window.Strom.UI.showToast('Fíškovi: 4 osoby, 1 rodina', 10000));
+                await expect(page.locator('body > .toast.show')).toBeVisible();
+                await expect.poll(navClash, `${w}×${h} ${mode} toast`).toEqual([]);
+                await page.locator('#focus-back-btn').click();
+                await expect.poll(focusName, `${w}×${h} ${mode}`).not.toBe(other);
+            }
+        }
+    });
+
     test('phone: the person menu leads with the status line and the signal', async ({ page }) => {
         await setup(page, 360);
         await card(page, 'Jan').locator('.name').click();
