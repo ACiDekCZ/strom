@@ -1396,7 +1396,7 @@ test.describe('Ancestors: the buttons cover no ancestor (1101)', () => {
 test.describe('Ancestors: every ancestor carries a label (1101)', () => {
     /** Julvi's four generations (Ahnentafel numbers), a long double surname on her mother's line. */
     const PEDIGREE: Array<[number, string, string, string, string]> = [
-        [1, 'Julvi', 'Vlenk', '1956', ''], [2, 'Peske', 'Vlenk', '1929', '2004'], [3, 'Anvi', 'Ulbernaskeldorer-Kroppwendt', '1931', '2019'],
+        [1, 'Julvi', 'Vlenk', '1956', ''], [2, 'Peske', 'Vlenk', '1929', '2004'], [3, 'Kremi', 'Ulbernaskeldorer-Kroppwendt', '1931', '2019'],
         [4, 'Antvo', 'Vlenk', '1898', '1962'], [5, 'Marvi', 'Kesmar', '1902', '1979'],
         [6, 'Johalm', 'Ulbernaskeldorer-Kroppwendt', '1898', '1967'], [7, 'Marvi', 'Lumbauer', '1902', '1988'],
         [8, 'Jakvo', 'Vlenk', '1870', '1935'], [9, 'Elimabeth', 'Wulp', '1874', '1949'], [10, 'Paux', 'Kesmar', '1868', '1930'],
@@ -1405,7 +1405,7 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
         [16, 'Andrevs', 'Vlenk', '1841', '1903'], [17, 'Barbuna', 'Sautek', '1845', '1912'], [18, 'Matthulf', 'Wulp', '1846', '1915'],
         [19, 'Hedwyx', 'Raupenfold', '1850', '1921'], [20, 'Ferdivant', 'Kesmar', '1839', '1899'], [21, 'Ottrine', 'Wendolbrak', '1843', '1908'],
         [22, 'Konvar', 'Fiskorn', '1842', '1910'], [23, 'Genovuna', 'Rapk', '1847', '1913'],
-        [24, 'Josvo', 'Ulbernaskeldorer-Kroppwendt', '1838', '1901'], [25, 'Anvi', 'Bauxe', '1840', '1905'],
+        [24, 'Josvo', 'Ulbernaskeldorer-Kroppwendt', '1838', '1901'], [25, 'Kremi', 'Bauxe', '1840', '1905'],
         [26, 'Lorvex', 'Vogra', '1841', '1900'], [27, 'Magdurena', 'Brunnhoxer', '1845', '1910'],
         [28, 'Martox', 'Lumbauer', '1846', '1910'], [29, 'Rosalvu', 'Schwalk', '1849', '1920'],
         [30, 'Sebaskorn', 'Hubna', '1848', '1919'], [31, 'Ursolk', 'Henkstlor', '1851', '1925'],
@@ -1452,7 +1452,7 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
                 expect(got['3']).toContain('Ulbernas');
                 expect(got['3']).toContain('Kroppwendt');
             } else {
-                expect(got['3']).toBe('Anvi U. 1931–2019');
+                expect(got['3']).toBe('Kremi U. 1931–2019');
                 expect(got['6']).toBe('Johalm U. 1898–1967');
             }
             await ctx.close();
