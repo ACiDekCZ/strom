@@ -17,11 +17,10 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
-import { strings, getCurrentLanguage } from '../strings.js';
+import { strings } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
-    collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesForManager, placeFilterText, placeMatchesFilter,
-    isPlacesSort, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
+    collectPlaces, placeKey, PlaceUsage, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
 } from '../places.js';
 import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
 import { MQ_MOBILE } from '../breakpoints.js';
@@ -31,9 +30,8 @@ import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
 } from '../map.js';
-import { GEOCODER_NAME, geocodeCandidates, geocodePlaces } from '../geocode.js';
+import { GEOCODER_NAME, geocodePlaces, placesCentroid } from '../geocode.js';
 import { uiModule } from './module.js';
-import { normalizeModal } from './modal-skeleton.js';
 
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
@@ -49,9 +47,6 @@ export type MapScope = 'view' | 'tree';
 
 /** Recomputes --map-floor for the current map canvas (see watchMapFloor). */
 let mapFloorUpdate: (() => void) | null = null;
-
-/** The Places dialog's places by key, as last drawn (what its search looks in). */
-let managerPlaces = new Map<string, PlaceUsage>();
 
 /** The map point whose bubble is open (a place key or 'town:…'), null when closed. */
 let openPoint: string | null = null;
@@ -532,7 +527,7 @@ export const mapMethods = uiModule({
             <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}${info.houses > 0 ? ' map-marker-town' : ''}" data-key="${this.escapeHtml(info.key)}"
                     style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
                 <span class="map-marker-dot">${persons}</span>
-                ${info.houses > 0 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.houses}</span>` : ''}
+                ${info.houses >= 2 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.houses}</span>` : ''}
                 <span class="map-marker-label">${this.escapeHtml(info.display)}</span>
             </button>`;
     },
@@ -1221,9 +1216,12 @@ export const mapMethods = uiModule({
         // the name is spelled.
         const names = missing.map(m => m.usage.display);
         const keyOfName = new Map(missing.map(m => [m.usage.display, m.key]));
+        const data = DataManager.getData();
 
         const results = await geocodePlaces(names, {
             signal: controller.signal,
+            // A place with a house the geocoder does not know is looked up by its town (§4).
+            townFallback: { centroid: placesCentroid(data.places), known: knownStreets(data) },
             onProgress: (done, total) => {
                 this.mapGeocoding = { done, total, place: names[Math.min(done, total - 1)] };
                 this.renderMapStatus(this.mapPlaces());
@@ -1243,371 +1241,17 @@ export const mapMethods = uiModule({
         if (found.size > 0) DataManager.setPlaceGeos(found);
 
         const notFound = results.size - found.size;
-        this.showToast(notFound > 0
-            ? strings.map.doneWithMisses(found.size, notFound)
-            : strings.map.done(found.size));
+        const byTown = [...found.values()].filter(g => g.byTown).length;
+        // The places still without a location are one tap away: the dialog with its "No location" chip.
+        this.showToast(strings.map.geocodeDone(found.size, byTown, notFound), notFound > 0 ? 10000 : 6000, {
+            action: {
+                label: strings.map.managePlaces,
+                run: () => this.showPlacesManager(undefined, undefined, undefined, { unplaced: notFound > 0 }),
+            },
+        });
 
         this.mapCenter = null;  // reframe now that there is more to show
         TreeRenderer.render();
-    },
-
-    // ==================== PLACES MANAGER ====================
-
-    /**
-     * One home for everything about a place: what it is called, who it belongs
-     * to, and where it sits on the map.
-     *
-     * It exists because both halves can go wrong and neither could be fixed:
-     *   - a place the geocoder cannot find ("Kravaře u Č. Lípy" — a spelling
-     *     only the family uses) had no way to get onto the map at all,
-     *   - a place matched to the WRONG spot (a same-named town elsewhere) fell
-     *     out of the "missing" list and became unreachable.
-     *
-     * Searching and renaming are kept apart on purpose. The search query is
-     * throwaway — type the nearest town, take the coordinates. The name is the
-     * record, and renaming it rewrites every use in the tree.
-     */
-    placesForManager(scope: MapScope): { key: string; usage: PlaceUsage; geo?: PlaceGeo }[] {
-        const data = DataManager.getData();
-        const filter: ReadonlySet<PersonId> | undefined =
-            scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        // By name, as the UI language sorts, unless the dialog's sort says
-        // otherwise — a long list is read like an index. The places without
-        // coordinates have their own chip (and stay marked).
-        return sortPlacesForManager([...collectPlaces(data, filter)]
-            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), this.placesSort, getCurrentLanguage());
-    },
-
-    /**
-     * @param focusKey scroll to this place and open its search straight away
-     * @param parentDialogId dialog to return to on Escape/Close (tree manager)
-     * @param scope which places to list, when the caller knows better
-     *
-     * Opened from the map it follows the map's scope; opened from anywhere else
-     * "this view" would mean nothing, so it covers the whole tree.
-     */
-    showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope, opts: { keepFilter?: boolean } = {}): void {
-        this.placesManagerScope = scope ?? (parentDialogId ? 'tree' : this.mapScope);
-        this.placesManagerParent = parentDialogId ?? null;
-        const places = this.placesForManager(this.placesManagerScope);
-        if (places.length === 0) {
-            this.showToast(strings.map.noPlacesAtAll);
-            return;
-        }
-        managerPlaces = new Map(places.map(p => [p.key, p.usage]));
-        // A fresh open starts with the whole list; a redraw (a rename, a pin) keeps the search.
-        if (!opts.keepFilter) this.placesFilter = { query: '', unplacedOnly: false };
-        const unplaced = places.filter(p => !p.geo).length;
-        if (!unplaced) this.placesFilter.unplacedOnly = false;
-        const f = this.placesFilter;
-        const m = strings.map;
-        // Coordinate entries no person/event/partnership refers to any more. They
-        // never appear as rows (the list is built from used places), so the
-        // footer action is the only handle on them.
-        const orphanCount = orphanedPlaceKeys(DataManager.getData()).length;
-        this.closeMapPopup();
-
-        document.getElementById('places-modal')?.remove();
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay active';
-        overlay.id = 'places-modal';
-        overlay.innerHTML = `
-            <div class="modal places-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
-                <div class="modal-header">
-                    <h2>${strings.map.placesTitle}</h2>
-                    <button class="close-btn" id="places-close-x" aria-label="${strings.buttons.close}">&times;</button>
-                </div>
-                <p class="places-intro">${strings.map.placesIntro}</p>
-                <div class="places-list">
-                    ${places.map(p => this.renderPlaceRow(p)).join('')}
-                </div>
-                <p class="places-empty" id="places-filter-none" hidden>${m.filterNone}</p>
-                <div class="buttons places-footer">
-                    <button type="button" class="secondary places-clean-orphans" id="places-clean-orphans"
-                        ${orphanCount === 0 ? 'disabled' : ''}>${strings.map.cleanOrphans(orphanCount)}</button>
-                    <button type="button" class="secondary" id="places-close" data-dismiss>${strings.buttons.close}</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
-        // Wrap the body into its scroll container now, not in the skeleton's
-        // observer later: moving the rows there afterwards would drop the
-        // scroll to the focused place and the focus in its search (N9).
-        const modal = overlay.querySelector('.modal') as HTMLElement;
-        normalizeModal(modal);
-        // The search stays put over the scrolling list (as in History of places).
-        const bar = document.createElement('div');
-        bar.className = 'places-bar';
-        bar.innerHTML = `
-            <div class="hm-search">
-                <svg class="hm-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>
-                <input type="search" id="places-filter" autocomplete="off" spellcheck="false" enterkeyhint="search"
-                       placeholder="${this.escapeHtml(m.filterPh)}" aria-label="${this.escapeHtml(m.filterPh)}" value="${this.escapeHtml(f.query)}">
-                <span class="hm-search-count" id="places-filter-count" aria-live="polite"></span>
-                <button type="button" class="hm-search-clear" id="places-filter-clear" hidden aria-label="${this.escapeHtml(m.filterClear)}">&times;</button>
-            </div>
-            ${unplaced ? `<button type="button" class="hd-chip places-unplaced-chip" id="places-unplaced" aria-pressed="${f.unplacedOnly}"
-                title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}
-            <select class="places-sort" id="places-sort" aria-label="${this.escapeHtml(m.sortLabel)}" title="${this.escapeHtml(m.sortLabel)}">
-                ${([['name', m.sortName], ['people', m.sortPeople], ['unplaced', m.sortUnplaced]] as const)
-                    .map(([v, label]) => `<option value="${v}"${this.placesSort === v ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
-            </select>`;
-        modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
-        const input = bar.querySelector('#places-filter') as HTMLInputElement;
-        const setQuery = (q: string): void => {
-            this.placesFilter.query = q;
-            this.applyPlacesFilter();
-        };
-        input.addEventListener('input', () => setQuery(input.value));
-        input.addEventListener('keydown', (e) => {
-            // Escape empties the search first; the next one closes the dialog.
-            if (e.key === 'Escape' && input.value) {
-                e.preventDefault();
-                e.stopPropagation();
-                input.value = '';
-                setQuery('');
-            }
-        });
-        (bar.querySelector('#places-filter-clear') as HTMLButtonElement).onclick = () => {
-            input.value = '';
-            setQuery('');
-            input.focus();
-        };
-        const chip = bar.querySelector('#places-unplaced') as HTMLButtonElement | null;
-        if (chip) chip.onclick = () => {
-            this.placesFilter.unplacedOnly = !this.placesFilter.unplacedOnly;
-            chip.setAttribute('aria-pressed', String(this.placesFilter.unplacedOnly));
-            this.applyPlacesFilter();
-        };
-
-        const sortSelect = bar.querySelector('#places-sort') as HTMLSelectElement;
-        sortSelect.onchange = () => {
-            if (!isPlacesSort(sortSelect.value)) return;
-            this.placesSort = sortSelect.value;
-            this.applyPlacesSort();
-        };
-
-        const close = (): void => this.closePlacesManager();
-        overlay.onclick = (e) => {
-            if (e.target === overlay) { close(); return; }
-            const hist = (e.target as HTMLElement).closest<HTMLElement>('[data-place-hist]');
-            if (hist) this.placesHistoryAction(hist.dataset.placeHist ?? '', hist.dataset.hkey ?? '');
-        };
-        this.refreshPlacesHistoryRows();
-        (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
-        (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
-        (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
-        overlay.querySelectorAll('.place-row').forEach(row => this.bindPlaceRow(row as HTMLElement));
-
-        if (focusKey) {
-            const row = overlay.querySelector(`.place-row[data-key="${CSS.escape(focusKey)}"]`) as HTMLElement | null;
-            // Opened on a place the search or the chip hides: the whole list again.
-            if (row?.hidden) {
-                this.placesFilter = { query: '', unplacedOnly: false };
-                input.value = '';
-                chip?.setAttribute('aria-pressed', 'false');
-                this.applyPlacesFilter();
-            }
-            // Open its search first (it focuses the query), then bring the
-            // whole, now taller row into view.
-            (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
-            row?.scrollIntoView({ block: 'center' });
-        }
-
-        // Same stack discipline as other child dialogs (see showAuditLog): the
-        // parent hides while the manager is open and Escape/Close returns to it.
-        this.clearDialogStack();
-        if (parentDialogId) {
-            this.pushDialog(parentDialogId);
-            this.closeDialogById(parentDialogId);
-        }
-        this.pushDialog('places-modal');
-    },
-
-    /** What each row's search looks in: its names in the tree and, with a history of places, its other names. */
-    refreshPlacesFilterText(): void {
-        const modal = document.getElementById('places-modal');
-        if (!modal) return;
-        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key]')];
-        const aliases = this.placesHistoryAliases(rows.map(r => r.dataset.key ?? ''));
-        for (const row of rows) {
-            const key = row.dataset.key ?? '';
-            const usage = managerPlaces.get(key);
-            row.dataset.search = usage ? placeFilterText(key, usage, aliases.get(key)) : placeKey(key);
-        }
-        this.applyPlacesFilter();
-    },
-
-    /**
-     * Put the rows in the order of the chosen sort. The row elements move, they
-     * are not redrawn: an open search in a row, its results and a typed new
-     * name all stay.
-     */
-    applyPlacesSort(): void {
-        const list = document.querySelector<HTMLElement>('#places-modal .places-list');
-        if (!list) return;
-        const geos = DataManager.getData().places ?? {};
-        const rows = new Map([...list.querySelectorAll<HTMLElement>(':scope > .place-row[data-key]')]
-            .map(r => [r.dataset.key ?? '', r] as const));
-        const sorted = sortPlacesForManager([...managerPlaces].filter(([key]) => rows.has(key))
-            .map(([key, usage]) => ({ key, usage, geo: geos[key] })), this.placesSort, getCurrentLanguage());
-        for (const p of sorted) list.appendChild(rows.get(p.key)!);
-    },
-
-    /** Show the rows the search and the "No location" chip let through; the count and the empty state. */
-    applyPlacesFilter(): void {
-        const modal = document.getElementById('places-modal');
-        if (!modal) return;
-        const f = this.placesFilter;
-        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key]')];
-        let found = 0;
-        for (const row of rows) {
-            const shown = (!f.unplacedOnly || row.classList.contains('place-row-unplaced'))
-                && placeMatchesFilter(row.dataset.search ?? '', f.query);
-            row.hidden = !shown;
-            if (shown) found++;
-        }
-        const filtering = !!f.query.trim() || f.unplacedOnly;
-        const count = modal.querySelector('#places-filter-count');
-        if (count) count.textContent = filtering ? strings.map.filterCount(found, rows.length) : '';
-        const clear = modal.querySelector<HTMLElement>('#places-filter-clear');
-        if (clear) clear.hidden = !f.query;
-        const none = modal.querySelector<HTMLElement>('#places-filter-none');
-        if (none) none.hidden = found > 0;
-    },
-
-    renderPlaceRow(p: { key: string; usage: PlaceUsage; geo?: PlaceGeo }): string {
-        const pinned = p.geo
-            ? `<div class="place-pin">
-                   <span class="place-pin-label">${iconSvg('pin', { size: 12 })} ${this.escapeHtml(p.geo.label ?? `${p.geo.lat.toFixed(3)}, ${p.geo.lon.toFixed(3)}`)}</span>
-                   <button type="button" class="place-change secondary">${strings.map.changePin}</button>
-                   <button type="button" class="place-remove secondary">${strings.map.removePin}</button>
-               </div>`
-            : `<div class="place-pin place-pin-none">
-                   <span class="place-hint">${strings.map.notOnMap}</span>
-                   <button type="button" class="place-change secondary">${strings.map.findOnMap}</button>
-               </div>`;
-        return `
-            <div class="place-row${p.geo ? '' : ' place-row-unplaced'}" data-key="${this.escapeHtml(p.key)}">
-                <div class="place-head">
-                    <input type="text" class="place-name" value="${this.escapeHtml(p.usage.display)}"
-                           aria-label="${strings.map.nameLabel}">
-                    <button type="button" class="place-rename secondary" disabled>${strings.map.rename}</button>
-                    <span class="place-count">${strings.map.usedBy(p.usage.personIds.length)}</span>
-                </div>
-                ${pinned}
-                <div class="place-search" hidden>
-                    <input type="text" class="place-query" value="${this.escapeHtml(p.usage.display)}"
-                           aria-label="${strings.map.searchLabel}">
-                    <button type="button" class="place-search-go">${strings.map.search}</button>
-                </div>
-                <div class="place-results"></div>
-            </div>`;
-    },
-
-    bindPlaceRow(row: HTMLElement): void {
-        const key = row.getAttribute('data-key') ?? '';
-        const name = row.querySelector('.place-name') as HTMLInputElement;
-        const renameBtn = row.querySelector('.place-rename') as HTMLButtonElement;
-        const original = name.value;
-
-        // Rename only lights up once the name actually differs — no accidental
-        // tree-wide rewrite from clicking around.
-        const sync = (): void => { renameBtn.disabled = name.value.trim() === original.trim() || !name.value.trim(); };
-        name.oninput = sync;
-        name.onkeydown = (e) => { if (e.key === 'Enter' && !renameBtn.disabled) { e.preventDefault(); renameBtn.click(); } };
-        renameBtn.onclick = () => this.renamePlaceFromManager(key, name.value);
-
-        const search = row.querySelector('.place-search') as HTMLElement;
-        const query = row.querySelector('.place-query') as HTMLInputElement;
-        const go = row.querySelector('.place-search-go') as HTMLButtonElement;
-        const run = (): void => { void this.searchPlaceFromManager(key, query.value, row); };
-        go.onclick = run;
-        query.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
-
-        (row.querySelector('.place-change') as HTMLButtonElement).onclick = () => {
-            search.hidden = false;
-            query.focus();
-            query.select();
-        };
-        const remove = row.querySelector('.place-remove') as HTMLButtonElement | null;
-        if (remove) remove.onclick = () => this.removePlacePin(key);
-    },
-
-    closePlacesManager(): void {
-        document.getElementById('places-modal')?.remove();
-        this.dialogStack = this.dialogStack.filter(d => d !== 'places-modal');
-        // Return to whoever opened the manager (tree manager), per stack rules.
-        const parent = this.dialogStack[this.dialogStack.length - 1];
-        if (parent) this.openDialogById(parent);
-    },
-
-    /** Redraw the dialog in place, keeping the map behind it in step. */
-    refreshPlacesManager(focusKey?: string): void {
-        this.mapCenter = null;  // what is on the map changed — reframe it
-        TreeRenderer.render();
-        if (document.getElementById('places-modal')) {
-            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined, this.placesManagerScope, { keepFilter: true });
-        }
-    },
-
-    renamePlaceFromManager(key: string, newName: string): void {
-        const changed = DataManager.renamePlaceTo(key, newName);
-        if (changed === 0) return;
-        this.showToast(strings.map.renamed(changed));
-        this.refreshPlacesManager();
-    },
-
-    removePlacePin(key: string): void {
-        DataManager.clearPlaceGeo(key);
-        this.refreshPlacesManager();
-    },
-
-    /** Sweep coordinate entries nothing in the tree points at any more. Confirms
-     *  with the count, then deletes via the normal mutation path (undo + audit
-     *  + Undo toast) and redraws the manager. */
-    async cleanOrphanPlaces(): Promise<void> {
-        const count = orphanedPlaceKeys(DataManager.getData()).length;
-        if (count === 0) return;
-        if (!await this.showConfirm(strings.map.cleanOrphansConfirm(count), strings.danger.cleanPlacesTitle(count),
-            { confirmLabel: strings.danger.cleanPlaces, variant: 'danger' })) return;
-        const removed = DataManager.clearOrphanPlaces();
-        if (removed > 0) this.showToast(strings.map.cleanOrphansDone(removed));
-        this.refreshPlacesManager();
-    },
-
-    /** Search under whatever name the user typed and offer what comes back. */
-    async searchPlaceFromManager(key: string, query: string, row: HTMLElement): Promise<void> {
-        const results = row.querySelector('.place-results') as HTMLElement;
-        const text = query.trim();
-        if (!text || this.placeSearchBusy) return;
-        // The typed name goes out too, so the same consent rule applies.
-        if (!await this.confirmGeocoding(1)) return;
-
-        results.innerHTML = `<span class="place-hint">${strings.map.searching}</span>`;
-        this.placeSearchBusy = true;
-        let candidates;
-        try {
-            candidates = await geocodeCandidates(text);
-        } finally {
-            this.placeSearchBusy = false;
-        }
-        if (candidates.length === 0) {
-            results.innerHTML = `<span class="place-hint">${strings.map.noCandidates}</span>`;
-            return;
-        }
-
-        results.innerHTML = candidates.map((c, i) => `
-            <button type="button" class="place-candidate" data-index="${i}">
-                ${this.escapeHtml(c.label ?? `${c.lat}, ${c.lon}`)}
-            </button>`).join('');
-        results.querySelectorAll('.place-candidate').forEach(btn => {
-            (btn as HTMLButtonElement).onclick = () => {
-                const geo = candidates[Number(btn.getAttribute('data-index'))];
-                DataManager.setPlaceGeos(new Map([[key, geo]]));
-                this.showToast(strings.map.matched(geo.label ?? ''));
-                this.refreshPlacesManager();
-            };
-        });
     },
 
     cancelGeocoding(): void {

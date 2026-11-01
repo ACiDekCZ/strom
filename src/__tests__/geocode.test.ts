@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
-    parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates,
+    parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates, hitKind, hitLabelParts,
     CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS,
 } from '../geocode.js';
 
@@ -231,5 +231,22 @@ describe('settlements in a manual search', () => {
             { geo: { lat: 49, lon: 15, label: 'Bělokamen' }, settlement: true, kind: 'village' },
             { geo: { lat: 49, lon: 15, label: 'Kopřivná 12' }, settlement: false, kind: 'building' },
         ]);
+    });
+});
+
+describe('a search option in the Places dialog: its kind and its name', () => {
+    it('reads the kind from the address type; a settlement is a town, a part of one stays a part', () => {
+        expect(hitKind({ settlement: true, kind: 'village' })).toBe('settlement');
+        expect(hitKind({ settlement: true, kind: 'suburb' })).toBe('suburb');
+        expect(hitKind({ settlement: false, kind: 'road' })).toBe('road');
+        expect(hitKind({ settlement: false, kind: 'house' })).toBe('house');
+        expect(hitKind({ settlement: false, kind: 'county' })).toBe('region');
+        expect(hitKind({ settlement: false })).toBe('other');
+    });
+
+    it('splits the label into the name and the rest', () => {
+        expect(hitLabelParts('Bělokamen, okres Horní, Česko')).toEqual({ name: 'Bělokamen', region: 'okres Horní, Česko' });
+        expect(hitLabelParts('Lhota')).toEqual({ name: 'Lhota', region: '' });
+        expect(hitLabelParts(undefined)).toEqual({ name: '', region: '' });
     });
 });

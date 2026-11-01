@@ -11,8 +11,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { parseLiveBridge, type LiveStatus } from '../research-link.js';
 import { storedResearchBridge } from '../research-device.js';
 import {
-    FIXES_LIST_FEATURE, availableFixCount, fetchResearchFixes, fixRows, fixText, fixesEmpty,
-    type FixesReply, type FixRow,
+    FIXES_LIST_FEATURE, FIXES_TOWNS_FEATURE, STREET_PLACES_FIX, availableFixCount, fetchResearchFixes, fixRows, fixText, fixesEmpty,
+    type FixesReply, type FixRow, type ResearchFix,
 } from '../research-fixes.js';
 import { formatLiveClock } from '../live-time.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -130,6 +130,18 @@ export const researchFixesMethods = uiModule({
         if (!(lastFeatures.get(rid) ?? []).includes(FIXES_LIST_FEATURE)) return null;
         if (!this.researchLinkAvailable('fixes')) return null;
         return lists.get(rid) ?? null;
+    },
+
+    /**
+     * The research's `street-places` fix for the Places dialog (§7): the fix
+     * when the open tree's research listed it, and whether the research names
+     * its towns (`fixes.towns`, so the dialog links only those).
+     */
+    streetPlacesFixNow(): { fix: ResearchFix | null; towns: boolean } {
+        const rid = this.fixesResearchId();
+        if (!rid) return { fix: null, towns: false };
+        const fix = lists.get(rid)?.reply.fixes.find(f => f.id === STREET_PLACES_FIX) ?? null;
+        return { fix, towns: (lastFeatures.get(rid) ?? []).includes(FIXES_TOWNS_FEATURE) };
     },
 
     /** The research menu's item ("Tree fixes" with the count of fixes waiting), or null. */

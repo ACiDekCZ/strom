@@ -5022,9 +5022,11 @@
         }
 
         /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
-        .places-modal { max-width: 580px; }
-        .places-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-        .places-list { display: flex; flex-direction: column; gap: 10px; }
+        .modal.modal--lg.places-modal { width: 820px; max-width: min(820px, 94vw); }
+        /* Rename, split and "use for the others" answer with a toast and its Undo: above the dialog's overlay (200). */
+        body:has(#places-modal) .toast:not([data-kind="materials"]) { z-index: 250; }
+        .places-intro { margin: 4px 0 6px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+        .places-list { display: flex; flex-direction: column; }
         /* Footer: housekeeping (clean orphans) on the left, Close on the right. */
         .modal .places-footer { justify-content: space-between; flex-wrap: wrap; }
         .places-clean-orphans:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -5062,56 +5064,139 @@
             font: inherit; font-size: 13px; cursor: pointer;
         }
         .places-empty { margin: 0; padding: 14px 0 6px; font-size: 13px; color: var(--text-faint); }
-        .places-empty[hidden], .place-row[hidden] { display: none; }
+        .places-empty[hidden], .place-row[hidden], .place-group[hidden], .place-group-more[hidden] { display: none; }
+        .places-modal [hidden] { display: none !important; }
+        /* A row: the name and its actions on the left, the location in its box on the right (§6). */
         .place-row {
-            padding: 10px 12px;
-            border: 1px solid var(--border-color, #ddd);
-            border-radius: 10px;
-            background: var(--bg-color, #fafafa);
+            display: flex; flex-direction: column; gap: 10px; min-width: 0;
+            padding: 12px 0; border-bottom: 1px solid var(--divider);
         }
-        /* A place with nowhere to sit is the one worth noticing. */
-        .place-row-unplaced { border-color: color-mix(in srgb, var(--primary, #4a7c59) 45%, transparent); }
-        .place-head { display: flex; align-items: center; gap: 6px; }
-        .place-name {
-            flex: 1;
-            min-width: 0;
-            padding: 6px 9px;
-            border: 1px solid var(--border-color, #ddd);
-            border-radius: 6px;
-            background: var(--card-bg, #fff);
-            color: var(--text-color, #222);
-            font-size: 13px;
+        .place-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 8px 16px; align-items: start; }
+        .place-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+        .place-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+        .place-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+        .place-count { font-size: 12.5px; color: var(--text-light); }
+        .place-unplaced-tag {
+            padding: 1px 8px; border-radius: 999px; background: var(--warning-soft); color: var(--warning-text);
+            font-size: 12px; font-weight: 600; white-space: nowrap;
         }
-        .place-count { font-size: 12px; color: var(--text-light); white-space: nowrap; }
-        .place-pin { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-        .place-pin-label { flex: 1; min-width: 0; font-size: 12px; color: var(--text-light); }
-        .place-hint { flex: 1; font-size: 12px; color: var(--text-light); }
-        .place-row button { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
-        .place-search { display: flex; gap: 6px; margin-top: 8px; }
-        /* `display` beats the hidden attribute — say it explicitly, or every
-           row shows its search box before anyone asked for it. */
-        .place-search[hidden] { display: none; }
-        .place-query {
-            flex: 1;
-            min-width: 0;
-            padding: 6px 9px;
-            border: 1px solid var(--border-color, #ddd);
-            border-radius: 6px;
-            font-size: 13px;
+        .place-acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+        .place-group-head .place-acts { padding-left: 24px; }
+        .places-modal button.place-act, .places-modal button.place-link-btn, .places-modal button.place-research-link,
+        .places-modal button.place-show-all {
+            min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; cursor: pointer;
+            text-align: left; white-space: normal; overflow-wrap: anywhere;
         }
-        .place-results { display: flex; flex-direction: column; gap: 4px; }
-        .place-results:not(:empty) { margin-top: 8px; }
-        .place-candidate {
-            padding: 6px 9px;
-            border: 1px solid var(--border-color, #ddd);
-            border-radius: 6px;
-            background: var(--card-bg, #fff);
-            color: var(--text-color, #222);
-            font-size: 12px;
-            text-align: left;
-            cursor: pointer;
+        .places-modal button.place-act {
+            color: var(--text-light); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px;
         }
-        @media (hover: hover) { .place-candidate:hover { background: var(--primary, #4a7c59); color: var(--on-primary); } }
+        .places-modal button.place-link-btn { color: var(--primary-dark); font-weight: 500; }
+        .places-modal button.place-link-btn.is-quiet { color: var(--text-light); font-weight: 400; }
+        .place-field-label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-light); min-width: 0; }
+        .places-modal input.place-new-name, .places-modal input.place-query {
+            width: 100%; min-width: 0; height: 36px; padding: 0 10px; box-sizing: border-box;
+            border: 1.5px solid var(--primary); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 14.5px; font-weight: 400;
+        }
+        /* The location box. */
+        .place-pin {
+            display: flex; flex-direction: column; gap: 5px; min-width: 0;
+            padding: 8px 10px; border-radius: 8px; background: var(--surface-2);
+        }
+        .place-pin-none { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+        .place-pin-label { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+        .place-pin-mark { color: var(--primary-dark); }
+        .place-bytown {
+            align-self: flex-start; max-width: 100%; padding: 2px 8px; border-radius: 6px; box-sizing: border-box;
+            background: var(--primary-soft); color: var(--primary-dark); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere;
+        }
+        .place-nearest { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .place-pin-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .place-hint { font-size: 13px; color: var(--text-light); }
+        .places-modal button.place-find {
+            min-height: 0; padding: 4px 10px; border: 1px solid var(--primary); border-radius: 7px; background: none;
+            color: var(--primary-dark); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        /* The cards under a row: the rename and split previews, the search, the offer. */
+        .place-rename-preview, .place-split-preview, .place-bare-card, .place-search, .place-offer {
+            display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border-radius: 10px;
+        }
+        .place-rename-preview, .place-split-preview { border: 1px solid var(--read-amber-line); background: var(--warning-soft); }
+        .place-bare-card { border: 1px solid var(--border); background: var(--surface); }
+        .place-search { border: 1px solid var(--border); }
+        .place-offer { border: 1px solid var(--primary); background: var(--primary-soft); }
+        .place-split-card:empty { display: none; }
+        .places-modal .place-row p, .places-modal .place-group-strip p { margin: 0; }
+        .place-card-head { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+        .place-split-preview .place-card-head, .place-bare-card .place-card-head { font-size: 15px; }
+        .place-card-text { font-size: 13.5px; }
+        .place-card-warn { font-size: 13.5px; color: var(--warning-text); }
+        .place-card-note { font-size: 12.5px; color: var(--text-light); line-height: 1.45; }
+        .place-rename-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; min-width: 0; }
+        .place-rename-line s, .place-split-examples s { color: var(--text-light); overflow-wrap: anywhere; }
+        .place-rename-line strong { overflow-wrap: anywhere; min-width: 0; }
+        .place-arrow { color: var(--warning-text); }
+        .place-split-examples {
+            display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 13.5px; align-items: baseline;
+        }
+        .place-split-examples > * { overflow-wrap: anywhere; min-width: 0; }
+        .place-bare-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+        .place-bare-examples span { padding: 3px 10px; border-radius: 6px; background: var(--surface-2); font-size: 13.5px; overflow-wrap: anywhere; }
+        .place-card-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+        .place-card-buttons button { padding: 7px 14px; font-size: 13.5px; white-space: normal; text-align: left; }
+        .place-card-buttons button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .place-offer-done { font-size: 13.5px; color: var(--primary-dark); overflow-wrap: anywhere; }
+        .place-search-row { display: flex; gap: 8px; min-width: 0; }
+        .place-search-row .place-query { flex: 1 1 auto; }
+        .places-modal button.place-search-go { flex: none; height: 36px; padding: 0 14px; font-size: 13.5px; font-weight: 600; }
+        .place-attach-note {
+            display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 8px;
+            background: var(--primary-soft); color: var(--primary-dark); font-size: 13px; line-height: 1.45;
+        }
+        .place-attach-mark { font-weight: 700; }
+        .place-results { display: flex; flex-direction: column; }
+        .places-modal button.place-candidate {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; width: 100%; min-width: 0;
+            padding: 9px 8px; border: 0; border-top: 1px solid var(--divider); border-radius: 0; background: none;
+            color: var(--text); font: inherit; font-size: 13.5px; text-align: left; white-space: normal; cursor: pointer;
+        }
+        .place-candidate strong { font-weight: 600; overflow-wrap: anywhere; }
+        .place-candidate-sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .place-results > .place-hint { padding: 6px 0 0; }
+        /* A town group: the head, the strip (shown closed too), its houses indented. */
+        .place-group { border-bottom: 1px solid var(--divider); }
+        .place-group > .place-group-head, .place-group-title { border-bottom: 0; }
+        .place-group-title { padding: 12px 0 6px; }
+        .places-modal button.place-caret {
+            flex: none; width: 18px; min-height: 0; padding: 0; border: 0; background: none;
+            color: var(--text-faint); font-size: 11px; cursor: pointer;
+        }
+        .place-group-title .place-title, .place-group-head .place-title { cursor: pointer; }
+        .place-group-strip { padding: 10px 0 12px 44px; }
+        .place-strip-idle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+        .place-strip-note { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .place-strip-idle .place-split-all { padding: 6px 12px; font-size: 13px; white-space: normal; text-align: left; max-width: 100%; }
+        .place-research { display: flex; flex-direction: column; gap: 6px; }
+        .place-research-note { font-size: 13px; line-height: 1.5; color: var(--text-light); }
+        .place-research-link-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+        .places-modal button.place-research-link {
+            font-size: 13px; color: var(--primary-dark); font-weight: 600; text-decoration: underline; text-underline-offset: 3px;
+        }
+        .place-research-count { color: var(--text-faint); }
+        .place-row-sub {
+            padding: 9px 12px 9px 42px; border-bottom: 1px solid var(--divider);
+            background: color-mix(in srgb, var(--surface-2) 45%, transparent);
+        }
+        .place-row-sub .place-title { font-size: 14px; font-weight: 500; }
+        .place-group-members > .place-row-sub:last-of-type { border-bottom: 0; }
+        .place-group-more { padding: 8px 16px 10px 42px; border-top: 1px solid var(--divider); }
+        .places-modal button.place-show-all { font-size: 13px; color: var(--primary-dark); font-weight: 500; }
+        @media (hover: hover) {
+            .places-modal button.place-candidate:hover { background: var(--surface-2); }
+            .places-modal button.place-act:hover, .places-modal button.place-link-btn:hover,
+            .places-modal button.place-show-all:hover { text-decoration: underline; color: var(--text); }
+            .places-modal button.place-find:hover { background: var(--primary-soft); }
+        }
         .map-popup-fix {
             width: 100%;
             margin-top: 10px;
@@ -5124,16 +5209,19 @@
             cursor: pointer;
         }
         @media (hover: hover) { .map-popup-fix:hover { background: var(--bg-color, #f4f4f4); color: var(--text-color, #222); } }
-        /* Tablet: the name row keeps its shape, the pin row wraps as needed. */
+        /* Tablet: the dialog takes the width it can; the location box keeps its column. */
         @media (max-width: 1024px) {
             .places-modal { max-width: 94vw; }
         }
-        /* Mobile: everything stacks — nothing gets squeezed to nothing. */
+        /* Mobile: the two parts of a row stack — nothing gets squeezed to nothing. */
         @media (max-width: 640px) {
-            .place-head { flex-wrap: wrap; }
-            .place-name { flex-basis: 100%; }
-            .place-search { flex-direction: column; }
-            .place-search-go { width: 100%; }
+            .modal.modal--lg.places-modal { width: 100%; max-width: 100vw; }
+            .place-grid { grid-template-columns: minmax(0, 1fr); }
+            .place-row-sub { padding-left: 28px; }
+            .place-group-strip { padding: 10px 0 12px 28px; }
+            .place-group-more { padding-left: 28px; }
+            .place-split-examples { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+            .place-split-examples > span { margin-bottom: 4px; }
             /* The search and the chip share the row (.hm-search alone takes it whole in History of places). */
             .places-bar { padding: 10px 16px; }
             #places-modal .hm-search { flex: 1 1 160px; }
@@ -5141,11 +5229,18 @@
         /* A phone held sideways: little height — a low bar, the list keeps the room. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .places-bar { padding: 6px 16px; }
+            .place-row { padding: 8px 0; gap: 6px; }
         }
         @media (pointer: coarse) {
             #places-modal button.hm-search-clear { width: 44px; height: 44px; }
             #places-modal button.hd-chip { min-height: 44px; }
             .modal select.places-sort { height: 44px; }
+            .places-modal button.place-act, .places-modal button.place-link-btn, .places-modal button.place-research-link,
+            .places-modal button.place-show-all, .places-modal button.place-find { min-height: 44px; }
+            .places-modal button.place-caret { width: 44px; min-height: 44px; }
+            .places-modal input.place-new-name, .places-modal input.place-query { height: 44px; font-size: 16px; }
+            .places-modal button.place-search-go, .place-card-buttons button { min-height: 44px; }
+            .places-modal button.place-candidate { min-height: 44px; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */

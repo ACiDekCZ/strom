@@ -115,6 +115,7 @@ import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import { placesManagerMethods } from './places-manager-ui.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
@@ -780,6 +781,10 @@ Object.assign(UIClass.prototype, slideshowMethods);
 type MapMethods = typeof mapMethods;
 export interface UIClass extends MapMethods {}
 Object.assign(UIClass.prototype, mapMethods);
+
+type PlacesManagerMethods = typeof placesManagerMethods;
+export interface UIClass extends PlacesManagerMethods {}
+Object.assign(UIClass.prototype, placesManagerMethods);
 
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}

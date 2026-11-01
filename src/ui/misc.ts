@@ -1833,6 +1833,7 @@ export const miscMethods = uiModule({
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();    // attachments brought back or gone again
+        this.placesManagerTreeChanged();
         this.showToast(strings.undo.undone(result.description), 3000, { kind: 'undo-result' });
     },
 
@@ -1849,6 +1850,7 @@ export const miscMethods = uiModule({
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();
+        this.placesManagerTreeChanged();
         this.showToast(strings.undo.redone(result.description), 3000, { kind: 'undo-result' });
     },
 

@@ -48,7 +48,7 @@ import { isEncrypted, EncryptedData, decrypt } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
-import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
+import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys, splitPlaceHouses, SplitPlaceHousesResult } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from './surnames.js';
 import { cleanLineageOverrides, LineagePatch } from './lineage.js';
@@ -1695,12 +1695,12 @@ class DataManagerClass {
      * own data so they travel with the file and the map keeps working offline.
      * Goes through the normal mutation path, so undo covers it.
      */
-    setPlaceGeos(geos: ReadonlyMap<string, PlaceGeo>): void {
+    setPlaceGeos(geos: ReadonlyMap<string, PlaceGeo>, description?: string): void {
         if (geos.size === 0) return;
         this.beginMutation();
         this.data.places = { ...this.data.places };
         for (const [key, geo] of geos) this.data.places[key] = geo;
-        this.commitMutation(strings.undo.geocodePlaces(geos.size));
+        this.commitMutation(description ?? strings.undo.geocodePlaces(geos.size));
     }
 
     /**
@@ -1732,6 +1732,41 @@ class DataManagerClass {
         }
         this.commitMutation(strings.undo.renamePlace(target));
         return changed;
+    }
+
+    /**
+     * Split the places `keys` of `town` into the town and the house
+     * (splitPlaceHouses): one undo step and one audit entry. The town keeps a
+     * location: when it has none of its own, the location a member found by
+     * the town goes to it (no longer "by the town" — it IS the town). A member
+     * left without any use drops its by-town location; an exact one stays
+     * (the orphan cleaning offers it).
+     */
+    splitPlacesIntoHouses(town: string, keys: readonly string[], bareTowns?: ReadonlySet<string>): SplitPlaceHousesResult {
+        const res = splitPlaceHouses(this.data, keys, { bareTowns });
+        if (res.changed === 0) return res;
+        this.beginMutation();
+        this.data = res.data;
+        const townKey = placeKey(town);
+        const places = { ...this.data.places };
+        if (!places[townKey]) {
+            const byTown = keys.map(k => places[k]).find(g => g?.byTown);
+            if (byTown) {
+                const geo: PlaceGeo = { ...byTown };
+                delete geo.byTown;
+                places[townKey] = geo;
+            }
+        }
+        const used = collectPlaces(this.data);
+        for (const key of keys) {
+            if (!used.has(key) && places[key]?.byTown) delete places[key];
+        }
+        this.data.places = places;
+        this.commitMutation(strings.undo.splitPlaces(town));
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'place.split', strings.auditLog.splitPlaces(town, res.changed));
+        }
+        return res;
     }
 
     /**

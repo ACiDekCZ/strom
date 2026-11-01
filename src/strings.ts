@@ -94,6 +94,16 @@ function veCs(m: number): string {
 }
 /** German count form shorthand: `${n} ${word}`. */
 const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
+/** Kinds of a map search hit (Nominatim class/type groups), per language. */
+const HIT_KIND_EN: Record<string, string> = {
+    settlement: 'town', suburb: 'part of a town', road: 'street', house: 'house', region: 'region', other: 'place',
+};
+const HIT_KIND_CS: Record<string, string> = {
+    settlement: 'obec', suburb: 'část obce', road: 'ulice', house: 'dům', region: 'oblast', other: 'místo',
+};
+const HIT_KIND_DE: Record<string, string> = {
+    settlement: 'Ort', suburb: 'Ortsteil', road: 'Straße', house: 'Haus', region: 'Region', other: 'Ort',
+};
 
 /** Czech adverbs for a text's language ("německy"); other languages by Intl. */
 const CS_LANG_ADVERB: Record<string, string> = {
@@ -2902,10 +2912,9 @@ const stringsEN = {
         allPlaced: (count: number) => `${strings.map.placeCount(count)} on the map.`,
         placesTitle: 'Places',
         placesMenu: 'Places…',
-        placesIntro: 'Rename a place to fix it everywhere in the tree at once. To put one on the map, search under a name the map knows — the nearest town usually works. Only the coordinates are attached; the place keeps the name the family wrote.',
-        nameLabel: 'Place name, as used in the tree',
-        rename: 'Rename',
-        renamed: (count: number) => `Renamed in ${count} ${count === 1 ? 'place' : 'places'}.`,
+        placesIntro: 'Places from the tree and where they are on the map. A name changes only through Rename, a location only through Find on the map.',
+        rename: 'Rename…',
+        renamed: (count: number) => `Renamed: ${nEn(count, 'entry', 'entries')}.`,
         notOnMap: 'Not on the map yet',
         filterPh: 'Search places',
         filterClear: 'Clear search',
@@ -2974,6 +2983,54 @@ const stringsEN = {
         houseSearchNone: 'No such house number here.',
         houseHits: (n: number) => nEn(n, 'house', 'houses'),
         byTownShort: (town: string) => `located by the town of ${town}`,
+        byTown: (town: string) => `Located by the town of ${town}`,
+        nearestTown: 'Several towns have this name; the one nearest the tree’s other places was chosen.',
+        geocodeDone: (found: number, byTown: number, notFound: number) => {
+            const head = found > 0
+                ? `Found ${nEn(found, 'place', 'places')}${byTown > 0 ? `, ${byTown} of them by town` : ''}.`
+                : '';
+            const miss = notFound > 0 ? `${nEn(notFound, 'place', 'places')} not found.` : '';
+            return [head, miss].filter(Boolean).join(' ') || 'Found 0 places.';
+        },
+        searchUnder: 'Search under a name the map knows',
+        attachOnly: 'Only the location is attached; the entry in the tree stays as it is.',
+        attachedByTown: (place: string) => `Location attached to ${place}, by town.`,
+        useForOthers: (town: string, n: number) => `Use for the other house numbers in ${town} too (${n})`,
+        othersNote: 'Only places in this town that are not on the map yet. The entries in the tree stay as they are.',
+        justThis: 'Only this place',
+        othersDone: (n: number, town: string) => `Location attached to ${n} more ${n === 1 ? 'place' : 'places'} in ${town}, by town.`,
+        houseNumbers: (n: number) => nEn(n, 'house number', 'house numbers'),
+        unplacedN: (n: number) => `${n} without location`,
+        showAllN: (n: number) => `Show all ${n}`,
+        newName: 'New name in the tree',
+        renameCount: (n: number, p: number) => `Rewrites ${nEn(n, 'entry', 'entries')} for ${nEn(p, 'person', 'people')}:`,
+        renameMerge: 'Another place already has this name; the two become one.',
+        renameGo: (n: number) => `Rewrite ${nEn(n, 'entry', 'entries')}`,
+        undoableUndo: 'Can be undone: Undo.',
+        splitOne: 'Split into town and house',
+        splitAll: (town: string, n: number) => `Split all numbers in ${town} (${n})…`,
+        housesNote: 'The house numbers are part of the place name for now. The map still shows them in one point for the town.',
+        bareQuestion: (town: string) => `Are the numbers in ${town} house numbers?`,
+        bareExplain: 'These entries have a number after the town name without a house-number mark. It can be a house or a district (like “Praha 5”), so they are split only after confirmation, for the whole town.',
+        bareYes: 'Yes, they are house numbers',
+        bareNo: 'No, leave them',
+        splitHead: (town: string, n: number) => `Split ${nEn(n, 'place', 'places')} in ${town} into town and house`,
+        splitCount: (n: number, p: number) => `${nEn(n, 'entry', 'entries')} for ${nEn(p, 'person', 'people')} ${n === 1 ? 'changes' : 'change'}: the place becomes the town, the number or street moves to the House field.`,
+        splitSkipped: (n: number) => n === 1
+            ? '1 entry already has a different house and stays unchanged.'
+            : `${n} entries already have a different house and stay unchanged.`,
+        splitNoHouseField: (n: number) => n === 1
+            ? '1 entry is a divorce place, which has no House field; it stays unchanged.'
+            : `${n} entries are divorce places, which have no House field; they stay unchanged.`,
+        splitGo: (n: number) => `Split ${nEn(n, 'entry', 'entries')}`,
+        splitDone: (n: number, town: string) => `Split ${nEn(n, 'entry', 'entries')} in ${town} into town and house.`,
+        afterSplit: (p: number, h: number) => `${nEn(p, 'person', 'people')} · ${nEn(h, 'house', 'houses')} in the House field`,
+        researchHere: 'This tree is linked to a research. The research splits town and house with a bulk fix; it reaches the app with the next sync.',
+        researchLink: 'Fix in the research (Tree fixes)',
+        researchCount: (n: number) => `the research reports ${nEn(n, 'place', 'places')}`,
+        researchElsewhere: (fix: string) => `This tree is linked to a research on another computer. Town and house are split there: research menu → Tree fixes → ${fix}.`,
+        researchElsewhereFix: 'Streets and house numbers in fact places',
+        hitKind: (kind: string) => HIT_KIND_EN[kind] ?? '',
     },
 
     fan: {
@@ -5080,6 +5137,7 @@ const stringsEN = {
         updatedEvent: (name: string) => `Updated event of ${name}`,
         removedEvent: (name: string) => `Removed event from ${name}`,
         cleanedOrphanPlaces: (count: number) => `Cleaned ${count} orphaned ${count === 1 ? 'place' : 'places'}`,
+        splitPlaces: (town: string, count: number) => `Split into town and house: ${town}, ${nEn(count, 'entry', 'entries')}`,
         qualityDismissed: (finding: string) => `Marked as not an error: ${finding}`,
         qualityRestored: (finding: string) => `Reported again: ${finding}`,
         surnameRejected: (forms: string) => `Spelling suggestion rejected: ${forms}`,
@@ -5115,6 +5173,8 @@ const stringsEN = {
         clearPlaceGeo: 'removing a place from the map',
         cleanOrphanPlaces: (count: number) => `cleaning ${count} orphaned ${count === 1 ? 'place' : 'places'}`,
         renamePlace: (name: string) => `renaming a place to ${name}`,
+        splitPlaces: (town: string) => `splitting the places of ${town} into town and house`,
+        attachByTown: (town: string) => `locating places by the town of ${town}`,
         addSurnameGroup: (names: string) => `linking the spellings ${names}`,
         removeSurnameGroup: (name: string) => `unlinking the spellings of ${name}`,
         rejectSurnameGroup: (names: string) => `rejecting the spellings ${names}`,
@@ -9290,10 +9350,9 @@ const stringsCZ: StringsType = {
         allPlaced: (count: number) => `${strings.map.placeCount(count)} na mapě.`,
         placesTitle: 'Místa',
         placesMenu: 'Místa…',
-        placesIntro: 'Přejmenování opraví místo všude ve stromu naráz. Na mapu se dostane tak, že se najde pod názvem, který mapa zná — obvykle stačí nejbližší město. Připojí se jen souřadnice, místo si ponechá název, jak ho píše rodina.',
-        nameLabel: 'Název místa, jak je ve stromu',
-        rename: 'Přejmenovat',
-        renamed: (count: number) => `Přejmenováno na ${count} ${count === 1 ? 'místě' : 'místech'}.`,
+        placesIntro: 'Místa ze stromu a jejich poloha na mapě. Název se mění jen přes Přejmenovat, poloha přes Najít na mapě.',
+        rename: 'Přejmenovat…',
+        renamed: (count: number) => `Přejmenováno: ${nCs(count, 'zápis', 'zápisy', 'zápisů')}.`,
         notOnMap: 'Zatím není na mapě',
         filterPh: 'Hledat místo',
         filterClear: 'Vymazat hledání',
@@ -9362,6 +9421,52 @@ const stringsCZ: StringsType = {
         houseSearchNone: 'Takové číslo domu tu není.',
         houseHits: (n: number) => nCs(n, 'dům', 'domy', 'domů'),
         byTownShort: (town: string) => `poloha podle obce ${town}`,
+        byTown: (town: string) => `Poloha podle obce ${town}`,
+        nearestTown: 'Obec toho jména je víckrát; vybrána ta nejblíž ostatním místům stromu.',
+        geocodeDone: (found: number, byTown: number, notFound: number) => {
+            const head = found > 0
+                ? `${plural('cs', found, 'Nalezeno', 'Nalezena', 'Nalezeno')} ${nCs(found, 'místo', 'místa', 'míst')}${byTown > 0 ? `, z toho ${byTown} podle obce` : ''}.`
+                : '';
+            const miss = notFound > 0 ? `${nCs(notFound, 'místo se nenašlo', 'místa se nenašla', 'míst se nenašlo')}.` : '';
+            return [head, miss].filter(Boolean).join(' ') || 'Nalezeno 0 míst.';
+        },
+        searchUnder: 'Hledat pod názvem, který mapa zná',
+        attachOnly: 'Připojí se jen poloha, zápis ve stromu se nemění.',
+        attachedByTown: (place: string) => `Poloha připojena k ${place}, podle obce.`,
+        useForOthers: (town: string, n: number) => `Použít i pro další čísla domů v ${town} (${n})`,
+        othersNote: 'Jen místa této obce, která ještě nejsou na mapě. Zápisy ve stromu se nemění.',
+        justThis: 'Jen toto místo',
+        othersDone: (n: number, town: string) => `Poloha připojena k ${plural('cs', n, 'dalšímu', 'dalším', 'dalším')} ${n} ${plural('cs', n, 'místu', 'místům', 'místům')} v ${town}, podle obce.`,
+        houseNumbers: (n: number) => `${nCs(n, 'číslo', 'čísla', 'čísel')} domů`,
+        unplacedN: (n: number) => `${n} bez polohy`,
+        showAllN: (n: number) => `Zobrazit ${plural('cs', n, 'všech', 'všechna', 'všech')} ${n}`,
+        newName: 'Nový název ve stromu',
+        renameCount: (n: number, p: number) => `Přepíše se ${nCs(n, 'zápis', 'zápisy', 'zápisů')} u ${p} ${p === 1 ? 'osoby' : 'osob'}:`,
+        renameMerge: 'Název už má jiné místo; obě se spojí v jedno.',
+        renameGo: (n: number) => `Přepsat ${nCs(n, 'zápis', 'zápisy', 'zápisů')}`,
+        undoableUndo: 'Lze vrátit: Zpět.',
+        splitOne: 'Rozdělit na obec a dům',
+        splitAll: (town: string, n: number) => `Rozdělit všechna čísla v ${town} (${n})…`,
+        housesNote: 'Čísla domů jsou zatím součástí názvu místa. Mapa je i tak ukáže v jednom bodě obce.',
+        bareQuestion: (town: string) => `Čísla v ${town} jsou čísla domů?`,
+        bareExplain: 'Tyto zápisy mají číslo za názvem obce bez značky čp. Může jít o dům i o část obce (jako „Praha 5“), proto se rozdělí jen po potvrzení, a to za celou obec.',
+        bareYes: 'Ano, jsou to čísla domů',
+        bareNo: 'Ne, nechat jak jsou',
+        splitHead: (town: string, n: number) => `Rozdělit ${nCs(n, 'místo', 'místa', 'míst')} v ${town} na obec a dům`,
+        splitCount: (n: number, p: number) => `Změní se ${nCs(n, 'zápis', 'zápisy', 'zápisů')} u ${p} ${p === 1 ? 'osoby' : 'osob'}: místo bude obec, číslo nebo ulice přejde do pole Dům.`,
+        splitSkipped: (n: number) => `${n} ${plural('cs', n, 'zápis má', 'zápisy mají', 'zápisů má')} jiný dům, ${plural('cs', n, 'zůstane', 'zůstanou', 'zůstane')} beze změny.`,
+        splitNoHouseField: (n: number) => n === 1
+            ? '1 zápis je místo rozvodu, to pole Dům nemá; zůstane beze změny.'
+            : `${n} ${plural('cs', n, 'zápis je místo', 'zápisy jsou místa', 'zápisů jsou místa')} rozvodu, ta pole Dům nemají; ${plural('cs', n, 'zůstane', 'zůstanou', 'zůstanou')} beze změny.`,
+        splitGo: (n: number) => `Rozdělit ${nCs(n, 'zápis', 'zápisy', 'zápisů')}`,
+        splitDone: (n: number, town: string) => `${plural('cs', n, 'Rozdělen', 'Rozděleny', 'Rozděleno')} ${nCs(n, 'zápis', 'zápisy', 'zápisů')} v ${town} na obec a dům.`,
+        afterSplit: (p: number, h: number) => `${nCs(p, 'osoba', 'osoby', 'osob')} · ${nCs(h, 'dům', 'domy', 'domů')} v poli Dům`,
+        researchHere: 'Strom je spojený s výzkumem. Obec a dům rozdělí výzkum hromadnou opravou, do aplikace to přijde synchronizací.',
+        researchLink: 'Opravit ve výzkumu (Opravy stromu)',
+        researchCount: (n: number) => `výzkum hlásí ${nCs(n, 'místo', 'místa', 'míst')}`,
+        researchElsewhere: (fix: string) => `Strom je spojený s výzkumem na jiném počítači. Obec a dům se rozdělí tam: menu výzkumu → Opravy stromu → ${fix}.`,
+        researchElsewhereFix: 'Ulice a čísla domů v místech údajů',
+        hitKind: (kind: string) => HIT_KIND_CS[kind] ?? '',
     },
 
     fan: {
@@ -11441,6 +11546,7 @@ const stringsCZ: StringsType = {
         updatedEvent: (name: string) => `Upravena událost u ${name}`,
         removedEvent: (name: string) => `Odebrána událost u ${name}`,
         cleanedOrphanPlaces: (count: number) => `Vyčištěno ${count} ${plural('cs', count, 'osiřelé místo', 'osiřelá místa', 'osiřelých míst')}`,
+        splitPlaces: (town: string, count: number) => `Rozděleno na obec a dům: ${town}, ${nCs(count, 'zápis', 'zápisy', 'zápisů')}`,
         qualityDismissed: (finding: string) => `Označeno jako není chyba: ${finding}`,
         qualityRestored: (finding: string) => `Znovu se hlásí: ${finding}`,
         surnameRejected: (forms: string) => `Odmítnut návrh tvarů: ${forms}`,
@@ -11476,6 +11582,8 @@ const stringsCZ: StringsType = {
         clearPlaceGeo: 'odebrání místa z mapy',
         cleanOrphanPlaces: (count: number) => `vyčištění ${count} ${plural('cs', count, 'osiřelého místa', 'osiřelých míst', 'osiřelých míst')}`,
         renamePlace: (name: string) => `přejmenování místa na ${name}`,
+        splitPlaces: (town: string) => `rozdělení míst obce ${town} na obec a dům`,
+        attachByTown: (town: string) => `poloha míst podle obce ${town}`,
         addSurnameGroup: (names: string) => `propojení tvarů ${names}`,
         removeSurnameGroup: (name: string) => `zrušení propojení tvarů ${name}`,
         rejectSurnameGroup: (names: string) => `odmítnutí tvarů ${names}`,
@@ -15603,10 +15711,9 @@ const stringsDE: StringsType = {
         allPlaced: (count: number) => `${strings.map.placeCount(count)} auf der Karte.`,
         placesTitle: 'Orte',
         placesMenu: 'Orte…',
-        placesIntro: 'Einen Ort umbenennen, um ihn im ganzen Stammbaum auf einmal zu korrigieren. Um einen auf die Karte zu bringen, unter einem Namen suchen, den die Karte kennt — die nächstgelegene Stadt funktioniert meist. Nur die Koordinaten werden angehängt; der Ort behält den Namen, den die Familie geschrieben hat.',
-        nameLabel: 'Ortsname, wie im Stammbaum verwendet',
-        rename: 'Umbenennen',
-        renamed: (count: number) => `An ${count} ${count === 1 ? 'Stelle' : 'Stellen'} umbenannt.`,
+        placesIntro: 'Orte aus dem Stammbaum und ihre Lage auf der Karte. Ein Name ändert sich nur über Umbenennen, eine Lage nur über Auf der Karte finden.',
+        rename: 'Umbenennen…',
+        renamed: (count: number) => `Umbenannt: ${nDe(count, 'Eintrag', 'Einträge')}.`,
         notOnMap: 'Noch nicht auf der Karte',
         filterPh: 'Ort suchen',
         filterClear: 'Suche leeren',
@@ -15675,6 +15782,54 @@ const stringsDE: StringsType = {
         houseSearchNone: 'Diese Hausnummer gibt es hier nicht.',
         houseHits: (n: number) => nDe(n, 'Haus', 'Häuser'),
         byTownShort: (town: string) => `Lage nach dem Ort ${town}`,
+        byTown: (town: string) => `Lage nach dem Ort ${town}`,
+        nearestTown: 'Mehrere Orte tragen diesen Namen; gewählt wurde der, der den übrigen Orten des Stammbaums am nächsten liegt.',
+        geocodeDone: (found: number, byTown: number, notFound: number) => {
+            const head = found > 0
+                ? `${nDe(found, 'Ort', 'Orte')} gefunden${byTown > 0 ? `, davon ${byTown} nach dem Ort` : ''}.`
+                : '';
+            const miss = notFound > 0 ? `${nDe(notFound, 'Ort', 'Orte')} nicht gefunden.` : '';
+            return [head, miss].filter(Boolean).join(' ') || '0 Orte gefunden.';
+        },
+        searchUnder: 'Unter einem Namen suchen, den die Karte kennt',
+        attachOnly: 'Nur die Lage wird ergänzt, der Eintrag im Stammbaum bleibt unverändert.',
+        attachedByTown: (place: string) => `Lage an ${place} angehängt, nach dem Ort.`,
+        useForOthers: (town: string, n: number) => `Auch für die übrigen Hausnummern in ${town} verwenden (${n})`,
+        othersNote: 'Nur Orte dieses Ortes, die noch nicht auf der Karte sind. Die Einträge im Stammbaum bleiben unverändert.',
+        justThis: 'Nur dieser Ort',
+        othersDone: (n: number, town: string) => `Lage an ${n} ${n === 1 ? 'weiteren Ort' : 'weitere Orte'} in ${town} angehängt, nach dem Ort.`,
+        houseNumbers: (n: number) => nDe(n, 'Hausnummer', 'Hausnummern'),
+        unplacedN: (n: number) => `${n} ohne Lage`,
+        showAllN: (n: number) => `Alle ${n} zeigen`,
+        newName: 'Neuer Name im Stammbaum',
+        renameCount: (n: number, p: number) => `Überschreibt ${nDe(n, 'Eintrag', 'Einträge')} bei ${nDe(p, 'Person', 'Personen')}:`,
+        renameMerge: 'Ein anderer Ort trägt diesen Namen schon; beide werden zu einem.',
+        renameGo: (n: number) => `${nDe(n, 'Eintrag', 'Einträge')} überschreiben`,
+        undoableUndo: 'Rückgängig möglich: Rückgängig.',
+        splitOne: 'In Ort und Haus aufteilen',
+        splitAll: (town: string, n: number) => `Alle Nummern in ${town} aufteilen (${n})…`,
+        housesNote: 'Die Hausnummern sind vorerst Teil des Ortsnamens. Die Karte zeigt sie trotzdem in einem Punkt für den Ort.',
+        bareQuestion: (town: string) => `Sind die Zahlen in ${town} Hausnummern?`,
+        bareExplain: 'Diese Einträge haben eine Zahl nach dem Ortsnamen ohne Hausnummer-Zeichen. Das kann ein Haus oder ein Stadtteil sein (wie „Praha 5“), deshalb wird erst nach Bestätigung aufgeteilt, für den ganzen Ort.',
+        bareYes: 'Ja, das sind Hausnummern',
+        bareNo: 'Nein, so lassen',
+        splitHead: (town: string, n: number) => `${nDe(n, 'Ort', 'Orte')} in ${town} in Ort und Haus aufteilen`,
+        splitCount: (n: number, p: number) => `${nDe(n, 'Eintrag', 'Einträge')} bei ${nDe(p, 'Person', 'Personen')} ${n === 1 ? 'ändert' : 'ändern'} sich: der Ort wird der Ortsname, Nummer oder Straße wandert in das Feld Haus.`,
+        splitSkipped: (n: number) => n === 1
+            ? '1 Eintrag hat schon ein anderes Haus und bleibt unverändert.'
+            : `${n} Einträge haben schon ein anderes Haus und bleiben unverändert.`,
+        splitNoHouseField: (n: number) => n === 1
+            ? '1 Eintrag ist ein Scheidungsort, der kein Feld Haus hat; er bleibt unverändert.'
+            : `${n} Einträge sind Scheidungsorte, die kein Feld Haus haben; sie bleiben unverändert.`,
+        splitGo: (n: number) => `${nDe(n, 'Eintrag', 'Einträge')} aufteilen`,
+        splitDone: (n: number, town: string) => `${nDe(n, 'Eintrag', 'Einträge')} in ${town} in Ort und Haus aufgeteilt.`,
+        afterSplit: (p: number, h: number) => `${nDe(p, 'Person', 'Personen')} · ${nDe(h, 'Haus', 'Häuser')} im Feld Haus`,
+        researchHere: 'Dieser Stammbaum ist mit einer Forschung verbunden. Die Forschung teilt Ort und Haus mit einer Sammelkorrektur auf; in die App kommt das mit der nächsten Synchronisierung.',
+        researchLink: 'In der Forschung korrigieren (Baumkorrekturen)',
+        researchCount: (n: number) => `die Forschung meldet ${nDe(n, 'Ort', 'Orte')}`,
+        researchElsewhere: (fix: string) => `Dieser Stammbaum ist mit einer Forschung auf einem anderen Computer verbunden. Ort und Haus werden dort aufgeteilt: Forschungsmenü → Baumkorrekturen → ${fix}.`,
+        researchElsewhereFix: 'Straßen und Hausnummern in Ortsangaben',
+        hitKind: (kind: string) => HIT_KIND_DE[kind] ?? '',
     },
 
     fan: {
@@ -17706,6 +17861,7 @@ const stringsDE: StringsType = {
         updatedEvent: (name: string) => `Ereignis von ${name} aktualisiert`,
         removedEvent: (name: string) => `Ereignis von ${name} entfernt`,
         cleanedOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigt`,
+        splitPlaces: (town: string, count: number) => `In Ort und Haus aufgeteilt: ${town}, ${nDe(count, 'Eintrag', 'Einträge')}`,
         qualityDismissed: (finding: string) => `Als kein Fehler markiert: ${finding}`,
         qualityRestored: (finding: string) => `Wieder gemeldet: ${finding}`,
         surnameRejected: (forms: string) => `Vorschlag für Schreibweisen abgelehnt: ${forms}`,
@@ -17740,6 +17896,8 @@ const stringsDE: StringsType = {
         clearPlaceGeo: 'einen Ort von der Karte entfernen',
         cleanOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigen`,
         renamePlace: (name: string) => `einen Ort in ${name} umbenennen`,
+        splitPlaces: (town: string) => `die Orte von ${town} in Ort und Haus aufteilen`,
+        attachByTown: (town: string) => `Orte nach dem Ort ${town} verorten`,
         addSurnameGroup: (names: string) => `die Schreibweisen ${names} verknüpfen`,
         removeSurnameGroup: (name: string) => `die Verknüpfung der Schreibweisen von ${name} lösen`,
         rejectSurnameGroup: (names: string) => `die Schreibweisen ${names} ablehnen`,

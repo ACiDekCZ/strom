@@ -121,6 +121,31 @@ export function parseGeocodeCandidateDetails(body: unknown): GeocodeCandidate[] 
     return out;
 }
 
+/** What a search option is, for its line in the Places dialog. */
+export type HitKind = 'settlement' | 'suburb' | 'road' | 'house' | 'region' | 'other';
+
+const SUBURB_TYPES: ReadonlySet<string> = new Set(['suburb', 'quarter', 'neighbourhood', 'city_district', 'borough', 'city_block']);
+const ROAD_TYPES: ReadonlySet<string> = new Set(['road', 'street', 'residential', 'pedestrian', 'square', 'living_street']);
+const HOUSE_TYPES: ReadonlySet<string> = new Set(['house', 'building', 'house_number', 'yes', 'farm', 'church']);
+const REGION_TYPES: ReadonlySet<string> = new Set(['county', 'state', 'region', 'province', 'district', 'country', 'administrative']);
+
+/** The kind of a search option (GeocodeCandidate) by its address type. */
+export function hitKind(c: { settlement: boolean; kind?: string }): HitKind {
+    const k = c.kind ?? '';
+    if (SUBURB_TYPES.has(k)) return 'suburb';
+    if (c.settlement) return 'settlement';
+    if (ROAD_TYPES.has(k)) return 'road';
+    if (HOUSE_TYPES.has(k)) return 'house';
+    if (REGION_TYPES.has(k)) return 'region';
+    return 'other';
+}
+
+/** A geocoder's label as the option's name (its first part) and where it is (the rest). */
+export function hitLabelParts(label: string | undefined): { name: string; region: string } {
+    const parts = (label ?? '').split(',').map(p => p.trim()).filter(Boolean);
+    return { name: parts[0] ?? '', region: parts.slice(1).join(', ') };
+}
+
 /** A point on the globe. */
 export interface LatLon {
     lat: number;

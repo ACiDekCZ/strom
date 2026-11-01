@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-    parseFixesReply, fixRows, availableFixCount, fixesEmpty, fixText, fetchResearchFixes, type FixesReply,
+    parseFixesReply, fixRows, availableFixCount, fixesEmpty, fixText, fetchResearchFixes, parseFixTowns, type FixesReply,
 } from '../research-fixes';
 import { getStringsForLang } from '../strings';
 
@@ -80,6 +80,29 @@ describe('tree fixes of the research (§7)', () => {
         const none = parseFixesReply({ fixes: RAW.fixes.filter(f => f.state !== 'pending' && !(f.state === 'fixed' && f.undoable)) })!;
         expect(fixesEmpty(none)).toBe(true);
         expect(fixesEmpty(null)).toBe(true);
+    });
+
+    it('reads the towns of street-places (fixes.towns): bounded, the unreadable ones left out', () => {
+        const towns = [
+            { town: 'Bělokamen', key: 'belokamen', count: 140, places: ['Bělokamen 16', 'Bělokamen čp. 4', 7, '  '] },
+            { key: 'zalesi u brodku', count: -3 },
+            { town: '', key: '' },
+            'Lhota',
+            null,
+        ];
+        const r = parseFixesReply({ ...RAW, fixes: [{ ...RAW.fixes[4], towns }] })!;
+        expect(r.fixes[0].towns).toEqual([
+            { town: 'Bělokamen', key: 'belokamen', count: 140, places: ['Bělokamen 16', 'Bělokamen čp. 4'] },
+            { town: 'zalesi u brodku', key: 'zalesi u brodku', count: 0, places: [] },
+        ]);
+        // An older research: no towns at all, not an empty list.
+        expect(reply().fixes.find(f => f.id === 'street-places')!.towns).toBeUndefined();
+        expect(parseFixTowns('x')).toBeUndefined();
+        const many = parseFixTowns(Array.from({ length: 300 }, (_, i) => ({
+            town: `T${i}`, key: `t${i}`, count: 1, places: Array.from({ length: 40 }, (_, j) => `T${i} ${j}`),
+        })))!;
+        expect(many).toHaveLength(200);
+        expect(many[0].places).toHaveLength(20);
     });
 
     it('a text in the language of the app, else another', () => {

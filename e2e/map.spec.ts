@@ -414,7 +414,7 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     await page.getByRole('button', { name: 'Look them up' }).click();
 
     // The automatic run cannot find it and leaves it behind.
-    await expect(page.locator('.toast', { hasText: '1 could not be found' })).toBeVisible();
+    await expect(page.locator('.toast', { hasText: '1 place not found.' })).toBeVisible();
     await expect(page.locator('.map-marker')).toHaveCount(1);
     expect(asked).toEqual(['Kravaře u Č. Lípy']);
 
@@ -532,8 +532,9 @@ test('places can be fixed without going to the map', async ({ page }) => {
 
     // Fix the spelling; every use in the tree follows.
     const row = page.locator('.place-row[data-key="kolin"]');
-    await row.locator('.place-name').fill('Kolín');
-    await row.getByRole('button', { name: 'Rename' }).click();
+    await row.getByRole('button', { name: '✎ Rename…' }).click();
+    await row.locator('.place-new-name').fill('Kolín');
+    await row.locator('.place-rename-go').click();
     expect(await page.evaluate(() => {
         const dm = window.Strom.DataManager;
         return dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Jan')?.birthPlace;
@@ -596,8 +597,9 @@ test('renaming a place fixes it everywhere and keeps its pin', async ({ page }) 
     await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
     const row = page.locator('.place-row[data-key="grenwich"]');
-    await row.locator('.place-name').fill('Greenwich');
-    await row.getByRole('button', { name: 'Rename' }).click();
+    await row.getByRole('button', { name: '✎ Rename…' }).click();
+    await row.locator('.place-new-name').fill('Greenwich');
+    await row.locator('.place-rename-go').click();
 
     const after = await page.evaluate(() => {
         const dm = window.Strom.DataManager;

@@ -1310,6 +1310,7 @@ export type AuditAction =
     | 'attachment.update'
     | 'parentRel.update'
     | 'place.clean'
+    | 'place.split'
     | 'quality.dismiss'
     | 'quality.restore'
     | 'surname.reject'

@@ -16,10 +16,16 @@ import { retryAfterMs } from './surname-suggest-bridge.js';
 
 /** In `/status.features`: the bridge serves `GET /fixes`. */
 export const FIXES_LIST_FEATURE = 'fixes.list';
+/** In `/status.features`: the `street-places` fix carries `towns` (which towns it splits). */
+export const FIXES_TOWNS_FEATURE = 'fixes.towns';
+/** The research's fix that splits fact places into the town and the house. */
+export const STREET_PLACES_FIX = 'street-places';
 
 export const FIXES_READ_TIMEOUT_MS = 20_000;
 const MAX_REPLY = 2_000_000;
 const MAX_FIXES = 100;
+const MAX_TOWNS = 200;
+const MAX_TOWN_PLACES = 20;
 
 export type ResearchFixState = 'pending' | 'declined' | 'fixed' | 'nothing';
 const STATES: readonly string[] = ['pending', 'declined', 'fixed', 'nothing'];
@@ -47,6 +53,20 @@ export interface ResearchFix {
     undone: boolean;
     /** It reads images again with the agent (AI, costs). */
     paid: boolean;
+    /** `street-places` with `fixes.towns`: the towns it splits, with a few of their places as the tree writes them. */
+    towns?: ResearchFixTown[];
+}
+
+/** One town of the `street-places` fix. */
+export interface ResearchFixTown {
+    /** The town as the research writes it. */
+    town: string;
+    /** The research's folded key of the town. */
+    key: string;
+    /** How many places of the town it splits. */
+    count: number;
+    /** Some of those places, as the tree writes them. */
+    places: string[];
 }
 
 export interface FixesReply {
@@ -70,6 +90,25 @@ function localized(raw: unknown, max: number): ResearchFixText {
     return out;
 }
 
+/** The `towns` of a fix: bounded, the unreadable ones left out; undefined when it has none. */
+export function parseFixTowns(raw: unknown): ResearchFixTown[] | undefined {
+    if (!Array.isArray(raw)) return undefined;
+    const out: ResearchFixTown[] = [];
+    for (const item of raw.slice(0, MAX_TOWNS)) {
+        const r = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : null;
+        if (!r) continue;
+        const town = text(r.town, 200);
+        const key = text(r.key, 200);
+        if (!town && !key) continue;
+        const count = typeof r.count === 'number' && Number.isFinite(r.count) && r.count >= 0 ? Math.floor(r.count) : 0;
+        const places = Array.isArray(r.places)
+            ? r.places.slice(0, MAX_TOWN_PLACES).map(p => text(p, 200)).filter((p): p is string => !!p)
+            : [];
+        out.push({ town: town ?? key!, key: key ?? town!, count, places });
+    }
+    return out;
+}
+
 function parseFix(raw: unknown): ResearchFix | null {
     const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
     if (!r || typeof r.id !== 'string' || !FIX_ID_RE.test(r.id)) return null;
@@ -89,6 +128,7 @@ function parseFix(raw: unknown): ResearchFix | null {
         ...(at ? { at } : {}),
         undone: r.undone === true,
         paid: r.paid === true,
+        ...(Array.isArray(r.towns) ? { towns: parseFixTowns(r.towns) } : {}),
     };
 }
 

@@ -274,6 +274,18 @@ test.describe('town points', () => {
         await expect(page.locator('#map-container')).toBeHidden();
     });
 
+    test('a town point with one house has no "⌂" count; its bubble still lists the house', async ({ page }) => {
+        await stubTiles(page);
+        await openApp(page);
+        await seedTown(page, 'Bělokamen', { 'čp. 4': [{ firstName: 'Quilla' }] });
+        await openMap(page);
+        const marker = page.locator('.map-marker');
+        await expect(marker).toHaveCount(1);
+        await expect(marker.locator('.map-marker-houses')).toHaveCount(0);
+        await marker.locator('.map-marker-dot').click();
+        await expect(page.locator('.map-popup .map-popup-house-no')).toHaveText(['4']);
+    });
+
     test('above 30 houses the bubble has a house search, and "+ N more" shows the rest of a house', async ({ page }) => {
         await stubTiles(page);
         await openApp(page);
