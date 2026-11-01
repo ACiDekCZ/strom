@@ -6,7 +6,9 @@
  * estimates, the set of files later; > 50 MB: one file is not saved), the
  * memory of the choices per tree, the file built and saved (it opens on the
  * lineage's page), the pages' window's "Save as file", a phone's sheet,
- * the dark theme and German without overflow. Invented names only
+ * the dark theme and German without overflow; the entries (026 §7: the
+ * overview's lineage detail, the card's ⋯ menu, Export, a followed tree,
+ * Escape over the window, a phone). Invented names only
  * (e2e/rods-fixture.ts).
  */
 
@@ -346,4 +348,151 @@ test.describe('family pages: the dialog in German', () => {
             }
         });
     }
+});
+
+/** The tree overview at its family lines, the line's detail open. */
+async function openOverviewRod(page: Page, rod: string): Promise<Locator> {
+    const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+    await page.evaluate((id) => window.Strom.UI.showTreeOverview(id as never, { section: 'rods' }), treeId);
+    const sec = page.locator('#tree-overview-modal .tov-sec[data-section="rods"]');
+    await expect(sec).toHaveAttribute('data-ready', 'true');
+    await sec.locator('.tov-rod[data-rod]', { hasText: rod }).locator('.tov-rod-row').click();
+    return sec.locator('.tov-rod.is-open');
+}
+
+/** The person card's Family line ⋯ menu, opened. */
+async function openCardRodMenu(page: Page, id: string): Promise<Locator> {
+    await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+    await expect(page.locator('#person-modal')).toHaveClass(/active/);
+    const row = page.locator('#pm-rod');
+    await row.locator('.pm-rod-more-btn').click();
+    const menu = row.locator('.pm-rod-menu');
+    await expect(menu).toBeVisible();
+    return menu;
+}
+
+const treeJson = (page: Page): Promise<string> => page.evaluate(() => JSON.stringify(window.Strom.DataManager.getData()));
+
+test.describe('family pages: the entries', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the overview\'s lineage detail: Family line page between Show in tree and the book, it opens the window', async ({ page }) => {
+        await setup(page);
+        const detail = await openOverviewRod(page, 'Tallqvist');
+        await expect(detail.locator('.tov-rod-act')).toHaveText(['Show in tree', 'Family line page', 'Family line book…', 'Edit family line…']);
+        await detail.getByRole('button', { name: 'Family line page' }).click();
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toContainText('Tallqvist');
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+    });
+
+    test('the card\'s ⋯ menu: Family line page closes the card and opens the line\'s page; Back returns to the person @smoke', async ({ page }) => {
+        await setup(page);
+        const menu = await openCardRodMenu(page, 'b16');
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            'Show family line in tree', 'Family line page', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+        ]);
+        await menu.locator('[data-rod-act="page"]').click();
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toContainText('Brandvold');
+        // A person of the line's page opens their page in the same window, Back returns.
+        await win.locator('.pp-body [data-sp-open^="person:"]').first().click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await win.locator('.pp-back').click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toContainText('Brandvold');
+    });
+
+    test('Export → Print and image: Family pages opens the dialog with the pages and the focus person\'s line; Family book the book', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await page.locator('#export-pages-btn').click();
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        await expect(page.locator('#export-modal')).not.toHaveClass(/active/);
+        await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('.book-rod-row input:checked')).toHaveCount(1);
+        await expect(dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input')).toBeChecked();
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toHaveClass(/active/);
+
+        // The pages are now remembered; Export's Family book still opens the book.
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await page.locator('#export-modal .menu-option', { hasText: 'Family book' }).click();
+        await expect(dialog).toHaveClass(/active/);
+        await expect(outBtn(dialog, 'book')).toHaveAttribute('aria-checked', 'true');
+    });
+
+    test('Escape over the window: the dialog from Save as file first, then the window', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
+        const win = page.locator('#person-page-modal');
+        await win.locator('.pp-facts [data-pp-rod]', { hasText: 'Brandvold' }).click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.pp-save').click();
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toHaveClass(/active/);
+        await expect(win).toBeVisible();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-page-modal')).toHaveCount(0);
+    });
+
+    test('a followed tree and a locked person: the entries work, nothing in the tree changes', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => {
+            const D = window.Strom.DataManager;
+            (D.getData().persons['b4' as never] as { isLocked?: boolean }).isLocked = true;
+            D.setLiveTree(D.getCurrentTreeId());
+        });
+        const before = await treeJson(page);
+        const win = page.locator('#person-page-modal');
+        for (const id of ['b16', 'b4']) {
+            const menu = await openCardRodMenu(page, id);
+            await expect(menu.locator('[data-rod-act="page"]')).not.toHaveAttribute('aria-disabled', 'true');
+            await menu.locator('[data-rod-act="page"]').click();
+            await expect(win).toHaveClass(/pp-is-set/);
+            await expect(win.locator('#pp-title')).toContainText('Brandvold');
+            await page.keyboard.press('Escape');
+            await expect(win).toHaveCount(0);
+        }
+
+        const detail = await openOverviewRod(page, 'Brandvold');
+        await detail.getByRole('button', { name: 'Family line page' }).click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.pp-save').click();
+        await expect(page.locator('#book-modal')).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(win).toHaveCount(0);
+        expect(await treeJson(page)).toBe(before);
+    });
+});
+
+test.describe('family pages: the entries on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('the overview\'s button and the card\'s menu open the window without sideways scroll', async ({ page }) => {
+        await setup(page);
+        const detail = await openOverviewRod(page, 'Brandvold');
+        const btn = detail.getByRole('button', { name: 'Family line page' });
+        expect((await btn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await btn.click();
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        expect(await win.locator('.pp-body').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        await page.keyboard.press('Escape');
+        await expect(win).toHaveCount(0);
+
+        const menu = await openCardRodMenu(page, 'b16');
+        await menu.locator('[data-rod-act="page"]').click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(win.locator('#pp-title')).toContainText('Brandvold');
+    });
 });

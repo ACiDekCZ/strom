@@ -86,7 +86,7 @@ test.describe('person family line row', () => {
         await expect(row.locator('.pm-rod-link')).toHaveCount(0);
     });
 
-    test('the ⋯ menu: its four actions, Escape closes only the menu, Show in tree highlights the line', async ({ page }) => {
+    test('the ⋯ menu: its five actions, Escape closes only the menu, Show in tree highlights the line', async ({ page }) => {
         await setup(page);
         const row = await openCard(page, 'b16');
         const more = row.locator('.pm-rod-more-btn');
@@ -96,7 +96,7 @@ test.describe('person family line row', () => {
         await expect(menu).toBeVisible();
         await expect(more).toHaveAttribute('aria-expanded', 'true');
         await expect(menu.getByRole('menuitem')).toHaveText([
-            'Show family line in tree', 'Edit family line…', 'Start a family line from this person…', 'Family line book…',
+            'Show family line in tree', 'Family line page', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
         ]);
         await expect(menu.locator('[aria-disabled="true"]')).toHaveCount(0);
         await expect(menu.locator('.pm-rod-menu-note')).toHaveCount(0);

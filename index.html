@@ -21377,10 +21377,16 @@
                             <span class="option-desc" data-i18n="exportMenu.posterDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option active-tree-only" onclick="window.Strom.UI.showBookDialog()">
+                    <button class="menu-option active-tree-only" onclick="window.Strom.UI.showBookDialog('book')">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.book"></span>
                             <span class="option-desc" data-i18n="book.menuDesc"></span>
+                        </span>
+                    </button>
+                    <button class="menu-option active-tree-only" id="export-pages-btn" onclick="window.Strom.UI.showFamilyPagesDialog()">
+                        <span class="option-text">
+                            <span class="option-title" data-i18n="familyPages.menuItem"></span>
+                            <span class="option-desc" data-i18n="familyPages.menuDesc"></span>
                         </span>
                     </button>
                 </div>

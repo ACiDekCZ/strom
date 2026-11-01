@@ -1529,6 +1529,7 @@ export const treeOverviewMethods = uiModule({
         const id = `data-id="${esc(rod.id)}"`;
         const actions = `<div class="tov-rod-actions">
             <button type="button" class="tov-btn tov-rod-act" data-tov="rod-show" ${id}>${esc(st.active ? t.actShowInTree : t.openAndShow)}</button>
+            <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-page" ${id}>${esc(strings.familyPages.rodPage)}</button>
             <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-book" ${id}>${esc(r.book)}</button>
             ${this.treeOverviewActionHtml('rod-edit', r.edit, 'tov-btn tov-rod-act tov-rod-act--plain', id)}
         </div>`;
@@ -1643,6 +1644,15 @@ export const treeOverviewMethods = uiModule({
             },
             faint: () => realRodSpouses(latest ?? idx, id),
         };
+    },
+
+    /** "Family line page": the lineage's page in the pages' window (its tree opened first; 026 §7). */
+    async openTreeOverviewRodPage(id: RodId): Promise<void> {
+        if (!state) return;
+        const { treeId, active } = state;
+        this.closeTreeOverview();
+        if (!active) await this.switchToTree(treeId as TreeId);
+        this.openRodPage(id);
     },
 
     /** "Family line book…": the book dialog for this lineage (its tree opened first). */
@@ -2253,6 +2263,9 @@ export const treeOverviewMethods = uiModule({
                 return;
             case 'rod-show':
                 this.showTreeOverviewRodInTree(target.dataset.id as RodId);
+                return;
+            case 'rod-page':
+                void this.openTreeOverviewRodPage(target.dataset.id as RodId);
                 return;
             case 'rod-book':
                 void this.openTreeOverviewRodBook(target.dataset.id as RodId);

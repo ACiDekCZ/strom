@@ -384,7 +384,11 @@ export const personModalMethods = uiModule({
             + `<span class="pm-rod-more"><button type="button" class="pm-rod-more-btn" aria-haspopup="menu" aria-expanded="false"`
             + ` aria-label="${esc(R.menu)}" title="${esc(R.menu)}">⋯</button>`
             + `<div class="pm-rod-menu" role="menu" aria-label="${esc(R.menu)}" hidden>`
-            + item('show', R.showInTree) + item('edit', R.edit, locked) + item('split', R.split, locked) + item('book', R.book)
+            // 026 §7: Show in tree · Family line page · Family book… · Edit… · Start…
+            // (step D adds the "Family page (…)" items, a submenu for several
+            // marriages, right after 'page').
+            + item('show', R.showInTree) + item('page', strings.familyPages.rodPage) + item('book', R.book)
+            + item('edit', R.edit, locked) + item('split', R.split, locked)
             + (locked ? `<p class="pm-rod-menu-note">${esc(hint)}</p>` : '')
             + `</div></span>`;
         el.hidden = false;
@@ -433,6 +437,9 @@ export const personModalMethods = uiModule({
                 break;
             case 'split':
                 this.leavePersonModalThen(() => this.openLineageSplitFrom(personId));
+                break;
+            case 'page':
+                this.leavePersonModalThen(() => this.openRodPage(rodId));
                 break;
             case 'book':
                 this.leavePersonModalThen(() => this.openBookForRods([rodId]));

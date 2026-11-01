@@ -38,7 +38,7 @@ import {
     PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName, pageSetImages, pageSetPrivacyWarning, sizeVerdict,
 } from '../family-pages.js';
 import { PagesCancelled, PagesFile, PagesJob, buildPagesFile, canSharePagesFile, downloadPagesFile, sharePagesFile } from './family-pages-ui.js';
-import { LineageIndex, Rod, RodId, buildLineages, rodLabels, rods as allRods } from '../lineage.js';
+import { LineageIndex, Rod, RodId, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shownName } from '../person-name.js';
@@ -663,6 +663,18 @@ export const bookUiMethods = uiModule({
         this.openBookDialog({ kind: 'menu' }, undefined, output ? { output } : undefined);
     },
 
+    /**
+     * Export → Family pages (026 §7): the dialog with the pages output, for
+     * the lineage of the person in focus (the lineage of their card's row),
+     * else the remembered lineages.
+     */
+    showFamilyPagesDialog(): void {
+        const data = DataManager.getData();
+        const focus = TreeRenderer.getFocusPersonId();
+        const row = focus && data.persons[focus] ? personRodRow(buildLineages(data), focus) : null;
+        this.openBookDialog({ kind: 'menu' }, undefined, { output: 'pages', selection: row ? { kind: 'rods', rods: [row.rodId] } : undefined });
+    },
+
     /** The book of a person's descendants, 4 generations (§4.8). */
     openBookForPerson(personId: PersonId): void {
         this.openBookDialog({ kind: 'person', person: personId });
@@ -759,7 +771,10 @@ export const bookUiMethods = uiModule({
 
         // Own the dialog stack (as the poster does): the first Escape closes
         // the book, and no parent dialog can reopen on top of it.
-        this.clearDialogStack();
+        // Over the pages' window (its Save as file) the window stays on the
+        // stack under the dialog: Escape closes the dialog, then the window.
+        if (this.isPersonPageOpen()) this.dialogStack = this.dialogStack.filter(id => id !== 'book-modal');
+        else this.clearDialogStack();
         this.pushDialog('book-modal');
         this.renderViewLinksNote(modal.querySelector('.modal-header'));
         overlay.classList.add('active');
@@ -942,7 +957,8 @@ export const bookUiMethods = uiModule({
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
         document.getElementById('book-modal')?.classList.remove('active');
-        this.clearDialogStack();
+        if (this.isPersonPageOpen()) this.dialogStack = this.dialogStack.filter(id => id !== 'book-modal');
+        else this.clearDialogStack();
         st = null;
     },
 

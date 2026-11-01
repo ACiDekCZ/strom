@@ -953,6 +953,12 @@ export const miscMethods = uiModule({
                         this.closePersonStoryDialog();
                         return;
                     }
+                    // The family book and pages dialog (also over the pages' window,
+                    // which stays open under it): a build in progress is dropped.
+                    if (currentDialog === 'book-modal') {
+                        this.closeBookDialog();
+                        return;
+                    }
                     // The person page: Esc closes the whole window, never a step back (spec 025).
                     if (currentDialog === 'person-page-export-modal') {
                         this.closePersonPageExport();
