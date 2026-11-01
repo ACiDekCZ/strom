@@ -71,6 +71,10 @@ export interface PageSetOptions {
     photos?: ImageChoice;
     /** The map of places as a page (default true). */
     map?: boolean;
+    /** The person pages' sources (default true). */
+    sources?: boolean;
+    /** The stories of persons and couples (default true). */
+    stories?: boolean;
     now?: Date;
 }
 
@@ -85,7 +89,7 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map'>> & { now: Date };
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories'>> & { now: Date };
     selection: Selection;
     protectedTree: ProtectedPersonPageTree;
     /** The lineages with a page, in reading order. */
@@ -247,9 +251,17 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const F = S.familyPages;
     const options: PageSet['options'] = {
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
-        clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true, now: opts.now ?? new Date(),
+        clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
+        sources: opts.sources ?? true, stories: opts.stories ?? true, now: opts.now ?? new Date(),
     };
     const prot = protectPersonPageTree(data, options.privacy, options.now);
+    if (!options.stories) {
+        // Without stories: the protected copy loses them (the tree itself is untouched).
+        for (const [id, p] of Object.entries(prot.tree.persons)) if (p.story) prot.tree.persons[id as PersonId] = { ...p, story: undefined };
+        const unions: StromData['partnerships'] = {};
+        for (const [id, u] of Object.entries(prot.tree.partnerships)) unions[id as PartnershipId] = u.story ? { ...u, story: undefined } : u;
+        prot.tree.partnerships = unions;
+    }
     if (options.privacy === 'anonymous' || options.privacy === 'minimal') {
         // "Living person" in the file's language, not the app's (as the book does).
         for (const id of prot.living) { const p = prot.tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }

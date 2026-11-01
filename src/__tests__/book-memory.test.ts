@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     BOOK_GENERATIONS_DEFAULT, bookEntrySelection, bookMemoryKey, bookOptionsFromMemory, bookRodChoices,
-    clampBookGenerations, loadBookMemory, parseBookMemory, saveBookMemory,
+    clampBookGenerations, defaultPagesChoices, loadBookMemory, pagesChoicesFromMemory, parseBookMemory, saveBookMemory,
 } from '../book-memory.js';
 import { BOOK_PART_KEYS, BookOptions, bookRodCounts, defaultBookOptions, estimateBook } from '../book-options.js';
 import { buildBookModel } from '../book-model.js';
@@ -147,6 +147,29 @@ describe('book memory: per tree on this device', () => {
         expect(() => saveBookMemory(fakeStorage({}, { set: true }), 't', opts())).not.toThrow();
         expect(loadBookMemory(null, 't')).toBeNull();
         expect(() => saveBookMemory(undefined, 't', opts())).not.toThrow();
+    });
+
+    it('the output and the family pages\' choices (spec 026 §6.6): remembered with the book\'s, kept when a save does not give them', () => {
+        const s = fakeStorage();
+        expect(pagesChoicesFromMemory(null)).toEqual(defaultPagesChoices());
+        expect(defaultPagesChoices()).toEqual({ families: 'pages', clips: 'full', photos: 'full', include: { map: true, sources: true, stories: true } });
+        const pages = { families: 'section' as const, clips: 'none' as const, photos: 'small' as const, include: { map: false, sources: true, stories: false } };
+        saveBookMemory(s, 't', opts({ selection: { kind: 'rods', rods: ['r1'] as RodId[] } }), { output: 'pages', pages });
+        const m = loadBookMemory(s, 't')!;
+        expect(m.output).toBe('pages');
+        expect(pagesChoicesFromMemory(m)).toEqual(pages);
+        // A save of the book alone keeps them.
+        saveBookMemory(s, 't', opts({ detail: 'all' }));
+        expect(loadBookMemory(s, 't')).toMatchObject({ output: 'pages', pages, detail: 'all' });
+        saveBookMemory(s, 't', opts(), { output: 'book' });
+        expect(loadBookMemory(s, 't')).toMatchObject({ output: 'book', pages });
+        // The selection is still not remembered.
+        expect(Object.keys(JSON.parse(s.map.get('strom.book.t')!))).not.toContain('selection');
+        // Malformed fields fall back one by one.
+        const bad = parseBookMemory(JSON.stringify({ output: 'poster', pages: { families: 'all', clips: 'small', photos: 7, include: { map: false, sources: 'no' } } }))!;
+        expect(bad.output).toBeUndefined();
+        expect(bad.pages).toEqual({ families: 'pages', clips: 'small', photos: 'full', include: { map: false, sources: true, stories: true } });
+        expect(parseBookMemory('{"pages":{"families":"x"}}')).toBeNull();
     });
 
     it('the book\'s options never touch the person card\'s settings or lifelineDefaults: one key of its own', () => {

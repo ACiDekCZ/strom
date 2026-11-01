@@ -4,7 +4,9 @@
  * Remembered per tree on this device (`localStorage` key `strom.book.{treeId}`):
  * the preset, the parts, the detail, notes, researcher data, privacy and the
  * book's language — plus the last choice of lineages, which the menu entry
- * offers again while those lineages still exist. Never remembered: the
+ * offers again while those lineages still exist, the output (the book or
+ * the linked family pages, spec 026 §6.6) and the pages' own choices
+ * (families, images, what they include). Never remembered: the
  * selection itself (whole tree, ancestors, descendants, the person) and the
  * title. The book's options never touch the person card's settings or
  * `lifelineDefaults`: this module writes its own key and nothing else.
@@ -16,6 +18,7 @@ import { PersonId } from './types.js';
 import { PrivacyMode } from './privacy.js';
 import { LineageIndex, RodId } from './lineage.js';
 import { chapterRods } from './book-model.js';
+import { ImageChoice } from './image-registry.js';
 import {
     BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookParts, BookPreset, BookSelectionSpec,
     applyBookPreset, bookPresetOf, defaultBookOptions,
@@ -37,6 +40,28 @@ export interface BookMemory {
     lang: BookLang;
     /** The last lineages chosen (kind 'rods'), offered again from the menu. */
     lastRods?: RodId[];
+    /** The dialog's output: the book to print or the linked family pages (spec 026 §6.1). */
+    output?: BookOutput;
+    /** The family pages' own choices (§6.2). */
+    pages?: PagesChoices;
+}
+
+export type BookOutput = 'book' | 'pages';
+
+/** What the family pages include besides the pages themselves (§6.2). */
+export interface PagesInclude { map: boolean; sources: boolean; stories: boolean }
+
+/** The family pages' rows of the dialog (§6.2). */
+export interface PagesChoices {
+    families: 'pages' | 'section';
+    clips: ImageChoice;
+    photos: ImageChoice;
+    include: PagesInclude;
+}
+
+/** The pages' rows when nothing is remembered: families as pages where it makes sense, images as they are, everything in. */
+export function defaultPagesChoices(): PagesChoices {
+    return { families: 'pages', clips: 'full', photos: 'full', include: { map: true, sources: true, stories: true } };
 }
 
 /** How the dialog was opened (§4.8): the entry decides the first selection. */
@@ -55,6 +80,10 @@ const LANGS: readonly BookLang[] = ['cs', 'en', 'de'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRESETS: readonly BookPreset[] = ['family', 'research', 'custom'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
+const OUTPUTS: readonly BookOutput[] = ['book', 'pages'];
+const FAMILIES: readonly PagesChoices['families'][] = ['pages', 'section'];
+const IMAGES: readonly ImageChoice[] = ['full', 'small', 'none'];
+const INCLUDE_KEYS: readonly (keyof PagesInclude)[] = ['map', 'sources', 'stories'];
 
 function oneOf<T extends string>(list: readonly T[], x: unknown): T | undefined {
     return typeof x === 'string' && (list as readonly string[]).includes(x) ? x as T : undefined;
@@ -95,7 +124,30 @@ export function parseBookMemory(raw: string | null | undefined): Partial<BookMem
         const ids = o.lastRods.filter((x): x is RodId => typeof x === 'string' && x.length > 0);
         if (ids.length) out.lastRods = ids;
     }
+    const output = oneOf(OUTPUTS, o.output);
+    if (output) out.output = output;
+    const pages = parsePagesChoices(o.pages);
+    if (pages) out.pages = pages;
     return Object.keys(out).length ? out : null;
+}
+
+/** The pages' choices of a stored entry, each field checked on its own over the defaults; null when none is usable. */
+function parsePagesChoices(v: unknown): PagesChoices | null {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const o = v as Record<string, unknown>;
+    const out = defaultPagesChoices();
+    let any = false;
+    const families = oneOf(FAMILIES, o.families);
+    if (families) { out.families = families; any = true; }
+    const clips = oneOf(IMAGES, o.clips);
+    if (clips) { out.clips = clips; any = true; }
+    const photos = oneOf(IMAGES, o.photos);
+    if (photos) { out.photos = photos; any = true; }
+    if (o.include && typeof o.include === 'object' && !Array.isArray(o.include)) {
+        const src = o.include as Record<string, unknown>;
+        for (const k of INCLUDE_KEYS) if (typeof src[k] === 'boolean') { out.include[k] = src[k] as boolean; any = true; }
+    }
+    return any ? out : null;
 }
 
 /** This tree's memory, or null (nothing stored, storage unavailable or unreadable). */
@@ -106,10 +158,13 @@ export function loadBookMemory(storage: StorageLike | null | undefined, treeId: 
 
 /**
  * Remember the options for this tree: everything but the selection and the
- * title. A choice of lineages becomes `lastRods`; another kind of selection
+ * title. The output and the pages' choices, when not given, stay as stored. A choice of lineages becomes `lastRods`; another kind of selection
  * keeps the previous `lastRods`. Storage errors are swallowed (not kept).
  */
-export function saveBookMemory(storage: StorageLike | null | undefined, treeId: string | null | undefined, options: BookOptions): void {
+export function saveBookMemory(
+    storage: StorageLike | null | undefined, treeId: string | null | undefined, options: BookOptions,
+    extra: { output?: BookOutput; pages?: PagesChoices } = {},
+): void {
     if (!storage || !treeId) return;
     try {
         const prev = loadBookMemory(storage, treeId);
@@ -124,9 +179,20 @@ export function saveBookMemory(storage: StorageLike | null | undefined, treeId: 
             privacy: options.privacy,
             lang: options.lang,
             ...(lastRods?.length ? { lastRods } : {}),
+            ...((extra.output ?? prev?.output) ? { output: extra.output ?? prev?.output } : {}),
+            ...((extra.pages ?? prev?.pages) ? { pages: clonePages((extra.pages ?? prev?.pages)!) } : {}),
         };
         storage.setItem(bookMemoryKey(treeId), JSON.stringify(memory));
     } catch { /* not kept */ }
+}
+
+function clonePages(p: PagesChoices): PagesChoices {
+    return { ...p, include: { ...p.include } };
+}
+
+/** The pages' choices on opening: the remembered ones, else the defaults. */
+export function pagesChoicesFromMemory(memory: Partial<BookMemory> | null): PagesChoices {
+    return memory?.pages ? clonePages(memory.pages) : defaultPagesChoices();
 }
 
 /**

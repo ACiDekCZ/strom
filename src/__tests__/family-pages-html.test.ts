@@ -135,6 +135,20 @@ describe('the file of one lineage, several lineages, a branch (§0.2, §1)', () 
         expect(hub).toContain(' (* asi 1810, Brdovice)');
     });
 
+    it('without sources and without stories (the dialog\'s "Includes", §6.2): neither is in the file, the tree is untouched', () => {
+        const { data } = familyPagesFixture();
+        const someone = Object.values(data.persons).find(p => !p.isPlaceholder && !p.birthDate?.startsWith('20'))!;
+        someone.story = { text: 'Mlýn v Brdovicích stál u potoka.', status: 'final' };
+        const before = JSON.stringify(data);
+        const full = buildPageSetHtml(rodsSet(data));
+        expect(full).toContain('Mlýn v Brdovicích stál u potoka.');
+        expect(full).toContain('class="pp-src"');
+        const bare = buildPageSetHtml(rodsSet(data, undefined, { sources: false, stories: false }));
+        expect(bare).not.toContain('Mlýn v Brdovicích');
+        expect(bare).not.toContain('class="pp-src"');
+        expect(JSON.stringify(data)).toBe(before);
+    });
+
     it('a branch: descendants of the founder, the children of daughters included', () => {
         const { data, ids } = familyPagesFixture();
         const set = buildPageSet(data, { kind: 'descendants', person: ids.jan }, { lang: 'cs', now: FP_NOW });

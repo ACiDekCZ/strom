@@ -248,7 +248,7 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
     const set = r.set;
     return {
         personId: page.id as PersonId, lang: set.options.lang, mode: r.mode,
-        groups: { ...PERSON_PAGE_ALL_GROUPS, research: false, ...(r.opts.groups ?? {}) },
+        groups: { ...PERSON_PAGE_ALL_GROUPS, research: false, sources: set.options.sources, ...(r.opts.groups ?? {}) },
         privacy: set.options.privacy, toggles: { history: true, childEvents: true }, research: false,
         now: set.options.now, toc: false,
         links: { mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug },
