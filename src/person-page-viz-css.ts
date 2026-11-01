@@ -38,7 +38,7 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-coast { fill: none; stroke: var(--map-geo); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .pp-map-border { fill: none; stroke: var(--map-geo); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .pp-map-route { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: .5 6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.pp-map-pt { position: absolute; z-index: 2; width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0; border: 2px solid var(--surface); border-radius: 50%; background: var(--primary); color: #fff; font: 600 11.5px/18px var(--font-sans); text-align: center; box-shadow: 0 1px 3px rgba(30, 24, 12, .25); cursor: pointer; }
+.pp-map-pt { position: absolute; z-index: 2; width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0; border: 2px solid var(--surface); border-radius: 50%; background: var(--primary); color: var(--on-primary, #fff); font: 600 11.5px/18px var(--font-sans); text-align: center; box-shadow: 0 1px 3px rgba(30, 24, 12, .25); cursor: pointer; }
 .pp-map-pt--rel { z-index: 1; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid var(--primary); background: var(--surface); box-shadow: none; }
 .pp-map-pt.is-sel { z-index: 3; width: 26px; height: 26px; margin: -13px 0 0 -13px; line-height: 22px; background: var(--accent); }
 .pp-map-pt--rel.is-sel { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: var(--accent); background: var(--surface); }
@@ -47,11 +47,13 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-cl.is-sel { width: auto; min-width: 26px; height: 26px; margin: 0; padding: 0 8px; border-radius: 13px; }
 /* Round 5 (K5-33): a cluster with relatives' places has a hollow ring after the numbers; a cluster of those
    places only is a hollow pill with their count. */
-.pp-map-cl-ring { display: inline-block; box-sizing: border-box; width: 8px; height: 8px; margin-left: 4px; border: 1.5px solid #fff; border-radius: 50%; vertical-align: 0; }
+.pp-map-cl-ring { display: inline-block; box-sizing: border-box; width: 8px; height: 8px; margin-left: 4px; border: 1.5px solid currentColor; border-radius: 50%; vertical-align: 0; }
 .pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary); box-shadow: none; }
 .pp-map-cl--rel.is-sel { border-color: var(--accent); background: var(--surface); color: var(--accent); }
 .pp-map-lb--cl { font-weight: 600; }
-.pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
+/* A label stays legible over the coasts and borders of a zoomed-out map (a whole continent or the world):
+   an almost opaque plate in the map's surface colour (the token's translucent one where color-mix is unknown). */
+.pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .pp-map-lb--rel { font-weight: 500; color: var(--text-light); }
 .pp-map-yr { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-faint); }
 .pp-map-yr.y-p { display: none; }

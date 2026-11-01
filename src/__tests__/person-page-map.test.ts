@@ -532,7 +532,7 @@ describe('clusters with children\'s and partners\' places (round 5, K5-33)', () 
             expect(M.clusterAria('3', 1, 5)).toBe({ cs: 'Místo 3 a 5 míst dětí', en: 'Place 3 and 5 children’s places', de: 'Ort 3 und 5 Orte der Kinder' }[lang]);
         }
         expect(PERSON_PAGE_MAP_CSS).toContain('.pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary);');
-        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.pp-map-cl-ring \{[^}]*width: 8px; height: 8px;[^}]*border: 1\.5px solid #fff/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.pp-map-cl-ring \{[^}]*width: 8px; height: 8px;[^}]*border: 1\.5px solid currentColor/);
     });
 });
 

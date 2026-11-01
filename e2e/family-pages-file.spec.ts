@@ -529,6 +529,34 @@ test.describe('family pages file: the map of places (§3.7)', () => {
         await expect(page.locator(`#${set.mapSlug} .pp-map-pt`).first()).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
+
+    test('legible in light and dark: the numbers on the points and pills contrast with their fill, the labels sit on a plate that hides the lines (1101)', async ({ page }) => {
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            await page.goto(`${url}#${set.mapSlug}`);
+            await expect.poll(() => shown(page)).toEqual([set.mapSlug]);
+            const map = page.locator(`#${set.mapSlug} .pp-map`);
+            await expect(map.locator('.pp-map-lb').first()).toBeVisible();
+            const seen = await map.evaluate((m) => {
+                const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
+                const lum = (c: string) => {
+                    const [r, g, b] = rgb(c).slice(0, 3).map(v => v / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                };
+                const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+                const pts = [...m.querySelectorAll<HTMLElement>('.pp-map-pt:not(.pp-map-pt--rel):not(.pp-map-cl--rel)')].filter(e => e.getClientRects().length);
+                const labels = [...m.querySelectorAll<HTMLElement>('.pp-map-lb')].filter(e => e.getClientRects().length);
+                return {
+                    points: pts.length,
+                    contrast: Math.min(...pts.map(e => ratio(getComputedStyle(e).color, getComputedStyle(e).backgroundColor))),
+                    alpha: Math.min(...labels.map(e => { const c = rgb(getComputedStyle(e).backgroundColor); return c.length > 3 ? c[3] : 1; })),
+                };
+            });
+            expect(seen.points, scheme).toBeGreaterThan(0);
+            expect(seen.contrast, scheme).toBeGreaterThanOrEqual(4.5);
+            expect(seen.alpha, scheme).toBeGreaterThanOrEqual(0.9);
+        }
+    });
 });
 
 test.describe('family pages file: the set of files (§6.4)', () => {
