@@ -27,6 +27,7 @@ import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
+import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
@@ -138,7 +139,8 @@ function syncUrlTreeParam(): void {
     const currentUrlSlug = url.searchParams.get('tree');
     const treeSlug = currentTreeId ? TreeManager.getTreeSlug(currentTreeId) : null;
     // `?research=` only picks the startup tree; the slug names it from then on.
-    const hadResearch = url.searchParams.has('research');
+    // So do `person` / `show` (a link from outside, handled once: src/deep-link.ts).
+    const hadResearch = stripDeepLinkParams(url) || url.searchParams.has('research');
     url.searchParams.delete('research');
     if (treeSlug) {
         // Only update if slug changed
@@ -313,6 +315,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Parse debug options from URL
     const debugOptions = parseDebugOptions();
 
+    // A link beyond the tree (?person= / ?show=waiting): read before anything rewrites the address.
+    const startParams = new URLSearchParams(window.location.search);
+    const startDeepLink = parseDeepLink(startParams);
+
     // Check if we have embedded data (from exported HTML)
     const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
 
@@ -471,6 +477,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Sync URL with current tree slug (for refresh persistence and bookmarking)
         syncUrlTreeParam();
+
+        // A link to a person or to "Waiting for you" (the macOS widget, spec 019 U4).
+        if (startDeepLink && !hasEmbeddedData) {
+            const currentId = DataManager.getCurrentTreeId();
+            const current = currentId ? TreeManager.getTreeMetadata(currentId) : null;
+            const matches = deepLinkTreeMatches(
+                startParams,
+                current ? { id: current.id, researchId: current.research?.id ?? null } : null,
+                TreeManager.getTreeFromUrl(startParams),
+            );
+            void UI.openDeepLink(startDeepLink, matches);
+        }
 
         // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
         UI.researchPromoAfterFirstRender();

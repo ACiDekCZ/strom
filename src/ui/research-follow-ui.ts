@@ -22,6 +22,10 @@ import { parseLiveBridge } from '../research-link.js';
 import { answerFresh, followOnOpen } from '../research-follow.js';
 import { liveSession } from './research-ui.js';
 import { uiModule } from './module.js';
+import { DeepLink, findDeepLinkPerson } from '../deep-link.js';
+import { TreeRenderer } from '../renderer.js';
+import { ZoomPan } from '../zoom.js';
+import { strings } from '../strings.js';
 
 /** The switch waits at most this long for the open tree's changes to go (they stay in the tree either way). */
 const SEND_BEFORE_SWITCH_MS = 15_000;
@@ -96,5 +100,51 @@ export const researchFollowMethods = uiModule({
             auto: { researchId: link.id, treeId },
             from: { followed: from.followed, open: from.open },
         });
+    },
+
+    /**
+     * A link into the app from outside (?person= / ?show=waiting, spec 019
+     * U4), after the first render. `treeMatches`: the tree on screen is the
+     * one the address names (deepLinkTreeMatches). Whatever does not fit —
+     * another tree, an unknown person, a tree without a research — leaves the
+     * tree as it opened with a short notice; nothing else happens.
+     */
+    async openDeepLink(link: DeepLink, treeMatches: boolean): Promise<void> {
+        const notice = (text: string): void => this.showToast(text, 5000, { notice: true, closable: true, kind: 'deep-link' });
+        if (!treeMatches) {
+            notice(strings.deepLink.treeNotFound);
+            return;
+        }
+        if (link.kind === 'person') {
+            const id = findDeepLinkPerson(DataManager.getData().persons, link.ref);
+            if (!id) {
+                notice(strings.deepLink.personNotFound);
+                return;
+            }
+            await TreeRenderer.setFocus(id);
+            ZoomPan.centerOnPerson(id);
+            ZoomPan.highlightPerson(id);
+            this.showPersonPage(id);
+            return;
+        }
+        const treeId = DataManager.getCurrentTreeId();
+        const researchId = this.activeResearchId();
+        if (!treeId || !researchId) {
+            notice(strings.deepLink.noResearch);
+            return;
+        }
+        // An agent at work: followed as opening the tree by a switch would (else the tree stays editable).
+        const s = liveSession();
+        if (!(s && !s.ended && s.treeId === treeId)) {
+            await this.researchFollowAfterSwitch(treeId as TreeId, { followed: null, open: null, panelShown: false });
+        }
+        if (DataManager.getCurrentTreeId() !== treeId) return;
+        if (this.isFollowingActiveResearch() && this.canOpenResearchOverview()) {
+            this.unfoldOverviewSection('waiting');
+            this.openResearchOverview();
+            document.querySelector('#research-overview .live-panel-heading-waiting')?.scrollIntoView({ block: 'start' });
+            return;
+        }
+        this.showResearchWaiting();
     },
 });

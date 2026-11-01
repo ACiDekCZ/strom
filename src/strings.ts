@@ -3745,6 +3745,13 @@ const stringsEN = {
         resultCount: (n: number) => nEn(n, 'person', 'people'),
     },
 
+    // Links into the app from outside (the macOS widget): ?person= / ?show=waiting (spec 019 U4)
+    deepLink: {
+        personNotFound: 'The linked person is not in this tree.',
+        treeNotFound: 'The linked tree is not in this browser.',
+        noResearch: 'The tree is not linked to a research.',
+    },
+
     // Search filters
     searchFilters: {
         toggle: 'Filters',
@@ -10073,6 +10080,13 @@ const stringsCZ: StringsType = {
         resultCount: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
     },
 
+    // Odkazy do aplikace zvenku (widget macOS): ?person= / ?show=waiting (spec 019 U4)
+    deepLink: {
+        personNotFound: 'Odkazovaná osoba v tomto stromu není.',
+        treeNotFound: 'Odkazovaný strom v tomto prohlížeči není.',
+        noResearch: 'Strom není propojený s výzkumem.',
+    },
+
     // Search filters
     searchFilters: {
         toggle: 'Filtry',
@@ -16348,6 +16362,13 @@ const stringsDE: StringsType = {
         cancel: 'Abbrechen',
         clear: 'Suche löschen',
         resultCount: (n: number) => nDe(n, 'Person', 'Personen'),
+    },
+
+    // Links von außen in die App (macOS-Widget): ?person= / ?show=waiting (spec 019 U4)
+    deepLink: {
+        personNotFound: 'Die verlinkte Person ist nicht in diesem Stammbaum.',
+        treeNotFound: 'Der verlinkte Stammbaum ist in diesem Browser nicht vorhanden.',
+        noResearch: 'Der Stammbaum ist mit keiner Forschung verbunden.',
     },
 
     // Search filters
