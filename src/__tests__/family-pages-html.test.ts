@@ -438,6 +438,17 @@ describe('round 2 of the design (§9.2, §9.3, §9.9)', () => {
     });
 });
 
+describe('the Ancestors fan in the set', () => {
+    it('keeps its colours: the embedded stylesheet is scoped by the prefixed id of its drawing', () => {
+        const html = buildPageSetHtml(rodsSet(familyPagesFixture().data));
+        const fans = [...html.matchAll(/<svg\b[^>]*\sid="([^"]*--ppfan-[^"]*)"/g)].map(m => m[1]);
+        expect(fans.length).toBeGreaterThan(0);
+        for (const id of fans) expect(html, id).toContain(`#${id} .fan-fill{`);
+        // No rule is left on the unprefixed id, which no element of the set carries.
+        expect(html).not.toMatch(/[\s>,}]#ppfan-/);
+    });
+});
+
 describe('time (§6.5)', () => {
     it('a set of about 500 people: built and drawn within 1.5 s', () => {
         const { data } = syntheticTree({ persons: 500, founders: 10 });

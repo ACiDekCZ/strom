@@ -268,6 +268,9 @@ describe('the person page in a set (§0.3, §0.8)', () => {
         const out = prefixPageIds('<a href="#obr-1">x</a><a href="#jan-fisek">y</a><div id="obr-1" aria-controls="pp-x pp-y"></div><svg><path fill="url(#g1)" id="g1"/></svg>', 'p', new Set(['jan-fisek']));
         expect(out).toBe('<a href="#p--obr-1">x</a><a href="#jan-fisek">y</a><div id="p--obr-1" aria-controls="p--pp-x p--pp-y"></div><svg><path fill="url(#p--g1)" id="p--g1"/></svg>');
         expect(prefixPageIds('<a href="#obr-1">', '')).toBe('<a href="#obr-1">');
+        // An embedded stylesheet follows its element's id; colours and foreign ids stay.
+        expect(prefixPageIds('<svg id="ppfan-a"><style>#ppfan-a .fc0{fill:#abc}#other .x{}</style></svg>', 'p'))
+            .toBe('<svg id="p--ppfan-a"><style>#p--ppfan-a .fc0{fill:#abc}#other .x{}</style></svg>');
     });
 });
 

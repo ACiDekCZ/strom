@@ -3049,7 +3049,10 @@ export function prefixPageIds(html: string, prefix: string, keep: ReadonlySet<st
         .replace(/(\s(?:xlink:)?href)="#([^"]+)"/g, (m, attr: string, id: string) => (own(id) ? `${attr}="#${prefix}--${id}"` : m))
         .replace(/(\s(?:aria-controls|aria-labelledby|aria-describedby|for|data-pp-osa|data-pp-story))="([^"]+)"/g,
             (_m, attr: string, v: string) => `${attr}="${v.split(' ').map(x => (x ? p(x) : x)).join(' ')}"`)
-        .replace(/url\(#([^)"']+)\)/g, (m, id: string) => (ids.has(id) ? `url(#${prefix}--${id})` : m));
+        .replace(/url\(#([^)"']+)\)/g, (m, id: string) => (ids.has(id) ? `url(#${prefix}--${id})` : m))
+        // An embedded stylesheet scoped by an own id (the Ancestors fan's colours) follows its element.
+        .replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g, (_m, open: string, css: string, close: string) =>
+            `${open}${css.replace(/#([A-Za-z][\w-]*)/g, (m, id: string) => (ids.has(id) ? `#${prefix}--${id}` : m))}${close}`);
 }
 
 function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): string {
