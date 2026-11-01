@@ -278,7 +278,7 @@ export function cleanWorkNote(text: string): string {
 }
 
 /** A raster image data URL safe to embed (the app's check plus a clean base64 body). */
-function safeImage(url: string | undefined): string | null {
+export function safeImage(url: string | undefined): string | null {
     if (!url || !isSafeExcerptDataUrl(url)) return null;
     const comma = url.indexOf(',');
     return /^[A-Za-z0-9+/=\s]*$/.test(url.slice(comma + 1)) ? url : null;
@@ -296,7 +296,7 @@ function safePdf(a: Attachment): string | null {
 }
 
 /** An excerpt as shown (turned upright), still a safe data URL. */
-function shownExcerpt(e: SourceExcerpt): string {
+export function shownExcerpt(e: SourceExcerpt): string {
     return safeImage(excerptImageUrl(e)) ?? safeImage(e.dataUrl) ?? '';
 }
 

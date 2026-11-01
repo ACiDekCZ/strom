@@ -12,21 +12,24 @@
  * are `data-sp-open` buttons in the app's window (pageSetSectionHtml).
  */
 
-import { Partnership, PartnershipId, PersonId } from './types.js';
+import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
 import { getStringsForLang } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { Rod } from './lineage.js';
+import { Rod, RodId, marriedInto, rodGenerations, sortByBirth } from './lineage.js';
+import { sortCoupleEvents } from './events.js';
+import { shownNameOrEmpty, shownNameParts, shownSurnameIsBirth } from './person-name.js';
 import { buildBookModel, BookModel } from './book-model.js';
 import { BOOK_PART_KEYS, BookParts } from './book-options.js';
 import {
-    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, founderNote, branchPageLine, indexHtml, pageLineGenerationsHtml,
-    pageLineHeadHtml, pageLinePeriod, rodLineageHtml, rodOverviewHtml, rodPageLine,
+    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, birthRodNamed, diedYoung, founderNote, branchPageLine, indexHtml,
+    occupationOf, pageLineGenerationsHtml, pageLineHeadHtml, pageLinePeriod, pairFirstNames, rodLabelOf, rodLineageHtml, rodOverviewHtml,
+    rodPageLine, roman,
 } from './book-blocks.js';
 import {
-    PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, personPageDocumentShell,
-    preparePersonPageData, PersonPageOptions,
+    PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, coupleChapterData, coupleChapterHtml,
+    personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, safeImage, shownExcerpt,
 } from './person-page.js';
-import { PageSet, SetPage, familyTitle, isProtectedPerson, pageSetFileName, pageSetLivingNames } from './family-pages.js';
+import { PageSet, SetPage, familyFirstNames, familyTitle, isProtectedPerson, pageSetFileName, pageSetLivingNames } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 
 export interface PageSetHtmlOptions {
@@ -49,6 +52,8 @@ interface Render {
     opts: PageSetHtmlOptions;
     /** The footer of the set's own pages (the person page writes its own). */
     foot: string;
+    /** Members' generations per lineage, as asked for. */
+    gens: Map<RodId, Map<PersonId, number>>;
 }
 
 function esc(text: string): string {
@@ -103,7 +108,7 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
     };
     const lines = [`<p>${esc(S.personPage.created(formatFlexDate(localDay(set.options.now), lang)))}</p>`];
     if (pageSetLivingNames(set).length) lines.push(`<p>${esc(S.familyPages.privacyNote[set.options.privacy])}</p>`);
-    return { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>` };
+    return { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>`, gens: new Map() };
 }
 
 /** §3.2: where the page stands; a phone shows only "‹ the page above". */
@@ -195,36 +200,309 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
         + `<div class="sp-cards">${cards}</div>${crossHtml}`;
 }
 
-/**
- * A family's page — a stand-in until step D draws it (§2): the couple, the
- * marriage, the partners and the children, each a link.
- * TODO(D): the family page of §2.2.
- */
+// ─── A family's page (§2.2) ─────────────────────────────────────────────────
+
+function realIn(tree: StromData, id: PersonId | undefined | null): Person | undefined {
+    const p = id ? tree.persons[id] : undefined;
+    return p && !p.isPlaceholder ? p : undefined;
+}
+
+/** The couple, husband first (as the book's heading and the page's title). */
+function coupleOf(tree: StromData, u: Partnership): Person[] {
+    const ps = [u.person1Id, u.person2Id].map(id => realIn(tree, id)).filter((p): p is Person => !!p);
+    return ps.sort((a, b) => (a.gender === 'female' ? 1 : 0) - (b.gender === 'female' ? 1 : 0));
+}
+
+function isWedding(u: Partnership): boolean {
+    return u.status === 'married' || u.status === 'divorced';
+}
+
+function gKey(p: Person | undefined): 'm' | 'f' | 'u' {
+    return p?.gender === 'male' ? 'm' : p?.gender === 'female' ? 'f' : 'u';
+}
+
+/** A member's generation within the lineage (I = its root), as the search index counts it. */
+function generationOf(r: Render, id: PersonId): number | null {
+    const rodId = r.model.index.rodByPerson.get(id);
+    if (!rodId) return null;
+    let gens = r.gens.get(rodId);
+    if (!gens) {
+        gens = new Map();
+        rodGenerations(r.model.index, rodId).forEach((ids, i) => { for (const x of ids) gens!.set(x, i + 1); });
+        r.gens.set(rodId, gens);
+    }
+    return gens.get(id) ?? null;
+}
+
+/** The lineage of the set a family belongs to (the first that lists it), else a partner's in the set. */
+function familyRodId(r: Render, u: Partnership, ps: readonly Person[]): RodId | null {
+    for (const id of r.set.rodIds) if (rodOf(r, id)?.familyIds.includes(u.id)) return id;
+    const inSet = new Set(r.set.rodIds);
+    for (const p of ps) {
+        const rid = r.model.index.rodByPerson.get(p.id);
+        if (rid && inSet.has(rid)) return rid;
+    }
+    const members = new Set(r.set.selection.memberIds);
+    for (const p of ps) if (members.has(p.id)) return r.model.index.rodByPerson.get(p.id) ?? null;
+    return null;
+}
+
+function rodLabel(r: Render, ctx: BookCtx, rodId: RodId): string {
+    return r.set.rodLabels.get(rodId) || rodLabelOf(ctx, rodId) || r.S.familyPages.rodGeneric;
+}
+
+/** A link to a lineage's page of the set, plain text when it has none. */
+function rodLinkHtml(r: Render, rodId: RodId, html: string): string {
+    const slug = r.set.rodSlug.get(rodId);
+    return slug ? pageLink(r, slug, html) : html;
+}
+
+function personLinkHtml(r: Render, ctx: BookCtx, id: PersonId): string {
+    const name = bookName(ctx, id);
+    if (isProtectedPerson(r.set.protectedTree, id)) return name;
+    const slug = r.set.personSlug.get(id);
+    return slug ? pageLink(r, slug, name) : name;
+}
+
+function familyLinkHtml(r: Render, uid: PartnershipId, html: string): string {
+    const slug = r.set.familySlug.get(uid);
+    return slug ? pageLink(r, slug, html) : html;
+}
+
+/** The union a person was born into (the first one recorded with the person among its children). */
+function parentUnionOf(tree: StromData, p: Person): Partnership | undefined {
+    for (const par of p.parentIds ?? []) {
+        for (const uid of tree.persons[par]?.partnerships ?? []) {
+            const u = tree.partnerships[uid];
+            if (u?.childIds.includes(p.id)) return u;
+        }
+    }
+    return undefined;
+}
+
+/** A person's unions with both partners recorded, by date (undated last, as recorded). */
+function datedUnions(tree: StromData, p: Person): Partnership[] {
+    const list = p.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u && coupleOf(tree, u).length === 2);
+    return list.map((u, i) => ({ u, i, y: yearOf(u.startDate) ?? Infinity })).sort((a, b) => a.y - b.y || a.i - b.i).map(x => x.u);
+}
+
+function dateAndPlace(r: Render, date: string | undefined, place: string | undefined): string {
+    return [date ? formatFlexDate(date, r.set.options.lang) : '', place?.trim() ?? ''].filter(Boolean).join(', ');
+}
+
+/** The note after a married-in name: "née Kvapilová" ('' when the shown surname is the birth one). */
+function birthSurnameNote(r: Render, p: Person): string {
+    const birth = p.lastName?.trim() ?? '';
+    const parts = shownNameParts(p);
+    if (!birth || !p.marriedSurname?.trim() || shownSurnameIsBirth(p) || parts.surname.trim() === birth) return '';
+    return `${r.S.name.birthAbbr} ${birth}`;
+}
+
+/** A portrait 64×80: the set's image in the file, an <img> in the window ('' without one). */
+function portraitHtml(r: Render, p: Person): string {
+    const src = r.set.options.photos === 'none' ? null : safeImage(p.photo);
+    if (!src) return '';
+    if (r.mode === 'file') {
+        const cls = r.set.images.add(src, 'photo');
+        return cls ? `<span class="pp-img sp-portrait ${cls}" aria-hidden="true"></span>` : '';
+    }
+    return `<img class="sp-portrait" src="${esc(src)}" alt="" loading="lazy">`;
+}
+
+function partnerCardHtml(r: Render, ctx: BookCtx, u: Partnership, p: Person, famRod: RodId | null): string {
+    const F = r.S.familyPages;
+    const P = F.fam;
+    const prot = isProtectedPerson(r.set.protectedTree, p.id);
+    const husband = p.gender !== 'female';
+    const role = isWedding(u) ? (husband ? P.husband : P.wife) : (p.gender === 'female' ? P.mother : p.gender === 'male' ? P.father : P.partner);
+    const yrs = bookYears(p);
+    const facts: string[] = [];
+    const fact = (k: string, v: string): void => { if (v) facts.push(`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`); };
+    if (!prot) {
+        fact(P.born, dateAndPlace(r, p.birthDate, p.birthPlace));
+        fact(P.died, dateAndPlace(r, p.deathDate, p.deathPlace));
+        fact(P.occupation, occupationOf(p));
+        const note = birthSurnameNote(r, p);
+        if (note) facts.push(`<dt></dt><dd>${esc(note)}</dd>`);
+    }
+    const rows: string[] = [];
+    const rodId = r.model.index.rodByPerson.get(p.id) ?? null;
+    if (!prot && rodId) {
+        const inSet = r.set.rodIds.includes(rodId);
+        const gen = generationOf(r, p.id);
+        if ((rodId === famRod || inSet) && gen !== null) {
+            rows.push(rodLinkHtml(r, rodId, esc(F.tagRod(rodLabel(r, ctx, rodId), roman(gen)))));
+        } else if (birthRodNamed(ctx, p.id)) {
+            rows.push(rodLinkHtml(r, rodId, esc(F.birthRod(rodLabel(r, ctx, rodId)))));
+        }
+    }
+    const parents = prot ? undefined : parentUnionOf(r.set.protectedTree.tree, p);
+    if (parents && coupleOf(r.set.protectedTree.tree, parents).length) {
+        rows.push(`↑ ${esc(P.parentsFam)}: ${familyLinkHtml(r, parents.id, pairFirstNames(ctx, parents))}`);
+    }
+    const slug = prot ? '' : r.set.personSlug.get(p.id) ?? '';
+    const go = slug ? pageLink(r, slug, esc(P.personPage), 'sp-go') : '';
+    const portrait = prot ? '' : portraitHtml(r, p);
+    return `<div class="sp-partner">`
+        + `<div class="sp-partner-top">${portrait}<div class="sp-partner-id"><span class="sp-role">${esc(role)}</span>`
+        + `<span class="sp-partner-name">${personLinkHtml(r, ctx, p.id)}</span>${yrs ? `<span class="sp-yrs">${esc(yrs)}</span>` : ''}</div></div>`
+        + (facts.length ? `<dl class="sp-pfacts">${facts.join('')}</dl>` : '')
+        + rows.map(x => `<span class="sp-prow">${x}</span>`).join('')
+        + go + '</div>';
+}
+
+/** "Josef Fíšek · 2nd marriage: ⚭ 1876 Terezie Lhotáková" — the partners' other unions that have pages. */
+function otherMarriagesHtml(r: Render, ctx: BookCtx, u: Partnership, ps: readonly Person[]): string {
+    const tree = r.set.protectedTree.tree;
+    const F = r.S.familyPages;
+    const out: string[] = [];
+    for (const p of ps) {
+        const all = datedUnions(tree, p);
+        if (all.length < 2) continue;
+        all.forEach((o, k) => {
+            if (o.id === u.id || !r.set.familySlug.has(o.id)) return;
+            const other = coupleOf(tree, o).find(x => x.id !== p.id);
+            const y = isWedding(o) ? yearOf(o.startDate) : null;
+            const label = `${y !== null ? `⚭ ${y} ` : ''}${other ? bookName(ctx, other.id) : '?'}`;
+            out.push(`<div class="sp-other"><span class="sp-other-pre">${bookName(ctx, p.id)} · ${esc(F.nth(k + 1))}:</span>${familyLinkHtml(r, o.id, label)}</div>`);
+        });
+    }
+    return out.join('');
+}
+
+/** The marriage's record excerpt: the first of the union's sources (the set's image and its zoom in the file). */
+function marriageClip(r: Render, u: Partnership): { src: string; caption: string } | null {
+    const sources = r.set.protectedTree.tree.sources ?? {};
+    for (const sid of u.sourceIds ?? []) {
+        const s = sources[sid];
+        for (const e of s?.excerpts ?? []) {
+            const src = shownExcerpt(e);
+            if (src) return { src, caption: [s.title?.trim(), s.reference?.trim()].filter(Boolean).join(', ') };
+        }
+    }
+    return null;
+}
+
+function marriageHtml(r: Render, ctx: BookCtx, u: Partnership, slug: string): string {
+    const P = r.S.familyPages.fam;
+    const tree = r.set.protectedTree.tree;
+    const facts: string[] = [];
+    const fact = (k: string, v: string): void => { if (v) facts.push(`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`); };
+    if (isWedding(u)) {
+        fact(P.date, u.startDate ? formatFlexDate(u.startDate, r.set.options.lang) : '');
+        fact(P.place, [u.startPlace?.trim(), u.address?.trim()].filter(Boolean).join(', '));
+        const witnesses = (u.participants ?? []).filter(x => x.role === 'witness').map(x => {
+            const linked = x.personId ? realIn(tree, x.personId) : undefined;
+            const who = linked ? shownNameOrEmpty(linked) : (x.name ?? '').trim();
+            return who ? (x.note?.trim() ? `${who}, ${x.note.trim()}` : who) : '';
+        }).filter(Boolean);
+        fact(P.witnesses, witnesses.join('; '));
+    }
+    const clip = r.set.options.clips === 'none' ? null : marriageClip(r, u);
+    let clipHtml = '';
+    let lightbox = '';
+    if (clip) {
+        const cap = clip.caption ? `<span class="sp-clip-cap">${esc(clip.caption)}</span>` : '';
+        if (r.mode === 'file') {
+            const cls = r.set.images.add(clip.src, 'clip');
+            if (cls) {
+                const lb = `${slug}--obr-1`;
+                clipHtml = `<a class="sp-clip" href="#${esc(lb)}" aria-label="${esc(P.clip)}"><span class="pp-img sp-clip-img ${cls}" role="img" aria-label="${esc(clip.caption || P.clip)}"></span>${cap}</a>`;
+                lightbox = `<div class="pp-lb" id="${esc(lb)}" role="dialog" aria-label="${esc(clip.caption || P.clip)}">`
+                    + `<div class="pp-lb-top"><span class="pp-lb-count"></span><a class="pp-lb-close" href="#${esc(slug)}--sp-marriage" data-pp-lb="close">${esc(r.S.personPage.gal.closeZoom)}</a></div>`
+                    + `<span class="pp-img pp-lb-img ${cls}" role="img" aria-label="${esc(clip.caption || P.clip)}"></span>`
+                    + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc(clip.caption)}</span></div></div>`;
+            }
+        } else {
+            clipHtml = `<div class="sp-clip"><img class="sp-clip-img" src="${esc(clip.src)}" alt="${esc(clip.caption || P.clip)}" loading="lazy">${cap}</div>`;
+        }
+    }
+    if (!facts.length && !clipHtml) return '';
+    return `<section class="sp-block sp-marriage" id="${esc(slug)}--sp-marriage"><h2 class="sp-h2">${esc(P.marriage)}</h2>`
+        + `<div class="sp-mar">${facts.length ? `<dl class="sp-mfacts">${facts.join('')}</dl>` : ''}${clipHtml}</div>${lightbox}</section>`;
+}
+
+function residenceHtml(r: Render, u: Partnership): string {
+    const rows = sortCoupleEvents(u.events ?? []).filter(e => e.type === 'residence').map(e => {
+        const where = [e.place?.trim(), e.address?.trim()].filter(Boolean).join(' ');
+        const when = e.date ? formatFlexDate(e.date, r.set.options.lang) : '';
+        return [where, when].filter(Boolean).join(' · ');
+    }).filter(Boolean);
+    if (!rows.length) return '';
+    return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.familyPages.fam.residence)}</h2>${rows.map(x => `<p class="sp-res">${esc(x)}</p>`).join('')}</section>`;
+}
+
+function childCardHtml(r: Render, ctx: BookCtx, c: Person): string {
+    const F = r.S.familyPages;
+    const tree = r.set.protectedTree.tree;
+    const prot = isProtectedPerson(r.set.protectedTree, c.id);
+    const young = diedYoung(c);
+    let note = '';
+    if (young) note = esc(F.diedChild[gKey(c)]);
+    else if (!prot) {
+        const first = datedUnions(tree, c)[0];
+        const into = marriedInto(r.model.index, c.id)[0];
+        if (first && r.set.familySlug.has(first.id)) {
+            note = familyLinkHtml(r, first.id, `→ ${esc(F.familyRef(familyFirstNames(tree, first, r.set.options.lang)))}`);
+        } else if (into) {
+            note = rodLinkHtml(r, into.rodId, esc(F.toRod(rodLabel(r, ctx, into.rodId))));
+        } else if (!c.partnerships.length && !r.set.protectedTree.living.has(c.id) && (yearOf(c.deathDate) !== null)) {
+            note = esc(F.fam.single[gKey(c)]);
+        }
+    }
+    const yrs = bookYears(c);
+    return `<div class="sp-kid${young ? ' sp-kid--young' : ''}"><span class="sp-kid-name">${personLinkHtml(r, ctx, c.id)}</span>`
+        + (yrs ? `<span class="sp-yrs">${esc(yrs)}</span>` : '')
+        + (note ? `<span class="sp-kid-note">${note}</span>` : '') + '</div>';
+}
+
+/** The union's sources (its own and its events'), as the book lists a chapter's. */
+function familySourcesHtml(r: Render, u: Partnership): string {
+    if (!r.set.options.sources) return '';
+    const sources = r.set.protectedTree.tree.sources ?? {};
+    const ids = [...new Set([...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])].filter(id => !!sources[id]);
+    const rows = ids.map(id => {
+        const s = sources[id];
+        return [s.title, s.reference].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
+    }).filter(Boolean);
+    if (!rows.length) return '';
+    return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.familyPages.fam.sources)}</h2>${rows.map(x => `<p class="sp-src">${x}</p>`).join('')}</section>`;
+}
+
+function familyStoryHtml(r: Render, u: Partnership, ps: readonly Person[], slug: string): string {
+    if (!r.set.options.stories || !ps.length) return '';
+    const tree = r.set.protectedTree.tree;
+    const ch = coupleChapterData(tree, ps[0], u, r.set.options.lang);
+    if (!ch) return '';
+    const html = coupleChapterHtml(ch, { lang: r.set.options.lang, mode: r.mode, foldable: false, open: true, partnerHtml: '', tint: false });
+    return `<section class="sp-block sp-story"><h2 class="sp-h2">${esc(r.S.familyPages.fam.story)}</h2>${prefixPageIds(html, slug)}</section>`;
+}
+
+/** A family's page (§2.2): the couple, the partners' cards, the marriage, the home, the children, the story, the sources. */
 function familyPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const F = r.S.familyPages;
     const tree = r.set.protectedTree.tree;
     const u: Partnership | undefined = page.id ? tree.partnerships[page.id as PartnershipId] : undefined;
     if (!u) return '';
-    const y = yearOf(u.startDate);
-    const wedding = u.status === 'married' || u.status === 'divorced';
-    const mar = wedding ? [`⚭${y !== null ? ` ${y}` : ''}`, u.startPlace?.trim() ?? ''].filter(Boolean).join(', ') : F.notMarried;
-    const link = (id: PersonId): string => {
-        const slug = r.set.personSlug.get(id);
-        const name = bookName(ctx, id);
-        return slug ? pageLink(r, slug, name) : name;
-    };
-    const partners = [u.person1Id, u.person2Id].filter((id): id is PersonId => !!id && !!tree.persons[id] && !tree.persons[id].isPlaceholder)
-        .map(id => {
-            const yrs = bookYears(tree.persons[id]);
-            return `<div class="sp-partner"><span class="sp-partner-name">${link(id)}</span>${yrs ? `<span class="sp-yrs">${esc(yrs)}</span>` : ''}</div>`;
-        }).join('');
-    const kids = (u.childIds ?? []).filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder).map(id => {
-        const yrs = bookYears(tree.persons[id]);
-        return `<li>${link(id)}${yrs ? ` <span class="sp-yrs">${esc(yrs)}</span>` : ''}</li>`;
-    }).join('');
-    return `<header class="sp-head"><div class="sp-kicker">${esc(F.kFam)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(mar)}</p></header>`
-        + `<div class="sp-partners">${partners}</div>`
-        + (kids ? `<section class="sp-block"><h2 class="sp-h2">${esc(F.children)}</h2><ul class="sp-list">${kids}</ul></section>` : '');
+    const ps = coupleOf(tree, u);
+    const wedding = isWedding(u);
+    const famRod = familyRodId(r, u, ps);
+    const member = ps.find(p => famRod && r.model.index.rodByPerson.get(p.id) === famRod) ?? ps[0];
+    const gen = member ? generationOf(r, member.id) : null;
+    const kicker = famRod ? F.famKicker(rodLabel(r, ctx, famRod), roman(gen ?? 1)) : F.kFam;
+    const sym = wedding ? ' <span class="sp-sym">⚭</span> ' : ` ${esc(r.S.book.and)} `;
+    const h1 = ps.map(p => bookName(ctx, p.id)).join(sym) || esc(page.title);
+    const kids = sortByBirth(tree, [...(u.childIds ?? [])]).map(id => realIn(tree, id)).filter((c): c is Person => !!c);
+    const mar = wedding ? `⚭${dateAndPlace(r, u.startDate, u.startPlace) ? ` ${dateAndPlace(r, u.startDate, u.startPlace)}` : ''}` : F.notMarried;
+    const sub = [mar, kids.length ? F.nKids(kids.length) : F.noKids].join(' · ');
+    const head = `<header class="sp-head"><div class="sp-kicker">${esc(kicker)}</div><h1 class="sp-h1">${h1}</h1>`
+        + `<p class="sp-sub">${esc(sub)}</p>${otherMarriagesHtml(r, ctx, u, ps)}</header>`;
+    const partners = `<div class="sp-partners">${ps.map(p => partnerCardHtml(r, ctx, u, p, famRod)).join('')}</div>`;
+    const children = kids.length
+        ? `<section class="sp-block"><h2 class="sp-h2">${esc(F.fam.kidsOf(kids.length))}</h2><div class="sp-kids-grid">${kids.map(c => childCardHtml(r, ctx, c)).join('')}</div></section>`
+        : '';
+    return `<div class="sp-fam-page">${head}${partners}${marriageHtml(r, ctx, u, page.slug)}${residenceHtml(r, u)}${children}`
+        + `${familyStoryHtml(r, u, ps, page.slug)}${familySourcesHtml(r, u)}</div>`;
 }
 
 /** The index of people (§1.7): the book's index, the names leading to the pages. */

@@ -131,6 +131,33 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .sp-partner { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
 .sp-partner-name { font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.sp-fam-page { display: flex; flex-direction: column; gap: 30px; }
+.sp-sym { color: var(--accent-text); font-weight: 400; }
+.sp-other { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 10px 14px; border-radius: 10px; background: var(--card-bg-2); font-size: 14px; overflow-wrap: anywhere; }
+.sp-other-pre { color: var(--text-light); }
+.sp-partner { gap: 10px; }
+.sp-partner-top { display: flex; gap: 14px; align-items: flex-start; }
+.sp-portrait { width: 64px; height: 80px; flex: none; border-radius: 6px; object-fit: cover; background-color: var(--card-bg-2); }
+.sp-partner-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-role { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.sp-pfacts, .sp-mfacts { margin: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 10px; font-size: 14px; }
+.sp-mfacts { flex: 1 1 280px; gap: 4px 10px; font-size: 14.5px; }
+.sp-pfacts dt, .sp-mfacts dt { color: var(--text-light); }
+.sp-pfacts dd, .sp-mfacts dd { margin: 0; overflow-wrap: anywhere; }
+.sp-prow { font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
+.sp-go { align-self: flex-start; min-height: 36px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 8px; border: 1px solid var(--sp-frame); background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--primary); text-decoration: none; cursor: pointer; }
+.sp-mar { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-start; }
+.sp-clip { flex: 0 1 300px; display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; cursor: zoom-in; min-width: 0; }
+.sp-clip-img { width: 100%; aspect-ratio: var(--pp-ar, 5 / 2); border-radius: 6px; border: 1px solid var(--border); background-size: contain; object-fit: contain; }
+.sp-clip-cap { font-size: 12.5px; color: var(--text-light); }
+.sp-res, .sp-src { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.sp-src { font-size: 14px; color: var(--text-light); }
+.sp-kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.sp-kid { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.sp-kid--young { background: var(--card-bg-2); color: var(--text-light); }
+.sp-kid-name { font-size: 15px; font-weight: 600; }
+.sp-kid-note { font-size: 13px; color: var(--text-light); }
+.sp-story .pp-couple-story { margin: 0; }
 .sp-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
 .sp-list > li { padding: 8px 0; border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
 .sp-foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--text-faint); }
@@ -141,10 +168,10 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-body .book-index-see { color: var(--text-faint); font-style: italic; }
 @media (hover: hover) {
   .sp-card:hover { border-color: var(--primary); }
-  .sp-btn:hover { background: var(--hover-bg); }
+  .sp-btn:hover, .sp-go:hover { background: var(--hover-bg); }
   .sp-body .pp-link:hover, .sp-crumbs a:hover { text-decoration-thickness: 2px; }
 }
-.sp-card:focus-visible, .sp-btn:focus-visible, .sp-crumbs a:focus-visible, .sp-toc-row a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sp-card:focus-visible, .sp-btn:focus-visible, .sp-go:focus-visible, .sp-clip:focus-visible, .sp-crumbs a:focus-visible, .sp-toc-row a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* Tablet: a narrower margin. */
 @media (min-width: 641px) and (max-width: 1024px) { .pp-file.sp-file { padding: 24px 28px 36px; } }
 /* Phone: 16 px margins, a smaller heading, cards under each other, the breadcrumb only "‹ the page above". */
@@ -158,6 +185,9 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
   .sp-crumbs > .sp-crumb-back { display: inline-flex; }
   .sp-facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .sp-facts dd { margin-bottom: 6px; }
+  .sp-fam-page { gap: 24px; }
+  .sp-partner { padding: 14px 14px; }
+  .sp-clip { flex-basis: 100%; }
 }
 /* A phone held sideways: the phone's margins, partners' cards beside each other (8c). */
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -167,7 +197,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 }
 @media (pointer: coarse) {
   .sp-crumbs a, .sp-crumbs [aria-current], .sp-crumb-back { min-height: 44px; }
-  .sp-btn, .sp-kids > summary { min-height: 44px; }
+  .sp-btn, .sp-kids > summary, .sp-go { min-height: 44px; }
   .sp-toc-row a { display: inline-block; padding: 10px 0; }
 }
 /* §8.3: the shown page only (all of them without the script), no breadcrumbs or folds, links as text, paper. */
@@ -176,11 +206,11 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   .pp-file.sp-file { max-width: none; padding: 0; }
   .sp-crumbs, .sp-bar, .sp-toc-file { display: none !important; }
   .sp-body a, .sp-body .pp-link, .sp-crumbs a { color: inherit !important; text-decoration: none !important; }
-  .sp-btns, .sp-card-go { display: none !important; }
+  .sp-btns, .sp-card-go, .sp-go { display: none !important; }
   details.sp-kids > summary { display: none !important; }
   details.sp-kids::details-content { content-visibility: visible; display: contents; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
-  .sp-card, .sp-row, .sp-union { break-inside: avoid; }
+  .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kid, .sp-mar { break-inside: avoid; }
 }
 `;
 

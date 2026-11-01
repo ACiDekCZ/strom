@@ -164,6 +164,114 @@ describe('the file of one lineage, several lineages, a branch (§0.2, §1)', () 
     });
 });
 
+describe('a family\'s page (§2.2)', () => {
+    it('Josef and Anna: the kicker, ⚭ in the title, the other marriage, the partners, the marriage, the children', () => {
+        const { data, ids, unions } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        const f9 = set.familySlug.get(unions.f9)!, f10 = set.familySlug.get(unions.f10)!;
+        const page = section(html, f9);
+        expect(page).toMatch(/<div class="sp-kicker">Rodina · rod Fíšek, [IVX]+\. generace<\/div>/);
+        expect(page).toContain('<h1 class="sp-h1">Josef Fíšek <span class="sp-sym">⚭</span> Anna Kvapilová</h1>');
+        expect(page).toContain('<p class="sp-sub">⚭ 12. 2. 1846, Čapkov · 7 dětí</p>');
+        // The repeated marriages: f9 leads to f10 and f10 back to f9.
+        expect(page).toContain(`<span class="sp-other-pre">Josef Fíšek · 2. sňatek:</span><a class="pp-link" href="#${f10}">⚭ 1876 Terezie Lhotáková</a>`);
+        expect(section(html, f10)).toContain(`<span class="sp-other-pre">Josef Fíšek · 1. sňatek:</span><a class="pp-link" href="#${f9}">⚭ 1846 Anna Kvapilová</a>`);
+        // The partners: roles, facts, the lineage, the parents' family, the person page.
+        expect(page).toContain('<span class="sp-role">manžel</span>');
+        expect(page).toContain('<span class="sp-role">manželka</span>');
+        expect(page).toContain('<dt>Povolání</dt><dd>rolník</dd>');
+        expect(page).toContain(`<a class="sp-go" href="#${set.personSlug.get(ids.josef)}">Stránka osoby →</a>`);
+        expect(page).toMatch(/<span class="sp-prow"><a class="pp-link" href="#rod-fisek">rod Fíšek, [IVX]+\. generace<\/a><\/span>/);
+        expect(page).toMatch(/<span class="sp-prow">↑ rodina rodičů: (?:<a class="pp-link" href="#rodina-[^"]+">)?Jakub a Magdalena/);
+        expect(page).toMatch(/class="pp-img sp-portrait img-\d+"/);
+        // The marriage: date, place, the witness, the record's excerpt with its zoom.
+        expect(page).toContain('<dt>Svědci</dt><dd>Jiří Vrbátek</dd>');
+        expect(page).toContain(`<a class="sp-clip" href="#${f9}--obr-1"`);
+        expect(page).toContain(`<div class="pp-lb" id="${f9}--obr-1"`);
+        expect(page).toContain('Oddací matrika Čapkov 1840–1860, fol. 12');
+        // The children: seven, those who died young tinted, a married son leading to his family, a daughter to her husband's.
+        expect(page).toContain('<h2 class="sp-h2">Děti (7)</h2>');
+        expect(page.match(/class="sp-kid sp-kid--young"/g)).toHaveLength(3);
+        expect(page).toContain('zemřela v dětství');
+        expect(page).toMatch(/<a class="pp-link" href="#rodina-[^"]+">→ rodina Jan a Rosálie<\/a>/);
+        expect(page).toMatch(/→ rodina Matouš a Anna/);
+        // The family's sources.
+        expect(page).toContain('<h2 class="sp-h2">Prameny rodiny</h2>');
+    });
+
+    it('Eva and Petr, both living: no page and no names; Kateřina without a union: no family page', () => {
+        const { data, ids, unions } = familyPagesFixture();
+        const set = rodsSet(data);
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        expect(set.familySlug.has(unions.f24)).toBe(false);
+        expect(html).not.toMatch(/\bEva\b/);
+        expect(html).not.toMatch(/Petr Řepík/);
+        const fams = set.pages.filter(p => p.kind === 'family');
+        const tree = set.protectedTree.tree;
+        expect(fams.some(p => [tree.partnerships[p.id as never]?.person1Id, tree.partnerships[p.id as never]?.person2Id].includes(ids.katerina))).toBe(false);
+        expect(set.personSlug.has(ids.katerina)).toBe(true);
+        // A living partner's page keeps the protected name, no facts, no link.
+        const jj = section(html, set.familySlug.get(unions.jaroslavJana)!);
+        expect(jj).not.toContain('Hrabanov');
+    });
+
+    it('a couple with children and no marriage: a page without ⚭, father and mother', () => {
+        const { data, unions } = familyPagesFixture();
+        const u = data.partnerships[unions.f10];
+        u.status = 'partners';
+        delete u.startDate;
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        const page = section(html, set.familySlug.get(unions.f10)!);
+        expect(page).toContain('<h1 class="sp-h1">Josef Fíšek a Terezie Lhotáková</h1>');
+        expect(page).not.toContain('⚭ 1876');
+        expect(page).toContain('<p class="sp-sub">bez záznamu o sňatku · 1 dítě</p>');
+        expect(page).toContain('<span class="sp-role">otec</span>');
+        expect(page).toContain('<span class="sp-role">matka</span>');
+        expect(page).toContain('<dd>roz. Vrbátková</dd>');
+        expect(page).not.toContain('sp-marriage');
+    });
+
+    it('the couple\'s story: once on the family page, its ids the page\'s; left out without stories', () => {
+        const { data, unions } = familyPagesFixture();
+        data.partnerships[unions.f9].story = { text: 'Josef převzal statek čp. 12 v roce 1846.' } as never;
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        const slug = set.familySlug.get(unions.f9)!;
+        const page = section(html, slug);
+        expect(page).toContain('<h2 class="sp-h2">Vyprávění</h2>');
+        expect(page).toContain(`id="${slug}--pp-story-`);
+        expect(page).toContain('převzal statek');
+        const without = section(buildPageSetHtml(rodsSet(data, fixtureRods(data), { privacy: 'full', stories: false })), slug);
+        expect(without).not.toContain('převzal statek');
+    });
+
+    it('families as a section: no family pages at all', () => {
+        const { data } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { families: 'section' });
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        expect(html).not.toContain('sp-page--family');
+        expect(html).not.toMatch(/id="rodina-/);
+        expect(html).not.toMatch(/href="#rodina-/);
+    });
+
+    it('in the window: the links are buttons, the excerpt an image, no zoom of the file', () => {
+        const { data, unions } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const page = pageSetSectionHtml(set, set.familySlug.get(unions.f9)!);
+        expect(page).toContain(`data-sp-open="family:${unions.f10}"`);
+        expect(page).toContain('<img class="sp-clip-img"');
+        expect(page).not.toContain('pp-lb');
+        expect(page).not.toMatch(/href="#/);
+    });
+});
+
 describe('the living (§5)', () => {
     it('a protected person has no section and the real name is nowhere in the file', () => {
         const { data, ids } = familyPagesFixture();

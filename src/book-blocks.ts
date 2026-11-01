@@ -243,7 +243,7 @@ function rodOfPerson(ctx: BookCtx, id: PersonId): RodId | null {
  * a one-person lineage (a wife who married in without recorded parents is
  * not a family of her own; the person card's row says the same).
  */
-function birthRodNamed(ctx: BookCtx, id: PersonId): RodId | null {
+export function birthRodNamed(ctx: BookCtx, id: PersonId): RodId | null {
     const rodId = rodOfPerson(ctx, id);
     const rod = rodId ? ctx.model.index.rods.get(rodId) : undefined;
     return rod && !rod.solitary ? rod.id : null;
@@ -379,7 +379,7 @@ export function rodHasMaleLine(rod: Rod, ctx: BookCtx): boolean {
     return maleLineHtml(ctx, rod) !== '';
 }
 
-function diedYoung(p: Person): boolean {
+export function diedYoung(p: Person): boolean {
     const b = yearOf(p.birthDate), d = yearOf(p.deathDate);
     return b !== null && d !== null && d - b < 15 && p.partnerships.length === 0;
 }
@@ -966,7 +966,7 @@ function linePlaces(line: PageLine, ctx: BookCtx) {
 }
 
 /** The first occupation recorded ('' without one). */
-function occupationOf(p: Person): string {
+export function occupationOf(p: Person): string {
     for (const e of p.events ?? []) {
         if (e.type !== 'occupation') continue;
         const what = stripResearchIds(e.note?.trim() ?? '').text.trim();
