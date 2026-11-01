@@ -216,6 +216,8 @@ html:not(.sp-on) body > .sp-fbar { display: none; }
 /* An address of a page or of an anchor in it lands below the sticky bar (57px), not under it
    (on the targets only: a padding on the root would also shift the page while typing in the bar's field). */
 html.sp-on main [id] { scroll-margin-top: 64px; }
+/* A page's own address opens it at the very top (an opened Menu then pushes the page down, not over it). */
+html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-fbar-in { box-sizing: border-box; max-width: 960px; height: 56px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; gap: 16px; }
 .sp-fbar-home { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text); text-decoration: none; }
 .sp-fbar-gap { flex: 1 1 auto; }

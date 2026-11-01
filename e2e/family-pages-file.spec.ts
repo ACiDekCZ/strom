@@ -242,6 +242,16 @@ test.describe('family pages file: the bar and the search (§3.1, §3.4)', () => 
                 await page.goto(`${url}#${slug}`);
                 await expect.poll(() => shown(page)).toEqual([slug]);
                 expect(await below(`[id="${slug}"] nav.sp-crumbs`), `${w}×${h} ${slug}`).toBeGreaterThanOrEqual(0);
+                expect(await page.evaluate(() => window.scrollY), `${w}×${h} ${slug} at the top`).toBe(0);
+            }
+            if (w <= 844) {
+                // The Menu panel pushes the page down, it does not slide over it.
+                await page.goto('about:blank');
+                await page.goto(`${url}#${rodFisek}`);
+                await expect.poll(() => shown(page)).toEqual([rodFisek]);
+                await page.locator('.sp-fbar-menu').click();
+                await expect(page.locator('.sp-menu')).toBeVisible();
+                expect(await below(`[id="${rodFisek}"] nav.sp-crumbs`), `${w}×${h} menu`).toBeGreaterThanOrEqual(0);
             }
             await page.goto('about:blank');
             await page.goto(`${url}#${josef}--pp-sec-family`);
