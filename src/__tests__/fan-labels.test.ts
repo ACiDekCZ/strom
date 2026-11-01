@@ -81,8 +81,9 @@ describe('label ladder (§4.4)', () => {
         expect(fit(p, box(110, 14))!.level).toBe(4);
         expect(texts(fit(p, box(50, 14)))).toEqual(['Laroulek']);
         expect(fit(p, box(50, 14))!.level).toBe(5);
+        // Not even "Bohumil L." fits: the surname is cut.
         expect(texts(fit(p, box(38, 14)))).toEqual(['Laroul…']);
-        expect(fit(p, box(38, 14))!.level).toBe(6);
+        expect(fit(p, box(38, 14))!.level).toBe(7);
         expect(fit(p, box(15, 14))).toBeNull();
     });
 
@@ -96,12 +97,29 @@ describe('label ladder (§4.4)', () => {
         expect(texts(fit(p2, box(100, 26)))).toEqual(['Oberwaldenburger-', 'Kreuzfeldt']);
     });
 
+    it('where the surname would be cut, the given name with its initial and the years where they fit (1101)', () => {
+        const p2 = person({ firstName: 'Velmira', lastName: 'Dlouhozmarná-Pšenkovická', birthDate: '1872', deathDate: '1932' });
+        // Not even the first half of the double surname fits: "Velmira D." and the years, not "Dlouhozm…".
+        const l = fit(p2, box(60, 30));
+        expect(texts(l)).toEqual(['Velmira D.', '1872–1932']);
+        expect(l!.level).toBe(6);
+        // No room for the years: the given name with the initial alone.
+        expect(texts(fit(p2, box(60, 14)))).toEqual(['Velmira D.']);
+        // Too short for one line, tall enough for two: the initial under the given name.
+        expect(texts(fit(p2, box(40, 30)))).toEqual(['Velmira', 'D.']);
+        // Several given names: only the first, where all of them do not fit.
+        expect(texts(fit({ ...p2, firstName: 'Velmira Bertoldina' }, box(60, 30)))).toEqual(['Velmira D.', '1872–1932']);
+        // Not even that fits: the cut surname as before.
+        expect(texts(fit(p2, box(40, 14)))).toEqual(['Dlouho…']);
+        expect(fit(p2, box(40, 14))!.level).toBe(7);
+    });
+
     it('cuts a long surname short rather than leaving the sector empty (1101)', () => {
         // §4.4 kept 60 % of a cut surname: a double surname in a small sector then showed nothing.
-        const p2 = person({ firstName: 'Anna', lastName: 'Oberwaldenburger-Kreuzfeldt' });
+        const p2 = person({ firstName: 'Bertoldina', lastName: 'Oberwaldenburger-Kreuzfeldt' });
         const l = fit(p2, box(50, 14));
         expect(texts(l)).toEqual(['Oberwald…']);
-        expect(l!.level).toBe(6);
+        expect(l!.level).toBe(7);
         // Never under four letters.
         expect(texts(fit(person(), box(27, 14)))).toEqual(['Laro…']);
     });
@@ -110,7 +128,7 @@ describe('label ladder (§4.4)', () => {
         const narrow = (t: string, fs: number) => [...t].reduce((w, c) => w + (c === '.' || c === ' ' ? 0.25 : 0.6), 0) * fs;
         const l = fit(person({ firstName: 'Ursula', lastName: 'Hengstler' }), box(24, 14), { measure: narrow });
         expect(texts(l)).toEqual(['U. H.']);
-        expect(l!.level).toBe(7);
+        expect(l!.level).toBe(8);
         // A protected living person never: the initials would name them.
         expect(fit(person({ firstName: 'Ursula', lastName: 'Hengstler', deathDate: undefined }), box(24, 14), { measure: narrow, protect: true })).toBeNull();
         // An unknown person has none.
@@ -123,7 +141,7 @@ describe('label ladder (§4.4)', () => {
 
     it('shows more of a label at a larger scale (K1.4)', () => {
         const s = { r1: 360, r2: 422, lo: 168.75, hi: 180 };
-        const at = (ppu: number) => fit(p, fanLabelBox(s, ppu))?.level ?? 7;
+        const at = (ppu: number) => fit(p, fanLabelBox(s, ppu))?.level ?? 9;
         expect(at(1)).toBeGreaterThan(at(2));
         expect(at(2)).toBeGreaterThan(at(5));
     });

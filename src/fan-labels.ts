@@ -2,8 +2,9 @@
  * Fan chart labels (spec 029 §4): the box a sector offers its text at the
  * current scale (along the arc or along the radius), the reading direction
  * (never upside down), and the ladder that picks the most text that fits —
- * full name with full dates first, down to a cut surname, the initials, or
- * nothing where not even those fit.
+ * full name with full dates first, down to the given name with the
+ * surname's initial, a cut surname, the initials, or nothing where not even
+ * those fit.
  *
  * Pure apart from the default text measurer, which uses a canvas when one is
  * available and an estimate otherwise (tests inject their own).
@@ -260,8 +261,9 @@ export interface FanLabel {
     rows: FanLabelRow[];
     /**
      * Ladder step (§4.4): 1 full name + full dates, 2 name + years, 3 initials
-     * + years, 4 name without years, 5 surname, 6 cut surname, 7 the initials
-     * alone (1101).
+     * + years, 4 name without years, 5 surname, 6 given name + the surname's
+     * initial ("Jan D.", with the years where they fit), 7 cut surname, 8 the
+     * initials alone (1101).
      */
     level: number;
 }
@@ -282,7 +284,7 @@ export interface FitFanLabelOptions {
 
 const LINE_HEIGHT = 1.18;
 
-/** The fewest characters a cut surname keeps before its "…" (step 6). */
+/** The fewest characters a cut surname keeps before its "…" (step 7). */
 export const FAN_CUT_KEEP = 4;
 
 /** All the characters a label shows (to compare two of the same step). */
@@ -346,6 +348,25 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
     push(iniTwo, null, null, 4);
     push([rep + (surname || full)], null, null, 5);
     if (halves) push([rep + halves[0], halves[1]], null, null, 5);
+    // Step 6: where the surname would have to be cut, the given name with the surname's
+    // initial names the person better ("Jan D.") — with the years where they fit, on one
+    // line or the initial below; several given names then only the first (1101).
+    // "van der Berg" → "B.": the first word that starts with a capital, if there is one.
+    const sWord = surname.split(/\s+/).find(w => /^\p{Lu}/u.test(w)) ?? surname;
+    const sInitial = [...sWord][0];
+    if (given && sInitial) {
+        const givens = [given];
+        const first = given.split(/\s+/)[0];
+        if (first !== given) givens.push(first);
+        const shortForms = (sub: string | null) => {
+            for (const g of givens) {
+                push([`${rep}${g} ${sInitial}.`], sub, null, 6);
+                push([rep + g, `${sInitial}.`], sub, null, 6);
+            }
+        };
+        if (yr) shortForms(yr);
+        shortForms(null);
+    }
     // Only exact repeats go (same rows and the same font floor).
     const seen = new Set<string>();
     return out.filter(c => {
@@ -390,7 +411,7 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
         }
     }
 
-    // Step 6: the surname cut with "…", while at least FAN_CUT_KEEP characters stay —
+    // Step 7: the surname cut with "…", while at least FAN_CUT_KEEP characters stay —
     // a long double surname cut short still names the line, an empty sector names
     // nobody (1101; §4.4 kept 6 characters and 60 %, which left such sectors empty).
     if (box.cross >= min * LINE_HEIGHT) {
@@ -398,20 +419,21 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
         const s = [...(opts.protect ? strings.fan.living : (opts.repeat ? '↻ ' : '') + (parts.surname.trim() || parts.given.trim() || '?'))];
         for (let n = s.length - 1; n >= FAN_CUT_KEEP; n--) {
             const text = s.slice(0, n).join('') + '…';
-            if (measure(text, min, true) <= box.len) return { rows: [{ text, fs: min, bold: true }], level: 6 };
+            if (measure(text, min, true) <= box.len) return { rows: [{ text, fs: min, bold: true }], level: 7 };
         }
-        // Step 7: the initials ("W. S."), the card's monogram — still somebody, not an empty sector (1101).
+        // Step 8: the initials ("W. S."), the card's monogram — still somebody, not an empty sector (1101).
         const mono = opts.protect ? '' : [parts.given, parts.surname].map(w => [...w.trim()][0]).filter(c => c && c !== '?').map(c => `${c}.`).join(' ');
-        if (mono && measure(mono, min, true) <= box.len) return { rows: [{ text: mono, fs: min, bold: true }], level: 7 };
+        if (mono && measure(mono, min, true) <= box.len) return { rows: [{ text: mono, fs: min, bold: true }], level: 8 };
     }
     return null;
 }
 
 /**
  * The label of a person's sector: the ladder in the box fanLabelBox chose,
- * and where that gives nothing or only a cut surname, in the turned box when
- * it holds more — a better step, or more of the cut surname (1101: a wide short sector on a phone had no name at all,
- * surnames were cut where the other direction had room). `adjust` shrinks a
+ * and where that gives nothing or only a shortened surname (the initial or a
+ * cut), in the turned box when it holds more — a better step, or more of the
+ * name (1101: a wide short sector on a phone had no name at all, surnames
+ * were cut where the other direction had room). `adjust` shrinks a
  * box for what else the sector carries (the Kekulé number).
  */
 export function fitFanSectorLabel(

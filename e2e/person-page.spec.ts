@@ -1446,9 +1446,15 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
             const page = await ctx.newPage();
             const got = await labels(await open(page));
             for (let n = 2; n < 32; n++) expect(got[String(n)], `#${n} ${PEDIGREE[n - 1][2]}`).toMatch(/\S/);
-            // The mother's line is named, cut short where its sector is small.
-            expect(got['3']).toContain('Ulbernas');
-            if (s.width > 640) expect(got['3']).toContain('Kroppwendt');
+            // The mother's line is named: whole on a desktop; where the surname would be cut,
+            // the given name with its initial and the years (1101, Milan 1 Nov).
+            if (s.width > 640) {
+                expect(got['3']).toContain('Ulbernas');
+                expect(got['3']).toContain('Kroppwendt');
+            } else {
+                expect(got['3']).toBe('Anvi U. 1931–2019');
+                expect(got['6']).toBe('Johalm U. 1898–1967');
+            }
             await ctx.close();
         });
     }
