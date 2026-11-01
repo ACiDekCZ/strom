@@ -92,7 +92,7 @@ function fullTree(): Required<StromData> {
             },
         },
         places: {
-            'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko' },
+            'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko', byTown: 'Kolín', townChoices: 2 },
         },
         surnameVariants: [['Fíšek', 'Fyšek', 'Fischek']],
         surnameRejections: [{ forms: ['Lhoták', 'Lhota'], id: 'sg_lhotak_lhota', at: '2026-10-20T10:00:00.000Z' }],

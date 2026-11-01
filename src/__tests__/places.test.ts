@@ -5,8 +5,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
-    sortPlacesByName, sortPlacesForManager, isPlacesSort, placeFilterText, placeMatchesFilter } from '../places.js';
-import { StromData, Person, PersonId, PartnershipId } from '../types.js';
+    sortPlacesByName, sortPlacesForManager, isPlacesSort, placeFilterText, placeMatchesFilter,
+    MapKind, countPlaceUses, compareHouses, houseKey, groupTownPoints, MappedPlaceInput, TownPoint,
+    splitPlaceHouses, placeTownGroups, townHousePlaces, townOfPlace } from '../places.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, PlaceGeo } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
     return {
@@ -144,7 +146,7 @@ describe('the Places dialog: order and search', () => {
     const row = (display: string, extra: string[] = []) => ({
         key: placeKey(display),
         usage: {
-            display, count: 1, personIds: [],
+            display, count: 1, personIds: [], kinds: new Map(), houses: new Map(),
             variants: new Map<string, number>([[display, 1], ...extra.map(v => [v, 1] as [string, number])]),
         },
     });
@@ -184,5 +186,252 @@ describe('the Places dialog: order and search', () => {
         expect(placeMatchesFilter(text, 'tschapkau')).toBe(true);
         expect(placeMatchesFilter(text, 'kolin')).toBe(false);
         expect(placeMatchesFilter(text, '  ')).toBe(true);   // an empty query hides nothing
+    });
+});
+
+// ==================== map kinds and houses (spec 031) ====================
+
+const P = (id: string) => id as PersonId;
+function treeWith(persons: Person[], unions: Partnership[] = [], places?: Record<string, PlaceGeo>): StromData {
+    return {
+        persons: Object.fromEntries(persons.map(p => [p.id, p])) as StromData['persons'],
+        partnerships: Object.fromEntries(unions.map(u => [u.id, u])) as StromData['partnerships'],
+        ...(places ? { places } : {}),
+    };
+}
+function union(id: string, a: string, b: string, o: Partial<Partnership> = {}): Partnership {
+    return { id: id as PartnershipId, person1Id: P(a), person2Id: P(b), childIds: [], status: 'married', ...o };
+}
+const kindsOf = (data: StromData, place: string, id: string, kinds?: ReadonlySet<MapKind>) =>
+    [...(collectPlaces(data, undefined, kinds).get(placeKey(place))?.kinds.get(P(id)) ?? [])].sort();
+
+describe('collectPlaces: map kinds', () => {
+    const data = treeWith([
+        person('a', {
+            birthPlace: 'Bělokamen', deathPlace: 'Lhotín',
+            events: [
+                { id: 'e1', type: 'baptism', place: 'Tichá Lhota' },
+                { id: 'e2', type: 'burial', place: 'Zálesí u Brodku' },
+                { id: 'e3', type: 'cremation', place: 'Horní Ves' },
+                { id: 'e4', type: 'residence', place: 'Bělokamen' },
+            ],
+        }),
+        person('b'),
+    ], [union('u1', 'a', 'b', {
+        startPlace: 'Lhotín', endPlace: 'Horní Ves',
+        events: [{ id: 'c1', type: 'banns', place: 'Tichá Lhota' }, { id: 'c2', type: 'census', place: 'Zálesí u Brodku' }],
+    })]);
+
+    it('baptism is a birth, burial and cremation a death, banns a wedding (both partners), the divorce another event', () => {
+        expect(kindsOf(data, 'Bělokamen', 'a')).toEqual(['birth', 'event']);
+        expect(kindsOf(data, 'Tichá Lhota', 'a')).toEqual(['birth', 'wedding']);
+        expect(kindsOf(data, 'Tichá Lhota', 'b')).toEqual(['wedding']);
+        expect(kindsOf(data, 'Zálesí u Brodku', 'a')).toEqual(['death', 'event']);
+        expect(kindsOf(data, 'Horní Ves', 'a')).toEqual(['death', 'event']);
+        expect(kindsOf(data, 'Horní Ves', 'b')).toEqual(['event']);
+        expect(kindsOf(data, 'Lhotín', 'b')).toEqual(['wedding']);
+    });
+
+    it('only the enabled kinds: places, people and counts of those facts alone', () => {
+        const births = collectPlaces(data, undefined, new Set<MapKind>(['birth']));
+        expect([...births.keys()].sort()).toEqual([placeKey('Bělokamen'), placeKey('Tichá Lhota')].sort());
+        expect(births.get(placeKey('Bělokamen'))!.count).toBe(1);
+        expect(births.get(placeKey('Tichá Lhota'))!.personIds).toEqual([P('a')]);
+        const deaths = collectPlaces(data, undefined, new Set<MapKind>(['death']));
+        expect(deaths.has(placeKey('Lhotín'))).toBe(true);
+        expect(deaths.get(placeKey('Horní Ves'))!.personIds).toEqual([P('a')]);
+        // without kinds: every fact, as before
+        expect(collectPlaces(data).get(placeKey('Horní Ves'))!.count).toBe(2);
+    });
+
+    it('keeps the house field of each fact per person', () => {
+        const d = treeWith([person('a', { birthPlace: 'Bělokamen', birthAddress: ' čp. 16 ', deathPlace: 'Bělokamen' })]);
+        const houses = collectPlaces(d).get(placeKey('Bělokamen'))!.houses.get(P('a'))!;
+        expect([...houses.keys()].sort()).toEqual(['', 'čp. 16']);
+        expect([...houses.get('čp. 16')!]).toEqual(['birth']);
+        expect([...houses.get('')!]).toEqual(['death']);
+    });
+});
+
+describe('countPlaceUses', () => {
+    it('counts exactly what renamePlace then rewrites', () => {
+        const data = treeWith([
+            person('a', { birthPlace: 'Bělokamen', deathPlace: 'bělokamen', events: [{ id: 'e', type: 'residence', place: 'Lhotín' }] }),
+            person('b', { birthPlace: 'Lhotín' }),
+            person('c', { deathPlace: 'Bělokamen' }),
+        ], [union('u1', 'a', 'b', { startPlace: 'Bělokamen', endPlace: 'Bělokamen', events: [{ id: 'c', type: 'banns', place: 'BĚLOKAMEN' }] })]);
+        const key = placeKey('Bělokamen');
+        const count = countPlaceUses(data, key);
+        expect(count).toEqual({ uses: 6, persons: 3 });
+        expect(renamePlace(data, key, 'Bělokamen u Lhotína').changed).toBe(count.uses);
+        // a new name one spelling already has: that spelling is not rewritten
+        expect(countPlaceUses(data, key, 'Bělokamen').uses).toBe(renamePlace(data, key, 'Bělokamen').changed);
+    });
+});
+
+describe('houses: natural order and one house however written', () => {
+    it('numbers by value (a marker word skipped), then streets, then texts without a number', () => {
+        const list = ['Za Humny', 'Kopřivná 12', '12a', '102', 'čp. 4', '13/2', '12', '2', '16', 'Haus Nr. 3', 'Kopřivná 5', 'House No. 7'];
+        expect([...list].sort(compareHouses)).toEqual(
+            ['2', 'Haus Nr. 3', 'čp. 4', 'House No. 7', '12', '12a', '13/2', '16', '102', 'Kopřivná 5', 'Kopřivná 12', 'Za Humny']);
+    });
+
+    it('"16", "čp. 16", "Haus Nr. 16" and "č. p. 16" are one house', () => {
+        for (const h of ['čp. 16', 'Haus Nr. 16', 'č. p. 16', 'House No. 16']) expect(houseKey(h)).toBe(houseKey('16'));
+        expect(houseKey('Kopřivná 12')).toBe(houseKey('kopřivná  12'));
+        expect(houseKey('Kopřivná 12')).not.toBe(houseKey('12'));
+    });
+
+    it('townOfPlace: a recognised house, a bare number, never a numbered town', () => {
+        expect(townOfPlace('Bělokamen čp. 4')).toEqual({ town: 'Bělokamen', house: '4', bare: false });
+        expect(townOfPlace('Bělokamen, Kopřivná 12')).toEqual({ town: 'Bělokamen', house: 'Kopřivná 12', bare: false });
+        expect(townOfPlace('Bělokamen 16')).toEqual({ town: 'Bělokamen', house: '16', bare: true });
+        expect(townOfPlace('Praha 5')).toBeNull();
+        expect(townOfPlace('Bělokamen')).toBeNull();
+    });
+});
+
+describe('groupTownPoints', () => {
+    const exact = (lat: number): PlaceGeo => ({ lat, lon: 15 });
+    const byTown = (lat: number, town: string): PlaceGeo => ({ lat, lon: 15, byTown: town });
+    const mapped = (data: StromData): MappedPlaceInput[] =>
+        [...collectPlaces(data)].filter(([k]) => data.places?.[k]).map(([key, usage]) => ({ key, usage, geo: data.places![key] }));
+
+    it('houses found by the town join one point of the town; exact coordinates and "Praha 5" stay apart', () => {
+        const data = treeWith([
+            person('e', { birthPlace: 'Bělokamen', birthAddress: 'čp. 16' }),
+            person('f', { deathPlace: 'Bělokamen' }),
+            person('g', { birthPlace: 'Bělokamen 16' }),
+            person('h', { birthPlace: 'Bělokamen čp. 4', deathPlace: 'Bělokamen čp. 4' }),
+            person('i', { birthPlace: 'Bělokamen 31' }),
+            person('j', { birthPlace: 'Praha 5' }),
+            person('k', { birthPlace: 'Lhotín, Kopřivná 12' }),
+        ], [], {
+            [placeKey('Bělokamen')]: exact(49.1),
+            [placeKey('Bělokamen 16')]: byTown(49.2, 'Bělokamen'),
+            [placeKey('Bělokamen čp. 4')]: byTown(49.2, 'Bělokamen'),
+            [placeKey('Bělokamen 31')]: exact(49.3),
+            [placeKey('Praha 5')]: byTown(50, 'Praha'),
+            [placeKey('Lhotín, Kopřivná 12')]: byTown(48, 'Lhotín'),
+        });
+        const points = groupTownPoints(mapped(data));
+        const town = points.find(p => p.key === 'town:' + placeKey('Bělokamen')) as TownPoint;
+        expect(town).toBeDefined();
+        expect(town.geo.lat).toBe(49.1);   // the town's own place
+        expect(town.ownKey).toBe(placeKey('Bělokamen'));
+        expect(town.houses.map(h => [h.house, [...h.persons.keys()].sort()])).toEqual([
+            ['4', [P('h')]],
+            ['16', [P('e'), P('g')]],   // the house field "čp. 16" and "Bělokamen 16" are one house
+        ]);
+        expect([...town.houses[0].persons.get(P('h'))!].sort()).toEqual(['birth', 'death']);
+        expect([...town.noHouse.keys()]).toEqual([P('f')]);
+        expect(town.personCount).toBe(4);
+        expect(town.houseCount).toBe(2);
+        // exact coordinates of a house: its own point; a numbered town never groups
+        expect(points.find(p => p.key === placeKey('Bělokamen 31'))?.type).toBe('place');
+        expect(points.find(p => p.key === placeKey('Praha 5'))?.type).toBe('place');
+        // a town not on the map itself: the point stands where its first house was found
+        const lhotin = points.find(p => p.key === 'town:' + placeKey('Lhotín')) as TownPoint;
+        expect(lhotin.geo.lat).toBe(48);
+        expect(lhotin.town).toBe('Lhotín');
+        expect(lhotin.ownKey).toBeUndefined();
+        expect(points).toHaveLength(4);
+    });
+
+    it('a tree from the research (town in the place, house in the field) gets the same town point', () => {
+        const data = treeWith([
+            person('e', { birthPlace: 'Bělokamen', birthAddress: 'čp. 16' }),
+            person('f', { birthPlace: 'Bělokamen', birthAddress: 'Kopřivná 12' }),
+            person('g', { birthPlace: 'Lhotín' }),
+        ], [], { [placeKey('Bělokamen')]: exact(49), [placeKey('Lhotín')]: exact(48) });
+        const points = groupTownPoints(mapped(data));
+        const town = points.find(p => p.type === 'town') as TownPoint;
+        expect(town.key).toBe('town:' + placeKey('Bělokamen'));
+        expect(town.houses.map(h => h.house)).toEqual(['čp. 16', 'Kopřivná 12']);
+        expect(points.find(p => p.key === placeKey('Lhotín'))?.type).toBe('place');
+    });
+
+    it('a recognised house with exact coordinates is no member', () => {
+        const data = treeWith([person('h', { birthPlace: 'Bělokamen čp. 4', birthAddress: 'čp. 4' }), person('e', { birthPlace: 'Bělokamen' })], [],
+            { [placeKey('Bělokamen čp. 4')]: exact(49.2), [placeKey('Bělokamen')]: exact(49.1) });
+        expect(groupTownPoints(mapped(data)).map(p => p.type)).toEqual(['place', 'place']);
+    });
+});
+
+describe('the Places dialog: towns with house numbers', () => {
+    const data = treeWith([
+        person('a', { birthPlace: 'Bělokamen' }),
+        person('b', { birthPlace: 'Bělokamen čp. 4' }),
+        person('c', { birthPlace: 'Bělokamen 16' }),
+        person('d', { birthPlace: 'Bělokamen 102', deathPlace: 'Bělokamen, Kopřivná 12' }),
+        person('e', { birthPlace: 'Bělokamen 2' }),
+        person('f', { birthPlace: 'Praha 5' }), person('g', { birthPlace: 'Praha 6' }), person('h', { birthPlace: 'Praha 7' }),
+        person('i', { birthPlace: 'Praha' }),
+        person('j', { birthPlace: 'Tichá Lhota 3' }), person('k', { birthPlace: 'Tichá Lhota 4' }), person('l', { birthPlace: 'Tichá Lhota 5' }),
+    ], [], { [placeKey('Bělokamen čp. 4')]: { lat: 49, lon: 15, byTown: 'Bělokamen' } });
+
+    it('groups a town with three or more house places; never a numbered town, bare numbers only of a town the tree writes plain', () => {
+        const groups = placeTownGroups(data);
+        expect(groups.map(g => g.townKey)).toEqual([placeKey('Bělokamen')]);
+        const g = groups[0];
+        expect(g.ownKey).toBe(placeKey('Bělokamen'));
+        expect(g.members.map(m => m.house)).toEqual(['2', '4', '16', '102', 'Kopřivná 12']);
+        expect(g.houseCount).toBe(5);
+        expect(g.personCount).toBe(5);
+        expect(g.unplacedCount).toBe(4);
+        expect(g.hasBare).toBe(true);
+    });
+
+    it('a town\'s house places with three examples: smallest, second, largest', () => {
+        const t = townHousePlaces(data, placeKey('Bělokamen'));
+        expect(t.places).toHaveLength(5);
+        expect(t.hasBare).toBe(true);
+        expect(t.examples.map(p => p.house)).toEqual(['2', '4', 'Kopřivná 12']);
+        expect(t.bareExamples.map(p => p.display)).toEqual(['Bělokamen 2', 'Bělokamen 16', 'Bělokamen 102']);
+    });
+});
+
+describe('splitPlaceHouses', () => {
+    const build = (): StromData => treeWith([
+        person('a', { birthPlace: 'Bělokamen', deathPlace: 'Bělokamen' }),
+        person('b', { birthPlace: 'Bělokamen čp. 4' }),
+        person('c', { deathPlace: 'Bělokamen čp. 4', deathAddress: '7' }),
+        person('d', { birthPlace: 'Bělokamen čp. 4', birthAddress: 'čp. 4' }),
+        person('e', { birthPlace: 'Bělokamen 16', events: [{ id: 'x', type: 'residence', place: 'Bělokamen 16' }] }),
+        person('f', { birthPlace: 'Praha 5' }),
+        person('g'),
+    ], [union('u1', 'b', 'g', { startPlace: 'Bělokamen, Kopřivná 12', endPlace: 'Bělokamen, Kopřivná 12' })]);
+    const keys = ['Bělokamen čp. 4', 'Bělokamen, Kopřivná 12', 'Bělokamen 16', 'Praha 5'].map(placeKey);
+
+    it('the place becomes the town, the house goes to the house field; another house and the divorce stay', () => {
+        const data = build();
+        const before = structuredClone(data);
+        const r = splitPlaceHouses(data, keys);
+        expect(data).toEqual(before);   // works on a copy
+        expect(r.changed).toBe(3);      // b's birth, d's birth, the wedding
+        expect(r.skipped).toBe(1);      // c: the house field says 7
+        expect(r.noHouseField).toBe(1); // the divorce
+        expect(r.persons).toBe(3);      // b, d, g
+        const p = r.data.persons;
+        expect([p[P('b')].birthPlace, p[P('b')].birthAddress]).toEqual(['Bělokamen', '4']);
+        expect([p[P('d')].birthPlace, p[P('d')].birthAddress]).toEqual(['Bělokamen', 'čp. 4']);   // the same house, kept as written
+        expect([p[P('c')].deathPlace, p[P('c')].deathAddress]).toEqual(['Bělokamen čp. 4', '7']);
+        expect([r.data.partnerships['u1' as PartnershipId].startPlace, r.data.partnerships['u1' as PartnershipId].address])
+            .toEqual(['Bělokamen', 'Kopřivná 12']);
+        expect(r.data.partnerships['u1' as PartnershipId].endPlace).toBe('Bělokamen, Kopřivná 12');
+        // a bare number stays without the person's word, a numbered town always
+        expect(p[P('e')].birthPlace).toBe('Bělokamen 16');
+        expect(p[P('f')].birthPlace).toBe('Praha 5');
+    });
+
+    it('bare numbers of a confirmed town are split too, to the spelling the tree uses most', () => {
+        const data = build();
+        data.persons[P('a')].birthPlace = 'BĚLOKAMEN';
+        data.persons[P('g')].birthPlace = 'Bělokamen';
+        const r = splitPlaceHouses(data, keys, { bareTowns: new Set([placeKey('Bělokamen')]) });
+        const e = r.data.persons[P('e')];
+        expect([e.birthPlace, e.birthAddress, e.events![0].place, e.events![0].address]).toEqual(['Bělokamen', '16', 'Bělokamen', '16']);
+        expect(r.changed).toBe(5);
+        expect(r.data.persons[P('f')].birthPlace).toBe('Praha 5');
     });
 });

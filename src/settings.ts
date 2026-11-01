@@ -6,6 +6,7 @@
 import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
+import { MapKind, MAP_KINDS, isMapKind } from './places.js';
 
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
@@ -34,6 +35,9 @@ export interface LifelineDefaults {
 
 /** Per device, apart from the other settings. */
 const CARD_SIGNALS_KEY = 'strom-card-signals';
+
+/** The kinds of places the map shows (spec 031 §1), per device, apart from the other settings. */
+export const MAP_KINDS_KEY = 'strom.map.kinds';
 
 /** Fallback sender names that older builds stored as if typed (cs/en/de). */
 const FORMER_SENDER_PLACEHOLDERS = new Set(['Příbuzný', 'A relative', 'Ein Verwandter', 'Ein Familienmitglied']);
@@ -534,6 +538,28 @@ class SettingsManagerClass {
     setCardSignal(key: keyof CardSignals, on: boolean): void {
         const next = { ...this.getCardSignals(), [key]: on };
         try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(next)); } catch { /* not kept */ }
+    }
+
+    /**
+     * The kinds of places the map shows, for this device, in MAP_KINDS order.
+     * All four by default; a stored list that is empty or holds no known kind
+     * reads as all four (at least one kind always stays on).
+     */
+    getMapKinds(): MapKind[] {
+        try {
+            const parsed: unknown = JSON.parse(localStorage.getItem(MAP_KINDS_KEY) ?? 'null');
+            if (Array.isArray(parsed)) {
+                const on = MAP_KINDS.filter(k => parsed.some(v => isMapKind(v) && v === k));
+                if (on.length) return on;
+            }
+        } catch { /* defaults */ }
+        return [...MAP_KINDS];
+    }
+
+    /** Remember the map's kinds for this device; an empty list is kept as all four. */
+    setMapKinds(kinds: readonly MapKind[]): void {
+        const on = MAP_KINDS.filter(k => kinds.includes(k));
+        try { localStorage.setItem(MAP_KINDS_KEY, JSON.stringify(on.length ? on : [...MAP_KINDS])); } catch { /* not kept */ }
     }
 
     /** Toolbar "Add family" button default OFF (opt-in). */

@@ -14,11 +14,15 @@
  */
 
 import { StromData, PersonId } from './types.js';
-import { placeKey, collectPlaces } from './places.js';
+import { placeKey, collectPlaces, forEachPlaceFact, MapKind } from './places.js';
 import { yearOf } from './dates.js';
 
-/** What kind of record a dated point came from. */
-export type DatedPointKind = 'birth' | 'death' | 'event' | 'wedding';
+/**
+ * What kind of record a dated point came from — the map kinds (places.ts):
+ * a baptism is a birth, a burial or a cremation a death, the steps to a
+ * wedding (engagement, banns, licence, contract, settlement) the wedding.
+ */
+export type DatedPointKind = MapKind;
 
 /** One dated place reference: a person was somewhere in a given year. */
 export interface DatedPoint {
@@ -51,7 +55,11 @@ export interface DatedPlaceHarvest {
  *   - deathDate + deathPlace
  *   - each life event's date + place
  *   - a wedding's startDate + startPlace — a point for BOTH partners in scope
- *   - each couple event's date + place — likewise for both partners
+ *   - a divorce's endDate + endPlace and each couple event's date + place —
+ *     likewise for both partners
+ * Each point carries its map kind (see DatedPointKind). `kinds` keeps only
+ * the facts of those kinds: the points, the year range and
+ * `undatedPlaceCount` come from them alone; without it every fact counts.
  *
  * A reference contributes a point only when it has BOTH a parseable year (flex
  * dates such as `~1880` or a `1880..1885` range resolve to their year/start)
@@ -61,40 +69,23 @@ export interface DatedPlaceHarvest {
 export function collectDatedPlacePoints(
     data: StromData,
     personFilter?: ReadonlySet<PersonId>,
+    kinds?: ReadonlySet<MapKind>,
 ): DatedPlaceHarvest {
     const kept = (id: PersonId): boolean => !personFilter || personFilter.has(id);
     const points: DatedPoint[] = [];
 
-    const add = (
-        dateRaw: string | undefined,
-        placeRaw: string | undefined,
-        personId: PersonId,
-        kind: DatedPointKind,
-    ): void => {
-        const year = yearOf(dateRaw);
-        const place = placeRaw?.trim();
+    forEachPlaceFact(data, fact => {
+        if (kinds && !kinds.has(fact.kind)) return;
+        const year = yearOf(fact.date);
+        const place = fact.place?.trim();
         if (year === null || !place) return;
         const key = placeKey(place);
         if (!key) return;
-        points.push({ year, placeKey: key, personId, kind });
-    };
-
-    for (const person of Object.values(data.persons)) {
-        if (!kept(person.id)) continue;
-        add(person.birthDate, person.birthPlace, person.id, 'birth');
-        add(person.deathDate, person.deathPlace, person.id, 'death');
-        for (const ev of person.events ?? []) add(ev.date, ev.place, person.id, 'event');
-    }
-    for (const union of Object.values(data.partnerships)) {
-        // The wedding happened to both partners: each one in scope gets a point.
-        if (kept(union.person1Id)) add(union.startDate, union.startPlace, union.person1Id, 'wedding');
-        if (kept(union.person2Id)) add(union.startDate, union.startPlace, union.person2Id, 'wedding');
-        // The couple's own events (banns, a census of the household) likewise.
-        for (const ev of union.events ?? []) {
-            if (kept(union.person1Id)) add(ev.date, ev.place, union.person1Id, 'event');
-            if (kept(union.person2Id)) add(ev.date, ev.place, union.person2Id, 'event');
+        // A couple's fact happened to both partners: each one in scope gets a point.
+        for (const personId of fact.persons) {
+            if (kept(personId)) points.push({ year, placeKey: key, personId, kind: fact.kind });
         }
-    }
+    });
 
     points.sort((a, b) =>
         a.year - b.year ||
@@ -105,7 +96,7 @@ export function collectDatedPlacePoints(
     let undatedPlaceCount = 0;
     if (data.places) {
         const datedKeys = new Set(points.map(p => p.placeKey));
-        for (const [key] of collectPlaces(data, personFilter)) {
+        for (const [key] of collectPlaces(data, personFilter, kinds)) {
             if (data.places[key] && !datedKeys.has(key)) undatedPlaceCount++;
         }
     }

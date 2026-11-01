@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
-    parseGeocodeCandidates, parseGeocodeResponse,
+    parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates,
     CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS,
 } from '../geocode.js';
 
@@ -165,5 +165,71 @@ describe('geocodePlaces', () => {
         const fetchFn = vi.fn();
         await expect(geocodePlaces([], { fetchFn })).resolves.toEqual(new Map());
         expect(fetchFn).not.toHaveBeenCalled();
+    });
+});
+
+describe('geocodePlaces — a house not found is found by its town', () => {
+    const village = (lat: string, name: string) => ({ lat, lon: '15.0', display_name: name, category: 'boundary', type: 'administrative', addresstype: 'village' });
+    const road = { lat: '40.0', lon: '15.0', display_name: 'Kopřivná, Somewhere', category: 'highway', type: 'residential', addresstype: 'road' };
+    /** Answers by query: a full house name is never found, a town by its hits. */
+    const geocoder = (towns: Record<string, unknown[]>) => vi.fn().mockImplementation(async (url: string) =>
+        okResponse(towns[new URL(url).searchParams.get('q')!] ?? []));
+    const queries = (fetchFn: ReturnType<typeof vi.fn>) => fetchFn.mock.calls.map(c => new URL(c[0] as string).searchParams.get('q'));
+
+    it('looks the town up only after the full name failed, once a town, the nearest to the tree\'s places', async () => {
+        const fetchFn = geocoder({
+            'Bělokamen': [village('41.0', 'Bělokamen far'), road, village('49.1', 'Bělokamen near')],
+            'Lhotín': [{ lat: '48.0', lon: '14.0', display_name: 'Lhotín' }],
+        });
+        const waitFn = vi.fn().mockResolvedValue(undefined);
+        const centroid = placesCentroid({ a: { lat: 49, lon: 15 }, b: { lat: 50, lon: 15 } });
+        const found = await geocodePlaces(['Lhotín', 'Bělokamen čp. 4', 'Bělokamen 16', 'Bělokamen, Kopřivná 12'],
+            { fetchFn, waitFn, townFallback: { centroid } });
+
+        expect(queries(fetchFn)).toEqual(['Lhotín', 'Bělokamen čp. 4', 'Bělokamen', 'Bělokamen 16', 'Bělokamen, Kopřivná 12']);
+        expect(found.get('Lhotín')).toEqual({ lat: 48, lon: 14, label: 'Lhotín' });   // found by its name: no town
+        expect(found.get('Bělokamen čp. 4')).toEqual({ lat: 49.1, lon: 15, label: 'Bělokamen near', byTown: 'Bělokamen', townChoices: 2 });
+        expect(found.get('Bělokamen 16')).toMatchObject({ lat: 49.1, byTown: 'Bělokamen' });
+        expect(found.get('Bělokamen, Kopřivná 12')).toMatchObject({ lat: 49.1, byTown: 'Bělokamen' });
+        // the town lookup asked for several settlements, and kept to the rate limit
+        const townUrl = new URL(fetchFn.mock.calls[2][0] as string);
+        expect(townUrl.searchParams.get('limit')).toBe(String(CANDIDATE_LIMIT));
+        expect(waitFn).toHaveBeenCalledTimes(fetchFn.mock.calls.length - 1);
+    });
+
+    it('takes the first settlement without places to compare, and none that is no settlement', async () => {
+        const fetchFn = geocoder({ 'Bělokamen': [road, village('41.0', 'first'), village('49.1', 'second')], 'Lhotín': [road] });
+        const waitFn = vi.fn().mockResolvedValue(undefined);
+        const found = await geocodePlaces(['Bělokamen čp. 4', 'Lhotín čp. 2'], { fetchFn, waitFn, townFallback: {} });
+        expect(found.get('Bělokamen čp. 4')).toMatchObject({ label: 'first', byTown: 'Bělokamen', townChoices: 2 });
+        expect(found.get('Lhotín čp. 2')).toBeNull();
+    });
+
+    it('never looks up a town for a numbered town ("Praha 5"), a place without a house, or without the option', async () => {
+        const fetchFn = geocoder({ 'Praha': [village('50.0', 'Praha')], 'Bělokamen': [village('49.0', 'Bělokamen')] });
+        const waitFn = vi.fn().mockResolvedValue(undefined);
+        await geocodePlaces(['Praha 5', 'Lhotín'], { fetchFn, waitFn, townFallback: {} });
+        expect(queries(fetchFn)).toEqual(['Praha 5', 'Lhotín']);
+        fetchFn.mockClear();
+        const found = await geocodePlaces(['Bělokamen čp. 4'], { fetchFn, waitFn });
+        expect(queries(fetchFn)).toEqual(['Bělokamen čp. 4']);
+        expect(found.get('Bělokamen čp. 4')).toBeNull();
+    });
+});
+
+describe('settlements in a manual search', () => {
+    it('tells a settlement from an exact address', async () => {
+        expect(isSettlementHit({ category: 'place', type: 'village' })).toBe(true);
+        expect(isSettlementHit({ category: 'boundary', type: 'administrative', addresstype: 'municipality' })).toBe(true);
+        expect(isSettlementHit({ category: 'building', type: 'house', addresstype: 'building' })).toBe(false);
+        expect(isSettlementHit({ category: 'highway', type: 'residential', addresstype: 'road' })).toBe(false);
+        const fetchFn = vi.fn().mockResolvedValue(okResponse([
+            { lat: '49', lon: '15', display_name: 'Bělokamen', category: 'place', type: 'village', addresstype: 'village' },
+            { lat: '49', lon: '15', display_name: 'Kopřivná 12', category: 'building', type: 'house', addresstype: 'building' },
+        ]));
+        expect(await searchPlaceCandidates('Bělokamen', { fetchFn })).toEqual([
+            { geo: { lat: 49, lon: 15, label: 'Bělokamen' }, settlement: true, kind: 'village' },
+            { geo: { lat: 49, lon: 15, label: 'Kopřivná 12' }, settlement: false, kind: 'building' },
+        ]);
     });
 });

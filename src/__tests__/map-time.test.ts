@@ -138,3 +138,48 @@ describe('collectDatedPlacePoints — person filter', () => {
             .toEqual(['birth:a', 'wedding:a']);
     });
 });
+
+describe('collectDatedPlacePoints — map kinds', () => {
+    const data = (): StromData => {
+        const d = tree([
+            person('a', {
+                birthDate: '1850', birthPlace: 'Bělokamen',
+                events: [
+                    { id: 'e1', type: 'baptism', date: '1851', place: 'Lhotín' },
+                    { id: 'e2', type: 'burial', date: '1920', place: 'Tichá Lhota' },
+                    { id: 'e3', type: 'cremation', date: '1921', place: 'Horní Ves' },
+                    { id: 'e4', type: 'military', date: '1872', place: 'Zálesí u Brodku' },
+                ],
+            }),
+            person('b'),
+        ], {
+            u1: {
+                id: 'u1' as PartnershipId, person1Id: 'a' as PersonId, person2Id: 'b' as PersonId,
+                childIds: [], status: 'married', startDate: '1878', startPlace: 'Lhotín',
+                events: [
+                    { id: 'c1', type: 'banns', date: '1877', place: 'Tichá Lhota' },
+                    { id: 'c2', type: 'census', date: '1890', place: 'Horní Ves' },
+                ],
+            },
+        });
+        d.places = { [placeKey('Zálesí u Brodku')]: { lat: 49, lon: 15 }, [placeKey('Bělokamen')]: { lat: 49.5, lon: 15 } };
+        return d;
+    };
+
+    it('a baptism is a birth, burial and cremation a death, banns a wedding of both partners', () => {
+        const kinds = collectDatedPlacePoints(data()).points.filter(p => p.personId === ('a' as PersonId)).map(p => `${p.year}:${p.kind}`);
+        expect(kinds).toEqual(['1850:birth', '1851:birth', '1872:event', '1877:wedding', '1878:wedding', '1890:event', '1920:death', '1921:death']);
+    });
+
+    it('only the enabled kinds: their points, their year range and their undated places', () => {
+        const d = data();
+        d.persons['b' as PersonId].deathPlace = 'Zálesí u Brodku';   // undated death at a pinned place
+        const deaths = collectDatedPlacePoints(d, undefined, new Set(['death']));
+        expect(deaths.points.map(p => p.year)).toEqual([1920, 1921]);
+        expect([deaths.minYear, deaths.maxYear]).toEqual([1920, 1921]);
+        expect(deaths.undatedPlaceCount).toBe(1);
+        const births = collectDatedPlacePoints(d, undefined, new Set(['birth']));
+        expect([births.minYear, births.maxYear]).toEqual([1850, 1851]);
+        expect(births.undatedPlaceCount).toBe(0);   // Zálesí has no birth
+    });
+});

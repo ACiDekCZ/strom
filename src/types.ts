@@ -1065,6 +1065,14 @@ export interface PlaceGeo {
     lon: number;
     /** Full name as the geocoder understood it — lets the user check the hit. */
     label?: string;
+    /**
+     * The town the location was found by, when the full name was not found
+     * and the place holds a house ("Bělokamen 16" → "Bělokamen"): the point
+     * stands at the town, not at the house. Older builds ignore it.
+     */
+    byTown?: string;
+    /** How many towns of that name the geocoder offered, only when more than one (the nearest was taken). */
+    townChoices?: number;
 }
 
 export interface StromData {
