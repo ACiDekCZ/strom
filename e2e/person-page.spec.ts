@@ -1297,3 +1297,90 @@ test.describe('a phone', () => {
         await expect(sheet).toHaveCount(0);
     });
 });
+
+test.describe('Ancestors: the buttons cover no ancestor (1101)', () => {
+    /** Four full generations above Jan (a complete half circle, nobody living): a1 = Jan, a2n the father, a2n+1 the mother. */
+    async function seedPedigree(page: Page): Promise<void> {
+        await page.evaluate(async () => {
+            const persons: Record<string, unknown> = {};
+            for (let n = 1; n < 32; n++) {
+                const g = Math.floor(Math.log2(n));
+                persons[`a${n}`] = {
+                    id: `a${n}`, firstName: n % 2 === 0 || n === 1 ? 'Jan' : 'Anna', lastName: `Line${n}`,
+                    gender: n === 1 || n % 2 === 0 ? 'male' : 'female', isPlaceholder: false,
+                    parentIds: n < 16 ? [`a${2 * n}`, `a${2 * n + 1}`] : [], childIds: n > 1 ? [`a${n >> 1}`] : [], partnerships: [],
+                    birthDate: String(1900 - 28 * g), deathDate: String(1960 - 28 * g),
+                };
+            }
+            await window.Strom.DataManager.importAsNewTree({ persons, partnerships: {} } as never, 'Pedigree');
+            await window.Strom.TreeRenderer.setFocus('a1' as never);
+        });
+    }
+
+    /** The sectors under the visible buttons (a grid of points over each, the gap around them too). */
+    const sectorsUnderButtons = (root: Page) => root.locator('#pp-sec-ancestors .pp-anc-fan').evaluate((fan) => {
+        const hits = new Set<string>();
+        for (const btn of fan.querySelectorAll<HTMLElement>('.pp-anc-zoom, .pp-anc-zbtn')) {
+            const r = btn.getBoundingClientRect();
+            if (!r.width || getComputedStyle(btn).display === 'none') continue;
+            for (let i = 0; i <= 12; i++) {
+                for (let j = 0; j <= 6; j++) {
+                    const x = r.left - 4 + (r.width + 8) * i / 12, y = r.top - 4 + (r.height + 8) * j / 6;
+                    for (const el of document.elementsFromPoint(x, y)) {
+                        const s = el.closest('.fan-sector');
+                        if (s && fan.contains(s)) hits.add(s.getAttribute('data-fan-key') ?? '?');
+                    }
+                }
+            }
+        }
+        return [...hits];
+    });
+
+    const sizes = [
+        { width: 1440, height: 900, touch: false },
+        { width: 1024, height: 768, touch: false },
+        { width: 390, height: 844, touch: true },
+        { width: 844, height: 390, touch: true },
+    ];
+
+    const open = async (page: Page) => {
+        await openApp(page);
+        await seedPedigree(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('a1' as never));
+        const fan = win(page).locator('#pp-sec-ancestors .pp-anc-fan');
+        await fan.scrollIntoViewIfNeeded();
+        await expect(fan.locator('.fan-sector[data-fan-ahnentafel="31"]')).toHaveCount(1);
+        await fan.locator('[data-fan-zoom-act="fit"]').click();
+        await page.waitForTimeout(400);
+    };
+
+    for (const s of sizes) {
+        test(`the window at ${s.width}×${s.height}: the whole fan keeps clear of ${s.touch ? '⛶' : '＋ − ⛶'}`, async ({ browser }) => {
+            const ctx = await browser.newContext({ viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch });
+            const page = await ctx.newPage();
+            await open(page);
+            expect(await sectorsUnderButtons(page)).toEqual([]);
+            await ctx.close();
+        });
+    }
+
+    test('the saved file: the whole fan keeps clear of the buttons at every width', async ({ page, browser }) => {
+        test.slow();
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await open(page);
+        await win(page).locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        for (const s of sizes) {
+            const ctx = await browser.newContext({ viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch });
+            const file = await ctx.newPage();
+            await file.setContent(html, { waitUntil: 'load' });
+            const fan = file.locator('#pp-sec-ancestors .pp-anc-fan');
+            await fan.scrollIntoViewIfNeeded();
+            await file.waitForTimeout(300);
+            expect(await sectorsUnderButtons(file), `${s.width}×${s.height}`).toEqual([]);
+            await ctx.close();
+        }
+    });
+});

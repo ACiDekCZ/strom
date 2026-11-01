@@ -93,6 +93,43 @@ export function fanBasePpu(b: FanBounds, W: number, H: number): number {
     return Math.min(W / b.w, H / b.h);
 }
 
+/** Free px kept between the whole fan and the top of the buttons over its corner. */
+export const FAN_RESERVE_GAP = 6;
+
+/**
+ * The frame grown at the bottom so that the whole fan (z = 1) on a W × H
+ * surface leaves `px` screen px free under the line y = `floor` — the
+ * buttons in a bottom corner, beside the focus disc (the only drawing under
+ * that line), then cover nothing (1101). The unchanged frame when it already
+ * leaves that much, or when nothing would.
+ */
+export function fanReservedBounds(b: FanBounds, floor: number, W: number, H: number, px: number): FanBounds {
+    if (!(px > 0 && px < H && W > 0 && b.w > 0 && b.h > 0)) return b;
+    const free = (e: number): number => {
+        const h = b.h + e, u = Math.min(W / b.w, H / h);
+        return (H - h * u) / 2 + (b.y + h - floor) * u;
+    };
+    if (free(0) >= px) return b;
+    let lo = 0, hi = b.h;
+    while (free(hi) < px) hi *= 2;
+    for (let i = 0; i < 40; i++) {
+        const m = (lo + hi) / 2;
+        if (free(m) >= px) hi = m; else lo = m;
+    }
+    return { ...b, h: b.h + hi };
+}
+
+/**
+ * The px the buttons `el` take from the bottom of `surface` (with the gap);
+ * 0 while they are not shown (print, a closed section).
+ */
+export function fanReservePx(surface: HTMLElement, el: HTMLElement | null | undefined): number {
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    if (!r.height) return 0;
+    return Math.max(0, surface.getBoundingClientRect().bottom - r.top + FAN_RESERVE_GAP);
+}
+
 /**
  * z within [1, 8]; the centre keeps the view inside the frame (a larger view
  * is centred), widened on each side by `over` × min(view, frame) (the Fan
@@ -211,6 +248,12 @@ export interface FanZoomOptions {
     controls?: HTMLElement | null;
     /** The motion is reduced: views change at once. Default: the OS setting. */
     reducedMotion?: () => boolean;
+    /**
+     * Buttons over a bottom corner: the whole fan keeps clear of them (the
+     * frame grows at the bottom, see fanReservedBounds), measured with every
+     * new size. `floor`: the lowest y of the drawing beside the focus disc.
+     */
+    reserve?: { el: HTMLElement; floor: number } | null;
 }
 
 interface Press {
@@ -237,6 +280,8 @@ export class FanZoom {
     private readonly o: FanZoomOptions;
     /** The pan past the strict clamp (the Fan view only). */
     private readonly over: number;
+    /** The fan's own frame; `bounds` is it grown for the reserved corner. */
+    private frameBounds: FanBounds;
     private bounds: FanBounds;
     private view: FanView;
     private W = 0;
@@ -261,11 +306,12 @@ export class FanZoom {
     constructor(o: FanZoomOptions) {
         this.o = o;
         this.over = o.mode === 'view' ? FAN_VIEW_OVERSCROLL : 0;
+        this.frameBounds = o.bounds;
         this.bounds = o.bounds;
-        this.view = fanFitView(o.bounds);
         const s = o.surface;
         if (!s.hasAttribute('tabindex')) s.setAttribute('tabindex', '0');
         this.measure();
+        this.view = fanFitView(this.bounds);
         this.on(s, 'pointerdown', e => this.down(e as PointerEvent));
         this.on(s, 'pointermove', e => this.move(e as PointerEvent));
         this.on(s, 'pointerup', e => this.up(e as PointerEvent));
@@ -341,6 +387,7 @@ export class FanZoom {
 
     /** A new frame (generations, shape or focus changed): back to the whole fan. */
     setBounds(b: FanBounds): void {
+        this.frameBounds = b;
         this.bounds = b;
         this.reset();
     }
@@ -348,8 +395,8 @@ export class FanZoom {
     /** The whole fan at once (§1.6, before printing). */
     reset(): void {
         this.stopAnim();
-        this.view = fanFitView(this.bounds);
         this.measure();
+        this.view = fanFitView(this.bounds);
         this.apply(true);
     }
 
@@ -425,6 +472,15 @@ export class FanZoom {
     private measure(): void {
         this.W = this.o.surface.clientWidth;
         this.H = this.o.surface.clientHeight;
+        this.reserveCorner();
+    }
+
+    /** The frame for this size: grown so the whole fan keeps clear of the corner's buttons. */
+    private reserveCorner(): void {
+        const r = this.o.reserve;
+        this.bounds = r && this.W && this.H
+            ? fanReservedBounds(this.frameBounds, r.floor, this.W, this.H, fanReservePx(this.o.surface, r.el))
+            : this.frameBounds;
     }
 
     private ensureSize(): void {
@@ -439,6 +495,7 @@ export class FanZoom {
         this.W = W;
         this.H = H;
         if (!W || !H) return;
+        this.reserveCorner();
         // §1.6: a new size starts from the whole fan again.
         this.stopAnim();
         this.view = fanFitView(this.bounds);
@@ -663,6 +720,7 @@ export class FanZoom {
  *     <svg class="fan-svg" viewBox="x y w h">…</svg>   (drawn whole: the viewBox is the frame)
  *     <button data-fan-zoom-act="in|out|fit">…</button>
  *     <div data-fan-zoom-hint hidden aria-live="polite" data-mac="⌘ + …">Ctrl + …</div>
+ *     <div data-fan-zoom-reserve="0">…</div>          (optional: the buttons' corner, its floor; see fanReservedBounds)
  *   </div>
  *
  * Same numbers as `FanZoom` in page mode: z 1–8, ＋/− ×1.6, ⛶ animated
@@ -679,10 +737,12 @@ export function fanZoomInlineScript(): string {
 // Kept hand-compact (no build step for it): a test checks its size, that it
 // parses, and that it uses nothing outside the page.
 const FAN_ZOOM_INLINE = `(function(){var M=Math,R=matchMedia('(prefers-reduced-motion: reduce)').matches,mac=/mac|iphone|ipad/i.test(navigator.platform||'');
-function F(el){var s=el.querySelector('svg.fan-svg');if(!s||el.__fz)return;el.__fz=1;var b=s.getAttribute('viewBox').split(/[ ,]+/).map(Number),G={x:b[0],y:b[1],w:b[2],h:b[3]},v,W,H,P={},n=0,pd=null,pin=null,sup=0,an=0,ht,hint=el.querySelector('[data-fan-zoom-hint]');
+function F(el){var s=el.querySelector('svg.fan-svg');if(!s||el.__fz)return;el.__fz=1;var b=s.getAttribute('viewBox').split(/[ ,]+/).map(Number),G0={x:b[0],y:b[1],w:b[2],h:b[3]},G=G0,v,W,H,P={},n=0,pd=null,pin=null,sup=0,an=0,ht,hint=el.querySelector('[data-fan-zoom-hint]'),rk=el.querySelector('[data-fan-zoom-reserve]');
 if(hint&&mac&&hint.getAttribute('data-mac'))hint.textContent=hint.getAttribute('data-mac');
 function fit(){return{z:1,cx:G.x+G.w/2,cy:G.y+G.h/2}}
-function sz(){W=el.clientWidth||1;H=el.clientHeight||1}
+function sz(){W=el.clientWidth||1;H=el.clientHeight||1;G=G0;var r=rk&&rk.getBoundingClientRect(),q=r&&r.height?el.getBoundingClientRect().bottom-r.top+6:0,f=rk?+rk.getAttribute('data-fan-zoom-reserve')||0:0,lo=0,hi=G0.h,i,m;
+function fr(e){var h=G0.h+e,u=M.min(W/G0.w,H/h);return(H-h*u)/2+(G0.y+h-f)*u}
+if(!q||q>=H||fr(0)>=q)return;while(fr(hi)<q)hi*=2;for(i=0;i<40;i++){m=(lo+hi)/2;if(fr(m)>=q)hi=m;else lo=m}G={x:G0.x,y:G0.y,w:G0.w,h:G0.h+hi}}
 function p0(){return M.min(W/G.w,H/G.h)}
 function cl(c,m,S,sp){return sp>=S?m+S/2:M.max(m+sp/2,M.min(m+S-sp/2,c))}
 function cv(q){var z=M.max(1,M.min(8,q.z)),u=p0()*z;return{z:z,cx:cl(q.cx,G.x,G.w,W/u),cy:cl(q.cy,G.y,G.h,H/u)}}
@@ -703,6 +763,6 @@ if(!pd||pd.id!=e.pointerId||v.z<=1.001)return;if(!pd.m&&M.hypot(q.x-pd.x,q.y-pd.
 function up(e){if(!P[e.pointerId])return;delete P[e.pointerId];n--;if(n<2)pin=null;if(!n)pd=null}
 el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
 if(window.ResizeObserver)new ResizeObserver(function(){var w=W,h=H;sz();if(w!=W||h!=H){v=fit();ap()}}).observe(el);
-addEventListener('beforeprint',function(){cancelAnimationFrame(an);v=fit();ap()})}
+addEventListener('beforeprint',function(){cancelAnimationFrame(an);G=G0;v=fit();ap()})}
 function all(){document.querySelectorAll('[data-fan-zoom]').forEach(F)}
 if(document.readyState=='loading')document.addEventListener('DOMContentLoaded',all);else all()})();`;

@@ -419,8 +419,10 @@ export const personPageMethods = uiModule({
         if (!surface || !model) return;
         const hint = surface.querySelector<HTMLElement>('[data-fan-zoom-hint]');
         if (hint?.dataset.mac && fanZoomModifier() === '⌘') hint.textContent = hint.dataset.mac;
+        const reserveEl = surface.querySelector<HTMLElement>('[data-fan-zoom-reserve]');
         const zoom = new FanZoom({
             surface, mode: 'page', bounds: model.bounds, controls: surface,
+            reserve: reserveEl ? { el: reserveEl, floor: Number(reserveEl.dataset.fanZoomReserve) || 0 } : null,
             onTap: (target) => {
                 const sector = target?.closest?.<SVGElement>('[data-fan-person]');
                 // The centre is the page itself: nothing.

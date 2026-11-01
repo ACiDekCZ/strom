@@ -1676,7 +1676,8 @@ function ancestorsHtml(c: Ctx): string {
     const print = c.opts.mode === 'print';
     const btn = (act: string, glyph: string, label: string) =>
         `<button type="button" class="pp-anc-zbtn pp-anc-z${act}" data-fan-zoom-act="${act}" title="${esc(label)}" aria-label="${esc(label)}">${glyph}</button>`;
-    const controls = print ? '' : `<div class="pp-anc-zoom">${btn('in', '＋', F.zoomIn)}${btn('out', '−', F.zoomOut)}${btn('fit', '⛶', F.zoomFit)}</div>`
+    // The buttons' corner stays free of the whole fan: nothing of the half circle is under y = 0 but the focus disc.
+    const controls = print ? '' : `<div class="pp-anc-zoom" data-fan-zoom-reserve="0">${btn('in', '＋', F.zoomIn)}${btn('out', '−', F.zoomOut)}${btn('fit', '⛶', F.zoomFit)}</div>`
         + `<div class="pp-anc-hint" data-fan-zoom-hint hidden aria-live="polite" data-mac="${esc(F.ctrlHint('⌘'))}">${esc(F.ctrlHint('Ctrl'))}</div>`;
     // A tap leads somewhere in the window, and in a file only through the anchors of a set.
     const taps = c.app || svg.includes('<a href=');

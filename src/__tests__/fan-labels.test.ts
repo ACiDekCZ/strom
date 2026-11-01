@@ -32,6 +32,16 @@ describe('fanLabelBox (§4.2)', () => {
         expect(fanLabelBox({ r1: 140, r2: 220, lo: 157.5, hi: 180 }, 3).curved).toBe(false);
     });
 
+    it('a radial label may use the ring but 4 px at each end: a surname that fits stays whole (1101)', () => {
+        // The outer ring of the person page's fan beside the horizontal, at its desktop scale.
+        const s = { r1: 294, r2: 362, lo: 0, hi: 11.25 };
+        const b = fanLabelBox(s, 0.86);
+        expect(b.curved).toBe(false);
+        expect(b.len).toBeCloseTo(68 * 0.86 - 8);
+        const l = fitFanLabel(person({ firstName: 'Ursula', lastName: 'Hengstler' }), b, { base: 12, min: 9, measure });
+        expect(l!.rows.map(r => r.text)).toContain('Hengstler');
+    });
+
     it('grows with the scale', () => {
         const s = { r1: 360, r2: 422, lo: 168.75, hi: 180 };
         const a = fanLabelBox(s, 1), b = fanLabelBox(s, 2);

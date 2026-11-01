@@ -169,7 +169,8 @@ function orientedBox(s: FanSectorShape, ppu: number, curved: boolean, anchor: nu
     }
     return {
         curved: false, anchor, aspan, upper: m > 0 && m < 180, mid: m, rc,
-        len: ringW - 14,
+        // 4 px off each end of the ring: a surname was cut where the ring had room for it (1101; §4.2 said 14).
+        len: ringW - 8,
         cross: rad(s.hi - s.lo) * (s.r1 + (s.r2 - s.r1) * 0.15) * ppu - 2,
     };
 }

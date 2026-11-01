@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { transformSync } from 'esbuild';
 import {
     fanFitView, fanBasePpu, clampFanView, fanViewBox, fanZoomAt, fanPanBy, fanWheelFactor, fanPinchStep,
-    fanEase, fanLerpView, fanZoomInlineScript, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
+    fanEase, fanLerpView, fanZoomInlineScript, fanReservedBounds, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
 } from '../fan-zoom.js';
 import type { FanBounds } from '../fan-chart.js';
 
@@ -155,6 +155,38 @@ describe('fan zoom: pinch', () => {
     it('pinching in from the whole fan stays at the whole fan', () => {
         const out = fanPinchStep(fanFitView(G), { d: 200, mx: 300, my: 300 }, { d: 50, mx: 300, my: 300 }, G, W, H);
         expect(out.z).toBe(1);
+    });
+});
+
+describe('fan zoom: the buttons\' corner stays free (1101)', () => {
+    // The person page's half circle of four generations: R = 362, the focus disc 56 under y = 0, a pad of 10.
+    const F: FanBounds = { x: -372, y: -372, w: 744, h: 438 };
+    /** Screen px between the line y = 0 (the half circle's foot) and the surface's bottom at z = 1. */
+    const freeUnder = (b: FanBounds, W: number, H: number) => {
+        const vb = fanViewBox(fanFitView(b), b, W, H);
+        return H - (0 - vb.y) * vb.ppu;
+    };
+
+    it('the whole fan leaves the buttons\' height free under its foot, on the desktop, a tablet, a phone and a phone held sideways', () => {
+        for (const [W, H, px] of [[680, 380, 68], [600, 340, 68], [390, 236, 66], [760, 260, 66], [320, 236, 66]]) {
+            expect(freeUnder(F, W, H)).toBeLessThan(px);
+            const b = fanReservedBounds(F, 0, W, H, px);
+            expect(freeUnder(b, W, H)).toBeGreaterThanOrEqual(px - 1e-6);
+            // Only as much as needed: the fan stays as large as it can.
+            expect(freeUnder(b, W, H)).toBeLessThan(px + 1);
+            expect({ x: b.x, y: b.y, w: b.w }).toEqual({ x: F.x, y: F.y, w: F.w });
+        }
+    });
+
+    it('keeps the frame where there is room already, and where nothing would help', () => {
+        expect(fanReservedBounds(F, 0, 680, 900, 68)).toBe(F);
+        expect(fanReservedBounds(F, 0, 680, 380, 0)).toBe(F);
+        expect(fanReservedBounds(F, 0, 680, 60, 68)).toBe(F);
+    });
+
+    it('the saved page\'s script does the same from its buttons\' corner', () => {
+        const src = fanZoomInlineScript();
+        expect(src).toContain('[data-fan-zoom-reserve]');
     });
 });
 
