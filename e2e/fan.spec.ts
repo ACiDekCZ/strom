@@ -64,6 +64,8 @@ test('fan view: the generations stepper changes the ring count and is remembered
     }
     await expect(more).toBeDisabled();
     await page.reload();
+    // A start opens the tree view (1101); the fan's own settings stay.
+    await page.locator('#view-mode-fan').click();
     await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
     await expect(page.locator('#fan-gen-stepper .depth-stepper-value')).toHaveText('10');
 });
@@ -297,6 +299,8 @@ test('fan view: three shapes, kept after a reload; the descendants stepper only 
     await expect(desc.locator('[data-step="1"]')).toBeDisabled();
 
     await page.reload();
+    // A start opens the tree view (1101); the fan's own settings stay.
+    await page.locator('#view-mode-fan').click();
     await expect(svg).toBeVisible();
     await expect(svg).toHaveAttribute('data-fan-shape', 'two');
     await expect(page.locator('#fan-desc-stepper .depth-stepper-value')).toHaveText('5');
@@ -323,6 +327,8 @@ test('fan view: the colour choice and the legend; a colour keeps the zoom; the l
     await expect(page.locator('#fan-legend-head')).toHaveAttribute('aria-expanded', 'false');
     await expect(legend.locator('.fan-legend-items')).toBeHidden();
     await page.reload();
+    // A start opens the tree view (1101); the fan's own settings stay.
+    await page.locator('#view-mode-fan').click();
     await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
     await expect(page.locator('#fan-legend-head')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('#fan-toolbar [data-fan-color="line"]')).toHaveAttribute('aria-checked', 'true');
