@@ -165,3 +165,53 @@ for (const resume of [false, true]) {
         }
     });
 }
+
+/** The open tree's view and focus person, as the renderer has them. */
+const shown = (page: Page) => page.evaluate(() => {
+    const id = window.Strom.DataManager.getCurrentTreeId();
+    return {
+        tree: id ? window.Strom.TreeManager.getTreeMetadata(id)?.name ?? null : null,
+        view: window.Strom.TreeRenderer.getViewMode(),
+        person: window.Strom.TreeRenderer.getFocusPersonId(),
+    };
+});
+
+async function reloadPage(page: Page): Promise<void> {
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+}
+
+test('a reload keeps the tree, the view and the person in every view, whatever the settings', async ({ page }) => {
+    await twoTrees(page);
+    // The second tree is open, not the one a start opens.
+    expect(await currentTree(page)).toBe('Hollerbachovi');
+
+    // The family view with a person other than the tree's start person.
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocus('ho_b' as never));
+    await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Kvido');
+    await reloadPage(page);
+    expect(await shown(page)).toEqual({ tree: 'Hollerbachovi', view: 'family', person: 'ho_b' });
+    await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+    await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Kvido');
+
+    // The descendants chart, the timeline and the map with that person.
+    for (const view of ['descendants', 'timeline', 'map'] as const) {
+        await page.locator(`#view-mode-${view}`).click();
+        await expect(page.locator(`#view-mode-${view}`)).toHaveClass(/active/);
+        await reloadPage(page);
+        await expect(page.locator(`#view-mode-${view}`)).toHaveClass(/active/);
+        expect(await shown(page)).toEqual({ tree: 'Hollerbachovi', view, person: 'ho_b' });
+    }
+    await expect(page.locator('#map-container')).toBeVisible();
+
+    // The fan, centred on the grandfather.
+    await fanOn(page, 'Radomil');
+    await reloadPage(page);
+    await expect(page.locator('#view-mode-fan')).toHaveClass(/active/);
+    await expect(page.locator('#fan-container .fan-focus')).toContainText('Radomil');
+    expect(await shown(page)).toEqual({ tree: 'Hollerbachovi', view: 'fan', person: 'ho_a' });
+
+    // A new start in the same tab is no reload: the start tree, the family view.
+    await reopen(page);
+    expect(await shown(page)).toMatchObject({ tree: 'Lhotákovi', view: 'family' });
+});

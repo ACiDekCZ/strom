@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     parseResumeStore, recordResumePoint, readResumePoint, lastResumeTreeId, RESUME_STORAGE_KEY,
+    parseReloadPoint, recordReloadPoint, peekReloadPoint, takeReloadPoint, isReloadNavigation,
+    resetReloadPointForTests, RELOAD_STORAGE_KEY,
 } from '../resume-view';
 
 /** Where the work ended, per tree, on this device (1101). */
@@ -42,5 +44,59 @@ describe('resume points', () => {
         vi.stubGlobal('localStorage', { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } });
         expect(() => recordResumePoint('a', { person: 'p_1', view: 'fan' })).not.toThrow();
         expect(lastResumeTreeId()).toBeNull();
+    });
+});
+
+describe('reload point (1101)', () => {
+    let session: Map<string, string>;
+    const navigation = (type: string | null) => vi.stubGlobal('performance', {
+        getEntriesByType: (t: string) => (t === 'navigation' && type ? [{ type }] : []),
+    });
+    beforeEach(() => {
+        session = new Map();
+        vi.stubGlobal('sessionStorage', {
+            getItem: (k: string) => session.get(k) ?? null,
+            setItem: (k: string, v: string) => { session.set(k, v); },
+            removeItem: (k: string) => { session.delete(k); },
+        });
+        resetReloadPointForTests();
+    });
+
+    it('parses a point and drops what is malformed', () => {
+        expect(parseReloadPoint(null)).toBeNull();
+        expect(parseReloadPoint('{')).toBeNull();
+        expect(parseReloadPoint(JSON.stringify({ tree: 't', person: 'p', view: 'poster' }))).toBeNull();
+        expect(parseReloadPoint(JSON.stringify({ tree: '', person: 'p', view: 'fan' }))).toBeNull();
+        expect(parseReloadPoint(JSON.stringify({ tree: 't', person: 'p', view: 'map', up: 2, down: 'x' })))
+            .toEqual({ tree: 't', person: 'p', view: 'map', up: 2 });
+    });
+
+    it('counts only for a reload, and only once', () => {
+        recordReloadPoint({ tree: 't_a', person: 'p_1', view: 'fan', up: 3, down: 1 });
+        expect(JSON.parse(session.get(RELOAD_STORAGE_KEY)!)).toEqual({ tree: 't_a', person: 'p_1', view: 'fan', up: 3, down: 1 });
+
+        // A new start (an address opened again, a link) keeps nothing.
+        navigation('navigate');
+        expect(isReloadNavigation()).toBe(false);
+        expect(peekReloadPoint()).toBeNull();
+        expect(takeReloadPoint()).toBeNull();
+
+        resetReloadPointForTests();
+        navigation('reload');
+        expect(isReloadNavigation()).toBe(true);
+        expect(peekReloadPoint()).toEqual({ tree: 't_a', person: 'p_1', view: 'fan', up: 3, down: 1 });
+        expect(takeReloadPoint()).toEqual({ tree: 't_a', person: 'p_1', view: 'fan', up: 3, down: 1 });
+        // A later tree load (a switch) follows the settings.
+        expect(peekReloadPoint()).toBeNull();
+        expect(takeReloadPoint()).toBeNull();
+    });
+
+    it('survives storage and timing that throw', () => {
+        vi.stubGlobal('performance', { getEntriesByType: () => { throw new Error('no'); } });
+        expect(isReloadNavigation()).toBe(false);
+        navigation('reload');
+        vi.stubGlobal('sessionStorage', { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } });
+        expect(() => recordReloadPoint({ tree: 't', person: 'p', view: 'family' })).not.toThrow();
+        expect(takeReloadPoint()).toBeNull();
     });
 });

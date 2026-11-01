@@ -82,3 +82,68 @@ export function readResumePoint(treeId: string): ResumePoint | null {
 export function lastResumeTreeId(): string | null {
     return readStore().last ?? null;
 }
+
+// ==================== Reload point (1101) ====================
+
+/**
+ * A reload of the page in the same tab keeps the tree, the view and the
+ * person (with the depths), whatever the settings say. Kept for the tab only
+ * (sessionStorage) and used once, by the first tree load after a reload; a
+ * new start (a new tab, an address opened again) follows the tree's settings.
+ */
+export const RELOAD_STORAGE_KEY = 'strom-reload-point';
+
+export interface ReloadPoint {
+    tree: string;
+    person: string;
+    view: ViewMode;
+    up?: number;
+    down?: number;
+}
+
+/** The stored reload point, or null when missing or malformed. */
+export function parseReloadPoint(raw: string | null): ReloadPoint | null {
+    if (!raw) return null;
+    let data: unknown;
+    try { data = JSON.parse(raw); } catch { return null; }
+    if (!data || typeof data !== 'object') return null;
+    const d = data as { tree?: unknown; person?: unknown; view?: unknown; up?: unknown; down?: unknown };
+    if (typeof d.tree !== 'string' || !d.tree || typeof d.person !== 'string' || !d.person || !isViewMode(d.view)) return null;
+    const point: ReloadPoint = { tree: d.tree, person: d.person, view: d.view };
+    if (typeof d.up === 'number' && Number.isFinite(d.up)) point.up = d.up;
+    if (typeof d.down === 'number' && Number.isFinite(d.down)) point.down = d.down;
+    return point;
+}
+
+/** Note where the work in this tab stands now, for a reload. */
+export function recordReloadPoint(point: ReloadPoint): void {
+    try { sessionStorage.setItem(RELOAD_STORAGE_KEY, JSON.stringify(point)); } catch { /* storage blocked */ }
+}
+
+/** Was this page load a reload (not a new start, a link or back/forward)? */
+export function isReloadNavigation(): boolean {
+    try {
+        const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+        return nav?.type === 'reload';
+    } catch { return false; }
+}
+
+let reloadPointUsed = false;
+
+/** The reload point while it still counts: a reload, before the first tree load used it. */
+export function peekReloadPoint(): ReloadPoint | null {
+    if (reloadPointUsed || !isReloadNavigation()) return null;
+    try { return parseReloadPoint(sessionStorage.getItem(RELOAD_STORAGE_KEY)); } catch { return null; }
+}
+
+/** The reload point for the first tree load; every later call gets null. */
+export function takeReloadPoint(): ReloadPoint | null {
+    const point = peekReloadPoint();
+    reloadPointUsed = true;
+    return point;
+}
+
+/** Tests: the page starts again. */
+export function resetReloadPointForTests(): void {
+    reloadPointUsed = false;
+}

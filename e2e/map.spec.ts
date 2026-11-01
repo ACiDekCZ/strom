@@ -231,9 +231,7 @@ test('coordinates survive a reload — they are part of the tree', async ({ page
     // field by field, and once quietly dropped this one — so every coordinate
     // the user had looked up was gone the next time they opened the app.
     await page.reload();
-    // A start opens the family view (1101); the map, opened again, still has them.
-    await expect(page.locator('#map-container')).toBeHidden();
-    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    // A reload keeps the view (1101): the app comes back straight onto the map.
     await expect(page.locator('#map-container')).toBeVisible();
     expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().places ?? {})))
         .toEqual(['kolin']);

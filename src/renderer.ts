@@ -59,7 +59,7 @@ import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
-import { readResumePoint, recordResumePoint } from './resume-view.js';
+import { readResumePoint, recordResumePoint, recordReloadPoint, takeReloadPoint } from './resume-view.js';
 import { personInitials } from './initials.js';
 import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
@@ -1201,6 +1201,10 @@ class TreeRendererClass {
         // Restore the per-tree display view mode on tree switch / startup.
         this.loadViewModeForCurrentTree();
 
+        // A reload in this tab keeps the tree, the view and the person (1101);
+        // only the first tree load after the page start may use it.
+        const reload = takeReloadPoint();
+
         const persons = DataManager.getAllPersons();
 
         if (persons.length === 0) {
@@ -1208,9 +1212,17 @@ class TreeRendererClass {
             return;
         }
 
+        if (this.applyReloadPoint(reload)) {
+            this.recordReload();
+            return;
+        }
+
         // "Continue where work ended" (1101): the view with the person it
         // ended with, never with the tree's start person.
-        if (this.restoreResumePoint()) return;
+        if (this.restoreResumePoint()) {
+            this.recordReload();
+            return;
+        }
 
         // Get startup focus based on tree's defaultPersonId setting
         const startupFocus = DataManager.getStartupFocus();
@@ -1239,6 +1251,8 @@ class TreeRendererClass {
                 this.focusDepthDown = maxGen.down;
             }
         }
+        // What a load opens is what a reload keeps until the work moves on.
+        this.recordReload();
     }
 
     // Public Focus Mode API
@@ -1286,6 +1300,8 @@ class TreeRendererClass {
             if (saveToData) {
                 DataManager.saveLastFocus(personId, this.focusDepthUp, this.focusDepthDown);
                 this.recordResume();
+            } else {
+                this.recordReload();
             }
         }
 
@@ -3159,7 +3175,7 @@ class TreeRendererClass {
         return true;
     }
 
-    /** Note where the work stands (view, person, depths) for the next start (1101). */
+    /** Note where the work stands (view, person, depths) for the next start and a reload (1101). */
     recordResume(): void {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || !this.focusPersonId || DataManager.isViewMode()) return;
@@ -3167,6 +3183,34 @@ class TreeRendererClass {
             person: this.focusPersonId, view: this.viewMode,
             up: this.focusDepthUp, down: this.focusDepthDown,
         });
+        this.recordReload();
+    }
+
+    /** Note where the work in this tab stands, for a reload of the page (1101). */
+    private recordReload(): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || !this.focusPersonId || DataManager.isViewMode()) return;
+        recordReloadPoint({
+            tree: treeId, person: this.focusPersonId, view: this.viewMode,
+            up: this.focusDepthUp, down: this.focusDepthDown,
+        });
+    }
+
+    /**
+     * After a reload of the page: the tree's view, person and depths as they
+     * were before it (1101). False (nothing changed) for another tree or a
+     * person no longer there (or only a placeholder).
+     */
+    private applyReloadPoint(point: ReturnType<typeof takeReloadPoint>): boolean {
+        if (!point || point.tree !== DataManager.getCurrentTreeId()) return false;
+        const person = DataManager.getPerson(point.person as PersonId);
+        if (!person || person.isPlaceholder) return false;
+        this.viewMode = point.view;
+        this.focusPersonId = person.id;
+        const maxGen = this.maxGenerations(person.id);
+        this.focusDepthUp = point.up ?? maxGen.up;
+        this.focusDepthDown = point.down ?? maxGen.down;
+        return true;
     }
 
     /**

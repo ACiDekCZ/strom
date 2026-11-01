@@ -24,7 +24,7 @@ import {
 import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js';
 import { SettingsManager } from './settings.js';
-import { lastResumeTreeId } from './resume-view.js';
+import { lastResumeTreeId, peekReloadPoint } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
@@ -1364,6 +1364,10 @@ class TreeManagerClass {
 
     getStartupTreeId(): TreeId | null {
         // Every branch must respect visibility — a hidden tree never opens.
+        // A reload of the page keeps the tree it showed (1101); an address
+        // with ?tree= picks it anyway (main.ts switches to it afterwards).
+        const reloaded = peekReloadPoint()?.tree as TreeId | undefined;
+        if (reloaded && this.isUsable(reloaded)) return reloaded;
         // "Continue where work ended" (1101): the tree the work went on in last.
         if (SettingsManager.isResumeLastViewEnabled()) {
             const resumed = lastResumeTreeId() as TreeId | null;
