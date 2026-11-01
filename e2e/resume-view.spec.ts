@@ -114,6 +114,14 @@ test('setting on: the next start opens the last tree in the fan with the person 
     await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
     await expect(page.locator('#tree-canvas .person-card.focused .name-text')).toContainText('Radomil');
 
+    // The timeline and the map too.
+    for (const view of ['timeline', 'map']) {
+        await page.locator(`#view-mode-${view}`).click();
+        await expect(page.locator(`#view-mode-${view}`)).toHaveClass(/active/);
+        await reopen(page);
+        await expect(page.locator(`#view-mode-${view}`)).toHaveClass(/active/);
+    }
+
     // The person gone: the family view with the tree's start person, never the fan.
     await page.evaluate(() => window.Strom.TreeRenderer.setFocus('ho_c' as never));
     await fanOn(page, 'Kvido');
