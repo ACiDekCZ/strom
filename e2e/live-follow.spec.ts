@@ -535,6 +535,53 @@ test.describe('follow the agent in the tree', () => {
             }
         });
 
+        test('the back button stands above the strip and takes a tap, in the family view and the fan, upright and held sideways (1101)', async ({ page }) => {
+            await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true, ged: LINE_GED });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            const navClash = (): Promise<string[]> => page.evaluate(() => {
+                const rect = (el: Element | null) => {
+                    const r = el?.getBoundingClientRect();
+                    return r && r.width > 0 && r.height > 0 && getComputedStyle(el!).visibility !== 'hidden' ? r : null;
+                };
+                const out: string[] = [];
+                for (const nav of ['#focus-back-btn', '#focus-forward-btn']) {
+                    const n = rect(document.querySelector(nav));
+                    if (!n) { if (nav === '#focus-back-btn') out.push('no back'); continue; }
+                    if (n.top < 0 || n.bottom > window.innerHeight || n.left < 0 || n.right > window.innerWidth) out.push(`${nav} outside`);
+                    const hit = document.elementFromPoint(n.left + n.width / 2, n.top + n.height / 2);
+                    if (!hit?.closest(nav)) out.push(`${nav} under ${hit?.id || hit?.className}`);
+                    for (const sel of ['#live-panel', '#evidence-pill', '#live-follow-pill', '#fan-origin-pill', '#fan-legend-chip', '#fan-legend',
+                        '#fan-zoom-controls', '#fan-toolbar', '.zoom-controls', '.bottom-bar', '.tree-legend']) {
+                        for (const el of document.querySelectorAll(sel)) {
+                            const b = rect(el);
+                            if (b && n.left < b.right && b.left < n.right && n.top < b.bottom && b.top < n.bottom) out.push(`${nav} × ${sel}`);
+                        }
+                    }
+                }
+                return out;
+            });
+            for (const paused of [false, true]) {
+                if (paused) await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+                await expect(page.locator('#live-follow-pill')).toHaveCount(paused ? 1 : 0);
+                for (const [w, h] of [[390, 844], [640, 360], [844, 390]]) {
+                    await page.setViewportSize({ width: w, height: h });
+                    for (const mode of ['family', 'fan']) {
+                        await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
+                        await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                        // A step to another person shows the back button.
+                        const id = await idOf(page, 'P0013');
+                        await page.evaluate((p) => window.Strom.TreeRenderer.setFocus(p as never), id);
+                        await expect(page.locator('#focus-back-btn')).toBeVisible();
+                        await expect.poll(navClash, `${paused ? 'paused' : 'following'} ${w}×${h} ${mode}`).toEqual([]);
+                        // A tap goes back.
+                        await page.locator('#focus-back-btn').click({ trial: false });
+                        await expect.poll(() => focusRefn(page), `${w}×${h} ${mode}`).not.toBe('P0013');
+                    }
+                }
+                await page.setViewportSize({ width: 390, height: 844 });
+            }
+        });
+
         test('held sideways at 640×360 the fan stays in view: it ends above the strip, the paused pill folds into a chip on the top row (1101)', async ({ page }) => {
             await follow(page, { size: { width: 640, height: 360 }, idle: 60_000, on: true, ged: LINE_GED });
             await expect.poll(() => focusRefn(page)).toBe('P0012');
