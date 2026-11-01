@@ -471,4 +471,29 @@ test.describe('follow the agent in the tree', () => {
             }
         });
     });
+
+    test('leaving the fan: the live card takes the height of the family view in the first frame (1101)', async ({ page }) => {
+        await follow(page, { size: { width: 844, height: 390 }, idle: 60_000, on: true, ged: LINE_GED });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+        await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        // In the fan the card stands lower and is fitted to that room.
+        await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('live-panel')!.getBoundingClientRect().top))).toBeGreaterThan(90);
+        const first = await page.evaluate(async () => {
+            const p = document.getElementById('live-panel')!;
+            window.Strom.UI.setDisplayViewMode('family');
+            await new Promise(requestAnimationFrame);
+            return Math.round(p.getBoundingClientRect().height);
+        });
+        await page.waitForTimeout(400);
+        const later = await page.evaluate(() => {
+            const p = document.getElementById('live-panel')!.getBoundingClientRect();
+            const z = [...document.querySelectorAll('.zoom-controls, .control-block')].map(e => e.getBoundingClientRect())
+                .filter(r => r.width > 0 && r.left < p.right && r.right > p.left);
+            return { h: Math.round(p.height), clear: z.every(r => p.bottom <= r.top) };
+        });
+        expect(first).toBe(later.h);
+        expect(later.clear).toBe(true);
+    });
 });

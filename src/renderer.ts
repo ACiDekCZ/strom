@@ -654,6 +654,7 @@ class TreeRendererClass {
         // §5.2: leaving the Fan view forgets its way back.
         if (this.viewMode !== 'fan') this.fanView?.deactivate();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
+        const leftFan = document.body.dataset.viewMode === 'fan' && this.viewMode !== 'fan';
         document.body.dataset.viewMode = this.viewMode;
         for (const [mode, view] of Object.entries(standalone)) {
             const el = document.getElementById(view.id);
@@ -666,6 +667,7 @@ class TreeRendererClass {
                 active.draw(el);
                 this.updateFocusUI();
                 UI.updateViewModeUI?.();
+                if (leftFan) UI.placeLivePanel?.();
                 UI.updateMinimap?.();  // hidden outside the tree canvas
                 UI.updateGenLabels?.();  // clears labels for standalone views
                 UI.updateViewLinksIndicator?.();  // none outside the Family and Descendants views
@@ -691,6 +693,10 @@ class TreeRendererClass {
         this.updateFocusUI();
         // Keep the view-mode segment + descendants badge in sync.
         UI.updateViewModeUI?.();
+        // A followed research's card stood below the fan's toolbar, fitted to that room:
+        // back at the top it is fitted again with this view's chrome in place, not when
+        // the hidden toolbar reports a frame or two later.
+        if (leftFan) UI.placeLivePanel?.();
         // Refresh the overview minimap for the new layout.
         UI.updateMinimap?.();
         // Rebuild the sticky generation-label overlay for the new layout.
