@@ -12,7 +12,7 @@
  * the output.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo, FactStatus } from './types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo, FactStatus } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
@@ -41,12 +41,31 @@ import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeCh
 import { buildFanModel, buildFanSvg, FanBounds, FanModel } from './fan-chart.js';
 import { fanScreenSizes } from './fan-labels.js';
 import { fanZoomInlineScript } from './fan-zoom.js';
+import type { ImageRegistry } from './image-registry.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
 export type PersonPageMode = 'app' | 'file' | 'print';
-/** 'app' → buttons into the app, 'plain' → text, 'set' → anchors between the pages of a set (§8). */
-export type PersonPageLinks = 'app' | 'plain' | 'set';
+/**
+ * 'app' → buttons into the app, 'plain' → text, 'set' → anchors between the
+ * pages of a set (§8, members in `setMembers`), or the family pages' set
+ * (spec 026 §0.8) with the slugs of its pages.
+ */
+export type PersonPageLinks = 'app' | 'plain' | 'set' | PersonPageSetLinks;
+
+/**
+ * The links of a page inside a set of family pages (spec 026 §0.8): a person,
+ * family or lineage with a page in the set is an anchor `#{slug}` in the file
+ * (mode 'file') and a button `data-sp-open="person:{id}"` (`family:`, `rod:`)
+ * in the app's window (mode 'app'); everyone else, and a protected living
+ * person, is text.
+ */
+export interface PersonPageSetLinks {
+    mode: 'set';
+    personSlug: ReadonlyMap<PersonId, string>;
+    familySlug?: ReadonlyMap<PartnershipId, string>;
+    rodSlug?: ReadonlyMap<RodId, string>;
+}
 
 export interface PersonPageGroups {
     history: boolean;
@@ -88,6 +107,14 @@ export interface PersonPageOptions {
     links: PersonPageLinks;
     /** Members of a set (links 'set' only): they are anchors, everyone else text. */
     setMembers?: ReadonlySet<PersonId>;
+    /**
+     * A page among others in one document (spec 026 §0.3): every id of the
+     * body and every reference to one becomes `{idPrefix}--{id}`. None: the
+     * body is exactly the standalone page's.
+     */
+    idPrefix?: string;
+    /** The set's one registry of images (file only, §0.4); none: the page embeds its own images in its own <style>. */
+    images?: ImageRegistry;
     /** Window: all true (minus what the tree does not have). */
     groups: PersonPageGroups;
     /** The window is always 'full'. */
@@ -765,6 +792,8 @@ interface Ctx {
     chart: LifeChartInput | null;
     /** Set by the family book's print blocks only: rows without folds, the people around only when asked. */
     book?: { people: boolean };
+    /** The page's record excerpts, for the set's image registry (built on first use). */
+    clips?: Set<string>;
 }
 
 interface ImgEntry {
@@ -778,26 +807,50 @@ function isOpen(c: Ctx, key: string): boolean {
     return !!c.opts.open?.has(key);
 }
 
-/** The slug of a person's page in a set (the file name without .html). */
+/** The family pages' set links of the page (spec 026 §0.8), or null. */
+function setLinksOf(opts: PersonPageOptions): PersonPageSetLinks | null {
+    return typeof opts.links === 'object' && opts.links.mode === 'set' ? opts.links : null;
+}
+
+/** Are the page's links between the pages of a set (either form)? */
+function inSet(c: Ctx): boolean {
+    return c.opts.links === 'set' || !!setLinksOf(c.opts);
+}
+
+/** The slug of a person's page in a set: the set's own (spec 026 §0.6), else the file name without .html. */
 function slugOf(c: Ctx, pid: PersonId): string {
-    return personPageFileName({ ...c.page, personId: pid }).replace(/\.html$/, '');
+    return setLinksOf(c.opts)?.personSlug.get(pid) ?? personPageFileName({ ...c.page, personId: pid }).replace(/\.html$/, '');
 }
 
 /** May a person's name lead to their page? */
 function linkable(c: Ctx, pid: PersonId | undefined): pid is PersonId {
     if (!pid || pid === c.page.personId || !c.tree.persons[pid]) return false;
     if (c.opts.links === 'app') return c.opts.mode === 'app';
-    if (c.opts.links === 'set') {
-        if (!c.opts.setMembers?.has(pid)) return false;
+    const set = setLinksOf(c.opts);
+    if (c.opts.links === 'set' || set) {
+        if (!(set ? set.personSlug.has(pid) : c.opts.setMembers?.has(pid))) return false;
         // A living relative under privacy is never a link.
         return !(c.page.privacy !== 'full' && c.page.living.has(pid));
     }
     return false;
 }
 
+/**
+ * A link to another page of the set (spec 026 §0.8): an anchor in the file,
+ * a button the window opens the page by (`data-sp-open="person:{id}"`).
+ */
+function setLinkHtml(c: Ctx, cls: string, target: { person: PersonId } | { family: PartnershipId } | { rod: RodId }, inner: string, attrs = ''): string {
+    const [kind, id] = 'person' in target ? ['person', target.person] : 'family' in target ? ['family', target.family] : ['rod', target.rod];
+    if (c.app && setLinksOf(c.opts)) return `<button type="button" class="${cls}" data-sp-open="${kind}:${esc(id)}"${attrs}>${inner}</button>`;
+    const set = setLinksOf(c.opts);
+    const slug = 'person' in target ? slugOf(c, target.person)
+        : 'family' in target ? set?.familySlug?.get(target.family) ?? '' : set?.rodSlug?.get(target.rod) ?? '';
+    return `<a class="${cls}" href="#${esc(slug)}"${attrs}>${inner}</a>`;
+}
+
 function personLink(c: Ctx, nameHtmlStr: string, pid: PersonId | undefined): string {
     if (!linkable(c, pid)) return nameHtmlStr;
-    if (c.opts.links === 'set') return `<a class="pp-link" href="#${esc(slugOf(c, pid))}">${nameHtmlStr}</a>`;
+    if (inSet(c)) return setLinkHtml(c, 'pp-link', { person: pid }, nameHtmlStr);
     return `<button type="button" class="pp-link" data-pp-person="${esc(pid)}">${nameHtmlStr}</button>`;
 }
 
@@ -1065,8 +1118,11 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
 /** The "Family line" value: lineage names as buttons into the app (window), else text (file, print). */
 function rodRowHtml(c: Ctx, rod: RodRowValue): string {
     const links = c.app && c.opts.links === 'app';
+    const set = setLinksOf(c.opts);
     return rod.parts.map(p => {
         if ('text' in p) return `<span class="pp-rod-join">${esc(p.text)}</span>`;
+        // In a set of family pages: the lineage's page when the set has one (spec 026 §0.8).
+        if (set?.rodSlug?.has(p.rodId)) return setLinkHtml(c, 'pp-link pp-rod-link', { rod: p.rodId }, esc(p.label));
         return links
             ? `<button type="button" class="pp-link pp-rod-link" data-pp-rod="${esc(p.rodId)}">${esc(p.label)}</button>`
             : `<span class="pp-rod-name">${esc(p.label)}</span>`;
@@ -1123,7 +1179,7 @@ function ftCard(c: Ctx, pid: PersonId, cls: string, style = '', extra = ''): str
         + (extra ? `<span class="pp-ft-rel">${esc(extra)}</span>` : '');
     const st = style ? ` style="${style}"` : '';
     if (linkable(c, pid)) {
-        if (c.opts.links === 'set') return `<a class="${classes} pp-ft-link" href="#${esc(slugOf(c, pid))}"${st}>${inner}</a>`;
+        if (inSet(c)) return setLinkHtml(c, `${classes} pp-ft-link`, { person: pid }, inner, st);
         return `<button type="button" class="${classes} pp-ft-link" data-pp-person="${esc(pid)}"${st}>${inner}</button>`;
     }
     return `<span class="${classes}"${st}>${inner}</span>`;
@@ -1139,7 +1195,7 @@ function ftChip(c: Ctx, pid: PersonId): string {
     const text = `<span class="pp-chip-name">${esc(name)}</span>${years ? `${shield ? ' · ' : ' '}<span class="pp-chip-years">${esc(years)}</span>` : ''}`;
     const cls = `pp-chip${shield ? ' pp-chip--living' : ''}`;
     if (linkable(c, pid)) {
-        if (c.opts.links === 'set') return `<a class="${cls} pp-chip-link" href="#${esc(slugOf(c, pid))}">${text}</a>`;
+        if (inSet(c)) return setLinkHtml(c, `${cls} pp-chip-link`, { person: pid }, text);
         return `<button type="button" class="${cls} pp-chip-link" data-pp-person="${esc(pid)}">${text}</button>`;
     }
     return `<span class="${cls}">${text}</span>`;
@@ -1465,8 +1521,17 @@ function fanProtect(page: PersonPageData): ((p: Person) => boolean) | undefined 
 /** A sector's anchor in a set of pages (§8.4): an ancestor whose page is in the set, never a protected living one. */
 function fanLinkFor(page: PersonPageData, opts: PersonPageOptions): ((pid: PersonId) => string | null) | undefined {
     const a = page.ancestors;
-    if (!a || opts.mode !== 'file' || opts.links !== 'set' || !opts.setMembers) return undefined;
+    const set = setLinksOf(opts);
+    if (!a || opts.mode !== 'file') return undefined;
     const prot = fanProtect(page);
+    if (set) {
+        return pid => {
+            const p = a.tree.persons[pid];
+            const slug = set.personSlug.get(pid);
+            return !p || pid === page.personId || !slug || prot?.(p) ? null : `#${slug}`;
+        };
+    }
+    if (opts.links !== 'set' || !opts.setMembers) return undefined;
     return pid => {
         const p = a.tree.persons[pid];
         if (!p || pid === page.personId || !opts.setMembers!.has(pid) || prot?.(p)) return null;
@@ -2296,11 +2361,31 @@ function imgEntry(c: Ctx, src: string): ImgEntry | null {
     if (!CSS_SAFE_IMAGE.test(clean)) return null;
     let e = c.imgs.get(clean);
     if (!e) {
-        const size = dataUrlImageSize(clean);
-        e = { n: c.imgs.size + 1, src: clean, ratio: size ? `${size.w} / ${size.h}` : null };
+        if (c.opts.images) {
+            // The set's registry (spec 026 §0.4): one class per image across all pages, its rule in the set's <style>.
+            const n = c.opts.images.number(clean, clipSources(c).has(clean) ? 'clip' : 'photo');
+            if (n === null) return null;
+            e = { n, src: clean, ratio: null };
+        } else {
+            const size = dataUrlImageSize(clean);
+            e = { n: c.imgs.size + 1, src: clean, ratio: size ? `${size.w} / ${size.h}` : null };
+        }
         c.imgs.set(clean, e);
     }
     return e;
+}
+
+/** The page's record excerpts (white space removed): the registry tells them from photos. */
+function clipSources(c: Ctx): Set<string> {
+    if (!c.clips) {
+        c.clips = new Set();
+        for (const s of Object.values(c.tree.sources ?? {})) {
+            for (const e of s.excerpts ?? []) {
+                for (const url of [shownExcerpt(e), e.dataUrl]) if (url) c.clips.add(url.replace(/\s+/g, ''));
+            }
+        }
+    }
+    return c.clips;
 }
 
 /** An image: `<img>` in the window, in the file a span painted by the image's class. */
@@ -2312,7 +2397,8 @@ function imgHtml(c: Ctx, src: string, alt: string, cls: string): string {
 
 /** The file's one <style> of images (each data URL once). */
 function imgStyles(c: Ctx): string {
-    if (!c.imgs?.size) return '';
+    // A set's images are in its one <style> (the registry's css()).
+    if (!c.imgs?.size || c.opts.images) return '';
     const rules = [...c.imgs.values()]
         .map(e => `.img-${e.n}{background-image:url("${e.src}")${e.ratio ? `;--pp-ar:${e.ratio}` : ''}}`).join('\n');
     return `<style>\n${rules}\n</style>`;
@@ -2848,8 +2934,44 @@ export function personPageFileToggles(shown: { history: boolean; childEvents: bo
     return { history: shown.history, childEvents: shown.childEvents, kidPlaces: shown.kidPlaces !== false };
 }
 
-/** The page's body: `<article class="pp">…</article>`. */
+/**
+ * The page's body: `<article class="pp">…</article>`. With `opts.idPrefix`
+ * (a page of a set, spec 026 §0.3) every id in it and every reference to one
+ * carries the prefix; without, the standalone page's body unchanged.
+ */
 export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOptions): string {
+    const html = personPageBodyHtml(page, opts);
+    if (!opts.idPrefix) return html;
+    const set = setLinksOf(opts);
+    const slugs = new Set<string>(set ? [...set.personSlug.values(), ...(set.familySlug?.values() ?? []), ...(set.rodSlug?.values() ?? [])] : []);
+    return prefixPageIds(html, opts.idPrefix, slugs);
+}
+
+/** Ids the page's own blocks give out (sections, folds, light boxes, timeline rows, the fan, sources). */
+const PAGE_OWN_ID = /^(?:pp-|obr-|osa-|ppfan-)/;
+
+/**
+ * Every id of a page's HTML as `{prefix}--{id}` (spec 026 §0.3), and every
+ * reference to one: `href="#…"`, `aria-controls`, `aria-labelledby`,
+ * `aria-describedby`, `for`, `data-pp-osa`, `data-pp-story` and `url(#…)`.
+ * A fragment link that is neither an id of the page nor one of its own kind
+ * (a page of the set, `keep`) stays as it is.
+ */
+export function prefixPageIds(html: string, prefix: string, keep: ReadonlySet<string> = new Set()): string {
+    if (!prefix) return html;
+    const ids = new Set<string>();
+    for (const m of html.matchAll(/\sid="([^"]+)"/g)) ids.add(m[1]);
+    const own = (id: string): boolean => ids.has(id) || (!keep.has(id) && PAGE_OWN_ID.test(id));
+    const p = (id: string): string => (own(id) ? `${prefix}--${id}` : id);
+    return html
+        .replace(/(\s)id="([^"]+)"/g, (_m, sp: string, id: string) => `${sp}id="${prefix}--${id}"`)
+        .replace(/(\s(?:xlink:)?href)="#([^"]+)"/g, (m, attr: string, id: string) => (own(id) ? `${attr}="#${prefix}--${id}"` : m))
+        .replace(/(\s(?:aria-controls|aria-labelledby|aria-describedby|for|data-pp-osa|data-pp-story))="([^"]+)"/g,
+            (_m, attr: string, v: string) => `${attr}="${v.split(' ').map(x => (x ? p(x) : x)).join(' ')}"`)
+        .replace(/url\(#([^)"']+)\)/g, (m, id: string) => (ids.has(id) ? `url(#${prefix}--${id})` : m));
+}
+
+function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): string {
     const c = makeCtx(page, opts);
     if (!c) return '<article class="pp"></article>';
     const rows = personSourceRows(page.tree, page.personId, c.S).filter(r => page.tree.sources?.[r.source.id]);

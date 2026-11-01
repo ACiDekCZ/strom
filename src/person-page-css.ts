@@ -554,20 +554,25 @@ export function personPageFileCss(fontCss = ''): string {
  * events switches, history excerpts closed on load (open without JS), the
  * :target light boxes made nicer (closing goes back where it was opened,
  * ‹ › replace the history entry, Esc and the arrow keys), "sources differ"
- * opening the researchers' section, and the folds open for printing.
+ * opening the researchers' section, and the folds open for printing. It
+ * listens on the document and finds its page by `closest('article.pp')`, so
+ * one file may hold many pages whose ids carry a prefix (spec 026 §0.3).
  */
-export const PERSON_PAGE_SCRIPT = `(function(){var d=document,a=d.querySelector('article.pp');if(!a)return;
-var q=function(s){return Array.prototype.slice.call(d.querySelectorAll(s))};
+export const PERSON_PAGE_SCRIPT = `(function(){var d=document;
+var q=function(s,r){return Array.prototype.slice.call((r||d).querySelectorAll(s))};
+var own=function(n){return '[id="'+n+'"],[id$="--'+n+'"]'};
+var lb=/^#(?:[\\w.-]+--)?obr-/;
 q('details.pp-quote[open]').forEach(function(e){e.open=false});
-q('[data-pp-switch]').forEach(function(b){b.addEventListener('click',function(){var on=b.getAttribute('aria-checked')!=='true';b.setAttribute('aria-checked',on?'true':'false');a.classList.toggle(b.getAttribute('data-pp-switch')==='history'?'pp-no-history':'pp-no-kids',!on)})});
-var r=d.getElementById('pp-research');q('a.pp-differs').forEach(function(l){l.addEventListener('click',function(){if(r)r.open=true})});
 var opened=false;
-d.addEventListener('click',function(e){var l=e.target.closest?e.target.closest('a[href^="#obr-"]'):null;if(!l)return;if(l.hasAttribute('data-pp-lb')){e.preventDefault();location.replace(l.getAttribute('href'));return}opened=true});
-q('a[data-pp-lb="close"]').forEach(function(c){c.addEventListener('click',function(e){if(opened){e.preventDefault();opened=false;history.back()}})});
-d.addEventListener('keydown',function(e){var h=location.hash,t=h.indexOf('#obr-')===0?d.getElementById(h.slice(1)):null;if(!t)return;var k=e.key==='Escape'?'close':e.key==='ArrowLeft'?'prev':e.key==='ArrowRight'?'next':'';var l=k?t.querySelector('[data-pp-lb="'+k+'"]'):null;if(l){e.preventDefault();l.click()}});
-var folds=q('#pp-sources-fold, #pp-ancestors-fold, details.pp-gal-more, details.pp-sibs, details.pp-grand'),was=[];
-window.addEventListener('beforeprint',function(){was=folds.map(function(f){var o=f.open;f.open=true;return o})});
-window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.open=!!was[i]})});
+d.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
+var b=t.closest('[data-pp-switch]'),a=b&&b.closest('article.pp');if(a){var on=b.getAttribute('aria-checked')!=='true';b.setAttribute('aria-checked',on?'true':'false');a.classList.toggle(b.getAttribute('data-pp-switch')==='history'?'pp-no-history':'pp-no-kids',!on);return}
+var f=t.closest('a.pp-differs'),fa=f&&f.closest('article.pp'),r=fa&&fa.querySelector(own('pp-research'));if(r)r.open=true;
+var c=t.closest('a[data-pp-lb="close"]');if(c){if(opened){e.preventDefault();opened=false;history.back()}return}
+var l=t.closest('a[href^="#"]');if(!l||!lb.test(l.getAttribute('href')))return;if(l.hasAttribute('data-pp-lb')){e.preventDefault();location.replace(l.getAttribute('href'));return}opened=true});
+d.addEventListener('keydown',function(e){var h=location.hash,t=lb.test(h)?d.getElementById(decodeURIComponent(h.slice(1))):null;if(!t)return;var k=e.key==='Escape'?'close':e.key==='ArrowLeft'?'prev':e.key==='ArrowRight'?'next':'';var l=k?t.querySelector('[data-pp-lb="'+k+'"]'):null;if(l){e.preventDefault();l.click()}});
+var was=[],folds=[];
+window.addEventListener('beforeprint',function(){folds=q(own('pp-sources-fold')+','+own('pp-ancestors-fold')+',details.pp-gal-more,details.pp-sibs,details.pp-grand');was=folds.map(function(f){var o=f.open;f.open=true;return o})});
+window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.open=!!was[i]});folds=[]});
 })();`;
 
 /**
@@ -578,8 +583,9 @@ window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.op
  */
 export const PERSON_PAGE_STORY_SCRIPT = `(function(){var d=document;
 var q=function(s){return Array.prototype.slice.call(d.querySelectorAll(s))};
-q('a[data-pp-story]').forEach(function(l){l.addEventListener('click',function(){var c=d.getElementById(l.getAttribute('data-pp-story'));var f=c&&c.querySelector('details.pp-ch-fold');if(f)f.open=true})});
-q('[data-pp-fold-close]').forEach(function(b){b.addEventListener('click',function(){var c=b.closest('.pp-couple-story');var f=c&&c.querySelector('details.pp-ch-fold');if(!f)return;f.open=false;var m=f.querySelector('summary');if(m)m.focus()})});
+d.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
+var l=t.closest('a[data-pp-story]');if(l){var c=d.getElementById(l.getAttribute('data-pp-story'));var f=c&&c.querySelector('details.pp-ch-fold');if(f)f.open=true;return}
+var b=t.closest('[data-pp-fold-close]');if(!b)return;var s=b.closest('.pp-couple-story');var g=s&&s.querySelector('details.pp-ch-fold');if(!g)return;g.open=false;var m=g.querySelector('summary');if(m)m.focus()});
 var shut=[];
 window.addEventListener('beforeprint',function(){shut=q('details.pp-ch-fold:not([open])');shut.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){shut.forEach(function(f){f.open=false});shut=[]});

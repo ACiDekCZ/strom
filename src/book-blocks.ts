@@ -9,7 +9,7 @@
  * person's lineage is not mentioned under initials or hidden names (§3.4).
  */
 
-import { Partnership, Person, PersonId, Source, StromData, Story, personSourceIds } from './types.js';
+import { Partnership, PartnershipId, Person, PersonId, Source, StromData, Story, personSourceIds } from './types.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
 import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
@@ -28,7 +28,11 @@ import { BookChapter, BookModel } from './book-model.js';
 import { BookDetail, BookLang, BookParts } from './book-options.js';
 
 export type BookMode = 'book' | 'app' | 'file';
-export type BookLinkTarget = { chapter: number } | { rod: number } | { person: PersonId };
+/**
+ * What a reference points to: a chapter or the lineage part of the book, a
+ * person, or (pages of a set, spec 026 §0.8) a family or a lineage by id.
+ */
+export type BookLinkTarget = { chapter: number } | { rod: number } | { person: PersonId } | { family: PartnershipId } | { rodId: RodId };
 
 /** The width of the type area in CSS px (166 mm). */
 export const BOOK_TEXT_WIDTH = 627;
@@ -85,7 +89,14 @@ export interface BookCtx {
     parts: BookParts;
     notes: boolean;
     research: boolean;
+    /**
+     * Where a reference leads, null for plain text: an href in the book and
+     * a saved file ('#kap-5', '#rodina-…'), the `data-sp-open` value in the
+     * app's window ('family:{id}').
+     */
     linkTo: (target: BookLinkTarget, ctx: BookCtx) => string | null;
+    /** Pages of a set (spec 026 §0.3): every id of a block as `{idPrefix}--{id}`; none in the book. */
+    idPrefix?: string;
     /** The tree after privacy (and without media when the part is off). */
     tree: StromData;
     /** Living people, judged before protection. */
@@ -164,13 +175,41 @@ function rodShown(ctx: BookCtx, id: PersonId): boolean {
     return !(ctx.living.has(id) && (ctx.privacy === 'initials' || ctx.privacy === 'anonymous'));
 }
 
-function link(ctx: BookCtx, target: BookLinkTarget, html: string): string {
-    const href = ctx.linkTo(target, ctx);
-    return href ? `<a href="${esc(href)}">${html}</a>` : html;
+/** An id of a block, with the set's page prefix when there is one. */
+export function bookId(ctx: BookCtx, id: string): string {
+    return ctx.idPrefix ? `${ctx.idPrefix}--${id}` : id;
 }
 
-function chapterRef(ctx: BookCtx, n: number, arrow = false): string {
-    return link(ctx, { chapter: n }, `${arrow ? '→ ' : ''}${esc(T(ctx).book.chapterRef(n))}`);
+/**
+ * A reference as a link: `<a href>` in the book, `<a class="pp-link" href>`
+ * in a saved file of pages, `<button class="pp-link" data-sp-open>` in the
+ * app's window (spec 026 §0.8); plain text where `linkTo` has nothing.
+ */
+function link(ctx: BookCtx, target: BookLinkTarget, html: string): string {
+    const to = ctx.linkTo(target, ctx);
+    if (!to) return html;
+    if (ctx.mode === 'book') return `<a href="${esc(to)}">${html}</a>`;
+    if (ctx.mode === 'app') return `<button type="button" class="pp-link" data-sp-open="${esc(to)}">${html}</button>`;
+    return `<a class="pp-link" href="${esc(to)}">${html}</a>`;
+}
+
+/** The couple of a chapter, as "Josef and Anna" (escaped), or null. */
+function chapterCouple(ctx: BookCtx, n: number): { unionId: PartnershipId; names: string } | null {
+    const ch = ctx.model.chapters.find(c => c.no === n);
+    const u = ch ? ctx.tree.partnerships[ch.unionId] : undefined;
+    return ch && u ? { unionId: ch.unionId, names: pairFirstNames(ctx, u) } : null;
+}
+
+/**
+ * "→ ch. 5" in the book; on pages of a set the family itself, "→ the family
+ * of Josef and Anna" (`word` false: just "Josef and Anna"), linked to its page.
+ */
+function chapterRef(ctx: BookCtx, n: number, arrow = false, word = true): string {
+    const B = T(ctx).book;
+    const fam = ctx.mode === 'book' ? null : chapterCouple(ctx, n);
+    if (!fam) return link(ctx, { chapter: n }, `${arrow ? '→ ' : ''}${esc(B.chapterRef(n))}`);
+    const text = word ? esc(T(ctx).familyPages.familyRef('\u0000')).replace('\u0000', fam.names) : fam.names;
+    return link(ctx, { family: fam.unionId }, `${arrow ? '→ ' : ''}${text}`);
 }
 
 /** The label of a lineage, protected when its founder is a living person under initials / hidden names. */
@@ -388,7 +427,7 @@ export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boo
     }
     flushYoung();
     if (!rows.length) return '';
-    return `<section class="book-rod-lineage${opts.breakBefore ? ' book-break' : ''}"${opts.id ? ` id="${esc(opts.id)}"` : ''}><h2>${esc(B.parts.tree)}</h2>${rows.join('')}</section>`;
+    return `<section class="book-rod-lineage${opts.breakBefore ? ' book-break' : ''}"${opts.id ? ` id="${esc(bookId(ctx, opts.id))}"` : ''}><h2>${esc(B.parts.tree)}</h2>${rows.join('')}</section>`;
 }
 
 // ─── A person (§5.5) ────────────────────────────────────────────────────────
@@ -627,6 +666,9 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
         const n = ctx.model.birthChapter.get(id);
         if (n === undefined || n === ch.no) return '';
         const p = person(ctx, id)!;
+        if (ctx.mode !== 'book' && chapterCouple(ctx, n)) {
+            return `<div class="book-family-line book-muted">${esc(T(ctx).familyPages.childOf[gKey(p)]('\u0000', '\u0001')).replace('\u0000', bookName(ctx, id)).replace('\u0001', chapterRef(ctx, n, false, false))}</div>`;
+        }
         return `<div class="book-family-line book-muted">${esc(B.childOf[gKey(p)]('\u0000', n)).replace('\u0000', bookName(ctx, id)).replace(esc(B.chapterRef(n)), chapterRef(ctx, n))}</div>`;
     }).join('');
     const head = `<header class="book-family-head"><div class="book-kicker">${esc(B.chapterKicker(ch.no, ch.gen))}</div>`
@@ -657,7 +699,7 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     const children = childrenHtml(ctx, u, ch);
     const sources = chapterSourcesHtml(ctx, ch.no);
     ctx.sources.chapter = 0;
-    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="kap-${ch.no}">${head}${events}`
+    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="${esc(bookId(ctx, `kap-${ch.no}`))}">${head}${events}`
         + `<div class="book-section book-partners">${partners}</div>${storyHtml}${children}${sources}</article>`;
 }
 

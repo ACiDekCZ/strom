@@ -195,7 +195,7 @@ describe('sections', () => {
         // Opened, "Collapse ▴" stands after the last paragraph, not between the first one and the rest.
         expect(file).toMatch(/<details class="pp-ch-fold"><summary class="pp-ch-more">.*?<\/summary><div class="pp-prose"><p>Pak přišel mlýn\.<\/p><p>A pak děti\.<\/p><\/div><\/details><p class="pp-ch-foot"><button type="button" class="pp-ch-more pp-ch-less js-only" data-pp-fold-close>Sbalit ▴<\/button><span class="pp-ch-also">/);
         expect(file).toContain('html.js .pp-ch-fold[open] > summary { display: none; }');
-        expect(file).toContain("q('[data-pp-fold-close]')");
+        expect(file).toContain("closest('[data-pp-fold-close]')");
         expect(file).toContain('<a class="pp-story-jump" href="#pp-story-u1" data-pp-story="pp-story-u1">Jan a Marie ↓</a>');
         // Print: everything unfolded.
         const print = body(d, { mode: 'print', links: 'plain' });
@@ -1571,7 +1571,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const one = geoTree();
         one.persons['jan' as PersonId].events = one.persons['jan' as PersonId].events!.filter(e => e.place !== 'Vídeň');
         expect(body(one)).not.toContain('id="pp-sec-places"');
-        expect(doc(one)).not.toContain(".pp-places');if(!root)");
+        expect(doc(one)).not.toContain("el.closest('.pp-places')");
         const noGeo = fiskTree();
         const w = body(noGeo);
         expect(w).toContain('id="pp-sec-places"');
@@ -1597,7 +1597,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const file = doc(geoTree(), { ...rosa, privacy: 'full' });
         expect(file).not.toContain('data-pp-switch="kidPlaces"');
         expect(file).not.toContain('map:open');
-        expect(file).toContain(".pp-places');if(!root)");
+        expect(file).toContain("el.closest('.pp-places')");
         // Places in the text lead to the section.
         expect(file).toMatch(/<a class="pp-link pp-place-link" href="#pp-sec-places" data-pp-to-place="[^"]+">Čapkov<\/a>/);
         // The window keeps its buttons: the window decides where a place leads (§1.6).
@@ -1637,7 +1637,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const evaFile = doc(geoTree(), { personId: 'eva' as PersonId, privacy: 'initials' });
         expect(evaFile).not.toContain('id="pp-sec-places"');
         expect(evaFile).not.toContain('class="pp-chart"');
-        expect(evaFile).not.toContain(".pp-places');if(!root)");
+        expect(evaFile).not.toContain("el.closest('.pp-places')");
         // The living person's page in the window: the map and the chart (to today).
         const evaApp = body(geoTree(), { personId: 'eva' as PersonId });
         expect(evaApp).toContain('id="pp-sec-places"');

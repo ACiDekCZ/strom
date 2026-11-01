@@ -6369,6 +6369,24 @@ const stringsEN = {
             big: 'The file may be too large for WhatsApp or e-mail.',
         },
     },
+    // ── Family pages (spec 026): a linked file of lineage, family and person pages ──
+    familyPages: {
+        rodTitle: (label: string) => `${label} family line`,
+        rodGeneric: 'Family line',
+        hubTitle: (labels: string[]) => `${joinAnd('en', labels)} family lines`,
+        hub: 'Overview',
+        start: 'Start',
+        familyRef: (names: string) => `the family of ${names}`,
+        childOf: { m: (name: string, family: string) => `${name} is a son of ${family}`, f: (name: string, family: string) => `${name} is a daughter of ${family}`, u: (name: string, family: string) => `${name} is a child of ${family}` } as Record<'m' | 'f' | 'u', (name: string, family: string) => string>,
+        index: 'Index',
+        indexTitle: { persons: 'Index of people', families: 'Index of families', surnames: 'Index of surnames', places: 'Index of places' } as Record<'persons' | 'families' | 'surnames' | 'places', string>,
+        map: 'Map of places',
+        tagRod: (label: string, gen: string) => `${label} family line, generation ${gen}`,
+        recordedAs: { m: (form: string) => `recorded as ${form}`, f: (form: string) => `recorded as ${form}`, u: (form: string) => `recorded as ${form}` } as Record<'m' | 'f' | 'u', (form: string) => string>,
+        spouseIn: { m: (label: string) => `husband in the ${label} family line`, f: (label: string) => `wife in the ${label} family line`, u: (label: string) => `spouse in the ${label} family line` } as Record<'m' | 'f' | 'u', (label: string) => string>,
+        fileStem: { rod: 'Family-line', descendants: 'Descendants', ancestors: 'Ancestors', tree: 'Family-tree' } as Record<'rod' | 'descendants' | 'ancestors' | 'tree', string>,
+        privacyWarn: (n: number) => `The selection includes ${nEn(n, 'living person', 'living people')}. The file will carry their names, dates and places.`,
+    },
 };
 
 const stringsCZ: StringsType = {
@@ -12492,6 +12510,24 @@ const stringsCZ: StringsType = {
             big: 'Soubor může být pro WhatsApp nebo e-mail velký.',
         },
     },
+    // ── Stránky rodu (spec 026): propojený soubor stránek rodu, rodin a osob ──
+    familyPages: {
+        rodTitle: (label: string) => `Rod ${label}`,
+        rodGeneric: 'Rod',
+        hubTitle: (labels: string[]) => `Rody ${joinAnd('cs', labels)}`,
+        hub: 'Rozcestník',
+        start: 'Úvod',
+        familyRef: (names: string) => `rodina ${names}`,
+        childOf: { m: (name: string, family: string) => `${name} je syn z rodiny ${family}`, f: (name: string, family: string) => `${name} je dcera z rodiny ${family}`, u: (name: string, family: string) => `${name} je dítě z rodiny ${family}` },
+        index: 'Rejstřík',
+        indexTitle: { persons: 'Rejstřík osob', families: 'Rejstřík rodin', surnames: 'Rejstřík příjmení', places: 'Rejstřík obcí' },
+        map: 'Mapa obcí',
+        tagRod: (label: string, gen: string) => `rod ${label}, ${gen}. generace`,
+        recordedAs: { m: (form: string) => `zapsán jako ${form}`, f: (form: string) => `zapsána jako ${form}`, u: (form: string) => `zapsáno jako ${form}` },
+        spouseIn: { m: (label: string) => `manžel v rodu ${label}`, f: (label: string) => `manželka v rodu ${label}`, u: (label: string) => `sňatkem v rodu ${label}` },
+        fileStem: { rod: 'Rod', descendants: 'Potomci', ancestors: 'Predci', tree: 'Rodokmen' },
+        privacyWarn: (n: number) => `Ve výběru ${plural('cs', n, 'je', 'jsou', 'je')} ${nCs(n, 'žijící osoba', 'žijící osoby', 'žijících osob')}. Soubor ponese jejich jména, data a místa.`,
+    },
 };
 
 const stringsDE: StringsType = {
@@ -18534,6 +18570,24 @@ const stringsDE: StringsType = {
             shrink: 'Bilder über 1600 px werden beim Speichern verkleinert; die Originale bleiben im Stammbaum.',
             big: 'Die Datei kann für WhatsApp oder E-Mail zu groß sein.',
         },
+    },
+    // ── Familienseiten (Spec 026): eine verknüpfte Datei mit Seiten der Stammlinie, der Familien und der Personen ──
+    familyPages: {
+        rodTitle: (label: string) => `Stammlinie ${label}`,
+        rodGeneric: 'Stammlinie',
+        hubTitle: (labels: string[]) => `Stammlinien ${joinAnd('de', labels)}`,
+        hub: 'Übersicht',
+        start: 'Start',
+        familyRef: (names: string) => `Familie ${names}`,
+        childOf: { m: (name: string, family: string) => `${name} ist ein Sohn von ${family}`, f: (name: string, family: string) => `${name} ist eine Tochter von ${family}`, u: (name: string, family: string) => `${name} ist ein Kind von ${family}` },
+        index: 'Register',
+        indexTitle: { persons: 'Personenregister', families: 'Familienregister', surnames: 'Familiennamenregister', places: 'Ortsregister' },
+        map: 'Ortskarte',
+        tagRod: (label: string, gen: string) => `Stammlinie ${label}, ${gen}. Generation`,
+        recordedAs: { m: (form: string) => `eingetragen als ${form}`, f: (form: string) => `eingetragen als ${form}`, u: (form: string) => `eingetragen als ${form}` },
+        spouseIn: { m: (label: string) => `Ehemann in der Stammlinie ${label}`, f: (label: string) => `Ehefrau in der Stammlinie ${label}`, u: (label: string) => `Ehepartner in der Stammlinie ${label}` },
+        fileStem: { rod: 'Stammlinie', descendants: 'Nachkommen', ancestors: 'Vorfahren', tree: 'Stammbaum' },
+        privacyWarn: (n: number) => `Die Auswahl enthält ${nDe(n, 'lebende Person', 'lebende Personen')}. Die Datei enthält ihre Namen, Daten und Orte.`,
     },
 };
 

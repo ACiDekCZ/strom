@@ -1603,14 +1603,17 @@ export function selectMapPlace(root: ParentNode, key: string | null): Element | 
  * The saved file's selection script (inline, optional: without it the map is
  * static and nothing breaks). Click / Enter / Space on a point or row selects
  * the place; again on the selected row follows its timeline anchor; a place
- * in the text (an anchor to the section) selects its place too.
+ * in the text (an anchor to the section) selects its place too. Listens on
+ * the document and works per map (its `.pp-places`), so one file may hold
+ * many pages with a map each (spec 026 §0.3); a link in the text selects in
+ * the map of its own page (`.pp` or section).
  */
-export const PLACES_MAP_SCRIPT = `(function(){
-var root=document.querySelector('.pp-places');if(!root)return;
-function sel(k){var on=(k||'').split('\\t');root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',!!k&&el.getAttribute('data-pp-map-place').split('\\t').some(function(x){return on.indexOf(x)>=0;}));});}
-function act(el){var k=el.getAttribute('data-pp-map-place');var was=el.classList.contains('is-sel');sel(k);
-if(was&&el.classList.contains('pp-map-row')){var a=el.getAttribute('data-pp-osa');var t=a&&document.getElementById(a);if(t)t.scrollIntoView({block:'center'});}}
-root.addEventListener('click',function(e){var el=e.target.closest&&e.target.closest('[data-pp-map-place]');if(el)act(el);});
-root.addEventListener('keydown',function(e){if(e.key!=='Enter'&&e.key!==' ')return;var el=e.target.closest&&e.target.closest('li[data-pp-map-place]');if(el){e.preventDefault();act(el);}});
-document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-pp-to-place]');if(a)sel(a.getAttribute('data-pp-to-place'));});
+export const PLACES_MAP_SCRIPT = `(function(){var d=document;
+function sel(root,k){var on=(k||'').split('\\t');root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',!!k&&el.getAttribute('data-pp-map-place').split('\\t').some(function(x){return on.indexOf(x)>=0;}));});}
+function act(root,el){var k=el.getAttribute('data-pp-map-place');var was=el.classList.contains('is-sel');sel(root,k);
+if(was&&el.classList.contains('pp-map-row')){var a=el.getAttribute('data-pp-osa');var t=a&&d.getElementById(a);if(t)t.scrollIntoView({block:'center'});}}
+function hit(e,s){var el=e.target.closest&&e.target.closest(s);var root=el&&el.closest('.pp-places');return root?[root,el]:null;}
+d.addEventListener('click',function(e){var h=hit(e,'[data-pp-map-place]');if(h){act(h[0],h[1]);return;}
+var a=e.target.closest&&e.target.closest('a[data-pp-to-place]');if(!a)return;var s=a.closest('.pp')||a.closest('section')||d;var root=s.querySelector('.pp-places');if(root)sel(root,a.getAttribute('data-pp-to-place'));});
+d.addEventListener('keydown',function(e){if(e.key!=='Enter'&&e.key!==' ')return;var h=hit(e,'li[data-pp-map-place]');if(h){e.preventDefault();act(h[0],h[1]);}});
 })();`;
