@@ -3130,16 +3130,13 @@ class TreeRendererClass {
     }
 
     /**
-     * Load the per-tree view mode (called on tree switch / session restore).
-     * A standalone view (timeline, fan, map) is not restored: a tree load
-     * focuses the tree's start person, not the one the view was left with,
-     * so the tree opens in the tree view (1101). Descendants is kept.
+     * The view a tree load (start, tree switch) opens in: always the family
+     * view, with the tree's start person (1101). A view left on screen (the
+     * descendants chart, timeline, fan, map) is not restored: it came back
+     * with the tree's start person, not the one it was left with.
      */
     loadViewModeForCurrentTree(): void {
-        const key = this.viewModeStorageKey();
-        let stored: string | null = null;
-        try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
-        this.viewMode = stored === 'descendants' ? 'descendants' : 'family';
+        this.viewMode = 'family';
     }
 
     /**
