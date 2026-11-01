@@ -166,6 +166,14 @@ function founderYear(ctx: BookCtx, date: string | undefined): string {
     return d.qualifier !== '' || !!d.end ? T(ctx).treeOverview.rods.approx(d.year) : String(d.year);
 }
 
+/** A lineage founder's note after the name, " (* asi 1810, Place)", as the lineage header and the hub card write it; '' when shielded or without a birth. */
+export function founderNote(ctx: BookCtx, id: PersonId): string {
+    const p = person(ctx, id);
+    if (!p || shielded(ctx, id)) return '';
+    const bits = [founderYear(ctx, p.birthDate), p.birthPlace?.trim() ?? ''].filter(Boolean);
+    return bits.length ? ` (* ${esc(bits.join(', '))})` : '';
+}
+
 /** A living person under a privacy other than full: no details. */
 function shielded(ctx: BookCtx, id: PersonId): boolean {
     return ctx.living.has(id) && ctx.privacy !== 'full';
@@ -986,9 +994,8 @@ export function pageLineHeadHtml(line: PageLine, ctx: BookCtx): string {
     if (root && !root.isPlaceholder) {
         const name = link(ctx, { person: line.rootId }, bookName(ctx, line.rootId));
         let post = '';
-        if (line.kind === 'rod' && !shielded(ctx, line.rootId)) {
-            const bits = [founderYear(ctx, root.birthDate), root.birthPlace?.trim() ?? ''].filter(Boolean);
-            if (bits.length) post = ` (* ${esc(bits.join(', '))})`;
+        if (line.kind === 'rod') {
+            post = founderNote(ctx, line.rootId);
         } else {
             const y = bookYears(root);
             if (y) post = ` (${esc(y)})`;

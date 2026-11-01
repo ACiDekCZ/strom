@@ -19,7 +19,7 @@ import { Rod } from './lineage.js';
 import { buildBookModel, BookModel } from './book-model.js';
 import { BOOK_PART_KEYS, BookParts } from './book-options.js';
 import {
-    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, branchPageLine, indexHtml, pageLineGenerationsHtml,
+    BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, founderNote, branchPageLine, indexHtml, pageLineGenerationsHtml,
     pageLineHeadHtml, pageLinePeriod, rodLineageHtml, rodOverviewHtml, rodPageLine,
 } from './book-blocks.js';
 import {
@@ -164,9 +164,8 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
         const period = periods[i];
         const founder = tree.persons[rod.founderId];
         const g = founder?.gender === 'female' ? 'f' : founder?.gender === 'male' ? 'm' : 'u';
-        const fy = bookYears(founder);
         const founderLine = founder && !founder.isPlaceholder
-            ? `${esc(F.founder[g])} ${bookName(ctx, rod.founderId)}${fy ? ` (${esc(fy)})` : ''}` : '';
+            ? `${esc(F.founder[g])} ${bookName(ctx, rod.founderId)}${founderNote(ctx, rod.founderId)}` : '';
         const bar = period
             ? `<span class="sp-axis" aria-hidden="true"><span class="sp-bar" style="left:${((period.from - lo) / span * 100).toFixed(1)}%;width:${(Math.max(0.5, (period.to - period.from) / span * 100)).toFixed(1)}%"></span></span>`
             : '';

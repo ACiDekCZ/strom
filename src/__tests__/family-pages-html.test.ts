@@ -119,6 +119,22 @@ describe('the file of one lineage, several lineages, a branch (§0.2, §1)', () 
         expect(section(html, 'rod-kvapil')).toContain('<a class="sp-crumb" href="#uvod">');
     });
 
+    it('the hub card writes the founder like the lineage header: "asi" for an approximate birth, the place', () => {
+        const { data } = familyPagesFixture();
+        const set0 = rodsSet(data);
+        const rod = set0.rodIds[0];
+        const lineages = buildLineages(data);
+        const founderId = rods(lineages).find(r => r.id === rod)!.founderId;
+        data.persons[founderId].birthDate = '~1810';
+        data.persons[founderId].birthPlace = 'Brdovice';
+        const set = rodsSet(data);
+        const html = buildPageSetHtml(set);
+        const hub = section(html, 'uvod');
+        const rodPage = section(html, set.rodSlug.get(rod)!);
+        expect(rodPage).toContain(' (* asi 1810, Brdovice)');
+        expect(hub).toContain(' (* asi 1810, Brdovice)');
+    });
+
     it('a branch: descendants of the founder, the children of daughters included', () => {
         const { data, ids } = familyPagesFixture();
         const set = buildPageSet(data, { kind: 'descendants', person: ids.jan }, { lang: 'cs', now: FP_NOW });
