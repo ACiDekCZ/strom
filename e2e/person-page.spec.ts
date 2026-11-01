@@ -665,7 +665,15 @@ test.describe('desktop', () => {
         // A tap on the father's sector opens his page in the same window; Back returns.
         const father = fan.locator('.fan-sector[data-fan-ahnentafel="2"]');
         await expect(father).toHaveAttribute('data-fan-person', /.+/);
-        const fb = (await father.locator('text').first().boundingBox())!;
+        // Polled: Fit draws the fan again for the new view, and a label read just as it is replaced
+        // is detached (no box). The point stays the same, the click lands on the new drawing.
+        const boxes: { x: number; y: number; width: number; height: number }[] = [];
+        await expect.poll(async () => {
+            const b = await father.locator('text').first().boundingBox();
+            if (b) boxes.push(b);
+            return b !== null;
+        }).toBe(true);
+        const fb = boxes[boxes.length - 1];
         await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2);
         await expect(w.locator('h1')).toContainText('Vaclav Fisek');
         // The father has no known parent: no Ancestors section.
