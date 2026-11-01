@@ -144,6 +144,18 @@ async function viewBox(page: Page): Promise<number[]> {
     return (vb ?? '').split(/[ ,]+/).map(Number);
 }
 
+/** The viewBox once the zoom's animation has stopped: the same over two reads further apart than the animation. */
+async function settledViewBox(page: Page): Promise<number[]> {
+    let last = '';
+    await expect.poll(async () => {
+        const now = (await viewBox(page)).join(' ');
+        const same = now === last;
+        last = now;
+        return same;
+    }, { intervals: [400], timeout: 10_000 }).toBe(true);
+    return last.split(' ').map(Number);
+}
+
 /** A screen point inside the sector of a person (the bounding box centre of a wedge may lie outside it). */
 async function sectorPoint(page: Page, name: string): Promise<{ x: number; y: number }> {
     const p = await page.evaluate((who) => {
@@ -349,17 +361,21 @@ test('fan view: printing shows the whole fan without the toolbar, then the zoom 
     await page.getByRole('button', { name: 'Zoom in' }).click();
     await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect.poll(async () => (await viewBox(page))[2]).toBeLessThan(whole[2] / 2);
-    const zoomed = await viewBox(page);
+    // The zoom animates: the view to come back is the one it stops at, not one on the way (under load
+    // the width passes half the fan well before the animation ends).
+    const zoomed = await settledViewBox(page);
     const bounds = await page.evaluate(() => window.Strom.TreeRenderer.getFanView()?.getModel()?.bounds ?? null);
     expect(bounds).not.toBeNull();
 
-    await page.emulateMedia({ media: 'print' });
+    // The browser's order: beforeprint, then the print layout (its new size alone would start from the whole fan, §1.6).
     await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+    await page.emulateMedia({ media: 'print' });
     await expect(page.locator('#fan-toolbar')).toBeHidden();
     await expect(page.locator('#fan-zoom-controls')).toBeHidden();
     await expect(page.locator('#fan-legend-items')).toBeVisible();
-    const printed = await viewBox(page);
-    expect(printed.map(n => Math.round(n))).toEqual([bounds!.x, bounds!.y, bounds!.w, bounds!.h].map(n => Math.round(n)));
+    // Polled: the print layout's new size first fits the view, the redraw after it shows the frame.
+    await expect.poll(async () => (await viewBox(page)).map(n => Math.round(n)))
+        .toEqual([bounds!.x, bounds!.y, bounds!.w, bounds!.h].map(n => Math.round(n)));
 
     // The browser fires afterprint once the screen is back.
     await page.emulateMedia({ media: 'screen' });

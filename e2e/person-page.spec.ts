@@ -1113,7 +1113,9 @@ test.describe('a research tree with history', () => {
         await expect(legend.locator('.pp-hm')).toHaveCount(1);
         await expect(legend).toHaveText('◇Regional history');
         // Its own margin below (the page's paragraph reset does not take it): the first segment's title keeps off.
-        expect(await legend.evaluate((el) => getComputedStyle(el).marginBottom)).toBe('14px');
+        // Polled: a late answer of the research redraws the window, and a legend read just as it is
+        // replaced is detached (an empty computed style).
+        await expect.poll(() => legend.evaluate((el) => getComputedStyle(el).marginBottom)).toBe('14px');
 
         // The switch: on by default; off hides the rows and the legend, on brings them back.
         const sw = w.locator('[data-pp-switch="history"]');
