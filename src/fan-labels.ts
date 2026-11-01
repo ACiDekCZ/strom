@@ -152,6 +152,13 @@ export function fanLabelBox(s: FanSectorShape, ppu: number): FanLabelBox {
         const nearHorizontal = Math.min(Math.abs(m - 180), m, 360 - m) < 22;
         curved = !nearHorizontal && rad(span) * rc * ppu >= 1.6 * ringW;
     }
+    return orientedBox(s, ppu, curved, anchor, aspan);
+}
+
+/** The box of a sector along the arc (`curved`) or along the radius, centred on `anchor` over `aspan` degrees. */
+function orientedBox(s: FanSectorShape, ppu: number, curved: boolean, anchor: number, aspan: number): FanLabelBox {
+    const rc = (s.r1 + s.r2) / 2;
+    const ringW = (s.r2 - s.r1) * ppu;
     const m = normAngle(anchor);
     if (curved) {
         return {
@@ -163,8 +170,23 @@ export function fanLabelBox(s: FanSectorShape, ppu: number): FanLabelBox {
     return {
         curved: false, anchor, aspan, upper: m > 0 && m < 180, mid: m, rc,
         len: ringW - 14,
-        cross: rad(span) * (s.r1 + (s.r2 - s.r1) * 0.15) * ppu - 2,
+        cross: rad(s.hi - s.lo) * (s.r1 + (s.r2 - s.r1) * 0.15) * ppu - 2,
     };
+}
+
+/**
+ * The sector's box in the other direction than fanLabelBox chose (a sector
+ * under 120°): a wide short sector whose radial box holds no text at all may
+ * still hold a name along its arc, and a narrow tall one along its radius.
+ * Only a fallback where the chosen box gives nothing (1101).
+ */
+export function fanLabelBoxTurned(s: FanSectorShape, ppu: number): FanLabelBox | null {
+    if (s.hi - s.lo >= 120) return null;
+    const chosen = fanLabelBox(s, ppu);
+    // Text along the arc beside the horizontal would stand upright: never there.
+    const m = normAngle(chosen.anchor);
+    if (!chosen.curved && Math.min(Math.abs(m - 180), m, 360 - m) < 22) return null;
+    return orientedBox(s, ppu, !chosen.curved, chosen.anchor, chosen.aspan);
 }
 
 /** The rotation of a radial label: along the radius, never upside down — §4.3. */
@@ -339,6 +361,29 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
         }
     }
     return null;
+}
+
+/**
+ * The label of a person's sector: the ladder in the box fanLabelBox chose,
+ * and where that gives nothing or only a cut surname, in the turned box when
+ * it holds more (1101: a wide short sector on a phone had no name at all,
+ * surnames were cut where the other direction had room). `adjust` shrinks a
+ * box for what else the sector carries (the Kekulé number).
+ */
+export function fitFanSectorLabel(
+    p: Person, s: FanSectorShape, ppu: number, opts: FitFanLabelOptions,
+    adjust: (b: FanLabelBox) => FanLabelBox = b => b,
+): { label: FanLabel; box: FanLabelBox } | null {
+    const box = adjust(fanLabelBox(s, ppu));
+    const label = fitFanLabel(p, box, opts);
+    if (label && label.level < 6) return { label, box };
+    const turned = fanLabelBoxTurned(s, ppu);
+    if (turned) {
+        const tbox = adjust(turned);
+        const tlabel = fitFanLabel(p, tbox, opts);
+        if (tlabel && (!label || tlabel.level < label.level)) return { label: tlabel, box: tbox };
+    }
+    return label ? { label, box } : null;
 }
 
 // ---------------------------------------------------------------- SVG

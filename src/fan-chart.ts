@@ -28,7 +28,7 @@ import {
     FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanRodColors, FanRodColors, fanLegend, fanHasRepeats,
 } from './fan-colors.js';
 import {
-    FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel,
+    FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
     fanLabelSvg, fanCenteredRowsSvg, fanRadialRotation, fanYears, FanLabelBox,
 } from './fan-labels.js';
 
@@ -581,12 +581,11 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         if (withLabels && inView(s)) {
             const k = kekuleSvg(s);
             kek = k.svg;
-            const box = k.box(fanLabelBox(s, ppu));
-            const lab = fitFanLabel(p, box, {
+            const fit = fitFanSectorLabel(p, s, ppu, {
                 base: fanBaseSize(sizes, 'anc', s.generation), min: sizes.min, yearsDrop: sizes.yearsDrop,
                 protect: prot, repeat: rep, measure,
-            });
-            if (lab) label = fanLabelSvg(lab, box, ppu, labelOpts);
+            }, k.box);
+            if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
         }
         if (marks.has(s.key)) over.push(`<path class="fan-mark" d="${d}" fill="none" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`);
         body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${nonBio}${rep ? ' fan-repeat' : ''}" data-fan-key="${s.key}" data-fan-kind="anc"`
@@ -639,11 +638,11 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
                     }
                 }
             } else {
-                const lab = fitFanLabel(p, box, {
+                const fit = fitFanSectorLabel(p, s, ppu, {
                     base: fanBaseSize(sizes, 'desc', s.depth), min: sizes.min, yearsDrop: sizes.yearsDrop,
                     protect: prot, repeat: rep, measure,
                 });
-                if (lab) label = fanLabelSvg(lab, box, ppu, labelOpts);
+                if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
             }
         }
         const kindCls = s.kind === 'partner' ? ' fan-partner' : ' fan-desc';

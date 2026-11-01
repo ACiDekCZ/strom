@@ -9,7 +9,7 @@ import {
     buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanModel, FOCUS_R, RING_W, ancestorRingRadii,
 } from '../fan-chart.js';
 import { FAN_PALETTES, fanLineColor } from '../fan-colors.js';
-import { estimateFanMeasure as estimate } from '../fan-labels.js';
+import { estimateFanMeasure as estimate, fanScreenSizes } from '../fan-labels.js';
 import { StromData, Person, PersonId, Gender, Partnership, PartnershipId } from '../types.js';
 import { calibrationWorkload, machineFactor, normalizedMs } from './helpers/perf-budget.js';
 
@@ -321,6 +321,35 @@ describe('fan shapes (spec 029 §0.3)', () => {
         expect([child.r1, child.r2]).toEqual([FOCUS_R + 12, FOCUS_R + 12 + 70]);
         expect(m.Rd).toBe(FOCUS_R + 12 + 70);
         expect(m.bounds.y + m.bounds.h).toBe(Math.max(m.Rd, FOCUS_R) + 10);
+    });
+});
+
+describe('labels of wide short sectors on a phone (1101)', () => {
+    // Three children share the lower half: 60° each in the first descendant ring.
+    const fam = () => withUnions([
+        person('me', 'male'), person('w', 'female'),
+        ...['c1', 'c2', 'c3'].map((id, i) => person(id, 'female', [], { firstName: 'Kristýna', lastName: 'Novotná', birthDate: String(1950 + i) })),
+    ], [union('u1', 'me', 'w', ['c1', 'c2', 'c3'])]);
+
+    it('a 60° child sector at the phone\'s zoomed-out scale still carries the name, along its arc', () => {
+        const m = buildFanModel(fam(), 'me' as PersonId, { generations: 3, shape: 'two', descGenerations: 2 })!;
+        const c3 = m.desc.find(s => s.person?.id === 'c3')!;
+        expect(c3.hi - c3.lo).toBeCloseTo(60);
+        const svg = buildFanSvg(m, { ...svgOpts, editable: false, ppu: 0.67, measure: estimate, sizes: fanScreenSizes(true) });
+        for (const id of ['c1', 'c2', 'c3']) {
+            const g = svg.match(new RegExp(`<g class="fan-sector female fan-desc"[^>]*data-fan-person="${id}"[^]*?</g>`))![0];
+            expect(g).toContain('class="fan-name"');
+            expect(g).toMatch(/>Kristýna</);
+        }
+    });
+
+    it('a sector whose own box holds the name keeps that direction', () => {
+        const m = buildFanModel(fam(), 'me' as PersonId, { generations: 3, shape: 'two', descGenerations: 2 })!;
+        const before = buildFanSvg(m, { ...svgOpts, editable: false, ppu: 3, measure: estimate });
+        // At three times the scale the radial box is enough: no text along the arc in the children's ring.
+        const c2 = before.match(/<g class="fan-sector female fan-desc"[^>]*data-fan-person="c2"[^]*?<\/g>/)![0];
+        expect(c2).toContain('class="fan-name"');
+        expect(c2).not.toContain('<textPath');
     });
 });
 
