@@ -665,7 +665,7 @@ test.describe('family pages: the families in the app', () => {
         await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
     });
 
-    test('several marriages: one item Family pages unfolds them; each opens its family; closing the menu folds it', async ({ page }) => {
+    test('several marriages: one item Family pages unfolds them as ⚭ year and partner; each opens its family; closing the menu folds it', async ({ page }) => {
         await setup(page, twoMarriages());
         let menu = await openCardRodMenu(page, 'b14');
         const many = menu.locator('[data-rod-act="families"]');
@@ -676,7 +676,8 @@ test.describe('family pages: the families in the app', () => {
         await many.click();
         await expect(many).toHaveAttribute('aria-expanded', 'true');
         const sub = menu.locator('.pm-rod-sub');
-        await expect(sub.getByRole('menuitem')).toHaveText(['Family page (Karl and Ester)', 'Family page (Karl and Vera)']);
+        // Each by the wedding's year and the other partner (design 7b); no recorded date, the name alone.
+        await expect(sub.getByRole('menuitem')).toHaveText(['Ester Fagerholm', '⚭ 1975 Vera Lindqvist']);
         await expect(sub.getByRole('menuitem').first()).toBeFocused();
         // Closing the menu folds the item again.
         await page.keyboard.press('Escape');

@@ -54,7 +54,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { isMobile, isPhoneBar, MQ_MOBILE } from '../breakpoints.js';
 import { suggestMarriedSurname, MarriedSurnameSuggestion } from '../married-suggestion.js';
-import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
+import { isValidDateInput, normalizeDateInput, formatDateForInput, yearOf } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 import { lifelineGlyph } from '../lifeline-glyphs.js';
@@ -388,10 +388,18 @@ export const personModalMethods = uiModule({
         const famItem = (uid: string, label: string): string =>
             `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="family" data-fam="${esc(uid)}">${esc(label)}</button>`;
         const famLabel = (u: typeof families[number]): string => FP.fam.menu(familyFirstNames(data, u, getCurrentLanguage()));
+        // Unfolded under "Family pages" (§7, design 7b): "⚭ 1846 Anna Kvapilová", the other partner after the wedding's year.
+        const subLabel = (u: typeof families[number]): string => {
+            const otherId = u.person1Id === person!.id ? u.person2Id : u.person1Id;
+            const other = otherId ? data.persons[otherId] : undefined;
+            if (!other || other.isPlaceholder) return famLabel(u);
+            const y = u.status === 'married' || u.status === 'divorced' ? yearOf(u.startDate) : null;
+            return `${y !== null ? `⚭ ${y} ` : ''}${shownName(other)}`;
+        };
         const famHtml = families.length === 1 ? famItem(families[0].id, famLabel(families[0]))
             : families.length > 1
                 ? `<button type="button" role="menuitem" class="pm-rod-item pm-rod-item--sub" data-rod-act="families" aria-haspopup="menu" aria-expanded="false">${esc(FP.fam.menuMany)}</button>`
-                    + `<div class="pm-rod-sub" role="menu" aria-label="${esc(FP.fam.menuMany)}" hidden>${families.map(u => famItem(u.id, famLabel(u))).join('')}</div>`
+                    + `<div class="pm-rod-sub" role="menu" aria-label="${esc(FP.fam.menuMany)}" hidden>${families.map(u => famItem(u.id, subLabel(u))).join('')}</div>`
                 : '';
         el.dataset.rod = value.row.rodId;
         el.innerHTML = `<span class="pm-rod-label">${esc(value.label)}</span>`
