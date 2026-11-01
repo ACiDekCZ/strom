@@ -3093,17 +3093,34 @@ function documentTitle(page: PersonPageData): string {
 }
 
 /** The file's frame around a body (separate, so a set of pages wraps its pages once, §8). */
-export function personPageDocumentShell(lang: Language, title: string, body: string, fontCss = '', toc = ''): string {
+/**
+ * What a file of many pages adds to the frame (spec 026 §0.2): its own rules
+ * after the page's, the class of <main>, markup before and after <main> and
+ * a script after the page's. None: the person page's file as it always was.
+ */
+export interface PersonPageShellExtras {
+    css?: string;
+    mainClass?: string;
+    beforeMain?: string;
+    afterMain?: string;
+    script?: string;
+}
+
+export function personPageDocumentShell(lang: Language, title: string, body: string, fontCss = '', toc = '', extras: PersonPageShellExtras = {}): string {
+    const main = `<main class="${esc(extras.mainClass ?? 'pp-file')}">${body}</main>`;
     return `<!doctype html><html lang="${esc(lang)}" class="no-js"><head>`
         + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
         + `<meta name="generator" content="Strom"><title>${esc(title)}</title>`
-        + `<style>${personPageFileCss(fontCss)}</style>`
+        + `<style>${personPageFileCss(fontCss)}${extras.css ?? ''}</style>`
         + `</head><body><script>document.documentElement.className='js'</script>`
-        + (toc ? `<div class="pp-file-layout">${toc}<main class="pp-file">${body}</main></div>` : `<main class="pp-file">${body}</main>`)
+        + (extras.beforeMain ?? '')
+        + (toc ? `<div class="pp-file-layout">${toc}${main}</div>` : main)
+        + (extras.afterMain ?? '')
         + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script>`
         + (body.includes('class="pp-sec pp-sec--places') ? `<script>${PLACES_MAP_SCRIPT}</script>` : '')
         // One zoom script for every fan of the document (a set of pages has one per page).
         + (body.includes(' data-fan-zoom ') ? `<script>${fanZoomInlineScript()}</script>` : '')
+        + (extras.script ? `<script>${extras.script}</script>` : '')
         + '</body></html>';
 }
 

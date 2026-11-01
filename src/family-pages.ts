@@ -250,6 +250,10 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true, now: opts.now ?? new Date(),
     };
     const prot = protectPersonPageTree(data, options.privacy, options.now);
+    if (options.privacy === 'anonymous' || options.privacy === 'minimal') {
+        // "Living person" in the file's language, not the app's (as the book does).
+        for (const id of prot.living) { const p = prot.tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }
+    }
     const tree = prot.tree;
     const index = prot.lineages;
     const sel = selection(index, lineageSpec(spec));
