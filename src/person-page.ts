@@ -2391,6 +2391,8 @@ function clipSources(c: Ctx): Set<string> {
 /** An image: `<img>` in the window, in the file a span painted by the image's class. */
 function imgHtml(c: Ctx, src: string, alt: string, cls: string): string {
     const e = imgEntry(c, src);
+    // A set's registry that carries no images of the kind: none (the file stays without them).
+    if (!e && c.imgs && c.opts.images) return '';
     if (!e) return `<img class="${cls}" src="${esc(src)}" alt="${esc(alt)}" loading="lazy">`;
     return `<span class="pp-img ${cls} img-${e.n}"${alt ? ` role="img" aria-label="${esc(alt)}"` : ' aria-hidden="true"'}></span>`;
 }
@@ -3116,7 +3118,7 @@ export function buildPersonPageDocument(page: PersonPageData, opts: PersonPageOp
  * "jan-fisek-1860-1910.html" (no birth year: no numbers); a living person
  * under a privacy other than full: "stranka-osoby-e-f-1952.html".
  */
-export function personPageFileName(page: PersonPageData): string {
+export function personPageFileName(page: Pick<PersonPageData, 'lang' | 'tree' | 'personId' | 'privacy' | 'living'>): string {
     const P = getStringsForLang(page.lang).personPage;
     const prefix = asciiSlug(P.title) || 'person-page';
     const p = page.tree.persons[page.personId];
