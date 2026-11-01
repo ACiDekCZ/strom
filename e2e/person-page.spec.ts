@@ -680,14 +680,25 @@ test.describe('desktop', () => {
         await expect(w.locator('h1')).toContainText('Jan Fisek');
         await expect(w.locator('.pp-back')).toBeHidden();
 
-        // Print: the section open, the whole fan, no buttons and no hint.
+        // Print: the section open, the whole fan, no buttons and no hint. The printed
+        // surface may have another aspect than the screen's, so the fitted viewBox may
+        // differ from vb0: what counts is that it holds the whole drawing again.
+        const holdsWholeFan = () => w.locator('#pp-sec-ancestors svg').first().evaluate((el) => {
+            const svgEl = el as SVGSVGElement;
+            const [x, y, vw, vh] = (svgEl.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
+            const b = svgEl.getBBox();
+            const eps = 0.5;
+            return x <= b.x + eps && y <= b.y + eps && x + vw >= b.x + b.width - eps && y + vh >= b.y + b.height - eps;
+        });
+        expect(await holdsWholeFan()).toBe(true);
         await w.locator('#pp-sec-ancestors [data-fan-zoom-act="in"]').click();
+        await expect.poll(holdsWholeFan).toBe(false);
         await page.evaluate(() => { window.print = () => {}; });
         await w.locator('.pp-print').click();
         await page.emulateMedia({ media: 'print' });
         const psec = w.locator('#pp-sec-ancestors');
         await expect(psec.locator('svg').first()).toBeVisible();
-        await expect.poll(() => psec.locator('svg').first().getAttribute('viewBox')).toBe(vb0);
+        await expect.poll(holdsWholeFan).toBe(true);
         await expect(psec.locator('.pp-anc-zoom')).toBeHidden();
         await expect(psec.locator('[data-fan-zoom-hint]')).toBeHidden();
         expect(await psec.evaluate((el) => getComputedStyle(el).breakInside)).toBe('avoid');
