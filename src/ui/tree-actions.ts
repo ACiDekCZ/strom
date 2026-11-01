@@ -179,6 +179,9 @@ export const treeActionsMethods = uiModule({
             const p = treeData.persons[defaultSetting];
             defaultPerson = shownNameOrEmpty(p);
         }
+        // A tree opening in its last used view says so after the person (1101).
+        const defaultPersonValue = (defaultPerson || s.defaultPersonFirstPerson)
+            + (treeData?.defaultView === 'last' ? ` \u00b7 ${s.defaultViewLastSummary}` : '');
         const auditOffered = isActive && (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(id));
         const editable = !readOnly;
 
@@ -201,7 +204,8 @@ export const treeActionsMethods = uiModule({
             ] : [] },
             { key: 'settings', header: g.settings, rows: editable ? [
                 { key: 'rename', label: s.rename, editOnly: true, run: () => this.showRenameTreeDialog(id, parent) },
-                { key: 'defaultPerson', label: s.defaultPerson, value: defaultPerson || s.defaultPersonFirstPerson, editOnly: true, run: () => void this.showDefaultPersonDialog(id, parent) },
+                // The narrow flyout may cut the label and the value: the tooltip says both.
+                { key: 'defaultPerson', label: s.defaultPersonViewTitle, value: defaultPersonValue, hint: `${s.defaultPersonViewTitle}: ${defaultPersonValue}`, editOnly: true, run: () => void this.showDefaultPersonDialog(id, parent) },
                 { key: 'startup', label: s.openAtStartup, checked: TreeManager.getDefaultTree() === id, editOnly: true, run: () => this.toggleStartupTree(id) },
                 { key: 'lifeline', label: s.lifelineDefaults, value: lifelineDefaultsSummary(id), editOnly: true, run: () => this.showLifelineDefaultsDialog(id, parent) },
                 ...(isActive ? [

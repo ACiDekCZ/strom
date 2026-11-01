@@ -59,7 +59,7 @@ import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
-import { readResumePoint, recordResumePoint, recordReloadPoint, takeReloadPoint } from './resume-view.js';
+import { chooseStartView, readLastView, recordLastView, recordReloadPoint, takeReloadPoint } from './resume-view.js';
 import { personInitials } from './initials.js';
 import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
@@ -1217,13 +1217,6 @@ class TreeRendererClass {
             return;
         }
 
-        // "Continue where work ended" (1101): the view with the person it
-        // ended with, never with the tree's start person.
-        if (this.restoreResumePoint()) {
-            this.recordReload();
-            return;
-        }
-
         // Get startup focus based on tree's defaultPersonId setting
         const startupFocus = DataManager.getStartupFocus();
 
@@ -1299,10 +1292,8 @@ class TreeRendererClass {
             // Save to tree data if setting is LAST_FOCUSED (this DOES export)
             if (saveToData) {
                 DataManager.saveLastFocus(personId, this.focusDepthUp, this.focusDepthDown);
-                this.recordResume();
-            } else {
-                this.recordReload();
             }
+            this.recordReload();
         }
 
         // Render async, then center once cards are in DOM. The descendants
@@ -3075,7 +3066,7 @@ class TreeRendererClass {
         // Save to tree data if setting is LAST_FOCUSED (this DOES export)
         if (this.focusPersonId) {
             DataManager.saveLastFocus(this.focusPersonId, up, down);
-            this.recordResume();
+            this.recordReload();
             this.render();
         }
     }
@@ -3140,50 +3131,26 @@ class TreeRendererClass {
         else ZoomPan.centerOnFocusWithContext();
     }
 
-    /** The view is remembered only as where the work stands (1101, resume points). */
+    /**
+     * The view is remembered per tree on this device, for a tree that opens
+     * in its last used view (1101), and for a reload of the page.
+     */
     private persistViewMode(): void {
-        this.recordResume();
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || DataManager.isViewMode()) return;
+        recordLastView(treeId, this.viewMode);
+        this.recordReload();
     }
 
     /**
-     * The view a tree load (start, tree switch) opens in: always the family
-     * view, with the tree's start person (1101). A view left on screen (the
-     * descendants chart, timeline, fan, map) is not restored: it came back
-     * with the tree's start person, not the one it was left with.
+     * The view a tree load (start, opening or switching a tree) opens in
+     * (1101): the family view, or the view last used with the tree on this
+     * device when the tree's "Default view" says so. The person always comes
+     * from the tree's default person (restoreFromSession).
      */
     loadViewModeForCurrentTree(): void {
-        this.viewMode = 'family';
-    }
-
-    /**
-     * With "Continue where work ended" on: the open tree's last view and
-     * person (and depths). False (nothing changed) when off, without a point
-     * or when its person is gone.
-     */
-    private restoreResumePoint(): boolean {
-        if (!SettingsManager.isResumeLastViewEnabled()) return false;
         const treeId = DataManager.getCurrentTreeId();
-        const point = treeId ? readResumePoint(treeId) : null;
-        if (!point) return false;
-        const person = DataManager.getPerson(point.person as PersonId);
-        if (!person || person.isPlaceholder) return false;
-        this.viewMode = point.view;
-        this.focusPersonId = person.id;
-        const maxGen = this.maxGenerations(person.id);
-        this.focusDepthUp = point.up ?? maxGen.up;
-        this.focusDepthDown = point.down ?? maxGen.down;
-        return true;
-    }
-
-    /** Note where the work stands (view, person, depths) for the next start and a reload (1101). */
-    recordResume(): void {
-        const treeId = DataManager.getCurrentTreeId();
-        if (!treeId || !this.focusPersonId || DataManager.isViewMode()) return;
-        recordResumePoint(treeId, {
-            person: this.focusPersonId, view: this.viewMode,
-            up: this.focusDepthUp, down: this.focusDepthDown,
-        });
-        this.recordReload();
+        this.viewMode = chooseStartView(DataManager.getData().defaultView, treeId ? readLastView(treeId) : null);
     }
 
     /** Note where the work in this tab stands, for a reload of the page (1101). */

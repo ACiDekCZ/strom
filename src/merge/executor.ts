@@ -242,6 +242,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         delete mergedData.lastFocusDepthUp;
         delete mergedData.lastFocusDepthDown;
         delete mergedData.defaultPersonId;
+        delete mergedData.defaultView;
 
         let mergedCount = 0;
         let addedCount = 0;

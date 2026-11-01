@@ -1217,12 +1217,6 @@ const stringsEN = {
         settingHint: 'Show a short overview of the changes at the first start of a new version',
     },
 
-    // Settings: open where the work ended (1101)
-    resumeView: {
-        settingLabel: 'Continue where work ended',
-        settingHint: 'At start, open the last tree in the last view (descendants, timeline, fan, map) with the same person; off: the Family view with the tree\'s start person',
-    },
-
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Add family…',
@@ -4475,6 +4469,12 @@ const stringsEN = {
         lifelineKindsNote: 'Kinds of history: the default is in Settings, a choice here applies to this tree. One kind stays on.',
         defaultPersonLastFocused: 'Last focused',
         defaultPersonSpecific: 'Specific person:',
+        // The same dialog: the view a tree opens in (1101)
+        defaultPersonViewTitle: 'Default person and view',
+        defaultViewDesc: 'When opening this tree, show:',
+        defaultViewFamily: 'Family view',
+        defaultViewLast: 'Last used',
+        defaultViewLastSummary: 'Last used view',
         // Default tree dialog
         // New Tree Menu
         newTreeMenu: 'New tree',
@@ -7672,12 +7672,6 @@ const stringsCZ: StringsType = {
         dontShowAgain: 'Příště nezobrazovat',
         settingLabel: 'Co je nového po aktualizaci',
         settingHint: 'Při prvním spuštění nové verze ukázat krátký přehled změn',
-    },
-
-    // Settings: open where the work ended (1101)
-    resumeView: {
-        settingLabel: 'Pokračovat tam, kde práce skončila',
-        settingHint: 'Po spuštění otevřít poslední strom v posledním pohledu (potomci, časová osa, vějíř, mapa) se stejnou osobou; vypnuto: pohled Rodina s výchozí osobou stromu',
     },
 
     // Family wizard (add a whole family at once)
@@ -10889,6 +10883,12 @@ const stringsCZ: StringsType = {
         lifelineKindsNote: 'Druhy dějin: výchozí jsou v Nastavení, volba tady platí pro tento strom. Jeden druh zůstává zapnutý.',
         defaultPersonLastFocused: 'Naposledy zobrazená',
         defaultPersonSpecific: 'Konkrétní osoba:',
+        // The same dialog: the view a tree opens in (1101)
+        defaultPersonViewTitle: 'Výchozí osoba a pohled',
+        defaultViewDesc: 'Při otevření tohoto stromu zobrazit:',
+        defaultViewFamily: 'Rodina',
+        defaultViewLast: 'Naposledy použitý',
+        defaultViewLastSummary: 'Naposledy použitý pohled',
         // Default tree dialog
         // New Tree Menu
         newTreeMenu: 'Nový strom',
@@ -14051,12 +14051,6 @@ const stringsDE: StringsType = {
         dontShowAgain: 'Nächstes Mal nicht anzeigen',
         settingLabel: '„Was ist neu“ nach einem Update',
         settingHint: 'Beim ersten Start einer neuen Version eine kurze Übersicht der Änderungen anzeigen',
-    },
-
-    // Settings: open where the work ended (1101)
-    resumeView: {
-        settingLabel: 'Dort weitermachen, wo die Arbeit endete',
-        settingHint: 'Beim Start den letzten Stammbaum in der letzten Ansicht (Nachkommen, Zeitleiste, Fächer, Karte) mit derselben Person öffnen; aus: die Ansicht Familie mit der Startperson des Stammbaums',
     },
 
     // Family wizard (add a whole family at once)
@@ -17223,6 +17217,12 @@ const stringsDE: StringsType = {
         lifelineKindsNote: 'Arten der Geschichte: Standard in den Einstellungen, die Auswahl hier gilt für diesen Stammbaum. Eine Art bleibt eingeschaltet.',
         defaultPersonLastFocused: 'Zuletzt fokussiert',
         defaultPersonSpecific: 'Bestimmte Person:',
+        // The same dialog: the view a tree opens in (1101)
+        defaultPersonViewTitle: 'Standardperson und -ansicht',
+        defaultViewDesc: 'Beim Öffnen dieses Stammbaums anzeigen:',
+        defaultViewFamily: 'Familie',
+        defaultViewLast: 'Zuletzt verwendet',
+        defaultViewLastSummary: 'Zuletzt verwendete Ansicht',
         newTreeMenu: 'Neuer Stammbaum',
         emptyTree: 'Leerer Stammbaum',
         emptyTreeDesc: 'Mit einem leeren Stammbaum beginnen',

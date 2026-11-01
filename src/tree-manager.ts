@@ -24,7 +24,7 @@ import {
 import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js';
 import { SettingsManager } from './settings.js';
-import { lastResumeTreeId, peekReloadPoint } from './resume-view.js';
+import { peekReloadPoint, forgetLastView } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
@@ -517,6 +517,8 @@ class TreeManagerClass {
         forgetViewLinks(id);
         SettingsManager.forgetRecentSources(id);
         SettingsManager.forgetLifelineDefaults(id);
+        // The view last used with the tree on this device (1101).
+        forgetLastView(id);
 
         // If this was the active tree, switch to another VISIBLE one (never
         // land on a hidden tree) or null
@@ -1368,12 +1370,6 @@ class TreeManagerClass {
         // with ?tree= picks it anyway (main.ts switches to it afterwards).
         const reloaded = peekReloadPoint()?.tree as TreeId | undefined;
         if (reloaded && this.isUsable(reloaded)) return reloaded;
-        // "Continue where work ended" (1101): the tree the work went on in last.
-        if (SettingsManager.isResumeLastViewEnabled()) {
-            const resumed = lastResumeTreeId() as TreeId | null;
-            if (resumed && this.isUsable(resumed)) return resumed;
-        }
-
         const setting = this.index.defaultTreeId;
 
         if (setting === LAST_FOCUSED) {
@@ -1407,6 +1403,20 @@ class TreeManagerClass {
     async getDefaultPerson(treeId: TreeId): Promise<PersonId | LastFocusedMarker | undefined> {
         const data = await this.getTreeData(treeId);
         return data?.defaultPersonId;
+    }
+
+    /** The view the tree opens in (1101): undefined = the family view, 'last' = the view last used here. */
+    async setDefaultView(treeId: TreeId, value: 'last' | undefined): Promise<void> {
+        const data = await this.getTreeData(treeId);
+        if (!data) return;
+        if (value === undefined) delete data.defaultView;
+        else data.defaultView = value;
+        this.saveTreeData(treeId, data);
+    }
+
+    async getDefaultView(treeId: TreeId): Promise<'last' | undefined> {
+        const data = await this.getTreeData(treeId);
+        return data?.defaultView;
     }
 
     async saveLastFocus(treeId: TreeId, personId: PersonId, depthUp: number, depthDown: number): Promise<void> {

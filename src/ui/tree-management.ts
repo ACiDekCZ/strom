@@ -915,6 +915,12 @@ export const treeManagementMethods = uiModule({
                 defaultPersonDisplay = birthYear ? `${name} (*${birthYear})` : name;
             }
             // If undefined, don't show anything (first person is implicit default)
+            // A tree opening in its last used view says so (1101).
+            if (treeData?.defaultView === 'last') {
+                defaultPersonDisplay = defaultPersonDisplay
+                    ? `${defaultPersonDisplay} \u00b7 ${strings.treeManager.defaultViewLastSummary}`
+                    : strings.treeManager.defaultViewLastSummary;
+            }
 
             const s = strings.treeManager;
 
@@ -1702,6 +1708,11 @@ export const treeManagementMethods = uiModule({
             radioSpecific.checked = true;
         }
 
+        // The view the tree opens in (1101): the family view unless set to the last used one.
+        const viewLast = treeData?.defaultView === 'last';
+        (document.getElementById('default-view-family') as HTMLInputElement).checked = !viewLast;
+        (document.getElementById('default-view-last') as HTMLInputElement).checked = viewLast;
+
         // Initialize person picker with persons from this tree
         this.initDefaultPersonPicker(treeData, currentSetting);
 
@@ -1797,11 +1808,15 @@ export const treeManagementMethods = uiModule({
             }
         }
 
+        const view = (document.getElementById('default-view-last') as HTMLInputElement | null)?.checked ? 'last' : undefined;
+
         await TreeManager.setDefaultPerson(this.defaultPersonTreeId, value);
+        await TreeManager.setDefaultView(this.defaultPersonTreeId, view);
 
         // If this is the current tree, also update DataManager
         if (this.defaultPersonTreeId === DataManager.getCurrentTreeId()) {
             DataManager.setDefaultPerson(value);
+            DataManager.setDefaultView(view);
         }
 
         this.closeDefaultPersonDialog();

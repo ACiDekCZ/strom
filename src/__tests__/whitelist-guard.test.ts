@@ -100,6 +100,7 @@ function fullTree(): Required<StromData> {
         lineageOverrides: { founders: [BOB], notCarriers: [ALICE] },
         researchAsOf: '2026-09-20',
         defaultPersonId: LAST_FOCUSED,
+        defaultView: 'last',
         lastFocusPersonId: ALICE,
         lastFocusDepthUp: 3,
         lastFocusDepthDown: 4,
@@ -434,7 +435,7 @@ describe('updatePerson applies every field it owns', () => {
  * tree starts fresh), split has no meaningful focus to inherit.
  */
 const FOCUS_FIELDS: (keyof StromData)[] =
-    ['defaultPersonId', 'lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDepthDown'];
+    ['defaultPersonId', 'defaultView', 'lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDepthDown'];
 
 describe('merge keeps every tree-level field', () => {
     beforeEach(() => {

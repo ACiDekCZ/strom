@@ -21639,13 +21639,6 @@
                         </span>
                     </label>
                     <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="resume-last-view-toggle" onchange="window.Strom.UI.toggleResumeLastView(this.checked)">
-                        <span class="settings-text">
-                            <span class="settings-name" data-i18n="resumeView.settingLabel"></span>
-                            <span class="settings-desc" data-i18n="resumeView.settingHint"></span>
-                        </span>
-                    </label>
-                    <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="whats-new-after-update-toggle" onchange="window.Strom.UI.toggleWhatsNewAfterUpdate(this.checked)">
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="releaseNotes.settingLabel"></span>
@@ -22524,7 +22517,7 @@
     <div class="modal-overlay" id="default-person-modal">
         <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
-                <h2 data-i18n="treeManager.defaultPerson">Default person</h2>
+                <h2 data-i18n="treeManager.defaultPersonViewTitle">Default person and view</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeDefaultPersonDialog()">&times;</button>
             </div>
             <p class="modal-description" data-i18n="treeManager.defaultPersonDesc">When opening this tree, focus on:</p>
@@ -22544,6 +22537,17 @@
                 <div id="default-person-picker-container" class="picker-container" style="display: none;">
                     <div id="default-person-picker"></div>
                 </div>
+            </div>
+            <p class="modal-description" data-i18n="treeManager.defaultViewDesc">When opening this tree, show:</p>
+            <div class="default-options">
+                <label class="radio-option">
+                    <input type="radio" name="default-view-option" id="default-view-family" value="family">
+                    <span data-i18n="treeManager.defaultViewFamily">Family view</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="default-view-option" id="default-view-last" value="last">
+                    <span data-i18n="treeManager.defaultViewLast">Last used</span>
+                </label>
             </div>
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>

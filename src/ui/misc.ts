@@ -347,8 +347,6 @@ export const miscMethods = uiModule({
         // The row of card types is drawn with "Show on card" (renderCardSignalSettings).
         this.renderCardSignalSettings();
         this.renderResearchEdgeSettings();
-        const resumeToggle = document.getElementById('resume-last-view-toggle') as HTMLInputElement | null;
-        if (resumeToggle) resumeToggle.checked = SettingsManager.isResumeLastViewEnabled();
         const kekuleToggle = document.getElementById('fan-kekule-toggle') as HTMLInputElement | null;
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
         const titlesToggle = document.getElementById('show-titles-toggle') as HTMLInputElement | null;

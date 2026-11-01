@@ -726,13 +726,6 @@ export const appModeMethods = uiModule({
         this.renderCardSignalSettings();
     },
 
-    /** Settings: at start, continue in the last tree, view and person (1101). */
-    toggleResumeLastView(enabled: boolean): void {
-        SettingsManager.setResumeLastView(enabled);
-        // From now on: the view on screen is where the work stands.
-        if (enabled) TreeRenderer.recordResume();
-    },
-
     toggleFanKekule(enabled: boolean): void {
         SettingsManager.setFanKekule(enabled);
         TreeRenderer.render();

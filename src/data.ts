@@ -257,6 +257,9 @@ export function migrateData(data: unknown): StromData {
     if (d.defaultPersonId !== undefined) {
         result.defaultPersonId = d.defaultPersonId as PersonId | LastFocusedMarker;
     }
+    if (d.defaultView === 'last') {
+        result.defaultView = 'last';
+    }
     if (d.lastFocusPersonId) {
         result.lastFocusPersonId = d.lastFocusPersonId as PersonId;
     }
@@ -3358,6 +3361,22 @@ class DataManagerClass {
      */
     getDefaultPerson(): PersonId | LastFocusedMarker | undefined {
         return this.data.defaultPersonId;
+    }
+
+    /**
+     * Set the view the current tree opens in (exports with tree, 1101):
+     * undefined = the family view, 'last' = the view last used on this device.
+     */
+    setDefaultView(value: 'last' | undefined): void {
+        if (!this.currentTreeId || this.isLocked() || this.isNewerData()) return;
+        if (value === undefined) delete this.data.defaultView;
+        else this.data.defaultView = value;
+        this.save();
+    }
+
+    /** The view the current tree opens in (undefined = the family view). */
+    getDefaultView(): 'last' | undefined {
+        return this.data.defaultView;
     }
 
     /**

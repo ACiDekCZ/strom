@@ -1087,6 +1087,11 @@ export interface StromData {
 
     // Default person settings (exports with tree)
     defaultPersonId?: PersonId | LastFocusedMarker;  // undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific
+    /**
+     * The view the tree opens in (1101): undefined = the family view, 'last' =
+     * the view last used with this tree on this device (kept there, never here).
+     */
+    defaultView?: 'last';
 
     /** Coordinates for places, keyed by placeKey(). Filled in by geocoding (opt-in). */
     places?: Record<string, PlaceGeo>;
@@ -1455,7 +1460,6 @@ export interface AppSettings {
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
     whatsNewAfterUpdate?: boolean;  // default: true - the "What's new" dialog at the first start of a new version
-    resumeLastView?: boolean;  // default: false - at start, open the last tree, view and person (else the tree view)
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events (fallback of every tree, see lifelineByTree)

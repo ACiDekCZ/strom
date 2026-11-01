@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-    parseResumeStore, recordResumePoint, readResumePoint, lastResumeTreeId, RESUME_STORAGE_KEY,
+    chooseStartView, parseLastViews, recordLastView, readLastView, forgetLastView, LAST_VIEW_STORAGE_KEY,
     parseReloadPoint, recordReloadPoint, peekReloadPoint, takeReloadPoint, isReloadNavigation,
     resetReloadPointForTests, RELOAD_STORAGE_KEY,
 } from '../resume-view';
+import { migrateData } from '../data';
 
-/** Where the work ended, per tree, on this device (1101). */
+/** Which view a tree opens in, and what a reload keeps (1101). */
 
 let store: Map<string, string>;
 beforeEach(() => {
@@ -18,32 +19,50 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('resume points', () => {
-    it('keeps a point per tree and the tree used last', () => {
-        expect(lastResumeTreeId()).toBeNull();
-        recordResumePoint('t_a', { person: 'p_1', view: 'fan', up: 4, down: 1 });
-        recordResumePoint('t_b', { person: 'p_9', view: 'family' });
-        expect(lastResumeTreeId()).toBe('t_b');
-        expect(readResumePoint('t_a')).toEqual({ person: 'p_1', view: 'fan', up: 4, down: 1 });
-        expect(readResumePoint('t_b')).toEqual({ person: 'p_9', view: 'family' });
-        expect(readResumePoint('t_c')).toBeNull();
-        // Work going on in the first tree again makes it the last one.
-        recordResumePoint('t_a', { person: 'p_2', view: 'map' });
-        expect(lastResumeTreeId()).toBe('t_a');
-        expect(readResumePoint('t_a')).toEqual({ person: 'p_2', view: 'map' });
+describe('the view a tree load opens', () => {
+    it('is the family view unless the tree asks for the last used one and there is one', () => {
+        expect(chooseStartView(undefined, null)).toBe('family');
+        expect(chooseStartView(undefined, 'fan')).toBe('family');
+        expect(chooseStartView('last', null)).toBe('family');
+        expect(chooseStartView('last', 'fan')).toBe('fan');
+        expect(chooseStartView('last', 'map')).toBe('map');
+        expect(chooseStartView('last', 'poster' as never)).toBe('family');
+        expect(chooseStartView('fan', 'fan')).toBe('family');
+    });
+});
+
+describe('last used views', () => {
+    it('keeps one view per tree and forgets a deleted tree', () => {
+        expect(readLastView('t_a')).toBeNull();
+        recordLastView('t_a', 'fan');
+        recordLastView('t_b', 'timeline');
+        expect(readLastView('t_a')).toBe('fan');
+        expect(readLastView('t_b')).toBe('timeline');
+        recordLastView('t_a', 'map');
+        expect(readLastView('t_a')).toBe('map');
+        forgetLastView('t_a');
+        expect(readLastView('t_a')).toBeNull();
+        expect(JSON.parse(store.get(LAST_VIEW_STORAGE_KEY)!)).toEqual({ t_b: 'timeline' });
     });
 
     it('drops what is malformed and survives storage that throws', () => {
-        expect(parseResumeStore('not json')).toEqual({ trees: {} });
-        expect(parseResumeStore(JSON.stringify({
-            last: 7,
-            trees: { a: { person: 'p_1', view: 'poster' }, b: { person: '', view: 'fan' }, c: { person: 'p_3', view: 'timeline', up: 'x' }, d: null },
-        }))).toEqual({ trees: { c: { person: 'p_3', view: 'timeline' } } });
-        store.set(RESUME_STORAGE_KEY, '{');
-        expect(readResumePoint('a')).toBeNull();
+        expect(parseLastViews('not json')).toEqual({});
+        expect(parseLastViews('[1]')).toEqual({});
+        expect(parseLastViews(JSON.stringify({ a: 'poster', b: 7, c: 'descendants' }))).toEqual({ c: 'descendants' });
+        store.set(LAST_VIEW_STORAGE_KEY, '{');
+        expect(readLastView('a')).toBeNull();
         vi.stubGlobal('localStorage', { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } });
-        expect(() => recordResumePoint('a', { person: 'p_1', view: 'fan' })).not.toThrow();
-        expect(lastResumeTreeId()).toBeNull();
+        expect(() => recordLastView('a', 'fan')).not.toThrow();
+        expect(() => forgetLastView('a')).not.toThrow();
+        expect(readLastView('a')).toBeNull();
+    });
+});
+
+describe('the tree\'s default view in its data', () => {
+    it('a load keeps "last", and nothing else', () => {
+        expect(migrateData({ persons: {}, partnerships: {}, defaultView: 'last' }).defaultView).toBe('last');
+        expect('defaultView' in migrateData({ persons: {}, partnerships: {}, defaultView: 'fan' })).toBe(false);
+        expect('defaultView' in migrateData({ persons: {}, partnerships: {} })).toBe(false);
     });
 });
 

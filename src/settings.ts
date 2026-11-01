@@ -402,16 +402,6 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** At start, continue in the last tree, view and person; default OFF (the tree view). */
-    isResumeLastViewEnabled(): boolean {
-        return this.settings.resumeLastView === true;
-    }
-
-    setResumeLastView(enabled: boolean): void {
-        this.settings.resumeLastView = enabled;
-        this.save();
-    }
-
     /** Branch colour coding default ON (undefined = enabled). */
     isBranchColorsEnabled(): boolean {
         return this.settings.branchColors !== false;

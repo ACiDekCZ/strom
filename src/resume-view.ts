@@ -1,86 +1,68 @@
 /**
- * Where the work ended, per tree (1101): the person in the centre and the view
- * (family, descendants, timeline, fan, map), plus the tree used last. Kept on
- * this device (localStorage), never in the tree's data.
+ * Which view a tree opens in (1101).
  *
- * With Settings → "Continue where work ended" ON, a start opens the last tree
- * in that view with that person, and a tree load (switch) opens that tree's
- * point. OFF (the default), a tree load opens the family view with the tree's
- * start person (TreeRenderer.loadViewModeForCurrentTree).
+ * - A tree load (start, opening or switching a tree) follows the tree's
+ *   "Default view" (`StromData.defaultView`, in the default person dialog):
+ *   the family view, or with 'last' the view last used with the tree on this
+ *   device. The person always comes from the tree's default person.
+ * - A reload of the page keeps the tree, the view and the person, whatever
+ *   the settings say (the reload point below).
+ *
+ * The last used view is kept per tree on this device (localStorage), never in
+ * the tree's data: a view switch must not make the tree dirty or sync.
  */
 
 import type { ViewMode } from './types.js';
 
-export const RESUME_STORAGE_KEY = 'strom-resume-points';
+export const LAST_VIEW_STORAGE_KEY = 'strom-last-views';
 
 const VIEW_MODES: readonly ViewMode[] = ['family', 'descendants', 'timeline', 'fan', 'map'];
-
-export interface ResumePoint {
-    person: string;
-    view: ViewMode;
-    up?: number;
-    down?: number;
-}
-
-interface ResumeStore {
-    last?: string;
-    trees: Record<string, ResumePoint>;
-}
 
 function isViewMode(v: unknown): v is ViewMode {
     return typeof v === 'string' && (VIEW_MODES as readonly string[]).includes(v);
 }
 
-/** The stored points; anything malformed is dropped. */
-export function parseResumeStore(raw: string | null): ResumeStore {
-    const store: ResumeStore = { trees: {} };
-    if (!raw) return store;
+/** The view a tree load opens: the family view unless the tree asks for the last used one and there is one. */
+export function chooseStartView(defaultView: unknown, storedView: ViewMode | null | undefined): ViewMode {
+    return defaultView === 'last' && isViewMode(storedView) ? storedView : 'family';
+}
+
+/** The stored last views per tree; anything malformed is dropped. */
+export function parseLastViews(raw: string | null): Record<string, ViewMode> {
+    const views: Record<string, ViewMode> = {};
+    if (!raw) return views;
     let data: unknown;
-    try { data = JSON.parse(raw); } catch { return store; }
-    if (!data || typeof data !== 'object') return store;
-    const d = data as { last?: unknown; trees?: unknown };
-    if (typeof d.last === 'string' && d.last) store.last = d.last;
-    if (d.trees && typeof d.trees === 'object') {
-        for (const [treeId, p] of Object.entries(d.trees as Record<string, unknown>)) {
-            if (!p || typeof p !== 'object') continue;
-            const point = p as { person?: unknown; view?: unknown; up?: unknown; down?: unknown };
-            if (typeof point.person !== 'string' || !point.person || !isViewMode(point.view)) continue;
-            const kept: ResumePoint = { person: point.person, view: point.view };
-            if (typeof point.up === 'number' && Number.isFinite(point.up)) kept.up = point.up;
-            if (typeof point.down === 'number' && Number.isFinite(point.down)) kept.down = point.down;
-            store.trees[treeId] = kept;
-        }
+    try { data = JSON.parse(raw); } catch { return views; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return views;
+    for (const [treeId, view] of Object.entries(data as Record<string, unknown>)) {
+        if (treeId && isViewMode(view)) views[treeId] = view;
     }
-    return store;
+    return views;
 }
 
-function readStore(): ResumeStore {
-    try { return parseResumeStore(localStorage.getItem(RESUME_STORAGE_KEY)); } catch { return { trees: {} }; }
+function readLastViews(): Record<string, ViewMode> {
+    try { return parseLastViews(localStorage.getItem(LAST_VIEW_STORAGE_KEY)); } catch { return {}; }
 }
 
-function writeStore(store: ResumeStore): void {
-    try { localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(store)); } catch { /* storage full or blocked */ }
+/** Note the view used with `treeId` now. */
+export function recordLastView(treeId: string, view: ViewMode): void {
+    const views = readLastViews();
+    if (views[treeId] === view) return;
+    views[treeId] = view;
+    try { localStorage.setItem(LAST_VIEW_STORAGE_KEY, JSON.stringify(views)); } catch { /* storage full or blocked */ }
 }
 
-/** Note where the work in `treeId` stands now (also makes it the last tree). */
-export function recordResumePoint(treeId: string, point: ResumePoint): void {
-    const store = readStore();
-    const prev = store.trees[treeId];
-    if (store.last === treeId && prev && prev.person === point.person && prev.view === point.view
-        && prev.up === point.up && prev.down === point.down) return;
-    store.last = treeId;
-    store.trees[treeId] = { ...point };
-    writeStore(store);
+/** The view last used with `treeId` on this device, or null. */
+export function readLastView(treeId: string): ViewMode | null {
+    return readLastViews()[treeId] ?? null;
 }
 
-/** Where the work in `treeId` ended, or null. */
-export function readResumePoint(treeId: string): ResumePoint | null {
-    return readStore().trees[treeId] ?? null;
-}
-
-/** The tree the work went on in last, or null. */
-export function lastResumeTreeId(): string | null {
-    return readStore().last ?? null;
+/** A tree deleted: its last view goes too. */
+export function forgetLastView(treeId: string): void {
+    const views = readLastViews();
+    if (!(treeId in views)) return;
+    delete views[treeId];
+    try { localStorage.setItem(LAST_VIEW_STORAGE_KEY, JSON.stringify(views)); } catch { /* storage blocked */ }
 }
 
 // ==================== Reload point (1101) ====================
