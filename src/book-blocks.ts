@@ -18,7 +18,8 @@ import { shownNameOrEmpty } from './person-name.js';
 import { feminineForm, czechRulesApply } from './surnames.js';
 import { safeHttpUrl } from './validation.js';
 import { proseHtml, coupleStoryYears } from './story-text.js';
-import { marriedInto, Rod, RodId, rodPlaceSpans, sortByBirth } from './lineage.js';
+import { marriedInto, placeSpans, Rod, RodId, rodGenerations, rodNameForms, rodPlaceSpans, sortByBirth } from './lineage.js';
+import { placeKey } from './places.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageOptions, ProtectedPersonPageTree,
     cleanWorkNote, personBookChartHtml, personBookClipsHtml, personBookResearchHtml, personBookTimelineHtml, personPageDate,
@@ -185,6 +186,10 @@ export function bookId(ctx: BookCtx, id: string): string {
  * in a saved file of pages, `<button class="pp-link" data-sp-open>` in the
  * app's window (spec 026 §0.8); plain text where `linkTo` has nothing.
  */
+export function bookLink(ctx: BookCtx, target: BookLinkTarget, html: string): string {
+    return link(ctx, target, html);
+}
+
 function link(ctx: BookCtx, target: BookLinkTarget, html: string): string {
     const to = ctx.linkTo(target, ctx);
     if (!to) return html;
@@ -314,7 +319,9 @@ function maleLineHtml(ctx: BookCtx, rod: Rod): string {
 }
 
 /** The lineage's opening page: name, facts, places, and the male line when it fits. */
-export function rodOverviewHtml(rod: Rod, ctx: BookCtx): string {
+export function rodOverviewHtml(rod: Rod, ctx: BookCtx, page: { title?: string } = {}): string {
+    // A page of a set (spec 026 §1.2): the page's header and charts, the same data.
+    if (ctx.mode !== 'book') return pageLineHeadHtml(rodPageLine(rod, ctx, page.title), ctx);
     const S = T(ctx);
     const B = S.book;
     const label = rodLabelOf(ctx, rod.id);
@@ -371,6 +378,8 @@ function diedYoung(p: Person): boolean {
 
 /** The lineage's line tree, variant B (§5.3): one row per member, indented by generation. */
 export function rodLineageHtml(rod: Rod, ctx: BookCtx, opts: { breakBefore?: boolean; id?: string } = {}): string {
+    // A page of a set (spec 026 §1.4): generation by generation.
+    if (ctx.mode !== 'book') return pageLineGenerationsHtml(rodPageLine(rod, ctx), ctx);
     const B = T(ctx).book;
     const index = ctx.model.index;
     const rows: string[] = [];
@@ -773,8 +782,12 @@ export function indexHtml(ctx: BookCtx): string {
         const years = bookYears(p);
         const own = ctx.model.ownChapters.get(id) ?? [];
         const all = [...new Set([...own, ...(ctx.model.birthChapter.has(id) ? [ctx.model.birthChapter.get(id)!] : [])])].sort((a, b) => a - b);
-        const refs = all.map(n => own.includes(n) ? `<b>${link(ctx, { chapter: n }, String(n))}</b>` : link(ctx, { chapter: n }, String(n))).join(', ');
-        const text = `${esc(name)}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`;
+        // Pages of a set (spec 026 §1.7): the name leads to the person's page, no chapters.
+        const pages = ctx.mode !== 'book';
+        const refs = pages ? '' : all.map(n => own.includes(n) ? `<b>${link(ctx, { chapter: n }, String(n))}</b>` : link(ctx, { chapter: n }, String(n))).join(', ');
+        const text = pages
+            ? `${link(ctx, { person: id }, esc(name))}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`
+            : `${esc(name)}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`;
         const letter = last ? sortKey(last).charAt(0).toLocaleUpperCase(ctx.lang) : '';
         entries.push({
             key: `${last ? '0' : '1'} ${sortKey(last)} ${sortKey(first)}`, letter,
@@ -795,5 +808,362 @@ export function indexHtml(ctx: BookCtx): string {
         if (letter !== prev) { out.push(`<div class="book-index-letter">${esc(letter)}</div>`); prev = letter; }
         out.push(e.html);
     }
+    // A page of a set has its own heading.
+    if (ctx.mode !== 'book') return `<div class="book-index">${out.join('')}</div>`;
     return `<h2>${esc(B.index)}</h2><div class="book-index">${out.join('')}</div>`;
+}
+
+// ─── Pages of a set (spec 026 §1) ───────────────────────────────────────────
+
+/**
+ * What a lineage's or a branch's page lays out (§1.2–§1.6): the root (the
+ * founder, the ancestor), the members in line order with their generation
+ * (I = the root's) and the spouses who married in.
+ */
+export interface PageLine {
+    kind: 'rod' | 'branch';
+    /** The lineage (kind 'rod'). */
+    rod?: Rod;
+    rootId: PersonId;
+    /** The heading, plain text. */
+    title: string;
+    memberIds: PersonId[];
+    spouseIds: PersonId[];
+    generation: ReadonlyMap<PersonId, number>;
+}
+
+function realIn(ctx: BookCtx, id: PersonId | undefined | null): boolean {
+    const p = person(ctx, id);
+    return !!p && !p.isPlaceholder;
+}
+
+/** A lineage as its page lays it out; `title` the set's (default: "Rod {label}"). */
+export function rodPageLine(rod: Rod, ctx: BookCtx, title?: string): PageLine {
+    const F = T(ctx).familyPages;
+    const generation = new Map<PersonId, number>();
+    rodGenerations(ctx.model.index, rod.id).forEach((ids, i) => { for (const id of ids) generation.set(id, i + 1); });
+    const label = rodLabelOf(ctx, rod.id);
+    return {
+        kind: 'rod', rod, rootId: rod.founderId,
+        title: title ?? (label ? F.rodTitle(label) : F.rodGeneric),
+        memberIds: rod.memberIds.filter(id => realIn(ctx, id) && generation.has(id)),
+        spouseIds: [...new Set(rod.spouses.map(s => s.personId))].filter(id => realIn(ctx, id)),
+        generation,
+    };
+}
+
+/**
+ * A branch (§1.6) as its page lays it out: the generations counted from the
+ * root through the members' parent and child links (descendants: I = the
+ * ancestor; the children of daughters included, as the selection has them).
+ */
+export function branchPageLine(ctx: BookCtx, rootId: PersonId, memberIds: readonly PersonId[], spouseIds: readonly PersonId[], title: string): PageLine {
+    const members = new Set(memberIds);
+    const generation = new Map<PersonId, number>([[rootId, 1]]);
+    const queue: PersonId[] = [rootId];
+    for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        const p = person(ctx, id);
+        if (!p) continue;
+        for (const n of [...p.childIds, ...p.parentIds]) {
+            if (members.has(n) && !generation.has(n)) { generation.set(n, generation.get(id)! + 1); queue.push(n); }
+        }
+    }
+    return {
+        kind: 'branch', rootId, title,
+        memberIds: memberIds.filter(id => realIn(ctx, id) && generation.has(id)),
+        spouseIds: spouseIds.filter(id => realIn(ctx, id)),
+        generation,
+    };
+}
+
+/** The unions of the line's members, each once, in the members' order. */
+function lineUnions(line: PageLine, ctx: BookCtx): Partnership[] {
+    const out: Partnership[] = [];
+    const seen = new Set<PartnershipId>();
+    for (const id of line.memberIds) {
+        for (const uid of person(ctx, id)?.partnerships ?? []) {
+            const u = ctx.tree.partnerships[uid];
+            if (u && !seen.has(uid)) { seen.add(uid); out.push(u); }
+        }
+    }
+    return out;
+}
+
+/** The line's families as its counts name them: a lineage's own (`rod.familyIds`), a branch's every union of a member. */
+function lineFamilyCount(line: PageLine, ctx: BookCtx): number {
+    return line.rod ? line.rod.familyIds.length : lineUnions(line, ctx).length;
+}
+
+/**
+ * First and last year of the line's records the page may show: members and
+ * spouses, their events and the members' weddings; a protected living person
+ * and a union with one say nothing (§5: the period ends with the last
+ * unprotected record).
+ */
+export function pageLinePeriod(line: PageLine, ctx: BookCtx): { from: number; to: number } | null {
+    let from = Infinity, to = -Infinity;
+    const note = (date: string | undefined): void => {
+        const y = yearOf(date);
+        if (y === null) return;
+        from = Math.min(from, y);
+        to = Math.max(to, y);
+    };
+    for (const id of [...line.memberIds, ...line.spouseIds]) {
+        const p = person(ctx, id);
+        if (!p || shielded(ctx, id)) continue;
+        note(p.birthDate);
+        note(p.deathDate);
+        for (const ev of p.events ?? []) note(ev.date);
+    }
+    for (const u of lineUnions(line, ctx)) {
+        if (shielded(ctx, u.person1Id) || (u.person2Id && shielded(ctx, u.person2Id))) continue;
+        note(u.startDate);
+        note(u.endDate);
+    }
+    return from <= to ? { from, to } : null;
+}
+
+/** A common time axis rounded to 50 years (§1.3), positions in per cent. */
+function timeAxis(lo: number, hi: number): { a: number; b: number; ticks: number[]; pos: (from: number, to: number) => string } {
+    const a = Math.floor(lo / 50) * 50;
+    let b = Math.min(2050, Math.ceil(hi / 50) * 50);
+    if (b <= a) b = a + 50;
+    const ticks = [...new Set([a, Math.round((a + b) / 100) * 50, b])];
+    const pos = (from: number, to: number): string => {
+        const left = Math.max(0, Math.min(100, ((from - a) / (b - a)) * 100));
+        const width = Math.min(100 - left, Math.max(1.2, ((to - from) / (b - a)) * 100));
+        return `left:${left.toFixed(1)}%;width:${width.toFixed(1)}%`;
+    };
+    return { a, b, ticks, pos };
+}
+
+/**
+ * Where a person's bar ends: the death, else today for the living (a
+ * protected living person: the birth year, §1.3), else the birth.
+ */
+function barEnd(ctx: BookCtx, id: PersonId, p: Person): number | null {
+    const d = yearOf(p.deathDate);
+    if (d !== null) return d;
+    const b = yearOf(p.birthDate);
+    if (ctx.living.has(id) && !shielded(ctx, id)) return ctx.now.getFullYear();
+    return b;
+}
+
+/** The line's places (§1.3, max 6 on the chart, the protected left out). */
+function linePlaces(line: PageLine, ctx: BookCtx) {
+    const members = new Set(line.memberIds);
+    const families = line.rod ? line.rod.familyIds : lineUnions(line, ctx).map(u => u.id);
+    return placeSpans(ctx.tree, [...line.memberIds, ...line.spouseIds], families, members, id => shielded(ctx, id));
+}
+
+/** The first occupation recorded ('' without one). */
+function occupationOf(p: Person): string {
+    for (const e of p.events ?? []) {
+        if (e.type !== 'occupation') continue;
+        const what = stripResearchIds(e.note?.trim() ?? '').text.trim();
+        if (what) return what;
+    }
+    return '';
+}
+
+/** A count as the header writes it: the number in bold ("<strong>48</strong> members"), escaped. */
+function statHtml(text: string): string {
+    return `<span class="sp-stat">${esc(text).replace(/^(\d+)/, '<strong>$1</strong>')}</span>`;
+}
+
+/**
+ * A lineage's or a branch's header and its "over time" charts (§1.2, §1.3):
+ * kicker, heading, founder / ancestor, counts, name forms, the three main
+ * places (linked to the chart of places), then the generations and the
+ * places on one time axis.
+ */
+export function pageLineHeadHtml(line: PageLine, ctx: BookCtx): string {
+    const F = T(ctx).familyPages;
+    const root = person(ctx, line.rootId);
+    const rows: string[] = [];
+    let rootHtml = '';
+    if (root && !root.isPlaceholder) {
+        const name = link(ctx, { person: line.rootId }, bookName(ctx, line.rootId));
+        let post = '';
+        if (line.kind === 'rod' && !shielded(ctx, line.rootId)) {
+            const bits = [founderYear(ctx, root.birthDate), root.birthPlace?.trim() ?? ''].filter(Boolean);
+            if (bits.length) post = ` (* ${esc(bits.join(', '))})`;
+        } else {
+            const y = bookYears(root);
+            if (y) post = ` (${esc(y)})`;
+        }
+        const word = (line.kind === 'rod' ? F.founder : F.ancestor)[gKey(root)];
+        rootHtml = `<p class="sp-founder">${esc(word)} ${name}${post}</p>`;
+    }
+    const period = pageLinePeriod(line, ctx);
+    const gens = new Set(line.memberIds.map(id => line.generation.get(id) ?? 1)).size;
+    const stats = [
+        period ? `<span class="sp-stat"><strong>${period.from}–${period.to}</strong></span>` : '',
+        line.rod ? statHtml(F.nMembers(line.rod.realMemberCount)) : statHtml(F.nDesc(Math.max(0, line.memberIds.length - 1))),
+        statHtml(F.nSpouses(line.rod ? line.rod.realSpouseCount : line.spouseIds.length)),
+        statHtml(F.nGens(gens)),
+        statHtml(F.nFams(lineFamilyCount(line, ctx))),
+    ].filter(Boolean).join(' · ');
+    if (line.rod && rodShown(ctx, line.rod.founderId)) {
+        const nf = rodNameForms(line.rod, ctx.model.index.data);
+        if (nf.forms.length > 1) {
+            const fem = nf.feminine.length ? `<span class="sp-faint"> · ${esc(F.feminine(nf.feminine.join(', ')))}</span>` : '';
+            rows.push(`<dt>${esc(F.forms)}</dt><dd>${esc(nf.forms.join(' · '))}${fem}</dd>`);
+        }
+    }
+    const spans = linePlaces(line, ctx);
+    if (spans.length) {
+        const to = `#${bookId(ctx, 'sp-places')}`;
+        const names = spans.slice(0, 3).map(s => {
+            const key = esc(placeKey(s.name));
+            return ctx.mode === 'file'
+                ? `<a class="pp-link sp-place" href="${esc(to)}" data-sp-place="${key}">${esc(s.name)}</a>`
+                : `<span class="sp-place" data-sp-place="${key}">${esc(s.name)}</span>`;
+        });
+        const more = spans.length > 3 ? ` <span class="sp-faint">${esc(F.morePlaces(spans.length - 3))}</span>` : '';
+        rows.push(`<dt>${esc(F.places)}</dt><dd>${names.join(', ')}${more}</dd>`);
+    }
+    const kicker = line.kind === 'rod' ? F.kRod : F.kBranch;
+    return `<header class="sp-head"><div class="sp-kicker">${esc(kicker)}</div><h1 class="sp-h1">${esc(line.title)}</h1>${rootHtml}`
+        + `<p class="sp-stats">${stats}</p>${rows.length ? `<dl class="sp-facts">${rows.join('')}</dl>` : ''}</header>`
+        + lineTimeHtml(line, ctx, spans);
+}
+
+/** "Rod v čase" (§1.3): generations I–N and the places on a common axis rounded to 50 years. */
+function lineTimeHtml(line: PageLine, ctx: BookCtx, spans: ReturnType<typeof placeSpans>): string {
+    const F = T(ctx).familyPages;
+    const byGen = new Map<number, { from: number; to: number }>();
+    for (const id of line.memberIds) {
+        const p = person(ctx, id)!;
+        const b = yearOf(p.birthDate);
+        const e = barEnd(ctx, id, p);
+        const from = b ?? e;
+        if (from === null) continue;
+        const g = line.generation.get(id) ?? 1;
+        const cur = byGen.get(g);
+        const to = Math.max(from, e ?? from);
+        byGen.set(g, cur ? { from: Math.min(cur.from, from), to: Math.max(cur.to, to) } : { from, to });
+    }
+    const places = spans.slice(0, 6);
+    const all = [...byGen.values(), ...places];
+    if (!all.length) return '';
+    const ax = timeAxis(Math.min(...all.map(x => x.from)), Math.max(...all.map(x => x.to)));
+    const ticks = `<div class="sp-ticks" aria-hidden="true">${ax.ticks.map(t => `<span>${t}</span>`).join('')}</div>`;
+    const bar = (from: number, to: number): string =>
+        `<span class="sp-axis"><span class="sp-bar" style="${ax.pos(from, to)}" title="${from}–${to}"></span></span>`;
+    const genRows = [...byGen.keys()].sort((a, b) => a - b).map(g => {
+        const s = byGen.get(g)!;
+        return `<div class="sp-bar-row"><span class="sp-bar-k sp-bar-gen">${roman(g)}</span>${bar(s.from, s.to)}</div>`;
+    }).join('');
+    const placeRows = places.map(s =>
+        `<div class="sp-bar-row sp-bar-row--place"><span class="sp-bar-k"><span class="sp-bar-name">${esc(s.name)}</span> <span class="sp-bar-n">${s.persons}</span></span>${bar(s.from, s.to)}</div>`).join('');
+    const more = spans.length > 6 ? `<p class="sp-faint sp-more">${esc(F.morePlaces(spans.length - 6))}</p>` : '';
+    const branch = line.kind === 'branch';
+    const gensChart = genRows ? `<div class="sp-chart"><h3 class="sp-h3">${esc(F.gens)}</h3>${genRows}${ticks}</div>` : '';
+    const placesChart = placeRows
+        ? `<div class="sp-chart" id="${esc(bookId(ctx, 'sp-places'))}"><h3 class="sp-h3">${esc(branch ? F.placeSpansBranch : F.placeSpans)}</h3>${placeRows}${ticks}${more}</div>`
+        : '';
+    return `<section class="sp-block sp-time" id="${esc(bookId(ctx, 'sp-time'))}"><h2 class="sp-h2">${esc(branch ? F.timelineBranch : F.timeline)}</h2>`
+        + `<div class="sp-charts">${gensChart}${placesChart}</div></section>`;
+}
+
+/** A recorded marriage (not a partnership without one). */
+function isWedding(u: Partnership): boolean {
+    return u.status === 'married' || u.status === 'divorced';
+}
+
+/**
+ * "Linie po generacích" (§1.4): per generation a roman numeral with the
+ * count and the birth years, a row per member (name, years, place,
+ * occupation; the parents' family; died in childhood) and the member's
+ * unions under it (partner, the partner's lineage, the children in a fold
+ * that is open without the script, the family's page). A protected living
+ * person is the name and the birth year only (§5).
+ */
+export function pageLineGenerationsHtml(line: PageLine, ctx: BookCtx): string {
+    const F = T(ctx).familyPages;
+    const members = new Set(line.memberIds);
+    // The union each member was born of, among the members' own unions.
+    const parentUnion = new Map<PersonId, Partnership>();
+    for (const u of lineUnions(line, ctx)) {
+        for (const c of u.childIds ?? []) if (members.has(c) && !parentUnion.has(c)) parentUnion.set(c, u);
+    }
+    const byGen = new Map<number, PersonId[]>();
+    for (const id of line.memberIds) {
+        const g = line.generation.get(id) ?? 1;
+        byGen.set(g, [...(byGen.get(g) ?? []), id]);
+    }
+    const gens = [...byGen.keys()].sort((a, b) => a - b).map(g => {
+        const ids = byGen.get(g)!;
+        const births = ids.map(id => yearOf(person(ctx, id)?.birthDate)).filter((y): y is number => y !== null);
+        const meta = F.genMeta(ids.length, births.length ? Math.min(...births) : null, births.length ? Math.max(...births) : null);
+        const rows = ids.map(id => lineRowHtml(id, line, ctx, members, parentUnion)).join('');
+        return `<div class="sp-gen"><h3 class="sp-gen-h"><span class="sp-roman">${roman(g)}</span> <span class="sp-gen-meta">${esc(meta)}</span></h3><div class="sp-rows">${rows}</div></div>`;
+    }).join('');
+    if (!gens) return '';
+    return `<section class="sp-block sp-line" id="${esc(bookId(ctx, 'sp-line'))}"><h2 class="sp-h2">${esc(F.line)}</h2>${gens}</section>`;
+}
+
+function lineRowHtml(id: PersonId, line: PageLine, ctx: BookCtx, members: ReadonlySet<PersonId>, parentUnion: ReadonlyMap<PersonId, Partnership>): string {
+    const F = T(ctx).familyPages;
+    const p = person(ctx, id)!;
+    const name = link(ctx, { person: id }, bookName(ctx, id));
+    const years = bookYears(p);
+    const yrs = years ? ` <span class="sp-yrs">${esc(years)}</span>` : '';
+    if (shielded(ctx, id)) return `<div class="sp-row sp-row--prot"><p class="sp-row-main">${name}${yrs}</p></div>`;
+    const meta = [p.birthPlace?.trim() ?? '', occupationOf(p)].filter(Boolean).join(' · ');
+    const young = diedYoung(p);
+    let sub = '';
+    const pu = parentUnion.get(id);
+    const lineParent = pu ? [pu.person1Id, pu.person2Id].find(m => !!m && members.has(m)) : undefined;
+    if (pu && lineParent) {
+        const fam = ctx.linkTo({ family: pu.id }, ctx)
+            ? link(ctx, { family: pu.id }, pairFirstNames(ctx, pu))
+            : link(ctx, { person: lineParent }, bookName(ctx, lineParent));
+        sub += `<p class="sp-row-sub">${esc(F.childWord[gKey(p)])} · ${fam}</p>`;
+    }
+    if (young) sub += `<p class="sp-row-note">${esc(F.diedChild[gKey(p)])}</p>`;
+    const unions = p.partnerships.map(uid => ctx.tree.partnerships[uid]).filter((u): u is Partnership => !!u)
+        .map((u, i) => ({ u, i, y: yearOf(u.startDate) }))
+        .sort((a, b) => (a.y ?? Infinity) - (b.y ?? Infinity) || a.i - b.i)
+        .map(x => lineUnionHtml(x.u, id, ctx)).filter(Boolean);
+    return `<div class="sp-row${young ? ' sp-row--young' : ''}"><p class="sp-row-main">${name}${yrs}${meta ? `<span class="sp-meta"> · ${esc(meta)}</span>` : ''}</p>`
+        + `${sub}${unions.length ? `<ul class="sp-unions">${unions.join('')}</ul>` : ''}</div>`;
+}
+
+function lineUnionHtml(u: Partnership, memberId: PersonId, ctx: BookCtx): string {
+    const F = T(ctx).familyPages;
+    const member = person(ctx, memberId)!;
+    const otherId = u.person1Id === memberId ? u.person2Id : u.person1Id;
+    const known = realIn(ctx, otherId);
+    const bits: string[] = [];
+    if (known) {
+        const y = yearOf(u.startDate);
+        const head = y !== null ? `⚭ ${y}` : isWedding(u) ? '⚭' : '';
+        const other = person(ctx, otherId)!;
+        const oy = bookYears(other);
+        const partner = `${link(ctx, { person: otherId }, bookName(ctx, otherId))}${oy ? ` <span class="sp-yrs">(${esc(oy)})</span>` : ''}`;
+        bits.push(head ? `<span class="sp-nw">${head}</span> ${partner}` : partner);
+        const otherRod = rodShown(ctx, otherId) && rodShown(ctx, memberId) ? birthRodNamed(ctx, otherId) : null;
+        if (otherRod && otherRod !== rodOfPerson(ctx, memberId)) {
+            const label = rodLabelOf(ctx, otherRod);
+            const text = member.gender === 'female' ? F.toRod(label) : F.birthRod(label);
+            bits.push(`<span class="sp-rodref">${link(ctx, { rodId: otherRod }, esc(text))}</span>`);
+        }
+    } else {
+        bits.push(`<span class="sp-faint">${esc(member.gender === 'female' ? F.fatherUnknown : F.motherUnknown)}</span>`);
+    }
+    const kids = sortByBirth(ctx.tree, (u.childIds ?? []).filter(c => realIn(ctx, c)));
+    if (!kids.length && known && isWedding(u)) bits.push(`<span class="sp-faint">${esc(F.noKids)}</span>`);
+    if (ctx.linkTo({ family: u.id }, ctx)) bits.push(link(ctx, { family: u.id }, esc(F.famLink)));
+    const fold = kids.length
+        ? `<details class="sp-kids" open><summary>${esc(F.nKids(kids.length))}</summary><p class="sp-kid-list">`
+            + kids.map(k => {
+                const ky = bookYears(person(ctx, k));
+                return `<span class="sp-kid">${link(ctx, { person: k }, bookName(ctx, k))}${ky ? ` <span class="sp-yrs">${esc(ky)}</span>` : ''}</span>`;
+            }).join(', ')
+            + '</p></details>'
+        : '';
+    return `<li class="sp-union"><span class="sp-union-line">${bits.join(' · ')}</span>${fold}</li>`;
 }

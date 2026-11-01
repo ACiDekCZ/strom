@@ -914,7 +914,19 @@ export interface RodPlaceSpan {
 export function rodPlaceSpans(index: LineageIndex, rodId: RodId, skip?: (personId: PersonId) => boolean): RodPlaceSpan[] {
     const rod = index.rods.get(rodId);
     if (!rod) return [];
-    const data = index.data;
+    return placeSpans(index.data, [...rod.memberIds, ...rod.spouses.map(s => s.personId)], rod.familyIds, new Set(rod.memberIds), skip);
+}
+
+/**
+ * The places of any group of people and families (a lineage, a branch), as
+ * `rodPlaceSpans` counts them: each person's birth, death and events, each
+ * family's wedding (counted for its partner among `members`); a family of a
+ * skipped partner says nothing.
+ */
+export function placeSpans(
+    data: StromData, people: readonly PersonId[], familyIds: readonly PartnershipId[],
+    members: ReadonlySet<PersonId>, skip?: (personId: PersonId) => boolean,
+): RodPlaceSpan[] {
     const acc = new Map<string, { names: Map<string, number>; from: number; to: number; persons: Set<string> }>();
     const note = (place: string | undefined, date: string | undefined, who: string): void => {
         const name = place?.trim();
@@ -928,7 +940,6 @@ export function rodPlaceSpans(index: LineageIndex, rodId: RodId, skip?: (personI
         a.to = Math.max(a.to, year);
         a.persons.add(who);
     };
-    const people = [...rod.memberIds, ...rod.spouses.map(s => s.personId)];
     for (const id of people) {
         const p = data.persons[id];
         if (!p || p.isPlaceholder || skip?.(id)) continue;
@@ -936,11 +947,11 @@ export function rodPlaceSpans(index: LineageIndex, rodId: RodId, skip?: (personI
         note(p.deathPlace, p.deathDate, id);
         for (const ev of p.events ?? []) note(ev.place, ev.date, id);
     }
-    for (const uid of rod.familyIds) {
+    for (const uid of familyIds) {
         const u = data.partnerships[uid];
         // A family of a skipped (living, protected) partner says nothing of where they wed either.
         if (!u || (skip && (skip(u.person1Id) || (!!u.person2Id && skip(u.person2Id))))) continue;
-        const who = rod.memberIds.includes(u.person1Id) ? u.person1Id : u.person2Id;
+        const who = members.has(u.person1Id) ? u.person1Id : u.person2Id;
         note(u.startPlace, u.startDate, who);
     }
     return [...acc.values()]
