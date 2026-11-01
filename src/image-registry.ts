@@ -94,8 +94,11 @@ export class ImageRegistry {
         return this.list.map(e => ({ n: e.n, src: e.src, kind: e.kind }));
     }
 
-    /** The rules of one <style>: `.img-N{background-image:url("…");--pp-ar:w / h}` (as the person page writes them). */
-    css(): string {
-        return this.list.map(e => `.img-${e.n}{background-image:url("${e.src}")${e.ratio ? `;--pp-ar:${e.ratio}` : ''}}`).join('\n');
+    /**
+     * The rules of one <style>: `.img-N{background-image:url("…");--pp-ar:w / h}` (as the person page writes them);
+     * `url(n)` puts another address in place of the data URL (a set of files: `obrazky/img-N.jpg`).
+     */
+    css(url?: (n: number) => string): string {
+        return this.list.map(e => `.img-${e.n}{background-image:url("${url ? url(e.n) : e.src}")${e.ratio ? `;--pp-ar:${e.ratio}` : ''}}`).join('\n');
     }
 }

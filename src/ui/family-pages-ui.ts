@@ -24,7 +24,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
-import { buildPageSetHtmlAsync, pageSetBarHtml, pageSetRenderedPages, pageSetSearchHtml, pageSetSectionHtml } from '../family-pages-html.js';
+import { buildZip } from '../zip.js';
+import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetBarHtml, pageSetRenderedPages, pageSetSearchHtml, pageSetSectionHtml } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
 import { RodId, buildLineages, rodOf } from '../lineage.js';
@@ -147,7 +148,9 @@ export class PagesCancelled extends Error {
 export interface PagesJob { cancelled: boolean }
 
 export interface PagesFile {
-    html: string;
+    /** One .html file, or the set of files (§6.4) as a .zip. */
+    data: string | Uint8Array<ArrayBuffer>;
+    type: 'text/html' | 'application/zip';
     name: string;
     bytes: number;
     title: string;
@@ -175,12 +178,13 @@ function stepOf(page: SetPage | undefined): string {
 
 /**
  * Build the file a page at a time: the set, the reduced images, the pages,
- * the file. `onStep(done, total, text)` reports the pages done (0 / 0 while
- * preparing and reducing images). Throws PagesCancelled once `job.cancelled`.
+ * the file (with `zip` the set of files, §6.4). `onStep(done, total, text)`
+ * reports the pages done (0 / 0 while preparing and reducing images).
+ * Throws PagesCancelled once `job.cancelled`.
  */
 export async function buildPagesFile(
     data: StromData, spec: BookSelectionSpec, opts: PageSetOptions, job: PagesJob,
-    onStep: (done: number, total: number, text: string) => void,
+    onStep: (done: number, total: number, text: string) => void, zip = false,
 ): Promise<PagesFile> {
     const F = strings.familyPages;
     const check = (): void => { if (job.cancelled) throw new PagesCancelled(); };
@@ -203,18 +207,25 @@ export async function buildPagesFile(
     }
     const pages = pageSetRenderedPages(set);
     onStep(0, pages.length, stepOf(pages[0]));
-    const html = await buildPageSetHtmlAsync(set, {
+    const build = {
         fontCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         pause: async () => { await idle(); check(); },
-        progress: (done, total) => onStep(done, total, done < total ? stepOf(pages[done]) : F.step.write),
-    });
+        progress: (done: number, total: number) => onStep(done, total, done < total ? stepOf(pages[done]) : F.step.write),
+    };
+    const title = set.bySlug.get(set.introSlug)?.title ?? '';
+    if (zip) {
+        const bytes = buildZip(await buildPageSetFilesAsync(set, build), set.options.now);
+        check();
+        return { data: bytes, type: 'application/zip', name: pageSetZipName(set), bytes: bytes.length, title };
+    }
+    const html = await buildPageSetHtmlAsync(set, build);
     check();
-    return { html, name: pageSetFileName(set), bytes: new Blob([html]).size, title: set.bySlug.get(set.introSlug)?.title ?? '' };
+    return { data: html, type: 'text/html', name: pageSetFileName(set), bytes: new Blob([html]).size, title };
 }
 
 /** Save by a download (as the person page and the book do). */
 export function downloadPagesFile(file: PagesFile): void {
-    const blob = new Blob([file.html], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([file.data], { type: file.type === 'text/html' ? 'text/html;charset=utf-8' : file.type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -237,7 +248,7 @@ export function canSharePagesFile(): boolean {
 }
 
 export async function sharePagesFile(file: PagesFile): Promise<void> {
-    const f = new File([file.html], file.name, { type: 'text/html' });
+    const f = new File([file.data], file.name, { type: file.type });
     await navigator.share({ files: [f], title: file.title || file.name });
 }
 

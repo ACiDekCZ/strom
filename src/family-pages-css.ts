@@ -396,6 +396,11 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
  * where it was. ×, Escape or a click beside the image go back when the box
  * was opened here, else (a link with `--obr-N` opened the file) replace the
  * address with the page's `#{slug}`; ‹ › replace the entry.
+ *
+ * The map of places (§3.7): a place of a lineage's header selects its row;
+ * a hash `{map}--m-{key}` selects it on opening. In the set of files (§6.4)
+ * each file holds one page, the search index comes from hledani.js
+ * (`window.__spIndex`) and the results lead to `{slug}.html`.
  */
 export const PAGE_SET_SCRIPT = `(function(){var d=document,h=d.documentElement;
 var q=function(s,r){return Array.prototype.slice.call((r||d).querySelectorAll(s))};
@@ -411,7 +416,9 @@ function show(s){if(s===cur)return false;if(cur)cur.classList.remove('sp-cur');s
 function route(first){var id=hashId(),s=pageOf(id)||intro,moved=show(s);
 var e=id&&id!==s.id?d.getElementById(id):null;if(e&&e.tagName==='DETAILS'&&!e.open){e.open=true;if(!moved)e.scrollIntoView()}
 if(!moved)return;
-if(e){if(!/(^|--)obr-/.test(id))e.scrollIntoView()}else if(!first)window.scrollTo(0,0)}
+if(e){if(!/(^|--)obr-/.test(id))e.scrollIntoView()}else if(!first)window.scrollTo(0,0);
+var mk=s.classList.contains('sp-page--map')&&/--m-(.+)$/.exec(id);if(mk)selPlace(s,mk[1])}
+function selPlace(m,k){q('[data-pp-map-place]',m).forEach(function(x){x.classList.toggle('is-sel',x.getAttribute('data-pp-map-place').split('\\t').indexOf(k)>=0)})}
 h.classList.add('sp-on');
 q('details.sp-kids[open],details.sp-ix-more[open]').forEach(function(f){f.open=false});
 route(true);
@@ -423,11 +430,12 @@ menuBtn=bar&&bar.querySelector('.sp-fbar-menu'),lang=h.lang||'en',ix=null,str=nu
 try{pr=new Intl.PluralRules(lang)}catch(x){}
 function pl(t,n){t=t||{};return String(t[pr?pr.select(n):'other']||t.other||'').replace('{n}',String(n))}
 function fill(t,v){return String(t||'').replace('{q}',function(){return v})}
-function link(slug,html){return slug&&d.getElementById(slug)?'<a class="pp-link" href="'+'#'+esc(slug)+'">'+html+'</a>':html}
-function draw(v){ix=ix||J('sp-index')||[];str=str||J('sp-strings')||{};var r=spSearch(ix,v,lang,10),o;
+function to(slug){return !slug?'':str&&str.zip?esc(slug===str.home?'index.html':slug+'.html'):d.getElementById(slug)?'#'+esc(slug):''}
+function link(slug,html){var u=to(slug);return u?'<a class="pp-link" href="'+u+'">'+html+'</a>':html}
+function draw(v){ix=ix||window.__spIndex||J('sp-index')||[];str=str||J('sp-strings')||{};var r=spSearch(ix,v,lang,10),o;
 if(!r.total)o='<div class="sp-res-none"><p class="sp-res-none-t">'+esc(fill(str.none,v))+'</p><p class="sp-res-hint">'+esc(str.hint||'')+'</p><p>'+link(str.idx,esc(str.toIdx||''))+'</p></div>';
 else o='<p class="sp-res-head">'+esc(fill(pl(str.res,r.total),v))+'</p><ul class="sp-res-list">'+r.hits.map(function(e){
-return '<li class="sp-res-row">'+(e.s&&d.getElementById(e.s)?'<a class="pp-link sp-res-n" href="'+'#'+esc(e.s)+'">'+esc(e.n)+'</a>':'<span class="sp-res-n">'+esc(e.n)+'</span>')
+var u=to(e.s);return '<li class="sp-res-row">'+(u?'<a class="pp-link sp-res-n" href="'+u+'">'+esc(e.n)+'</a>':'<span class="sp-res-n">'+esc(e.n)+'</span>')
 +(e.y?' <span class="sp-res-y">'+esc(e.y)+'</span>':'')+(e.t?' <span class="sp-res-t">'+esc(e.t)+'</span>':'')+'</li>'}).join('')+'</ul>'
 +(r.total>r.hits.length?'<p class="sp-res-more">'+link(str.idx,esc(pl(str.more,r.total-r.hits.length)))+'</p>':'');
 res.innerHTML=o}
@@ -475,8 +483,7 @@ window.addEventListener('keydown',function(e){if(!lbEl)return;var k=e.key;
 if(k==='Escape'||k==='Esc'){e.preventDefault();e.stopPropagation();lbClose();return}
 if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();e.stopPropagation();var l=lbEl.querySelector('[data-pp-lb="'+(k==='ArrowLeft'?'prev':'next')+'"]');if(l)l.click()}},true);
 d.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-sp-place]');if(!a)return;
-var m=d.getElementById((a.getAttribute('href')||'').slice(1));if(!m||!m.classList.contains('sp-page--map'))return;var k=a.getAttribute('data-sp-place');
-q('[data-pp-map-place]',m).forEach(function(x){x.classList.toggle('is-sel',x.getAttribute('data-pp-map-place').split('\\t').indexOf(k)>=0)})});
+var m=d.getElementById((a.getAttribute('href')||'').slice(1));if(!m||!m.classList.contains('sp-page--map'))return;selPlace(m,a.getAttribute('data-sp-place'))});
 window.addEventListener('popstate',lbSync);
 lbSync();
 window.addEventListener('hashchange',function(){if(on)cancel(true);shut();route(false);lbSync()});

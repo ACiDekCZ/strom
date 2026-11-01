@@ -35,7 +35,12 @@ import {
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
-import { RodPlacePoint, collectRodPlacePoints, planPlacesMap, placesMapHtml, rodPlacePointSize } from './person-page-map.js';
+import {
+    PLACES_MAP_SCRIPT, RodPlacePoint, collectRodPlacePoints, planPlacesMap, placesMapHtml, rodPlacePointSize,
+} from './person-page-map.js';
+import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
+import { fanZoomInlineScript } from './fan-zoom.js';
+import { ZipEntry, dataUrlBytes } from './zip.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -61,6 +66,8 @@ interface Render {
     gens: Map<RodId, Map<PersonId, number>>;
     /** The index of places' rows, once asked for (the index and the lineages' headers). */
     places?: SetPlaceRow[];
+    /** A set of files (§6.4): the search's links lead to `{slug}.html`. */
+    zip?: boolean;
 }
 
 function esc(text: string): string {
@@ -587,6 +594,7 @@ function searchStrings(r: Render): Record<string, unknown> {
         more: pluralTemplates(lang, n => F.searchMore(n)),
         none: F.none('{q}'), hint, toIdx: F.toIdx, idx: drawnSlug(r, set.indexSlug.persons),
         lbHint: F.lbHint,
+        ...(r.zip ? { zip: true, home: set.introSlug } : {}),
     };
 }
 
@@ -978,4 +986,98 @@ export function pageSetSectionHtml(set: PageSet, slug: string, opts: PageSetHtml
     const page = set.bySlug.get(slug);
     if (!page || !rendered(set, page)) return '';
     return sectionHtml(makeRender(set, 'app', opts), page);
+}
+
+// ─── The set of files (§6.4) ──────────────────────────────────────────────
+
+/** The file of a page in the set of files: the introduction is index.html. */
+function zipFileOf(set: PageSet, slug: string): string {
+    return slug === set.introSlug ? 'index.html' : `${slug}.html`;
+}
+
+const IMAGE_EXT: Record<string, string> = {
+    'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
+};
+
+/**
+ * A page's links in the set of files: `#slug` of another page becomes
+ * `slug.html` (the introduction `index.html`), `#slug--x` `slug.html#slug--x`,
+ * a link inside the page stays; a place of a lineage's header leads to the
+ * map with the place selected (`mapa-obci.html#mapa-obci--m-{key}`).
+ */
+function zipLinks(set: PageSet, own: string, drawn: ReadonlySet<string>, html: string): string {
+    return html
+        .replace(/href="#([^"]+)" data-sp-place="([^"]*)"/g, (all, id: string, key: string) =>
+            set.bySlug.get(id)?.kind === 'map' && drawn.has(id) ? `href="#${id}--m-${encodeURIComponent(key)}" data-sp-place="${key}"` : all)
+        .replace(/href="#([^"]+)"/g, (all, id: string) => {
+            const i = id.indexOf('--');
+            const slug = i > 0 ? id.slice(0, i) : id;
+            if (!drawn.has(slug) || slug === own) return all;
+            return `href="${zipFileOf(set, slug)}${slug === id ? '' : `#${id}`}"`;
+        });
+}
+
+/** One file of the set: the shared styles and scripts by reference, the bar, the page. */
+function zipPageShell(r: Render, page: SetPage, body: string): string {
+    const lang = r.set.options.lang;
+    return `<!doctype html><html lang="${esc(lang)}" class="no-js"><head>`
+        + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
+        + `<meta name="generator" content="Strom"><title>${esc(page.title)}</title>`
+        + `<link rel="stylesheet" href="styl.css"></head><body><script>document.documentElement.className='js'</script>`
+        + barHtml(r, page) + `<main class="pp-file sp-file">${body}</main>`
+        + `<script type="application/json" id="sp-strings">${jsonForScript(searchStrings(r))}</script>`
+        + `<script src="hledani.js"></script><script src="skript.js"></script></body></html>`;
+}
+
+/**
+ * The set of files (§6.4), a page at a time: `index.html` (the introduction
+ * and the contents), `{slug}.html` per page, the shared `styl.css` and
+ * `skript.js`, the images as files in `obrazky/` and the search index as
+ * `hledani.js` (`window.__spIndex`: a page opened from a folder over file://
+ * cannot fetch a JSON file). Works offline from the unpacked folder and
+ * as it is on a web server.
+ */
+export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOptions & {
+    pause?: () => Promise<void>;
+    progress?: (done: number, total: number) => void;
+} = {}): Promise<ZipEntry[]> {
+    const r = makeRender(set, 'file', opts);
+    r.zip = true;
+    const pages = pageSetRenderedPages(set);
+    const drawn = new Set(pages.map(p => p.slug));
+    const out: ZipEntry[] = [];
+    const results = `<div class="sp-results" id="sp-results" aria-live="polite" hidden></div>`;
+    const foot = `<p class="sp-print-foot">${esc(r.S.familyPages.printFoot(zipFileOf(set, set.introSlug)))}</p>`;
+    for (const p of pages) {
+        const toc = p.slug === set.introSlug ? fileTocHtml(r, pages) : '';
+        const html = zipPageShell(r, p, `${toc}${results}${sectionHtml(r, p)}${foot}`);
+        out.push({ path: zipFileOf(set, p.slug), data: zipLinks(set, p.slug, drawn, html) });
+        opts.progress?.(out.length, pages.length);
+        if (opts.pause) await opts.pause();
+    }
+    // Last: every image of every page is in the registry by now.
+    const files = new Map<number, string>();
+    for (const e of set.images.entries()) {
+        const img = dataUrlBytes(e.src);
+        if (!img) continue;
+        const path = `obrazky/img-${e.n}.${IMAGE_EXT[img.mime] ?? 'bin'}`;
+        files.set(e.n, path);
+        out.push({ path, data: img.bytes });
+    }
+    const css = `${personPageFileCss(opts.fontCss ?? '')}${FAMILY_PAGES_CSS}\n`
+        + set.images.css(n => files.get(n) ?? '');
+    out.unshift(
+        { path: 'styl.css', data: css },
+        { path: 'skript.js', data: [PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, PLACES_MAP_SCRIPT, fanZoomInlineScript(), PAGE_SET_SCRIPT].join(';\n') },
+        { path: 'hledani.js', data: `window.__spIndex=${jsonForScript(set.searchIndex)};\n` },
+    );
+    // index.html first: an unpacker lists it at the top.
+    const home = out.findIndex(e => e.path === 'index.html');
+    if (home > 0) out.unshift(...out.splice(home, 1));
+    return out;
+}
+
+/** The name of the set of files: the file's name with .zip (`Rod-Fisek.zip`). */
+export function pageSetZipName(set: PageSet): string {
+    return pageSetFileName(set).replace(/\.html$/, '') + '.zip';
 }

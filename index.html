@@ -15762,14 +15762,14 @@
         #book-modal .fp-big { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--warning); border-radius: 10px; background: var(--surface); font-size: 13.5px; line-height: 1.45; }
         #book-modal .fp-big[hidden], #book-modal .fp-offer[hidden] { display: none; }
         #book-modal .fp-big-t { font-weight: 600; color: var(--warning-text); }
-        #book-modal .fp-big-d, #book-modal .fp-zip-note { color: var(--text-light); }
-        #book-modal .fp-zip-note { font-size: 12.5px; }
+        #book-modal .fp-big-d { color: var(--text-light); }
         #book-modal .fp-offers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
         #book-modal .fp-offer {
             min-height: 36px; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 8px; background: var(--surface);
             color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; text-align: left;
         }
         #book-modal .fp-offer:disabled { border-color: var(--border); color: var(--text-faint); cursor: default; }
+        #book-modal .fp-offer[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
         #book-modal .fp-offer:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         #book-modal .fp-prog, #book-modal .fp-res { display: flex; flex-direction: column; gap: 10px; font-size: 14px; min-width: 0; }
         #book-modal .fp-prog-h { display: flex; justify-content: space-between; gap: 12px; }

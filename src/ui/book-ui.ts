@@ -38,6 +38,7 @@ import {
     PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName, pageSetImages, pageSetPrivacyWarning, sizeVerdict,
 } from '../family-pages.js';
 import { PagesCancelled, PagesFile, PagesJob, buildPagesFile, canSharePagesFile, downloadPagesFile, sharePagesFile } from './family-pages-ui.js';
+import { pageSetZipName } from '../family-pages-html.js';
 import { LineageIndex, Rod, RodId, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
@@ -113,6 +114,14 @@ interface DialogState {
     job: PagesJob | null;
     prog: { done: number; total: number; text: string };
     file: PagesFile | null;
+    /** The set of files chosen over 15 MB (§6.3, §6.4); over 50 MB it is the only way. */
+    zip: boolean;
+}
+
+/** Whether "Save file" makes the set of files: chosen over 15 MB, always over 50 MB (§6.3). */
+function savesZip(s: DialogState): boolean {
+    const v = s.est ? sizeVerdict(s.est.size.bytes) : 'ok';
+    return v === 'set' || (v === 'big' && s.zip);
 }
 
 let st: DialogState | null = null;
@@ -509,14 +518,15 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
     const sel = selectionOf(s);
     const ready = selectionReady(sel) && sel.kind !== 'tree';
     const verdict = est ? sizeVerdict(est.size.bytes) : 'ok';
+    const zip = savesZip(s);
     const estEl = foot.querySelector<HTMLElement>('.fp-est')!;
     estEl.classList.toggle('is-empty', !ready);
     estEl.classList.toggle('is-big', verdict !== 'ok');
     estEl.classList.toggle('is-stale', s.estTimer !== null);
-    setText(foot, '.fp-est-t', !ready ? (s.kind === 'rods' ? strings.book.noRodSelected : strings.book.dlg.noPerson) : verdict === 'set' ? F.estZip : F.estFile);
+    setText(foot, '.fp-est-t', !ready ? (s.kind === 'rods' ? strings.book.noRodSelected : strings.book.dlg.noPerson) : zip ? F.estZip : F.estFile);
     setText(foot, '.fp-est-d', ready && est ? F.estDetail(est.size.pages, est.size.persons, est.size.images) : '');
     setText(foot, '.fp-est-s', ready && est ? F.estSize(mbText(est.size.bytes)) : '');
-    setText(foot, '.fp-file', ready && est && verdict !== 'set' ? est.name : '');
+    setText(foot, '.fp-file', ready && est ? (zip ? pageSetZipName(est.set) : est.name) : '');
     const big = foot.querySelector<HTMLElement>('.fp-big')!;
     big.hidden = !ready || !est || verdict === 'ok';
     if (ready && est && verdict !== 'ok') {
@@ -531,11 +541,10 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
         offer('small', est.small, F.offerSmall);
         offer('noclips', est.noClips, F.offerNoClips);
         setText(big, '[data-offer="zip"]', F.offerZip);
-        big.querySelector<HTMLElement>('[data-offer="zip"]')!.setAttribute('aria-pressed', String(verdict === 'set'));
-        setText(big, '.fp-zip-note', verdict === 'set' ? F.splitLater : F.zipLater);
+        big.querySelector<HTMLElement>('[data-offer="zip"]')!.setAttribute('aria-pressed', String(zip));
     }
-    // Over 50 MB one file is not saved (the set of files comes with step E); the window still opens.
-    open.disabled = !ready || !est || verdict === 'set' || s.phase !== 'options';
+    // Over 50 MB only the set of files is saved; the window still opens.
+    open.disabled = !ready || !est || s.phase !== 'options';
     win.disabled = !ready || s.phase !== 'options';
 }
 
@@ -544,8 +553,7 @@ function estimateHtml(): string {
         + `<div class="fp-big" hidden><p class="fp-big-t"></p><p class="fp-big-d"></p><div class="fp-offers">`
         + `<button type="button" class="fp-offer" data-offer="small"></button>`
         + `<button type="button" class="fp-offer" data-offer="noclips"></button>`
-        + `<button type="button" class="fp-offer" data-offer="zip" disabled aria-describedby="fp-zip-note"></button></div>`
-        + `<p class="fp-zip-note" id="fp-zip-note"></p></div>`
+        + `<button type="button" class="fp-offer" data-offer="zip" aria-pressed="false"></button></div></div>`
         + `<p class="fp-file"></p>`;
 }
 
@@ -739,6 +747,7 @@ export const bookUiMethods = uiModule({
             job: null,
             prog: { done: 0, total: 0, text: '' },
             file: null,
+            zip: false,
         };
         fitSelectionToOutput(st);
 
@@ -817,6 +826,11 @@ export const bookUiMethods = uiModule({
             if (offer) {
                 if (offer.disabled) return;
                 const smaller = (c: ImageChoice): ImageChoice => c === 'full' ? 'small' : c;
+                // The set of files: a switch over 15 MB, the only way over 50 MB.
+                if (offer.dataset.offer === 'zip') {
+                    update(s => { if (s.est && sizeVerdict(s.est.size.bytes) === 'big') s.zip = !s.zip; });
+                    return;
+                }
                 update(s => {
                     s.pages = offer.dataset.offer === 'small'
                         ? { ...s.pages, clips: smaller(s.pages.clips), photos: smaller(s.pages.photos) }
@@ -969,7 +983,8 @@ export const bookUiMethods = uiModule({
         const sel = selectionOf(s);
         if (!selectionReady(sel) || sel.kind === 'tree') return;
         if (s.estTimer !== null) scheduleEstimate(s, true);
-        if (!s.est || sizeVerdict(s.est.size.bytes) === 'set') return;
+        if (!s.est) return;
+        const zip = savesZip(s);
         saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
         const job: PagesJob = { cancelled: false };
         s.job = job;
@@ -984,7 +999,7 @@ export const bookUiMethods = uiModule({
                 s.prog = { done, total, text };
                 const foot = document.querySelector<HTMLElement>('#book-modal .fp-foot');
                 if (st === s && s.job === job && s.phase === 'progress' && foot) syncProgress(s, foot);
-            });
+            }, zip);
             if (st !== s || s.job !== job) return;
             s.file = file;
             s.phase = 'result';
