@@ -1394,21 +1394,21 @@ test.describe('Ancestors: the buttons cover no ancestor (1101)', () => {
 });
 
 test.describe('Ancestors: every ancestor carries a label (1101)', () => {
-    /** Julia's four generations (Ahnentafel numbers), a long double surname on her mother's line. */
+    /** Julvi's four generations (Ahnentafel numbers), a long double surname on her mother's line. */
     const PEDIGREE: Array<[number, string, string, string, string]> = [
-        [1, 'Julia', 'Klein', '1956', ''], [2, 'Peter', 'Klein', '1929', '2004'], [3, 'Anna', 'Oberwaldenburger-Kreuzfeldt', '1931', '2019'],
-        [4, 'Anton', 'Klein', '1898', '1962'], [5, 'Maria', 'Kaiser', '1902', '1979'],
-        [6, 'Johann', 'Oberwaldenburger-Kreuzfeldt', '1898', '1967'], [7, 'Maria', 'Lindauer', '1902', '1988'],
-        [8, 'Jakob', 'Klein', '1870', '1935'], [9, 'Elisabeth', 'Wolf', '1874', '1949'], [10, 'Paul', 'Kaiser', '1868', '1930'],
-        [11, 'Johanna', 'Fischer', '1872', '1950'], [12, 'Georg', 'Oberwaldenburger-Kreuzfeldt', '1865', '1931'],
-        [13, 'Katharina', 'Vogel', '1870', '1944'], [14, 'Franz', 'Lindauer', '1874', '1940'], [15, 'Theresia', 'Huber', '1876', '1950'],
-        [16, 'Andreas', 'Klein', '1841', '1903'], [17, 'Barbara', 'Sauter', '1845', '1912'], [18, 'Matthias', 'Wolf', '1846', '1915'],
-        [19, 'Hedwig', 'Rautenfeld', '1850', '1921'], [20, 'Ferdinand', 'Kaiser', '1839', '1899'], [21, 'Ottilie', 'Wendelbach', '1843', '1908'],
-        [22, 'Konrad', 'Fischer', '1842', '1910'], [23, 'Genoveva', 'Rapp', '1847', '1913'],
-        [24, 'Josef', 'Oberwaldenburger-Kreuzfeldt', '1838', '1901'], [25, 'Anna', 'Bauer', '1840', '1905'],
-        [26, 'Lorenz', 'Vogel', '1841', '1900'], [27, 'Magdalena', 'Brunnhuber', '1845', '1910'],
-        [28, 'Martin', 'Lindauer', '1846', '1910'], [29, 'Rosalia', 'Schwarz', '1849', '1920'],
-        [30, 'Sebastian', 'Huber', '1848', '1919'], [31, 'Ursula', 'Hengstler', '1851', '1925'],
+        [1, 'Julvi', 'Vlenk', '1956', ''], [2, 'Peske', 'Vlenk', '1929', '2004'], [3, 'Anvi', 'Ulbernaskeldorer-Kroppwendt', '1931', '2019'],
+        [4, 'Antvo', 'Vlenk', '1898', '1962'], [5, 'Marvi', 'Kesmar', '1902', '1979'],
+        [6, 'Johalm', 'Ulbernaskeldorer-Kroppwendt', '1898', '1967'], [7, 'Marvi', 'Lumbauer', '1902', '1988'],
+        [8, 'Jakvo', 'Vlenk', '1870', '1935'], [9, 'Elimabeth', 'Wulp', '1874', '1949'], [10, 'Paux', 'Kesmar', '1868', '1930'],
+        [11, 'Johavna', 'Fiskorn', '1872', '1950'], [12, 'Georv', 'Ulbernaskeldorer-Kroppwendt', '1865', '1931'],
+        [13, 'Katmarina', 'Vogra', '1870', '1944'], [14, 'Franx', 'Lumbauer', '1874', '1940'], [15, 'Thermsia', 'Hubna', '1876', '1950'],
+        [16, 'Andrevs', 'Vlenk', '1841', '1903'], [17, 'Barbuna', 'Sautek', '1845', '1912'], [18, 'Matthulf', 'Wulp', '1846', '1915'],
+        [19, 'Hedwyx', 'Raupenfold', '1850', '1921'], [20, 'Ferdivant', 'Kesmar', '1839', '1899'], [21, 'Ottrine', 'Wendolbrak', '1843', '1908'],
+        [22, 'Konvar', 'Fiskorn', '1842', '1910'], [23, 'Genovuna', 'Rapk', '1847', '1913'],
+        [24, 'Josvo', 'Ulbernaskeldorer-Kroppwendt', '1838', '1901'], [25, 'Anvi', 'Bauxe', '1840', '1905'],
+        [26, 'Lorvex', 'Vogra', '1841', '1900'], [27, 'Magdurena', 'Brunnhoxer', '1845', '1910'],
+        [28, 'Martox', 'Lumbauer', '1846', '1910'], [29, 'Rosalvu', 'Schwalk', '1849', '1920'],
+        [30, 'Sebaskorn', 'Hubna', '1848', '1919'], [31, 'Ursolk', 'Henkstlor', '1851', '1925'],
     ];
 
     const open = async (page: Page) => {
@@ -1447,8 +1447,8 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
             const got = await labels(await open(page));
             for (let n = 2; n < 32; n++) expect(got[String(n)], `#${n} ${PEDIGREE[n - 1][2]}`).toMatch(/\S/);
             // The mother's line is named, cut short where its sector is small.
-            expect(got['3']).toContain('Oberwald');
-            if (s.width > 640) expect(got['3']).toContain('Kreuzfeldt');
+            expect(got['3']).toContain('Ulbernas');
+            if (s.width > 640) expect(got['3']).toContain('Kroppwendt');
             await ctx.close();
         });
     }
@@ -1457,10 +1457,10 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
         const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
         const page = await ctx.newPage();
         const got = await labels(await open(page));
-        expect(got['2']).toBe('Peter Klein 1929–2004');
-        expect(got['4']).toBe('Anton Klein 1898–1962');
-        expect(got['5']).toBe('Maria Kaiser 1902–1979');
-        expect(got['7']).toBe('Maria Lindauer 1902–1988');
+        expect(got['2']).toBe('Peske Vlenk 1929–2004');
+        expect(got['4']).toBe('Antvo Vlenk 1898–1962');
+        expect(got['5']).toBe('Marvi Kesmar 1902–1979');
+        expect(got['7']).toBe('Marvi Lumbauer 1902–1988');
         await ctx.close();
     });
 });
