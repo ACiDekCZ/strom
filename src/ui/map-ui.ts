@@ -21,8 +21,10 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesForManager, placeFilterText, placeMatchesFilter,
-    isPlacesSort,
+    isPlacesSort, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
 } from '../places.js';
+import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
+import { MQ_MOBILE } from '../breakpoints.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
 import {
@@ -51,6 +53,30 @@ let mapFloorUpdate: (() => void) | null = null;
 /** The Places dialog's places by key, as last drawn (what its search looks in). */
 let managerPlaces = new Map<string, PlaceUsage>();
 
+/** The map point whose bubble is open (a place key or 'town:…'), null when closed. */
+let openPoint: string | null = null;
+/** The open town bubble's house search, and the houses (houseKey, NO_HOUSE) shown with all their people. */
+let townQuery = '';
+let townExpanded = new Set<string>();
+/** The "no house number" group in townExpanded. */
+const NO_HOUSE = '\u0000';
+/** Above this many houses a town bubble gets its search and shortens each house's people. */
+const TOWN_BIG = 30;
+/** The phone's menu of kinds is open. */
+let kindsMenuOpen = false;
+let kindTipTimer: number | null = null;
+/** Escape and the click outside the menu of kinds are listened to once, for every map canvas. */
+let mapKeysBound = false;
+
+/** A drawn map point: a place or a town with its houses. */
+interface MapMarkerInfo {
+    key: string;
+    geo: PlaceGeo;
+    display: string;
+    /** Houses of a town point (the "⌂ N" tag), 0 for a place. */
+    houses: number;
+}
+
 export const mapMethods = uiModule({
     /**
      * Places the map should show: everything with coordinates, for the chosen
@@ -63,7 +89,7 @@ export const mapMethods = uiModule({
             this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
 
         const mapped: MappedPlace[] = [];
-        for (const [key, usage] of collectPlaces(data, filter)) {
+        for (const [key, usage] of collectPlaces(data, filter, this.mapKinds())) {
             const geo = data.places?.[key];
             if (geo) mapped.push({ key, usage, geo });
         }
@@ -75,10 +101,20 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        return [...collectPlaces(data, filter)]
+        return [...collectPlaces(data, filter, this.mapKinds())]
             .filter(([key]) => !data.places?.[key])
             .map(([key, usage]) => ({ key, usage }))
             .sort((a, b) => b.usage.count - a.usage.count);
+    },
+
+    /** The kinds of places the map shows (chips above it), kept on this device. */
+    mapKinds(): ReadonlySet<MapKind> {
+        return new Set(SettingsManager.getMapKinds());
+    },
+
+    /** The map's points: the places, the houses of a town found by the town grouped into one point. */
+    mapPoints(places?: MappedPlace[]): MapPoint[] {
+        return groupTownPoints(places ?? this.mapPlaces(), knownStreets(DataManager.getData()));
     },
 
     /** Draw the whole view. Called by the renderer whenever the map is on. */
@@ -101,9 +137,12 @@ export const mapMethods = uiModule({
                     <button type="button" class="map-time-toggle" onclick="window.Strom.UI.toggleMapTime()"
                             aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}">${iconSvg('timer')}</button>
                 </div>
-                <div class="map-scope">
-                    <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
-                    <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
+                <div class="map-topleft">
+                    <div class="map-scope">
+                        <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
+                        <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
+                    </div>
+                    ${this.mapKindsHtml()}
                 </div>
                 <div class="map-timebar" id="map-timebar" hidden>
                     <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">${iconSvg('play')}</button>
@@ -116,8 +155,10 @@ export const mapMethods = uiModule({
             this.bindMapGestures(container);
             this.bindMapClicks(container);
             this.bindMapTime(container);
+            this.bindMapKinds(container);
             this.watchMapFloor(container);
         }
+        this.renderMapKinds();
 
         document.getElementById('map-scope-view')?.classList.toggle('active', this.mapScope !== 'tree');
         document.getElementById('map-scope-tree')?.classList.toggle('active', this.mapScope === 'tree');
@@ -168,6 +209,185 @@ export const mapMethods = uiModule({
         mapFloorUpdate = update;
     },
 
+    // ==================== KINDS OF PLACES (chips above the map) ====================
+
+    /**
+     * The kinds switch: four chips under the scope (computer, tablet), one
+     * button with a menu on a phone and a phone held sideways — CSS shows one
+     * of them. Built once with the canvas; renderMapKinds keeps its state.
+     */
+    mapKindsHtml(): string {
+        const m = strings.map;
+        const chips = MAP_KINDS.map(k => `
+            <button type="button" class="map-kind" data-kind="${k}" aria-pressed="true">
+                <span class="map-kind-check" aria-hidden="true">✓</span>
+                <span class="map-kind-mark" aria-hidden="true">${KIND_MARK[k]}</span>
+                <span class="map-kind-label">${this.escapeHtml(m.kinds[k])}</span>
+            </button>`).join('');
+        const rows = MAP_KINDS.map(k => `
+            <button type="button" class="map-kinds-row" role="checkbox" data-kind="${k}" aria-checked="true">
+                <span class="map-kinds-box" aria-hidden="true">✓</span>
+                <span class="map-kind-mark" aria-hidden="true">${KIND_MARK[k]}</span>
+                <span class="map-kinds-text">
+                    <span class="map-kinds-name">${this.escapeHtml(m.kinds[k])}</span>
+                    <span class="map-kinds-hint">${this.escapeHtml(m.kindHint[k])}</span>
+                </span>
+            </button>`).join('');
+        return `
+            <div class="map-kinds" role="group" aria-label="${this.escapeHtml(m.kindsAria)}">${chips}</div>
+            <div class="map-kinds-wrap">
+                <button type="button" class="map-kinds-btn" aria-expanded="false" aria-haspopup="true">
+                    <span class="map-kinds-btn-marks" aria-hidden="true"></span>
+                    <span class="map-kinds-btn-label"></span>
+                    <span class="map-kinds-btn-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="map-kinds-menu" role="group" aria-label="${this.escapeHtml(m.kindsAria)}" hidden>
+                    ${rows}
+                    <p class="map-kinds-last" hidden>${this.escapeHtml(m.kindsLastOn)}</p>
+                </div>
+            </div>`;
+    },
+
+    /** Push the kinds switched on onto the chips, the phone's button and its menu. */
+    renderMapKinds(): void {
+        const root = document.querySelector('#map-container .map-topleft');
+        if (!root) return;
+        const m = strings.map;
+        const on = this.mapKinds();
+        const all = on.size === MAP_KINDS.length;
+        root.querySelectorAll<HTMLElement>('.map-kind, .map-kinds-row').forEach(el => {
+            const kind = el.dataset.kind;
+            if (!isMapKind(kind)) return;
+            const pressed = on.has(kind);
+            const locked = pressed && on.size === 1;
+            const chip = el.classList.contains('map-kind');
+            el.setAttribute(chip ? 'aria-pressed' : 'aria-checked', String(pressed));
+            if (locked) el.setAttribute('aria-disabled', 'true');
+            else el.removeAttribute('aria-disabled');
+            // The menu says it in its own line (no hover on touch).
+            if (chip) el.title = locked ? `${m.kindHint[kind]}. ${m.kindsLastOn}` : m.kindHint[kind];
+        });
+        const btn = root.querySelector('.map-kinds-btn') as HTMLElement | null;
+        if (btn) {
+            btn.classList.toggle('filtered', !all);
+            btn.setAttribute('aria-expanded', String(kindsMenuOpen));
+            const marks = btn.querySelector('.map-kinds-btn-marks') as HTMLElement;
+            marks.textContent = all ? '' : kindMarks(on);
+            (btn.querySelector('.map-kinds-btn-label') as HTMLElement).textContent =
+                all ? m.kindsAll : m.kindsSome(on.size, MAP_KINDS.length);
+        }
+        const menu = root.querySelector('.map-kinds-menu') as HTMLElement | null;
+        if (menu) {
+            menu.hidden = !kindsMenuOpen;
+            (menu.querySelector('.map-kinds-last') as HTMLElement).hidden = on.size !== 1;
+        }
+    },
+
+    /** Clicks on the chips, the phone's button and its rows. */
+    bindMapKinds(container: HTMLElement): void {
+        const root = container.querySelector('.map-topleft') as HTMLElement | null;
+        root?.addEventListener('click', (e: Event) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.map-kinds-btn')) { this.toggleMapKindsMenu(); return; }
+            const kind = (target.closest('.map-kind, .map-kinds-row') as HTMLElement | null)?.dataset.kind;
+            if (isMapKind(kind)) this.toggleMapKind(kind);
+        });
+        if (mapKeysBound) return;
+        mapKeysBound = true;
+        // Outside the menu (and its button), a press closes it.
+        document.addEventListener('pointerdown', (e: PointerEvent) => {
+            if (!kindsMenuOpen) return;
+            if ((e.target as Element | null)?.closest?.('.map-kinds-wrap')) return;
+            this.toggleMapKindsMenu(false);
+        }, true);
+        // Escape closes the menu of kinds first, then the open bubble.
+        document.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented) return;
+            const map = document.getElementById('map-container');
+            if (!map || map.getClientRects().length === 0) return;
+            if (document.querySelector('.modal-overlay.active')) return;
+            if (kindsMenuOpen) {
+                e.preventDefault();
+                this.toggleMapKindsMenu(false);
+                (map.querySelector('.map-kinds-btn') as HTMLElement | null)?.focus();
+                return;
+            }
+            if (openPoint) {
+                e.preventDefault();
+                this.closeMapPopup();
+            }
+        });
+    },
+
+    /** Open or close the phone's menu of kinds; open, it never reaches over the bars at the bottom. */
+    toggleMapKindsMenu(open: boolean = !kindsMenuOpen): void {
+        kindsMenuOpen = open;
+        this.renderMapKinds();
+        const container = document.getElementById('map-container');
+        const menu = container?.querySelector('.map-kinds-menu') as HTMLElement | null;
+        if (!container || !menu || !open) return;
+        menu.style.maxHeight = '';
+        // As far down as the time bar or the status bar, whichever reaches higher.
+        let floor = container.getBoundingClientRect().bottom;
+        for (const sel of ['.map-status', '.map-timebar']) {
+            const r = (container.querySelector(sel) as HTMLElement | null)?.getBoundingClientRect();
+            if (r && r.height > 0) floor = Math.min(floor, r.top);
+        }
+        const room = Math.floor(floor - menu.getBoundingClientRect().top - 8);
+        if (room > 0 && menu.scrollHeight > room) menu.style.maxHeight = `${Math.max(room, 96)}px`;
+    },
+
+    /** Switch one kind on or off; the last one on stays (its chip says why). */
+    toggleMapKind(kind: MapKind): void {
+        const on = new Set(this.mapKinds());
+        if (on.has(kind)) {
+            if (on.size === 1) { this.showMapKindTip(kind); return; }
+            on.delete(kind);
+        } else {
+            on.add(kind);
+        }
+        SettingsManager.setMapKinds([...on]);
+        townExpanded = new Set();
+        this.refreshMapContent();
+    },
+
+    /**
+     * A click on the last chip on: its hint and why it stays, under the chip
+     * for a moment — a tablet has no hover for the title.
+     */
+    showMapKindTip(kind: MapKind): void {
+        const group = document.querySelector('#map-container .map-kinds') as HTMLElement | null;
+        const chip = group?.querySelector(`.map-kind[data-kind="${kind}"]`) as HTMLElement | null;
+        if (!group || !chip || chip.getClientRects().length === 0) return;
+        group.querySelector('.map-kind-tip')?.remove();
+        const tip = document.createElement('div');
+        tip.className = 'map-kind-tip';
+        tip.setAttribute('role', 'status');
+        tip.innerHTML = `<span>${this.escapeHtml(strings.map.kindHint[kind])}</span>`
+            + `<span class="map-kind-tip-why">${this.escapeHtml(strings.map.kindsLastOn)}</span>`;
+        tip.style.left = `${chip.offsetLeft}px`;
+        group.appendChild(tip);
+        if (kindTipTimer !== null) clearTimeout(kindTipTimer);
+        kindTipTimer = window.setTimeout(() => { tip.remove(); kindTipTimer = null; }, 3500);
+    },
+
+    /** Redraw what the kinds decide: the points, the bar, the time range and an open bubble. */
+    refreshMapContent(): void {
+        const container = document.getElementById('map-container');
+        if (!container) return;
+        this.renderMapKinds();
+        if (!SettingsManager.isMapTilesAcknowledged()) return;
+        const places = this.mapPlaces();
+        this.renderMapTimeControls();
+        this.drawMapMarkers(container, places);
+        this.renderMapStatus(places);
+        if (!openPoint) return;
+        const key = openPoint;
+        const still = this.mapPoints(places).some(p => p.key === key);
+        if (still) this.showMapPlace(key, { pan: false });
+        else this.closeMapPopup();
+    },
+
     /**
      * The bar along the bottom: what is on the map, what is missing, and the
      * one button that offers to look the missing places up.
@@ -196,13 +416,17 @@ export const mapMethods = uiModule({
             return;
         }
 
+        // In time mode the family path is drawn from the births: without them
+        // the bar says why the lines are gone, so it does not look broken.
+        const pathNote = this.mapTimeOn && !this.mapKinds().has('birth') ? ` ${strings.map.noFamilyPath}` : '';
+
         // In time mode, own up to places that carry no date and so cannot appear
         // on the timeline — honesty instead of a silently emptier map.
         if (this.mapTimeOn) {
             const undated = this.mapTimeHarvest().undatedPlaceCount;
             if (undated > 0) {
                 box.innerHTML = `
-                    <span class="map-status-text">${strings.map.timeUndated(undated)}</span>
+                    <span class="map-status-text">${strings.map.timeUndated(undated)}${pathNote}</span>
                     <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
                 box.style.display = 'flex';
                 return;
@@ -211,7 +435,9 @@ export const mapMethods = uiModule({
 
         const missing = this.mapMissingPlaces();
         if (places.length === 0 && missing.length === 0) {
-            box.innerHTML = `<span class="map-status-text">${strings.map.noPlaces}</span>`;
+            // With kinds off, the places may all be of those kinds: say that, not "no places".
+            const text = this.mapKinds().size < MAP_KINDS.length ? strings.map.noPlacesOfKinds : strings.map.noPlaces;
+            box.innerHTML = `<span class="map-status-text">${text}</span>`;
             box.style.display = 'flex';
             return;
         }
@@ -221,7 +447,7 @@ export const mapMethods = uiModule({
         box.innerHTML = `
             <span class="map-status-text">${missing.length > 0
                 ? strings.map.missing(places.length, missing.length)
-                : strings.map.allPlaced(places.length)}</span>
+                : strings.map.allPlaced(places.length)}${pathNote}</span>
             ${missing.length > 0
                 ? `<button type="button" onclick="window.Strom.UI.startGeocoding()">${strings.map.lookUp(missing.length)}</button>`
                 : ''}
@@ -278,17 +504,37 @@ export const mapMethods = uiModule({
 
         const { width, height } = this.mapViewportSize(container);
 
-        layer.innerHTML = places.map(p => {
-            const at = pointInViewport(p.geo, this.mapCenter!, this.mapZoom, width, height);
-            // Skip what is far off-screen; keeps big trees light while panning.
-            if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
-            return `
-                <button type="button" class="map-marker" data-key="${this.escapeHtml(p.key)}"
-                        style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
-                    <span class="map-marker-dot">${p.usage.personIds.length}</span>
-                    <span class="map-marker-label">${this.escapeHtml(p.usage.display)}</span>
-                </button>`;
+        layer.innerHTML = this.mapPoints(places).map(p => {
+            const info = this.mapMarkerInfo(p);
+            const persons = p.type === 'town' ? p.personCount : p.usage.personIds.length;
+            return this.mapMarkerHtml(info, persons, false, width, height);
         }).join('');
+    },
+
+    /**
+     * What a marker shows of a point: where, its name, its houses. A town that
+     * is a place of its own keeps that place's key (the life timeline, links
+     * and the Places dialog know it by it); only a group of house places is
+     * 'town:…'.
+     */
+    mapMarkerInfo(p: MapPoint): MapMarkerInfo {
+        return p.type === 'town'
+            ? { key: p.ownKey ?? p.key, geo: p.geo, display: p.town, houses: p.houseCount }
+            : { key: p.key, geo: p.geo, display: p.usage.display, houses: 0 };
+    },
+
+    /** One marker: the dot with its people, a town's "⌂ N" tag, the name under it. */
+    mapMarkerHtml(info: MapMarkerInfo, persons: number, fresh: boolean, width: number, height: number): string {
+        const at = pointInViewport(info.geo, this.mapCenter!, this.mapZoom, width, height);
+        // Skip what is far off-screen; keeps big trees light while panning.
+        if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
+        return `
+            <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}${info.houses > 0 ? ' map-marker-town' : ''}" data-key="${this.escapeHtml(info.key)}"
+                    style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
+                <span class="map-marker-dot">${persons}</span>
+                ${info.houses > 0 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.houses}</span>` : ''}
+                <span class="map-marker-label">${this.escapeHtml(info.display)}</span>
+            </button>`;
     },
 
     // ==================== MIGRATION OVER TIME (P5) ====================
@@ -298,24 +544,29 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        return collectDatedPlacePoints(data, filter);
+        return collectDatedPlacePoints(data, filter, this.mapKinds());
     },
 
     /**
-     * The dated points that actually have a pin, grouped per place and joined to
-     * their coordinates and display name. Places with no coordinates are dropped
-     * (nothing to draw) — matching the ordinary marker rule.
+     * The dated points that actually have a pin, grouped per map point (a
+     * town's houses in its one point) and joined to its coordinates and name.
+     * Places with no coordinates are dropped (nothing to draw) — matching the
+     * ordinary marker rule.
      */
-    mapTimePlacesData(): { key: string; geo: PlaceGeo; display: string; points: { year: number; personId: PersonId }[] }[] {
-        const geoByKey = new Map(this.mapPlaces().map(m => [m.key, m]));
-        const byKey = new Map<string, { key: string; geo: PlaceGeo; display: string; points: { year: number; personId: PersonId }[] }>();
+    mapTimePlacesData(): (MapMarkerInfo & { points: { year: number; personId: PersonId }[] })[] {
+        const pointOf = new Map<string, MapMarkerInfo>();
+        for (const p of this.mapPoints()) {
+            const info = this.mapMarkerInfo(p);
+            for (const key of p.type === 'town' ? p.placeKeys : [p.key]) pointOf.set(key, info);
+        }
+        const byKey = new Map<string, MapMarkerInfo & { points: { year: number; personId: PersonId }[] }>();
         for (const pt of this.mapTimeHarvest().points) {
-            const base = geoByKey.get(pt.placeKey);
+            const base = pointOf.get(pt.placeKey);
             if (!base) continue;
-            let tp = byKey.get(pt.placeKey);
+            let tp = byKey.get(base.key);
             if (!tp) {
-                tp = { key: pt.placeKey, geo: base.geo, display: base.usage.display, points: [] };
-                byKey.set(pt.placeKey, tp);
+                tp = { ...base, points: [] };
+                byKey.set(base.key, tp);
             }
             tp.points.push({ year: pt.year, personId: pt.personId });
         }
@@ -330,6 +581,8 @@ export const mapMethods = uiModule({
      * child's age at year Y: 1.0 fresh, down to 0.15 at 60+ years.
      */
     mapMigrationSegments(year: number): { from: PlaceGeo; to: PlaceGeo; opacity: number }[] {
+        // The path runs between birthplaces: no births on the map, no path.
+        if (!this.mapKinds().has('birth')) return [];
         const data = DataManager.getData();
         const places = data.places ?? {};
         const filter: ReadonlySet<PersonId> | undefined =
@@ -381,14 +634,7 @@ export const mapMethods = uiModule({
             const persons = new Set(upto.map(p => p.personId)).size;
             // "Fresh" = something happened here within the last ten years (Y−10, Y].
             const fresh = upto.some(p => p.year > year - 10);
-            const at = pointInViewport(tp.geo, this.mapCenter!, this.mapZoom, width, height);
-            if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
-            return `
-                <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}" data-key="${this.escapeHtml(tp.key)}"
-                        style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
-                    <span class="map-marker-dot">${persons}</span>
-                    <span class="map-marker-label">${this.escapeHtml(tp.display)}</span>
-                </button>`;
+            return this.mapMarkerHtml(tp, persons, fresh, width, height);
         }).join('');
 
         if (!lines) return;
@@ -566,32 +812,147 @@ export const mapMethods = uiModule({
         return { width: Math.round(rect.width) || 800, height: Math.round(rect.height) || 600 };
     },
 
-    /** Who is connected to a place — the panel shown when a marker is clicked. */
-    showMapPlace(key: string): void {
-        const place = this.mapPlaces().find(p => p.key === key);
+    /**
+     * Who is connected to a point — the bubble shown when a marker is clicked.
+     * `key` is a point's key or a place of a town point (the life timeline
+     * opens a place, the map may show it within its town). `pan: false` keeps
+     * the map where it is (a redraw of the open bubble).
+     */
+    showMapPlace(key: string, opts: { pan?: boolean } = {}): void {
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
-        if (!place || !popup) return;
+        if (!popup) return;
+        const points = this.mapPoints();
+        const point = points.find(p => p.key === key)
+            ?? points.find(p => p.type === 'town' && p.placeKeys.includes(key));
+        if (!point) return;
+        if (point.key !== openPoint) {
+            townQuery = '';
+            townExpanded = new Set();
+        }
+        openPoint = point.key;
 
-        const people = place.usage.personIds
-            .map(id => DataManager.getPerson(id))
-            .filter((p): p is NonNullable<typeof p> => !!p)
-            .map(p => `
-                <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(p.id)}">
-                    ${this.escapeHtml(shownName(p))}
-                </button>`)
-            .join('');
+        const m = strings.map;
+        const on = this.mapKinds();
+        const only = on.size < MAP_KINDS.length
+            ? ` · ${m.kindsOnly(MAP_KINDS.filter(k => on.has(k)).map(k => m.kinds[k]))}` : '';
+        const name = point.type === 'town' ? point.town : point.usage.display;
+        const geo = point.geo;
+        const label = [geo.label, geo.byTown ? m.byTownShort(geo.byTown) : ''].filter(Boolean).join(' · ');
+        const big = point.type === 'town' && point.houseCount > TOWN_BIG;
+        const summary = point.type === 'town'
+            ? m.townSummary(point.houseCount, point.personCount) + only
+            : (only ? m.usedBy(point.usage.personIds.length) + only : '');
 
         popup.innerHTML = `
-            <div class="map-popup-head">
-                <strong>${this.escapeHtml(place.usage.display)}</strong>
-                <button type="button" class="map-popup-close" aria-label="${strings.buttons.close}">×</button>
+            <div class="map-popup-grip" aria-hidden="true"></div>
+            <div class="map-popup-top">
+                <div class="map-popup-head">
+                    <strong>${this.escapeHtml(name)}</strong>
+                    <button type="button" class="map-popup-close" aria-label="${strings.buttons.close}">×</button>
+                </div>
+                ${label ? `<div class="map-popup-label">${this.escapeHtml(label)}</div>` : ''}
+                ${summary ? `<div class="map-popup-summary">${this.escapeHtml(summary)}</div>` : ''}
+                ${big ? `
+                <label class="map-popup-search">
+                    <span class="map-popup-search-icon" aria-hidden="true">⌕</span>
+                    <input type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                           placeholder="${this.escapeHtml(m.houseSearch)}" aria-label="${this.escapeHtml(m.houseSearch)}"
+                           value="${this.escapeHtml(townQuery)}">
+                    <span class="map-popup-search-count" aria-live="polite"></span>
+                </label>` : ''}
             </div>
-            ${place.geo.label ? `<div class="map-popup-label">${this.escapeHtml(place.geo.label)}</div>` : ''}
-            <div class="map-popup-people">${people}</div>
-            <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(place.key)}">
-                ${strings.map.wrongSpot}
-            </button>`;
-        popup.style.display = 'block';
+            <div class="map-popup-body${point.type === 'town' ? ' map-popup-houses' : ''}">
+                ${point.type === 'town' ? '' : `<div class="map-popup-people">${this.mapPopupPeople(
+                    point.usage.personIds.map(id => [id, point.usage.kinds.get(id) ?? new Set<MapKind>()] as const), Infinity, '')}</div>`}
+            </div>
+            <div class="map-popup-foot">
+                <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(point.type === 'town' ? point.ownKey ?? point.key : point.key)}">${m.wrongSpot}</button>
+            </div>`;
+        if (point.type === 'town') {
+            this.renderMapTownList(point);
+            const input = popup.querySelector('.map-popup-search input') as HTMLInputElement | null;
+            input?.addEventListener('input', () => {
+                townQuery = input.value;
+                this.renderMapTownList(point);
+            });
+        }
+        popup.style.display = 'flex';
+        // A phone: a sheet along the bottom, and the point moves up above it.
+        const sheet = window.matchMedia(MQ_MOBILE).matches;
+        popup.classList.toggle('map-popup--sheet', sheet);
+        if (sheet && opts.pan !== false) this.panMapAboveSheet(geo);
+    },
+
+    /** The bubble of a town point ('town:…'): its houses, each with its people. */
+    showMapTown(key: string): void {
+        this.showMapPlace(key);
+    },
+
+    /**
+     * The houses of the open town bubble, in natural order, narrowed by its
+     * search; above TOWN_BIG houses each house shows its first 3 people and
+     * "+ N more" (the "no house number" group its first 6).
+     */
+    renderMapTownList(point: TownPoint): void {
+        const popup = document.querySelector('.map-popup') as HTMLElement | null;
+        const body = popup?.querySelector('.map-popup-houses') as HTMLElement | null;
+        if (!popup || !body) return;
+        const m = strings.map;
+        const big = point.houseCount > TOWN_BIG;
+        const q = big ? townQuery.trim() : '';
+        const houses = q ? point.houses.filter(h => houseMatches(h.house, q)) : point.houses;
+        const count = popup.querySelector('.map-popup-search-count') as HTMLElement | null;
+        if (count) count.textContent = q ? m.houseHits(houses.length) : '';
+        const rows = houses.map(h => `
+            <div class="map-popup-house">
+                <span class="map-popup-house-no">${this.escapeHtml(h.house)}</span>
+                <div class="map-popup-people">${this.mapPopupPeople([...h.persons], big ? 3 : Infinity, h.key)}</div>
+            </div>`).join('');
+        const none = q && houses.length === 0 ? `<p class="map-popup-none">${this.escapeHtml(m.houseSearchNone)}</p>` : '';
+        const noHouse = !q && point.noHouse.size > 0 ? `
+            <div class="map-popup-nohouse">
+                <div class="map-popup-nohouse-title">${this.escapeHtml(`${m.noHouseNumber} · ${m.usedBy(point.noHouse.size)}`)}</div>
+                <div class="map-popup-people">${this.mapPopupPeople([...point.noHouse], big ? 6 : Infinity, NO_HOUSE)}</div>
+            </div>` : '';
+        body.innerHTML = rows + none + noHouse;
+    },
+
+    /**
+     * People of a bubble as buttons, the marks of their kinds before the name
+     * (only the kinds on); past `limit` a "+ N more" that shows the rest of
+     * this group (`group` = its key in townExpanded).
+     */
+    mapPopupPeople(entries: readonly (readonly [PersonId, ReadonlySet<MapKind>])[], limit: number, group: string): string {
+        const m = strings.map;
+        const on = this.mapKinds();
+        const people = entries
+            .map(([id, kinds]) => ({ person: DataManager.getPerson(id), kinds }))
+            .filter((e): e is { person: NonNullable<typeof e.person>; kinds: ReadonlySet<MapKind> } => !!e.person);
+        const shown = townExpanded.has(group) ? people : people.slice(0, limit);
+        const html = shown.map(({ person, kinds }) => {
+            const name = shownName(person);
+            const marks = kindMarks(kinds, on);
+            const what = MAP_KINDS.filter(k => kinds.has(k) && on.has(k)).map(k => m.kinds[k]).join(', ');
+            return `
+                <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(person.id)}"
+                        title="${this.escapeHtml(what ? `${name} · ${what}` : name)}">${marks
+                    ? `<span class="map-popup-marks" aria-hidden="true">${marks}</span>` : ''}${this.escapeHtml(name)}</button>`;
+        }).join('');
+        const rest = people.length - shown.length;
+        return html + (rest > 0
+            ? `<button type="button" class="map-popup-more" data-group="${this.escapeHtml(group)}">${this.escapeHtml(m.morePeople(rest))}</button>`
+            : '');
+    },
+
+    /** Move the map so the point of an opened sheet stands at about 18 % of its height, above the sheet. */
+    panMapAboveSheet(geo: PlaceGeo): void {
+        const container = document.getElementById('map-container');
+        if (!container || !this.mapCenter) return;
+        const { width, height } = this.mapViewportSize(container);
+        const at = pointInViewport(geo, this.mapCenter, this.mapZoom, width, height);
+        this.mapCenter = panCenter(this.mapCenter, this.mapZoom, 0, Math.round(height * 0.18 - at.y));
+        this.drawMapTiles(container);
+        this.drawMapMarkers(container, this.mapPlaces());
     },
 
     /**
@@ -603,6 +964,13 @@ export const mapMethods = uiModule({
         const geo = DataManager.getData().places?.[key];
         if (!geo) return;
         if (!this.mapPlaces().some(p => p.key === key)) this.mapScope = 'tree';
+        // Hidden by the kinds switched off: the place's own kinds come on too.
+        if (!this.mapPlaces().some(p => p.key === key)) {
+            const usage = collectPlaces(DataManager.getData()).get(key);
+            const on = new Set(this.mapKinds());
+            for (const kinds of usage?.kinds.values() ?? []) kinds.forEach(k => on.add(k));
+            SettingsManager.setMapKinds([...on]);
+        }
         this.mapCenter = { lat: geo.lat, lon: geo.lon };
         this.mapZoom = 11;
         this.closeMapPopup();
@@ -624,12 +992,33 @@ export const mapMethods = uiModule({
             if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
             const person = target.closest('.map-popup-person') as HTMLElement | null;
             if (person?.dataset.personId) { this.focusFromMap(person.dataset.personId); return; }
+            const more = target.closest('.map-popup-more') as HTMLElement | null;
+            if (more && openPoint) {
+                townExpanded.add(more.dataset.group ?? '');
+                const point = this.mapPoints().find(p => p.key === openPoint);
+                if (point?.type === 'town') this.renderMapTownList(point);
+                else this.showMapPlace(openPoint, { pan: false });
+                return;
+            }
             const fix = target.closest('.map-popup-fix') as HTMLElement | null;
             if (fix) this.showPlacesManager(fix.dataset.key);
+        });
+        // A click on the map itself (not a drag) closes the bubble.
+        let downAt: { x: number; y: number } | null = null;
+        container.addEventListener('pointerdown', (e: PointerEvent) => { downAt = { x: e.clientX, y: e.clientY }; }, true);
+        container.addEventListener('click', (e: MouseEvent) => {
+            if (!openPoint) return;
+            // A button the bubble re-rendered under the click ("+ N more") is
+            // no longer in the page: that click was inside the bubble.
+            if (!(e.target as Node).isConnected) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
+            this.closeMapPopup();
         });
     },
 
     closeMapPopup(): void {
+        openPoint = null;
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         if (popup) popup.style.display = 'none';
     },
@@ -708,7 +1097,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
             if (pointers.size === 1) {

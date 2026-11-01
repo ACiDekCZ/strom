@@ -8116,6 +8116,30 @@
             box-shadow: var(--shadow-sm);
         }
         @media (hover: hover) { .map-marker-dot:hover { transform: scale(1.12); } }
+        /* A town point: "⌂ 140" tucked under the dot's right side (spec 031 §3). */
+        .map-marker-town .map-marker-dot { position: relative; z-index: 1; }
+        .map-marker-houses {
+            position: absolute;
+            top: 50%;
+            left: calc(100% - 9px);
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 20px;
+            padding: 0 7px 0 12px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--primary);
+            border-radius: 0 999px 999px 0;
+            background: var(--surface);
+            color: var(--primary-dark);
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: var(--shadow-sm);
+            pointer-events: auto;
+            cursor: pointer;
+        }
         /* Fresh: something happened here within the last ten years of the slider.
            An accent ring outside the white border, driven purely by state. */
         .map-marker-fresh .map-marker-dot {
@@ -8155,14 +8179,172 @@
         }
         .map-time-toggle.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
         .map-time-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
-        .map-scope {
+        /* Top left: the scope and under it the kinds of places (spec 031 §1).
+           Ends 60px from the right, clear of the zoom buttons; the box itself
+           lets the map through, only its controls take clicks. */
+        .map-topleft {
             position: absolute;
             top: 12px;
             left: 12px;
+            right: 60px;
+            z-index: 3;
             display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .map-topleft > * { pointer-events: auto; max-width: 100%; }
+        .map-scope {
+            display: flex;
+            flex: none;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: var(--shadow-sm);
+        }
+        .map-kinds {
+            position: relative;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 3px;
+            border-radius: 8px;
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
+        }
+        .map-kind {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 10px 5px 8px;
+            border: none;
+            border-radius: 6px;
+            background: none;
+            color: var(--text-faint);
+            font-size: 13px;
+            font-weight: 400;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .map-kind-check {
+            flex: none;
+            display: grid;
+            place-items: center;
+            width: 14px;
+            height: 14px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--text-faint);
+            border-radius: 4px;
+            color: transparent;
+            font-size: 10px;
+            line-height: 1;
+        }
+        .map-kind-mark { flex: none; min-width: 9px; text-align: center; font-weight: 700; opacity: 0.6; }
+        .map-kind[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
+        .map-kind[aria-pressed="true"] .map-kind-check { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+        .map-kind[aria-pressed="true"] .map-kind-mark { opacity: 1; }
+        .map-kind[aria-disabled="true"] { cursor: not-allowed; }
+        @media (hover: hover) { .map-kind[aria-pressed="false"]:hover { background: var(--surface-2); } }
+        .map-kind-tip {
+            position: absolute;
+            top: calc(100% + 9px);
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            width: 230px;
+            max-width: calc(100vw - 32px);
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: var(--text);
+            color: var(--surface);
+            font-size: 12px;
+            line-height: 1.45;
+            box-shadow: var(--shadow-lg);
+            pointer-events: none;
+        }
+        .map-kind-tip-why { opacity: 0.8; }
+        /* Phone (and a phone held sideways): one button with a menu instead. */
+        .map-kinds-wrap { display: none; position: relative; flex: none; }
+        .map-kinds-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 32px;
+            padding: 0 10px;
+            border: 1.5px solid transparent;
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: 12.5px;
+            font-weight: 400;
+            white-space: nowrap;
+            box-shadow: var(--shadow-sm);
+            cursor: pointer;
+        }
+        .map-kinds-btn.filtered { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
+        .map-kinds-btn-marks { font-weight: 700; }
+        .map-kinds-btn-marks:empty { display: none; }
+        .map-kinds-btn-caret { font-size: 10px; color: var(--text-faint); }
+        .map-kinds-btn.filtered .map-kinds-btn-caret { color: inherit; }
+        .map-kinds-menu {
+            position: absolute;
+            left: 0;
+            top: calc(100% + 6px);
+            z-index: 6;
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            max-width: calc(100vw - 16px);
+            box-sizing: border-box;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: 6px;
+            border-radius: 10px;
+            background: var(--surface);
+            box-shadow: var(--shadow-lg);
+        }
+        .map-kinds-menu[hidden] { display: none; }
+        .map-kinds-row {
+            flex: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 48px;
+            padding: 4px 10px;
+            border: none;
+            border-radius: 8px;
+            background: none;
+            color: var(--text);
+            text-align: left;
+            cursor: pointer;
+        }
+        .map-kinds-row[aria-disabled="true"] { cursor: not-allowed; }
+        .map-kinds-box {
+            flex: none;
+            display: grid;
+            place-items: center;
+            width: 20px;
+            height: 20px;
+            box-sizing: border-box;
+            border: 2px solid var(--text-faint);
+            border-radius: 5px;
+            color: transparent;
+            font-size: 13px;
+            line-height: 1;
+        }
+        .map-kinds-row[aria-checked="true"] .map-kinds-box { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+        .map-kinds-row .map-kind-mark { width: 12px; min-width: 12px; opacity: 1; color: var(--text-light); }
+        .map-kinds-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .map-kinds-name { font-size: 14px; font-weight: 500; }
+        .map-kinds-hint { font-size: 12px; line-height: 1.35; color: var(--text-faint); }
+        .map-kinds-last {
+            flex: none;
+            margin: 4px 0 0;
+            padding: 6px 10px 4px;
+            border-top: 1px solid var(--divider);
+            font-size: 12px;
+            color: var(--text-light);
         }
         .map-scope button {
             padding: 6px 12px;
@@ -8271,38 +8453,161 @@
             text-decoration: none;
         }
         [data-theme="dark"] .map-attribution { background: rgba(0,0,0,0.5); color: #ccc; }
+        /* The bubble of a point: a fixed head (name, label, summary, house
+           search), a list that scrolls inside it, a foot with the fix link.
+           It never grows past 66% of the map (spec 031 §3). */
         .map-popup {
             position: absolute;
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            width: min(320px, calc(100% - 32px));
-            max-height: 60%;
-            overflow: auto;
-            padding: 12px 14px;
+            z-index: 5;
+            flex-direction: column;
+            width: min(380px, calc(100% - 32px));
+            max-height: 66%;
+            box-sizing: border-box;
+            overflow: hidden;
             border-radius: 10px;
-            background: var(--card-bg, #fff);
+            background: var(--surface);
+            color: var(--text);
             box-shadow: var(--shadow-lg);
         }
-        .map-popup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .map-popup-close { border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-light); }
-        .map-popup-label { margin-top: 2px; font-size: 12px; color: var(--text-light); }
-        .map-popup-people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .map-popup-grip { display: none; }
+        .map-popup-top {
+            flex: none;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 12px 14px 8px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .map-popup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+        .map-popup-head strong { flex: 1; min-width: 0; font-size: 15.5px; line-height: 1.3; overflow-wrap: anywhere; text-wrap: pretty; }
+        .map-popup-close { flex: none; padding: 0 2px; border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-faint); }
+        .map-popup-label { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .map-popup-summary { margin-top: 2px; font-size: 12.5px; color: var(--text-light); }
+        .map-popup-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 34px;
+            margin-top: 6px;
+            padding: 0 10px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-2);
+            cursor: text;
+        }
+        .map-popup-search-icon { color: var(--text-faint); font-size: 13px; }
+        .map-popup-search input {
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            outline: none;
+            background: transparent;
+            box-shadow: none;
+            color: var(--text);
+            font: inherit;
+            font-size: 13.5px;
+        }
+        .map-popup-search:focus-within { border-color: var(--primary); }
+        .map-popup-search-count { flex: none; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .map-popup-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 4px 14px 8px; }
+        .map-popup-people { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
         .map-popup-person {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             padding: 4px 9px;
-            border: 1px solid var(--border-color, #ddd);
+            border: 1px solid var(--border);
             border-radius: 14px;
-            background: var(--bg-color, #fafafa);
-            color: var(--text-color, #222);
-            font-size: 12px;
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 12.5px;
             cursor: pointer;
         }
-        @media (hover: hover) { .map-popup-person:hover { background: var(--primary, #4a7c59); color: var(--on-primary); } }
+        .map-popup-marks { font-weight: 700; color: var(--primary-dark); }
+        @media (hover: hover) {
+            .map-popup-person:hover { background: var(--primary); color: var(--on-primary); }
+            .map-popup-person:hover .map-popup-marks { color: inherit; }
+        }
+        .map-popup-more {
+            padding: 3px 9px;
+            border: 1px dashed var(--border);
+            border-radius: 14px;
+            background: none;
+            color: var(--primary-dark);
+            font-size: 12.5px;
+            cursor: pointer;
+        }
+        .map-popup-house {
+            display: grid;
+            grid-template-columns: 84px minmax(0, 1fr);
+            gap: 10px;
+            align-items: start;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--divider);
+        }
+        .map-popup-house-no {
+            padding-top: 4px;
+            font-size: 13.5px;
+            font-weight: 600;
+            line-height: 1.25;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            overflow-wrap: anywhere;
+        }
+        .map-popup-house .map-popup-people { gap: 5px; padding: 0; }
+        .map-popup-house .map-popup-person { padding: 3px 9px; }
+        .map-popup-none { margin: 0; padding: 14px 0; font-size: 13px; color: var(--text-light); }
+        .map-popup-nohouse { display: flex; flex-direction: column; gap: 6px; padding: 10px 0 4px; }
+        .map-popup-nohouse-title { font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .map-popup-nohouse .map-popup-people { gap: 5px; padding: 0; }
+        .map-popup-foot { flex: none; padding: 8px 14px 12px; border-top: 1px solid var(--divider); }
+        .map-popup-foot .map-popup-fix {
+            width: auto;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--primary-dark);
+            font-size: 12.5px;
+            text-align: left;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            cursor: pointer;
+        }
+        @media (hover: hover) { .map-popup-foot .map-popup-fix:hover { background: none; color: var(--primary); } }
+        /* Phone: a sheet along the bottom (the point moves up above it). */
+        .map-popup.map-popup--sheet {
+            left: 0;
+            right: 0;
+            top: auto;
+            bottom: 0;
+            transform: none;
+            width: auto;
+            max-height: 74%;
+            border-radius: 16px 16px 0 0;
+        }
+        .map-popup--sheet .map-popup-grip {
+            display: block;
+            flex: none;
+            width: 36px;
+            height: 4px;
+            margin: 8px auto 0;
+            border-radius: 2px;
+            background: var(--border);
+        }
 
         /* Tablet: the map is the whole screen, so keep chrome smaller. */
         @media (max-width: 1024px) {
             .map-marker-label { max-width: 110px; font-size: 10px; }
             .map-scope button { padding: 5px 10px; font-size: 12px; }
+            .map-kind { font-size: 12.5px; }
         }
         /* Mobile: labels would cover the map — the dot with the count stays,
            the name is one tap away in the popup. */
@@ -8310,7 +8615,7 @@
             .map-marker-label { display: none; }
             .map-controls { right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
-            .map-scope { left: 8px; }
+            .map-topleft { left: 8px; right: 52px; }
             /* Narrow screens: a full-width bar. Sized to its content it shrank
                to the width of the sentence, which left no room for the buttons
                to sit next to each other. */
@@ -8341,7 +8646,25 @@
            still belongs here: its depth controls decide who is "in this view").
            The map's own controls step below it rather than hiding under it. */
         @media (max-width: 640px) {
-            .map-controls, .map-scope { top: 52px; }
+            .map-controls, .map-topleft { top: 52px; }
+        }
+        /* Phone and a phone held sideways: the kinds as one button with a menu. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-kinds { display: none; }
+            .map-kinds-wrap { display: block; }
+        }
+        /* Sideways: the button in one row with the scope, the bubble taller. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-topleft { top: 8px; left: 8px; right: 52px; flex-direction: row; }
+            .map-controls { top: 8px; right: 8px; }
+            .map-controls button { width: 30px; height: 30px; }
+            .map-kinds-menu { width: 320px; }
+            .map-popup { max-height: 88%; }
+        }
+        @media (pointer: coarse) {
+            .map-popup-close { min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0; }
+            .map-popup-person, .map-popup-more { min-height: 36px; }
+            .map-popup-house-no { padding-top: 9px; }
         }
 
         /* ---- Fan view (src/ui/fan-view.ts, spec 029 §9.5) ----
