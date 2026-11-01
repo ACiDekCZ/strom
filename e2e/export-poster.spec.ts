@@ -127,6 +127,21 @@ test('fan view: poster downloads an SVG containing fan sectors', async ({ page }
     expect(svg).toMatch(/<path class="fan-fill[^"]*" d="M/); // sector geometry
 });
 
+test('fan view: the two-way poster names ancestors and descendants (1031)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await page.locator('#view-mode-fan').click();
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+    await page.getByRole('radio', { name: 'Two-way' }).click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFanShape())).toBe('two');
+
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const label = page.locator('#poster-modal #poster-view-label');
+    await expect(label).toContainText('ancestors and descendants');
+    await expect(label).toContainText('3 down');
+});
+
 test('timeline view: poster downloads an SVG containing timeline bars', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();

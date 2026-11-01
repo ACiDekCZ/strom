@@ -74,7 +74,9 @@ function focusNameFrom(source: StromData): string {
 function viewLabelFor(mode: ViewMode, name: string): string {
     switch (mode) {
         case 'fan':
-            return strings.poster.viewFan(name, TreeRenderer.getFanGenerations());
+            return TreeRenderer.getFanShape() === 'two'
+                ? strings.poster.viewFanTwoWay(name, TreeRenderer.getFanGenerations(), TreeRenderer.getFanDescGenerations())
+                : strings.poster.viewFan(name, TreeRenderer.getFanGenerations());
         case 'timeline':
             return strings.poster.viewTimeline(name);
         case 'descendants':

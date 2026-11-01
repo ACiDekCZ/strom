@@ -79,6 +79,13 @@ test('fan view: empty ancestor slot offers adding a parent', async ({ page }) =>
     // Jan has no parents: two dashed "+" slots; a click offers adding the father, which opens the add-parent modal.
     const addSlots = container.locator('[data-fan-add]');
     await expect(addSlots).toHaveCount(2);
+
+    // The "+" slots stay on screen only: printing leaves them out (spec 029 §7.3).
+    await page.emulateMedia({ media: 'print' });
+    await expect(addSlots.first()).toBeHidden();
+    await page.emulateMedia({ media: 'screen' });
+    await expect(addSlots.first()).toBeVisible();
+
     await addSlots.first().click();
     await page.locator('[data-fan-menu="add"], #fan-menu-add').first().click();
     await expect(page.locator('#relation-modal')).toBeVisible();

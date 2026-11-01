@@ -19422,6 +19422,8 @@
                 -webkit-print-color-adjust: exact; print-color-adjust: exact;
             }
             .fan-legend-who { color: #555; }
+            /* Empty "+" slots of edit mode never reach paper (spec 029 §7.3). */
+            .fan-chart .fan-empty { display: none !important; }
 
             /* Timeline prints fully (not just the on-screen viewport slice),
                and both extra views force light colours even from dark mode. */
