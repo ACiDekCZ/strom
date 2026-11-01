@@ -721,6 +721,29 @@ test.describe('family pages: the families in the app', () => {
 });
 
 test.describe('family pages: the window\'s bar (§3.1, §3.4)', () => {
+    test('the breadcrumb: wide the whole path without "‹ the page above" (no repeated target), on a phone "‹ the page above" alone (1101)', async ({ page }) => {
+        await setup(page);
+        const win = page.locator('#person-page-modal');
+        const crumbs = win.locator('.sp-app nav.sp-crumbs');
+        const seen = (): Promise<string[]> => crumbs.evaluate(nav => [...nav.children].filter(e => getComputedStyle(e).display !== 'none').map(e => e.textContent!.trim()));
+        for (const [w, h] of [[1440, 900], [1024, 768], [390, 844]] as const) {
+            await page.setViewportSize({ width: w, height: h });
+            await page.evaluate(() => window.Strom.UI.showPersonPage('b14' as never));
+            await win.locator('.pp-body .sp-famcard[data-sp-open="family:bu8"]').click();
+            await expect(win).toHaveClass(/pp-is-set/);
+            await expect(crumbs).toBeVisible();
+            if (w > 640) {
+                await expect(crumbs.locator('.sp-crumb-back'), `${w}×${h}`).toBeHidden();
+                expect(await seen(), `${w}×${h}`).toEqual(['Brandvold family line', '›', 'Karl and Ester']);
+            } else {
+                await expect(crumbs.locator('.sp-crumb-back')).toBeVisible();
+                expect(await seen()).toEqual(['‹ Brandvold family line']);
+            }
+            await page.keyboard.press('Escape');
+            await expect(win).toHaveCount(0);
+        }
+    });
+
     test('the search over the window\'s page: results as buttons, Escape brings the page back and the window stays; a result opens the person; Index opens the index', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));

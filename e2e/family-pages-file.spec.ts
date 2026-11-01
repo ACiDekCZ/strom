@@ -107,6 +107,22 @@ test.describe('family pages file', () => {
         await expect(crumbs.locator('[aria-current]')).toBeHidden();
     });
 
+    test('wider than a phone the breadcrumb is the whole path without "‹ the page above", which would repeat its first item (1101)', async ({ page }) => {
+        for (const [w, h] of [[1440, 900], [1024, 768], [844, 390]] as const) {
+            await page.setViewportSize({ width: w, height: h });
+            await page.goto(`${url}#${f9}`);
+            await expect.poll(() => shown(page)).toEqual([f9]);
+            const crumbs = page.locator(`#${f9} nav.sp-crumbs`);
+            await expect(crumbs.locator('.sp-crumb-back'), `${w}×${h}`).toBeHidden();
+            await expect(crumbs.locator('a.sp-crumb').first(), `${w}×${h}`).toBeVisible();
+            await expect(crumbs.locator('[aria-current]'), `${w}×${h}`).toBeVisible();
+            // What is shown names each page once: "Rod Fíšek › Josef a Anna".
+            const seen = await crumbs.evaluate(nav => [...nav.children].filter(e => getComputedStyle(e).display !== 'none').map(e => e.textContent!.trim()));
+            expect(seen.filter(t => t !== '›'), `${w}×${h}`).toEqual([...new Set(seen.filter(t => t !== '›'))]);
+            expect(seen.some(t => t.startsWith('‹')), `${w}×${h}`).toBe(false);
+        }
+    });
+
     test('the system\'s dark scheme darkens the paper; print shows the current page only, without breadcrumbs, with the file\'s footer', async ({ page }) => {
         await page.emulateMedia({ colorScheme: 'dark' });
         await page.goto(`${url}#${rodFisek}`);

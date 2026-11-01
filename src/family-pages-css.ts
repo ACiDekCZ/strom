@@ -67,7 +67,8 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-crumbs a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; display: inline-flex; align-items: center; min-height: 32px; }
 .sp-crumbs [aria-current] { display: inline-flex; align-items: center; min-height: 32px; overflow-wrap: anywhere; }
 .sp-crumbs .sp-sep { color: var(--text-faint); }
-.sp-crumb-back { display: none; }
+/* "‹ the page above" is the phone's breadcrumb only (§3.2): wider, the whole path (no repeated target). */
+.sp-crumbs > .sp-crumb-back { display: none; }
 .sp-head { display: flex; flex-direction: column; gap: 10px; }
 .sp-kicker { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); font-weight: 600; }
 .sp-h1 { margin: 0; font-family: var(--font-serif); font-size: 38px; line-height: 1.12; font-weight: 600; text-wrap: balance; overflow-wrap: anywhere; }
@@ -360,12 +361,17 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
   text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;
 }
 .sp-app .sp-crumbs button { display: inline-flex; align-items: center; min-height: 32px; }
+.sp-app .sp-crumbs > .sp-crumb-back { display: none; }
 .sp-app button.sp-card { width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .sp-app button.sp-btn { font: inherit; cursor: pointer; }
 .sp-app button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) { .sp-app button.pp-link:hover, .sp-app .sp-crumbs button:hover { text-decoration-thickness: 2px; } }
 @media (min-width: 641px) and (max-width: 1024px) { .sp-app { padding: 20px 24px 32px; } }
-@media (max-width: 640px) { .sp-app { padding: 16px 16px 28px; } }
+@media (max-width: 640px) {
+  .sp-app { padding: 16px 16px 28px; }
+  .sp-app .sp-crumbs > :not(.sp-crumb-back) { display: none; }
+  .sp-app .sp-crumbs > .sp-crumb-back { display: inline-flex; }
+}
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-app { padding: 12px 24px 24px; } }
 @media (pointer: coarse) { .sp-app .sp-crumbs button { min-height: 44px; } }
 .sp-appset .sp-fbar button.sp-fbar-home, .sp-appset .sp-fbar button.sp-fbar-a, .sp-appset button.sp-menu-a, .sp-app button.sp-tab, .sp-app button.sp-letter {
