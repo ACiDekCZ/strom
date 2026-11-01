@@ -456,5 +456,6 @@ describe('time (§6.5)', () => {
             ms = Math.min(ms, normalizedMs(performance.now() - t0, calMs, SET_CALIBRATION_REFERENCE_MS));
         }
         expect(ms).toBeLessThan(1500);
-    });
+        // The budget is the normalized time above; the runner's own 5 s limit would count the wall clock of eight runs.
+    }, 30_000);
 });
