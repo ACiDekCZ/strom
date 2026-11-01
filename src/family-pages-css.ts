@@ -376,6 +376,16 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-app button.sp-letter { font-size: 14px; color: var(--primary); }
 .sp-app button.sp-letter[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
 .sp-appset .sp-fbar-in { max-width: none; }
+/* The dialog's own label and field rules (.modal label / input) must not reach the bar's search:
+   it keeps its row, its magnifier inside the field and, on a phone, stays folded until the magnifier. */
+.sp-appset .sp-fbar label.sp-search { display: flex; margin: 0; font-size: inherit; font-weight: inherit; color: var(--text-light); }
+.sp-appset .sp-fbar .sp-search input.sp-q { width: 100%; height: 36px; padding: 0 10px 0 33px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; transition: none; }
+.sp-appset .sp-fbar .sp-search input.sp-q:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); box-shadow: none; }
+@media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+  .sp-appset .sp-fbar label.sp-search { display: none; }
+  .sp-appset .sp-fbar.sp-fbar--q label.sp-search { display: flex; flex: 1 1 auto; }
+  .sp-appset .sp-fbar .sp-search input.sp-q { height: 40px; font-size: 16px; }
+}
 `;
 
 /**

@@ -662,4 +662,42 @@ test.describe('family pages: the window\'s bar (§3.1, §3.4)', () => {
         await expect(win.locator('.sp-fbar button.sp-fbar-a', { hasText: 'Index' })).toHaveAttribute('aria-current', 'page');
         await expect(win.locator('.sp-tabs .sp-tab')).toHaveText(['People', 'Families', 'Surnames', 'Places']);
     });
+
+    test('the dialog\'s label and field rules do not reach the search: on a phone it waits behind the magnifier, the name is not cut; wide, the magnifier sits inside the field (1101)', async ({ page }) => {
+        await setup(page);
+        const win = page.locator('#person-page-modal');
+        const open = async (): Promise<void> => {
+            await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
+            await win.locator('.pp-facts [data-pp-rod]', { hasText: 'Brandvold' }).click();
+            await expect(win).toHaveClass(/pp-is-set/);
+        };
+        const search = win.locator('.sp-fbar label.sp-search');
+        const q = win.locator('.sp-fbar .sp-q');
+        // Wide: one row, no label margin, the magnifier vertically inside the field and left of the text.
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await open();
+        const wide = await search.evaluate((el) => {
+            const cs = getComputedStyle(el);
+            const f = el.querySelector('.sp-q')!.getBoundingClientRect();
+            const i = el.querySelector('.sp-ico')!.getBoundingClientRect();
+            const pad = parseFloat(getComputedStyle(el.querySelector('.sp-q')!).paddingLeft);
+            return { display: cs.display, margin: cs.marginBottom, dy: Math.abs((i.top + i.bottom) / 2 - (f.top + f.bottom) / 2), inside: i.left >= f.left && i.right + 4 <= f.left + pad };
+        });
+        expect(wide).toEqual({ display: 'flex', margin: '0px', dy: expect.any(Number), inside: true });
+        expect(wide.dy).toBeLessThanOrEqual(2);
+        await page.keyboard.press('Escape');
+        await expect(win).toHaveCount(0);
+        // Phone: the name, the magnifier and Menu; the field only after the magnifier, 16 px (no zoom on focus).
+        await page.setViewportSize({ width: 390, height: 844 });
+        await open();
+        await expect(search).toBeHidden();
+        const home = win.locator('.sp-fbar .sp-fbar-home');
+        expect(await home.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        await win.locator('.sp-fbar .sp-fbar-lupa').click();
+        await expect(search).toBeVisible();
+        await expect(q).toBeFocused();
+        expect(await q.evaluate(el => getComputedStyle(el).fontSize)).toBe('16px');
+        await win.locator('.sp-fbar .sp-fbar-cancel').click();
+        await expect(search).toBeHidden();
+    });
 });
