@@ -5451,6 +5451,10 @@
         }
         .modal button.pm-rod-item[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .pm-rod-menu-note { margin: 4px 10px 6px; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+        .modal button.pm-rod-item--sub::after { content: ' ▸'; color: var(--text-faint); }
+        .modal button.pm-rod-item--sub[aria-expanded="true"]::after { content: ' ▾'; }
+        .pm-rod-sub { margin: 0 0 4px 12px; padding-left: 6px; border-left: 2px solid var(--divider); }
+        .pm-rod-sub[hidden] { display: none; }
         @media (hover: hover) {
             .pm-rod-link:hover { text-decoration-thickness: 2px; }
             .modal button.pm-rod-more-btn:hover, .modal button.pm-rod-item:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); }

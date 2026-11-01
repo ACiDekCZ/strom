@@ -59,6 +59,8 @@ import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 import { lifelineGlyph } from '../lifeline-glyphs.js';
 import { buildLineages, rodLabels, RodId } from '../lineage.js';
+import { familyFirstNames, familyHasWindowPage } from '../family-pages.js';
+import { partnershipsInOrder } from '../story-text.js';
 import { personRodRowValue } from '../lineage-row.js';
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
@@ -378,16 +380,27 @@ export const personModalMethods = uiModule({
         const item = (act: string, label: string, off = false): string => off
             ? `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="${act}" aria-disabled="true" title="${esc(hint)}">${esc(label)}</button>`
             : `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="${act}">${esc(label)}</button>`;
+        // 026 §7: the person's families with a page; several under one item that unfolds them.
+        const data = DataManager.getData();
+        const FP = strings.familyPages;
+        const families = partnershipsInOrder(data, person!.partnerships.map(id => data.partnerships[id])
+            .filter((u): u is NonNullable<typeof u> => !!u && familyHasWindowPage(data, index!, u)));
+        const famItem = (uid: string, label: string): string =>
+            `<button type="button" role="menuitem" class="pm-rod-item" data-rod-act="family" data-fam="${esc(uid)}">${esc(label)}</button>`;
+        const famLabel = (u: typeof families[number]): string => FP.fam.menu(familyFirstNames(data, u, getCurrentLanguage()));
+        const famHtml = families.length === 1 ? famItem(families[0].id, famLabel(families[0]))
+            : families.length > 1
+                ? `<button type="button" role="menuitem" class="pm-rod-item pm-rod-item--sub" data-rod-act="families" aria-haspopup="menu" aria-expanded="false">${esc(FP.fam.menuMany)}</button>`
+                    + `<div class="pm-rod-sub" role="menu" aria-label="${esc(FP.fam.menuMany)}" hidden>${families.map(u => famItem(u.id, famLabel(u))).join('')}</div>`
+                : '';
         el.dataset.rod = value.row.rodId;
         el.innerHTML = `<span class="pm-rod-label">${esc(value.label)}</span>`
             + `<span class="pm-rod-value">${parts}</span>`
             + `<span class="pm-rod-more"><button type="button" class="pm-rod-more-btn" aria-haspopup="menu" aria-expanded="false"`
             + ` aria-label="${esc(R.menu)}" title="${esc(R.menu)}">⋯</button>`
             + `<div class="pm-rod-menu" role="menu" aria-label="${esc(R.menu)}" hidden>`
-            // 026 §7: Show in tree · Family line page · Family book… · Edit… · Start…
-            // (step D adds the "Family page (…)" items, a submenu for several
-            // marriages, right after 'page').
-            + item('show', R.showInTree) + item('page', strings.familyPages.rodPage) + item('book', R.book)
+            // 026 §7: Show in tree · Family line page · Family page (…) · Family book… · Edit… · Start…
+            + item('show', R.showInTree) + item('page', strings.familyPages.rodPage) + famHtml + item('book', R.book)
             + item('edit', R.edit, locked) + item('split', R.split, locked)
             + (locked ? `<p class="pm-rod-menu-note">${esc(hint)}</p>` : '')
             + `</div></span>`;
@@ -424,6 +437,15 @@ export const personModalMethods = uiModule({
         if (!itemEl || itemEl.getAttribute('aria-disabled') === 'true') return;
         const rodId = el.dataset.rod as RodId | undefined;
         if (!rodId) return;
+        if (itemEl.dataset.rodAct === 'families') {
+            // Several families: the item unfolds them under itself (on every width).
+            const sub = el.querySelector<HTMLElement>('.pm-rod-sub');
+            if (!sub) return;
+            sub.hidden = !sub.hidden;
+            itemEl.setAttribute('aria-expanded', String(!sub.hidden));
+            if (!sub.hidden) sub.querySelector<HTMLElement>('.pm-rod-item')?.focus();
+            return;
+        }
         this.closePersonModalRodMenu();
         switch (itemEl.dataset.rodAct) {
             case 'show':
@@ -444,6 +466,11 @@ export const personModalMethods = uiModule({
             case 'book':
                 this.leavePersonModalThen(() => this.openBookForRods([rodId]));
                 break;
+            case 'family': {
+                const uid = itemEl.dataset.fam;
+                if (uid) this.leavePersonModalThen(() => this.openFamilyPagesTarget(null, `family:${uid}`));
+                break;
+            }
         }
     },
 
@@ -460,7 +487,7 @@ export const personModalMethods = uiModule({
         }
         if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
         e.preventDefault();
-        const items = [...menu.querySelectorAll<HTMLElement>('.pm-rod-item')];
+        const items = [...menu.querySelectorAll<HTMLElement>('.pm-rod-item')].filter(x => !x.closest('[hidden]'));
         const at = items.indexOf(document.activeElement as HTMLElement);
         const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
         items[next]?.focus();
@@ -485,6 +512,9 @@ export const personModalMethods = uiModule({
     closePersonModalRodMenu(): void {
         const menu = document.querySelector<HTMLElement>('#pm-rod .pm-rod-menu');
         if (menu) menu.hidden = true;
+        const sub = menu?.querySelector<HTMLElement>('.pm-rod-sub');
+        if (sub) sub.hidden = true;
+        menu?.querySelector<HTMLElement>('.pm-rod-item--sub')?.setAttribute('aria-expanded', 'false');
         document.querySelector<HTMLElement>('#pm-rod .pm-rod-more-btn')?.setAttribute('aria-expanded', 'false');
         if (rodMenuAway) document.removeEventListener('pointerdown', rodMenuAway, true);
         rodMenuAway = null;

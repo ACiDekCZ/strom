@@ -11,7 +11,9 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, StromData, Attachment } from '../types.js';
-import type { RodId } from '../lineage.js';
+import { buildLineages, type RodId } from '../lineage.js';
+import { windowFamilyPages } from '../family-pages.js';
+import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { PrivacyMode } from '../privacy.js';
 import { placeKey } from '../places.js';
 import { researchPersonRef } from '../research-link.js';
@@ -365,9 +367,14 @@ export const personPageMethods = uiModule({
         if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }
         (overlay.querySelector('#pp-title') as HTMLElement).textContent = P.title;
         const lang = getCurrentLanguage();
+        // The families with a page of their own get a card leading to it (spec 026 §2.4).
+        const data = DataManager.getData();
+        const familyPages = windowFamilyPages(data, buildLineages(data), entry.personId);
+        if (familyPages.size) ensureFamilyPagesAppCss();
         const opts = this.personPageOptions(entry.personId, {
             mode: 'app', links: 'app', toggles: entry.toggles, open: entry.open, selectedPlace: entry.place,
             ...(chartWidth ? { chartWidth } : {}),
+            ...(familyPages.size ? { familyPages } : {}),
         });
         const page = preparePersonPageData(DataManager.getData(), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);

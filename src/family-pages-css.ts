@@ -230,6 +230,15 @@ export const FAMILY_PAGES_CSS = ROOT_CSS + FAMILY_PAGES_BODY_CSS;
  * dark from the app's theme), print without the file's paper tokens, and the
  * links as buttons (the window's `data-sp-open`) looking like the file's links.
  */
+/** The window's rules in the app's document, once (the set's window and the person page's family cards). */
+export function ensureFamilyPagesAppCss(doc: Document = document): void {
+    if (doc.getElementById('family-pages-css')) return;
+    const style = doc.createElement('style');
+    style.id = 'family-pages-css';
+    style.textContent = FAMILY_PAGES_APP_CSS;
+    doc.head.appendChild(style);
+}
+
 export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS, '') + `
 .sp-app { max-width: 960px; margin: 0 auto; padding: 24px 32px 40px; }
 .sp-app button.pp-link, .sp-app button.sp-crumb, .sp-app button.sp-crumb-back, .sp-app button.sp-toc-a {

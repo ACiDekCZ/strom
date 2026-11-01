@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     PAGE_SET_BIG_BYTES, PAGE_SET_SPLIT_BYTES, PageSet, buildPageSet, estimatePageSetSize, familyHasPage, pageSetFileName,
-    pageSetLivingNames, pageSetPrivacyWarning, sizeVerdict, uniqueSlug,
+    familyHasWindowPage, pageSetLivingNames, pageSetPrivacyWarning, sizeVerdict, uniqueSlug, windowFamilyPages,
 } from '../family-pages.js';
 import { ImageRegistry } from '../image-registry.js';
 import {
@@ -153,6 +153,28 @@ describe('familyHasPage (§2.1)', () => {
         const section = rodsSet(data, { families: 'section' });
         expect(section.pages.some(p => p.kind === 'family')).toBe(false);
         expect(section.familySlug.size).toBe(0);
+    });
+});
+
+describe('family pages in the app\'s window (§2.4, §7)', () => {
+    it('a person\'s families and the parents\' family that have a page: the window\'s sets agree', () => {
+        const { data, ids, unions } = familyPagesFixture();
+        const index = buildLineages(data);
+        const josef = windowFamilyPages(data, index, ids.josef);
+        expect(josef.has(unions.f9)).toBe(true);
+        expect(josef.has(unions.f10)).toBe(true);
+        expect(josef.size).toBe(3);
+        // Kateřina: only her parents' family; Marie's son without a father: none of her own.
+        expect([...windowFamilyPages(data, index, ids.katerina)]).toEqual([...josef].filter(u => u !== unions.f9 && u !== unions.f10));
+        expect(windowFamilyPages(data, index, ids.marie).has(unions.single)).toBe(false);
+        expect(familyHasWindowPage(data, index, data.partnerships[unions.single])).toBe(false);
+        // Each union said to have one is a family page of a partner's lineage's set (full data, as the window).
+        for (const uid of josef) {
+            const u = data.partnerships[uid];
+            const sets = [u.person1Id, u.person2Id].map(pid => index.rodByPerson.get(pid)).filter((r): r is RodId => !!r)
+                .map(r => buildPageSet(data, { kind: 'rods', rods: [r] }, { lang: 'cs', now: FP_NOW, privacy: 'full' }));
+            expect(sets.some(s => s.familySlug.has(uid))).toBe(true);
+        }
     });
 });
 

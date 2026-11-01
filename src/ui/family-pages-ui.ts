@@ -25,7 +25,7 @@ import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
 import { buildPageSetHtmlAsync, pageSetRenderedPages, pageSetSectionHtml } from '../family-pages-html.js';
-import { FAMILY_PAGES_APP_CSS } from '../family-pages-css.js';
+import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
 import { RodId, buildLineages, rodOf } from '../lineage.js';
 import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster-fonts.js';
@@ -39,8 +39,6 @@ export interface SetRef {
     title: string;
 }
 
-const APP_CSS_ID = 'family-pages-css';
-
 let cache: { key: string; set: PageSet } | null = null;
 let cacheWatched = false;
 
@@ -49,11 +47,7 @@ function esc(text: string): string {
 }
 
 function ensureAppCss(): void {
-    if (document.getElementById(APP_CSS_ID)) return;
-    const style = document.createElement('style');
-    style.id = APP_CSS_ID;
-    style.textContent = FAMILY_PAGES_APP_CSS;
-    document.head.appendChild(style);
+    ensureFamilyPagesAppCss();
 }
 
 function treeName(): string {

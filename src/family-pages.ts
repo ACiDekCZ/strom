@@ -19,7 +19,7 @@ import { shownNameOrEmpty } from './person-name.js';
 import { feminineForm } from './surnames.js';
 import { asciiSlug } from './filenames.js';
 import { normalizeSearchText, searchableSurnames, alternateNames } from './name-search.js';
-import { Rod, RodId, Selection, rodGenerations, rodNameForms, selection } from './lineage.js';
+import { LineageIndex, Rod, RodId, Selection, rodGenerations, rodNameForms, selection } from './lineage.js';
 import { BookSelectionSpec, chapterRods, lineageSpec } from './book-model.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
@@ -166,6 +166,37 @@ export function familyHasPage(u: Partnership, set: { protectedTree: ProtectedPer
     if (ps.length < 2) return false;
     if (!isMarriage(u) && !(u.childIds ?? []).some(id => !!prot.tree.persons[id])) return false;
     return !ps.every(p => isProtectedPerson(prot, p.id));
+}
+
+/**
+ * Does a union have a page in the app's window (§7: the person card's menu,
+ * the person page's "Family page →")? Full data there, families as pages: both
+ * partners recorded, a marriage or a child, and a partner's lineage carries
+ * the union (its set is where the window opens the page).
+ */
+export function familyHasWindowPage(data: StromData, index: LineageIndex, u: Partnership): boolean {
+    if (partnersOf(data, u).length < 2) return false;
+    if (!isMarriage(u) && !(u.childIds ?? []).some(id => !!data.persons[id])) return false;
+    return [u.person1Id, u.person2Id].some(pid => {
+        const rodId = pid ? index.rodByPerson.get(pid) : undefined;
+        return !!rodId && !!index.rods.get(rodId)?.familyIds.includes(u.id);
+    });
+}
+
+/** A person's unions and the parents' union that have a page in the window (see familyHasWindowPage). */
+export function windowFamilyPages(data: StromData, index: LineageIndex, personId: PersonId): Set<PartnershipId> {
+    const out = new Set<PartnershipId>();
+    const p = data.persons[personId];
+    if (!p) return out;
+    const unions = new Set<PartnershipId>(p.partnerships);
+    for (const par of p.parentIds ?? []) {
+        for (const uid of data.persons[par]?.partnerships ?? []) if (data.partnerships[uid]?.childIds.includes(personId)) unions.add(uid);
+    }
+    for (const uid of unions) {
+        const u = data.partnerships[uid];
+        if (u && familyHasWindowPage(data, index, u)) out.add(uid);
+    }
+    return out;
 }
 
 function nameOf(tree: StromData, id: PersonId): string {
