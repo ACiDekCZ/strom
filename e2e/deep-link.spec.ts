@@ -105,16 +105,16 @@ test.describe('a link to a person', () => {
         await openApp(page);
         const { slug, id } = await page.evaluate(async () => {
             const { TreeManager, DataManager, UI } = window.Strom;
-            const tree = TreeManager.createTree('Kopeckých rod');
+            const tree = TreeManager.createTree('Rod Pivoňkovských');
             await UI.switchToTree(tree);
-            const a = DataManager.createPerson({ firstName: 'Radomil', lastName: 'Kopecký', gender: 'male' });
-            DataManager.createPerson({ firstName: 'Vlastimila', lastName: 'Kopecká', gender: 'female' });
+            const a = DataManager.createPerson({ firstName: 'Hostivít', lastName: 'Pivoňkovský', gender: 'male' });
+            DataManager.createPerson({ firstName: 'Bohuslava', lastName: 'Pivoňkovská', gender: 'female' });
             await TreeManager.flush();
             return { slug: TreeManager.getTreeSlug(tree)!, id: a.id as string };
         });
         await page.goto(`/strom.html?tree=${slug}&person=${encodeURIComponent(id)}`);
         await expect(personPage(page)).toBeVisible();
-        await expect(personPage(page).locator('.pp-sub')).toContainText('Radomil Kopecký');
+        await expect(personPage(page).locator('.pp-sub')).toContainText('Hostivít Pivoňkovský');
         await expect.poll(() => params(page)).toEqual(['tree']);
     });
 
@@ -141,9 +141,9 @@ test.describe('a link to "Awaiting action"', () => {
         await openApp(page);
         const slug = await page.evaluate(async () => {
             const { TreeManager, DataManager, UI } = window.Strom;
-            const tree = TreeManager.createTree('Kopeckých rod');
+            const tree = TreeManager.createTree('Rod Pivoňkovských');
             await UI.switchToTree(tree);
-            DataManager.createPerson({ firstName: 'Radomil', lastName: 'Kopecký', gender: 'male' });
+            DataManager.createPerson({ firstName: 'Hostivít', lastName: 'Pivoňkovský', gender: 'male' });
             await TreeManager.flush();
             return TreeManager.getTreeSlug(tree)!;
         });
