@@ -2,6 +2,17 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.21.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Map**: the kinds of places are four chips, *Births*, *Deaths*, *Marriages* and *Other events* (on a phone one button with a menu), kept per device; the points, the bubbles and *Migration over time* show only the kinds turned on. A town is one point with its house numbers, and the numbers and labels stay legible in the dark and when zoomed out.
+- **Places**: the dialog groups the places of a town with their houses; *Split into town and house* moves house numbers and streets from the place name into the *House* field, for one place or a whole town after a confirmation; a place without its own location is located by its town.
+- **Default person and view**: the tree's dialog sets the view the tree opens in, the *Family view* or the *Last used* view on this device, always with the tree's default person; the tree's menu and the tree manager say when a tree opens in its last used view. A reload keeps the tree, the view and the person.
+- **Links into the app**: a link from the research's widget opens the tree with the person and the person page, or *Awaiting action* of the tree's research.
+- **Family book**: the *Custom* preset starts from the current settings, keeps its own values and is not overwritten by the other presets; a line under the presets says which one it started from.
+- **Smaller changes**: the footer of the family pages and the person page links to the website; the breadcrumb of the family pages is shorter only on a phone; the fan and the person page's ancestors fit more names into small sectors; further fixes of layout and texts.
+
 ## 3.20.0
 
 *Released 1 November 2026.*

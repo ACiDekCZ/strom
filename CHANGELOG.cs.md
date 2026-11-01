@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.21.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Mapa**: druhy míst jsou čtyři čipy, *Narození*, *Úmrtí*, *Sňatky* a *Ostatní události* (na telefonu jedno tlačítko s nabídkou), pamatují se v zařízení; body, bubliny i *Migrace v čase* ukazují jen zapnuté druhy. Obec je jeden bod s čísly svých domů a čísla i popisky zůstanou čitelné v tmavém režimu i při oddálení.
+- **Místa**: dialog seskupuje místa obce s jejími domy; *Rozdělit na obec a dům* přesune čísla domů a ulice z názvu místa do pole *Dům*, u jednoho místa nebo po potvrzení za celou obec; místo bez vlastní polohy dostane polohu podle obce.
+- **Výchozí osoba a pohled**: dialog stromu nastaví pohled, ve kterém se strom otevře, *Rodina* nebo *Naposledy použitý* pohled v tomto zařízení, vždy s výchozí osobou stromu; nabídka stromu a správce stromů uvádějí, když se strom otevírá v naposledy použitém pohledu. Znovunačtení stránky zachová strom, pohled i osobu.
+- **Odkazy do aplikace**: odkaz z widgetu výzkumu otevře strom s osobou a stránkou osoby, nebo *Čeká na vyřízení* výzkumu stromu.
+- **Kniha rodu**: předvolba *Vlastní* začne z aktuálního nastavení, drží si vlastní hodnoty a ostatní předvolby je nepřepíšou; řádek pod předvolbami říká, ze které vyšla.
+- **Drobnosti**: patička stránek rodu a stránky osoby odkazuje na web; drobečková navigace stránek rodu je zkrácená jen na telefonu; vějíř a předci na stránce osoby vejdou více jmen do malých výsečí; další opravy rozložení a textů.
+
 ## 3.20.0
 
 *Vydáno 1. listopadu 2026.*

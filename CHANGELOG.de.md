@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.21.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Karte**: Die Arten der Orte sind vier Chips, *Geburten*, *Sterbefälle*, *Eheschließungen* und *Weitere Ereignisse* (auf einem Telefon eine Schaltfläche mit Menü), gemerkt pro Gerät; Punkte, Blasen und *Wanderung über die Zeit* zeigen nur die eingeschalteten Arten. Ein Ort ist ein Punkt mit seinen Hausnummern, und Nummern und Beschriftungen bleiben im Dunkelmodus und beim Herauszoomen lesbar.
+- **Orte**: Der Dialog gruppiert die Orte einer Gemeinde mit ihren Häusern; *In Ort und Haus aufteilen* verschiebt Hausnummern und Straßen aus dem Ortsnamen in das Feld *Haus*, für einen Ort oder nach Bestätigung für die ganze Gemeinde; ein Ort ohne eigene Lage erhält die Lage seiner Gemeinde.
+- **Standardperson und -ansicht**: Der Dialog des Stammbaums legt die Ansicht fest, in der er sich öffnet, *Familie* oder *Zuletzt verwendet* (die auf diesem Gerät zuletzt verwendete Ansicht), immer mit der Standardperson des Stammbaums; das Menü des Stammbaums und die Stammbaumverwaltung nennen es, wenn ein Stammbaum in der zuletzt verwendeten Ansicht öffnet. Neu laden behält Stammbaum, Ansicht und Person.
+- **Links in die App**: Ein Link aus dem Widget der Forschung öffnet den Stammbaum mit der Person und der Personenseite oder *Wartet auf Bearbeitung* der Forschung des Stammbaums.
+- **Familienbuch**: Die Voreinstellung *Eigene* beginnt mit den aktuellen Einstellungen, behält ihre eigenen Werte und wird von den anderen Voreinstellungen nicht überschrieben; eine Zeile unter den Voreinstellungen nennt, von welcher sie ausging.
+- **Kleinere Änderungen**: Die Fußzeile der Familienseiten und der Personenseite verlinkt die Website; die Brotkrumen der Familienseiten sind nur auf einem Telefon verkürzt; der Fächer und die Vorfahren der Personenseite bringen mehr Namen in kleine Sektoren; weitere Korrekturen von Layout und Texten.
+
 ## 3.20.0
 
 *Veröffentlicht am 1. November 2026.*
