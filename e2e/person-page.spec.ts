@@ -1403,7 +1403,7 @@ test.describe('Ancestors: every ancestor carries a label (1101)', () => {
         [11, 'Johanna', 'Fischer', '1872', '1950'], [12, 'Georg', 'Oberwaldenburger-Kreuzfeldt', '1865', '1931'],
         [13, 'Katharina', 'Vogel', '1870', '1944'], [14, 'Franz', 'Lindauer', '1874', '1940'], [15, 'Theresia', 'Huber', '1876', '1950'],
         [16, 'Andreas', 'Klein', '1841', '1903'], [17, 'Barbara', 'Sauter', '1845', '1912'], [18, 'Matthias', 'Wolf', '1846', '1915'],
-        [19, 'Kreszentia', 'Haag', '1850', '1921'], [20, 'Xaver', 'Kaiser', '1839', '1899'], [21, 'Agatha', 'Moosmann', '1843', '1908'],
+        [19, 'Hedwig', 'Rautenfeld', '1850', '1921'], [20, 'Ferdinand', 'Kaiser', '1839', '1899'], [21, 'Ottilie', 'Wendelbach', '1843', '1908'],
         [22, 'Konrad', 'Fischer', '1842', '1910'], [23, 'Genoveva', 'Rapp', '1847', '1913'],
         [24, 'Josef', 'Oberwaldenburger-Kreuzfeldt', '1838', '1901'], [25, 'Anna', 'Bauer', '1840', '1905'],
         [26, 'Lorenz', 'Vogel', '1841', '1900'], [27, 'Magdalena', 'Brunnhuber', '1845', '1910'],
