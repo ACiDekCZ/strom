@@ -74,6 +74,23 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** The app's window only (§3.3, §9.3): " living" after a living person's years; '' in a saved file. */
+function livingTagHtml(r: Render, id: PersonId | undefined): string {
+    return id ? r.base.markLiving?.(id) ?? '' : '';
+}
+
+/** A card's line of years with the window's living tag; '' with neither. */
+function yearsTagHtml(r: Render, id: PersonId, yrs: string, cls: string): string {
+    const tag = livingTagHtml(r, id);
+    return yrs || tag ? `<span class="${cls}">${esc(yrs)}${yrs ? tag : tag.trimStart()}</span>` : '';
+}
+
+/** The living tag of a search hit, by its page (a person's page; nothing for other pages). */
+function livingOfPage(r: Render, slug: string | undefined): string {
+    const page = slug ? r.set.bySlug.get(slug) : undefined;
+    return page?.kind === 'person' && page.id ? livingTagHtml(r, page.id as PersonId) : '';
+}
+
 /** The window's value of a page's link: `person:{id}`, `family:{id}`, `rod:{id}`, else `page:{slug}`. */
 export function pageSetAppTarget(page: SetPage): string {
     if (page.kind === 'person' && page.id) return `person:${page.id}`;
@@ -119,6 +136,10 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
         linkTo, tree: prot.tree, living: prot.living, model, now: set.options.now,
         sources: new BookSourceNumbers(prot.tree.sources ?? {}, false),
         described: new Map(), protectedTree: prot,
+        // The window shows full data: a living person carries the tag of what the file protects (§9.3).
+        ...(mode === 'app' ? {
+            markLiving: (id: PersonId) => prot.living.has(id) ? ` <span class="sp-living">${esc(S.familyPages.livingTag)}</span>` : '',
+        } : {}),
     };
     const lines = [`<p>${esc(S.personPage.created(formatFlexDate(localDay(set.options.now), lang)))}</p>`];
     if (pageSetLivingNames(set).length) lines.push(`<p>${esc(S.familyPages.privacyNote[set.options.privacy])}</p>`);
@@ -380,7 +401,7 @@ function partnerCardHtml(r: Render, ctx: BookCtx, u: Partnership, p: Person, fam
     const portrait = prot ? '' : portraitHtml(r, p);
     return `<div class="sp-partner">`
         + `<div class="sp-partner-top">${portrait}<div class="sp-partner-id"><span class="sp-role">${esc(role)}</span>`
-        + `<span class="sp-partner-name">${personLinkHtml(r, ctx, p.id)}</span>${yrs ? `<span class="sp-yrs">${esc(yrs)}</span>` : ''}</div></div>`
+        + `<span class="sp-partner-name">${personLinkHtml(r, ctx, p.id)}</span>${yearsTagHtml(r, p.id, yrs, 'sp-yrs')}</div></div>`
         + (facts.length ? `<dl class="sp-pfacts">${facts.join('')}</dl>` : '')
         + rows.map(x => `<span class="sp-prow">${x}</span>`).join('')
         + go + '</div>';
@@ -405,10 +426,20 @@ function otherMarriagesHtml(r: Render, ctx: BookCtx, u: Partnership, ps: readonl
     return out.join('');
 }
 
-/** The marriage's record excerpt: the first of the union's sources (the set's image and its zoom in the file). */
+/**
+ * The marriage's record excerpt (§2.2, §9.9): first a source cited at the
+ * wedding itself (the union's own citations, which GEDCOM writes under MARR;
+ * a marriage register among them before the rest), then the first excerpt
+ * of the union's other sources (its events'); none: no block.
+ */
 function marriageClip(r: Render, u: Partnership): { src: string; caption: string } | null {
     const sources = r.set.protectedTree.tree.sources ?? {};
-    for (const sid of u.sourceIds ?? []) {
+    const own = u.sourceIds ?? [];
+    // A marriage register by its title, at a word's start ("Soupis poddaných" is not one).
+    const isRegister = (id: string) => /(?:^|[^\p{L}])(?:odda[cnč]|sňat|marriage|trau|heirat|ehe)/iu.test(sources[id]?.title ?? '');
+    const wedding = [...own.filter(isRegister), ...own];
+    const rest = sortCoupleEvents(u.events ?? []).flatMap(e => e.sourceIds ?? []);
+    for (const sid of new Set([...wedding, ...rest])) {
         const s = sources[sid];
         for (const e of s?.excerpts ?? []) {
             const src = shownExcerpt(e);
@@ -481,13 +512,12 @@ function childCardHtml(r: Render, ctx: BookCtx, c: Person): string {
             note = familyLinkHtml(r, first.id, `→ ${esc(F.familyRef(familyFirstNames(tree, first, r.set.options.lang)))}`);
         } else if (into) {
             note = rodLinkHtml(r, into.rodId, esc(F.toRod(rodLabel(r, ctx, into.rodId))));
-        } else if (!c.partnerships.length && !r.set.protectedTree.living.has(c.id) && (yearOf(c.deathDate) !== null)) {
-            note = esc(F.fam.single[gKey(c)]);
         }
+        // Nothing else (§9.2): a marriage missing from the data is no fact, so no "unmarried".
     }
     const yrs = bookYears(c);
     return `<div class="sp-kid${young ? ' sp-kid--young' : ''}"><span class="sp-kid-name">${personLinkHtml(r, ctx, c.id)}</span>`
-        + (yrs ? `<span class="sp-yrs">${esc(yrs)}</span>` : '')
+        + yearsTagHtml(r, c.id, yrs, 'sp-yrs')
         + (note ? `<span class="sp-kid-note">${note}</span>` : '') + '</div>';
 }
 
@@ -621,7 +651,7 @@ export function pageSetSearchHtml(set: PageSet, query: string, opts: PageSetHtml
             + `<p>${toIndex(esc(F.toIdx))}</p></div>`;
     }
     const rows = res.hits.map(e => `<li class="sp-res-row">${e.s && set.bySlug.has(e.s) ? pageLink(r, e.s, esc(e.n), 'pp-link sp-res-n') : `<span class="sp-res-n">${esc(e.n)}</span>`}`
-        + `${e.y ? ` <span class="sp-res-y">${esc(e.y)}</span>` : ''}${e.t ? ` <span class="sp-res-t">${esc(e.t)}</span>` : ''}</li>`).join('');
+        + `${e.y ? ` <span class="sp-res-y">${esc(e.y)}</span>` : ''}${livingOfPage(r, e.s)}${e.t ? ` <span class="sp-res-t">${esc(e.t)}</span>` : ''}</li>`).join('');
     const more = res.total > res.hits.length ? `<p class="sp-res-more">${toIndex(esc(F.searchMore(res.total - res.hits.length)))}</p>` : '';
     return `<p class="sp-res-head">${esc(F.searchResults(res.total, q))}</p><ul class="sp-res-list">${rows}</ul>${more}`;
 }
@@ -704,7 +734,7 @@ function personsIndexHtml(r: Render, slug: string): string {
         + `${keys.map((k, i) => letter(slug, i + 1, label(k))).join('')}</nav>`;
     const body = keys.map((k, i) => {
         const rows = groups.get(k)!.map(it => `<li class="sp-ix-row">${personNameLink(r, it.id, esc(it.shown), 'pp-link sp-ix-n')}`
-            + `${it.e.y ? ` <span class="sp-ix-y">${esc(it.e.y)}</span>` : ''}${it.e.t ? ` <span class="sp-ix-t">${esc(it.e.t)}</span>` : ''}</li>`).join('');
+            + `${it.e.y ? ` <span class="sp-ix-y">${esc(it.e.y)}</span>` : ''}${livingTagHtml(r, it.id)}${it.e.t ? ` <span class="sp-ix-t">${esc(it.e.t)}</span>` : ''}</li>`).join('');
         return `<div class="sp-ix-group" id="${esc(`${slug}--pis-${i + 1}`)}" data-sp-group="${i + 1}"><h2 class="sp-ix-letter">${esc(label(k))}</h2>`
             + `<ul class="sp-ix-list">${rows}</ul></div>`;
     }).join('');
@@ -738,7 +768,7 @@ function foldRowHtml(r: Render, id: string, head: string, people: readonly Perso
     const sub = people.map(pid => {
         const p = tree.persons[pid];
         const y = p ? bookYears(p) : '';
-        return `<li>${personNameLink(r, pid, esc(p ? shownNameOrEmpty(p) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}</li>`;
+        return `<li>${personNameLink(r, pid, esc(p ? shownNameOrEmpty(p) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}${livingTagHtml(r, pid)}</li>`;
     }).join('');
     return `<details class="sp-ix-more"${id ? ` id="${esc(id)}"` : ''} open><summary class="sp-ix-sum">${head}</summary><ul class="sp-ix-sub">${sub}</ul></details>`;
 }
@@ -853,7 +883,7 @@ function mapPageHtml(r: Render, page: SetPage): string {
         const people = p.personIds.map(pid => {
             const x = tree.persons[pid];
             const y = x ? bookYears(x) : '';
-            return `<span class="sp-map-who">${personNameLink(r, pid, esc(x ? shownNameOrEmpty(x) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}</span>`;
+            return `<span class="sp-map-who">${personNameLink(r, pid, esc(x ? shownNameOrEmpty(x) || '?' : '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}${livingTagHtml(r, pid)}</span>`;
         }).join('');
         const period = p.from === p.to ? String(p.from) : `${p.from}–${p.to}`;
         return ` · <span class="pp-map-ev">${esc(period)} · ${esc(F.nPersons(p.personIds.length))}</span><span class="sp-map-people">${people}</span>`;

@@ -160,6 +160,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-kid-note { font-size: 13px; color: var(--text-light); }
 .sp-story .pp-couple-story { margin: 0; }
 .sp-pfam { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.sp-pfam-none { margin: 0; font-size: 14px; color: var(--text-light); }
 .sp-famcard { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; width: 100%; box-sizing: border-box; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: none; font: inherit; color: var(--text); text-align: left; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; }
 .sp-famcard-t { font-size: 15px; font-weight: 600; }
 .sp-famcard-m { font-size: 13.5px; color: var(--text-light); }
@@ -352,6 +353,8 @@ export function ensureFamilyPagesAppCss(doc: Document = document): void {
 
 export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS, '') + `
 .sp-app { max-width: 960px; margin: 0 auto; padding: 24px 32px 40px; }
+/* The app's window shows full data; a living person's tag tells what the saved file protects (§3.3, §9.3). */
+.sp-living { font-size: 12px; font-weight: 400; color: var(--text-faint); white-space: nowrap; }
 .sp-app button.pp-link, .sp-app button.sp-crumb, .sp-app button.sp-crumb-back, .sp-app button.sp-toc-a {
   font: inherit; color: var(--primary); background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit;
   text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;

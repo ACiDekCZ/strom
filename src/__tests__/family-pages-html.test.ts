@@ -9,12 +9,12 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { PageSet, buildPageSet } from '../family-pages.js';
-import { buildPageSetHtml, buildPageSetHtmlAsync, pageSetRenderedPages, pageSetSectionHtml } from '../family-pages-html.js';
+import { buildPageSetHtml, buildPageSetHtmlAsync, pageSetRenderedPages, pageSetSearchHtml, pageSetSectionHtml } from '../family-pages-html.js';
 import { PAGE_SET_SCRIPT } from '../family-pages-css.js';
 import { buildLineages, rods, RodId } from '../lineage.js';
 import { StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
-import { familyPagesFixture, FP_NOW, CLIP_IMG } from './helpers/family-pages-fixture.js';
+import { familyPagesFixture, FP_NOW, CLIP_IMG, PHOTO_IMG } from './helpers/family-pages-fixture.js';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 import { calibrationWorkload, normalizedMs } from './helpers/perf-budget.js';
 
@@ -357,6 +357,84 @@ describe('images and the window (§0.4, §0.8)', () => {
         const two = await buildPageSetHtmlAsync(rodsSet(data), { pause: () => Promise.resolve(), progress: d => at.push(d) });
         expect(two).toBe(one);
         expect(at.length).toBe(pageSetRenderedPages(rodsSet(data)).length);
+    });
+});
+
+describe('round 2 of the design (§9.2, §9.3, §9.9)', () => {
+    it('nothing derives "single": a child without a union has no note; a person page without one says so', () => {
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            const { data, ids } = familyPagesFixture();
+            const set = rodsSet(data, fixtureRods(data), { privacy: 'full', lang });
+            const html = buildPageSetHtml(set);
+            const text = html.replace(/<style[^>]*>[^]*?<\/style>|<script[^>]*>[^]*?<\/script>/g, '');
+            expect(text).not.toMatch(/svobodn|ledig|unverheiratet|unmarried|\bsingle\b/i);
+            // Kateřina (no union): her card on her parents' page carries no note.
+            const parentsUnion = Object.values(data.partnerships).find(u => u.childIds.includes(ids.katerina))!;
+            const parents = section(html, set.familySlug.get(parentsUnion.id)!);
+            expect(parents).toMatch(/<div class="sp-kid">[^]*?Kateřina Fíšková[^]*?<\/div>/);
+            const card = parents.slice(parents.indexOf('Kateřina Fíšková'));
+            expect(card.slice(0, card.indexOf('</div>'))).not.toContain('sp-kid-note');
+            // Her own page: the family section says that nothing is recorded.
+            const own = section(html, set.personSlug.get(ids.katerina)!);
+            const line = { cs: 'Bez záznamu o sňatku a dětech.', en: 'No marriage or children recorded.', de: 'Keine Ehe und keine Kinder verzeichnet.' }[lang];
+            expect(own).toContain(`<p class="sp-pfam-none">${line}</p>`);
+            // Josef has unions: no such line.
+            expect(section(html, set.personSlug.get(ids.josef)!)).not.toContain('sp-pfam-none');
+        }
+    });
+
+    it('the window marks the living "žijící" in the lineage, the cards, the index and the search; the file never', () => {
+        const { data, ids, unions } = familyPagesFixture();
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const tag = '<span class="sp-living">žijící</span>';
+        const file = buildPageSetHtml(set);
+        expect(file).not.toContain('sp-living');
+        expect(file).not.toContain('>žijící<');
+        // The lineage: Eva (born 1952) carries it, Pavel (died 2010) not.
+        const rod = pageSetSectionHtml(set, 'rod-fisek');
+        expect(rod).toMatch(/Eva Fíšková<\/button> <span class="sp-yrs">[^<]*<\/span> <span class="sp-living">žijící<\/span>/);
+        expect(rod).not.toMatch(/Pavel Fíšek<\/button> <span class="sp-yrs">[^<]*<\/span> <span class="sp-living">/);
+        // The family page of Jaroslav and Jana: Jana's partner card and Eva's child card.
+        const fam = pageSetSectionHtml(set, set.familySlug.get(unions.jaroslavJana)!);
+        expect(fam.match(/class="sp-living"/g)).toHaveLength(2);
+        expect(fam).toMatch(/Jana Hrabánková<\/button><\/span><span class="sp-yrs">[^<]*<span class="sp-living">žijící<\/span><\/span>/);
+        // The index of people and the search.
+        const index = pageSetSectionHtml(set, set.indexSlug.persons!);
+        expect(index.split(tag).length - 1).toBe(set.selection.personIds.filter(id => set.protectedTree.living.has(id) && set.personSlug.has(id)).length);
+        expect(pageSetSearchHtml(set, 'Eva', { mode: 'app' })).toContain(tag);
+        expect(pageSetSearchHtml(set, 'Eva', { mode: 'file' })).not.toContain(tag);
+        // The dead and the book: untouched.
+        expect(pageSetSectionHtml(set, set.familySlug.get(unions.f9)!)).not.toContain('sp-living');
+        expect(set.protectedTree.living.has(ids.eva)).toBe(true);
+    });
+
+    it('the marriage excerpt: a marriage register cited by the union first, then the union\'s other sources; none, no block', () => {
+        const { data, unions } = familyPagesFixture();
+        const other = PHOTO_IMG.replace('KCIsIy', 'KCIsIz');
+        data.sources!['s-census'] = {
+            id: 's-census', title: 'Soupis poddaných Čapkov 1846',
+            excerpts: [{ id: 'x2', dataUrl: other, width: 1, height: 1, sizeBytes: 300 }],
+        } as never;
+        const u = data.partnerships[unions.f9];
+        // The census before the register in the union's citations: the register's excerpt still wins.
+        u.sourceIds = ['s-census', 's-marr1846'];
+        const pageOf = () => {
+            const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+            return section(buildPageSetHtml(set), set.familySlug.get(unions.f9)!);
+        };
+        let page = pageOf();
+        expect(page).toContain('Oddací matrika Čapkov 1840–1860, fol. 12');
+        expect(page).toContain('<span class="sp-clip-cap">Oddací matrika Čapkov 1840–1860, fol. 12</span>');
+        // No excerpt in the union's citations: the first one of its events' sources.
+        u.sourceIds = [];
+        u.events = [{ id: 'banns', type: 'banns', date: '1846-01-20', sourceIds: ['s-census'] }] as never;
+        page = pageOf();
+        expect(page).toMatch(/class="sp-clip"/);
+        expect(page).toContain('<span class="sp-clip-cap">Soupis poddaných Čapkov 1846</span>');
+        // No excerpt anywhere: no excerpt block.
+        delete u.events;
+        page = pageOf();
+        expect(page).not.toMatch(/class="sp-clip"/);
     });
 });
 

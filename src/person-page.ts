@@ -1503,12 +1503,14 @@ function familyTreeDesktopBothHtml(c: Ctx, d: FtData): string {
 function familyTreeHtml(c: Ctx): string {
     const d = familyTreeData(c);
     const any = d.parents.length || d.unions.length || d.solo.length || d.siblings.length || d.grandchildren.length;
-    if (!any) return '';
+    const blocks = familyPageBlocksHtml(c);
+    if (!any && !blocks) return '';
     // 0–2 unions: the tree to the sides (the upright one under 641 px); 3 and more: upright on every width.
     const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
         : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopBothHtml(c, d) + familyTreeRailHtml(c, d);
-    return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>${familyPageBlocksHtml(c)}`);
+    const tree = any ? `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>` : '';
+    return section('family', c.P.sec.family, `${tree}${blocks}`);
 }
 
 /**
@@ -1564,10 +1566,12 @@ function familyPageBlocksHtml(c: Ctx): string {
     }
     // The person's own families, in their order.
     const unions = partnershipsInOrder(tree, p.partnerships.map(id => tree.partnerships[id]).filter((u): u is Partnership => !!u));
+    let own = 0;
     for (const u of unions) {
         const other = real(u.person1Id === p.id ? u.person2Id : u.person1Id);
         const kids = (u.childIds ?? []).filter(id => !!real(id));
         if (!other && !kids.length) continue;
+        own++;
         const wedding = u.status === 'married' || u.status === 'divorced';
         const y = wedding ? yearOf(u.startDate) : null;
         const title = other ? `${y !== null ? `⚭ ${y} ` : ''}${esc(nameOf(c, other.id) || '?')}`
@@ -1576,6 +1580,8 @@ function familyPageBlocksHtml(c: Ctx): string {
         if (hasPage(u.id)) out.push(card(u.id, title, meta));
         else if (set) out.push(block(F.famOddil, `${title} · ${esc(meta)}`, kids.map(line)));
     }
+    // No union in the data (§2.4, §9.2): a neutral line, never "unmarried" - a missing record is no fact.
+    if (set && !own) out.push(`<p class="sp-pfam-none">${esc(F.fam.noUnion)}</p>`);
     return out.length ? `<div class="sp-pfam">${out.join('')}</div>` : '';
 }
 

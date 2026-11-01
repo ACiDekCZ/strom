@@ -118,6 +118,12 @@ export interface BookCtx {
     described: Map<PersonId, number>;
     /** The protected tree as the person page's helpers take it. */
     protectedTree: ProtectedPersonPageTree;
+    /**
+     * Pages of a set in the app's window (spec 026 §3.3, §9.3): the tag after
+     * a living person's years (' <span class="sp-living">living</span>'), ''
+     * for others; none in the book and in a saved file.
+     */
+    markLiving?: (id: PersonId) => string;
 }
 
 type Strings = ReturnType<typeof getStringsForLang>;
@@ -1124,7 +1130,7 @@ function lineRowHtml(id: PersonId, line: PageLine, ctx: BookCtx, members: Readon
     const p = person(ctx, id)!;
     const name = link(ctx, { person: id }, bookName(ctx, id));
     const years = bookYears(p);
-    const yrs = years ? ` <span class="sp-yrs">${esc(years)}</span>` : '';
+    const yrs = (years ? ` <span class="sp-yrs">${esc(years)}</span>` : '') + (ctx.markLiving?.(id) ?? '');
     if (shielded(ctx, id)) return `<div class="sp-row sp-row--prot"><p class="sp-row-main">${name}${yrs}</p></div>`;
     const meta = [p.birthPlace?.trim() ?? '', occupationOf(p)].filter(Boolean).join(' · ');
     const young = diedYoung(p);
@@ -1157,7 +1163,7 @@ function lineUnionHtml(u: Partnership, memberId: PersonId, ctx: BookCtx): string
         const head = y !== null ? `⚭ ${y}` : isWedding(u) ? '⚭' : '';
         const other = person(ctx, otherId)!;
         const oy = bookYears(other);
-        const partner = `${link(ctx, { person: otherId }, bookName(ctx, otherId))}${oy ? ` <span class="sp-yrs">(${esc(oy)})</span>` : ''}`;
+        const partner = `${link(ctx, { person: otherId }, bookName(ctx, otherId))}${oy ? ` <span class="sp-yrs">(${esc(oy)})</span>` : ''}${ctx.markLiving?.(otherId) ?? ''}`;
         bits.push(head ? `<span class="sp-nw">${head}</span> ${partner}` : partner);
         const otherRod = rodShown(ctx, otherId) && rodShown(ctx, memberId) ? birthRodNamed(ctx, otherId) : null;
         if (otherRod && otherRod !== rodOfPerson(ctx, memberId)) {
@@ -1175,7 +1181,7 @@ function lineUnionHtml(u: Partnership, memberId: PersonId, ctx: BookCtx): string
         ? `<details class="sp-kids" open><summary>${esc(F.nKids(kids.length))}</summary><p class="sp-kid-list">`
             + kids.map(k => {
                 const ky = bookYears(person(ctx, k));
-                return `<span class="sp-kid">${link(ctx, { person: k }, bookName(ctx, k))}${ky ? ` <span class="sp-yrs">${esc(ky)}</span>` : ''}</span>`;
+                return `<span class="sp-kid">${link(ctx, { person: k }, bookName(ctx, k))}${ky ? ` <span class="sp-yrs">${esc(ky)}</span>` : ''}${ctx.markLiving?.(k) ?? ''}</span>`;
             }).join(', ')
             + '</p></details>'
         : '';

@@ -6441,7 +6441,7 @@ const stringsEN = {
             story: 'Story',
             sources: 'Sources of the family',
             kidsOf: (n: number) => `Children (${n})`,
-            single: { m: 'unmarried, no children', f: 'unmarried, no children', u: 'unmarried, no children' } as Record<'m' | 'f' | 'u', string>,
+            noUnion: 'No marriage or children recorded.',
             card: 'Family page →',
             parents: 'Parents',
             parentsOf: (names: string) => `Parents: ${names}`,
@@ -6477,6 +6477,7 @@ const stringsEN = {
         output: 'Printed book · Linked pages',
         tooBig: (mb: string) => `The file will be large (${mb}).`,
         treeLater: 'pages for the whole tree come later',
+        treeMoved: (l: string) => `The whole tree is for the book only so far; the ${l} family line is selected.`,
         printFoot: (file: string) => `${file} · this page only`,
         crumbs: 'Where this page stands',
         privacyNote: {
@@ -6512,6 +6513,7 @@ const stringsEN = {
         estZip: 'Set of files (.zip)',
         estDetail: (pages: number, persons: number, images: number) => `${nEn(pages, 'page', 'pages')} · ${nEn(persons, 'person', 'people')} · ${nEn(images, 'image', 'images')}`,
         estSize: (mb: string) => `about ${mb} MB`,
+        estAtMost: (mb: string) => `at most about ${mb} MB`,
         bigNote: 'E-mail may refuse it and a phone opens it slowly. It can be made smaller:',
         offerSmall: (size: string) => `Reduce images (${size})`,
         offerNoClips: (size: string) => `Without excerpts (${size})`,
@@ -6549,6 +6551,7 @@ const stringsEN = {
         menuItem: 'Family pages',
         menuDesc: 'The family line as linked pages in one file, for a phone and offline',
         bookWinPages: 'Family pages',
+        livingTag: 'living',
     },
 };
 
@@ -12745,7 +12748,7 @@ const stringsCZ: StringsType = {
             story: 'Vyprávění',
             sources: 'Prameny rodiny',
             kidsOf: (n: number) => `Děti (${n})`,
-            single: { m: 'svobodný, bez dětí', f: 'svobodná, bez dětí', u: 'bez sňatku a bez dětí' } as Record<'m' | 'f' | 'u', string>,
+            noUnion: 'Bez záznamu o sňatku a dětech.',
             card: 'Stránka rodiny →',
             parents: 'Rodiče',
             parentsOf: (names: string) => `Rodiče: ${names}`,
@@ -12781,6 +12784,7 @@ const stringsCZ: StringsType = {
         output: 'Kniha k tisku · Propojené stránky',
         tooBig: (mb: string) => `Soubor bude velký (${mb}).`,
         treeLater: 'stránky celého stromu přijdou později',
+        treeMoved: (l: string) => `Celý strom je zatím jen pro knihu, vybrán rod ${l}.`,
         printFoot: (file: string) => `${file} · vytištěna jen tato stránka`,
         crumbs: 'Kde stránka stojí',
         privacyNote: {
@@ -12816,6 +12820,7 @@ const stringsCZ: StringsType = {
         estZip: 'Sada souborů (.zip)',
         estDetail: (pages: number, persons: number, images: number) => `${nCs(pages, 'stránka', 'stránky', 'stránek')} · ${nCs(persons, 'osoba', 'osoby', 'osob')} · ${nCs(images, 'obrázek', 'obrázky', 'obrázků')}`,
         estSize: (mb: string) => `asi ${mb} MB`,
+        estAtMost: (mb: string) => `nejvýš asi ${mb} MB`,
         bigNote: 'E-mail ho nemusí přijmout a na telefonu se otevře pomalu. Jde zmenšit:',
         offerSmall: (size: string) => `Zmenšit obrázky (${size})`,
         offerNoClips: (size: string) => `Bez výřezů (${size})`,
@@ -12853,6 +12858,7 @@ const stringsCZ: StringsType = {
         menuItem: 'Stránky rodu',
         menuDesc: 'Rod jako propojené stránky v jednom souboru, pro telefon i bez internetu',
         bookWinPages: 'Stránky rodu',
+        livingTag: 'žijící',
     },
 };
 
@@ -18969,7 +18975,7 @@ const stringsDE: StringsType = {
             story: 'Erzählung',
             sources: 'Quellen der Familie',
             kidsOf: (n: number) => `Kinder (${n})`,
-            single: { m: 'ledig, kinderlos', f: 'ledig, kinderlos', u: 'ledig, kinderlos' } as Record<'m' | 'f' | 'u', string>,
+            noUnion: 'Keine Ehe und keine Kinder verzeichnet.',
             card: 'Familienseite →',
             parents: 'Eltern',
             parentsOf: (names: string) => `Eltern: ${names}`,
@@ -19005,6 +19011,7 @@ const stringsDE: StringsType = {
         output: 'Buch zum Drucken · Verknüpfte Seiten',
         tooBig: (mb: string) => `Die Datei wird groß (${mb}).`,
         treeLater: 'Seiten für den ganzen Stammbaum folgen später',
+        treeMoved: (l: string) => `Der ganze Stammbaum ist vorerst nur für das Buch; ausgewählt ist die Stammlinie ${l}.`,
         printFoot: (file: string) => `${file} · nur diese Seite`,
         crumbs: 'Wo diese Seite steht',
         privacyNote: {
@@ -19040,6 +19047,7 @@ const stringsDE: StringsType = {
         estZip: 'Dateisatz (.zip)',
         estDetail: (pages: number, persons: number, images: number) => `${nDe(pages, 'Seite', 'Seiten')} · ${nDe(persons, 'Person', 'Personen')} · ${nDe(images, 'Bild', 'Bilder')}`,
         estSize: (mb: string) => `etwa ${mb} MB`,
+        estAtMost: (mb: string) => `höchstens etwa ${mb} MB`,
         bigNote: 'E-Mail nimmt die Datei vielleicht nicht an, und auf dem Telefon öffnet sie sich langsam. Verkleinern ist möglich:',
         offerSmall: (size: string) => `Bilder verkleinern (${size})`,
         offerNoClips: (size: string) => `Ohne Ausschnitte (${size})`,
@@ -19077,6 +19085,7 @@ const stringsDE: StringsType = {
         menuItem: 'Familienseiten',
         menuDesc: 'Die Linie als verknüpfte Seiten in einer Datei, für Telefon und offline',
         bookWinPages: 'Familienseiten',
+        livingTag: 'lebend',
     },
 };
 

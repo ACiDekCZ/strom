@@ -284,6 +284,14 @@ describe('file name (§6.3)', () => {
         }
     });
 
+    it('the branch of a living person: the title by the protected name ("Potomci: E. F."), the real one only under full data (§9.7)', () => {
+        const { data, ids } = familyPagesFixture();
+        const branch = (privacy: 'full' | 'initials') => buildPageSet(data, { kind: 'descendants', person: ids.eva }, { lang: 'cs', now: FP_NOW, privacy }).pages[0];
+        expect(branch('initials').title).toBe('Potomci: E. F.');
+        expect(branch('initials').slug).not.toMatch(/eva/);
+        expect(branch('full').title).toBe('Potomci: Eva Fíšková');
+    });
+
     it('a lineage founded by a living person: its surname; under hidden names "Rod"', () => {
         // A living founder: a mother born 1990 and her son, a line of their own.
         const d = familyPagesFixture().data;
