@@ -213,6 +213,9 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 /* The file's bar (§3.1): the name, the search, Index and Map of places; on a phone the magnifier and Menu. */
 .sp-fbar { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); }
 html:not(.sp-on) body > .sp-fbar { display: none; }
+/* An address of a page or of an anchor in it lands below the sticky bar (57px), not under it
+   (on the targets only: a padding on the root would also shift the page while typing in the bar's field). */
+html.sp-on main [id] { scroll-margin-top: 64px; }
 .sp-fbar-in { box-sizing: border-box; max-width: 960px; height: 56px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; gap: 16px; }
 .sp-fbar-home { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text); text-decoration: none; }
 .sp-fbar-gap { flex: 1 1 auto; }

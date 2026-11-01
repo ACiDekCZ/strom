@@ -229,6 +229,27 @@ async function results(page: Page): Promise<string[]> {
 }
 
 test.describe('family pages file: the bar and the search (§3.1, §3.4)', () => {
+    test('opened with an address of a page or an anchor in it, the place lands below the sticky bar, not under it (1101)', async ({ page }) => {
+        /** How far the element's top stands below the bar's bottom (negative: under the bar). */
+        const below = (sel: string) => page.evaluate((sel) => {
+            const bar = document.querySelector('.sp-fbar')!.getBoundingClientRect();
+            return Math.round(document.querySelector(sel)!.getBoundingClientRect().top - bar.bottom);
+        }, sel);
+        for (const [w, h] of [[1440, 900], [390, 844], [844, 390]]) {
+            await page.setViewportSize({ width: w, height: h });
+            for (const slug of [josef, rodFisek, f10, 'rejstrik-osoby']) {
+                await page.goto('about:blank');
+                await page.goto(`${url}#${slug}`);
+                await expect.poll(() => shown(page)).toEqual([slug]);
+                expect(await below(`[id="${slug}"] nav.sp-crumbs`), `${w}×${h} ${slug}`).toBeGreaterThanOrEqual(0);
+            }
+            await page.goto('about:blank');
+            await page.goto(`${url}#${josef}--pp-sec-family`);
+            await expect.poll(() => shown(page)).toEqual([josef]);
+            expect(await below(`[id="${josef}--pp-sec-family"]`), `${w}×${h} anchor`).toBeGreaterThanOrEqual(0);
+        }
+    });
+
     test('a prefix without diacritics, the form Fischek first, a birth surname; the living "eva" finds nothing; Escape brings the page back, the address unchanged', async ({ page }) => {
         await page.goto(`${url}#${rodFisek}`);
         await expect.poll(() => shown(page)).toEqual([rodFisek]);
