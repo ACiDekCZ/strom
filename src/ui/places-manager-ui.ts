@@ -588,7 +588,7 @@ export const placesManagerMethods = uiModule({
                 <p class="place-card-text">${this.escapeHtml(m.splitCount(dry.changed, dry.persons))}</p>
                 ${dry.skipped > 0 ? `<p class="place-card-warn">${this.escapeHtml(m.splitSkipped(dry.skipped))}</p>` : ''}
                 ${dry.noHouseField > 0 ? `<p class="place-card-warn">${this.escapeHtml(m.splitNoHouseField(dry.noHouseField))}</p>` : ''}
-                <p class="place-card-note">${this.escapeHtml(m.undoableUndo)}</p>
+                <p class="place-card-note">${this.escapeHtml(m.undoableUndo(strings.undo.undo))}</p>
                 <div class="place-card-buttons">
                     <button type="button" class="place-split-go primary"${dry.changed === 0 ? ' disabled' : ''}>${this.escapeHtml(m.splitGo(dry.changed))}</button>
                     <button type="button" class="place-split-cancel secondary">${this.escapeHtml(strings.buttons.cancel)}</button>
@@ -629,7 +629,7 @@ export const placesManagerMethods = uiModule({
             <p class="place-card-head">${this.escapeHtml(m.renameCount(uses, persons))}</p>
             <p class="place-rename-line"><s>${this.escapeHtml(usage.display)}</s><span class="place-arrow" aria-hidden="true">→</span><strong class="place-rename-to"></strong></p>
             <p class="place-card-warn place-rename-merge" hidden>${this.escapeHtml(m.renameMerge)}</p>
-            <p class="place-card-note">${this.escapeHtml(m.undoableUndo)}</p>
+            <p class="place-card-note">${this.escapeHtml(m.undoableUndo(strings.undo.undo))}</p>
             <div class="place-card-buttons">
                 <button type="button" class="place-rename-go primary" disabled>${this.escapeHtml(m.renameGo(uses))}</button>
                 <button type="button" class="place-rename-cancel secondary">${this.escapeHtml(strings.buttons.cancel)}</button>
