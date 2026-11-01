@@ -6445,6 +6445,7 @@ const stringsEN = {
         tooBig: (mb: string) => `The file will be large (${mb}).`,
         treeLater: 'pages for the whole tree come later',
         printFoot: (file: string) => `${file} · this page only`,
+        crumbs: 'Where this page stands',
         privacyNote: {
             full: 'Includes full details of living people.',
             initials: 'Living people are protected: initials and year of birth.',
@@ -12651,6 +12652,7 @@ const stringsCZ: StringsType = {
         tooBig: (mb: string) => `Soubor bude velký (${mb}).`,
         treeLater: 'stránky celého stromu přijdou později',
         printFoot: (file: string) => `${file} · vytištěna jen tato stránka`,
+        crumbs: 'Kde stránka stojí',
         privacyNote: {
             full: 'Obsahuje plné údaje žijících osob.',
             initials: 'Žijící osoby jsou chráněné: iniciály a rok narození.',
@@ -18777,6 +18779,7 @@ const stringsDE: StringsType = {
         tooBig: (mb: string) => `Die Datei wird groß (${mb}).`,
         treeLater: 'Seiten für den ganzen Stammbaum folgen später',
         printFoot: (file: string) => `${file} · nur diese Seite`,
+        crumbs: 'Wo diese Seite steht',
         privacyNote: {
             full: 'Enthält vollständige Angaben zu lebenden Personen.',
             initials: 'Lebende Personen sind geschützt: Initialen und Geburtsjahr.',
