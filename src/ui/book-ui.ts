@@ -30,11 +30,15 @@ import {
     applyBookPreset, autoBookTitle, bookPartAvailability, bookPeriod, bookPresetOf, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
-    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput,
-    bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, saveBookMemory,
+    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PagesChoices,
+    bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, pagesChoicesFromMemory, saveBookMemory,
 } from '../book-memory.js';
-import { LineageIndex, RodId, buildLineages, rodLabels } from '../lineage.js';
-import { chapterRods } from '../book-model.js';
+import { ImageChoice } from '../image-registry.js';
+import {
+    PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName, pageSetImages, pageSetPrivacyWarning, sizeVerdict,
+} from '../family-pages.js';
+import { PagesCancelled, PagesFile, PagesJob, buildPagesFile, canSharePagesFile, downloadPagesFile, sharePagesFile } from './family-pages-ui.js';
+import { LineageIndex, Rod, RodId, buildLineages, rodLabels, rods as allRods } from '../lineage.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shownName } from '../person-name.js';
@@ -45,17 +49,44 @@ import { uiModule } from './module.js';
 
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants';
 type PersonKind = 'ancestors' | 'descendants';
-/** The phone's sub-sheets (§4.1, 4b). */
-type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title';
+/** The phone's sub-sheets (§4.1, 4b; the pages' rows, 026 6b). */
+type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'include';
+/**
+ * The pages' footer (026 §6.5, §6.6): the options with the estimate; the
+ * file being built (its progress only after ~1 s); the file ready to save.
+ */
+type Phase = 'options' | 'building' | 'progress' | 'result';
 
 const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
 const LANGS: readonly BookLang[] = ['cs', 'en', 'de'];
+const IMAGE_CHOICES: readonly ImageChoice[] = ['full', 'small', 'none'];
+const INCLUDES = ['map', 'sources', 'stories'] as const;
+/** The pages' estimate is recomputed this long after the last change (§6.3). */
+const ESTIMATE_DEBOUNCE_MS = 150;
+/** The build's progress shows only after this long (§6.5). */
+const PROGRESS_AFTER_MS = 1000;
+
+/** The pages' estimate (§6.3): the set as chosen, its size and the alternatives' sizes. */
+interface PagesEstimate {
+    set: PageSet;
+    size: PageSetSize;
+    /** With the images reduced, without the record excerpts: null when that changes nothing. */
+    small: number | null;
+    noClips: number | null;
+    /** The warning about living people under full data, or ''. */
+    warn: string;
+    clips: number;
+    photos: number;
+    name: string;
+}
 
 interface DialogState {
     data: StromData;
     index: LineageIndex;
+    /** The lineages the dialog lists: the chapters, plus a small lineage the entry asked for (the pages' window of that lineage). */
+    rodChoices: RodId[];
     treeId: string | null;
     treeName: string;
     appLang: BookLang;
@@ -71,6 +102,17 @@ interface DialogState {
     /** The book window to rewrite ("Change options"), or null for a new one. */
     win: Window | null;
     sub: Sub | null;
+    /** The book to print or the linked pages (026 §6.1). */
+    output: BookOutput;
+    pages: PagesChoices;
+    /** The whole tree turned into lineages by the pages (it comes back with the book). */
+    treeForced: boolean;
+    phase: Phase;
+    est: PagesEstimate | null;
+    estTimer: number | null;
+    job: PagesJob | null;
+    prog: { done: number; total: number; text: string };
+    file: PagesFile | null;
 }
 
 let st: DialogState | null = null;
@@ -142,19 +184,26 @@ function canShareFiles(win: Window): boolean {
 function optionsHtml(s: DialogState): string {
     const T = strings.book;
     const D = T.dlg;
+    const F = strings.familyPages;
+    const pages = s.output === 'pages';
     const counts = bookRodCounts(s.data, { index: s.index });
     const persons = Object.values(s.data.persons).filter(p => !p.isPlaceholder).length;
     const hint: Record<Kind, string> = {
         tree: D.treeHint(persons, counts.rods, counts.other),
         rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants,
     };
-    const kinds = KINDS.map(k => `<label class="book-kind" data-kind="${k}">`
-        + `<input type="radio" name="book-kind" value="${k}">`
-        + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
-        + (k === 'tree' ? '' : `<button type="button" class="book-kind-sum" data-sub-open="sel" tabindex="-1"><span class="book-sum-v"></span><span class="book-chev" aria-hidden="true">›</span></button>`)
-        + `</label>`).join('');
+    // The pages of the whole tree come later (§6.1): the choice stays in sight, disabled, with the reason.
+    const kinds = KINDS.map(k => {
+        const off = pages && k === 'tree';
+        return `<label class="book-kind${off ? ' is-disabled' : ''}" data-kind="${k}"${off ? ' aria-disabled="true"' : ''}>`
+            + `<input type="radio" name="book-kind" value="${k}"${off ? ' disabled' : ''}>`
+            + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(off ? F.treeLater : hint[k])}</span></span>`
+            + (k === 'tree' ? '' : `<button type="button" class="book-kind-sum" data-sub-open="sel" tabindex="-1"><span class="book-sum-v"></span><span class="book-chev" aria-hidden="true">›</span></button>`)
+            + `</label>`;
+    }).join('');
     const labels = rodLabels(s.index);
-    const rods = chapterRods(s.index).map(r => {
+    const byId = new Map(allRods(s.index).map(r => [r.id, r]));
+    const rods = s.rodChoices.map(id => byId.get(id)).filter((r): r is Rod => !!r).map(r => {
         const period = r.period ? `${r.period.from}–${r.period.to}` : '';
         return `<label class="book-rod-row"><input type="checkbox" value="${esc(r.id)}">`
             + `<span class="book-rod-name">${esc(labels.get(r.id) ?? r.surname)}</span>`
@@ -176,23 +225,29 @@ function optionsHtml(s: DialogState): string {
     const sum = (sub: Sub, label: string): string =>
         `<button type="button" class="book-sum-row" data-sub-open="${sub}"><span class="book-sum-l">${esc(label)}</span>`
         + `<span class="book-sum-v" data-sum="${sub}"></span><span class="book-chev" aria-hidden="true">›</span></button>`;
-    return `<div class="book-sub-head"><button type="button" class="book-sub-back"><span aria-hidden="true">‹</span> ${esc(D.back)}</button>`
+    const head = `<div class="book-sub-head"><button type="button" class="book-sub-back"><span aria-hidden="true">‹</span> ${esc(D.back)}</button>`
         + `<span class="book-sub-title"></span></div>`
-        + `<section class="book-sec book-sec-what" data-sec="what"><h3 class="book-sec-h" id="book-what-h">${esc(D.what)}</h3>`
+        + `<section class="book-sec book-sec-what" data-sec="what"><h3 class="book-sec-h" id="book-what-h">${esc(pages ? F.what : D.what)}</h3>`
         + `<div class="book-kinds" role="radiogroup" aria-labelledby="book-what-h">${kinds}`
-        + `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
-        + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div></div></section>`
+        + (pages ? '' : `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
+            + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div>`)
+        + `</div></section>`
         + `<section class="book-sec book-sec-sel" data-sec="sel"><h3 class="book-sec-h book-sub-only" data-sub-title></h3>`
         + `<div class="book-sel book-sel-tree"><p class="book-hint">${esc(D.treeSentence)}</p></div>`
         + `<div class="book-sel book-sel-rods">`
         + (rods ? `<div class="book-rods-list">${rods}</div>` : `<p class="book-hint">${esc(D.noRods)}</p>`)
-        + (counts.other ? `<p class="book-rods-small">${esc(D.rodsSmall(counts.other))}</p>` : '') + `</div>`
+        + (counts.other && !pages ? `<p class="book-rods-small">${esc(D.rodsSmall(counts.other))}</p>` : '') + `</div>`
         + `<div class="book-sel book-sel-person"><div class="book-person-line"><span class="book-person-l">${esc(D.person)}</span>`
         + `<button type="button" class="book-person-btn" aria-haspopup="listbox" aria-expanded="false"><span class="book-person-name"></span><span class="book-caret" aria-hidden="true">▾</span></button>`
         + `<span class="book-gens"><button type="button" class="book-step" data-gen="-1" aria-label="${esc(D.fewer)}">−</button>`
         + `<output class="book-gens-n" aria-live="polite"></output>`
         + `<button type="button" class="book-step" data-gen="1" aria-label="${esc(D.more)}">+</button></span></div>`
-        + `<p class="book-hint book-gens-t"></p></div></section>`
+        + `<p class="book-hint book-gens-t"></p></div></section>`;
+    const privacyRadios = `<div class="book-radios" role="radiogroup" aria-labelledby="book-privacy-h">`
+        + PRIVACY.map(m => `<label class="book-radio"><input type="radio" name="book-privacy" value="${m}"><span>${esc(privacyLabel[m])}</span></label>`).join('')
+        + `</div>`;
+    if (pages) return head + pagesOptionsHtml(sum, privacyRadios);
+    return head
         + `<div class="book-sum">${sum('parts', D.parts)}${sum('detail', D.detail)}${sum('notes', D.notesRow)}`
         + `${sum('privacy', D.privacy)}${sum('lang', D.lang)}${sum('title', D.title)}</div>`
         + `<section class="book-sec" data-sec="parts"><h3 class="book-sec-h">${esc(D.parts)}</h3><div class="book-parts">${parts}</div></section>`
@@ -203,15 +258,41 @@ function optionsHtml(s: DialogState): string {
         + sw('notes', D.notes, D.notesHint) + sw('research', D.research, D.researchHint) + `</section>`
         + `<div class="book-pair">`
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
-        + `<div class="book-radios" role="radiogroup" aria-labelledby="book-privacy-h">`
-        + PRIVACY.map(m => `<label class="book-radio"><input type="radio" name="book-privacy" value="${m}"><span>${esc(privacyLabel[m])}</span></label>`).join('')
-        + `</div><p class="book-hint">${esc(D.privacyHint)}</p></section>`
+        + privacyRadios + `<p class="book-hint">${esc(D.privacyHint)}</p></section>`
         + `<section class="book-sec" data-sec="lang"><h3 class="book-sec-h">${esc(D.lang)}</h3>`
         + seg('lang', LANGS.map(l => [l, D.langName[l]] as [string, string]), D.lang)
         + `<p class="book-hint">${esc(D.langHint)}</p></section></div>`
         + `<section class="book-sec" data-sec="title"><h3 class="book-sec-h"><label for="book-title-input">${esc(D.title)}</label></h3>`
         + `<input type="text" id="book-title-input" class="book-title-input" autocomplete="off" spellcheck="false">`
         + `<p class="book-hint book-title-note"></p></section>`;
+}
+
+/**
+ * The pages' rows (026 §6.2): the protection of the living with its warning,
+ * the families, the images, what the pages include; on a phone rows with a
+ * summary, each opening a sub-sheet (6b).
+ */
+function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadios: string): string {
+    const D = strings.book.dlg;
+    const F = strings.familyPages;
+    const imgRow = (key: 'clips' | 'photos', label: string): string =>
+        `<div class="fp-img-row"><span class="fp-img-l" id="fp-img-${key}">${esc(label)}</span>`
+        + `<div class="book-seg" role="radiogroup" aria-labelledby="fp-img-${key}">`
+        + IMAGE_CHOICES.map(c => `<button type="button" role="radio" data-${key}="${c}">${esc(F.imgChoice[c])}</button>`).join('')
+        + `</div><span class="fp-img-n" data-n="${key}"></span></div>`;
+    return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('images', F.images)}${sum('include', F.include)}</div>`
+        + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
+        + privacyRadios + `<p class="fp-warn" role="status" hidden></p><p class="book-hint">${esc(F.privacyHint)}</p></section>`
+        + `<section class="book-sec" data-sec="families"><h3 class="book-sec-h" id="fp-families-h">${esc(F.families)}</h3>`
+        + `<div class="book-radios" role="radiogroup" aria-labelledby="fp-families-h">`
+        + (['pages', 'section'] as const).map(v => `<label class="book-radio"><input type="radio" name="fp-families" value="${v}"><span>${esc(F.famOpt[v])}</span></label>`).join('')
+        + `</div></section>`
+        + `<section class="book-sec" data-sec="images"><h3 class="book-sec-h">${esc(F.images)}</h3>`
+        + imgRow('clips', F.clips) + imgRow('photos', F.photos) + `</section>`
+        + `<section class="book-sec" data-sec="include"><h3 class="book-sec-h" id="fp-inc-h">${esc(F.include)}</h3>`
+        + `<div class="fp-inc" role="group" aria-labelledby="fp-inc-h">`
+        + INCLUDES.map(k => `<label class="book-radio"><input type="checkbox" name="fp-inc" value="${k}"><span>${esc(F.inc[k])}</span></label>`).join('')
+        + `</div></section>`;
 }
 
 function setText(root: ParentNode, sel: string, text: string): void {
@@ -224,15 +305,13 @@ function sync(s: DialogState): void {
     if (!modal) return;
     const T = strings.book;
     const D = T.dlg;
-    const BL = getStringsForLang(s.opts.lang).book;
-    const sel = selectionOf(s);
-    const ready = selectionReady(sel);
-    const opts = currentOptions(s);
-    const env = { index: s.index, hasHistory: s.hasHistory };
+    const F = strings.familyPages;
+    const pages = s.output === 'pages';
 
-    // Presets
-    const preset = bookPresetOf(s.opts);
-    modal.querySelectorAll<HTMLElement>('[data-preset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.preset === preset)));
+    // The output (026 §6.1)
+    modal.dataset.out = s.output;
+    modal.querySelectorAll<HTMLElement>('.book-out [data-output]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.output === s.output)));
+    setText(modal, '.book-out-hint', F.outHint[s.output]);
 
     // What goes in the book
     modal.querySelectorAll<HTMLInputElement>('input[name="book-kind"]').forEach(i => { i.checked = i.value === s.kind; });
@@ -252,6 +331,46 @@ function sync(s: DialogState): void {
         modal.querySelector<HTMLButtonElement>('[data-gen="-1"]')!.disabled = n <= BOOK_GENERATIONS_MIN;
         modal.querySelector<HTMLButtonElement>('[data-gen="1"]')!.disabled = n >= BOOK_GENERATIONS_MAX;
     }
+    modal.querySelectorAll<HTMLInputElement>('input[name="book-privacy"]').forEach(i => { i.checked = i.value === s.opts.privacy; });
+
+    const sum = (key: string, text: string): void => setText(modal, `[data-sum="${key}"]`, text);
+    sum('privacy', D.privacyShort[s.opts.privacy]);
+    const labels = rodLabels(s.index);
+    const selSum = s.kind === 'rods' ? (s.rods.map(id => labels.get(id) ?? '').filter(Boolean).join(', ') || D.choose)
+        : s.kind === 'tree' ? '' : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
+    modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
+        const v = k.querySelector<HTMLElement>('.book-sum-v');
+        if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
+    });
+
+    const title = pages ? '' : syncBook(s, modal);
+    if (pages) syncPages(s, modal);
+    syncFoot(s, modal);
+
+    // The phone's sub-sheet
+    if (s.sub) modal.dataset.sub = s.sub; else delete modal.dataset.sub;
+    const subTitle: Record<Sub, string> = {
+        sel: D.kind[s.kind], parts: D.parts, detail: D.detail, notes: D.notesRow, privacy: D.privacy, lang: D.lang, title: D.title,
+        families: F.families, images: F.images, include: F.include,
+    };
+    setText(modal, '.book-sub-title', s.sub ? subTitle[s.sub] : '');
+    setText(modal, '[data-sub-title]', D.kind[s.kind]);
+    if (!pages) sum('title', title);
+}
+
+/** The book's own controls, the preview, the outline and the estimate; returns the title shown. */
+function syncBook(s: DialogState, modal: HTMLElement): string {
+    const T = strings.book;
+    const D = T.dlg;
+    const BL = getStringsForLang(s.opts.lang).book;
+    const sel = selectionOf(s);
+    const ready = selectionReady(sel);
+    const opts = currentOptions(s);
+    const env = { index: s.index, hasHistory: s.hasHistory };
+
+    // Presets
+    const preset = bookPresetOf(s.opts);
+    modal.querySelectorAll<HTMLElement>('[data-preset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.preset === preset)));
 
     // Parts: an unavailable one stays in sight, grey, unticked, with its reason (in the app's language)
     const avail = bookPartAvailability(s.data, { ...opts, lang: s.appLang }, env);
@@ -268,13 +387,12 @@ function sync(s: DialogState): void {
         setText(row, '.book-part-r', avail[k].reason);
     }
 
-    // Detail, notes, privacy, language
+    // Detail, notes, language
     modal.querySelectorAll<HTMLElement>('[data-detail]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.detail === s.opts.detail)));
     setText(modal, '.book-detail-hint', T.detailHint[s.opts.detail]);
     modal.querySelectorAll<HTMLElement>('[data-switch]').forEach(b => {
         b.setAttribute('aria-checked', String(b.dataset.switch === 'notes' ? s.opts.notes : s.opts.research));
     });
-    modal.querySelectorAll<HTMLInputElement>('input[name="book-privacy"]').forEach(i => { i.checked = i.value === s.opts.privacy; });
     modal.querySelectorAll<HTMLElement>('[data-lang]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.lang === s.opts.lang)));
 
     // Title: automatic by the selection and the book's language, until edited
@@ -282,6 +400,8 @@ function sync(s: DialogState): void {
     const title = s.titleEdited && s.opts.title?.trim() ? s.opts.title.trim() : auto;
     const input = modal.querySelector<HTMLInputElement>('#book-title-input')!;
     if (!s.titleEdited && input.value !== auto) input.value = auto;
+    // The rows written again (back from the pages): the edited title into its field.
+    if (s.titleEdited && !input.value && s.opts.title) input.value = s.opts.title;
     const period = ready ? bookPeriod(s.data, sel, env) : '';
     const note = modal.querySelector<HTMLElement>('.book-title-note')!;
     note.innerHTML = s.titleEdited
@@ -310,36 +430,237 @@ function sync(s: DialogState): void {
     sum('parts', D.partsCount(ticked, BOOK_PART_KEYS.length));
     sum('detail', T.detail[s.opts.detail]);
     sum('notes', D.notesSummary[s.opts.notes && s.opts.research ? 'both' : s.opts.notes ? 'notes' : s.opts.research ? 'research' : 'none']);
-    sum('privacy', D.privacyShort[s.opts.privacy]);
     sum('lang', D.langName[s.opts.lang]);
-    sum('title', title);
-    const labels = rodLabels(s.index);
-    const selSum = s.kind === 'rods' ? (s.rods.map(id => labels.get(id) ?? '').filter(Boolean).join(', ') || D.choose)
-        : s.kind === 'tree' ? '' : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
-    modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
-        const v = k.querySelector<HTMLElement>('.book-sum-v');
-        if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
-    });
+    return title;
+}
 
-    // The phone's sub-sheet
-    if (s.sub) modal.dataset.sub = s.sub; else delete modal.dataset.sub;
-    const subTitle: Record<Sub, string> = {
-        sel: D.kind[s.kind], parts: D.parts, detail: D.detail, notes: D.notesRow, privacy: D.privacy, lang: D.lang, title: D.title,
+/** The pages' rows: families, images with their counts, what is included, the warning about the living. */
+function syncPages(s: DialogState, modal: HTMLElement): void {
+    const F = strings.familyPages;
+    const p = s.pages;
+    modal.querySelectorAll<HTMLInputElement>('input[name="fp-families"]').forEach(i => { i.checked = i.value === p.families; });
+    modal.querySelectorAll<HTMLElement>('[data-clips]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.clips === p.clips)));
+    modal.querySelectorAll<HTMLElement>('[data-photos]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.photos === p.photos)));
+    modal.querySelectorAll<HTMLInputElement>('input[name="fp-inc"]').forEach(i => { i.checked = p.include[i.value as typeof INCLUDES[number]]; });
+    setText(modal, '.fp-img-n[data-n="clips"]', s.est ? F.nClips(s.est.clips) : '');
+    setText(modal, '.fp-img-n[data-n="photos"]', s.est ? F.nPhotos(s.est.photos) : '');
+    const warn = modal.querySelector<HTMLElement>('.fp-warn');
+    if (warn) {
+        const text = s.opts.privacy === 'full' ? s.est?.warn ?? '' : '';
+        warn.hidden = !text;
+        if (warn.textContent !== text) warn.textContent = text;
+    }
+    const sum = (key: string, text: string): void => setText(modal, `[data-sum="${key}"]`, text);
+    sum('families', F.famShort[p.families]);
+    const clips = p.clips !== 'none', photos = p.photos !== 'none';
+    sum('images', F.imagesShort[clips && photos ? 'both' : clips ? 'clips' : photos ? 'photos' : 'none']);
+    const inc = INCLUDES.filter(k => p.include[k]).map(k => F.incShort[k]).join(', ');
+    sum('include', inc ? inc.charAt(0).toLocaleUpperCase() + inc.slice(1) : F.incNone);
+}
+
+/** "12" / "4,3" MB in the app's language: one decimal under 10 MB (or always, for a file made). */
+function mbText(bytes: number, exact = false): string {
+    const mb = Math.max(bytes / 1e6, 0.1);
+    const digits = exact || mb < 10 ? 1 : 0;
+    return new Intl.NumberFormat(getCurrentLanguage(), { minimumFractionDigits: exact ? 1 : 0, maximumFractionDigits: digits }).format(mb);
+}
+
+/** The footer: the book's estimate and button, or the pages' estimate, warning, progress or result (§6.3, §6.5, §6.6). */
+function syncFoot(s: DialogState, modal: HTMLElement): void {
+    const F = strings.familyPages;
+    const pages = s.output === 'pages';
+    const foot = modal.querySelector<HTMLElement>('.fp-foot');
+    const open = modal.querySelector<HTMLButtonElement>('#book-open');
+    const win = modal.querySelector<HTMLButtonElement>('.fp-open');
+    modal.dataset.phase = pages ? s.phase : 'options';
+    if (win) win.hidden = !pages;
+    if (foot) foot.hidden = !pages;
+    const main = modal.querySelector<HTMLElement>('.book-dlg-main');
+    const busy = pages && (s.phase === 'building' || s.phase === 'progress');
+    if (main) main.inert = busy;
+    const out = modal.querySelector<HTMLElement>('.book-out');
+    if (out) out.inert = busy;
+    if (!pages || !foot || !open || !win) {
+        if (open && open.dataset.out !== 'book') {
+            open.dataset.out = 'book';
+            open.textContent = strings.book.generate;
+        }
+        return;
+    }
+    if (open.dataset.out !== 'pages') {
+        open.dataset.out = 'pages';
+        open.innerHTML = `<span class="fp-l-wide">${esc(F.saveFile)}</span><span class="fp-l-phone">${esc(F.saveShare)}</span>`;
+    }
+    setText(modal, '.fp-open', F.openWin);
+    const view = s.phase === 'progress' ? 'progress' : s.phase === 'result' ? 'result' : 'options';
+    if (foot.dataset.view !== view) {
+        foot.dataset.view = view;
+        foot.innerHTML = view === 'progress' ? progressHtml() : view === 'result' ? resultHtml() : estimateHtml();
+    }
+    if (view === 'progress') { syncProgress(s, foot); return; }
+    if (view === 'result') {
+        const file = s.file;
+        setText(foot, '.fp-res-f', file ? F.resFile(file.name, mbText(file.bytes, true)) : '');
+        const share = foot.querySelector<HTMLElement>('.fp-res-share');
+        if (share) share.hidden = !canSharePagesFile();
+        return;
+    }
+    const est = s.est;
+    const sel = selectionOf(s);
+    const ready = selectionReady(sel) && sel.kind !== 'tree';
+    const verdict = est ? sizeVerdict(est.size.bytes) : 'ok';
+    const estEl = foot.querySelector<HTMLElement>('.fp-est')!;
+    estEl.classList.toggle('is-empty', !ready);
+    estEl.classList.toggle('is-big', verdict !== 'ok');
+    estEl.classList.toggle('is-stale', s.estTimer !== null);
+    setText(foot, '.fp-est-t', !ready ? (s.kind === 'rods' ? strings.book.noRodSelected : strings.book.dlg.noPerson) : verdict === 'set' ? F.estZip : F.estFile);
+    setText(foot, '.fp-est-d', ready && est ? F.estDetail(est.size.pages, est.size.persons, est.size.images) : '');
+    setText(foot, '.fp-est-s', ready && est ? F.estSize(mbText(est.size.bytes)) : '');
+    setText(foot, '.fp-file', ready && est && verdict !== 'set' ? est.name : '');
+    const big = foot.querySelector<HTMLElement>('.fp-big')!;
+    big.hidden = !ready || !est || verdict === 'ok';
+    if (ready && est && verdict !== 'ok') {
+        const mb = mbText(est.size.bytes);
+        setText(big, '.fp-big-t', verdict === 'set' ? F.splitT(mb) : F.tooBig(F.estSize(mb)));
+        setText(big, '.fp-big-d', verdict === 'set' ? F.splitD : F.bigNote);
+        const offer = (key: string, bytes: number | null, text: (size: string) => string): void => {
+            const b = big.querySelector<HTMLButtonElement>(`[data-offer="${key}"]`)!;
+            b.hidden = bytes === null;
+            if (bytes !== null) setText(big, `[data-offer="${key}"]`, text(F.estSize(mbText(bytes))));
+        };
+        offer('small', est.small, F.offerSmall);
+        offer('noclips', est.noClips, F.offerNoClips);
+        setText(big, '[data-offer="zip"]', F.offerZip);
+        big.querySelector<HTMLElement>('[data-offer="zip"]')!.setAttribute('aria-pressed', String(verdict === 'set'));
+        setText(big, '.fp-zip-note', verdict === 'set' ? F.splitLater : F.zipLater);
+    }
+    // Over 50 MB one file is not saved (the set of files comes with step E); the window still opens.
+    open.disabled = !ready || !est || verdict === 'set' || s.phase !== 'options';
+    win.disabled = !ready || s.phase !== 'options';
+}
+
+function estimateHtml(): string {
+    return `<div class="fp-est" aria-live="polite"><span class="fp-est-t"></span><span class="fp-est-d"></span><span class="fp-est-s"></span></div>`
+        + `<div class="fp-big" hidden><p class="fp-big-t"></p><p class="fp-big-d"></p><div class="fp-offers">`
+        + `<button type="button" class="fp-offer" data-offer="small"></button>`
+        + `<button type="button" class="fp-offer" data-offer="noclips"></button>`
+        + `<button type="button" class="fp-offer" data-offer="zip" disabled aria-describedby="fp-zip-note"></button></div>`
+        + `<p class="fp-zip-note" id="fp-zip-note"></p></div>`
+        + `<p class="fp-file"></p>`;
+}
+
+function progressHtml(): string {
+    const F = strings.familyPages;
+    return `<div class="fp-prog" role="status"><div class="fp-prog-h"><span class="fp-prog-t">${esc(F.progTitle)}</span><span class="fp-prog-n"></span></div>`
+        + `<div class="fp-bar" role="progressbar" aria-valuemin="0" aria-label="${esc(F.progTitle)}"><span class="fp-bar-fill"></span></div>`
+        + `<p class="fp-prog-step"></p><button type="button" class="secondary fp-prog-cancel">${esc(strings.buttons.cancel)}</button></div>`;
+}
+
+function resultHtml(): string {
+    const F = strings.familyPages;
+    return `<div class="fp-res" role="status"><p class="fp-res-t">${esc(F.resTitle)}</p><p class="fp-res-f"></p><p class="fp-res-n">${esc(F.resNote)}</p>`
+        + `<div class="fp-res-b"><button type="button" class="primary fp-res-save">${esc(F.resSave)}</button>`
+        + `<button type="button" class="secondary fp-res-share" hidden>${esc(F.resShare)}</button>`
+        + `<button type="button" class="secondary fp-res-open">${esc(F.openWin)}</button></div></div>`;
+}
+
+function syncProgress(s: DialogState, foot: HTMLElement): void {
+    const F = strings.familyPages;
+    const { done, total, text } = s.prog;
+    setText(foot, '.fp-prog-n', total ? F.progCount(done, total) : '');
+    setText(foot, '.fp-prog-step', text);
+    const bar = foot.querySelector<HTMLElement>('.fp-bar');
+    const fill = foot.querySelector<HTMLElement>('.fp-bar-fill');
+    if (bar && fill) {
+        const pct = total ? Math.round(done / total * 100) : 0;
+        fill.style.width = `${pct}%`;
+        bar.setAttribute('aria-valuemax', String(total || 1));
+        bar.setAttribute('aria-valuenow', String(done));
+    }
+}
+
+/** The pages' options for the file: the app's language (the book's language row is the book's alone). */
+function pageSetOptionsOf(s: DialogState): PageSetOptions {
+    const p = s.pages;
+    return {
+        lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
+        map: p.include.map, sources: p.include.sources, stories: p.include.stories,
     };
-    setText(modal, '.book-sub-title', s.sub ? subTitle[s.sub] : '');
-    setText(modal, '[data-sub-title]', D.kind[s.kind]);
+}
+
+/** The set as chosen and its size, with the alternatives' sizes (§6.3); null without a selection. */
+function computeEstimate(s: DialogState): PagesEstimate | null {
+    const sel = selectionOf(s);
+    if (!selectionReady(sel) || sel.kind === 'tree') return null;
+    const set = buildPageSet(s.data, sel, pageSetOptionsOf(s), { treeName: s.treeName });
+    const size = estimatePageSetSize(set);
+    const imgs = pageSetImages(set);
+    const clips = imgs.filter(i => i.kind === 'clip').length;
+    const photos = imgs.length - clips;
+    const p = s.pages;
+    const smaller = (c: ImageChoice): ImageChoice => c === 'full' ? 'small' : c;
+    const canShrink = (p.clips === 'full' && clips > 0) || (p.photos === 'full' && photos > 0);
+    return {
+        set, size, clips, photos,
+        small: canShrink ? estimatePageSetSize(set, { clips: smaller(p.clips), photos: smaller(p.photos) }).bytes : null,
+        noClips: p.clips !== 'none' && clips > 0 ? estimatePageSetSize(set, { clips: 'none' }).bytes : null,
+        warn: pageSetPrivacyWarning(set),
+        name: pageSetFileName(set),
+    };
+}
+
+/** Recompute the pages' estimate 150 ms after the last change (at once when asked). */
+function scheduleEstimate(s: DialogState, now = false): void {
+    if (s.estTimer !== null) clearTimeout(s.estTimer);
+    s.estTimer = null;
+    const run = (): void => {
+        s.estTimer = null;
+        if (st !== s || s.output !== 'pages') return;
+        try { s.est = computeEstimate(s); } catch { s.est = null; }
+        sync(s);
+    };
+    if (now) { run(); return; }
+    s.estTimer = window.setTimeout(run, ESTIMATE_DEBOUNCE_MS);
+}
+
+/** The pages need lineages or a person: the whole tree turns into lineages (the first, when none is chosen). */
+function fitSelectionToOutput(s: DialogState): void {
+    if (s.output === 'pages' && s.kind === 'tree') {
+        s.kind = 'rods';
+        s.treeForced = true;
+        if (!s.rods.length) {
+            const first = s.rodChoices[0];
+            if (first) s.rods = [first];
+        }
+    } else if (s.output === 'book' && s.treeForced) {
+        if (s.kind === 'rods') s.kind = 'tree';
+        s.treeForced = false;
+    }
+}
+
+/** Write the options' rows for the output (once per opening and on a switch of the output). */
+function renderOptions(s: DialogState): void {
+    const body = document.querySelector<HTMLElement>('#book-modal .book-dlg-opts');
+    if (body) { body.innerHTML = optionsHtml(s); body.scrollTop = 0; }
 }
 
 /** A change: remember the options (not the selection's person or the title) and refresh. */
 function changed(s: DialogState): void {
-    saveBookMemory(storage(), s.treeId, currentOptions(s));
+    saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
+    // A file made for other options is not the one to save.
+    if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
+    if (s.output === 'pages') scheduleEstimate(s);
     sync(s);
 }
 
 export const bookUiMethods = uiModule({
-    /** The family book from the menu, Export or the bottom sheet (§4.8: the last lineages, else the whole tree). */
-    showBookDialog(): void {
-        this.openBookDialog({ kind: 'menu' });
+    /**
+     * The family book from the menu, Export or the bottom sheet (§4.8: the
+     * last lineages, else the whole tree); the output given, else the one
+     * remembered for the tree (026 §6.6).
+     */
+    showBookDialog(output?: BookOutput): void {
+        this.openBookDialog({ kind: 'menu' }, undefined, output ? { output } : undefined);
     },
 
     /** The book of a person's descendants, 4 generations (§4.8). */
@@ -350,7 +671,9 @@ export const bookUiMethods = uiModule({
     /**
      * Open the dialog for an entry. `reuse` reopens it from a book window
      * ("Change options"): that book's options, and "Open book" rewrites that
-     * window.
+     * window. `over` sets the output and the selection (the pages' window:
+     * the pages, its set). The output: given, else the book for an entry of
+     * the book (a lineage, a person, Change options), else the remembered one.
      */
     openBookDialog(entry: BookEntry, reuse?: { options: BookOptions; win: Window }, over?: { output?: BookOutput; selection?: BookSelectionSpec }): void {
         this.closeMobileMenu?.();
@@ -367,7 +690,11 @@ export const bookUiMethods = uiModule({
             ? { ...reuse.options, parts: { ...reuse.options.parts } }
             : bookOptionsFromMemory(appLang, memory, over?.selection ?? bookEntrySelection(entry, index, memory?.lastRods));
         const sel = opts.selection;
-        const choosable = new Set(bookRodChoices(index));
+        // A small lineage is listed only when the entry asks for it (its pages' window's Save as file).
+        const all = new Set(allRods(index).map(r => r.id));
+        const rodChoices = bookRodChoices(index);
+        if (sel.kind === 'rods') for (const id of sel.rods) if (all.has(id) && !rodChoices.includes(id)) rodChoices.push(id);
+        const choosable = new Set(rodChoices);
         const real = (id: PersonId | null | undefined): PersonId | null => {
             const p = id ? data.persons[id] : undefined;
             return p && !p.isPlaceholder ? p.id : null;
@@ -376,8 +703,11 @@ export const bookUiMethods = uiModule({
         const gens = { ancestors: BOOK_GENERATIONS_DEFAULT, descendants: BOOK_GENERATIONS_DEFAULT };
         if (sel.kind === 'ancestors' || sel.kind === 'descendants') gens[sel.kind] = clampBookGenerations(sel.generations ?? BOOK_GENERATIONS_DEFAULT);
         const firstId = Object.keys(data.persons)[0];
+        const output: BookOutput = over?.output ?? (!reuse && entry.kind === 'menu' ? memory?.output ?? 'book' : 'book');
+        if (st?.job) st.job.cancelled = true;
+        if (st?.estTimer != null) clearTimeout(st.estTimer);
         st = {
-            data, index, treeId, appLang,
+            data, index, treeId, appLang, rodChoices,
             treeName: TreeManager.getActiveTreeMetadata()?.name || '',
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
             kind: sel.kind,
@@ -388,7 +718,17 @@ export const bookUiMethods = uiModule({
             titleEdited: !!opts.title?.trim(),
             win: reuse?.win ?? null,
             sub: null,
+            output,
+            pages: pagesChoicesFromMemory(memory),
+            treeForced: false,
+            phase: 'options',
+            est: null,
+            estTimer: null,
+            job: null,
+            prog: { done: 0, total: 0, text: '' },
+            file: null,
         };
+        fitSelectionToOutput(st);
 
         const overlay = document.getElementById('book-modal');
         const modal = overlay?.querySelector<HTMLElement>('.book-dlg');
@@ -399,14 +739,23 @@ export const bookUiMethods = uiModule({
             presets.innerHTML = (['family', 'research', 'custom'] as const)
                 .map(p => `<button type="button" role="radio" data-preset="${p}">${esc(strings.book.preset[p])}</button>`).join('');
         }
-        const body = modal.querySelector<HTMLElement>('.book-dlg-opts');
-        if (body) { body.innerHTML = optionsHtml(st); body.scrollTop = 0; }
+        const out = modal.querySelector<HTMLElement>('.book-out');
+        if (out) {
+            const F = strings.familyPages;
+            out.innerHTML = `<div class="book-seg book-out-seg" role="radiogroup" aria-label="${esc(F.output)}">`
+                + (['book', 'pages'] as const).map(o => `<button type="button" role="radio" data-output="${o}">${esc(o === 'book' ? F.outBook : F.outPages)}</button>`).join('')
+                + `</div><p class="book-hint book-out-hint"></p>`;
+        }
+        const foot = modal.querySelector<HTMLElement>('.fp-foot');
+        if (foot) { foot.innerHTML = ''; delete foot.dataset.view; }
+        renderOptions(st);
         setText(modal, '.book-open-hint', strings.book.dlg.openHint);
         if (!modal.dataset.wired) {
             modal.dataset.wired = '1';
             this.wireBookDialog(modal);
         }
-        sync(st);
+        if (st.output === 'pages') scheduleEstimate(st, true);
+        else sync(st);
 
         // Own the dialog stack (as the poster does): the first Escape closes
         // the book, and no parent dialog can reopen on top of it.
@@ -425,6 +774,45 @@ export const bookUiMethods = uiModule({
         };
         modal.addEventListener('click', (e) => {
             const t = e.target as HTMLElement;
+            const output = t.closest<HTMLElement>('button[data-output]');
+            if (output && st) {
+                const out = output.dataset.output as BookOutput;
+                if (out === st.output) return;
+                closePicker?.();
+                st.output = out;
+                st.sub = null;
+                st.phase = 'options';
+                st.file = null;
+                fitSelectionToOutput(st);
+                renderOptions(st);
+                changed(st);
+                if (out === 'pages') scheduleEstimate(st, true);
+                return;
+            }
+            const img = t.closest<HTMLElement>('[data-clips], [data-photos]');
+            if (img) {
+                update(s => {
+                    s.pages = img.dataset.clips
+                        ? { ...s.pages, clips: img.dataset.clips as ImageChoice }
+                        : { ...s.pages, photos: img.dataset.photos as ImageChoice };
+                });
+                return;
+            }
+            const offer = t.closest<HTMLButtonElement>('[data-offer]');
+            if (offer) {
+                if (offer.disabled) return;
+                const smaller = (c: ImageChoice): ImageChoice => c === 'full' ? 'small' : c;
+                update(s => {
+                    s.pages = offer.dataset.offer === 'small'
+                        ? { ...s.pages, clips: smaller(s.pages.clips), photos: smaller(s.pages.photos) }
+                        : { ...s.pages, clips: 'none' };
+                });
+                return;
+            }
+            if (t.closest('.fp-prog-cancel')) { this.cancelPagesBuild(); return; }
+            if (t.closest('.fp-res-save')) { this.savePagesResult(); return; }
+            if (t.closest('.fp-res-share')) { this.sharePagesResult(); return; }
+            if (t.closest('.fp-res-open')) { this.openFamilyPagesFromDialog(); return; }
             const preset = t.closest<HTMLElement>('[data-preset]');
             if (preset) {
                 const p = preset.dataset.preset;
@@ -477,12 +865,18 @@ export const bookUiMethods = uiModule({
         });
         modal.addEventListener('change', (e) => {
             const t = e.target as HTMLInputElement;
-            if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; }); return; }
+            if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; s.treeForced = false; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
+            if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }
+            if (t.name === 'fp-inc') {
+                const k = t.value as typeof INCLUDES[number];
+                update(s => { s.pages = { ...s.pages, include: { ...s.pages.include, [k]: t.checked } }; });
+                return;
+            }
             if (t.closest('.book-rod-row')) {
                 update(s => {
                     const id = t.value as RodId;
-                    const order = bookRodChoices(s.index);
+                    const order = s.rodChoices;
                     const set = new Set(s.rods.filter(r => r !== id));
                     if (t.checked) set.add(id);
                     s.rods = order.filter(r => set.has(r));
@@ -544,9 +938,90 @@ export const bookUiMethods = uiModule({
 
     closeBookDialog(): void {
         closePicker?.();
+        // A file being built is dropped: nothing is saved.
+        if (st?.job) st.job.cancelled = true;
+        if (st?.estTimer != null) clearTimeout(st.estTimer);
         document.getElementById('book-modal')?.classList.remove('active');
         this.clearDialogStack();
         st = null;
+    },
+
+    /** "Save file…" / "Save and share…": the file a page at a time, its progress after ~1 s, then the result (026 §6.5). */
+    async buildPagesFromDialog(): Promise<void> {
+        const s = st;
+        if (!s || s.output !== 'pages' || s.phase !== 'options') return;
+        const sel = selectionOf(s);
+        if (!selectionReady(sel) || sel.kind === 'tree') return;
+        if (s.estTimer !== null) scheduleEstimate(s, true);
+        if (!s.est || sizeVerdict(s.est.size.bytes) === 'set') return;
+        saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
+        const job: PagesJob = { cancelled: false };
+        s.job = job;
+        s.phase = 'building';
+        s.prog = { done: 0, total: 0, text: '' };
+        sync(s);
+        const timer = window.setTimeout(() => {
+            if (st === s && s.job === job && s.phase === 'building') { s.phase = 'progress'; sync(s); }
+        }, PROGRESS_AFTER_MS);
+        try {
+            const file = await buildPagesFile(s.data, sel, pageSetOptionsOf(s), job, (done, total, text) => {
+                s.prog = { done, total, text };
+                const foot = document.querySelector<HTMLElement>('#book-modal .fp-foot');
+                if (st === s && s.job === job && s.phase === 'progress' && foot) syncProgress(s, foot);
+            });
+            if (st !== s || s.job !== job) return;
+            s.file = file;
+            s.phase = 'result';
+        } catch (e) {
+            if (st !== s || s.job !== job) return;
+            s.phase = 'options';
+            if (!(e instanceof PagesCancelled)) this.showAlert(strings.familyPages.buildFailed, 'warning');
+        } finally {
+            clearTimeout(timer);
+            if (s.job === job) s.job = null;
+        }
+        sync(s);
+        if (s.phase === 'result') document.querySelector<HTMLElement>('#book-modal .fp-res-save')?.focus();
+    },
+
+    /** Cancel during the build: back to the options, nothing saved. */
+    cancelPagesBuild(): void {
+        const s = st;
+        if (!s?.job) return;
+        s.job.cancelled = true;
+        s.job = null;
+        s.phase = 'options';
+        sync(s);
+        document.querySelector<HTMLElement>('#book-modal #book-open')?.focus();
+    },
+
+    /** The result's Save: a download, as the person page and the book save. */
+    savePagesResult(): void {
+        const file = st?.file;
+        if (!file) return;
+        try {
+            downloadPagesFile(file);
+            this.showToast(strings.familyPages.saved(file.name));
+        } catch {
+            this.showAlert(strings.familyPages.saveFailed, 'warning');
+        }
+    },
+
+    /** The result's Share…: Web Share with the file, where the device shares files. */
+    sharePagesResult(): void {
+        const file = st?.file;
+        if (!file) return;
+        void sharePagesFile(file).catch(() => { /* cancelled */ });
+    },
+
+    /** "Open in window": the set's page in the app's window (the window's own set, §0.8). */
+    openFamilyPagesFromDialog(): void {
+        const s = st;
+        if (!s) return;
+        const sel = selectionOf(s);
+        if (!selectionReady(sel) || sel.kind === 'tree') return;
+        this.closeBookDialog();
+        this.openFamilyPages(sel);
     },
 
     /** The book's HTML for these options: for the window, or for a saved file. */
@@ -583,10 +1058,11 @@ export const bookUiMethods = uiModule({
         try { win.focus(); } catch { /* the browser decides */ }
     },
 
-    /** "Open book": the window opens (or the one being changed is rewritten). */
+    /** "Open book": the window opens (or the one being changed is rewritten); for the pages, the file is built. */
     generateFamilyBook(): void {
         const s = st;
         if (!s) return;
+        if (s.output === 'pages') { void this.buildPagesFromDialog(); return; }
         const sel = selectionOf(s);
         if (!selectionReady(sel)) return;
         if (Object.keys(s.data.persons).length === 0) {

@@ -1,0 +1,349 @@
+/**
+ * The family pages in the dialog "Family book and pages" (spec 026 §6): the
+ * output switch (the book's rows give way to the pages' rows, the whole tree
+ * off with its reason), the estimate and its recount, the warning about the
+ * living under full data, the large file (> 15 MB: the offers with their own
+ * estimates, the set of files later; > 50 MB: one file is not saved), the
+ * memory of the choices per tree, the file built and saved (it opens on the
+ * lineage's page), the pages' window's "Save as file", a phone's sheet,
+ * the dark theme and German without overflow. Invented names only
+ * (e2e/rods-fixture.ts).
+ */
+
+import { test, expect, Page, Locator } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { openApp } from './helpers.js';
+import { rodsTree } from './rods-fixture.js';
+
+async function setup(page: Page): Promise<void> {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
+    await page.evaluate(async (data) => {
+        const S = window.Strom;
+        await S.DataManager.importAsNewTree(data, 'Brandvold');
+        S.UI.updateTreeSwitcher?.();
+        S.TreeRenderer.setFocus(data.defaultPersonId);
+        await S.TreeRenderer.renderAsync();
+    }, rodsTree());
+}
+
+async function openDialog(page: Page, output?: 'book' | 'pages'): Promise<Locator> {
+    await page.evaluate((o) => window.Strom.UI.showBookDialog(o), output);
+    const dialog = page.locator('#book-modal');
+    await expect(dialog).toHaveClass(/active/);
+    return dialog;
+}
+
+/** A photo of this many characters on a person of the Brandvold line (in memory only, not saved). */
+async function injectPhoto(page: Page, chars: number): Promise<void> {
+    await page.evaluate((n) => {
+        const p = window.Strom.DataManager.getData().persons['b5' as never] as { photo?: string };
+        p.photo = 'data:image/jpeg;base64,' + 'A'.repeat(n);
+    }, chars);
+}
+
+const outBtn = (dialog: Locator, o: string): Locator => dialog.locator(`.book-out [data-output="${o}"]`);
+const pagesOf = async (dialog: Locator): Promise<number> =>
+    Number((await dialog.locator('.fp-est-d').textContent())!.match(/^(\d+) page/)![1]);
+
+/** Elements of the dialog wider than their box or past the dialog's right edge. */
+async function overflowing(dialog: Locator): Promise<string[]> {
+    return dialog.locator('.book-dlg').evaluate((modal) => {
+        const right = modal.getBoundingClientRect().right + 1;
+        const out: string[] = [];
+        modal.querySelectorAll<HTMLElement>('button, label, h2, h3, p, span').forEach(el => {
+            if (!el.getClientRects().length || getComputedStyle(el).visibility === 'hidden') return;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0) return;
+            const clipped = getComputedStyle(el).textOverflow === 'ellipsis';
+            if (r.right > right || (!clipped && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible')) {
+                out.push(`${el.className || el.tagName}: ${(el.textContent || '').trim().slice(0, 40)}`);
+            }
+        });
+        if (modal.scrollWidth > modal.clientWidth) out.push('dialog scrolls sideways');
+        return out;
+    });
+}
+
+test.describe('family pages: the dialog', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the output switch: the pages\' rows, the whole tree later, the estimate and its recount; back to the book @smoke', async ({ page }) => {
+        await setup(page);
+        const dialog = await openDialog(page);
+        await expect(dialog.locator('#book-dlg-title')).toHaveText('Family book and pages');
+        await expect(dialog.locator('.book-out [data-output]')).toHaveText(['Printed book', 'Linked pages']);
+        await expect(outBtn(dialog, 'book')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('[data-sec="parts"]')).toBeVisible();
+        await expect(dialog.locator('input[name="book-kind"][value="tree"]')).toBeChecked();
+
+        await outBtn(dialog, 'pages').click();
+        await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('.book-out-hint')).toContainText('works offline');
+        // Only the pages' rows; the book's preview, presets and parts are gone.
+        await expect(dialog.locator('[data-sec="parts"]')).toHaveCount(0);
+        await expect(dialog.locator('.book-presets')).toBeHidden();
+        await expect(dialog.locator('.book-dlg-side')).toBeHidden();
+        for (const sec of ['privacy', 'families', 'images', 'include']) await expect(dialog.locator(`[data-sec="${sec}"]`)).toBeVisible();
+        await expect(dialog.locator('input[name="fp-families"][value="pages"]')).toBeChecked();
+        await expect(dialog.locator('[data-clips="full"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('[data-photos="full"]')).toHaveAttribute('aria-checked', 'true');
+        for (const k of ['map', 'sources', 'stories']) await expect(dialog.locator(`input[name="fp-inc"][value="${k}"]`)).toBeChecked();
+        // The whole tree: disabled, with its reason; the lineages instead, the first one chosen.
+        const tree = dialog.locator('.book-kind[data-kind="tree"]');
+        await expect(tree.locator('input')).toBeDisabled();
+        await expect(tree.locator('.book-kind-h')).toHaveText('pages for the whole tree come later');
+        await expect(dialog.locator('input[name="book-kind"][value="rods"]')).toBeChecked();
+        await expect(dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input')).toBeChecked();
+
+        // The estimate: one file, its pages, people and images, its size and name.
+        await expect(dialog.locator('.fp-est-t')).toHaveText('One .html file');
+        await expect(dialog.locator('.fp-est-d')).toHaveText(/^\d+ pages · \d+ people · 0 images$/);
+        await expect(dialog.locator('.fp-est-s')).toHaveText(/^about \d+(\.\d)? MB$/);
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
+        await expect(dialog.locator('.fp-big')).toBeHidden();
+        await expect(dialog.locator('#book-open .fp-l-wide')).toHaveText('Save file…');
+        await expect(dialog.locator('#book-open')).toBeEnabled();
+        await expect(dialog.locator('.fp-open')).toHaveText('Open in a window');
+        // Families only as sections: fewer pages once the estimate is recounted.
+        const before = await pagesOf(dialog);
+        await dialog.locator('input[name="fp-families"][value="section"]').check();
+        await expect.poll(() => pagesOf(dialog)).toBeLessThan(before);
+        // No lineage chosen: nothing to save or open.
+        await dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input').uncheck();
+        await expect(dialog.locator('.fp-est-t')).toHaveText('No family line is selected.');
+        await expect(dialog.locator('#book-open')).toBeDisabled();
+        await expect(dialog.locator('.fp-open')).toBeDisabled();
+        await dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input').check();
+
+        // Back to the book: its rows, the button, the dialog's rule (one Cancel right before the primary).
+        await outBtn(dialog, 'book').click();
+        await expect(dialog.locator('[data-sec="parts"]')).toBeVisible();
+        await expect(dialog.locator('#book-open')).toHaveText('Open book');
+        await expect(dialog.locator('.fp-open')).toBeHidden();
+        await expect(dialog.locator('.book-estimate')).toHaveText(/about \d+ page/);
+        expect(await dialog.locator('.buttons [data-dismiss]').evaluate(d => d.nextElementSibling?.id)).toBe('book-open');
+    });
+
+    test('the living under full data: the warning with their number; protected, none', async ({ page }) => {
+        await setup(page);
+        const dialog = await openDialog(page, 'pages');
+        await expect(dialog.locator('input[name="book-privacy"][value="initials"]')).toBeChecked();
+        await expect(dialog.locator('.fp-warn')).toBeHidden();
+        await dialog.locator('input[name="book-privacy"][value="full"]').check();
+        await expect(dialog.locator('.fp-warn')).toHaveText(/^The selection includes \d+ living people\. The file will carry their names, dates and places\.$/);
+        await dialog.locator('input[name="book-privacy"][value="anonymous"]').check();
+        await expect(dialog.locator('.fp-warn')).toBeHidden();
+    });
+
+    test('over 15 MB the offers with their own estimates and the set of files later; over 50 MB one file is not saved', async ({ page }) => {
+        await setup(page);
+        await injectPhoto(page, 20_000_000);
+        const dialog = await openDialog(page, 'pages');
+        const big = dialog.locator('.fp-big');
+        await expect(big).toBeVisible();
+        await expect(dialog.locator('.fp-big-t')).toHaveText(/^The file will be large \(about 2\d MB\)\.$/);
+        await expect(dialog.locator('.fp-est-s')).toHaveText(/^about 2\d MB$/);
+        await expect(big.locator('[data-offer="small"]')).toHaveText(/^Reduce images \(about \d(\.\d)? MB\)$/);
+        // No record excerpts in this tree: nothing to leave out.
+        await expect(big.locator('[data-offer="noclips"]')).toBeHidden();
+        await expect(big.locator('[data-offer="zip"]')).toBeDisabled();
+        await expect(dialog.locator('.fp-zip-note')).toHaveText('The set of files is not available yet.');
+        await expect(dialog.locator('#book-open')).toBeEnabled();
+        // The offer takes its choice: the photos reduced, the warning gone.
+        await big.locator('[data-offer="small"]').click();
+        await expect(dialog.locator('[data-photos="small"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(big).toBeHidden();
+
+        await page.locator('#book-modal .close-btn').click();
+        await injectPhoto(page, 60_000_000);
+        await openDialog(page, 'pages');
+        await dialog.locator('[data-photos="full"]').click();
+        await expect(dialog.locator('.fp-big-t')).toHaveText(/^One file would have 6\d MB; it is saved as a set of files\.$/);
+        await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
+        await expect(dialog.locator('.fp-zip-note')).toHaveText(/^The set of files is not available yet: reduced images/);
+        await expect(big.locator('[data-offer="zip"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(dialog.locator('#book-open')).toBeDisabled();
+        await expect(dialog.locator('.fp-open')).toBeEnabled();
+    });
+
+    test('memory per tree: the output and the pages\' choices come back after closing and after a reload', async ({ page }) => {
+        await setup(page);
+        let dialog = await openDialog(page, 'pages');
+        await dialog.locator('input[name="fp-families"][value="section"]').check();
+        await dialog.locator('[data-clips="none"]').click();
+        await dialog.locator('[data-photos="small"]').click();
+        await dialog.locator('input[name="fp-inc"][value="map"]').uncheck();
+        await page.locator('#book-modal .close-btn').click();
+        await expect(dialog).not.toHaveClass(/active/);
+        const check = async (): Promise<void> => {
+            await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
+            await expect(dialog.locator('input[name="fp-families"][value="section"]')).toBeChecked();
+            await expect(dialog.locator('[data-clips="none"]')).toHaveAttribute('aria-checked', 'true');
+            await expect(dialog.locator('[data-photos="small"]')).toHaveAttribute('aria-checked', 'true');
+            await expect(dialog.locator('input[name="fp-inc"][value="map"]')).not.toBeChecked();
+            await expect(dialog.locator('input[name="fp-inc"][value="sources"]')).toBeChecked();
+        };
+        // The menu's dialog takes the remembered output.
+        dialog = await openDialog(page);
+        await check();
+        await page.reload();
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        dialog = await openDialog(page);
+        await check();
+        // An entry of the book opens the book, the pages' choices stay.
+        await page.locator('#book-modal .close-btn').click();
+        await page.evaluate(() => window.Strom.UI.openBookForPerson('b5' as never));
+        await expect(outBtn(dialog, 'book')).toHaveAttribute('aria-checked', 'true');
+        await outBtn(dialog, 'pages').click();
+        await expect(dialog.locator('input[name="fp-families"][value="section"]')).toBeChecked();
+        await expect(dialog.locator('input[name="book-kind"][value="descendants"]')).toBeChecked();
+    });
+
+    test('the file: built, Save downloads it, it opens on the lineage\'s page; Cancel during the build saves nothing', async ({ page, context }) => {
+        await setup(page);
+        const dialog = await openDialog(page, 'pages');
+        await dialog.locator('#book-open').click();
+        const res = dialog.locator('.fp-res');
+        await expect(res).toBeVisible();
+        await expect(res.locator('.fp-res-t')).toHaveText('The file is ready');
+        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold-family-line\.html · \d+\.\d MB$/);
+        await expect(res.locator('.fp-res-n')).toContainText('Family book');
+        // Share only where files can be shared (not in this browser).
+        await expect(res.locator('.fp-res-share')).toBeHidden();
+        await expect(dialog.locator('.book-dlg-foot .buttons')).toBeHidden();
+        const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
+        expect(download.suggestedFilename()).toBe('Brandvold-family-line.html');
+        const saved = join(mkdtempSync(join(tmpdir(), 'strom-pages-dlg-')), download.suggestedFilename());
+        await download.saveAs(saved);
+        const file = await context.newPage();
+        await file.goto(pathToFileURL(saved).href);
+        // The introduction of one lineage's set is the lineage's page.
+        await expect.poll(() => file.locator('section.sp-page').evaluateAll(els => els
+            .filter(e => getComputedStyle(e).display !== 'none').map(e => `${e.className}|${e.getAttribute('data-sp-title')}`)))
+            .toEqual([expect.stringMatching(/sp-page--rod.*\|Brandvold family line$/)]);
+        await file.close();
+
+        // A change of the options drops the file: the options again.
+        await dialog.locator('input[name="fp-families"][value="section"]').check();
+        await expect(res).toHaveCount(0);
+        await expect(dialog.locator('#book-open')).toBeVisible();
+
+        // A slow build shows its progress after ~1 s; Cancel goes back, nothing is saved.
+        await page.evaluate(() => {
+            const w = window as Window & { requestIdleCallback?: unknown };
+            w.requestIdleCallback = (cb: () => void) => window.setTimeout(cb, 400);
+        });
+        let downloads = 0;
+        page.on('download', () => { downloads++; });
+        await dialog.locator('#book-open').click();
+        const prog = dialog.locator('.fp-prog');
+        await expect(prog).toBeVisible();
+        await expect(prog.locator('.fp-prog-t')).toHaveText('Saving the pages…');
+        await expect(prog.locator('.fp-prog-step')).not.toHaveText('');
+        await prog.locator('.fp-prog-cancel').click();
+        await expect(prog).toHaveCount(0);
+        await expect(dialog.locator('#book-open')).toBeEnabled();
+        await page.waitForTimeout(1500);
+        await expect(res).toHaveCount(0);
+        expect(downloads).toBe(0);
+    });
+
+    test('the pages\' window: Save as file opens the dialog with the pages and the window\'s lineage', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
+        const win = page.locator('#person-page-modal');
+        await win.locator('.pp-facts [data-pp-rod]', { hasText: 'Ostrander' }).click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.pp-save').click();
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('.book-rod-row', { hasText: 'Ostrander' }).locator('input')).toBeChecked();
+        await expect(dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input')).not.toBeChecked();
+    });
+
+    test('the dark theme: the pages\' rows and footer on the dark surfaces', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        const dialog = await openDialog(page, 'pages');
+        await dialog.locator('input[name="book-privacy"][value="full"]').check();
+        await expect(dialog.locator('.fp-warn')).toBeVisible();
+        const lum = (c: string): number => {
+            const [r, g, b] = (c.match(/[\d.]+/g) ?? ['0', '0', '0']).map(Number);
+            return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        };
+        const colors = await dialog.evaluate((o) => {
+            const cs = (sel: string) => getComputedStyle(o.querySelector(sel)!);
+            return {
+                dlg: cs('.book-dlg').backgroundColor, text: cs('.fp-est-t').color,
+                warnBg: cs('.fp-warn').backgroundColor, warn: cs('.fp-warn').color,
+            };
+        });
+        expect(lum(colors.dlg)).toBeLessThan(0.3);
+        expect(lum(colors.text)).toBeGreaterThan(0.6);
+        expect(lum(colors.warn)).toBeGreaterThan(lum(colors.warnBg));
+    });
+});
+
+test.describe('family pages: the dialog on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('a full-screen sheet: rows with summaries open sub-sheets; the footer with Save and share; no sideways scroll', async ({ page }) => {
+        await setup(page);
+        const dialog = await openDialog(page, 'pages');
+        const modal = dialog.locator('.book-dlg');
+        const box = (await modal.boundingBox())!;
+        expect(box.width).toBe(390);
+        await expect(dialog.locator('.book-sum-row .book-sum-l')).toHaveText(['Privacy of living people', 'Families', 'Images', 'Includes']);
+        await expect(dialog.locator('[data-sum="privacy"]')).toHaveText('Initials');
+        await expect(dialog.locator('[data-sum="families"]')).toHaveText('Pages of their own');
+        await expect(dialog.locator('[data-sum="include"]')).toHaveText('Map, sources, stories');
+        await expect(dialog.locator('[data-sec="families"]')).toBeHidden();
+        await expect(dialog.locator('#book-open .fp-l-phone')).toHaveText('Save and share…');
+        await expect(dialog.locator('#book-open .fp-l-wide')).toBeHidden();
+        await expect(dialog.locator('.fp-open')).toBeVisible();
+        await expect(dialog.locator('.buttons [data-dismiss]')).toBeHidden();
+        // Save and share above Open in a window.
+        const save = (await dialog.locator('#book-open').boundingBox())!;
+        const open = (await dialog.locator('.fp-open').boundingBox())!;
+        expect(save.y).toBeLessThan(open.y);
+        expect(save.height).toBeGreaterThanOrEqual(48);
+        expect(await overflowing(dialog)).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+
+        await dialog.locator('[data-sub-open="images"]').click();
+        await expect(dialog.locator('.book-sub-title')).toHaveText('Images');
+        await expect(dialog.locator('[data-sec="images"]')).toBeVisible();
+        await dialog.locator('[data-clips="none"]').click();
+        expect(await overflowing(dialog)).toEqual([]);
+        await page.keyboard.press('Escape');
+        await expect(dialog.locator('.book-sub-title')).toHaveText('');
+        await expect(dialog.locator('[data-sum="images"]')).toHaveText('Photos only');
+        await expect(dialog).toHaveClass(/active/);
+    });
+});
+
+test.describe('family pages: the dialog in German', () => {
+    test.use({ locale: 'de' });
+
+    for (const [w, h] of [[1440, 900], [390, 844]] as const) {
+        test(`no text past its box at ${w} px, the large-file block included`, async ({ page }) => {
+            await page.setViewportSize({ width: w, height: h });
+            await setup(page);
+            await injectPhoto(page, 20_000_000);
+            const dialog = await openDialog(page, 'pages');
+            await expect(dialog.locator('#book-dlg-title')).toHaveText('Familienbuch und -seiten');
+            await expect(dialog.locator('.fp-big')).toBeVisible();
+            await expect(dialog.locator('.fp-big-t')).toHaveText(/^Die Datei wird groß \(etwa 2\d MB\)\.$/);
+            expect(await overflowing(dialog)).toEqual([]);
+            if (w < 640) {
+                await dialog.locator('[data-sub-open="families"]').click();
+                expect(await overflowing(dialog)).toEqual([]);
+            }
+        });
+    }
+});

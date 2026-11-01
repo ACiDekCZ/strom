@@ -15711,6 +15711,110 @@
             #book-modal .book-switch { width: 44px; height: 44px; }
             #book-modal .close-btn { width: 44px; height: 44px; }
         }
+        /* ── The output (026 §6.1) and the linked pages' rows, estimate, progress and result (§6.2–§6.6): one column, 760 px ── */
+        #book-modal .book-dlg-head { flex-wrap: wrap; row-gap: 10px; }
+        #book-modal .book-out { order: 2; flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        #book-modal .book-out:empty { display: none; }
+        #book-modal .book-out-seg button { padding: 7px 16px; font-size: 14px; }
+        #book-modal .book-out .book-out-hint { margin: 0; }
+        #book-modal .book-dlg[data-out="pages"] .book-presets { display: none; }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-head h2 { margin-right: auto; }
+        #book-modal .modal.book-dlg[data-out="pages"] { width: 760px; grid-template-columns: minmax(0, 1fr); }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-side,
+        #book-modal .book-dlg[data-out="pages"] .book-estimate,
+        #book-modal .book-dlg[data-out="pages"] .book-open-hint { display: none; }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-opts { grid-row: 3; }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-foot {
+            grid-column: 1; grid-row: 4; display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+            padding: 12px 24px 16px; border-top: 1px solid var(--divider);
+        }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons { justify-content: flex-end; flex-wrap: wrap; }
+        #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons .primary { flex: none; }
+        #book-modal .book-dlg[data-phase="progress"] .book-dlg-foot .buttons,
+        #book-modal .book-dlg[data-phase="result"] .book-dlg-foot .buttons { display: none; }
+        #book-modal .fp-open[hidden], #book-modal .fp-l-phone { display: none; }
+        #book-modal .book-kind.is-disabled { cursor: default; border-style: dashed; background: none; }
+        #book-modal .book-kind.is-disabled .book-kind-t { color: var(--text-faint); }
+        #book-modal .fp-warn { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; }
+        #book-modal .fp-warn[hidden] { display: none; }
+        #book-modal .fp-img-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+        #book-modal .fp-img-row + .fp-img-row { margin-top: 10px; }
+        #book-modal .fp-img-l { flex: 0 0 170px; min-width: 0; font-size: 14px; }
+        #book-modal .fp-img-n { font-size: 12.5px; color: var(--text-light); }
+        #book-modal .fp-inc { display: flex; flex-wrap: wrap; gap: 2px 22px; }
+        #book-modal .fp-inc input { margin: 0; accent-color: var(--primary); }
+        #book-modal .fp-foot { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+        #book-modal .fp-foot[hidden] { display: none; }
+        #book-modal .fp-foot p { margin: 0; }
+        #book-modal .fp-est { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13.5px; transition: opacity .1s; }
+        #book-modal .fp-est-t { font-weight: 600; color: var(--text); }
+        #book-modal .fp-est-d { color: var(--text-light); }
+        #book-modal .fp-est-s { margin-left: auto; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        #book-modal .fp-est.is-big .fp-est-s { color: var(--warning-text); }
+        #book-modal .fp-est.is-empty .fp-est-t { font-weight: 500; color: var(--text-light); }
+        #book-modal .fp-est.is-stale { opacity: .6; }
+        #book-modal .fp-file { font-size: 12.5px; color: var(--text-light); font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+        #book-modal .fp-file:empty { display: none; }
+        #book-modal .fp-big { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--warning); border-radius: 10px; background: var(--surface); font-size: 13.5px; line-height: 1.45; }
+        #book-modal .fp-big[hidden], #book-modal .fp-offer[hidden] { display: none; }
+        #book-modal .fp-big-t { font-weight: 600; color: var(--warning-text); }
+        #book-modal .fp-big-d, #book-modal .fp-zip-note { color: var(--text-light); }
+        #book-modal .fp-zip-note { font-size: 12.5px; }
+        #book-modal .fp-offers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+        #book-modal .fp-offer {
+            min-height: 36px; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 8px; background: var(--surface);
+            color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; text-align: left;
+        }
+        #book-modal .fp-offer:disabled { border-color: var(--border); color: var(--text-faint); cursor: default; }
+        #book-modal .fp-offer:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        #book-modal .fp-prog, #book-modal .fp-res { display: flex; flex-direction: column; gap: 10px; font-size: 14px; min-width: 0; }
+        #book-modal .fp-prog-h { display: flex; justify-content: space-between; gap: 12px; }
+        #book-modal .fp-prog-t, #book-modal .fp-res-t { font-weight: 600; color: var(--text); }
+        #book-modal .fp-prog-n { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        #book-modal .fp-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+        #book-modal .fp-bar-fill { display: block; width: 0; height: 100%; border-radius: 4px; background: var(--primary); transition: width .2s; }
+        #book-modal .fp-prog-step, #book-modal .fp-res-n { color: var(--text-light); line-height: 1.45; }
+        #book-modal .fp-prog-cancel { align-self: flex-end; }
+        #book-modal .fp-res-f { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+        #book-modal .fp-res-b { display: flex; flex-wrap: wrap; gap: 8px; }
+        #book-modal .fp-res-b [hidden] { display: none; }
+        @media (hover: hover) {
+            #book-modal .fp-offer:not(:disabled):hover { background: var(--primary-soft); }
+        }
+        @media (pointer: coarse) {
+            #book-modal .fp-offer { min-height: 44px; }
+        }
+        /* Phone (6b), also held sideways: the full-screen sheet; the pages' rows open sub-sheets; "Save and share…" above "Open in window" */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #book-modal .modal.book-dlg[data-out="pages"] { width: 100vw; max-width: 100vw; }
+            #book-modal .book-out .book-out-hint { display: none; }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); gap: 8px; background: var(--card-bg); }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons { flex-direction: column-reverse; align-items: stretch; }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons .primary { min-height: 48px; }
+            #book-modal .book-dlg[data-out="pages"] .fp-open { min-height: 44px; }
+            #book-modal .fp-l-wide { display: none; }
+            #book-modal .fp-l-phone { display: inline; }
+            #book-modal .book-kind.is-disabled .book-kind-h { display: block; }
+            #book-modal .book-kind.is-disabled { flex-wrap: wrap; padding: 8px 14px; }
+            #book-modal .book-dlg[data-sub="families"] [data-sec="families"],
+            #book-modal .book-dlg[data-sub="images"] [data-sec="images"],
+            #book-modal .book-dlg[data-sub="include"] [data-sec="include"] { display: block; border-top: 0; padding-top: 4px; }
+            #book-modal .fp-img-row { flex-direction: column; align-items: stretch; gap: 6px; }
+            #book-modal .fp-img-row + .fp-img-row { margin-top: 16px; }
+            #book-modal .fp-img-l { flex: none; }
+            #book-modal .fp-inc { flex-direction: column; gap: 0; }
+            #book-modal .fp-inc .book-radio { min-height: 48px; }
+            #book-modal .fp-file { display: none; }
+            #book-modal .fp-res-b { flex-direction: column; }
+            #book-modal .fp-res-b button { min-height: 48px; }
+            #book-modal .fp-prog-cancel { align-self: stretch; min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #book-modal .book-dlg-head { flex-wrap: wrap; row-gap: 4px; }
+            #book-modal .book-out { order: 5; }
+            #book-modal .modal.book-dlg[data-out="pages"] { grid-template-columns: minmax(0, 1fr) 240px; grid-template-rows: auto auto minmax(0, 1fr); }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot { grid-column: 2; grid-row: 3; justify-content: flex-end; overflow-y: auto; border-top: 0; border-left: 1px solid var(--divider); }
+        }
         /* Life and health, Family through time, Data quality, Highlights */
         .tov-block { display: flex; flex-direction: column; gap: 8px; }
         .tov-block-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
@@ -21302,13 +21406,14 @@
         </div>
     </div>
 
-    <!-- Family Book Dialog (1031 §4): options left, preview + estimate right; filled by src/ui/book-ui.ts -->
+    <!-- Family Book and Pages Dialog (1031 §4, 026 §6): the output, options left, preview + estimate right (the book) or the estimate below (the pages); filled by src/ui/book-ui.ts -->
     <div class="modal-overlay" id="book-modal">
         <div class="modal modal--lg book-dlg" role="dialog" data-dialog-kind="form" data-skeleton="skip" aria-modal="true" aria-labelledby="book-dlg-title">
             <div class="modal-header book-dlg-head">
                 <h2 id="book-dlg-title" data-i18n="book.dialogTitle"></h2>
                 <div class="book-presets" role="radiogroup"></div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
+                <div class="book-out"></div>
             </div>
             <div class="book-dlg-main">
                 <div class="book-dlg-opts"></div>
@@ -21319,7 +21424,9 @@
             </div>
             <div class="book-dlg-foot">
                 <div class="book-estimate" aria-live="polite"></div>
+                <div class="fp-foot" hidden></div>
                 <div class="buttons">
+                    <button class="secondary fp-open" type="button" hidden onclick="window.Strom.UI.openFamilyPagesFromDialog()"></button>
                     <button class="secondary" data-dismiss onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
                     <button class="primary" id="book-open" onclick="window.Strom.UI.generateFamilyBook()" data-i18n="book.generate"></button>
                 </div>

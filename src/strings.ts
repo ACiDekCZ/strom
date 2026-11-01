@@ -309,7 +309,7 @@ const stringsEN = {
         toolbarPrint: 'Print',
         toolbarClose: 'Close',
         title: 'Family book',
-        dialogTitle: 'Family book',
+        dialogTitle: 'Family book and pages',
         subtitle: 'The book of the family',
         families: 'Families',
         children: 'Children',
@@ -6454,6 +6454,8 @@ const stringsEN = {
         } as Record<'full' | 'initials' | 'anonymous' | 'minimal', string>,
         // The dialog, the window and the entries (spec 026 §6, §7).
         outBook: 'Printed book',
+        what: 'Selection',
+        privacyHint: 'Applies to every page, the index and the search.',
         outPages: 'Linked pages',
         outHint: {
             book: 'Read from the start, printed on A4 or saved as HTML.',
@@ -6649,7 +6651,7 @@ const stringsCZ: StringsType = {
         toolbarClose: 'Zavřít',
         menuDesc: 'Tisknutelná kniha: kapitoly po rodinách, fotky, prameny a rejstřík osob',
         title: 'Kniha rodu',
-        dialogTitle: 'Kniha rodu',
+        dialogTitle: 'Kniha a stránky rodu',
         subtitle: 'Kniha rodu',
         families: 'Rodiny',
         children: 'Děti',
@@ -12725,6 +12727,8 @@ const stringsCZ: StringsType = {
         } as Record<'full' | 'initials' | 'anonymous' | 'minimal', string>,
         // Dialog, okno a vstupy (spec 026 §6, §7).
         outBook: 'Kniha k tisku',
+        what: 'Výběr',
+        privacyHint: 'Platí pro všechny stránky, rejstřík i hledání.',
         outPages: 'Propojené stránky',
         outHint: {
             book: 'Čte se od začátku, tiskne se na A4 nebo ukládá jako HTML.',
@@ -12916,7 +12920,7 @@ const stringsDE: StringsType = {
         toolbarPrint: 'Drucken',
         toolbarClose: 'Schließen',
         title: 'Familienbuch',
-        dialogTitle: 'Familienbuch',
+        dialogTitle: 'Familienbuch und -seiten',
         subtitle: 'Das Buch der Familie',
         families: 'Familien',
         children: 'Kinder',
@@ -18916,6 +18920,8 @@ const stringsDE: StringsType = {
         } as Record<'full' | 'initials' | 'anonymous' | 'minimal', string>,
         // Dialog, Fenster und Einstiege (Spec 026 §6, §7).
         outBook: 'Buch zum Drucken',
+        what: 'Auswahl',
+        privacyHint: 'Gilt für alle Seiten, das Register und die Suche.',
         outPages: 'Verknüpfte Seiten',
         outHint: {
             book: 'Wird von vorn gelesen, auf A4 gedruckt oder als HTML gespeichert.',

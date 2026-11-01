@@ -53,7 +53,7 @@ test.describe('family book: the options dialog', () => {
     test('structure: presets, four kinds and House later, the parts with their reasons; a change makes the preset Custom @smoke', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
-        await expect(dialog.locator('#book-dlg-title')).toHaveText('Family book');
+        await expect(dialog.locator('#book-dlg-title')).toHaveText('Family book and pages');
         const presets = dialog.locator('[data-preset]');
         await expect(presets).toHaveText(['For the family', 'For researchers', 'Custom']);
         await expect(dialog.locator('[data-preset="family"]')).toHaveAttribute('aria-checked', 'true');
