@@ -218,3 +218,163 @@ test.describe('family pages file: a family\'s page', () => {
         await expect(page.locator(`#${slug} .sp-oddil-t`, { hasText: '⚭ 1876 Terezie Lhotáková' })).toBeVisible();
     });
 });
+
+/** Rows of the search's results (names). */
+async function results(page: Page): Promise<string[]> {
+    return page.locator('#sp-results .sp-res-n').allTextContents();
+}
+
+test.describe('family pages file: the bar and the search (§3.1, §3.4)', () => {
+    test('a prefix without diacritics, the form Fischek first, a birth surname; the living "eva" finds nothing; Escape brings the page back, the address unchanged', async ({ page }) => {
+        await page.goto(`${url}#${rodFisek}`);
+        await expect.poll(() => shown(page)).toEqual([rodFisek]);
+        await page.evaluate(() => window.scrollTo(0, 400));
+        const q = page.locator('.sp-fbar .sp-q');
+        await expect(q).toBeVisible();
+        await expect(page.locator('.sp-fbar-lupa')).toBeHidden();
+        await expect(page.locator('.sp-fbar-nav a', { hasText: 'Rejstřík' })).toBeVisible();
+        await expect(page.locator('.sp-fbar-nav a', { hasText: 'Mapa obcí' })).toHaveCount(0);
+        await q.fill('fis');
+        await expect(page.locator('#sp-results')).toBeVisible();
+        await expect.poll(() => shown(page)).toEqual([]);
+        expect(await results(page)).toContain('Jan Fíšek');
+        expect((await results(page)).length).toBe(10);
+        await expect(page.locator('#sp-results .sp-res-more')).toContainText('v rejstříku →');
+        await q.fill('josef fisek');
+        await expect.poll(() => results(page)).toContain('Josef Fíšek');
+        await q.fill('fischek');
+        await expect.poll(async () => (await results(page))[0]).toBe('Martin Fischek');
+        await q.fill('vrbatkova');
+        await expect.poll(() => results(page)).toContain('Terezie Lhotáková');
+        await q.fill('eva');
+        await expect(page.locator('#sp-results .sp-res-none-t')).toHaveText('Pro „eva“ se nic nenašlo.');
+        await expect(page.locator('#sp-results .sp-res-hint')).toContainText('Jména žijících osob jsou chráněná.');
+        await expect(page.locator('#sp-results a', { hasText: 'Rejstřík osob →' })).toHaveAttribute('href', '#rejstrik-osoby');
+        expect(new URL(page.url()).hash).toBe(`#${rodFisek}`);
+        await q.press('Escape');
+        await expect(page.locator('#sp-results')).toBeHidden();
+        await expect.poll(() => shown(page)).toEqual([rodFisek]);
+        await expect(q).toHaveValue('');
+        expect(await page.evaluate(() => window.scrollY)).toBe(400);
+        expect(new URL(page.url()).hash).toBe(`#${rodFisek}`);
+        // A result leads to the person's page and closes the search.
+        await q.fill('martin fis');
+        await page.locator('#sp-results a.sp-res-n', { hasText: 'Martin Fischek' }).click();
+        await expect.poll(() => shown(page)).toEqual([set.personSlug.get('martin' as never)!]);
+        await expect(page.locator('#sp-results')).toBeHidden();
+        await expect(q).toHaveValue('');
+    });
+
+    test('a phone at 390 px: the name, the magnifier and Menu; the magnifier turns the bar into the field, Cancel back; Menu\'s panel leads to an index', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(url);
+        const bar = page.locator('.sp-fbar');
+        await expect(bar.locator('.sp-fbar-home')).toBeVisible();
+        await expect(bar.locator('.sp-q')).toBeHidden();
+        await expect(bar.locator('.sp-fbar-nav')).toBeHidden();
+        const lupa = bar.locator('.sp-fbar-lupa');
+        const box = (await lupa.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        await lupa.click();
+        await expect(bar.locator('.sp-q')).toBeVisible();
+        await expect(bar.locator('.sp-q')).toBeFocused();
+        await expect(bar.locator('.sp-fbar-home')).toBeHidden();
+        expect(await bar.locator('.sp-q').evaluate(e => getComputedStyle(e).fontSize)).toBe('16px');
+        await bar.locator('.sp-q').fill('kvapil');
+        await expect.poll(() => results(page)).toContain('Anna Kvapilová');
+        await bar.locator('.sp-fbar-cancel').click();
+        await expect(bar.locator('.sp-q')).toBeHidden();
+        await expect(bar.locator('.sp-fbar-home')).toBeVisible();
+        await expect.poll(() => shown(page)).toEqual(['uvod']);
+        // Menu: the panel under the bar, rows of 48 px, no map while it is not drawn.
+        const menuBtn = bar.locator('.sp-fbar-menu');
+        await menuBtn.click();
+        await expect(menuBtn).toHaveAttribute('aria-expanded', 'true');
+        const items = bar.locator('.sp-menu .sp-menu-a');
+        await expect(items).toHaveText(['Úvod', 'Osoby', 'Rodiny', 'Příjmení', 'Obce']);
+        expect((await items.first().boundingBox())!.height).toBeGreaterThanOrEqual(48);
+        await expect(items.first()).toHaveAttribute('aria-current', 'page');
+        await items.filter({ hasText: 'Obce' }).click();
+        await expect.poll(() => shown(page)).toEqual(['rejstrik-obce']);
+        await expect(bar.locator('.sp-menu')).toBeHidden();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+
+    test('a phone held sideways (844×390): the magnifier and Menu as on a phone', async ({ page }) => {
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.goto(url);
+        await expect(page.locator('.sp-fbar-lupa')).toBeVisible();
+        await expect(page.locator('.sp-fbar-menu')).toBeVisible();
+        await expect(page.locator('.sp-fbar .sp-q')).toBeHidden();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+
+    test('without the script no bar; in print neither the bar nor the results', async ({ browser, page }) => {
+        const ctx = await browser.newContext({ javaScriptEnabled: false });
+        const noJs = await ctx.newPage();
+        await noJs.goto(url);
+        await expect(noJs.locator('.sp-fbar')).toBeHidden();
+        await ctx.close();
+        await page.goto(url);
+        await page.locator('.sp-fbar .sp-q').fill('fis');
+        await page.emulateMedia({ media: 'print' });
+        await expect(page.locator('.sp-fbar')).toBeHidden();
+        await expect(page.locator('#sp-results')).toBeHidden();
+    });
+});
+
+test.describe('family pages file: the indexes (§3.5)', () => {
+    test('the tabs; the alphabet filters the people, the address unchanged; places unfold their people; the lineage header\'s place opens its row', async ({ page }) => {
+        await page.goto(`${url}#rejstrik-osoby`);
+        await expect.poll(() => shown(page)).toEqual(['rejstrik-osoby']);
+        await expect(page.locator('.sp-fbar-nav a', { hasText: 'Rejstřík' })).toHaveAttribute('aria-current', 'page');
+        const sec = page.locator('#rejstrik-osoby');
+        await expect(sec.locator('.sp-tab')).toHaveText(['Osoby', 'Rodiny', 'Příjmení', 'Obce']);
+        const groups = sec.locator('.sp-ix-group');
+        const all = await groups.count();
+        expect(all).toBeGreaterThan(3);
+        await sec.locator('.sp-letter', { hasText: /^K$/ }).click();
+        await expect(sec.locator('.sp-ix-group:visible')).toHaveCount(1);
+        await expect(sec.locator('.sp-ix-group:visible .sp-ix-letter')).toHaveText('K');
+        await expect(sec.locator('.sp-letter', { hasText: /^K$/ })).toHaveAttribute('aria-current', 'true');
+        expect(new URL(page.url()).hash).toBe('#rejstrik-osoby');
+        await sec.locator('.sp-letter', { hasText: 'Vše' }).click();
+        await expect(sec.locator('.sp-ix-group:visible')).toHaveCount(all);
+        // The protected by the protected name, without a link.
+        await expect(sec.locator('.sp-ix-row a', { hasText: 'Eva' })).toHaveCount(0);
+        // Families: only those with a page.
+        await sec.locator('.sp-tab', { hasText: 'Rodiny' }).click();
+        await expect.poll(() => shown(page)).toEqual(['rejstrik-rodiny']);
+        await expect(page.locator(`#rejstrik-rodiny a[href="#${f9}"]`)).toHaveCount(1);
+        // Places: folded; a row unfolds its people.
+        await page.locator('#rejstrik-rodiny .sp-tab', { hasText: 'Obce' }).click();
+        const capkov = page.locator('#rejstrik-obce--o-1');
+        await expect(capkov.locator('.sp-ix-sum')).toContainText(/Čapkov · \d{4}–\d{4} · \d+ osob/);
+        await expect(capkov).not.toHaveAttribute('open', '');
+        await capkov.locator('.sp-ix-sum').click();
+        await expect(capkov.locator('.sp-ix-sub a', { hasText: 'Josef Fíšek' }).first()).toBeVisible();
+        await capkov.locator('.sp-ix-sum').click();
+        // From the lineage's header: the places index with the place's row unfolded.
+        await page.goto(`${url}#${rodFisek}`);
+        await page.locator(`#${rodFisek} a.sp-place`, { hasText: 'Kvasín' }).click();
+        await expect.poll(() => shown(page)).toEqual(['rejstrik-obce']);
+        const row = page.locator(`#${new URL(page.url()).hash.slice(1)}`);
+        await expect(row).toHaveAttribute('open', '');
+        await expect(row.locator('.sp-ix-n')).toHaveText('Kvasín');
+    });
+
+    test('390 px and the dark scheme: the bar and the index on dark surfaces, no sideways scrolling', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.emulateMedia({ colorScheme: 'dark' });
+        await page.goto(`${url}#rejstrik-osoby`);
+        await expect.poll(() => shown(page)).toEqual(['rejstrik-osoby']);
+        const lum = (rgb: string): number => { const [r, g, b] = rgb.match(/\d+/g)!.map(Number); return (r + g + b) / 3; };
+        expect(lum(await page.locator('.sp-fbar').evaluate(e => getComputedStyle(e).backgroundColor))).toBeLessThan(80);
+        expect(lum(await page.locator('.sp-ix-letter').first().evaluate(e => getComputedStyle(e).color))).toBeGreaterThan(150);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        // The tabs scroll within their row on a narrow screen.
+        const tabs = page.locator('#rejstrik-osoby .sp-tabs');
+        expect(await tabs.evaluate(e => e.getBoundingClientRect().right <= window.innerWidth + 1)).toBe(true);
+    });
+});

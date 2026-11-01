@@ -586,3 +586,37 @@ test.describe('family pages: the families in the app', () => {
         await expect(own).toBeVisible();
     });
 });
+
+test.describe('family pages: the window\'s bar (§3.1, §3.4)', () => {
+    test('the search over the window\'s page: results as buttons, Escape brings the page back and the window stays; a result opens the person; Index opens the index', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
+        const win = page.locator('#person-page-modal');
+        await win.locator('.pp-facts [data-pp-rod]', { hasText: 'Brandvold' }).click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        const q = win.locator('.sp-fbar .sp-q');
+        await expect(q).toBeVisible();
+        await expect(q).toHaveAttribute('placeholder', 'Search a name…');
+        await q.fill('brandv');
+        const rows = win.locator('.sp-results .sp-res-row');
+        await expect(rows.first()).toBeVisible();
+        await expect(win.locator('.sp-app section.sp-page')).toBeHidden();
+        await q.press('Escape');
+        await expect(win.locator('.sp-results')).toBeHidden();
+        await expect(win.locator('.sp-app section.sp-page')).toBeVisible();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(q).toHaveValue('');
+        await q.fill('brandv');
+        const first = win.locator('.sp-results button.sp-res-n').first();
+        const name = (await first.textContent())!;
+        await first.click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await expect(win.locator('.pp-mname')).toContainText(name.split(' ')[0]);
+        await page.locator('#person-page-modal .pp-back').click();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.sp-fbar button.sp-fbar-a', { hasText: 'Index' }).click();
+        await expect(win.locator('.sp-app section.sp-page--index')).toBeVisible();
+        await expect(win.locator('.sp-fbar button.sp-fbar-a', { hasText: 'Index' })).toHaveAttribute('aria-current', 'page');
+        await expect(win.locator('.sp-tabs .sp-tab')).toHaveText(['People', 'Families', 'Surnames', 'Places']);
+    });
+});
