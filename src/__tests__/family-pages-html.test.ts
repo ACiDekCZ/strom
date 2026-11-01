@@ -66,8 +66,11 @@ function expectWellFormed(html: string, set: PageSet): void {
     // The scripts once each.
     expect(html.split(PAGE_SET_SCRIPT).length - 1).toBe(1);
     expect(html.match(/<script type="application\/json" id="sp-index">/g)).toHaveLength(1);
-    // Nothing from the internet (the person page's printed URLs of sources would be text, none here).
-    expect(html).not.toMatch(/(?:src|href)="https?:/);
+    // Nothing from the internet (the person page's printed URLs of sources would be text, none here):
+    // the only address outside the file is the footers' ordinary link to the website.
+    expect(html).not.toMatch(/src="https?:/);
+    const out = [...new Set([...html.matchAll(/<([a-z]+)\s[^>]*?href="(https?:[^"]*)"/g)].map(m => `${m[1]} ${m[2]}`))];
+    expect(out).toEqual(['a https://stromapp.info/cs/']);
     expect(html).not.toMatch(/url\(["']?https?:/);
     expect(html).not.toMatch(/@import/);
 }

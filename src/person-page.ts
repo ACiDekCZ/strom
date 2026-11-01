@@ -41,6 +41,7 @@ import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeCh
 import { buildFanModel, buildFanSvg, FanBounds, FanModel } from './fan-chart.js';
 import { fanScreenSizes } from './fan-labels.js';
 import { fanZoomInlineScript } from './fan-zoom.js';
+import { websiteUrl } from './about-links.js';
 import type { ImageRegistry } from './image-registry.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
@@ -2961,8 +2962,24 @@ function footerHtml(c: Ctx): string {
         const d = formatFlexDate(page.changedAt.slice(0, 10), page.lang);
         return `<footer class="pp-foot">${esc(P.changed(d))}</footer>`;
     }
-    return `<footer class="pp-foot">${esc(P.created(formatFlexDate(isoDay(c.opts.now), page.lang)))}</footer>`;
+    return `<footer class="pp-foot">${createdWithStromHtml(page.lang, formatFlexDate(isoDay(c.opts.now), page.lang))}</footer>`;
 }
+
+/**
+ * The footer's "Created with the Strom app · {date}" with the app's name as
+ * an ordinary link to the website in the page's language (no script: the
+ * saved file works offline, the link only leads out when clicked).
+ */
+export function createdWithStromHtml(lang: Language, date: string): string {
+    const text = getStringsForLang(lang).personPage.created(date);
+    const at = text.indexOf(APP_NAME);
+    if (at < 0) return esc(text);
+    const link = `<a class="pp-site" href="${websiteUrl(lang)}" rel="noopener noreferrer" target="_blank">${esc(APP_NAME)}</a>`;
+    return esc(text.slice(0, at)) + link + esc(text.slice(at + APP_NAME.length));
+}
+
+/** The app's name as the footers write it (a name, the same in every language). */
+const APP_NAME = 'Strom';
 
 function makeCtx(page: PersonPageData, opts: PersonPageOptions): Ctx | null {
     const person = page.tree.persons[page.personId];

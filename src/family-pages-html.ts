@@ -26,7 +26,7 @@ import {
     rodPageLine, roman,
 } from './book-blocks.js';
 import {
-    PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, coupleChapterData, coupleChapterHtml,
+    PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, coupleChapterData, coupleChapterHtml, createdWithStromHtml,
     personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, safeImage, shownExcerpt,
 } from './person-page.js';
 import {
@@ -141,7 +141,7 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
             markLiving: (id: PersonId) => prot.living.has(id) ? ` <span class="sp-living">${esc(S.familyPages.livingTag)}</span>` : '',
         } : {}),
     };
-    const lines = [`<p>${esc(S.personPage.created(formatFlexDate(localDay(set.options.now), lang)))}</p>`];
+    const lines = [`<p>${createdWithStromHtml(lang, formatFlexDate(localDay(set.options.now), lang))}</p>`];
     if (pageSetLivingNames(set).length) lines.push(`<p>${esc(S.familyPages.privacyNote[set.options.privacy])}</p>`);
     const r: Render = { set, mode, S, model, base, opts, foot: `<footer class="sp-foot">${lines.join('')}</footer>`, gens: new Map() };
     // A place of a lineage's header leads to the map with the place selected (§3.7), else to its row of the index of places (§3.5).

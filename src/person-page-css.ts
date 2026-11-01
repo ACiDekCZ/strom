@@ -339,6 +339,11 @@ span.pp-gal-thumb { cursor: default; }
 .pp-ids li { list-style: none; margin-left: -18px; display: flex; gap: 10px; }
 .pp-ids code { flex: 0 0 auto; min-width: 52px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-faint); }
 .pp-foot { font-size: 12.5px; color: var(--text-faint); border-top: 1px solid var(--divider); padding-top: 14px; }
+/* The app's name in the footer leads to the website: the footer's colour, underlined; a taller target on touch. */
+.pp-site { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.pp-site:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+@media (hover: hover) { .pp-site:hover { color: var(--primary); text-decoration-thickness: 2px; } }
+@media (pointer: coarse) { .pp-site { padding: 12px 0; } }
 /* Wide screens (round 4 §0.8, K4-32): a column of up to 960 px; text keeps its reading width (660 px), the picture
    blocks (.pp-wide: In brief, the map, the chart, the gallery, the family tree) take the whole column. Print unchanged. */
 @media screen and (min-width: 1280px) {
