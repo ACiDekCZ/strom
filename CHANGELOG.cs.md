@@ -6,11 +6,12 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
-- **Vějíř**: pohled *Vějíř* má tři tvary, *Půlkruh*, *Celý kruh* a *Oboustranný* s potomky dole, 3 až 10 generací předků a 1 až 5 generací potomků a barvy podle *Pohlaví*, *Linie* (čtyři prarodiče) nebo *Rody*, se sklápěcí legendou. Přibližuje se a posouvá kolečkem, sevřením prstů, tažením i klávesami, i na telefonu. Klepnutí vějíř přecentruje na danou osobu, *Původní osoba* vede zpět; dlouhý stisk nebo pravé tlačítko otevře nabídku výseče. Opakovaný předek (ztráta předků) je označený a nekreslí se znovu, jeho první výskyt jde ukázat. Tisk a plakáty ukážou celý vějíř každého tvaru i s legendou.
+- **Stránky rodu**: rod jako propojené stránky rodu, jeho rodin a osob, v okně aplikace nebo uložené jako jeden soubor či sada souborů (.zip), která se otevře v prohlížeči bez internetu. Mají hledání, rejstříky, mapu obcí a obrázky a žijící lidé mají zvolenou ochranu. Otevírají se z přehledu rodů, z řádku *Rod* na kartě osoby, z *Akce → Pro rodinu* a z exportu.
+- **Vějíř**: pohled *Vějíř* má tři tvary, *Půlkruh*, *Celý kruh* a *Oboustranný* s potomky dole, 3 až 10 generací předků a 1 až 5 generací potomků a barvy podle *Pohlaví*, *Linie* (čtyři prarodiče) nebo *Rody*, se sklápěcí legendou. Přibližuje se a posouvá kolečkem, sevřením prstů, tažením i klávesami, i na telefonu, kde se posouvá jedním prstem. Klepnutí vějíř přecentruje na danou osobu, *Původní osoba* vede zpět; dlouhý stisk nebo pravé tlačítko otevře nabídku výseče. Opakovaný předek (ztráta předků) je označený a nekreslí se znovu, jeho první výskyt jde ukázat. Tisk a plakáty ukážou celý vějíř každého tvaru i s legendou.
 - **Stránka osoby**: oddíl *Předci* pod rodinou ukazuje půlkruhový vějíř čtyř generací obarvený podle pohlaví s počtem známých předků; klepnutí otevře stránku předka. Dá se přibližovat a je i v uloženém souboru a v tisku; žijící předci mají zvolenou ochranu.
-- **Živé sledování na telefonu**: pilulky stromu stojí nad živým pruhem a už se nepřekrývají navzájem ani s ovládáním.
+- **Živé sledování na telefonu**: pilulky stromu stojí nad živým pruhem a už se nepřekrývají navzájem ani s ovládáním a živé oznámení se vejde na malou obrazovku.
 - **Kniha rodu**: počty lidí rodu zůstanou na jednom řádku, tvary jména uvádějí ženský tvar jednou, přibližný rok zakladatele se čte *asi* a neznámá manželka nenechá *⚭ ?*.
-- **Drobnější změny**: další opravy rozvržení a textů.
+- **Drobnější změny**: karta si po odchodu z vějíře zachová výšku; další opravy rozvržení a textů.
 
 ## 3.19.0
 
