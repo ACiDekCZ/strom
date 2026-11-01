@@ -427,3 +427,35 @@ for (const [w, h] of [[390, 844], [844, 390], [800, 1100], [1440, 900]]) {
         })).toEqual([]);
     });
 }
+
+test('fan: on a tablet the two-sided toolbar may wrap its colours into a second row; nothing overlaps or is cut in cs, en, de (1101)', async ({ page }) => {
+    await openImplexFan(page);
+    await page.evaluate(() => {
+        window.Strom.UI.showEvidenceLevels();
+        window.Strom.TreeRenderer.setFocus('kaspar' as never);
+        window.Strom.TreeRenderer.setFanShape('two' as never);
+    });
+    await expect(pill(page)).toBeVisible();
+    const clash = (): Promise<string[]> => page.evaluate(() => {
+        const rr = (el: Element) => el.getBoundingClientRect();
+        const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+        const bar = document.getElementById('fan-toolbar')!;
+        const parts = [...bar.children].filter(k => rr(k).width > 0) as HTMLElement[];
+        const out: string[] = [];
+        for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) if (hit(rr(parts[i]), rr(parts[j]))) out.push(`${parts[i].className} × ${parts[j].className}`);
+        for (const p of parts) if (p.scrollWidth > p.clientWidth + 1) out.push(`cut ${p.className}`);
+        const others = ['#fan-origin-pill', '#evidence-pill', '#fan-zoom-controls', '#fan-legend', '#fan-legend-chip']
+            .map(sel => [sel, document.querySelector(sel)] as const).filter(([, e]) => e && rr(e).width > 0);
+        for (const [sel, e] of others) if (hit(rr(bar), rr(e!))) out.push(`toolbar × ${sel}`);
+        for (let i = 0; i < others.length; i++) for (let j = i + 1; j < others.length; j++) if (hit(rr(others[i][1]!), rr(others[j][1]!))) out.push(`${others[i][0]} × ${others[j][0]}`);
+        if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
+        return out;
+    });
+    for (const w of [800, 641]) {
+        await page.setViewportSize({ width: w, height: 1000 });
+        for (const lang of ['cs', 'en', 'de']) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await expect.poll(clash, `${w} ${lang}`).toEqual([]);
+        }
+    }
+});
