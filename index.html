@@ -15547,6 +15547,12 @@
             background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(60, 50, 30, 0.15);
         }
         #book-modal .book-presets button:focus-visible, #book-modal .book-seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* The line under the presets while Custom is chosen (§4.9): a band across the dialog under the header; on a phone a block under the segment */
+        #book-modal .book-preset-hint {
+            order: 3; flex: 1 1 100%; min-width: 0; margin: 0 -20px -14px -24px; padding: 8px 20px 8px 24px;
+            background: var(--surface-2); font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; text-wrap: pretty;
+        }
+        #book-modal .book-preset-hint:empty, #book-modal .book-dlg[data-out="pages"] .book-preset-hint { display: none; }
         #book-modal .book-sec { padding: 18px 0; border-top: 1px solid var(--divider); }
         #book-modal .book-sec-what { border-top: 0; padding-top: 14px; }
         #book-modal .book-sec-sel { border-top: 0; padding-top: 0; }
@@ -15687,6 +15693,7 @@
             #book-modal .book-dlg-head h2 { flex: 1; }
             #book-modal .book-presets { order: 3; flex: 1 1 100%; width: auto; }
             #book-modal .book-presets button { flex: 1; min-height: 40px; }
+            #book-modal .book-preset-hint { order: 4; margin: 0; padding: 8px 10px; border-radius: 8px; }
             #book-modal .close-btn { width: 44px; height: 44px; }
             #book-modal .book-dlg-opts { padding: 0 16px 16px; }
             #book-modal .book-dlg-side { display: none; }
@@ -21480,6 +21487,7 @@
             <div class="modal-header book-dlg-head">
                 <h2 id="book-dlg-title" data-i18n="book.dialogTitle"></h2>
                 <div class="book-presets" role="radiogroup"></div>
+                <p class="book-preset-hint" id="book-preset-hint" aria-live="polite"></p>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
                 <div class="book-out"></div>
             </div>

@@ -412,6 +412,12 @@ const stringsEN = {
         // ── The book dialog (1031 §4) and the book window (§6) ──
         dlg: {
             presetsLabel: 'Preset',
+            /** The line under the presets while Custom is chosen (§4.9); {p} = the preset it started from. */
+            presetHint: {
+                first: (p: string) => `Custom starts from “${p}”. Parts and detail can be adjusted below; they are remembered for this tree.`,
+                saved: 'Custom settings from last time. The presets do not overwrite them.',
+                auto: (p: string) => `The change switched from “${p}” to Custom. “${p}” restores its settings.`,
+            },
             what: 'What goes in the book',
             kind: { tree: 'Whole tree', rods: 'Family lines', ancestors: 'Ancestors of a person', descendants: 'Descendants of a person' } as Record<'tree' | 'rods' | 'ancestors' | 'descendants', string>,
             kindHint: { rods: 'one or more', ancestors: 'up from the chosen person', descendants: 'with the branch of the line' } as Record<'rods' | 'ancestors' | 'descendants', string>,
@@ -6785,6 +6791,11 @@ const stringsCZ: StringsType = {
         // ── Dialog knihy (1031 §4) a okno knihy (§6) ──
         dlg: {
             presetsLabel: 'Předvolba',
+            presetHint: {
+                first: (p: string) => `Vlastní nastavení začíná z „${p}“. Části a podrobnost jdou upravit níže; pamatuje se pro tento strom.`,
+                saved: 'Vlastní nastavení z minula. Předvolby ho nepřepíšou.',
+                auto: (p: string) => `Změna přepnula z „${p}“ na Vlastní. Klepnutím na „${p}“ se vrátí jeho nastavení.`,
+            },
             what: 'Co do knihy',
             kind: { tree: 'Celý strom', rods: 'Rody', ancestors: 'Předci osoby', descendants: 'Potomci osoby' },
             kindHint: { rods: 'jeden nebo víc', ancestors: 'od zvolené osoby nahoru', descendants: 'i větev rodu' },
@@ -13088,6 +13099,11 @@ const stringsDE: StringsType = {
         // ── Der Buchdialog (1031 §4) und das Buchfenster (§6) ──
         dlg: {
             presetsLabel: 'Voreinstellung',
+            presetHint: {
+                first: (p: string) => `Die eigene Einstellung beginnt mit „${p}“. Teile und Ausführlichkeit lassen sich unten anpassen; sie wird für diesen Stammbaum gespeichert.`,
+                saved: 'Die eigene Einstellung vom letzten Mal. Die Vorgaben überschreiben sie nicht.',
+                auto: (p: string) => `Die Änderung hat von „${p}“ auf „Eigene“ umgestellt. „${p}“ stellt dessen Einstellung wieder her.`,
+            },
             what: 'Was ins Buch kommt',
             kind: { tree: 'Ganzer Stammbaum', rods: 'Stammlinien', ancestors: 'Vorfahren einer Person', descendants: 'Nachkommen einer Person' },
             kindHint: { rods: 'eine oder mehrere', ancestors: 'von der gewählten Person aufwärts', descendants: 'mit dem Zweig der Linie' },

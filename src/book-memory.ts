@@ -3,7 +3,7 @@
  *
  * Remembered per tree on this device (`localStorage` key `strom.book.{treeId}`):
  * the preset, the parts, the detail, notes, researcher data, privacy and the
- * book's language — plus the last choice of lineages, which the menu entry
+ * book's language, the Custom preset's own values (§4.9) — plus the last choice of lineages, which the menu entry
  * offers again while those lineages still exist, the output (the book or
  * the linked family pages, spec 026 §6.6) and the pages' own choices
  * (families, images, what they include). Never remembered: the
@@ -19,6 +19,7 @@ import { PrivacyMode } from './privacy.js';
 import { LineageIndex, RodId } from './lineage.js';
 import { chapterRods } from './book-model.js';
 import { ImageChoice } from './image-registry.js';
+import type { BookPresetValues } from './book-preset.js';
 import {
     BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookParts, BookPreset, BookSelectionSpec,
     applyBookPreset, bookPresetOf, defaultBookOptions,
@@ -38,6 +39,8 @@ export interface BookMemory {
     research: boolean;
     privacy: PrivacyMode;
     lang: BookLang;
+    /** The Custom preset's own values (§4.9), null before Custom is first chosen. */
+    custom?: BookPresetValues | null;
     /** The last lineages chosen (kind 'rods'), offered again from the menu. */
     lastRods?: RodId[];
     /** The dialog's output: the book to print or the linked family pages (spec 026 §6.1). */
@@ -111,14 +114,19 @@ export function parseBookMemory(raw: string | null | undefined): Partial<BookMem
     if (lang) out.lang = lang;
     if (typeof o.notes === 'boolean') out.notes = o.notes;
     if (typeof o.research === 'boolean') out.research = o.research;
-    if (o.parts && typeof o.parts === 'object' && !Array.isArray(o.parts)) {
-        const src = o.parts as Record<string, unknown>;
-        const parts = {} as BookParts;
-        let any = false;
-        for (const k of BOOK_PART_KEYS) {
-            if (typeof src[k] === 'boolean') { parts[k] = src[k] as boolean; any = true; }
-        }
-        if (any) out.parts = parts;
+    const parts = parseParts(o.parts);
+    if (parts) out.parts = parts as BookParts;
+    if (o.custom === null) out.custom = null;
+    else {
+        const custom = parseCustom(o.custom);
+        if (custom) out.custom = custom;
+    }
+    // An entry from before Custom kept its own values: Custom's are the ones stored.
+    if (out.preset === 'custom' && !out.custom) {
+        out.custom = {
+            detail: out.detail ?? 'normal', notes: out.notes ?? false, research: out.research ?? false,
+            parts: { ...allParts(), ...out.parts, families: true },
+        };
     }
     if (Array.isArray(o.lastRods)) {
         const ids = o.lastRods.filter((x): x is RodId => typeof x === 'string' && x.length > 0);
@@ -129,6 +137,31 @@ export function parseBookMemory(raw: string | null | undefined): Partial<BookMem
     const pages = parsePagesChoices(o.pages);
     if (pages) out.pages = pages;
     return Object.keys(out).length ? out : null;
+}
+
+/** The stored parts that are booleans; null when none is. */
+function parseParts(v: unknown): Partial<BookParts> | null {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const src = v as Record<string, unknown>;
+    const parts: Partial<BookParts> = {};
+    let any = false;
+    for (const k of BOOK_PART_KEYS) {
+        if (typeof src[k] === 'boolean') { parts[k] = src[k] as boolean; any = true; }
+    }
+    return any ? parts : null;
+}
+
+function allParts(): BookParts {
+    return Object.fromEntries(BOOK_PART_KEYS.map(k => [k, true])) as BookParts;
+}
+
+/** Custom's stored values: the detail and both switches must be there; a missing part counts as ticked. */
+function parseCustom(v: unknown): BookPresetValues | null {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const o = v as Record<string, unknown>;
+    const detail = oneOf(DETAILS, o.detail);
+    if (!detail || typeof o.notes !== 'boolean' || typeof o.research !== 'boolean') return null;
+    return { detail, notes: o.notes, research: o.research, parts: { ...allParts(), ...parseParts(o.parts), families: true } };
 }
 
 /** The pages' choices of a stored entry, each field checked on its own over the defaults; null when none is usable. */
@@ -158,26 +191,29 @@ export function loadBookMemory(storage: StorageLike | null | undefined, treeId: 
 
 /**
  * Remember the options for this tree: everything but the selection and the
- * title. The output and the pages' choices, when not given, stay as stored. A choice of lineages becomes `lastRods`; another kind of selection
+ * title. The preset, when not given, is the one the options match; Custom's
+ * values, the output and the pages' choices, when not given, stay as stored. A choice of lineages becomes `lastRods`; another kind of selection
  * keeps the previous `lastRods`. Storage errors are swallowed (not kept).
  */
 export function saveBookMemory(
     storage: StorageLike | null | undefined, treeId: string | null | undefined, options: BookOptions,
-    extra: { output?: BookOutput; pages?: PagesChoices } = {},
+    extra: { output?: BookOutput; pages?: PagesChoices; preset?: BookPreset; custom?: BookPresetValues | null } = {},
 ): void {
     if (!storage || !treeId) return;
     try {
         const prev = loadBookMemory(storage, treeId);
         const lastRods = options.selection.kind === 'rods' && options.selection.rods.length
             ? [...options.selection.rods] : prev?.lastRods;
+        const custom = extra.custom !== undefined ? extra.custom : prev?.custom;
         const memory: BookMemory = {
-            preset: bookPresetOf(options),
+            preset: extra.preset ?? bookPresetOf(options),
             parts: { ...options.parts },
             detail: options.detail,
             notes: options.notes,
             research: options.research,
             privacy: options.privacy,
             lang: options.lang,
+            ...(custom !== undefined ? { custom: custom ? { ...custom, parts: { ...custom.parts } } : null } : {}),
             ...(lastRods?.length ? { lastRods } : {}),
             ...((extra.output ?? prev?.output) ? { output: extra.output ?? prev?.output } : {}),
             ...((extra.pages ?? prev?.pages) ? { pages: clonePages((extra.pages ?? prev?.pages)!) } : {}),

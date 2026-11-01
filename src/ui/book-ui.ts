@@ -27,12 +27,13 @@ import { buildFamilyBook } from '../book.js';
 import { bookFileName } from '../book-window.js';
 import {
     BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    applyBookPreset, autoBookTitle, bookPartAvailability, bookPeriod, bookPresetOf, bookRodCounts, estimateBook,
+    autoBookTitle, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PagesChoices,
     bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, pagesChoicesFromMemory, saveBookMemory,
 } from '../book-memory.js';
+import { BookPresetState, choosePreset, initialPresetState, presetValuesChanged } from '../book-preset.js';
 import { ImageChoice } from '../image-registry.js';
 import {
     PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName, pageSetImages, pageSetPrivacyWarning, sizeVerdict,
@@ -99,6 +100,8 @@ interface DialogState {
     gens: Record<PersonKind, number>;
     /** The options apart from the selection (that one comes from kind / rods / person). */
     opts: BookOptions;
+    /** The preset chosen, Custom's own values and the hint line (§4.9). */
+    presets: BookPresetState;
     titleEdited: boolean;
     /** The book window to rewrite ("Change options"), or null for a new one. */
     win: Window | null;
@@ -360,6 +363,7 @@ function sync(s: DialogState): void {
         moved.textContent = l ? F.treeMoved(l) : '';
     }
 
+    if (pages) setText(modal, '.book-preset-hint', '');
     const title = pages ? '' : syncBook(s, modal);
     if (pages) syncPages(s, modal);
     syncFoot(s, modal);
@@ -385,9 +389,14 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     const opts = currentOptions(s);
     const env = { index: s.index, hasHistory: s.hasHistory };
 
-    // Presets
-    const preset = bookPresetOf(s.opts);
-    modal.querySelectorAll<HTMLElement>('[data-preset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.preset === preset)));
+    // Presets, and the hint line while Custom is chosen (§4.9)
+    const P = s.presets;
+    modal.querySelectorAll<HTMLElement>('[data-preset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.preset === P.preset)));
+    const hint = P.preset === 'custom' && P.hint
+        ? (P.hint === 'saved' ? D.presetHint.saved : D.presetHint[P.hint](T.preset[P.origin])) : '';
+    setText(modal, '.book-preset-hint', hint);
+    const customBtn = modal.querySelector<HTMLElement>('[data-preset="custom"]');
+    if (hint) customBtn?.setAttribute('aria-describedby', 'book-preset-hint'); else customBtn?.removeAttribute('aria-describedby');
 
     // Parts: an unavailable one stays in sight, grey, unticked, with its reason (in the app's language)
     const avail = bookPartAvailability(s.data, { ...opts, lang: s.appLang }, env);
@@ -678,10 +687,15 @@ function renderOptions(s: DialogState): void {
     if (body) { body.innerHTML = optionsHtml(s); body.scrollTop = 0; }
 }
 
+/** What the memory keeps besides the options: the output, the pages' choices, the preset and Custom's values. */
+function memoryExtra(s: DialogState): Parameters<typeof saveBookMemory>[3] {
+    return { output: s.output, pages: s.pages, preset: s.presets.preset, custom: s.presets.custom };
+}
+
 /** A change: remember the options (not the selection's person or the title) and refresh. */
 function changed(s: DialogState): void {
     s.treeMoved = null;
-    saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
+    saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
     // A file made for other options is not the one to save.
     if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
     if (s.output === 'pages') scheduleEstimate(s);
@@ -779,6 +793,7 @@ export const bookUiMethods = uiModule({
             person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : null) ?? focus,
             gens,
             opts,
+            presets: initialPresetState(opts, memory),
             titleEdited: !!opts.title?.trim(),
             win: reuse?.win ?? null,
             sub: null,
@@ -841,6 +856,12 @@ export const bookUiMethods = uiModule({
             fn(st);
             changed(st);
         };
+        // A change of what a preset sets (detail, parts, notes, researcher data) lands in Custom (§4.9).
+        const updateValues = (fn: (s: DialogState) => void): void => update(s => {
+            const before = s.opts;
+            fn(s);
+            s.presets = presetValuesChanged(s.presets, before, s.opts);
+        });
         modal.addEventListener('click', (e) => {
             const t = e.target as HTMLElement;
             const output = t.closest<HTMLElement>('button[data-output]');
@@ -893,8 +914,12 @@ export const bookUiMethods = uiModule({
             const preset = t.closest<HTMLElement>('[data-preset]');
             if (preset) {
                 const p = preset.dataset.preset;
-                // "Custom" is where any other change lands; a click on it changes nothing.
-                if (p === 'family' || p === 'research') update(s => { s.opts = applyBookPreset(s.opts, p); });
+                if (!st || (p !== 'family' && p !== 'research' && p !== 'custom') || p === st.presets.preset) return;
+                update(s => {
+                    const next = choosePreset(s.presets, s.opts, p);
+                    s.presets = next.state;
+                    s.opts = next.options;
+                });
                 return;
             }
             const sub = t.closest<HTMLElement>('[data-sub-open]');
@@ -925,10 +950,10 @@ export const bookUiMethods = uiModule({
                 return;
             }
             const detail = t.closest<HTMLElement>('[data-detail]');
-            if (detail) { update(s => { s.opts = { ...s.opts, detail: detail.dataset.detail as BookDetail }; }); return; }
+            if (detail) { updateValues(s => { s.opts = { ...s.opts, detail: detail.dataset.detail as BookDetail }; }); return; }
             const sw = t.closest<HTMLElement>('[data-switch]');
             if (sw) {
-                update(s => {
+                updateValues(s => {
                     s.opts = sw.dataset.switch === 'notes' ? { ...s.opts, notes: !s.opts.notes } : { ...s.opts, research: !s.opts.research };
                 });
                 return;
@@ -964,7 +989,7 @@ export const bookUiMethods = uiModule({
             if (part) {
                 const k = part.dataset.part as BookPartKey;
                 if (k === 'families') return;
-                update(s => { s.opts = { ...s.opts, parts: { ...s.opts.parts, [k]: t.checked } }; });
+                updateValues(s => { s.opts = { ...s.opts, parts: { ...s.opts.parts, [k]: t.checked } }; });
             }
         });
         modal.addEventListener('input', (e) => {
@@ -1033,7 +1058,7 @@ export const bookUiMethods = uiModule({
         if (s.estTimer !== null) scheduleEstimate(s, true);
         if (!s.est) return;
         const zip = savesZip(s);
-        saveBookMemory(storage(), s.treeId, currentOptions(s), { output: s.output, pages: s.pages });
+        saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
         const job: PagesJob = { cancelled: false };
         s.job = job;
         s.phase = 'building';
@@ -1149,7 +1174,7 @@ export const bookUiMethods = uiModule({
             return;
         }
         const options = currentOptions(s);
-        saveBookMemory(storage(), s.treeId, options);
+        saveBookMemory(storage(), s.treeId, options, memoryExtra(s));
         // The window first (a popup must open in the click), then the book.
         const win = s.win && !s.win.closed ? s.win : window.open('', '_blank');
         this.closeBookDialog();

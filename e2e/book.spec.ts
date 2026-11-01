@@ -247,6 +247,134 @@ test.describe('family book: the options dialog', () => {
     });
 });
 
+// The Custom preset keeps its own values (1031 §4.9), on a computer and on a phone.
+for (const device of [
+    { name: 'computer', use: { viewport: { width: 1440, height: 900 } } },
+    { name: 'phone', use: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } },
+] as const) {
+    test.describe(`family book: the Custom preset (${device.name})`, () => {
+        test.use(device.use);
+        const phone = device.name === 'phone';
+        const preset = (dialog: Locator, p: string): Locator => dialog.locator(`.book-presets [data-preset="${p}"]`);
+        const hint = (dialog: Locator): Locator => dialog.locator('#book-preset-hint');
+        /** Tick or untick a part (on a phone through its sub-sheet, then back). */
+        const setPart = async (dialog: Locator, k: string, on: boolean): Promise<void> => {
+            if (phone) await dialog.locator('[data-sub-open="parts"]').click();
+            await part(dialog, k).locator('input').setChecked(on);
+            if (phone) await dialog.locator('.book-sub-back').click();
+        };
+        const partOn = async (dialog: Locator, k: string): Promise<boolean> => part(dialog, k).locator('input').isChecked();
+        const stored = (page: Page, treeId: string) => page.evaluate((id) => JSON.parse(localStorage.getItem(`strom.book.${id}`) ?? 'null'), treeId);
+
+        test('For the family → Custom: the values stay, Custom is saved; the hint names the preset it started from', async ({ page }) => {
+            const treeId = await setup(page);
+            const dialog = await openDialog(page);
+            await expect(dialog.locator('.book-presets')).toHaveAttribute('role', 'radiogroup');
+            await expect(preset(dialog, 'family')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toBeHidden();
+            await preset(dialog, 'custom').click();
+            await expect(preset(dialog, 'custom')).toHaveAttribute('aria-checked', 'true');
+            await expect(preset(dialog, 'family')).toHaveAttribute('aria-checked', 'false');
+            await expect(hint(dialog)).toHaveText('Custom starts from “For the family”. Parts and detail can be adjusted below; they are remembered for this tree.');
+            await expect(hint(dialog)).toHaveAttribute('aria-live', 'polite');
+            await expect(preset(dialog, 'custom')).toHaveAttribute('aria-describedby', 'book-preset-hint');
+            // The values are those of For the family.
+            await expect(dialog.locator('[data-detail="normal"]')).toHaveAttribute('aria-checked', 'true');
+            await expect(dialog.locator('[data-switch="notes"]')).toHaveAttribute('aria-checked', 'false');
+            expect(await partOn(dialog, 'index')).toBe(true);
+            const m = await stored(page, treeId);
+            expect(m.preset).toBe('custom');
+            expect(m.custom).toMatchObject({ detail: 'normal', notes: false, research: false, parts: { index: true, tree: true } });
+            // Where the hint sits: a band across the dialog under the header; on a phone under the segment.
+            const box = (await hint(dialog).boundingBox())!;
+            const seg = (await dialog.locator('.book-presets').boundingBox())!;
+            const dlg = (await dialog.locator('.book-dlg').boundingBox())!;
+            expect(box.y).toBeGreaterThanOrEqual(seg.y + seg.height - 1);
+            if (phone) expect(box.width).toBeLessThan(dlg.width);
+            else expect(Math.abs(box.width - dlg.width)).toBeLessThanOrEqual(2);
+            expect(await dialog.locator('.book-dlg').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+            // A click on Custom again changes nothing.
+            await preset(dialog, 'custom').click();
+            await expect(hint(dialog)).toHaveText(/^Custom starts from/);
+        });
+
+        test('Custom, a part off, For the family, Custom again: the part is off again', async ({ page }) => {
+            await setup(page);
+            const dialog = await openDialog(page);
+            await preset(dialog, 'custom').click();
+            await setPart(dialog, 'index', false);
+            await expect(preset(dialog, 'custom')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toHaveText(/^Custom starts from “For the family”/);
+            await preset(dialog, 'family').click();
+            await expect(preset(dialog, 'family')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toBeHidden();
+            await expect(preset(dialog, 'custom')).not.toHaveAttribute('aria-describedby', /./);
+            expect(await partOn(dialog, 'index')).toBe(true);
+            await preset(dialog, 'custom').click();
+            await expect(hint(dialog)).toHaveText('Custom settings from last time. The presets do not overwrite them.');
+            expect(await partOn(dialog, 'index')).toBe(false);
+            // No sub-sheet opens and nothing scrolls on a click of the segment.
+            await expect(dialog.locator('.book-dlg')).not.toHaveAttribute('data-sub', /./);
+            expect(await dialog.locator(phone ? '.book-dlg-main' : '.book-dlg-opts').evaluate(el => el.scrollTop)).toBe(0);
+        });
+
+        test('For researchers, a part changed: Custom, the old Custom replaced, the hint says the change switched', async ({ page }) => {
+            const treeId = await setup(page);
+            const dialog = await openDialog(page);
+            // A Custom of its own first: Brief.
+            await preset(dialog, 'custom').click();
+            if (phone) await dialog.locator('[data-sub-open="detail"]').click();
+            await dialog.locator('[data-detail="brief"]').click();
+            if (phone) await dialog.locator('.book-sub-back').click();
+            expect((await stored(page, treeId)).custom.detail).toBe('brief');
+            await preset(dialog, 'research').click();
+            await expect(preset(dialog, 'research')).toHaveAttribute('aria-checked', 'true');
+            await expect(dialog.locator('[data-detail="all"]')).toHaveAttribute('aria-checked', 'true');
+            await setPart(dialog, 'tree', false);
+            await expect(preset(dialog, 'custom')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toHaveText('The change switched from “For researchers” to Custom. “For researchers” restores its settings.');
+            await expect(dialog.locator('[data-detail="all"]')).toHaveAttribute('aria-checked', 'true');
+            const m = await stored(page, treeId);
+            expect(m.preset).toBe('custom');
+            expect(m.custom).toMatchObject({ detail: 'all', notes: true, research: true, parts: { tree: false, index: true } });
+            // For the family and back: the new Custom comes back.
+            await dialog.locator('[data-preset="family"]').click();
+            await preset(dialog, 'custom').click();
+            await expect(dialog.locator('[data-detail="all"]')).toHaveAttribute('aria-checked', 'true');
+            expect(await partOn(dialog, 'tree')).toBe(false);
+        });
+
+        test('reopening the dialog keeps Custom and its values, with the hint "from last time"', async ({ page }) => {
+            await setup(page);
+            let dialog = await openDialog(page);
+            await preset(dialog, 'custom').click();
+            await setPart(dialog, 'index', false);
+            await preset(dialog, 'family').click();
+            await preset(dialog, 'custom').click();
+            await page.evaluate(() => window.Strom.UI.closeBookDialog());
+            await page.reload();
+            await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+            dialog = await openDialog(page);
+            await expect(preset(dialog, 'custom')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toHaveText('Custom settings from last time. The presets do not overwrite them.');
+            expect(await partOn(dialog, 'index')).toBe(false);
+            // Back on For the family and reopened: no hint, Custom still there.
+            await preset(dialog, 'family').click();
+            await page.evaluate(() => window.Strom.UI.closeBookDialog());
+            dialog = await openDialog(page);
+            await expect(preset(dialog, 'family')).toHaveAttribute('aria-checked', 'true');
+            await expect(hint(dialog)).toBeHidden();
+            await preset(dialog, 'custom').click();
+            await expect(hint(dialog)).toHaveText(/^Custom settings from last time/);
+            expect(await partOn(dialog, 'index')).toBe(false);
+            // Under the linked pages there are no presets and no hint.
+            await dialog.locator('[data-output="pages"]').click();
+            await expect(dialog.locator('.book-presets')).toBeHidden();
+            await expect(hint(dialog)).toBeHidden();
+        });
+    });
+}
+
 test.describe('family book: the window', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
