@@ -299,6 +299,12 @@ html:not(.sp-on) body > .sp-fbar { display: none; }
   .sp-letter { min-width: 44px; height: 44px; }
   .sp-ix-sub li { padding: 4px 0; }
 }
+/* §3.6: the light boxes of the file's pages follow the script (opened by pushState, so not by :target); a hint under the image. */
+html.sp-on .pp-lb:target:not(.sp-lb-on) { display: none; }
+html.sp-on .pp-lb.sp-lb-on { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: #1c1a15; color: #e8e3d6; }
+html.sp-lb-open { overflow: hidden; }
+.sp-lb-hint { flex: 0 0 auto; margin: 0; padding: 2px 16px 14px; font-size: 12.5px; line-height: 1.4; color: #c9c1b0; text-align: center; }
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-lb-hint { display: none; } }
 /* §8.3: the shown page only (all of them without the script), no breadcrumbs or folds, links as text, paper. */
 @media print {
 ${PRINT_ROOT_CSS}  body { background: #fff; }
@@ -376,6 +382,12 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
  * the page back where it was. On a phone the magnifier turns the bar into the
  * field and Menu opens its panel. The alphabet of the index of people
  * filters its groups (§3.5) instead of jumping to them.
+ *
+ * The light boxes (§3.6): opening one pushes `#{slug}--obr-N` and shows it;
+ * a hash without `--obr-` (the browser's Back) closes it and the page stays
+ * where it was. ×, Escape or a click beside the image go back when the box
+ * was opened here, else (a link with `--obr-N` opened the file) replace the
+ * address with the page's `#{slug}`; ‹ › replace the entry.
  */
 export const PAGE_SET_SCRIPT = `(function(){var d=document,h=d.documentElement;
 var q=function(s,r){return Array.prototype.slice.call((r||d).querySelectorAll(s))};
@@ -433,7 +445,30 @@ d.addEventListener('click',function(e){var L=e.target.closest('[data-sp-letter]'
 var v=L.getAttribute('data-sp-letter'),box=L.closest('.sp-ix')||d;
 q('[data-sp-letter]',box).forEach(function(x){if(x===L)x.setAttribute('aria-current','true');else x.removeAttribute('aria-current')});
 q('[data-sp-group]',box).forEach(function(g){g.hidden=v!==''&&g.getAttribute('data-sp-group')!==v})});
-window.addEventListener('hashchange',function(){if(on)cancel(true);shut();route(false)});
+var lbRe=/(^|--)obr-/,lbEl=null,lbPushed=false,lbFrom=null,lbY=0;
+function lbSync(){var id=hashId(),e=lbRe.test(id)?d.getElementById(id):null;if(e&&!e.classList.contains('pp-lb'))e=null;
+if(lbEl&&lbEl!==e)lbEl.classList.remove('sp-lb-on');
+if(e&&!lbEl)lbY=window.pageYOffset;
+if(e&&e!==lbEl){e.classList.add('sp-lb-on');str=str||J('sp-strings')||{};
+if(str.lbHint&&!e.querySelector('.sp-lb-hint')){var p=d.createElement('p');p.className='sp-lb-hint';p.textContent=str.lbHint;e.appendChild(p)}
+var c=e.querySelector('.pp-lb-close');if(c)try{c.focus({preventScroll:true})}catch(x){}}
+if(!e){lbPushed=false;if(lbEl){var y=lbY;window.scrollTo(0,y);requestAnimationFrame(function(){window.scrollTo(0,y)});if(lbFrom){try{lbFrom.focus({preventScroll:true})}catch(x){}lbFrom=null}}}
+lbEl=e;h.classList.toggle('sp-lb-open',!!e)}
+function lbClose(){if(!lbEl)return;if(lbPushed){lbPushed=false;history.back();return}
+var s=lbEl.closest('section.sp-page');history.replaceState(null,'','#'+(s?s.id:''));lbSync()}
+d.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
+var a=t.closest('a[href^="#"]'),hr=a?a.getAttribute('href').slice(1):'',k=a?a.getAttribute('data-pp-lb'):null;
+if(a&&lbRe.test(hr)&&d.getElementById(hr)){e.preventDefault();e.stopPropagation();
+if(k==='prev'||k==='next'){history.replaceState(null,'','#'+hr);lbSync();return}
+if(!lbEl){lbFrom=a;history.pushState(null,'','#'+hr);lbPushed=true}else history.replaceState(null,'','#'+hr);lbSync();return}
+if(lbEl&&a&&k==='close'){e.preventDefault();e.stopPropagation();lbClose();return}
+if(lbEl&&lbEl.contains(t)&&!t.closest('a,button,.pp-lb-img')){e.preventDefault();e.stopPropagation();lbClose()}},true);
+window.addEventListener('keydown',function(e){if(!lbEl)return;var k=e.key;
+if(k==='Escape'||k==='Esc'){e.preventDefault();e.stopPropagation();lbClose();return}
+if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();e.stopPropagation();var l=lbEl.querySelector('[data-pp-lb="'+(k==='ArrowLeft'?'prev':'next')+'"]');if(l)l.click()}},true);
+window.addEventListener('popstate',lbSync);
+lbSync();
+window.addEventListener('hashchange',function(){if(on)cancel(true);shut();route(false);lbSync()});
 var opened=[];
 window.addEventListener('beforeprint',function(){opened=q('details.sp-kids:not([open]),details.sp-ix-more:not([open])');opened.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){opened.forEach(function(f){f.open=false});opened=[]});

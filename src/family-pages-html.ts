@@ -583,6 +583,7 @@ function searchStrings(r: Render): Record<string, unknown> {
         res: pluralTemplates(lang, n => F.searchResults(n, '{q}')),
         more: pluralTemplates(lang, n => F.searchMore(n)),
         none: F.none('{q}'), hint, toIdx: F.toIdx, idx: drawnSlug(r, set.indexSlug.persons),
+        lbHint: F.lbHint,
     };
 }
 
