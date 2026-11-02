@@ -209,6 +209,39 @@ test.describe('a large set of pages: the dialog (1102 §7)', () => {
     });
 });
 
+test.describe('a large set of pages: surnames with an unreadable place (1102)', () => {
+    test('the window\'s index opens on the first real letter; "?" and Without a surname close the alphabet; no "[" letter', async ({ page }) => {
+        test.setTimeout(120_000);
+        const { data, rootId } = syntheticTree({ persons: 1200 });
+        Object.values(data.persons).forEach((p, i) => {
+            if (p!.id === rootId) return;
+            if (i % 13 === 0) p!.lastName = '[?]';
+            else if (i % 17 === 0) p!.lastName = '[?]o[?]ral';
+        });
+        await setup(page, { ...data, defaultPersonId: rootId }, 'Smyslenov');
+        await page.evaluate((id) => window.Strom.UI.showPersonPage(id as never), rootId);
+        const win = page.locator('#person-page-modal');
+        await win.locator('.pp-facts [data-pp-rod]').first().click();
+        await expect(win).toHaveClass(/pp-is-set/, { timeout: 60_000 });
+        await win.locator('.sp-fbar button.sp-fbar-a', { hasText: 'Index' }).click();
+        const abc = win.locator('.sp-app section.sp-page--index nav.sp-abc');
+        await expect(abc).toBeVisible({ timeout: 60_000 });
+        await expect(abc.locator('[aria-current="page"]')).toHaveText(/^\p{Lu}$/u);
+        await expect(win.locator('.sp-app .sp-h1')).toHaveText(/^Index of people · \p{Lu}$/u);
+        const cells = (await abc.locator('.sp-abc-l').allTextContents()).map(t => t.trim());
+        expect(cells).not.toContain('[');
+        expect(cells.slice(-2)).toEqual(['?', 'Without surname']);
+        const q = abc.locator('.sp-abc-l', { hasText: '?' });
+        await expect(q).toHaveAttribute('title', 'Uncertain reading');
+        await q.click();
+        await expect(win.locator('.sp-app .sp-h1')).toHaveText('Index of people · Uncertain reading');
+        await expect(win.locator('.sp-app .sp-ix-letter', { hasText: '[?]o[?]ral' })).toBeVisible();
+        await win.locator('.sp-app nav.sp-abc .sp-abc-l', { hasText: 'Without surname' }).click();
+        await expect(win.locator('.sp-app .sp-h1')).toHaveText('Index of people · Without surname');
+        await expect(win.locator('.sp-app section.sp-page--index')).not.toContainText('[?]ová');
+    });
+});
+
 /** The toolbar fits the window: nothing past its right edge, the chip inside. */
 async function chipFits(page: Page): Promise<void> {
     const chip = page.locator('#pages-bg-chip');

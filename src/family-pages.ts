@@ -209,44 +209,77 @@ export function isMinimalPerson(p: Person): boolean {
     return personSourceIds(p).length === 0;
 }
 
+/** An unreadable place of a transcription: "[?]", "[...]", "[nečitelné]" (1102). */
+const TRANSCRIPTION_GAP = /\[[^\]]*\]/gu;
+
+/** The index key of the names that start with an unreadable place ("[?]a[?]har"): after the letters, before those without a surname (1102). */
+export const INDEX_UNCERTAIN = '?';
+
+/** A surname that is only unreadable places ("[?]", "[?] [?]"): no surname for the index (1102). */
+export function isGapOnlyName(text: string): boolean {
+    const t = text.trim();
+    return !!t && !/\p{L}/u.test(t.replace(TRANSCRIPTION_GAP, ''));
+}
+
 /**
  * The letter an index groups a name under (§3.5): Czech "Ch" is a letter of its own
  * (after H); a letter the language does not tell from its base letter goes
  * with it (Á with A in Czech, Ä with A in German), one that it does stays
- * apart (Č, Ř, Š in Czech).
+ * apart (Č, Ř, Š in Czech). Leading quotes or brackets other than "[" are
+ * skipped; a name starting with an unreadable place ("[?]a[?]har") or
+ * without any letter goes under INDEX_UNCERTAIN (1102).
  */
 export function indexLetter(text: string, lang: Language): string {
-    const t = text.trim();
-    if (!t) return '';
+    const t0 = text.trim();
+    if (!t0) return '';
+    const t = t0.replace(/^[^\p{L}[]+/u, '');
+    if (!t || t.startsWith('[')) return INDEX_UNCERTAIN;
     if (lang === 'cs' && /^ch/i.test(t)) return 'Ch';
     const ch = Array.from(t)[0].toLocaleUpperCase(lang);
     const base = ch.normalize('NFD').replace(/\p{M}/gu, '');
     return base && base !== ch && new Intl.Collator(lang, { sensitivity: 'base' }).compare(ch, base) === 0 ? base : ch;
 }
 
-/** A person's letter in the index of people: the shown surname's. */
-export function personIndexLetter(p: Person, lang: Language): string {
-    return indexLetter(shownNameParts(p).surname.trim(), lang);
+/** A person's surname for the index: '' for one of unreadable places only ("[?]", 1102). */
+function indexSurname(p: Person): string {
+    const sur = shownNameParts(p).surname.trim();
+    return isGapOnlyName(sur) ? '' : sur;
 }
 
-/** A person's sort key in the index of people: those without a surname last. */
+/** A person's letter in the index of people: the shown surname's. */
+export function personIndexLetter(p: Person, lang: Language): string {
+    return indexLetter(indexSurname(p), lang);
+}
+
+/** A person's sort key in the index of people: an uncertain surname after the letters, those without a surname last. */
 export function personIndexSort(p: Person): string {
-    return `${shownNameParts(p).surname.trim() ? '0' : '1'} ${surnameFirst(p)}`;
+    const sur = indexSurname(p);
+    return `${!sur ? '2' : indexLetter(sur, 'en') === INDEX_UNCERTAIN ? '1' : '0'} ${surnameFirst(p)}`;
+}
+
+/** The keys of an index's letters in order: the letters as found, then INDEX_UNCERTAIN, then '' (1102). */
+export function orderIndexKeys(keys: Iterable<string>): string[] {
+    const all = [...keys];
+    return [...all.filter(k => k && k !== INDEX_UNCERTAIN), ...all.filter(k => k === INDEX_UNCERTAIN), ...all.filter(k => !k)];
 }
 
 /** A family's sort key and letter in the index of families: the husband's surname first. */
 export function familyIndexSort(tree: StromData, u: Partnership): string {
-    return partnersOf(tree, u).map(p => surnameFirst(p)).join(' ');
+    // A husband's surname starting with an unreadable place after the letters, as its index letter (1102).
+    const first = partnersOf(tree, u)[0];
+    const rank = first && indexLetter(indexSurname(first), 'en') === INDEX_UNCERTAIN ? '1' : '0';
+    return `${rank} ${partnersOf(tree, u).map(p => surnameFirst(p)).join(' ')}`;
 }
 
 export function familyIndexLetter(tree: StromData, u: Partnership, lang: Language): string {
     const first = partnersOf(tree, u)[0];
-    return first ? indexLetter(shownNameParts(first).surname.trim() || shownNameOrEmpty(first), lang) : '';
+    return first ? indexLetter(indexSurname(first) || shownNameOrEmpty(first).replace(TRANSCRIPTION_GAP, '').trim(), lang) : '';
 }
 
 /** A letter's part of a slug: ASCII, "ch" for Ch, a letter with a mark apart from its base ("c-hacek"), the names without a surname "bez-prijmeni". */
 function letterSlug(key: string): string {
     if (!key) return 'bez-prijmeni';
+    if (key === INDEX_UNCERTAIN) return 'nejiste-cteni';
     const a = asciiSlug(key) || 'x';
     if (a === key.toLowerCase()) return a;
     const mark = key.normalize('NFD').replace(/^\P{M}+/u, '').charAt(0);
@@ -655,7 +688,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         // A page per letter (1102 §7.4): the index's link leads to the first letter.
         for (const [key, rows] of keys) {
             const slug = uniqueSlug(`${PAGE_SET_INDEX_SLUGS[k]}-${letterSlug(key)}`, used);
-            const label = key || S.book.noSurname;
+            const label = key === INDEX_UNCERTAIN ? F.idxUncertain : key || S.book.noSurname;
             const title = k === 'persons' ? F.idxLetter(label) : `${F.indexTitle[k]} · ${label}`;
             indexLetters[k].push({ key, slug, rows });
             pages.push({ slug, kind: 'index', id: k, letter: key, title, crumbs: [startCrumb, { slug, label: title }] });
@@ -696,7 +729,7 @@ function indexLetterKeys(set: Pick<PageSet, 'protectedTree' | 'selection' | 'per
         rows.sort((a, b) => a.sort.localeCompare(b.sort, lang));
         const out = new Map<string, number>();
         for (const r of rows) out.set(r.key, (out.get(r.key) ?? 0) + 1);
-        return [...out.entries()];
+        return orderIndexKeys(out.keys()).map(k => [k, out.get(k)!]);
     };
     const people = pageSetSearchPeople(set).map(id => {
         const p = tree.persons[id]!;

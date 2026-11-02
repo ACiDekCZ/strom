@@ -31,7 +31,7 @@ import {
 } from './person-page.js';
 import {
     PageSet, PageSetIndexKind, SetPage, SetPlaceRow, familyFirstNames, familyIndexLetter, familyIndexSort, familyTitle, indexLetter, indexPageOf,
-    isProtectedPerson, pageSetFileName, pageSetFolders, pageSetLivingNames, pageSetPath, pageSetPlaces, pageSetSearchPeople, personIndexLetter,
+    INDEX_UNCERTAIN, isGapOnlyName, isProtectedPerson, orderIndexKeys, pageSetFileName, pageSetFolders, pageSetLivingNames, pageSetPath, pageSetPlaces, pageSetSearchPeople, personIndexLetter,
     personIndexSort, surnameFirst, ZIP_PICK_LINES,
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
@@ -1219,10 +1219,12 @@ function personsIndexHtml(r: Render, page: SetPage): string {
     const items = ids.map((id, i) => {
         const e = set.searchIndex[i];
         const parts = shownNameParts(tree.persons[id]!);
-        const sur = parts.surname.trim();
+        const sur0 = parts.surname.trim();
+        // A surname of unreadable places only ("[?]") stands without a surname in the index (1102).
+        const sur = isGapOnlyName(sur0) ? '' : sur0;
         const giv = parts.given.trim();
         const prot = isProtectedPerson(set.protectedTree, id);
-        const shown = prot ? e.n : sur && giv ? `${sur}, ${giv}` : sur || giv || e.n;
+        const shown = prot ? e.n : sur0 && giv ? `${sur0}, ${giv}` : sur0 || giv || e.n;
         const p = tree.persons[id]!;
         return { id, e, shown, sur, sort: personIndexSort(p), letter: personIndexLetter(p, lang) };
     }).sort((a, b) => a.sort.localeCompare(b.sort, lang) || a.e.y.localeCompare(b.e.y));
@@ -1233,17 +1235,19 @@ function personsIndexHtml(r: Render, page: SetPage): string {
         const g = groups.get(it.letter);
         if (g) g.push(it); else groups.set(it.letter, [it]);
     }
-    const keys = [...groups.keys()];
-    const label = (k: string): string => k || S.book.noSurname;
-    const letter = (key: string, n: number | null, text: string): string => {
+    const keys = orderIndexKeys(groups.keys());
+    const label = (k: string): string => k === INDEX_UNCERTAIN ? F.idxUncertain : k || S.book.noSurname;
+    const letter = (key: string, n: number | null, text: string, title = ''): string => {
         const cur = n === null ? ' aria-current="true"' : '';
         const val = n === null ? '' : String(n);
+        const t = title ? ` title="${esc(title)}" aria-label="${esc(title)}"` : '';
         return r.mode === 'file'
-            ? `<a class="sp-letter" href="#${esc(n === null ? slug : `${slug}--pis-${n}`)}" data-sp-letter="${val}"${cur}>${esc(text)}</a>`
-            : `<button type="button" class="sp-letter" data-sp-letter="${val}"${cur}>${esc(text)}</button>`;
+            ? `<a class="sp-letter" href="#${esc(n === null ? slug : `${slug}--pis-${n}`)}" data-sp-letter="${val}"${cur}${t}>${esc(text)}</a>`
+            : `<button type="button" class="sp-letter" data-sp-letter="${val}"${cur}${t}>${esc(text)}</button>`;
     };
+    // The uncertain readings' button is "?", named in full (1102).
     const letters = `<nav class="sp-letters" aria-label="${esc(F.idxLetters)}">${letter(slug, null, F.idxAll)}`
-        + `${keys.map((k, i) => letter(slug, i + 1, label(k))).join('')}</nav>`;
+        + `${keys.map((k, i) => k === INDEX_UNCERTAIN ? letter(slug, i + 1, k, label(k)) : letter(slug, i + 1, label(k))).join('')}</nav>`;
     const body = keys.map((k, i) => {
         const rows = groups.get(k)!.map(it => `<li class="sp-ix-row">${personNameLink(r, it.id, esc(it.shown), 'pp-link sp-ix-n')}`
             + `${it.e.y ? ` <span class="sp-ix-y">${esc(it.e.y)}</span>` : ''}${livingTagHtml(r, it.id)}${it.e.t ? ` <span class="sp-ix-t">${esc(it.e.t)}</span>` : ''}</li>`).join('');
@@ -1318,11 +1322,13 @@ function surnamesIndexHtml(r: Render): string {
         const p = realIn(tree, id);
         if (!p || isProtectedPerson(set.protectedTree, id)) continue;
         const last = p.lastName?.trim();
-        if (!last) continue;
+        if (!last || isGapOnlyName(last)) continue;
         const list = bySurname.get(last);
         if (list) list.push(id); else bySurname.set(last, [id]);
     }
-    const birth = [...bySurname.entries()].sort((a, b) => a[0].localeCompare(b[0], lang)).map(([last, ids]) =>
+    // A surname starting with an unreadable place after the others (1102).
+    const rank = (last: string): number => indexLetter(last, lang) === INDEX_UNCERTAIN ? 1 : 0;
+    const birth = [...bySurname.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0], lang)).map(([last, ids]) =>
         foldRowHtml(r, '', `<span class="sp-ix-n">${esc(last)}</span> <span class="sp-ix-y">${esc(F.nPersons(ids.length))}</span>`, sortByBirth(tree, ids)));
     if (!rodRows.length && !birth.length) return emptyIndex(r);
     return `${rodRows.length ? `<ul class="sp-ix-list">${rodRows.join('')}</ul>` : ''}`
@@ -1362,13 +1368,20 @@ function letterPageHtml(r: Render, page: SetPage, body: string, meta: string | n
     const letters = r.set.indexLetters[kind];
     const have = new Map(letters.map(l => [l.key, l.slug]));
     const alphabet = [...(INDEX_ALPHABET[r.set.options.lang] ?? INDEX_ALPHABET.en)];
-    for (const l of letters) if (l.key && !alphabet.includes(l.key)) alphabet.push(l.key);
+    for (const l of letters) if (l.key && l.key !== INDEX_UNCERTAIN && !alphabet.includes(l.key)) alphabet.push(l.key);
+    if (have.has(INDEX_UNCERTAIN)) alphabet.push(INDEX_UNCERTAIN);
     if (have.has('')) alphabet.push('');
-    const label = (k: string): string => k || r.S.book.noSurname;
+    const label = (k: string): string => k === INDEX_UNCERTAIN ? F.idxUncertain : k || r.S.book.noSurname;
     const cells = alphabet.map(k => {
         const slug = have.get(k);
-        if (k === page.letter) return `<span class="sp-abc-l" aria-current="page">${esc(label(k))}</span>`;
-        return slug ? pageLink(r, slug, esc(label(k)), 'sp-abc-l') : `<span class="sp-abc-l sp-abc-off" aria-disabled="true">${esc(label(k))}</span>`;
+        // The uncertain readings' cell is "?", named in full (1102).
+        const text = k === INDEX_UNCERTAIN ? k : label(k);
+        if (k === INDEX_UNCERTAIN && slug && k !== page.letter) {
+            return pageLink(r, slug, esc(text), 'sp-abc-l').replace(/^<(a|button)\b/, `<$1 title="${esc(label(k))}" aria-label="${esc(label(k))}"`);
+        }
+        const named = k === INDEX_UNCERTAIN ? ` title="${esc(label(k))}" aria-label="${esc(label(k))}"` : '';
+        if (k === page.letter) return `<span class="sp-abc-l" aria-current="page"${named}>${esc(text)}</span>`;
+        return slug ? pageLink(r, slug, esc(text), 'sp-abc-l') : `<span class="sp-abc-l sp-abc-off" aria-disabled="true">${esc(text)}</span>`;
     }).join('');
     const at = letters.findIndex(l => l.key === page.letter);
     const prev = at > 0 ? letters[at - 1] : null;

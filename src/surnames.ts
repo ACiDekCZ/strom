@@ -130,6 +130,8 @@ export function feminineForm(surname: string): string | null {
     const name = surname.trim();
     const t = name.toLowerCase();   // endings, not casing (NOVÁK → NOVÁKová)
     if (!name || /ov[áa]$/.test(t)) return null;   // already feminine (incl. ASCII)
+    // No ending to decline: an unreadable place of a transcription ("[?]", "Nov[?]") or no letter at the end.
+    if (!/\p{L}$/u.test(name)) return null;
 
     // Indeclinable: Macků, Kočí, Nových are the same for everyone.
     if (/[ůí]$/.test(t) || /ých$/.test(t)) return null;
