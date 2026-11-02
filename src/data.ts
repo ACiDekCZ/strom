@@ -727,7 +727,7 @@ class DataManagerClass {
         // Add date/time suffix (in the UI language and its locale)
         const now = new Date();
         const lang = getCurrentLanguage();
-        const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : 'en-US';
+        const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : lang === 'pl' ? 'pl-PL' : 'en-US';
         const dateStr = now.toLocaleDateString(locale);
         const timeStr = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         const suffix = strings.storageSafety.importedSuffix(dateStr, timeStr);

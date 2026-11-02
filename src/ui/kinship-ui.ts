@@ -79,7 +79,7 @@ export const kinshipUiMethods = uiModule({
                 resultEl.style.display = 'block';
 
                 const cur = getCurrentLanguage();
-                const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
+                const lang = cur;
                 if (!relation) {
                     const viewOnly = viewOnlyRelationship(treeData!, TreeRenderer.getViewLayer()?.links ?? [], fromId, toId);
                     if (viewOnly) {

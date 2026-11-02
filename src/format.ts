@@ -29,6 +29,7 @@ function relativeDay(offset: 0 | -1, lang: Language): string {
             en: ['today', 'yesterday'],
             cs: ['dnes', 'včera'],
             de: ['heute', 'gestern'],
+            pl: ['dzisiaj', 'wczoraj'],
         };
         return words[lang][offset === 0 ? 0 : 1];
     }

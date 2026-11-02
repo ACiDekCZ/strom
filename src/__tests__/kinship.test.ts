@@ -151,21 +151,21 @@ describe('findRelationship — a person of unknown sex (U01)', () => {
     const relU = (a: string, b: string) => findRelationship(unknownAs(b), a as PersonId, b as PersonId)!.term;
 
     it('parent, grandparent and beyond', () => {
-        expect(relU('focus', 'father')).toEqual({ cs: 'rodič', en: 'parent', de: 'Elternteil' });
-        expect(relU('focus', 'gp_h_h')).toEqual({ cs: 'prarodič', en: 'grandparent', de: 'Großelternteil' });
-        expect(relU('focus', 'gggp_h_h')).toEqual({ cs: 'prapraprarodič', en: 'great-great-grandparent', de: 'Ururgroßelternteil' });
+        expect(relU('focus', 'father')).toEqual({ cs: 'rodič', en: 'parent', de: 'Elternteil', pl: 'rodzic' });
+        expect(relU('focus', 'gp_h_h')).toEqual({ cs: 'prarodič', en: 'grandparent', de: 'Großelternteil', pl: 'dziadek / babcia' });
+        expect(relU('focus', 'gggp_h_h')).toEqual({ cs: 'prapraprarodič', en: 'great-great-grandparent', de: 'Ururgroßelternteil', pl: 'prapradziadek / praprababcia' });
     });
 
     it('child, grandchild and beyond', () => {
-        expect(relU('father', 'focus')).toEqual({ cs: 'dítě', en: 'child', de: 'Kind' });
-        expect(relU('gp_h_h', 'focus')).toEqual({ cs: 'vnouče', en: 'grandchild', de: 'Enkelkind' });
-        expect(relU('gggp_h_h', 'focus')).toEqual({ cs: 'prapravnouče', en: 'great-great-grandchild', de: 'Ururenkelkind' });
+        expect(relU('father', 'focus')).toEqual({ cs: 'dítě', en: 'child', de: 'Kind', pl: 'dziecko' });
+        expect(relU('gp_h_h', 'focus')).toEqual({ cs: 'vnouče', en: 'grandchild', de: 'Enkelkind', pl: 'wnuk / wnuczka' });
+        expect(relU('gggp_h_h', 'focus')).toEqual({ cs: 'prapravnouče', en: 'great-great-grandchild', de: 'Ururenkelkind', pl: 'praprawnuk / praprawnuczka' });
     });
 
     it('sibling, half-sibling, uncle/aunt, nephew/niece, cousin', () => {
-        expect(relU('focus', 'sibling_1')).toEqual({ cs: 'sourozenec', en: 'sibling', de: 'Geschwister' });
+        expect(relU('focus', 'sibling_1')).toEqual({ cs: 'sourozenec', en: 'sibling', de: 'Geschwister', pl: 'brat / siostra' });
         expect(relU('focus', 'halfsibling_1').en).toBe('half-sibling');
-        expect(relU('focus', 'uncle_h_1')).toEqual({ cs: 'strýc / teta', en: 'uncle / aunt', de: 'Onkel / Tante' });
+        expect(relU('focus', 'uncle_h_1')).toEqual({ cs: 'strýc / teta', en: 'uncle / aunt', de: 'Onkel / Tante', pl: 'wujek / ciotka' });
         expect(relU('focus', 'nephew_1_1').en).toBe('nephew / niece');
         expect(relU('focus', 'cousin_h_1').cs).toBe('bratranec / sestřenice');
     });
@@ -223,15 +223,15 @@ describe('findRelationship — through two marriages (T27)', () => {
 
     it("the husband of the husband's sister is a brother-in-law, and back", () => {
         const fwd = r('alena', 'vlastimil')!;
-        expect(fwd.term).toEqual({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' });
+        expect(fwd.term).toEqual({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager', pl: 'szwagier' });
         expect(fwd.affinity).toBe(true);
         expect(fwd.path).toEqual(['alena', 'pavel', 'father', 'jana', 'vlastimil']);
-        expect(r('vlastimil', 'alena')!.term).toEqual({ cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' });
+        expect(r('vlastimil', 'alena')!.term).toEqual({ cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin', pl: 'szwagierka' });
     });
 
     it('another tie through two marriages is related by marriage', () => {
         const t = r('alena', 'cousinHusband')!;
-        expect(t.term).toEqual({ cs: 'příbuzný / příbuzná sňatkem', en: 'related by marriage', de: 'verschwägert' });
+        expect(t.term).toEqual({ cs: 'příbuzný / příbuzná sňatkem', en: 'related by marriage', de: 'verschwägert', pl: 'spowinowacony / spowinowacona' });
         expect(t.path[0]).toBe('alena');
         expect(t.path[t.path.length - 1]).toBe('cousinHusband');
         expect(r('cousinHusband', 'alena')!.term.cs).toBe('příbuzná sňatkem');

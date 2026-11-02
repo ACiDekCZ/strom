@@ -1102,6 +1102,7 @@ export const PAGE_SET_FOLDERS: Record<Language, PageSetFolders> = {
     cs: { rods: 'rody', families: 'rodiny', persons: 'osoby', timelines: 'casove-osy', index: 'rejstrik', images: 'obrazky', files: '_soubory' },
     en: { rods: 'lines', families: 'families', persons: 'people', timelines: 'timelines', index: 'index', images: 'images', files: '_files' },
     de: { rods: 'stammlinien', families: 'familien', persons: 'personen', timelines: 'zeitleisten', index: 'register', images: 'bilder', files: '_dateien' },
+    pl: { rods: 'rody', families: 'rodziny', persons: 'osoby', timelines: 'osie-czasu', index: 'indeks', images: 'obrazy', files: '_pliki' },
 };
 
 export function pageSetFolders(set: Pick<PageSet, 'options'>): PageSetFolders {

@@ -1,14 +1,15 @@
 /**
  * Texts never address the user (SPEC "Pravidla textů"): no vykání or
  * tykání in Czech (no "váš", "jste", no imperative to "you"), no "you/your"
- * in English, no "Sie/Ihr" or "du" in German — in every group of texts.
+ * in English, no "Sie/Ihr" or "du" in German, no "ty/twój/Pan/Pani" or
+ * second-person verbs in Polish — in every group of texts.
  * Texts for an AI agent or a terminal are the exceptions, named below.
  */
 
 import { describe, it, expect } from 'vitest';
 import { getStringsForLang, Language } from '../strings.js';
 
-const ADDRESS: Record<'en' | 'cs' | 'de', RegExp> = {
+const ADDRESS: Record<'en' | 'cs' | 'de' | 'pl', RegExp> = {
     en: /\b(you|your|yours|yourself)\b/i,
     de: /\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer|Ihres|Ihnen|du|dein|deine|deinen|deinem|deiner|dir|dich)\b/,
     // Pronouns; verbs of the second person: the plural imperative ("vyberte", "spusťte", "zkuste"),
@@ -16,10 +17,17 @@ const ADDRESS: Record<'en' | 'cs' | 'de', RegExp> = {
     cs: new RegExp('(?<![\\p{L}])(vy|vás|vám|vámi|vaše|váš|vaši|vaší|vašeho|vašem|vašich|vaším|vašim|vašemu|jste|byste|tvůj|tvé|tvoje|tvoji|tvou|tvá|tvém|tvým|tvých|tvému|tobě|tebe|tebou|tvého|ti|tě)(?![\\p{L}])'
         + '|(?<![\\p{L}])(?!(?:jej|dítěte)(?![\\p{L}]))[\\p{L}]+(rte|ťte|žte|zte|dte|nte|cte|uste|ijte|lte|pte|šte|hte|vte|mte|bte|íte|ete|áte|ějte|ejte|ujte|ěte|ďte|řte|ňte'
         + '|uješ|(?<!sp|li)íš|eš|áš|ej)(?![\\p{L}])', 'iu'),
+    // Pronouns (the polite Pan/Pani/Państwo only capitalised); verbs of the second person: the present
+    // ("masz", "możesz", "widzisz") and the past ("dodałeś", "zrobiłaś"). Command labels (buttons) use the
+    // imperative as Polish UIs do (the glossary), so the imperative alone is not counted.
+    pl: new RegExp('(?<![\\p{L}])(ty|ciebie|cię|tobie|tobą|twój|twoja|twoje|twojego|twojej|twoim|twoją|twoich|twoimi|twym|twych'
+        + '|wy|was|wam|wami|wasz|wasza|wasze|waszego|waszej|waszym|waszą|waszych|waszymi)(?![\\p{L}])'
+        + '|(?<![\\p{L}])(Pan|Pani|Pana|Panu|Panią|Państwo|Państwa|Państwu)(?![\\p{L}])'
+        + '|(?<![\\p{L}])(masz|możesz|chcesz|musisz|widzisz|wiesz|jesteś|będziesz|znajdziesz|dodasz|zobaczysz|wybierzesz|otworzysz|zapiszesz|klikniesz|potrzebujesz|[\\p{L}]+łeś|[\\p{L}]+łaś)(?![\\p{L}])', 'u'),
 };
 
 /** Per language: texts quoting another program, and words that only look like an address (group.key). */
-const EXCEPTIONS: Record<'en' | 'cs' | 'de', Set<string>> = {
+const EXCEPTIONS: Record<'en' | 'cs' | 'de' | 'pl', Set<string>> = {
     // The sample message the sender writes to a relative.
     en: new Set(['share.messagePlaceholder']),
     // The sample message the sender writes to a relative.
@@ -31,6 +39,8 @@ const EXCEPTIONS: Record<'en' | 'cs' | 'de', Set<string>> = {
         'focus.parentsFoldedBody',
         // The sample message the sender writes to a relative.
         'share.messagePlaceholder']),
+    // The sample message the sender writes to a relative.
+    pl: new Set(['share.messagePlaceholder']),
 };
 
 /** Every text of an object as "path → text"; a function's text is its source (the template it returns). */
@@ -42,7 +52,7 @@ function texts(value: unknown, path: string, out: [string, string][]): void {
 }
 
 describe('texts never address the user', () => {
-    for (const lang of ['en', 'cs', 'de'] as const) {
+    for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
         it(lang, () => {
             const pack = getStringsForLang(lang as Language) as unknown as Record<string, unknown>;
             const found: string[] = [];
@@ -116,7 +126,7 @@ describe('Czech texts about the people a file goes to are gender-neutral', () =>
  * colon or in parentheses (a real name is not declined there either).
  */
 describe('Sentences with the sender name read well with the unknown sender', () => {
-    for (const lang of ['en', 'cs', 'de'] as const) {
+    for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
         it(lang, () => {
             const s = getStringsForLang(lang as Language);
             const who = s.share.unknownSender;

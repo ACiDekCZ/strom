@@ -64,7 +64,7 @@ export function draftDate(story: Story): string | undefined {
     const at = story.draft?.at;
     if (!at) return undefined;
     const lang = getCurrentLanguage();
-    return formatFlexDate(at, lang === 'cs' || lang === 'de' ? lang : 'en') || undefined;
+    return formatFlexDate(at, lang) || undefined;
 }
 
 function targetKey(target: StoryTarget): string {

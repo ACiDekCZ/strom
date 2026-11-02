@@ -1355,6 +1355,7 @@ const INDEX_ALPHABET: Record<Language, string[]> = {
     cs: 'A B C Č D E F G H Ch I J K L M N O P Q R Ř S Š T U V W X Y Z Ž'.split(' '),
     en: 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z'.split(' '),
     de: 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z'.split(' '),
+    pl: 'A Ą B C Ć D E Ę F G H I J K L Ł M N Ń O Ó P Q R S Ś T U V W X Y Z Ź Ż'.split(' '),
 };
 
 /**

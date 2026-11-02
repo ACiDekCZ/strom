@@ -68,7 +68,7 @@ type Phase = 'options' | 'building' | 'progress' | 'result' | 'zipFail';
 const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'persons'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
-const LANGS: readonly BookLang[] = ['cs', 'en', 'de'];
+const LANGS: readonly BookLang[] = ['cs', 'en', 'de', 'pl'];
 const IMAGE_CHOICES: readonly ImageChoice[] = ['full', 'small', 'none'];
 const INCLUDES = ['map', 'timelines'] as const;
 /** The pages' depths of ancestors (1102 §4.1); "All" in the phone's sub-sheet only. */
@@ -179,7 +179,7 @@ function esc(text: string): string {
 
 function appBookLang(): BookLang {
     const cur = getCurrentLanguage();
-    return cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
+    return cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : cur === 'pl' ? 'pl' : 'en';
 }
 
 function storage(): Storage | null {
@@ -1468,7 +1468,7 @@ export const bookUiMethods = uiModule({
         const data = DataManager.getData();
         const firstId = Object.keys(data.persons)[0];
         const lang = options.lang;
-        const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : 'en-GB';
+        const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : lang === 'pl' ? 'pl-PL' : 'en-GB';
         return buildFamilyBook(data, options, {
             treeName: TreeManager.getActiveTreeMetadata()?.name,
             dateLabel: getStringsForLang(lang).book.compiled(new Date().toLocaleDateString(locale)),

@@ -312,7 +312,7 @@ export const waitingPlacesMethods = uiModule({
     /** Names joined as a sentence says them ("A, B and C"). */
     joinWaitingNames(names: readonly string[]): string {
         const lang = getCurrentLanguage();
-        const and = lang === 'cs' ? 'a' : lang === 'de' ? 'und' : 'and';
+        const and = lang === 'cs' ? 'a' : lang === 'de' ? 'und' : lang === 'pl' ? 'i' : 'and';
         return names.length <= 1 ? names[0] ?? '' : `${names.slice(0, -1).join(', ')} ${and} ${names[names.length - 1]}`;
     },
 

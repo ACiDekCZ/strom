@@ -37,7 +37,7 @@ const UNITS: readonly string[] = ['reading', 'place', 'participant', 'finding', 
 /** A fix's id in the research: what the link carries (and the research checks again). */
 export const FIX_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
-export interface ResearchFixText { cs?: string; en?: string; de?: string }
+export interface ResearchFixText { cs?: string; en?: string; de?: string; pl?: string }
 
 export interface ResearchFix {
     id: string;
@@ -83,7 +83,7 @@ function text(raw: unknown, max: number): string | undefined {
 function localized(raw: unknown, max: number): ResearchFixText {
     const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
     const out: ResearchFixText = {};
-    for (const lang of ['cs', 'en', 'de'] as const) {
+    for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
         const t = text(r[lang], max);
         if (t) out[lang] = t;
     }
@@ -149,7 +149,7 @@ export function parseFixesReply(raw: unknown): FixesReply | null {
 
 /** A text in the language of the app, else in another one. */
 export function fixText(t: ResearchFixText, lang: string): string {
-    return (lang === 'cs' || lang === 'en' || lang === 'de' ? t[lang] : undefined) ?? t.en ?? t.cs ?? t.de ?? '';
+    return (lang === 'cs' || lang === 'en' || lang === 'de' || lang === 'pl' ? t[lang] : undefined) ?? t.en ?? t.cs ?? t.de ?? t.pl ?? '';
 }
 
 /**

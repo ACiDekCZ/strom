@@ -15,7 +15,7 @@ import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './b
 
 export type { BookSelectionSpec } from './book-model.js';
 
-export type BookLang = 'cs' | 'en' | 'de';
+export type BookLang = 'cs' | 'en' | 'de' | 'pl';
 export type BookDetail = 'brief' | 'normal' | 'all';
 export type BookPreset = 'family' | 'research' | 'custom';
 

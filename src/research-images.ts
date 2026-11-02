@@ -674,8 +674,8 @@ export class ResearchImageQueue {
 
 // ==================== SIZES ====================
 
-/** A byte size for people: "280 kB", "3,1 MB" (decimal comma in cs/de). */
-export function formatImageBytes(bytes: number, lang: 'en' | 'cs' | 'de'): string {
+/** A byte size for people: "280 kB", "3,1 MB" (decimal comma in cs/de/pl). */
+export function formatImageBytes(bytes: number, lang: 'en' | 'cs' | 'de' | 'pl'): string {
     const num = (v: number, digits: number): string => {
         const s = v.toFixed(digits);
         return lang === 'en' ? s : s.replace('.', ',');

@@ -118,7 +118,7 @@ describe('person family line row: which lineages (§3.1)', () => {
 });
 
 describe('person family line row: wording in cs/en/de (§0.3, §3.1)', () => {
-    const cases: [string, Record<Language, string>][] = [
+    const cases: [string, Record<'cs' | 'en' | 'de', string>][] = [
         ['b6', { cs: 'Brandvold', en: 'Brandvold', de: 'Brandvold' }],
         ['b4', {
             cs: 'Brandvold · vdala se do rodu Tallqvist',
@@ -144,7 +144,7 @@ describe('person family line row: wording in cs/en/de (§0.3, §3.1)', () => {
         ['o2', { cs: 'Ostrander', en: 'Ostrander', de: 'Ostrander' }],
     ];
     for (const [id, want] of cases) {
-        for (const lang of ['cs', 'en', 'de'] as Language[]) {
+        for (const lang of ['cs', 'en', 'de'] as const) {
             it(`${id} in ${lang}`, () => expect(text(id, lang)).toBe(want[lang]));
         }
     }

@@ -2,7 +2,9 @@
  * UI Strings - Multi-language support
  */
 
-export type Language = 'en' | 'cs' | 'de';
+import { stringsPL } from './strings-pl/index.js';
+
+export type Language = 'en' | 'cs' | 'de' | 'pl';
 
 /** The event a main excerpt of the person page shows (personPage.excerptCaption). */
 export type PersonPageCaptionEvent = 'birth' | 'birthBaptism' | 'marriage' | 'death' | 'deathBurial';
@@ -12,11 +14,12 @@ export type PersonPageRegister = 'birth' | 'marriage' | 'death';
 export const SUPPORTED_LANGUAGES: { code: Language; name: string }[] = [
     { code: 'en', name: 'English' },
     { code: 'cs', name: 'Čeština' },
-    { code: 'de', name: 'Deutsch' }
+    { code: 'de', name: 'Deutsch' },
+    { code: 'pl', name: 'Polski' }
 ];
 
 // Type definition for strings structure
-type StringsType = typeof stringsEN;
+export type StringsType = typeof stringsEN;
 
 const pluralRulesCache: Partial<Record<Language, Intl.PluralRules>> = {};
 
@@ -34,7 +37,11 @@ export function pluralCategory(lang: Language, n: number): Intl.LDMLPluralRule {
         return rules.select(n);
     } catch {
         if (n === 1) return 'one';
-        if (lang === 'cs' && Number.isInteger(n) && n >= 2 && n <= 4) return 'few';
+        if ((lang === 'cs' || lang === 'pl') && Number.isInteger(n) && n >= 2 && n <= 4) return 'few';
+        if (lang === 'pl' && Number.isInteger(n)) {
+            const d = Math.abs(n) % 10, h = Math.abs(n) % 100;
+            return d >= 2 && d <= 4 && !(h >= 12 && h <= 14) ? 'few' : 'many';
+        }
         return 'other';
     }
 }
@@ -43,6 +50,7 @@ export function pluralCategory(lang: Language, n: number): Intl.LDMLPluralRule {
  * Pick the grammatical form for a count.
  * English/German: plural(lang, n, one, other).
  * Czech: plural('cs', n, one, few, other) — one = 1, few = 2–4, other = 0 and 5+.
+ * Polish: plural('pl', n, one, few, many) — one = 1, few = 2–4 and 22–24…, many (and fractions) = the rest.
  * Returns the bare word; callers put the number in themselves.
  */
 export function plural(lang: Language, n: number, one: string, few: string, other?: string): string {
@@ -60,7 +68,7 @@ export function plural(lang: Language, n: number, one: string, few: string, othe
 export function joinAnd(lang: Language, parts: string[]): string {
     const items = parts.filter(Boolean);
     if (items.length <= 1) return items[0] ?? '';
-    const and = lang === 'cs' ? 'a' : lang === 'de' ? 'und' : 'and';
+    const and = lang === 'cs' ? 'a' : lang === 'de' ? 'und' : lang === 'pl' ? 'i' : 'and';
     return `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`;
 }
 
@@ -457,7 +465,7 @@ const stringsEN = {
             privacyHint: 'Applies to the text, the line tree, the contents and the index.',
             lang: 'Book language',
             langHint: 'Changes the book\'s headings and labels. The tree\'s data is not translated.',
-            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch' } as Record<'cs' | 'en' | 'de', string>,
+            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch', pl: 'Polski' } as Record<'cs' | 'en' | 'de' | 'pl', string>,
             title: 'Title',
             titleAuto: (sub: string) => sub ? `From the selection. Subtitle: ${sub}` : 'From the selection.',
             titleEdited: 'Edited',
@@ -7441,7 +7449,7 @@ const stringsCZ: StringsType = {
             privacyHint: 'Platí pro text, rodokmen, obsah i rejstřík.',
             lang: 'Jazyk knihy',
             langHint: 'Mění nadpisy a popisky knihy. Údaje ze stromu se nepřekládají.',
-            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch' },
+            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch', pl: 'Polski' },
             title: 'Název',
             titleAuto: (sub: string) => sub ? `Podle výběru. Podtitul: ${sub}` : 'Podle výběru.',
             titleEdited: 'Upraveno',
@@ -14351,7 +14359,7 @@ const stringsDE: StringsType = {
             privacyHint: 'Gilt für Text, Stammbaum der Linie, Inhalt und Register.',
             lang: 'Sprache des Buchs',
             langHint: 'Ändert Überschriften und Beschriftungen des Buchs. Daten aus dem Stammbaum werden nicht übersetzt.',
-            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch' },
+            langName: { cs: 'Čeština', en: 'English', de: 'Deutsch', pl: 'Polski' },
             title: 'Titel',
             titleAuto: (sub: string) => sub ? `Nach der Auswahl. Untertitel: ${sub}` : 'Nach der Auswahl.',
             titleEdited: 'Bearbeitet',
@@ -20932,7 +20940,8 @@ const stringsDE: StringsType = {
 const languagePacks: Record<Language, StringsType> = {
     en: stringsEN,
     cs: stringsCZ,
-    de: stringsDE
+    de: stringsDE,
+    pl: stringsPL
 };
 
 /** Get the full string pack for a specific language (used by the family book). */
@@ -20978,6 +20987,9 @@ export function detectBrowserLanguage(): Language {
     }
     if (browserLang === 'de') {
         return 'de';
+    }
+    if (browserLang === 'pl') {
+        return 'pl';
     }
     return 'en';
 }

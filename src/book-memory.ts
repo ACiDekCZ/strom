@@ -91,7 +91,7 @@ export function bookMemoryKey(treeId: string): string {
     return `strom.book.${treeId}`;
 }
 
-const LANGS: readonly BookLang[] = ['cs', 'en', 'de'];
+const LANGS: readonly BookLang[] = ['cs', 'en', 'de', 'pl'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRESETS: readonly BookPreset[] = ['family', 'research', 'custom'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];

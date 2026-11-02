@@ -614,7 +614,7 @@ export function gedcomTagEventType(tag: string): LifeEventType | null {
 function isMilitaryLabel(label: string): boolean {
     const key = label.trim().toLowerCase();
     if (!key) return false;
-    return (['en', 'cs', 'de'] as const).some(lang =>
+    return (['en', 'cs', 'de', 'pl'] as const).some(lang =>
         getStringsForLang(lang).events.types.military.toLowerCase() === key)
         || key === 'military';
 }

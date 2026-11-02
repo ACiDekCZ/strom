@@ -1,0 +1,852 @@
+import type { StringsType } from '../strings.js';
+import { nPl, plPl, joinAndPl, relationPl } from './helpers.js';
+
+export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationships' | 'card' | 'buttons' | 'dialog'
+    | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'nav' | 'depth' | 'rodView' | 'focus'
+    | 'generationLabels' | 'treeOverview' | 'branchTabs' | 'search' | 'deepLink' | 'searchFilters' | 'personPicker'
+    | 'errors' | 'storageSafety' | 'addChild' | 'uiTips' | 'about' | 'gedcom' | 'gedcomNotes' | 'saveCurrent'
+    | 'validation'> = {
+    danger: {
+        undoHint: 'Usunięcie można cofnąć przyciskiem Cofnij.',
+        cannotUndo: 'Tej operacji nie można cofnąć.',
+        deletePersonTitle: (name: string) => `Usunąć osobę ${name}?`,
+        deletePerson: 'Usuń osobę',
+        /** '' when the person has no links. */
+        personLinks: (gender: string, parents: number, partners: number, children: number): string => {
+            const list = joinAndPl([
+                parents ? nPl(parents, 'rodzic', 'rodziców', 'rodziców') : '',
+                partners ? nPl(partners, 'partner', 'partnerów', 'partnerów') : '',
+                children ? nPl(children, 'dziecko', 'dzieci', 'dzieci') : '',
+            ]);
+            if (!list) return '';
+            const whose = gender === 'female' ? 'jej powiązania' : gender === 'male' ? 'jego powiązania' : 'powiązania tej osoby';
+            return `Usunięte zostaną też ${whose}: ${list}.`;
+        },
+        orphanMessage: (name: string) => `${name} nie ma już w tym drzewie żadnych relacji.`,
+        deleteTreeTitle: (name: string) => `Usunąć drzewo ${name}?`,
+        deleteTree: 'Usuń drzewo',
+        deleteTreeMessage: (persons: number) =>
+            `Z tej przeglądarki zniknie drzewo, a w nim ${nPl(persons, 'osoba', 'osoby', 'osób')}, oraz wszystkie jego kopie zapasowe. Jeśli może być jeszcze potrzebne, warto je najpierw wyeksportować. Tej operacji nie można cofnąć.`,
+        deleteBackupTitle: (when: string) => `Usunąć kopię zapasową (${when})?`,
+        deleteBackup: 'Usuń kopię zapasową',
+        deleteBackupMessage: (persons: number) =>
+            `Zawiera ${nPl(persons, 'osobę', 'osoby', 'osób')}. Samo drzewo pozostaje nienaruszone. Tej operacji nie można cofnąć.`,
+        restoreBackupTitle: (when: string) => `Przywrócić kopię zapasową (${when})?`,
+        restoreBackup: 'Przywróć kopię zapasową',
+        deleteSourceTitle: (title: string) => `Usunąć źródło ${title}?`,
+        deleteSource: 'Usuń źródło',
+        sourceCited: (n: number) => `Jest cytowane w ${nPl(n, 'miejscu', 'miejscach', 'miejscach')}; te cytaty również zostaną usunięte.`,
+        deleteEventTitle: (type: string) => `Usunąć zdarzenie „${type}”?`,
+        deleteEvent: 'Usuń zdarzenie',
+        deleteAttachmentTitle: (name: string) => `Usunąć załącznik ${name}?`,
+        deleteAttachment: 'Usuń załącznik',
+        cleanPlacesTitle: (n: number) => `Usunąć ${nPl(n, 'nieużywane miejsce', 'nieużywane miejsca', 'nieużywanych miejsc')}?`,
+        cleanPlaces: 'Usuń miejsca',
+        clearHistoryTitle: 'Wyczyścić historię zmian?',
+        clearHistory: 'Wyczyść historię',
+        clearHistoryMessage: 'Wszystkie zapisane zmiany tego drzewa zostaną usunięte; samo drzewo pozostaje nienaruszone. Tej operacji nie można cofnąć.',
+        discardMergeTitle: (name: string) => `Porzucić scalanie ${name}?`,
+        discardMerge: 'Porzuć scalanie',
+        discardMergeMessage: 'Decyzje podjęte w tym scalaniu zostaną odrzucone. Same drzewa pozostają nienaruszone. Tej operacji nie można cofnąć.',
+    },
+
+    // Empty states: serif heading, one sentence of purpose, optional action.
+    emptyStates: {
+        sourcesTitle: 'Na razie brak źródeł',
+        sourcesText: 'Źródło to księga metrykalna, dokument lub księga, z której pochodzi informacja. Można je potem cytować przy urodzeniu, ślubie i innych danych.',
+        backupsTitle: 'Na razie brak kopii zapasowych',
+        backupsText: 'Kopia zapasowa to kopia całego drzewa, do której można wrócić. Aplikacja tworzy je także sama — na bieżąco oraz przed importem lub scalaniem.',
+        anniversariesTitle: 'Brak rocznic w ciągu najbliższych 30 dni',
+        anniversariesText: 'Urodziny i rocznice ślubu pojawią się tutaj, gdy osoby będą miały pełne daty.',
+        attachmentsTitle: 'Na razie brak załączników',
+        attachmentsText: 'Skany dokumentów, listy lub zdjęcia związane z tą osobą.',
+        surnamesTitle: 'Na razie brak powiązanych form nazwiska',
+    },
+
+    // Relationships panel
+    relationships: {
+        title: (name: string) => `Relacje: ${name}`,
+        parents: 'Rodzice',
+        partners: 'Partnerzy',
+        children: 'Dzieci',
+        siblings: 'Rodzeństwo',
+        addParent: '+ Dodaj rodzica',
+        addPartner: '+ Dodaj partnera',
+        addChild: '+ Dodaj dziecko',
+        addSibling: '+ Dodaj rodzeństwo',
+        remove: 'Usuń',
+        witnesses: 'Świadkowie ślubu',
+        addWitness: '👥 Dodaj świadka',
+        witnessesTitle: 'Świadkowie ślubu',
+        reassign: 'Przenieś…',
+        reassignHeading: 'Przeniesienie do innego rodzica',
+        reassignHint: (child: string, oldParent: string) => `Osoba ${child} zostanie odłączona od: ${oldParent} i podłączona do wybranej osoby. Niczego nie trzeba wpisywać ponownie.`,
+        reassignDone: (child: string, parent: string) => `Osoba ${child} jest teraz podłączona do: ${parent}`,
+        reassignFailed: 'Nie udało się przenieść powiązania.',
+        removeLocked: 'Relacji zablokowanej osoby nie można zmieniać. Najpierw wymagane jest odblokowanie osoby.',
+        unsavedTitle: 'Niezapisane zmiany',
+        unsavedMessage: 'Ustawienia relacji mają niezapisane zmiany.',
+        unsavedSave: 'Zapisz i zamknij',
+        unsavedDiscard: 'Odrzuć zmiany',
+        unsavedStay: 'Zostań',
+        orphanConfirm: (name: string) => `„${name}” nie ma już żadnych relacji. Usunąć tę osobę?`,
+        orphanDelete: 'Usuń',
+        orphanKeep: 'Zachowaj'
+    },
+
+    // Buttons
+    card: {
+        // The custom card's lines (src/card-fields.ts).
+        dateAbout: 'ok.',
+        dateAfter: 'po',
+        dateBefore: 'przed',
+        moreMarriages: (n: number) => `+${n}`,
+        ttBaptized: (d: string, sex: string | undefined) => `${sex === 'female' ? 'ochrzczona' : sex === 'male' ? 'ochrzczony' : 'chrz.'} ${d}`,
+        // At-a-glance signals (tooltip, aria): evidence, story, what waits.
+        ttSources: (n: number) => nPl(n, 'źródło', 'źródła', 'źródeł'),
+        ttBirthCited: 'urodzenie udokumentowane',
+        ttBirthMissing: 'urodzenie bez źródła',
+        ttDeathMissing: 'zgon bez źródła',
+        // The story's corner (tooltip, aria): own or a couple's, its title, a draft, a new version.
+        story: {
+            own: (t: string) => t ? `Opowieść: ${t}` : 'Opowieść',
+            couple: (t: string) => t ? `Opowieść o małżeństwie: ${t}` : 'Opowieść o małżeństwie',
+            draft: (s: string) => `${s} (szkic)`,
+            nv: (s: string) => `${s} · nowa wersja czeka`,
+        },
+        ttAttachments: (n: number) => nPl(n, 'załącznik', 'załączniki', 'załączników'),
+        ttMaterials: (n: number) => `Materiały ${n}`,
+        ttWaiting: (t: string) => `Czeka na decyzję: ${t}`,
+        ttQuestion: (t: string) => `Pytanie: ${t}`,
+        ttAgent: (t: string) => `Badanie w toku: ${t}`,
+        ttQueued: (t: string) => `W kolejce: ${t}`,
+        ttConflicts: (n: number) => nPl(n, 'sprzeczność', 'sprzeczności', 'sprzeczności'),
+        ttHypotheses: (n: number) => nPl(n, 'hipoteza', 'hipotezy', 'hipotez'),
+        ariaEv: { full: 'udokumentowane źródłami', partial: 'częściowo udokumentowane', none: 'bez źródła' },
+        ariaWaiting: 'czeka na decyzję',
+        ariaConflict: 'sprzeczność w źródłach',
+        ariaQuestion: 'otwarte pytanie',
+        ariaAgent: 'badanie tej osoby w toku',
+        // Short one-word labels for the hover add-tab pills.
+        addTabParent: 'rodzic',
+        addTabPartner: 'partner',
+        addTabChild: 'dziecko',
+        // Chain-link edge tab (manage partnerships/parents) expanded label.
+        relTab: 'relacje',
+        // Lowercase inline word for the detailed card's "years · age" meta row.
+        ageWord: 'wiek',
+        ageAbout: (n: number) => `ok. ${n}`,
+        ageAtLeast: (n: number) => `co najmniej ${n}`,
+        ageAtMost: (n: number) => `najwyżej ${n}`,
+        ageSpan: (min: number, max: number) => `${min}–${max}`,
+    },
+    buttons: {
+        save: 'Zapisz',
+        cancel: 'Anuluj',
+        close: 'Zamknij',
+        add: 'Dodaj',
+        continue: 'Kontynuuj',
+        delete: 'Usuń',
+        manageRelationships: 'Zarządzaj relacjami',
+        ok: 'OK',
+        yes: 'Tak',
+        no: 'Nie',
+        importComplete: 'Import zakończony',
+        exportComplete: 'Eksport zakończony'
+    },
+
+    // Custom dialogs
+    dialog: {
+        info: 'Informacja',
+        warning: 'Ostrzeżenie',
+        error: 'Błąd',
+        confirm: 'Potwierdź'
+    },
+
+    // Gender
+    gender: {
+        male: 'Mężczyzna',
+        female: 'Kobieta',
+        unknown: 'Nieznana'
+    },
+
+    // Partnership status
+    partnershipStatus: {
+        married: 'Małżeństwo',
+        partners: 'Partnerzy',
+        divorced: 'Rozwiedzeni',
+        separated: 'W separacji'
+    },
+
+    // Parent→child relationship type
+    parentRelType: {
+        biological: 'Biologiczny',
+        adoptive: 'Adopcyjny',
+        step: 'Przybrany',
+        foster: 'Zastępczy',
+    },
+
+    // Export
+    export: {
+        failed: 'Eksport nie powiódł się. Można spróbować ponownie.',
+        devModeNotSupported: 'Eksport aplikacji jest dostępny tylko ze zbudowanego pliku (strom.html). Najpierw wymagane jest uruchomienie „npm run build”.',
+        viewLinksNote: (n: number) => `Połączenia tylko w widoku (${n}) nie są przenoszone do wyniku`,
+    },
+
+    // Focus mode
+    nav: {
+        timelineShort: 'Oś czasu',
+    },
+    depth: {
+        toggle: 'Liczba pokoleń',
+    },
+    rodView: {
+        only: (l: string) => `Tylko ród ${l}`,
+        onlySub: 'Tylko ród',
+        birth: 'z urodzenia',
+        wife: 'żona',
+        husband: 'mąż',
+        whole: 'Pokaż całe drzewo',
+        row: 'Ród',
+        change: 'Zmień ród',
+        moved: (n: string, l: string) => `W centrum: ${n}, ród ${l}`,
+    },
+    focus: {
+        back: 'Wróć do poprzedniej osoby (Alt+←)',
+        forward: 'Dalej (Alt+→)',
+        focusedOn: 'W centrum',
+        showAll: 'Pokaż wszystko',
+        generationsUp: 'Pokoleń w górę',
+        generationsDown: 'Pokoleń w dół',
+        // Depth stepper labels (focus chip, tablet toolbar, descendants badge).
+        ancestorsLabel: 'Przodkowie',
+        descendantsLabel: 'Potomkowie',
+        depthLabel: 'Głębokość',
+        depthDecrease: 'Mniej pokoleń',
+        depthIncrease: 'Więcej pokoleń',
+        exportFocus: 'Eksportuj wybór',
+        hiddenPartnersTooltip: 'Pozostali partnerzy',
+        menuOtherPartners: '∞ Pozostali partnerzy',
+        hiddenSiblingsTooltip: 'Rodzeństwo',
+        hiddenParentsTooltip: 'Rodzice',
+        hiddenChildrenTooltip: 'Dzieci',
+        placeShowHint: 'Kliknięcie pokazuje je tutaj; widok pozostaje.',
+        childrenShownTooltip: 'Dzieci pokazane tutaj',
+        placeHideHint: 'Kliknięcie zakładki ponownie je ukrywa.',
+        childrenTabShowAria: (name: string) => `Pokaż tutaj dzieci osoby ${name}`,
+        childrenTabHideAria: (name: string) => `Ukryj pokazane dzieci osoby ${name}`,
+        // Siblings shown in place: the children of the parents in view (one step, the view stays).
+        siblingsSameAsChildren: 'Te same osoby co „▸ dzieci” u rodziców.',
+        siblingsWithParents: 'Razem z nimi pojawiają się też rodzice.',
+        siblingsShownTooltip: 'Rodzeństwo pokazane tutaj',
+        siblingsShownVia: (names: string) => `Pokazane jako dzieci rodziców: ${names}.`,
+        siblingsTabHideHint: 'Kliknięcie zakładki ponownie je ukrywa, także u rodziców.',
+        siblingsGroupFull: 'Rodzone',
+        siblingsGroupHalf: (a: string, b: string) => `Przyrodnie · ${a} i ${b}`,
+        siblingsTabShowAria: (name: string) => `Pokaż tutaj rodzeństwo osoby ${name}`,
+        siblingsTabHideAria: (name: string) => `Ukryj pokazane rodzeństwo osoby ${name}`,
+        childrenElsewhereCount: (n: number) => `Pozostałe gdzie indziej w drzewie: ${n}`,
+        childrenElsewhereHeader: 'Już gdzie indziej w drzewie',
+        childrenElsewhereHint: 'Kliknięcie imienia przesuwa widok do karty.',
+        childrenElsewhereAria: (name: string) => `Przesuń widok do karty osoby ${name}`,
+        siblingOrderPill: (n: number, total: number) => `${n}. z ${total}`,
+        siblingOrderTooltip: (n: number, total: number) => `Według urodzenia ${n}. z ${total}. Na skraju z powodu linii, która biegnie stąd dalej.`,
+        parentsFoldedHeader: 'Rodzice tymczasowo ukryci',
+        parentsFoldedBody: (name: string) => `Zwolnili miejsce dla dzieci osoby ${name}.`,
+        parentsFoldedHint: 'Kliknięcie ukrywa dzieci i przywraca rodziców.',
+        parentsFoldedAria: (name: string) => `Ukryj dzieci osoby ${name} i przywróć rodziców`,
+        childrenShownFoldedLine: (name: string) => `Przodkowie osoby ${name} są tymczasowo ukryci.`,
+        hideChildrenHere: 'Ukryj dzieci pokazane tutaj',
+        hideSiblingsHere: 'Ukryj rodzeństwo pokazane tutaj',
+        hideAllShown: (n: number) => `Ukryj pokazane · ${n}`,
+        hideAllShownAria: (n: number) => `Ukryj wszystko pokazane tutaj (rozwinięcia: ${n})`,
+        tabMoreNames: (n: number) => `i jeszcze ${n}`,
+        bubbleMoreInMenu: 'Więcej w menu osoby',
+        // Short labels inside the card branch-tab pills (glyph + text).
+        branchTabParents: 'rodzice',
+        branchTabSiblings: 'rodzeństwo',
+        branchTabChildren: 'dzieci',
+        linkTabParents: 'rodzice',
+        linkTabChild: 'dziecko',
+        linkTabChildren: 'dzieci',
+        linkParentsTooltip: 'Rodzice są gdzie indziej w drzewie',
+        linkChildTooltip: 'Dziecko jest gdzie indziej w drzewie',
+        linkChildrenTooltip: 'Dzieci są gdzie indziej w drzewie',
+        branchTabShort: { parents: 'R', siblings: 'Rz', children: 'D' },
+        branchTabFamily: 'rodzina',
+        familyTooltip: 'Rodzina',
+        familyOfOrigin: 'Rodzina pochodzenia: poza tym widokiem.',
+        focusTabHint: (name: string) => `Kliknięcie przebudowuje drzewo wokół osoby ${name}; ↩ przywraca poprzedni widok.`,
+        focusTabAria: (name: string) => `Ustaw osobę ${name} w centrum i pokaż jej rodzinę`,
+        jumpHint: (n: number) => n > 1 ? 'Kliknięcie przesuwa widok do kart; drzewo pozostaje.' : 'Kliknięcie przesuwa widok do karty; drzewo pozostaje.',
+        linkParentsAria: (name: string) => `Przesuń widok do rodziców osoby ${name}`,
+        linkChildAria: (name: string) => `Przesuń widok do dziecka osoby ${name}`,
+        linkChildrenAria: (name: string) => `Przesuń widok do dzieci osoby ${name}`,
+        menuJumpTo: (names: string[]) => `↗ Przejdź do: ${names.length > 2 ? `${names.slice(0, 2).join(', ')} i jeszcze ${names.length - 2}` : joinAndPl(names)}`,
+        crossTreeHint: 'Kliknięcie przełącza do innego drzewa; historia ↩ zaczyna się od nowa.',
+        focusToast: (name: string) => `W centrum: ${name}`,
+        focusToastBack: '↩ Wróć',
+        focusToastAria: 'Przywróć poprzedni widok',
+        childrenGroupUnion: (n: number, partner: string) => `${n}. ∞ · ${partner}`,
+        childrenWithPartnersHint: 'Kliknięcie pokazuje je tutaj razem z partnerami; widok pozostaje.',
+        parentsShownTooltip: 'Rodzice pokazani tutaj',
+        showParentsHere: 'Pokaż rodziców tutaj',
+        hideParentsHere: 'Ukryj rodziców pokazanych tutaj',
+        parentsTabShowAria: (name: string) => `Pokaż tutaj rodziców osoby ${name}`,
+        parentsTabHideAria: (name: string) => `Ukryj pokazanych rodziców osoby ${name}`,
+        partnersShownTooltip: 'Partnerzy pokazani tutaj',
+        partnersTabShowAria: (name: string) => `Pokaż tutaj pozostałych partnerów osoby ${name}`,
+        partnersTabHideAria: (name: string) => `Ukryj pokazanych partnerów osoby ${name}`,
+        partnerShowOneAria: (name: string, withChildren: boolean) => withChildren
+            ? `Pokaż tutaj tylko osobę ${name} z dziećmi z tego związku` : `Pokaż tutaj tylko osobę ${name}`,
+        partnersPickHint: 'Kliknięcie pokazuje tutaj wszystkich, kliknięcie imienia tylko tę osobę; widok pozostaje.',
+        partnersRestHint: 'Kliknięcie pokazuje tutaj także pozostałych; widok pozostaje.',
+        partnersTabRestAria: (name: string) => `Pokaż tutaj także pozostałych partnerów osoby ${name}`,
+        hidePartnersHere: 'Ukryj partnerów pokazanych tutaj',
+        nestedFocusRow: (name: string) => `Ustaw w centrum: ${name}`,
+        nestedFocusHint: 'Nowy środek drzewa ze wszystkimi gałęziami.',
+        linkPosterParents: (names: string) => `rodzice: ${names}`,
+        linkPosterChild: (names: string) => `dziecko: ${names}`,
+        linkPosterChildren: (names: string) => `dzieci: ${names}`,
+        // Marriage-order pill on a partner's card: "1. ∞ 1866"; its hover bubble
+        // names whose marriage the number counts ("Wojciech Zaremba: 2. ślub, 1885").
+        unionOrdinal: (n: number) => `${n}.`,
+        unionOrderTip: (n: number, year: string, place: string, married: boolean, name: string) =>
+            `${name}: ${n}. ${married ? 'ślub' : 'związek'}${year ? `, ${year}` : ''}${place ? `, ${place}` : ''}`,
+        personCount: (visible: number, total: number) => `${visible} z ${total} ${plPl(total, 'osoby', 'osób', 'osób')}`
+    },
+
+    // Generation guide labels (small-caps rules on the canvas, relative to focus)
+    generationLabels: {
+        grandparents: 'DZIADKOWIE',
+        parents: 'RODZICE',
+        focus: 'POKOLENIE W CENTRUM',
+        children: 'DZIECI',
+        grandchildren: 'WNUKI',
+        generationN: (offset: number) => `POKOLENIE ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
+    },
+
+    // Tree overview: plural generation names relative to the chosen person
+    treeOverview: {
+        ancestorGeneration: (n: number) => n <= 1 ? 'rodzice' : n === 2 ? 'dziadkowie'
+            : n === 3 ? 'pradziadkowie' : `${n}. pokolenie przodków`,
+        descendantGeneration: (n: number) => n <= 1 ? 'dzieci' : n === 2 ? 'wnuki'
+            : n === 3 ? 'prawnuki' : `${n}. pokolenie potomków`,
+        sameGeneration: 'pokolenie osoby',
+        goodShape: 'Drzewo jest w dobrym stanie.',
+        // "Of" form (a generation as a whole: "children per couple in the parents' generation").
+        ancestorGenerationOf: (n: number) => n <= 1 ? 'pokolenie rodziców' : n === 2 ? 'pokolenie dziadków'
+            : n === 3 ? 'pokolenie pradziadków' : `${n}. pokolenie przodków`,
+        descendantGenerationOf: (n: number) => n <= 1 ? 'pokolenie dzieci' : n === 2 ? 'pokolenie wnuków'
+            : n === 3 ? 'pokolenie prawnuków' : `${n}. pokolenie potomków`,
+        sameGenerationOf: 'pokolenie osoby',
+        title: (name: string) => `Przegląd drzewa: ${name}`,
+        empty: 'To drzewo nie ma jeszcze żadnych osób.',
+        numPersons: (n: number) => plPl(n, 'osoba', 'osoby', 'osób'),
+        numGenerations: (n: number) => plPl(n, 'pokolenie', 'pokolenia', 'pokoleń'),
+        numGenerationsShort: 'pok.',
+        numWithSource: 'ze źródłem',
+        percent: (p: string) => `${p} %`,
+        inactive: 'Drzewo nie jest otwarte – dane tylko do odczytu.',
+        openTree: 'Otwórz drzewo',
+        openAndShow: 'Otwórz drzewo i pokaż',
+        disabledHint: 'Drzewo nie jest otwarte. Zmieniać można tylko otwarte drzewo.',
+        rootLabel: 'Przodkowie osoby:',
+        notSelected: 'nie wybrano',
+        rootHint: 'sekcja liczona od tej osoby',
+        rootMark: 'Liczone od wybranej osoby',
+        searchPerson: 'Szukaj osoby…',
+        inFocus: 'osoba w centrum',
+        recent: 'ostatnio wybrana',
+        noMatch: 'Nic nie znaleziono',
+        calculating: 'Obliczanie…',
+        close: 'Zamknij',
+        sections: {
+            focus: 'Na czym się skupić', ancestors: 'Przodkowie', rods: 'Rody', life: 'Życie i zdrowie',
+            time: 'Rodzina w czasie', quality: 'Jakość danych', highlights: 'Ciekawostki',
+        },
+        rods: {
+            summary: (n: number, m: number) => m > 0 ? `${nPl(n, 'ród', 'rody', 'rodów')} · ${nPl(m, 'inna rodzina', 'inne rodziny', 'innych rodzin')}` : nPl(n, 'ród', 'rody', 'rodów'),
+            summaryOne: (label: string) => `1 ród · ${label}`,
+            summaryNone: 'na razie żadnego rodu',
+            summarySmall: (m: number) => nPl(m, 'mała rodzina', 'małe rodziny', 'małych rodzin'),
+            intro: 'Ród to linia po mieczu od najstarszego znanego nosiciela nazwiska. Żony są pokazywane w rodzie męża, należą do swojego rodu z urodzenia.',
+            none: 'Ród powstaje, gdy osoba z nazwiskiem ma w drzewie dziecko o tym samym nazwisku. W drzewie są na razie tylko pojedyncze osoby.',
+            sortLabel: 'Sortowanie',
+            sorts: { size: 'wielkość', oldest: 'najstarsze', alpha: 'alfabetycznie' },
+            founder: (gender: string) => gender === 'female' ? 'założycielka' : 'założyciel',
+            founderTitle: (gender: string) => gender === 'female' ? 'Założycielka' : 'Założyciel',
+            approx: (year: number) => `ok. ${year}`,
+            oldestKnown: (gender: string) => gender === 'female' ? 'najstarsza znana' : 'najstarszy znany',
+            members: (n: number) => nPl(n, 'członek', 'członków', 'członków'),
+            marriedIn: (n: number) => nPl(n, 'osoba wżeniona', 'osoby wżenione', 'osób wżenionych'),
+            generations: (n: number) => nPl(n, 'pokolenie', 'pokolenia', 'pokoleń'),
+            living: (n: number) => `żyjący: ${n}`,
+            rootMark: (name: string) => `Ród osoby ${name}`,
+            other: (m: number) => `Inne rodziny: ${m}`,
+            otherUpTo: (max: number) => `(do ${max} ${plPl(max, 'osoby', 'osób', 'osób')})`,
+            people: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
+            search: 'Szukaj rodu, miejscowości lub osoby…',
+            showMore: (n: number) => `Pokaż więcej (${n})`,
+            noMatch: 'Żaden ród nie pasuje do wyszukiwania.',
+            founderAuto: 'ustalony automatycznie',
+            founderManual: 'ustalony ręcznie',
+            places: 'Miejscowości',
+            placesMore: (n: number) => `i ${n} ${plPl(n, 'inna', 'inne', 'innych')}`,
+            forms: 'Formy nazwiska',
+            membersTitle: 'Członkowie według pokoleń',
+            moreInGeneration: (n: number) => `i ${nPl(n, 'inna osoba', 'inne osoby', 'innych osób')}`,
+            rodLink: (label: string) => `ród ${label}`,
+            wivesTitle: 'Żony w rodzie',
+            husbandsTitle: 'Mężowie w rodzie',
+            spousesTitle: 'Żony i mężowie w rodzie',
+            birthLine: 'ród z urodzenia',
+            moreSpouses: (n: number) => `i ${nPl(n, 'inna osoba', 'inne osoby', 'innych osób')}`,
+            allGenerations: (n: number) => `Pokaż wszystkie ${nPl(n, 'pokolenie', 'pokolenia', 'pokoleń')}`,
+            book: 'Księga rodu…',
+            edit: 'Edytuj ród…',
+            highlight: (label: string, n: number) => `Ród ${label}: ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        },
+        focusSummary: (n: number) => nPl(n, 'krok', 'kroki', 'kroków'),
+        focusGood: 'w dobrym stanie',
+        cardValidation: (n: number, type: string) => `${nPl(n, 'błąd', 'błędy', 'błędów')} w danych (np. ${type}).`,
+        cardGap: (generation: string, known: number, expected: number) => `${generation}: znane ${known} z ${expected}.`,
+        cardBirth: (n: number) => `${nPl(n, 'bezpośredni przodek nie ma', 'bezpośredni przodkowie nie mają', 'bezpośrednich przodków nie ma')} udokumentowanego urodzenia.`,
+        cardResearch: (n: number) => `${nPl(n, 'decyzja czeka', 'decyzje czekają', 'decyzji czeka')} w badaniu.`,
+        actFix: 'Popraw',
+        actShowInTree: 'Pokaż w drzewie',
+        actShow: 'Pokaż',
+        actOpen: 'Otwórz',
+        ancestorsSummary: (n: number, g: number) => `${nPl(n, 'przodek', 'przodków', 'przodków')} · najdalej ${g}. pokolenie`,
+        ancestorsNoParentsSummary: 'rodziców nie ma w drzewie',
+        colGeneration: 'Pokolenie',
+        colKnown: 'znani',
+        colDocumented: 'udokumentowani',
+        docResearchNote: 'Udokumentowane oznacza tutaj sprawdzone w badaniu; wyjściowe drzewo genealogiczne jest wskazówką.',
+        colExpected: 'oczekiwani',
+        colRatio: 'znani / oczek.',
+        docShort: 'udok.',
+        collapse: (n: number) => n === 1
+            ? '1 przodek występuje w drzewie kilka razy. Jest liczony raz.'
+            : `${nPl(n, 'przodek występuje', 'przodków występuje', 'przodków występuje')} w drzewie kilka razy. Każdy jest liczony raz.`,
+        linesTitle: 'Cztery linie dziadków',
+        lineLabels: { FF: 'Po mieczu · ojciec ojca', FM: 'Matka ojca', MF: 'Ojciec matki', MM: 'Po kądzieli · matka matki' },
+        lineDepth: (g: number) => nPl(g, 'pokolenie', 'pokolenia', 'pokoleń'),
+        lineBorn: (year: string) => `* ${year}`,
+        lineVia: (name: string, years: string) => years ? `przez ${name} (${years})` : `przez ${name}`,
+        lineUnknown: 'nieznany',
+        lineEnds: 'Końce linii',
+        lineEndsCount: (n: number) => `Końce linii (${n})`,
+        noParents: (name: string) => `Osoba ${name} nie ma w drzewie rodziców.`,
+        chooseOther: 'Wybierz inną osobę',
+        needPerson: 'Przodkowie są liczeni od wybranej osoby.',
+        choosePerson: 'Wybierz osobę',
+        back: 'Wróć do przeglądu',
+        hlLineEnds: (n: number) => `Końce linii: ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        hlGap: (generation: string, n: number) => `${generation}: brakuje ${n}`,
+        hlBirth: (n: number) => `Urodzenie bez źródła: ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        hlBirthUnproven: (n: number) => `Urodzenie niesprawdzone: ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        hlNoSource: (n: number) => `Osoby bez źródła: ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        // Entry points
+        menu: 'Przegląd drzewa',
+        menuQuality: 'Jakość danych',
+        showTooltip: 'Pokaż przegląd drzewa',
+        // Life and health: age at death
+        deathAgeTitle: 'Wiek w chwili zgonu',
+        deathAgeScope: 'w całym drzewie',
+        diedUnder5: 'Zmarli przed 5. rokiem życia',
+        diedUnder5Of: (a: number, b: number) => `${a} z ${b} ${plPl(b, 'zgonu', 'zgonów', 'zgonów')} ze znaną datą urodzenia`,
+        adultLifespan: 'Długość życia dorosłych',
+        adultMedian: (m: number) => `mediana ${nPl(m, 'rok', 'lata', 'lat')}`,
+        adultOf: (n: number) => n === 1 ? '1 osoba, która dożyła 15 lat' : `${nPl(n, 'osoba', 'osoby', 'osób')}, które dożyły 15 lat`,
+        deathAgeNotEnough: (n: number) => `Na razie za mało danych: wiek w chwili zgonu jest znany u ${n} ${plPl(n, 'osoby', 'osób', 'osób')}.`,
+        adultNotEnough: (n: number) => `Na razie za mało danych: 15 lat ${plPl(n, 'dożyła', 'dożyły', 'dożyło')} ${nPl(n, 'osoba', 'osoby', 'osób')} ze znanym wiekiem w chwili zgonu.`,
+        periodsTitle: 'Długość życia dorosłych według okresu urodzenia (mediana, tylko gdy n ≥ 5)',
+        periodLabel: (from: number, to: number) => `${from}–${to}`,
+        periodValue: (m: number) => nPl(m, 'rok', 'lata', 'lat'),
+        sampleN: (n: number) => `n ${n}`,
+        lifeSummary: (m: number) => `długość życia dorosłych ${nPl(m, 'rok', 'lata', 'lat')}`,
+        // Family over time
+        menWomen: 'Mężczyźni / kobiety',
+        men: (n: number) => nPl(n, 'mężczyzna', 'mężczyzn', 'mężczyzn'),
+        women: (n: number) => nPl(n, 'kobieta', 'kobiety', 'kobiet'),
+        unknownSex: (n: number) => `${n} o nieznanej płci`,
+        livingDeceased: 'Żyjący / zmarli (szacunek)',
+        living: (n: number) => nPl(n, 'żyjący', 'żyjących', 'żyjących'),
+        deceased: (n: number) => nPl(n, 'zmarły', 'zmarłych', 'zmarłych'),
+        childrenByGen: 'Dzieci na parę według pokoleń',
+        childrenGenNote: (name: string) => `Pokolenia względem osoby ${name}. Kuzyn należy do pokolenia tej osoby.`,
+        childrenNotEnough: (n: number) => `Na razie za mało danych: liczba dzieci jest znana u ${n} ${plPl(n, 'pary', 'par', 'par')}.`,
+        childrenNeedPerson: 'Pokolenia są liczone od wybranej osoby.',
+        couplesN: (n: number) => nPl(n, 'para', 'pary', 'par'),
+        birthsByMonth: 'Urodzenia według miesięcy',
+        monthMarks: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'],
+        monthNames: ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'],
+        monthBirths: (month: string, n: number) => `${month}: ${nPl(n, 'urodzenie', 'urodzenia', 'urodzeń')}`,
+        monthsNotEnough: (n: number) => `Na razie za mało danych: miesiąc urodzenia jest znany u ${n} ${plPl(n, 'osoby', 'osób', 'osób')}.`,
+        topMaleNames: 'Najczęstsze imiona męskie',
+        topFemaleNames: 'Najczęstsze imiona żeńskie',
+        timeSummary: (m: number, f: number) => `${nPl(m, 'mężczyzna', 'mężczyzn', 'mężczyzn')}, ${nPl(f, 'kobieta', 'kobiety', 'kobiet')}`,
+        // Data quality
+        consistencyTitle: 'Spójność',
+        countErrors: (n: number) => nPl(n, 'błąd', 'błędy', 'błędów'),
+        countWarnings: (n: number) => nPl(n, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń'),
+        countNotes: (n: number) => nPl(n, 'uwaga', 'uwagi', 'uwag'),
+        noErrors: (w: number, p: number) => w === 0 && p === 0
+            ? 'Bez błędów, ostrzeżeń i uwag.'
+            : `Bez błędów. ${[w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '', p ? nPl(p, 'uwaga', 'uwagi', 'uwag') : ''].filter(Boolean).join(', ')}.`,
+        moreIssues: (n: number) => `i jeszcze ${n}…`,
+        findingGodparent: (name: string) => `Rodzic chrzestny: ${name}`,
+        findingPlace: (place: string) => `Miejsce: ${place}`,
+        completenessTitle: 'Kompletność danych',
+        fieldBirthDate: 'Data urodzenia',
+        fieldDeathDate: 'Data zgonu (u zmarłych)',
+        fieldBirthPlace: 'Miejsce urodzenia',
+        fieldSource: 'Źródło',
+        fieldPhoto: 'Zdjęcie',
+        contentLabel: 'Zawartość drzewa:',
+        contentPhotos: (n: number, size: string) => `${nPl(n, 'zdjęcie', 'zdjęcia', 'zdjęć')} (${size})`,
+        contentEvents: (n: number) => nPl(n, 'zdarzenie', 'zdarzenia', 'zdarzeń'),
+        contentSources: (n: number) => nPl(n, 'źródło', 'źródła', 'źródeł'),
+        contentAttachments: (n: number, size: string) => `${nPl(n, 'załącznik', 'załączniki', 'załączników')} (${size})`,
+        mediaWarning: 'Media zajmują ponad 10 MB. Plik drzewa wolniej się zapisuje i udostępnia.',
+        evidenceTitle: 'Gdzie brakuje dowodów',
+        evNoSource: 'Osoby bez źródła',
+        evBirthNoSource: 'Urodzenia bez źródła',
+        evBirthUnproven: 'Urodzenia niesprawdzone w badaniu',
+        evLineEnds: 'Końce linii',
+        evOfTotal: (n: number, total: number) => `${n} z ${total}`,
+        evOfAncestors: (n: number, total: number) => `${n} z ${total} ${plPl(total, 'przodka', 'przodków', 'przodków')}`,
+        evAllGood: 'Wszyscy mają źródło i rodziców.',
+        evLevels: 'Udokumentowanie w drzewie (● ◐ ○ na kartach)',
+        structureTitle: 'Struktura',
+        unions: (n: number) => nPl(n, 'związek', 'związki', 'związków'),
+        parts: (k: number) => `${k} ${plPl(k, 'niepołączona część', 'niepołączone części', 'niepołączonych części')}:`,
+        partItem: (name: string, n: number) => `${name} (${nPl(n, 'osoba', 'osoby', 'osób')})`,
+        partsHint: 'Niepołączone części nie mają drogi do głównej rodziny. Można je połączyć relacją albo wydzielić do osobnych drzew.',
+        separateParts: 'Wydziel niepołączone części',
+        allConnected: 'Wszystkie osoby są połączone w jedną rodzinę.',
+        quickActions: 'Szybkie działania',
+        actValidation: 'Szczegóły walidacji',
+        actCleanPlaces: (n: number) => `Usuń osierocone miejsca (${n})`,
+        actSplitFamilies: 'Podziel na rodziny',
+        qualityNoErrors: 'bez błędów',
+        qualityParts: (k: number) => `${k} ${plPl(k, 'niepołączona część', 'niepołączone części', 'niepołączonych części')}`,
+        // Highlights
+        recOldest: 'Najdłużej żyjący',
+        recMarriage: 'Najdłuższe małżeństwo',
+        recChildren: 'Najwięcej dzieci',
+        recAverage: 'Średnia liczba dzieci na parę',
+        recYears: (n: number) => nPl(n, 'rok', 'lata', 'lat'),
+        recChildCount: (n: number) => nPl(n, 'dziecko', 'dzieci', 'dzieci'),
+        anniversariesTitle: 'Rocznice w ciągu 30 dni',
+        noAnniversaries: 'W ciągu najbliższych 30 dni nie ma żadnej rocznicy.',
+        highlightsSummary: (n: number) => `${nPl(n, 'rocznica', 'rocznice', 'rocznic')} w ciągu 30 dni`,
+        // Where to focus: ask the family
+        cardRememberers: (n: number) => n === 1
+            ? '1 osoba zmarła w ostatnich 100 latach: brakuje daty lub miejsca zgonu.'
+            : `${nPl(n, 'osoba zmarła', 'osoby zmarłe', 'osób zmarłych')} w ostatnich 100 latach: brakuje daty lub miejsca zgonu.`,
+        // Ancestors: ask the family
+        remTitle: 'Pytania do rodziny',
+        remTitleCount: (n: number) => `Pytania do rodziny (${n})`,
+        remAside: 'co wie już tylko rodzina',
+        remIntro: 'Zmarli w ostatnich 100 latach. Archiwa zwykle jeszcze nie udostępniają tych danych – mogą je znać członkowie rodziny.',
+        remMissing: 'brakuje:',
+        remFacts: { deathDate: 'data zgonu', deathPlace: 'miejsce zgonu', deathCause: 'przyczyna', birthPlace: 'miejsce urodzenia' },
+        remRelation: relationPl,
+        remBornDeathUnknown: (year: string) => `* ${year} · zgon nieznany`,
+        remQuestion: 'Pytanie:',
+        remAdd: 'Dodaj pytanie',
+        remEdit: 'Edytuj pytanie',
+        remField: 'Pytanie do krewnych',
+        remSave: 'Zapisz pytanie',
+        remCancel: 'Anuluj',
+        remEmpty: 'Nikt ze zmarłych w ostatnich 100 latach nie ma luk w danych.',
+        remSummary: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
+        // Data quality: certainty of the research's facts
+        certaintyTitle: 'Pewność danych z badania',
+        certaintyDesc: 'Jak pewna jest informacja według badania. Nie mylić z udokumentowaniem źródłem (● ◐ ○ w sekcji Gdzie brakuje dowodów).',
+        certaintyRows: { birth: 'Urodzenie', death: 'Zgon', marriage: 'Ślub' },
+        certaintyNone: 'na razie bez stanu',
+    },
+
+    // Branch tabs (family context navigation)
+    branchTabs: {
+        viewFamily: 'Widok jako rodzic (z własną rodziną)'
+    },
+
+    // Search
+    search: {
+        married: (surname: string) => `po ślubie ${surname}`,
+        birth: (surname: string) => `z d. ${surname}`,
+        former: (surname: string) => `dawniej ${surname}`,
+        placeholder: 'Szukaj osoby...',
+        noResults: 'Nic nie znaleziono',
+        multipleResults: 'Znaleziono kilka wyników',
+        selectPerson: 'Wybierz osobę',
+        shortcutHint: '/',
+        shortcutAria: 'Wyszukiwanie klawiszem /',
+        open: 'Szukaj osoby',
+        cancel: 'Anuluj',
+        clear: 'Wyczyść wyszukiwanie',
+        resultCount: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
+    },
+
+    // Links into the app from outside (macOS widget): ?person= / ?show=waiting
+    deepLink: {
+        personNotFound: 'Wskazanej osoby nie ma w tym drzewie.',
+        treeNotFound: 'Wskazanego drzewa nie ma w tej przeglądarce.',
+        noResearch: 'Drzewo nie jest połączone z badaniem.',
+    },
+
+    // Search filters
+    searchFilters: {
+        toggle: 'Filtry',
+        lastName: 'Nazwisko',
+        place: 'Miejsce',
+        yearFrom: 'Rok od',
+        yearTo: 'Rok do',
+        anyGender: 'Dowolna płeć',
+        anyStatus: 'Żyjący i zmarli',
+        living: 'Tylko żyjący',
+        deceased: 'Tylko zmarli',
+        clear: 'Wyczyść',
+        resultCount: (n: number) => nPl(n, 'wynik', 'wyniki', 'wyników'),
+        title: 'Filtr',
+        clearFilters: 'Wyczyść filtry',
+        show: (n: number) => `Pokaż ${nPl(n, 'osobę', 'osoby', 'osób')}`,
+        none: 'Brak osób',
+        activeCount: (n: number) => `Aktywne filtry: ${n}`,
+    },
+
+    // Person picker
+    personPicker: {
+        placeholder: 'Szukaj osoby...',
+        noResults: 'Brak pasujących osób'
+    },
+
+    // Errors
+    errors: {
+        saveFailed: 'Zapis nie powiódł się — ostatnie zmiany mogły nie zostać zapisane! Wymagane jest zwolnienie miejsca lub odblokowanie szyfrowania i ponowna edycja.',
+        invalidJson: 'Nieprawidłowy plik JSON'
+    },
+
+    // Storage safety: encryption lock, other tabs, backups
+    storageSafety: {
+        saveBlocked: 'Tego drzewa nie udało się odszyfrować bieżącym hasłem, dlatego jego zmiany NIE SĄ ZAPISYWANE. Najpierw wymagane jest odblokowanie danych właściwym hasłem.',
+        lockedBanner: 'Dane są zaszyfrowane i zablokowane.',
+        newerReadOnly: 'To drzewo zapisała nowsza wersja aplikacji, dlatego jest tu tylko do odczytu. Po aktualizacji aplikacji znów będzie można je edytować.',
+        newerNotSaved: 'Nic nie zapisano: drzewo zapisała nowsza wersja aplikacji i do czasu aktualizacji aplikacji jest tu tylko do odczytu.',
+        unlock: 'Odblokuj',
+        treeOtherKey: 'To drzewo jest zaszyfrowane innym hasłem (sprzed zmiany hasła lub z importu). Po podaniu tego hasła drzewo zostanie ponownie zaszyfrowane obecnym hasłem.',
+        treeRecovered: 'Drzewo jest odblokowane i ponownie zaszyfrowane obecnym hasłem.',
+        unlockToContinue: 'Najpierw wymagane jest odblokowanie zaszyfrowanych danych — nowe drzewa są zapisywane w postaci zaszyfrowanej.',
+        otherTabSaved: 'To drzewo zapisało inne okno. Zmiany będą widoczne po ponownym wczytaniu drzewa. Do tego czasu zmiany w tym oknie nie są zapisywane.',
+        otherTabNotSaved: 'Nie zapisano: w międzyczasie drzewo zapisało inne okno, a to okno ma starszą kopię. Wymagane jest ponowne wczytanie drzewa i kontynuacja w zapisanej wersji. Zmiana z tego okna nie zostanie zachowana.',
+        reload: 'Wczytaj ponownie',
+        storageInitFailed: 'Nie udało się otworzyć pamięci przeglądarki, dlatego danych nie można wczytać ani zapisać. Pomaga zamknięcie pozostałych kart aplikacji, sprawdzenie, czy tryb prywatny nie blokuje pamięci, i ponowne wczytanie strony.',
+        storageBlocked: 'Pamięć blokuje inna karta ze starszą wersją aplikacji. Aby kontynuować, wymagane jest jej zamknięcie.',
+        storageClosed: 'Aplikacja została zaktualizowana w innej karcie. Przed kolejnymi zmianami wymagane jest ponowne wczytanie tej karty.',
+        treeLocked: 'To drzewo jest zablokowane. Cofanie i ponawianie zmian jest możliwe dopiero po odblokowaniu w zarządzaniu drzewami.',
+        importedSuffix: (date: string, time: string) => `import z dnia ${date} ${time}`,
+        backupTitle: 'Przywracanie kopii zapasowej',
+        backupContains: (count: number) => `Ta kopia zapasowa zawiera ${nPl(count, 'drzewo', 'drzewa', 'drzew')}. Zaimportować wszystkie jako nowe drzewa?`,
+        backupImportAll: 'Importuj wszystkie drzewa',
+        backupImported: (count: number) => `Zaimportowano: ${nPl(count, 'drzewo', 'drzewa', 'drzew')}`,
+        backupSkipped: (count: number) => `Pominięto nieczytelne drzewa (${count}).`,
+        backupEmpty: 'Kopia zapasowa nie zawiera żadnego czytelnego drzewa.',
+        snapshotFailed: 'Operacja na kopii zapasowej nie powiodła się.',
+        snapshotLocked: 'Praca z kopiami zapasowymi wymaga odblokowania zaszyfrowanych danych.',
+        reencodeFailed: (count: number) => `Niektórych zapisanych elementów (kopie zapasowe, wpisy zmian) nie udało się przekonwertować i pozostały w pierwotnej postaci (${count}).`
+    },
+
+    // Add child - parent selection
+    addChild: {
+        selectParent: 'Wybierz drugiego rodzica',
+        newPlaceholder: 'Nowa osoba (nieznana)',
+        unknownPerson: 'Nieznana osoba'
+    },
+
+    // Small UI tooltips wired via data-i18n-title
+    uiTips: {
+        centerOnFocus: 'Wyśrodkuj na osobie w centrum',
+        embeddedInfo: 'Informacje',
+    },
+
+    // About dialog
+    about: {
+        title: 'O aplikacji Strom',
+        version: 'Wersja',
+        support: 'Strom jest bezpłatny i open source. Jego dalszy rozwój można wesprzeć.',
+        coffee: 'Postaw kawę',
+        betaBadge: 'Beta',
+        betaValue: (version: string) => `BETA · ${version}`,
+        betaTitle: 'Wersja testowa przed wydaniem. Ma własne dane, oddzielone od zwykłej aplikacji. Drzewa przenosi się między nimi eksportem i importem; kopia zapasowa przed przeniesieniem to dobry zwyczaj.',
+        description: 'Drzewo genealogiczne w przeglądarce lub w jednym pliku HTML. Dane nie opuszczają urządzenia.',
+        createdBy: 'Stworzył',
+        author: 'Autor',
+        authorName: 'Milan Víšek',
+        sourceCode: 'Kod źródłowy',
+        usersGroup: 'Grupa użytkowników na Facebooku ↗',
+        whatsNew: 'Co nowego ↗',
+        close: 'Zamknij',
+        currentData: 'Bieżące dane',
+        stats: {
+            trees: (n: number) => nPl(n, 'drzewo', 'drzewa', 'drzew'),
+            persons: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
+            families: (n: number) => nPl(n, 'rodzina', 'rodziny', 'rodzin'),
+            unknownSex: (n: number) => `${n} o nieznanej płci`,
+            generations: (n: number) => nPl(n, 'pokolenie', 'pokolenia', 'pokoleń'),
+            since: (year: string) => `od ${year}`
+        }
+    },
+
+    // GEDCOM import
+    gedcom: {
+        resultTitle: 'Konwersja GEDCOM',
+        persons: 'Osób',
+        partnerships: 'Relacji',
+        placeholders: 'Zastępcze',
+        unsupported: 'Nieobsługiwane',
+        saveAsJson: 'Zapisz jako JSON',
+        saveAsJsonDesc: 'Pobierz przekonwertowane dane jako plik JSON',
+        importAsNew: 'Importuj jako nowe drzewo',
+        importAsNewDesc: 'Dodaj jako osobne drzewo (bieżące pozostanie)',
+        mergeExisting: 'Scal z istniejącym',
+        mergeExistingDesc: 'Inteligentne scalenie z bieżącym drzewem',
+        insertToTree: 'Wstaw do drzewa',
+        insertToTreeDesc: 'Wczytaj przekonwertowane dane do bieżącego drzewa',
+        parseError: 'Nie udało się przetworzyć pliku GEDCOM',
+        skippedTags: 'Pominięte rekordy',
+        unknownSex: (n: number) => `${nPl(n, 'osoba', 'osoby', 'osób')} o nieznanej płci`,
+        otherFamilyLinks: (n: number) =>
+            `${n} ${plPl(n, 'dziecko jest zapisane', 'dzieci są zapisane', 'dzieci jest zapisanych')} w kilku rodzinach `
+            + `(np. adopcja); pokazano przy rodzinie biologicznej, resztę zapisano w notatce osoby`,
+        photos: 'Zdjęcia',
+        documents: 'Dokumenty',
+        excerpts: 'Wycinki',
+        sources: 'Źródła',
+        events: 'Zdarzenia',
+        notes: 'Notatki',
+        allImported: 'Zaimportowano wszystko z pliku.',
+        viewCutTooSmall: 'Najpierw wymagane jest wyświetlenie większej liczby osób (widok Rodzina lub Potomkowie), potem można utworzyć drzewo z widoku.',
+        viewCutName: (name: string) => `${name} — wycinek`,
+        externalMedia: (n: number) => `Plik odwołuje się do ${nPl(n, 'zewnętrznego pliku multimediów', 'zewnętrznych plików multimediów', 'zewnętrznych plików multimediów')} (platformy eksportują zdjęcia osobno jako folder/zip — najpierw wymagane jest jego rozpakowanie).`,
+        attachMedia: 'Podłącz pliki multimediów…',
+        downloadMedia: 'Pobierz zdjęcia z internetu',
+        downloading: (done: number, total: number) => `Pobieranie zdjęć… ${done}/${total}`,
+        mediaAttached: (matched: number, total: number) => `Podłączono ${matched} z ${total} wskazanych plików.`,
+        mediaNoMatch: 'Żaden z wybranych plików nie odpowiada wskazanym nazwom.',
+    },
+
+    // Notes the GEDCOM importer writes straight into the data (they are saved),
+    // built in the app's CURRENT language at the moment of the import.
+    gedcomNotes: {
+        /**
+         * Labels for standard GEDCOM facts the model has no field for. They are
+         * folded into the person's or the couple's note rather than dropped —
+         * see foldFactIntoNote in the parser.
+         */
+        factLabels: {
+            BLES: 'Błogosławieństwo',
+            RETI: 'Przejście na emeryturę',
+            CAST: 'Pozycja społeczna',
+            DSCR: 'Opis',
+            IDNO: 'Numer identyfikacyjny',
+            NCHI: 'Liczba dzieci',
+            NMR: 'Liczba małżeństw',
+            PROP: 'Majątek',
+            SSN: 'Numer ubezpieczenia',
+            FACT: 'Informacja',
+            ALIA: 'Występuje także jako',
+        } as Record<string, string>,
+        census: 'Spis ludności',
+        genericEvent: 'Zdarzenie',
+        altBirth: 'Urodzenie (alternatywny zapis)',
+        altDeath: 'Zgon (alternatywny zapis)',
+        birthRecord: 'Akt urodzenia',
+        deathRecord: 'Akt zgonu',
+        birthNote: (text: string) => `Urodzenie: ${text}`,
+        deathNote: (text: string) => `Zgon: ${text}`,
+        remarriage: (divorced: string, married: string) => `Rozwód ${divorced}, ponowny ślub ${married}`,
+        remarriageNoDate: (married: string) => `Rozwód, ponowny ślub ${married}`,
+        association: (name: string, label: string) => `Relacja: ${name} (${label})`,
+        email: (value: string) => `E-mail: ${value}`,
+        adoptedChild: 'dziecko adoptowane',
+        fosterChild: 'dziecko w rodzinie zastępczej',
+        child: 'dziecko',
+        parentAnd: ' i ',
+        alsoRecorded: (kind: string, parents: string) => `Zapisano również jako ${kind} rodziców ${parents}.`,
+        alsoRecordedNoParents: (kind: string) => `Zapisano również jako ${kind} w innej rodzinie.`,
+        /**
+         * Detail a register gives about one fact beyond its date and place
+         * (GEDCOM AGE / CAUS / ADDR under the fact). One labelled line in the
+         * fact's note — there is no field for them, and a line is all it takes.
+         */
+        age: (text: string) => `Wiek: ${text}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'w' | 'd') => {
+            const words = {
+                y: plPl(n, 'rok', 'lata', 'lat'),
+                m: plPl(n, 'miesiąc', 'miesiące', 'miesięcy'),
+                w: plPl(n, 'tydzień', 'tygodnie', 'tygodni'),
+                d: plPl(n, 'dzień', 'dni', 'dni'),
+            };
+            return `${n} ${words[unit]}`;
+        },
+        ageWords: { INFANT: 'niemowlę', STILLBORN: 'martwo urodzone', CHILD: 'dziecko' } as Record<string, string>,
+        husbandAge: (text: string) => `Wiek pana młodego: ${text}`,
+        wifeAge: (text: string) => `Wiek panny młodej: ${text}`,
+        cause: (text: string) => `Przyczyna: ${text}`,
+        address: (text: string) => `Adres: ${text}`,
+        /** A date the file gave in another calendar; the stored date is read as Gregorian. */
+        calendarDate: (calendar: string, date: string) => `Data w kalendarzu ${calendar}: ${date}`,
+        calendars: { JULIAN: 'juliańskim', HEBREW: 'żydowskim', 'FRENCH R': 'francuskim republikańskim', ROMAN: 'rzymskim' } as Record<string, string>,
+        /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
+        sourcePublication: (text: string) => `Wydanie: ${text}`,
+        sourceAuthor: (text: string) => `Autor: ${text}`,
+        sourceCallNumber: (text: string) => `Sygnatura: ${text}`,
+        /** A GEDCOM date phrase or a date that could not be read whole — kept as written. */
+        datePhrase: (text: string) => `Data w zapisie: ${text}`,
+    },
+
+    // Save current data dialog
+    saveCurrent: {
+        title: 'Zapisać bieżące dane?',
+        message: 'Dane już istnieją. Zapisać je przed kontynuowaniem?',
+        exportJson: 'Eksportuj JSON',
+        exportApp: 'Eksportuj aplikację',
+        continueWithout: 'Kontynuuj bez zapisywania'
+    },
+
+    // Validation messages
+    validation: {
+        parseError: 'Błąd odczytu pliku',
+        invalidStructure: 'Nieprawidłowa struktura pliku',
+        missingPersons: 'Brak danych osób',
+        missingPartnerships: 'Brak danych relacji',
+        missingField: 'Brak wymaganego pola',
+        invalidReference: 'Nieprawidłowe odwołanie w danych',
+        missingGedcomHeader: 'Brak nagłówka GEDCOM',
+        noIndividuals: 'W pliku nie znaleziono żadnych osób',
+        fileTooShort: 'Plik jest za krótki lub pusty',
+        invalidLine: 'Nieprawidłowy format wiersza',
+        unknownError: 'Nieznany błąd',
+        continueWithWarnings: 'Kontynuuj mimo ostrzeżeń',
+        validationFailed: 'Walidacja nie powiodła się',
+        warnings: 'Ostrzeżenia',
+        errors: 'Błędy',
+        noVersion: 'Plik nie zawiera informacji o wersji (starszy format)',
+        olderVersion: 'Plik pochodzi ze starszej wersji',
+        newerVersion: 'Plik pochodzi z nowszej wersji (możliwe problemy ze zgodnością)',
+        // Version mismatch dialogs
+        newerDataTitle: 'Wykryto nowszą wersję danych',
+        newerDataInImport: 'Ten plik został utworzony nowszą wersją aplikacji.',
+        yourVersion: 'Wersja tej aplikacji',
+        dataVersion: 'Wersja danych',
+        viewOnlyAllowed: 'Dane można przeglądać, ale import jest zablokowany, aby zapobiec utracie danych.',
+        viewOnly: 'Tylko przeglądanie (tylko do odczytu)',
+        importBlocked: 'Import zablokowany',
+        importBlockedNewer: 'Nie można zaimportować: ten plik wymaga nowszej wersji aplikacji.',
+        jsonNewerVersion: 'Ten plik JSON został utworzony nowszą wersją (v%d). Ta aplikacja obsługuje wersję %d.'
+    },
+};

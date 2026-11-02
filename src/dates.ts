@@ -51,6 +51,8 @@ const QUALIFIER_WORDS: Record<string, DateQualifier> = {
     '>': '>', 'po': '>', 'od': '>', 'after': '>', 'aft': '>',
     // German (the DE placeholder offers 'um 1880')
     'um': '~', 'etwa': '~', 'zirka': '~', 'vor': '<', 'nach': '>',
+    // Polish ('ok. 1880', 'około 1880', 'przed 1880', 'po 1880')
+    'ok': '~', 'około': '~', 'przed': '<',
 };
 
 /** English month names and abbreviations (GEDCOM uses JAN…DEC too). */
@@ -143,11 +145,11 @@ export function toCanonical(date: FlexDate): string {
  * is the only valid reading. `lang` defaults to the current UI language;
  * importers (GEDCOM etc.) never go through here.
  */
-export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de'): string | null {
+export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de' | 'pl'): string | null {
     let s = input.trim();
     if (!s) return '';
     const cur = lang ?? getCurrentLanguage();
-    const monthFirstSlash = cur !== 'cs' && cur !== 'de';
+    const monthFirstSlash = cur !== 'cs' && cur !== 'de' && cur !== 'pl';
 
     // Period: 'A/B', 'A/', '/B' as stored (the edit field shows it so), and
     // 'od A do B', 'from A to B', 'von A bis B'. 'od A' alone stays "after".
@@ -163,7 +165,7 @@ export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de'): st
 
     // Range: 'A..B', 'mezi A a B', 'between A and B' — sides normalize
     // through the single-date path (no qualifiers inside a range).
-    const rangeMatch = /^(?:mezi|between|zwischen)\s+(.+?)\s+(?:a|and|und)\s+(.+)$/i.exec(s);
+    const rangeMatch = /^(?:mezi|between|zwischen|między)\s+(.+?)\s+(?:a|and|und)\s+(.+)$/i.exec(s);
     const sides = rangeMatch ? [rangeMatch[1], rangeMatch[2]]
         : s.includes('..') ? s.split('..', 2) : null;
     if (sides) {
@@ -287,17 +289,19 @@ export function dateSortKey(value?: string): string {
     return /^[~<>/]/.test(value) ? value.slice(1) : value;
 }
 
-const QUALIFIER_TEXT: Record<'cs' | 'en' | 'de', Record<Exclude<DateQualifier, ''>, string>> = {
+const QUALIFIER_TEXT: Record<'cs' | 'en' | 'de' | 'pl', Record<Exclude<DateQualifier, ''>, string>> = {
     cs: { '~': 'kolem', '<': 'před', '>': 'po' },
     en: { '~': 'about', '<': 'before', '>': 'after' },
     de: { '~': 'um', '<': 'vor', '>': 'nach' },
+    pl: { '~': 'ok.', '<': 'przed', '>': 'po' },
 };
 
 /** The words of a period (GEDCOM FROM … TO …): 'od 1871 do 1882'. */
-const PERIOD_TEXT: Record<'cs' | 'en' | 'de', { from: string; to: string; since: string }> = {
+const PERIOD_TEXT: Record<'cs' | 'en' | 'de' | 'pl', { from: string; to: string; since: string }> = {
     cs: { from: 'od', to: 'do', since: 'od' },
     en: { from: 'from', to: 'to', since: 'from' },
     de: { from: 'von', to: 'bis', since: 'ab' },
+    pl: { from: 'od', to: 'do', since: 'od' },
 };
 
 /** English month abbreviations for display, as GEDCOM writes them ('15 MAY 1880'). */
@@ -308,20 +312,21 @@ const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', '
  *   cs: '15. 5. 1880', '5/1880', 'kolem 1880'
  *   en: '15 May 1880', 'May 1880', 'about 1880'
  *   de: '15.5.1880', '5/1880', 'um 1880'
+ *   pl: '15.5.1880', '5/1880', 'ok. 1880'
  * English names the month: an all-numeric '3/4/1850' reads differently in the
  * US and in Britain. Every English form parses back through normalizeDateInput.
  */
-export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): string {
+export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de' | 'pl'): string {
     const d = parseFlexDate(value);
     if (!d) return value ?? '';
     const cur = getCurrentLanguage();
-    const locale = lang ?? (cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en');
+    const locale = lang ?? (cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : cur === 'pl' ? 'pl' : 'en');
 
     let core: string;
     if (d.day !== undefined && d.month !== undefined) {
         core = locale === 'cs'
             ? `${d.day}. ${d.month}. ${d.year}`
-            : locale === 'de'
+            : locale === 'de' || locale === 'pl'
                 ? `${d.day}.${d.month}.${d.year}`
                 : `${d.day} ${MONTH_ABBR_EN[d.month - 1]} ${d.year}`;
     } else if (d.month !== undefined) {
@@ -342,6 +347,8 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): strin
             ? `mezi ${core} a ${endCore}`
             : locale === 'de'
                 ? `zwischen ${core} und ${endCore}`
+                : locale === 'pl'
+                ? `między ${core} a ${endCore}`
                 : `between ${core} and ${endCore}`;
     }
 
@@ -360,10 +367,10 @@ export function formatDateForInput(value?: string): string {
     const d = parseFlexDate(value);
     if (!d) return value;
     if (d.end || d.period) return value;  // ranges and periods stay canonical ('1880..1885', '1880/1885')
-    // Czech and German both write dates day-first with dots ('15.5.1880').
+    // Czech, German and Polish write dates day-first with dots ('15.5.1880').
     // English keeps ISO: unambiguous for readers of either convention.
     const inputLang = getCurrentLanguage();
-    if (inputLang !== 'cs' && inputLang !== 'de') return value;
+    if (inputLang !== 'cs' && inputLang !== 'de' && inputLang !== 'pl') return value;
     const q = d.qualifier;
     if (d.day !== undefined && d.month !== undefined) return `${q}${d.day}.${d.month}.${d.year}`;
     if (d.month !== undefined) return `${q}${d.month}.${d.year}`;
