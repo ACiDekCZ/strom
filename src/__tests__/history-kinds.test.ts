@@ -98,6 +98,28 @@ describe('POST /history/kinds', () => {
         expect(foreign).toMatchObject({ code: 'link', link: `strom-research://history-kinds?tree=${TREE}&scope=tree&inherit=1` });
     });
 
+    it('403 link: the research\'s parameters in its own order (tree, kinds|inherit, scope) are taken, not only the app\'s text', () => {
+        const reply = (link: string, sent: Parameters<typeof historyKindsReply>[3] = { kinds: ['war', 'law'], scope: 'tree' }) =>
+            historyKindsReply(403, { code: 'history.kinds.link', link }, [], sent, check);
+        const base = `strom-research://history-kinds?tree=${TREE}`;
+        // The research's order and its own value shape: taken (as the app writes the same parameters).
+        expect(reply(`${base}&kinds=all,-economy&scope=tree`)).toMatchObject({ link: `${base}&scope=tree&kinds=all,-economy` });
+        expect(reply(`${base}&kinds=all%2C-economy&scope=default`)).toMatchObject({ link: `${base}&scope=default&kinds=all,-economy` });
+        expect(reply(`${base}&inherit=1&scope=tree`, { scope: 'tree', inherit: true })).toMatchObject({ link: `${base}&scope=tree&inherit=1` });
+        // Kinds in another order than the app's list: the research's value.
+        expect(reply(`${base}&kinds=law,war&scope=tree`)).toMatchObject({ link: `${base}&scope=tree&kinds=law,war` });
+        // Anything else: the app's own link.
+        const own = { link: `${base}&scope=tree&kinds=war,law` };
+        expect(reply(`${base}&kinds=all,-economy&scope=tree&x=1`)).toMatchObject(own);
+        expect(reply(`${base}&kinds=war&kinds=law&scope=tree`)).toMatchObject(own);
+        expect(reply(`${base}&kinds=war,nope&scope=tree`)).toMatchObject(own);
+        expect(reply(`${base}&kinds=war&scope=everyone`)).toMatchObject(own);
+        expect(reply(`${base}&inherit=1&scope=default`)).toMatchObject(own);
+        expect(reply(`${base}&inherit=1&kinds=war&scope=tree`)).toMatchObject(own);
+        expect(reply(`strom-research-dev://history-kinds?tree=${TREE}&kinds=war&scope=tree`)).toMatchObject(own);
+        expect(reply(`strom-research://history-kinds?tree=other&kinds=war&scope=tree`)).toMatchObject(own);
+    });
+
     it('maps the errors', () => {
         const sent = { kinds: ['war'] as HistoryKind[], scope: 'tree' as const };
         expect(historyKindsReply(503, { code: 'research.busy' }, [], sent, check)).toMatchObject({ code: 'busy' });

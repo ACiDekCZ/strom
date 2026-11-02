@@ -651,10 +651,20 @@ export function fakeHistoryDetail(opts: { many?: boolean } = {}, init: Partial<F
 }
 
 /** The answer to `/history*`, `/experiments` and `/stories` (null: not one of them; 404 when not said in `features`). */
-/** The value of history.kinds as the research writes it in a link: `all`, `none` or the kinds. */
+/** The value of history.kinds as the research keeps it: `all`, `none` or the kinds. */
 function kindsValue(kinds: string[]): string {
     const list = FAKE_KINDS.filter(k => kinds.includes(k));
     return !list.length ? 'none' : list.length === FAKE_KINDS.length ? 'all' : list.join(',');
+}
+
+/**
+ * The value as the research writes it in a link (its kindsSetting): `all`, `none`, else "all but"
+ * (`all,-economy`) when the value before was `all`, the kinds otherwise.
+ */
+function linkKindsValue(kinds: string[], before: string): string {
+    const v = kindsValue(kinds);
+    if (v === 'all' || v === 'none' || before !== 'all') return v;
+    return ['all', ...FAKE_KINDS.filter(k => !kinds.includes(k)).map(k => `-${k}`)].join(',');
 }
 
 /** A value of `?kinds=` (`all`, `none`, a list, `all,-x`) as a list of kinds, or null. */
@@ -710,12 +720,13 @@ function serveHistoryKinds(b: FakeBridge, h: FakeHistory, method: string, url: U
         if (h.kindsReply) return h.kindsReply;
         const scope = body.scope ?? 'tree';
         if (scope !== 'tree' && scope !== 'default') return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
+        // The research's order of the parameters: tree, kinds|inherit, scope (the app builds tree, scope, kinds|inherit).
         const link = (q: string) => `strom-research://history-kinds?tree=${UUID}&${q}`;
         if (body.inherit === true) {
             if (scope !== 'tree' || 'kinds' in body) return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
             const added = k.def.filter(x => !k.kinds.includes(x));
             if (added.length) {
-                return refuse(403, 'history.kinds.link', 'Adding kinds is confirmed in the research terminal.', { link: link('scope=tree&inherit=1'), added });
+                return refuse(403, 'history.kinds.link', 'Adding kinds is confirmed in the research terminal.', { link: link('inherit=1&scope=tree'), added });
             }
             k.own = false;
             k.kinds = [...k.def];
@@ -726,7 +737,7 @@ function serveHistoryKinds(b: FakeBridge, h: FakeHistory, method: string, url: U
             const added = FAKE_KINDS.filter(x => want.includes(x) && !now.includes(x));
             if (added.length) {
                 return refuse(403, 'history.kinds.link', 'Adding kinds is confirmed in the research terminal.',
-                    { link: link(`scope=${scope}&kinds=${kindsValue(want)}`), added });
+                    { link: link(`kinds=${linkKindsValue(want, kindsValue(now))}&scope=${scope}`), added });
             }
             if (scope === 'default') {
                 k.def = FAKE_KINDS.filter(x => want.includes(x));

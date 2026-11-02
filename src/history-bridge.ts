@@ -596,19 +596,28 @@ export function historyKindsLink(body: HistoryKindsBody, tree: string, scheme?: 
 }
 
 /**
- * The research's `history-kinds` link when it is one the app would build for this tree (its value may
- * be written in another shape, `all,-law`): rebuilt from its fixed parts and compared; else null.
+ * The research's `history-kinds` link when it says what the app would say for this tree: the same scheme
+ * and tree, a fixed scope and kinds from the fixed list (any value shape, `all,-law`; any order of the
+ * kinds) or inherit — its parameters compared, not the text, as the research writes them in its own order
+ * (`tree, kinds|inherit, scope`) and reads them in any. Returned as the app builds it from those
+ * parameters (nothing else of the text goes on); else null.
  */
 function saidKindsLink(said: string, tree: string, scheme?: string): string | null {
-    const m = /^[a-z0-9-]+:\/\/history-kinds\?(.*)$/.exec(said);
+    const m = /^([a-z0-9-]+):\/\/history-kinds\?([^#]*)$/.exec(said);
     if (!m) return null;
-    const q = new URLSearchParams(m[1]);
+    const q = new URLSearchParams(m[2]);
+    const keys = [...q.keys()];
+    const inherit = q.has('inherit');
+    const want = inherit ? ['inherit', 'scope', 'tree'] : ['kinds', 'scope', 'tree'];
+    // Each parameter once, nothing else.
+    if (keys.length !== want.length || [...keys].sort().join() !== want.join()) return null;
     const scope = q.get('scope');
     if (q.get('tree') !== tree || (scope !== 'tree' && scope !== 'default')) return null;
-    const built = q.get('inherit') === '1'
+    if (inherit && q.get('inherit') !== '1') return null;
+    const built = inherit
         ? researchSchemeUrl('history-kinds', { tree, kindsScope: scope, inherit: true }, scheme)
         : researchSchemeUrl('history-kinds', { tree, kindsScope: scope, kinds: q.get('kinds') ?? '' }, scheme);
-    return built === said ? said : null;
+    return built && built.startsWith(`${m[1]}://`) ? built : null;
 }
 
 function kindsRefusal(status: number, body: unknown, features: readonly string[] | null | undefined,
