@@ -53,7 +53,7 @@ describe('the letter of a surname with an unreadable place (1102)', () => {
     });
 
     it('the sort: the letters first, then the uncertain readings, those without a surname last', () => {
-        const keys = [person('Zbořil'), person('[?]o[?]ral'), person('[?]'), person('Adámek')].map(personIndexSort).sort();
+        const keys = [person('Zvonkařík'), person('[?]o[?]ral'), person('[?]'), person('Ambrožíček')].map(personIndexSort).sort();
         expect(keys.map(k => k[0])).toEqual(['0', '0', '1', '2']);
     });
 
