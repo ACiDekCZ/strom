@@ -175,6 +175,19 @@ describe('the indexes (§3.5)', () => {
         expect(indexLetter('Řepík', 'cs')).toBe('Ř');
     });
 
+    it('a letter with a stroke (Ł, Ø, Đ) goes under its base letter, Polish keeps Ł its own', () => {
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            expect(indexLetter('Łopatnicki', lang)).toBe('L');
+            expect(indexLetter('łopatnicki', lang)).toBe('L');
+            expect(indexLetter('Ørsted', lang)).toBe('O');
+            expect(indexLetter('Đuro', lang)).toBe('D');
+            expect(indexLetter('Śmigulski', lang)).toBe('S');
+        }
+        expect(indexLetter('Łopatnicki', 'pl')).toBe('Ł');
+        expect(indexLetter('Ørsted', 'pl')).toBe('O');
+        expect(indexLetter('Đuro', 'pl')).toBe('D');
+    });
+
     it('families: only those with a page; surnames: the forms per line and the birth surnames of the wives', () => {
         const set = rodsSet(familyPagesFixture().data);
         const html = buildPageSetHtml(set);
