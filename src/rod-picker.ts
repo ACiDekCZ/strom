@@ -11,6 +11,7 @@
 
 import { LineageIndex, RodId, otherFamilyRods, rodLabels, rods } from './lineage.js';
 import type { PageSet } from './family-pages.js';
+import { sortRods } from './rods-overview.js';
 
 export interface RodPickerItem {
     /** A line, the whole tree or the other families. */
@@ -30,19 +31,22 @@ export interface RodPickerItem {
 /**
  * The items of the choice: "Whole tree", the lines (without the small ones),
  * "Other families" when there are any. With a set, its lines, labels, pages
- * and periods (`period`, else the line's own); without one the tree's.
+ * and periods (`period`, else the line's own) in the set's order; without
+ * one the tree's lines in the tree overview's size order (`sortRods`, ties by
+ * the label in `lang`), so the choice and the overview list them alike.
  */
 export function rodPickerItems(
     index: LineageIndex,
     set?: PageSet,
     period?: (id: RodId) => { from: number; to: number } | null,
+    lang = 'en',
 ): RodPickerItem[] {
     const data = index.data;
     const persons = (set ? set.selection.personIds : Object.keys(data.persons))
         .filter(id => { const p = data.persons[id as keyof typeof data.persons]; return !!p && !p.isPlaceholder; }).length;
     const out: RodPickerItem[] = [{ id: 'tree', label: '', from: null, to: null, members: persons, forms: [], ...(set ? { slug: set.introSlug } : {}) }];
     const labels = set ? set.rodLabels : rodLabels(index);
-    const ids = set ? set.rodIds : rods(index).filter(r => !r.small).map(r => r.id);
+    const ids = set ? set.rodIds : sortRods(rods(index).filter(r => !r.small), 'size', labels, lang).map(r => r.id);
     for (const id of ids) {
         const rod = index.rods.get(id);
         if (!rod) continue;

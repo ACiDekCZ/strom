@@ -13,6 +13,7 @@ import {
     HUB_ROWS_FROM, RENDER_PAGE_CACHE, buildPageSetFilesAsync, buildPageSetHtml, pageSetRenderedPages, renderPage, renderPageBar,
 } from '../family-pages-html.js';
 import { buildLineages, rodOfPersonForCrumbs, rods } from '../lineage.js';
+import { sortRods } from '../rods-overview.js';
 import { rodPickKey, rodPickerItems, rodPickerHtml } from '../rod-picker.js';
 import { PersonId, StromData } from '../types.js';
 import { manyLinesFixture, treePagesFixture, TP_NOW } from './helpers/tree-pages-fixture.js';
@@ -184,6 +185,9 @@ describe('the choice of a line (§2.3)', () => {
         expect(items[0].id).toBe('tree');
         expect(items[0].slug).toBe(set.introSlug);
         expect(items.slice(1, -1).map(i => i.id)).toEqual(set.rodIds);
+        // The set's lines in the tree overview's size order (1102 N1).
+        const lin = set.protectedTree.lineages;
+        expect(set.rodIds).toEqual(sortRods(rods(lin).filter(r => !r.small), 'size', set.protectedTree.rodLabels, 'cs').map(r => r.id));
         expect(items[1].label).toBe('Lhoták (Lopuchov)');
         expect(items[1].members).toBeGreaterThan(items[2].members - 1);
         expect(items[items.length - 1]).toMatchObject({ id: 'other', members: 13, slug: set.otherSlug });

@@ -411,7 +411,7 @@ export const rodViewMethods = uiModule({
         hostGeneration = generation;
         hostAbort?.abort();
         hostAbort = null;
-        const items = rodPickerItems(rodIndex().index);
+        const items = rodPickerItems(rodIndex().index, undefined, undefined, getCurrentLanguage());
         if (!items.some(i => i.id !== 'tree' && i.id !== 'other')) {
             el.innerHTML = '';
             el.hidden = true;
@@ -476,7 +476,7 @@ export const rodViewMethods = uiModule({
     showRodPickerSheet(): void {
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        const items = rodPickerItems(rodIndex().index);
+        const items = rodPickerItems(rodIndex().index, undefined, undefined, getCurrentLanguage());
         if (!items.some(i => i.id !== 'tree' && i.id !== 'other')) return;
         ensureFamilyPagesAppCss();
         const title = strings.familyPages.rodPickLabel;

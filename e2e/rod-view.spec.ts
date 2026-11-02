@@ -93,6 +93,42 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await expect(host(page).locator('.sp-rodpick-btn')).toHaveText(/^Lines/);
     });
 
+    test('Descendants: another line already chosen, a line with nobody drawn moves the focus; ↩ Back brings it back', async ({ page }) => {
+        await setup(page);
+        await page.locator('#view-mode-descendants').click();
+        await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
+        const focus = () => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId() as string | null);
+        const pick = async (name: string) => {
+            await host(page).locator('.sp-rodpick-btn').click();
+            const q = host(page).locator('.sp-rodpick-q');
+            await q.fill(name.slice(0, 4).toLowerCase());
+            await expect(host(page).locator('button.sp-rodpick-first')).toContainText(name);
+            await q.press('Enter');
+            await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText(name);
+        };
+        // Brandvold: Mikael is a member, the focus stays.
+        await pick('Brandvold');
+        expect(await focus()).toBe('b16');
+        // Hollberg: none drawn under Mikael, the focus moves to the founder.
+        await pick('Hollberg');
+        await expect.poll(focus).toBe('h1');
+        const back = page.locator('.focus-toast-box .focus-toast-back');
+        await expect(back).toBeVisible();
+        // Clicked at once, while the message is still coming in.
+        await back.click();
+        await expect.poll(focus).toBe('b16');
+        await expect(page.locator('.focus-toast-box.show')).toHaveCount(0);
+        await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Hollberg');
+
+        // Once more from a chosen line, the other way: Brandvold again, then Hollberg.
+        await pick('Brandvold');
+        expect(await focus()).toBe('b16');
+        await pick('Hollberg');
+        await expect.poll(focus).toBe('h1');
+        await page.locator('.focus-toast-box .focus-toast-back').click();
+        await expect.poll(focus).toBe('b16');
+    });
+
     test('Other families unfold the small lines alphabetically; one of them is chosen and marked', async ({ page }) => {
         await setup(page);
         await host(page).locator('.sp-rodpick-btn').click();

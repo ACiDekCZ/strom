@@ -25,6 +25,7 @@ import {
     LineageIndex, Rod, RodId, Selection, otherFamilyRods, rodGenerations, rodNameForms, rodOfPersonForCrumbs, rods as allRods, selection,
 } from './lineage.js';
 import { BookSelectionSpec, lineageSpec } from './book-model.js';
+import { sortRods } from './rods-overview.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
@@ -394,11 +395,16 @@ function rodTitleOf(lang: Language, label: string): string {
     return label ? F.rodTitle(label) : F.rodGeneric;
 }
 
-/** The set's lineages: chosen ones; for the whole tree every lineage over the small ones (spec 026 P3 §1.1); none for a branch, ancestors or chosen people. */
-function setRods(prot: ProtectedPersonPageTree, spec: BookSelectionSpec): Rod[] {
+/**
+ * The set's lineages: chosen ones; for the whole tree every lineage over the
+ * small ones (spec 026 P3 §1.1) in the tree overview's size order (`sortRods`,
+ * so the introduction and the choice list them as the overview does); none
+ * for a branch, ancestors or chosen people.
+ */
+function setRods(prot: ProtectedPersonPageTree, spec: BookSelectionSpec, lang: string): Rod[] {
     const index = prot.lineages;
     if (spec.kind === 'rods') return spec.rods.map(id => index.rods.get(id)).filter((r): r is Rod => !!r);
-    if (spec.kind === 'tree') return allRods(index).filter(r => !r.small);
+    if (spec.kind === 'tree') return sortRods(allRods(index).filter(r => !r.small), 'size', prot.rodLabels, lang);
     return [];
 }
 
@@ -459,7 +465,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const tree = prot.tree;
     const index = prot.lineages;
     const sel = selection(index, lineageSpec(spec));
-    const rods = setRods(prot, spec);
+    const rods = setRods(prot, spec, lang);
     const rodIds = rods.map(r => r.id);
     const whole = spec.kind === 'tree';
     const small = whole ? otherRods(prot) : [];

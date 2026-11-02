@@ -5,9 +5,10 @@
  * member is drawn. Fictional trees only: every name below is invented.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { buildLineages, rodOf, RodId, LineageIndex } from '../lineage.js';
+import { buildLineages, rodOf, RodId, LineageIndex, rodLabels, rods } from '../lineage.js';
 import { rodFocusTarget } from '../rod-focus.js';
 import { rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
+import { sortRods } from '../rods-overview.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
@@ -251,6 +252,35 @@ describe('the chosen line: one state, per tree, covered and back (§0, §3)', ()
         rodViewDataChanged();
         expect(getSelectedRod()).toBe(rod);
         expect(rodBack()).toBeNull();
+    });
+});
+
+describe('the choice\'s order of lines of one size (1102 N1)', () => {
+    // Two lines of five members each: the older founder (Ječmínek) comes first in
+    // the index, the label (Hrachovec) first in the tree overview's size order.
+    const data = tree({
+        j: { first: 'Jaromír', last: 'Ječmínek', sex: 'male', born: '1700' },
+        jw: { first: 'Vlasta', last: 'Prosná', sex: 'female', born: '1702' },
+        j1: { first: 'Dalibor', last: 'Ječmínek', sex: 'male', born: '1730', parents: ['j', 'jw'] },
+        j2: { first: 'Bořek', last: 'Ječmínek', sex: 'male', born: '1732', parents: ['j', 'jw'] },
+        j3: { first: 'Dobroslav', last: 'Ječmínek', sex: 'male', born: '1734', parents: ['j', 'jw'] },
+        j4: { first: 'Hostivít', last: 'Ječmínek', sex: 'male', born: '1736', parents: ['j', 'jw'] },
+        h: { first: 'Kvido', last: 'Hrachovec', sex: 'male', born: '1760' },
+        hw: { first: 'Běla', last: 'Pšeničná', sex: 'female', born: '1762' },
+        h1: { first: 'Lubor', last: 'Hrachovec', sex: 'male', born: '1790', parents: ['h', 'hw'] },
+        h2: { first: 'Milota', last: 'Hrachovec', sex: 'male', born: '1792', parents: ['h', 'hw'] },
+        h3: { first: 'Radim', last: 'Hrachovec', sex: 'male', born: '1794', parents: ['h', 'hw'] },
+        h4: { first: 'Soběslav', last: 'Hrachovec', sex: 'male', born: '1796', parents: ['h', 'hw'] },
+    }, [['u1', 'j', 'jw', ['j1', 'j2', 'j3', 'j4']], ['u2', 'h', 'hw', ['h1', 'h2', 'h3', 'h4']]]);
+    const idx = buildLineages(data);
+    const big = rods(idx).filter(r => !r.small);
+
+    it('lists them as the tree overview does (size, then the label), not in the index\'s order', () => {
+        expect(big.map(r => r.surname)).toEqual(['Ječmínek', 'Hrachovec']);
+        const overview = sortRods(big, 'size', rodLabels(idx), 'cs').map(r => r.id);
+        const picked = rodPickerItems(idx, undefined, undefined, 'cs').filter(i => i.id !== 'tree' && i.id !== 'other').map(i => i.id);
+        expect(picked).toEqual(overview);
+        expect(picked.map(id => idx.rods.get(id as RodId)!.surname)).toEqual(['Hrachovec', 'Ječmínek']);
     });
 });
 
