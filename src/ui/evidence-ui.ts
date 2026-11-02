@@ -99,6 +99,11 @@ export function evidenceIds(data: StromData, kind: EvidenceKind, focus: PersonId
     return walkOrder(data, computeEvidenceGaps(data, focus)[kind]);
 }
 
+/** The pill just came up: the tree pans so that it covers no card (the focus kept in the view). */
+function cardsClearOfPill(): void {
+    ZoomPan.keepCardsClearOfPills(TreeRenderer.getFocusPersonId());
+}
+
 export const evidenceUiMethods = uiModule({
     listenForEvidenceChanges(): void {
         if (listening) return;
@@ -119,6 +124,7 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceLevels(null);
         TreeRenderer.setEvidenceHighlight(new Set(ids));
         this.renderEvidencePill();
+        cardsClearOfPill();
     },
 
     /**
@@ -140,6 +146,7 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceLevels(null);
         TreeRenderer.setEvidenceHighlight(new Set(evidence.ids), group.faint ? new Set(group.faint()) : null);
         this.renderEvidencePill();
+        cardsClearOfPill();
     },
 
     /** The Evidence mode: every card framed by its level, the pill counting them. */
@@ -150,6 +157,7 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceHighlight(null);
         TreeRenderer.setEvidenceLevels(evidenceLevels(DataManager.getData()));
         this.renderEvidencePill();
+        cardsClearOfPill();
     },
 
     /** A count in the Evidence pill: that group highlighted (again: back to all three). */

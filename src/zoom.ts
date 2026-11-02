@@ -6,6 +6,20 @@
 import { PersonId } from './types.js';
 import type { Rect } from './children-transition.js';
 import { jumpView, JumpViewPlan } from './jump-view.js';
+import { ClearRect, PILL_CLEARANCE, pillClearShift } from './pill-clearance.js';
+
+/** The pills floating over the tree (a highlighted group or family line, the follow pill). */
+const TREE_PILLS = '#evidence-pill, .live-follow-pill';
+
+/** The pills' boxes on screen (a hidden pill has none). */
+function treePillRects(): ClearRect[] {
+    const out: ClearRect[] = [];
+    document.querySelectorAll<HTMLElement>(TREE_PILLS).forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) out.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    });
+    return out;
+}
 
 // Import dynamically to avoid circular dependency
 let getTreeRenderer: () => { getFocusPersonId: () => PersonId | null } | null = () => null;
@@ -774,6 +788,10 @@ class ZoomPanClass {
             const br = badge.getBoundingClientRect();
             if (br.height > 0) topLimit = Math.max(topLimit, br.bottom - containerRect.top + 12);
         }
+        // A pill at the top of the tree (a highlighted group or family line): the chart starts below it too.
+        for (const p of treePillRects()) {
+            if (p.top < containerRect.top + container.clientHeight / 2) topLimit = Math.max(topLimit, p.bottom - containerRect.top + 12);
+        }
 
         const treeH = (maxY - minY) * this.scale;
         const availH = container.clientHeight - topLimit - MARGIN;
@@ -805,6 +823,8 @@ class ZoomPanClass {
         this.tx = tx;
         this.ty = top - minY * this.scale;
         this.apply();
+        // A pill at the bottom (the phone's): the cards clear of it, the focus kept in the view.
+        this.keepCardsClearOfPills(getTreeRenderer()?.getFocusPersonId());
     }
 
     /**
@@ -953,6 +973,41 @@ class ZoomPanClass {
         this.tx = containerWidth / 2 - cardCenterX * this.scale;
         this.ty = containerHeight / 2 - cardCenterY * this.scale;
 
+        this.apply();
+        this.keepCardsClearOfPills(personId);
+    }
+
+    /**
+     * No card under a floating pill (a highlighted group's or family line's,
+     * the follow pill): the tree pans up or down the least it takes, `keepId`'s
+     * card staying whole in the view. Nothing moves when no pan up to a third
+     * of the view does it, or no pill is up.
+     */
+    keepCardsClearOfPills(keepId?: PersonId | null): void {
+        const container = document.getElementById('tree-container');
+        const canvas = document.getElementById('tree-canvas');
+        if (!container || !canvas || this.isStandaloneViewActive()) return;
+        const pills = treePillRects();
+        if (!pills.length) return;
+        this.settleAnimation();
+        const cr = container.getBoundingClientRect();
+        const cards: ClearRect[] = [];
+        let keep: ClearRect | null = null;
+        canvas.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
+            const left = (parseFloat(card.style.left) || 0) * this.scale + this.tx + cr.left;
+            const top = (parseFloat(card.style.top) || 0) * this.scale + this.ty + cr.top;
+            const r = { left, top, right: left + card.offsetWidth * this.scale, bottom: top + card.offsetHeight * this.scale };
+            cards.push(r);
+            if (keepId && card.dataset.id === keepId) keep = r;
+        });
+        if (!cards.length) return;
+        const view = { top: cr.top + PILL_CLEARANCE, bottom: cr.top + container.clientHeight - PILL_CLEARANCE };
+        // A card to keep that is out of the view already (panned away) does not hold the pan.
+        const kept = keep as ClearRect | null;
+        const dy = pillClearShift(cards, pills, view,
+            { keep: kept && kept.top >= view.top && kept.bottom <= view.bottom ? kept : null, maxShift: container.clientHeight / 3 });
+        if (!dy) return;
+        this.ty += dy;
         this.apply();
     }
 

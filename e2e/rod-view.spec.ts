@@ -201,6 +201,68 @@ test.describe('the toolbar\'s choice at 1100 px', () => {
     });
 });
 
+/** Cards (drawn, in the window) the pill's box covers. */
+async function cardsUnderPill(page: Page): Promise<string[]> {
+    return page.evaluate(() => {
+        const p = document.getElementById('evidence-pill')!.getBoundingClientRect();
+        const out: string[] = [];
+        document.querySelectorAll<HTMLElement>('#tree-canvas .person-card').forEach(c => {
+            const r = c.getBoundingClientRect();
+            if (r.width && r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom) out.push(c.dataset.id ?? '?');
+        });
+        return out;
+    });
+}
+
+/** Descendants of the founder, every generation drawn. */
+async function founderDescendants(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const S = window.Strom;
+        S.TreeRenderer.setViewMode('descendants' as never);
+        await S.TreeRenderer.setFocus('b1' as never);
+    });
+    await expect(page.locator('#tree-canvas .person-card[data-id="b1"]')).toBeVisible();
+}
+
+test.describe('the pill covers no card', () => {
+    test.use({ viewport: { width: 1440, height: 750 } });
+
+    test('Descendants at 750 px: the founder\'s row moves below the pill; Next person › keeps the cards clear', async ({ page }) => {
+        await setup(page);
+        await founderDescendants(page);
+        await host(page).locator('.sp-rodpick-btn').click();
+        await host(page).locator('.sp-rodpick-q').fill('bran');
+        await host(page).locator('.sp-rodpick-q').press('Enter');
+        await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Brandvold');
+        expect(await cardsUnderPill(page)).toEqual([]);
+        // Below the descendants badge as well.
+        const badge = (await page.locator('#descendants-badge').boundingBox())!;
+        const founder = (await page.locator('#tree-canvas .person-card[data-id="b1"]').boundingBox())!;
+        expect(founder.y).toBeGreaterThan(badge.y + badge.height);
+        for (let i = 0; i < 4; i++) {
+            await pill(page).locator('.evidence-pill-next').click();
+            expect(await cardsUnderPill(page)).toEqual([]);
+        }
+    });
+});
+
+test.describe('the pill covers no card on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the pill at the bottom: Next person › keeps the cards clear of it', async ({ page }) => {
+        await setup(page);
+        await founderDescendants(page);
+        await page.evaluate(() => window.Strom.UI.showPersonBottomSheet('b1' as never));
+        await page.locator('.bottom-sheet-person [data-action^="rod-only:"]').first().click();
+        await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Brandvold');
+        expect(await cardsUnderPill(page)).toEqual([]);
+        for (let i = 0; i < 4; i++) {
+            await pill(page).locator('.evidence-pill-next').click();
+            expect(await cardsUnderPill(page)).toEqual([]);
+        }
+    });
+});
+
 test.describe('the toolbar\'s choice on a tablet', () => {
     test.use({ viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true });
 
