@@ -5038,7 +5038,7 @@
         }
 
         /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
-        .modal.modal--lg.places-modal { width: 820px; max-width: min(820px, 94vw); }
+        .modal.modal--lg.places-modal { width: 860px; max-width: min(860px, 94vw); }
         /* Rename, split and "use for the others" answer with a toast and its Undo: above the dialog's overlay (200). */
         body:has(#places-modal) .toast:not([data-kind="materials"]) { z-index: 250; }
         .places-intro { margin: 4px 0 6px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
@@ -5087,7 +5087,10 @@
             display: flex; flex-direction: column; gap: 10px; min-width: 0;
             padding: 12px 0; border-bottom: 1px solid var(--divider);
         }
-        .place-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 8px 16px; align-items: start; }
+        .place-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 8px 16px; align-items: start; flex: 1 1 auto; min-width: 0; }
+        /* The row's checkbox (while selecting) and its grid. */
+        .place-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+        .place-row.is-check { background: var(--sub); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
         .place-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
         .place-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
         .place-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
@@ -5122,11 +5125,7 @@
         .place-pin-none { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
         .place-pin-label { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
         .place-pin-mark { color: var(--primary-dark); }
-        .place-bytown {
-            align-self: flex-start; max-width: 100%; padding: 2px 8px; border-radius: 6px; box-sizing: border-box;
-            background: var(--primary-soft); color: var(--primary-dark); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere;
-        }
-        .place-nearest { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+                .place-nearest { font-size: 12px; line-height: 1.4; color: var(--text-light); }
         /* Place identification (spec 034): the state badge and the origin badge, anywhere a place is shown. */
         .place-state, .place-origin {
             display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; box-sizing: border-box;
@@ -5146,7 +5145,130 @@
         .place-origin[data-origin="hand"] { background: var(--surface-2); color: var(--text); }
         .place-origin[data-origin="map"] { background: var(--primary-soft); color: var(--primary-dark); }
         .place-origin[data-origin="other"] { background: var(--surface-2); color: var(--text); }
-        .place-pin-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .place-pin-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+        .place-pin-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+        .place-pin-text { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .place-pin-text[data-tone="warn"] { color: var(--warn-text); }
+        .place-pin[data-state="check"] { border: 1px solid var(--warn-line); background: var(--surface); }
+        .place-pin[data-state="confirm"] { border: 1px solid var(--warn-line); }
+        .place-pin[data-state="queued"], .place-pin[data-state="running"] { background: var(--research-soft); }
+        /* The ◆ steps: the research's colour, never the app's primary. */
+        .places-modal button.place-look, .places-modal button.place-check {
+            min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600;
+            color: var(--research); cursor: pointer; text-align: left; white-space: normal; overflow-wrap: anywhere;
+        }
+        .places-modal button.place-answer, .places-modal button.place-keep {
+            min-height: 0; padding: 4px 10px; border: 1px solid var(--primary); border-radius: 7px; background: none;
+            color: var(--primary-dark); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: normal; text-align: left;
+        }
+        .places-modal button.place-answer { border-color: var(--warn-line); color: var(--warn-text); background: var(--warn-soft); }
+        /* "Why here": a grid of label and value (one column on a phone). */
+        .place-why {
+            display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 14px; margin-left: 0;
+            padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+            font-size: 13px; line-height: 1.45;
+        }
+        .place-why-k { color: var(--text-light); font-size: 12.5px; font-weight: 600; }
+        .place-why-v { min-width: 0; overflow-wrap: anywhere; }
+        .place-why-v[data-tone="warn"] { color: var(--warn-text); }
+        .place-why-v[data-tone="muted"] { color: var(--text-light); font-size: 12.5px; }
+        .place-why-date { color: var(--text-light); font-size: 12.5px; }
+        .place-why-link { color: var(--primary-dark); text-underline-offset: 3px; }
+        /* The checkbox: 20 px, a 28 px target (44 px on touch); shown only while selecting. */
+        .places-modal button.place-select {
+            display: none; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0;
+            margin: -3px 0 0 -4px; padding: 0; border: 0; background: none; cursor: pointer;
+        }
+        .places-modal.is-selecting button.place-select { display: inline-flex; }
+        .place-select-box {
+            width: 20px; height: 20px; box-sizing: border-box; border: 1.5px solid var(--text-faint); border-radius: 5px;
+            background: var(--surface); display: flex; align-items: center; justify-content: center;
+            color: var(--surface); font-size: 13px; font-weight: 700; line-height: 1;
+        }
+        .place-select[aria-checked="true"] .place-select-box { background: var(--primary); border-color: var(--primary); }
+        .place-select[aria-checked="true"] .place-select-box::after { content: '✓'; }
+        .place-select[aria-checked="mixed"] .place-select-box { background: var(--primary); border-color: var(--primary); }
+        .place-select[aria-checked="mixed"] .place-select-box::after { content: '–'; }
+        .places-modal button.place-select:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 6px; }
+        /* The summary: the count, the state chips, Select and ⋯; the context line and a step's preview under it. */
+        .places-top { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 8px 24px 10px; border-bottom: 1px solid var(--divider); }
+        .places-summary { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .places-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        .places-total { font-size: 13px; font-weight: 600; margin-right: 4px; white-space: nowrap; }
+        .places-modal button.places-chip {
+            display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border: 1px solid var(--border);
+            border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+        }
+        .places-modal button.places-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
+        .places-chip-icon { font-weight: 700; color: var(--text-light); }
+        .places-chip[data-filter="check"] .places-chip-icon, .places-chip[data-filter="confirm"] .places-chip-icon { color: var(--warn-text); }
+        .places-chip[data-filter="research"] .places-chip-icon { color: var(--research); }
+        .places-chip[data-filter="map"] .places-chip-icon { color: var(--primary-dark); }
+        .places-chip-n { font-weight: 600; color: var(--text-light); }
+        .places-modal button.places-select-btn, .places-modal button.places-more-btn {
+            flex: none; min-height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .places-modal button.places-select-btn[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); }
+        .places-modal button.places-more-btn { padding: 0 10px; font-size: 16px; line-height: 1; }
+        .places-more {
+            position: absolute; top: calc(100% + 4px); right: 0; z-index: 5; width: 330px; max-width: calc(100vw - 32px);
+            display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); box-sizing: border-box;
+        }
+        .places-modal button.places-more-item {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; border-radius: 6px;
+            background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; white-space: normal;
+        }
+        .places-modal button.places-more-item:disabled { opacity: 0.45; cursor: not-allowed; }
+        .places-more-item.is-research .places-more-title { color: var(--research); font-weight: 600; }
+        .places-more-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .places-more-sep { height: 1px; margin: 4px 6px; background: var(--divider); }
+        .places-context { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; line-height: 1.45; }
+        .places-context-icon { font-weight: 700; color: var(--text-light); }
+        .places-context-icon[data-tone="warn"] { color: var(--warn-text); }
+        .places-context-icon[data-tone="research"] { color: var(--research); }
+        .places-context-icon[data-tone="faint"] { color: var(--text-faint); }
+        .places-context-text { flex: 1 1 240px; min-width: 0; color: var(--text-light); overflow-wrap: anywhere; }
+        .places-modal button.places-context-act {
+            min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+            color: var(--primary-dark); text-align: left; white-space: normal;
+        }
+        .places-modal button.places-context-act.is-research { color: var(--research); }
+        .places-bulk {
+            display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px;
+            border: 1px solid var(--research-line); background: var(--research-soft);
+        }
+        .places-bulk p { margin: 0; }
+        .places-bulk-head { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .places-bulk-lines { display: flex; flex-direction: column; gap: 4px; }
+        .places-bulk-line { display: flex; gap: 8px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .places-bulk-icon { flex: none; width: 14px; font-weight: 700; color: var(--text-light); }
+        .places-bulk-icon[data-tone="research"] { color: var(--research); }
+        .places-bulk-icon[data-tone="warn"] { color: var(--warn-text); }
+        .places-bulk-icon[data-tone="faint"] { color: var(--text-faint); }
+        .places-bulk-note { font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .places-bulk-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+        .places-modal button.places-bulk-go {
+            padding: 7px 14px; border: 1px solid var(--research); border-radius: 8px; background: var(--research); color: var(--surface);
+            font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: normal; text-align: left;
+        }
+        .places-modal button.places-bulk-go:disabled { opacity: 0.45; cursor: not-allowed; }
+        .places-modal button.places-bulk-cancel { padding: 7px 14px; font-size: 13.5px; }
+        /* The selection bar in place of the footer. */
+        .places-selbar {
+            flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 24px;
+            border-top: 1px solid var(--divider); background: var(--surface);
+        }
+        .places-selbar-count { flex: 1 1 auto; font-size: 13.5px; font-weight: 600; }
+        .places-modal .places-selbar button {
+            min-height: 36px; padding: 0 14px; border-radius: 8px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: normal;
+        }
+        .places-modal .places-selbar button.places-selbar-look, .places-modal .places-selbar button.places-selbar-check {
+            border: 1px solid var(--research-line); background: var(--research-soft); color: var(--research);
+        }
+        .places-modal .places-selbar button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .places-modal .places-selbar button.places-selbar-clear { border: 0; background: none; color: var(--text-light); font-weight: 400; }
         .place-hint { font-size: 13px; color: var(--text-light); }
         .places-modal button.place-find {
             min-height: 0; padding: 4px 10px; border: 1px solid var(--primary); border-radius: 7px; background: none;
@@ -5231,6 +5353,10 @@
             .places-modal button.place-act:hover, .places-modal button.place-link-btn:hover,
             .places-modal button.place-show-all:hover { text-decoration: underline; color: var(--text); }
             .places-modal button.place-find:hover { background: var(--primary-soft); }
+            .places-modal button.places-chip:hover, .places-modal button.places-select-btn:hover,
+            .places-modal button.places-more-btn:hover, .places-modal button.places-more-item:not(:disabled):hover { background: var(--surface-2); }
+            .places-modal button.place-look:hover, .places-modal button.place-check:hover,
+            .places-modal button.places-context-act:hover { text-decoration: underline; }
         }
         .map-popup-fix {
             width: 100%;
@@ -5257,14 +5383,29 @@
             .place-group-more { padding-left: 28px; }
             .place-split-examples { grid-template-columns: minmax(0, 1fr); gap: 2px; }
             .place-split-examples > span { margin-bottom: 4px; }
-            /* The search and the chip share the row (.hm-search alone takes it whole in History of places). */
+            /* The search and the sort share the row (.hm-search alone takes it whole in History of places). */
             .places-bar { padding: 10px 16px; }
             #places-modal .hm-search { flex: 1 1 160px; }
+            .places-intro { display: none; }
+            .places-top { padding: 8px 16px 10px; }
+            .places-selbar { padding: 12px 16px; }
+            .places-selbar-count { flex: 1 0 100%; }
+            .place-why { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+            .place-why-k:not(:first-child) { margin-top: 6px; }
+            .place-row.is-check { margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
+        }
+        /* Phone and a phone held sideways: the chips scroll in one line. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .places-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+            .places-chips::-webkit-scrollbar { display: none; }
         }
         /* A phone held sideways: little height — a low bar, the list keeps the room. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .places-bar { padding: 6px 16px; }
             .place-row { padding: 8px 0; gap: 6px; }
+            .places-intro { display: none; }
+            .places-top { padding: 6px 16px 8px; gap: 6px; }
+            .place-grid { grid-template-columns: minmax(0, 1fr) 290px; }
         }
         @media (pointer: coarse) {
             #places-modal button.hm-search-clear { width: 44px; height: 44px; }
@@ -5276,6 +5417,13 @@
             .places-modal input.place-new-name, .places-modal input.place-query { height: 44px; font-size: 16px; }
             .places-modal button.place-search-go, .place-card-buttons button { min-height: 44px; }
             .places-modal button.place-candidate { min-height: 44px; }
+            .places-modal button.places-chip, .places-modal button.places-select-btn, .places-modal button.places-more-btn,
+            .places-modal button.places-context-act, .places-modal button.places-more-item { min-height: 44px; }
+            .places-modal button.places-more-btn { min-width: 44px; }
+            .places-modal button.place-look, .places-modal button.place-check, .places-modal button.place-answer,
+            .places-modal button.place-keep, .places-modal .places-selbar button, .places-modal button.places-bulk-go,
+            .places-modal button.places-bulk-cancel { min-height: 44px; }
+            .places-modal button.place-select { width: 44px; height: 44px; margin: -10px -6px -10px -12px; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */

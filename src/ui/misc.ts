@@ -729,6 +729,8 @@ export const miscMethods = uiModule({
                     this.confirmEscape();
                     return;
                 }
+                // The Places dialog's menu, preview and selection close one at a time first.
+                if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
                 // A decision dialog on top (newer data version, a shared file
                 // opened, …): Escape takes its "leave it" option when it has
                 // one ([data-dismiss]), otherwise nothing — it must be answered.

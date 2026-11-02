@@ -117,6 +117,8 @@ import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
+import { placesIdentifyMethods } from './places-identify-ui.js';
+import type { PlaceStateFilter } from '../place-identity.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
@@ -365,10 +367,10 @@ export class UIClass {
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;
-    /** Places dialog: its search and the "No location" chip (kept over a redraw, cleared on a fresh open). */
-    placesFilter: { query: string; unplacedOnly: boolean } = { query: '', unplacedOnly: false };
-    /** Places dialog: its sort (kept while the app runs, also over closing the dialog). */
-    placesSort: PlacesSort = 'name';
+    /** Places dialog: its search and its state chip (kept over a redraw, cleared on a fresh open). */
+    placesFilter: { query: string; state: PlaceStateFilter } = { query: '', state: 'all' };
+    /** Places dialog: its sort (read from the settings on a fresh open, saved when chosen). */
+    placesSort: PlacesSort = 'state';
 
     // Migration-over-time (P5): the time slider on the map. All in-memory —
     // nothing is persisted (no settings key, no per-tree state).
@@ -790,6 +792,10 @@ Object.assign(UIClass.prototype, placesManagerMethods);
 type PlacesResearchMethods = typeof placesResearchMethods;
 export interface UIClass extends PlacesResearchMethods {}
 Object.assign(UIClass.prototype, placesResearchMethods);
+
+type PlacesIdentifyMethods = typeof placesIdentifyMethods;
+export interface UIClass extends PlacesIdentifyMethods {}
+Object.assign(UIClass.prototype, placesIdentifyMethods);
 
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}

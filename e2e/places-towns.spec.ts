@@ -235,7 +235,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await search.fill('');
 
         // The chip: only the houses without a location, opened.
-        await modal(page).locator('#places-unplaced').click();
+        await modal(page).locator('.places-chip[data-filter="none"]').click();
         await expect.poll(() => visibleSubKeys(page)).toEqual(natural.filter(k => k !== 'belokamen cp 2' && k !== 'belokamen cp 4'));
         await expect(row(page, 'hlinsko')).toBeHidden();
         await expect(row(page, key('Kopřivná čp. 7'))).toBeVisible();
@@ -338,7 +338,7 @@ test.describe('the Places dialog with towns and houses', () => {
         expect((await geos(page))[key(`${TOWN} čp. 4`)]?.byTown).toBe(TOWN);
         await t.getByRole('button', { name: 'Places' }).click();
         await expect(modal(page)).toBeVisible();
-        await expect(modal(page).locator('#places-unplaced')).toHaveAttribute('aria-pressed', 'true');
+        await expect(modal(page).locator('.places-chip[data-filter="none"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(row(page, 'lhota u nikde')).toBeVisible();
         await expect(row(page, key(`${TOWN} čp. 4`))).toBeHidden();
     });

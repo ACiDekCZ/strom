@@ -35,6 +35,15 @@ import {
 } from '../geocode.js';
 import { fixText, STREET_PLACES_FIX } from '../research-fixes.js';
 import { onComputer } from './research-ui.js';
+import { SettingsManager } from '../settings.js';
+import {
+    placeStateBadge, placeStateMatches, placeStateRank, placeStateSummary, type PlaceIdentity,
+} from '../place-identity.js';
+import {
+    checkFindingText, formatYearSpan, hasWhyHere, placeFormerLine, placeLocationLabel, placeRowActions, placeYearSpans,
+    type PlaceRowAction,
+} from '../places-dialog.js';
+import { placesView, resetPlacesView } from './places-identify-ui.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import type { MapScope } from './map-ui.js';
@@ -59,6 +68,10 @@ let offerTimer: number | null = null;
 
 /** The tree's streets (knownStreets), read once per draw of the dialog. */
 let managerKnown: KnownStreets = () => undefined;
+/** The years each place is used in, read once per draw. */
+let managerYears = new Map<string, [number, number]>();
+/** The ◆ actions go (the research's bridge here), read once per draw. */
+let managerCanResearch = false;
 
 /** Members shown in an opened group before "Show all N". */
 const GROUP_FIRST = 8;
@@ -102,11 +115,9 @@ export const placesManagerMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        // By name, as the UI language sorts, unless the dialog's sort says
-        // otherwise — a long list is read like an index. The places without
-        // coordinates have their own chip (and stay marked).
+        // By name, as the UI language sorts; the dialog's sort orders its items (sortedManagerItems).
         return sortPlacesForManager([...collectPlaces(data, filter)]
-            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), this.placesSort, getCurrentLanguage());
+            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), 'name', getCurrentLanguage());
     },
 
     /**
@@ -114,7 +125,7 @@ export const placesManagerMethods = uiModule({
      *   a town (`town:<townKey>`, or the town's own place) opens its group
      * @param parentDialogId dialog to return to on Escape/Close (tree manager)
      * @param scope which places to list, when the caller knows better
-     * @param opts.keepFilter a redraw: keep the search, the chip and the opened groups
+     * @param opts.keepFilter a redraw: keep the search, the state chip, the selection and the opened groups
      * @param opts.unplaced open with the "No location" chip on
      *
      * Opened from the map it follows the map's scope; opened from anywhere else
@@ -135,15 +146,24 @@ export const placesManagerMethods = uiModule({
         managerGroups = new Map(placeTownGroups(data, managerPlaces).map(g => [g.townKey, g]));
         // A fresh open starts with the whole list; a redraw (a rename, a pin) keeps the search.
         if (!opts.keepFilter) {
-            this.placesFilter = { query: '', unplacedOnly: !!opts.unplaced };
+            this.placesFilter = { query: '', state: opts.unplaced ? 'none' : 'all' };
+            this.placesSort = SettingsManager.getPlacesSort();
             expandedTowns = new Set();
             allShownTowns = new Set();
             pendingOffer = null;
+            resetPlacesView();
         }
-        const unplaced = places.filter(p => !p.geo).length;
-        if (!unplaced) this.placesFilter.unplacedOnly = false;
+        placesView.usages = managerPlaces;
+        managerYears = placeYearSpans(data);
+        const research = this.placesResearchContext();
+        managerCanResearch = research.canResearch;
+        if (!managerCanResearch) resetPlacesView();
+        const summary = placeStateSummary(this.computePlaceIdentities(managerPlaces.keys()).values());
+        // A chip with nothing left to show (the last place looked up) lets the whole list back.
+        if (this.placesFilter.state !== 'all' && !summary[this.placesFilter.state]) this.placesFilter.state = 'all';
         const f = this.placesFilter;
         const m = strings.map;
+        const d = strings.places.dialog;
         // Coordinate entries no person/event/partnership refers to any more. They
         // never appear as rows (the list is built from used places), so the
         // footer action is the only handle on them.
@@ -160,7 +180,7 @@ export const placesManagerMethods = uiModule({
                     <h2>${m.placesTitle}</h2>
                     <button class="close-btn" id="places-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
-                <p class="places-intro">${m.placesIntro}</p>
+                <p class="places-intro">${research.researchId ? d.introResearch : m.placesIntro}</p>
                 <div class="places-list">
                     ${this.renderPlacesList(places)}
                 </div>
@@ -188,13 +208,17 @@ export const placesManagerMethods = uiModule({
                 <span class="hm-search-count" id="places-filter-count" aria-live="polite"></span>
                 <button type="button" class="hm-search-clear" id="places-filter-clear" hidden aria-label="${this.escapeHtml(m.filterClear)}">&times;</button>
             </div>
-            ${unplaced ? `<button type="button" class="hd-chip places-unplaced-chip" id="places-unplaced" aria-pressed="${f.unplacedOnly}"
-                title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}
             <select class="places-sort" id="places-sort" aria-label="${this.escapeHtml(m.sortLabel)}" title="${this.escapeHtml(m.sortLabel)}">
-                ${([['name', m.sortName], ['people', m.sortPeople], ['unplaced', m.sortUnplaced]] as const)
-                    .map(([v, label]) => `<option value="${v}"${this.placesSort === readPlacesSort(v) ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
+                ${([['state', d.sortState], ['name', d.sortName], ['people', d.sortPeople]] as const)
+                    .map(([v, label]) => `<option value="${v}"${this.placesSort === v ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
             </select>`;
         modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
+        // The summary with its state chips, the context line and the preview of a step for all.
+        const top = document.createElement('div');
+        top.className = 'places-top';
+        top.innerHTML = `${this.placesSummaryHtml(summary)}<div class="places-context-host"></div><div class="places-bulk-host"></div>`;
+        modal.insertBefore(top, modal.querySelector(':scope > .modal-content'));
+        if (managerCanResearch) modal.insertAdjacentHTML('beforeend', this.placesSelbarHtml());
         const input = bar.querySelector('#places-filter') as HTMLInputElement;
         const setQuery = (q: string): void => {
             this.placesFilter.query = q;
@@ -215,23 +239,21 @@ export const placesManagerMethods = uiModule({
             setQuery('');
             input.focus();
         };
-        const chip = bar.querySelector('#places-unplaced') as HTMLButtonElement | null;
-        if (chip) chip.onclick = () => {
-            this.placesFilter.unplacedOnly = !this.placesFilter.unplacedOnly;
-            chip.setAttribute('aria-pressed', String(this.placesFilter.unplacedOnly));
-            this.applyPlacesFilter();
-        };
+        this.bindPlacesSummary(top);
+        this.refreshPlacesTop();
 
         const sortSelect = bar.querySelector('#places-sort') as HTMLSelectElement;
         sortSelect.onchange = () => {
-            // The old "without location first" option is the state order (place-identity), step B replaces the select.
             this.placesSort = readPlacesSort(sortSelect.value);
+            SettingsManager.setPlacesSort(this.placesSort);
             this.applyPlacesSort();
         };
 
         const close = (): void => this.closePlacesManager();
         overlay.onclick = (e) => {
             if (e.target === overlay) { close(); return; }
+            // A click anywhere else closes the ⋯ menu.
+            if (placesView.menu && !(e.target as HTMLElement).closest('.places-more, .places-more-btn')) this.setPlacesMenu(false);
             const hist = (e.target as HTMLElement).closest<HTMLElement>('[data-place-hist]');
             if (hist) this.placesHistoryAction(hist.dataset.placeHist ?? '', hist.dataset.hkey ?? '');
         };
@@ -240,11 +262,14 @@ export const placesManagerMethods = uiModule({
         (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
         overlay.querySelectorAll<HTMLElement>('.place-row[data-key]').forEach(row => this.bindPlaceRow(row));
         overlay.querySelectorAll<HTMLElement>('.place-group').forEach(group => this.bindPlaceGroup(group));
+        this.bindPlacesSelection(modal);
         // History lines and the search texts last: they end in applyPlacesFilter.
         this.refreshPlacesHistoryRows();
         this.showPendingOffer();
 
         if (focusKey) this.focusPlaceInManager(focusKey);
+        // The research's live states (a fresh open; a redraw has them already).
+        if (!opts.keepFilter) void this.refreshPlacesLive();
 
         // Same stack discipline as other child dialogs (see showAuditLog): the
         // parent hides while the manager is open and Escape/Close returns to it.
@@ -301,7 +326,15 @@ export const placesManagerMethods = uiModule({
             items.push({ key: g.ownKey ?? `${TOWN_POINT_PREFIX}${g.townKey}`, usage, geo: placed ? true : undefined, group: g });
         }
         for (const p of places) if (!grouped.has(p.key)) items.push(p);
-        return sortPlacesForManager(items, this.placesSort, getCurrentLanguage());
+        const rankOf = (k: string | undefined): number => {
+            const id = k ? placesView.ids.get(k) : undefined;
+            return id ? placeStateRank(id) : Number.MAX_SAFE_INTEGER;
+        };
+        // A group stands where its most pressing place does.
+        const rank = (item: (typeof items)[number]): number => 'group' in item
+            ? Math.min(rankOf(item.group.ownKey), ...item.group.members.map(mem => rankOf(mem.key)))
+            : rankOf(item.key);
+        return sortPlacesForManager(items, this.placesSort, getCurrentLanguage(), rank);
     },
 
     renderPlaceGroup(g: TownGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
@@ -312,6 +345,7 @@ export const placesManagerMethods = uiModule({
             ? this.renderPlaceRow(own, { group: g, meta })
             : `<div class="place-group-title">
                    <div class="place-head">
+                       ${this.placeSelectHtml(g.town)}
                        ${this.placeCaretHtml(g.town)}
                        <span class="place-title place-group-name">${this.escapeHtml(g.town)}</span>
                        <span class="place-count">${this.escapeHtml(meta)}</span>
@@ -391,28 +425,83 @@ export const placesManagerMethods = uiModule({
         if (url) this.launchResearchLink(url);
     },
 
+    /** A row's checkbox for the selection (shown while selecting). */
+    placeSelectHtml(name: string): string {
+        if (!managerCanResearch) return '';
+        return `<button type="button" class="place-select" role="checkbox" aria-checked="false"
+            aria-label="${this.escapeHtml(strings.places.dialog.selectPlace(name))}"><span class="place-select-box" aria-hidden="true"></span></button>`;
+    },
+
+    /** One of a row's actions (§1, §2, §5) as its button. */
+    placeActionHtml(action: PlaceRowAction, id: PlaceIdentity, key: string): string {
+        const m = strings.map;
+        const d = strings.places.dialog;
+        const r = strings.places.research;
+        const esc = (t: string): string => this.escapeHtml(t);
+        const open = placesView.why.has(key);
+        switch (action) {
+            case 'find': return `<button type="button" class="place-change place-find">${m.findOnMap}</button>`;
+            case 'findQuiet': return `<button type="button" class="place-change place-link-btn is-quiet">${m.findOnMap}</button>`;
+            case 'look': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">◆ ${esc(r.look)}</button>`;
+            case 'lookAgain': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">◆ ${esc(r.lookAgain)}</button>`;
+            case 'unqueue': return `<button type="button" class="place-unqueue place-link-btn is-quiet">${esc(r.unqueue)}</button>`;
+            case 'answer': return `<button type="button" class="place-answer">${esc(d.answer)}</button>`;
+            case 'why':
+            case 'whyQuiet': return `<button type="button" class="place-why-toggle place-link-btn${action === 'whyQuiet' ? ' is-quiet' : ''}"
+                aria-expanded="${open}">${esc(d.why)} ▾</button>`;
+            case 'keep': return `<button type="button" class="place-keep">${esc(d.keep)}</button>`;
+            case 'change': return `<button type="button" class="place-change place-link-btn">${m.changePin}</button>`;
+            case 'check': return `<button type="button" class="place-check is-research">◆ ${esc(r.check)}</button>`;
+            case 'remove': return `<button type="button" class="place-remove place-link-btn is-quiet">${m.removePin}</button>`;
+        }
+    },
+
+    /**
+     * The row's state frame: the state's badge, the location's label, one
+     * sentence (a check's first reason, why it stays undetermined, a former
+     * name) and the actions of the state.
+     */
+    placeStateFrameHtml(p: ManagerPlace, id: PlaceIdentity): string {
+        const m = strings.map;
+        const lang = getCurrentLanguage();
+        const geo = p.geo;
+        const town = id.state === 'town';
+        const badge = placeStateBadge(id, lang, { origin: true, ...(town ? { className: 'place-bytown' } : {}) });
+        const label = id.state === 'placed' || id.state === 'verified' || id.state === 'check'
+            ? placeLocationLabel(id, geo, lang) : '';
+        let line = '';
+        if (id.state === 'running') line = `<p class="place-pin-text">${this.escapeHtml(strings.places.state.runningTitle)}</p>`;
+        else if (id.state === 'undet' && id.why) line = `<p class="place-pin-text">${this.escapeHtml(id.why)}</p>`;
+        else if (id.state === 'check') {
+            const text = id.checks?.[0] ? checkFindingText(id.checks[0], lang) : id.checkWhy ?? '';
+            if (text) line = `<p class="place-pin-text" data-tone="warn">${this.escapeHtml(text)}</p>`;
+        } else if (town && (geo?.townChoices ?? 0) > 1) line = `<span class="place-nearest">${this.escapeHtml(m.nearestTown)}</span>`;
+        else if (id.state === 'placed' || id.state === 'verified') {
+            const former = placeFormerLine(id, p.usage.display, lang);
+            if (former) line = `<p class="place-pin-text place-former">${this.escapeHtml(former)}</p>`;
+        }
+        const actions = placeRowActions(id, { canResearch: managerCanResearch, hasGeo: !!geo, byTown: !!geo?.byTown });
+        return `
+            <div class="place-pin${id.state === 'none' ? ' place-pin-none' : ''}" data-state="${id.state}">
+                <div class="place-pin-state">${badge}</div>
+                ${label ? `<span class="place-pin-label"><span class="place-pin-mark" aria-hidden="true">⌖</span> ${this.escapeHtml(label)}</span>` : ''}
+                ${line}
+                ${actions.length ? `<span class="place-pin-acts">${actions.map(a => this.placeActionHtml(a, id, p.key)).join('')}</span>` : ''}
+            </div>`;
+    },
+
     renderPlaceRow(p: ManagerPlace, opts: { sub?: boolean; group?: TownGroup; meta?: string } = {}): string {
         const m = strings.map;
         const geo = p.geo;
-        const box = geo
-            ? `<div class="place-pin">
-                   ${geo.byTown
-                       ? `<span class="place-bytown"><span aria-hidden="true">⌖</span> ${this.escapeHtml(m.byTown(geo.byTown))}</span>
-                          ${(geo.townChoices ?? 0) > 1 ? `<span class="place-nearest">${this.escapeHtml(m.nearestTown)}</span>` : ''}`
-                       : `<span class="place-pin-label"><span class="place-pin-mark" aria-hidden="true">⌖</span> ${this.escapeHtml(geo.label ?? `${geo.lat.toFixed(3)}, ${geo.lon.toFixed(3)}`)}</span>`}
-                   <span class="place-pin-acts">
-                       <button type="button" class="place-change place-link-btn">${m.changePin}</button>
-                       ${geo.byTown ? '' : `<button type="button" class="place-remove place-link-btn is-quiet">${m.removePin}</button>`}
-                   </span>
-               </div>`
-            : `<div class="place-pin place-pin-none">
-                   <span class="place-hint">${m.notOnMap}</span>
-                   <button type="button" class="place-change place-find">${m.findOnMap}</button>
-               </div>`;
+        const id: PlaceIdentity = placesView.ids.get(p.key)
+            ?? { state: geo ? (geo.byTown ? 'town' : 'placed') : 'none', located: !!geo, ...(geo ? { origin: 'map' as const } : {}) };
+        const box = this.placeStateFrameHtml(p, id);
         const g = opts.group;
         const houses = houseFieldCount(p.usage);
-        const meta = opts.meta
-            ?? (houses > 0 ? m.afterSplit(p.usage.personIds.length, houses) : m.usedBy(p.usage.personIds.length));
+        const years = formatYearSpan(managerYears.get(p.key));
+        const meta = (opts.meta
+            ?? (houses > 0 ? m.afterSplit(p.usage.personIds.length, houses) : m.usedBy(p.usage.personIds.length)))
+            + (years && !opts.meta ? ` · ${years}` : '');
         const acts = [`<button type="button" class="place-rename-open place-act">✎ ${m.rename}</button>`];
         if (!g && this.placeSplittable(p.usage.display)) {
             if (this.activeResearchId()) {
@@ -427,8 +516,12 @@ export const placesManagerMethods = uiModule({
         if (!geo) cls.push('place-row-unplaced');
         if (opts.sub) cls.push('place-row-sub');
         if (g) cls.push('place-group-head');
+        if (id.state === 'check') cls.push('is-check');
+        const why = hasWhyHere(id) && placesView.why.has(p.key);
         return `
-            <div class="${cls.join(' ')}" data-key="${this.escapeHtml(p.key)}">
+            <div class="${cls.join(' ')}" data-key="${this.escapeHtml(p.key)}" data-state="${id.state}">
+                <div class="place-line">
+                ${this.placeSelectHtml(g ? g.town : p.usage.display)}
                 <div class="place-grid">
                     <div class="place-main">
                         <div class="place-head">
@@ -446,6 +539,8 @@ export const placesManagerMethods = uiModule({
                     </div>
                     ${box}
                 </div>
+                </div>
+                ${hasWhyHere(id) ? `<div class="place-why"${why ? '' : ' hidden'}>${why ? this.placeWhyHtml(p.key) : ''}</div>` : ''}
                 <div class="place-rename-preview" hidden></div>
                 <div class="place-split-card" hidden></div>
                 <div class="place-search" hidden>
@@ -477,13 +572,21 @@ export const placesManagerMethods = uiModule({
         go.onclick = run;
         query.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
 
-        (row.querySelector('.place-change') as HTMLButtonElement).onclick = () => {
+        // The row's own frame only (a group head holds its houses' rows too).
+        const own = <T extends HTMLElement>(sel: string): T[] =>
+            [...row.querySelectorAll<T>(`:scope > .place-line ${sel}`)];
+        for (const change of own<HTMLButtonElement>('.place-change')) change.onclick = () => {
             search.hidden = false;
             query.focus();
             query.select();
         };
-        const remove = row.querySelector('.place-remove') as HTMLButtonElement | null;
-        if (remove) remove.onclick = () => this.removePlacePin(key);
+        for (const b of own<HTMLButtonElement>('.place-remove')) b.onclick = () => this.removePlacePin(key);
+        for (const b of own<HTMLButtonElement>('.place-look')) b.onclick = () => void this.queuePlaces([key], false);
+        for (const b of own<HTMLButtonElement>('.place-check')) b.onclick = () => void this.queuePlaces([key], true);
+        for (const b of own<HTMLButtonElement>('.place-unqueue')) b.onclick = () => void this.unqueuePlaceForms([...(managerPlaces.get(key)?.variants.keys() ?? [])], [key]);
+        for (const b of own<HTMLButtonElement>('.place-answer')) b.onclick = () => { this.closePlacesManager(); this.showResearchWaiting(); };
+        for (const b of own<HTMLButtonElement>('.place-keep')) b.onclick = () => this.keepPlaceLocation(key);
+        for (const b of own<HTMLButtonElement>('.place-why-toggle')) b.onclick = () => this.togglePlaceWhy(row, key);
         (row.querySelector('.place-rename-open') as HTMLButtonElement).onclick = () => this.openPlaceRename(row, key);
         const split = row.querySelector('.place-split-one') as HTMLButtonElement | null;
         if (split) split.onclick = () => this.openPlaceSplitOne(row, key);
@@ -682,10 +785,10 @@ export const placesManagerMethods = uiModule({
         const group = managerGroups.get(townKey);
         const memberOf = group ? null : [...managerGroups.values()].find(g => g.members.some(x => x.key === focusKey));
         const resetFilter = (): void => {
-            this.placesFilter = { query: '', unplacedOnly: false };
+            this.placesFilter = { query: '', state: 'all' };
             const input = modal.querySelector('#places-filter') as HTMLInputElement | null;
             if (input) input.value = '';
-            modal.querySelector('#places-unplaced')?.setAttribute('aria-pressed', 'false');
+            this.refreshPlacesTop();
         };
         if (group) {
             expandedTowns.add(townKey);
@@ -711,7 +814,7 @@ export const placesManagerMethods = uiModule({
         }
         // Open its search first (it focuses the query), then bring the
         // whole, now taller row into view.
-        (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
+        (row?.querySelector(':scope > .place-line .place-change') as HTMLButtonElement | null)?.click();
         row?.scrollIntoView({ block: 'center' });
     },
 
@@ -755,17 +858,20 @@ export const placesManagerMethods = uiModule({
     },
 
     /**
-     * Show the rows the search and the "No location" chip let through; the
-     * count and the empty state. A group shows whole (as opened or closed)
-     * when its town matches and the chip is off; else only its houses that
-     * pass, opened.
+     * Show the rows the search and the state chip let through; the count and
+     * the empty state. A group shows whole (as opened or closed) when its town
+     * matches and no chip is on; else only its places that pass, opened.
      */
     applyPlacesFilter(): void {
         const modal = document.getElementById('places-modal');
         if (!modal) return;
         const f = this.placesFilter;
-        const pass = (row: HTMLElement): boolean => (!f.unplacedOnly || row.classList.contains('place-row-unplaced'))
-            && placeMatchesFilter(row.dataset.search ?? '', f.query);
+        const statePass = (row: HTMLElement): boolean => {
+            if (f.state === 'all') return true;
+            const id = placesView.ids.get(row.dataset.key ?? '');
+            return !!id && placeStateMatches(id, f.state);
+        };
+        const pass = (row: HTMLElement): boolean => statePass(row) && placeMatchesFilter(row.dataset.search ?? '', f.query);
         const all = modal.querySelectorAll('.place-row[data-key]').length;
         let found = 0;
         for (const row of modal.querySelectorAll<HTMLElement>('.places-list > .place-row[data-key]')) {
@@ -779,7 +885,7 @@ export const placesManagerMethods = uiModule({
             const more = group.querySelector<HTMLElement>('.place-group-more')!;
             const headMatch = placeMatchesFilter(group.dataset.search ?? '', f.query);
             let open: boolean;
-            if (!f.unplacedOnly && headMatch) {
+            if (f.state === 'all' && headMatch) {
                 open = expandedTowns.has(townKey);
                 const showAll = allShownTowns.has(townKey);
                 members.forEach((row, i) => { row.hidden = !open || (!showAll && i >= GROUP_FIRST); });
@@ -787,14 +893,15 @@ export const placesManagerMethods = uiModule({
                 group.hidden = false;
                 found += (head ? 1 : 0) + members.length;
             } else {
-                const shown = members.filter(row => (!f.unplacedOnly || row.classList.contains('place-row-unplaced'))
+                const shown = members.filter(row => statePass(row)
                     && (headMatch || placeMatchesFilter(row.dataset.search ?? '', f.query)));
                 const set = new Set(shown);
                 members.forEach(row => { row.hidden = !set.has(row); });
                 more.hidden = true;
-                group.hidden = shown.length === 0;
-                open = !group.hidden;
-                found += shown.length;
+                const headPass = !!head && statePass(head) && headMatch;
+                group.hidden = shown.length === 0 && !headPass;
+                open = shown.length > 0;
+                found += shown.length + (headPass ? 1 : 0);
             }
             if (head) head.hidden = group.hidden;
             group.classList.toggle('is-open', open);
@@ -804,7 +911,7 @@ export const placesManagerMethods = uiModule({
                 caret.firstElementChild!.textContent = open ? '▾' : '▸';
             }
         }
-        const filtering = !!f.query.trim() || f.unplacedOnly;
+        const filtering = !!f.query.trim() || f.state !== 'all';
         const count = modal.querySelector('#places-filter-count');
         if (count) count.textContent = filtering ? strings.map.filterCount(found, all) : '';
         const clear = modal.querySelector<HTMLElement>('#places-filter-clear');

@@ -147,6 +147,43 @@ export interface FakeBridge {
     surnames?: FakeSurnames;
     /** The research's tree fixes (`GET /fixes`, feature `fixes.list`). */
     fixes?: FakeFixes;
+    /** Place identification (spec 034): `GET /places`, `POST /places/identify` with `places.identify` in `features`. */
+    places?: FakePlaces;
+}
+
+/** The research's places (ZADANI_VYZKUM ztotozneni-mist, "Odpověď výzkumu"). */
+export interface FakePlaces {
+    /** The body of `GET /places` ({rev, places, forms, queue, counts}). */
+    reply: Record<string, unknown>;
+    /** How many times `GET /places` was asked. */
+    reads: number;
+    /** Every `POST /places/identify` body, parsed. */
+    identify: Record<string, unknown>[];
+    /** The answer to `POST /places/identify` (default: every form queued or cancelled, nothing skipped). */
+    identifyReply?: (body: Record<string, unknown>) => { status: number; body: unknown };
+}
+
+export function fakePlaces(init: Partial<FakePlaces> = {}): FakePlaces {
+    return { reply: { rev: 'p1', places: {}, forms: {} }, reads: 0, identify: [], ...init };
+}
+
+/** The answer to `/places*` (null: not it; 404 when not said in `features`). */
+function servePlaces(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
+    if (!/\/places(\/identify)?$/.test(url.pathname)) return null;
+    const p = b.places;
+    if (!p || !(b.features ?? []).includes('places.identify')) return { status: 404, body: { error: 'unknown' } };
+    if (method === 'GET' && url.pathname.endsWith('/places')) {
+        p.reads++;
+        return { status: 200, body: p.reply };
+    }
+    if (method !== 'POST' || !url.pathname.endsWith('/identify')) return { status: 405, body: { error: 'method' } };
+    const body = JSON.parse(posted ?? '{}') as Record<string, unknown>;
+    p.identify.push(body);
+    if (p.identifyReply) return p.identifyReply(body);
+    const n = Array.isArray(body.forms) ? body.forms.length : 3;
+    return body.do === 'cancel'
+        ? { status: 200, body: { ok: true, queued: 0, cancelled: n, skipped: [] } }
+        : { status: 200, body: { ok: true, queued: n, skipped: [] } };
 }
 
 /** The research's tree fixes (`GET /fixes`, ZADANI_VYZKUM akce-z-aplikace §1). */
@@ -1283,6 +1320,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         }
         const fx = serveFixes(b, method, url);
         if (fx) return json(fx.status, fx.body);
+        const pl = servePlaces(b, method, url, route.request().postData());
+        if (pl) return json(pl.status, pl.body);
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
         const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);
