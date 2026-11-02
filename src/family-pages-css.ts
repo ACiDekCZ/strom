@@ -14,6 +14,7 @@
 import { PERSON_PAGE_LIGHT_TOKENS } from './person-page-css.js';
 import { PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page-viz-css.js';
 import { PAGE_SET_SEARCH_JS } from './family-pages-search.js';
+import { rodTimelineScript } from './rod-timeline-wire.js';
 
 /** The lineage bars' colour (light / dark), next to the person page's tokens. */
 const LIGHT_EXTRA = '--rod-bar: #9fb8a6; --sp-frame: #d0c6b2; --tint: #f1ece1; --hist: #f3e3cf;';
@@ -450,6 +451,74 @@ html.sp-on .pp-lb.sp-lb-on { position: fixed; inset: 0; z-index: 1000; display: 
 html.sp-lb-open { overflow: hidden; }
 .sp-lb-hint { flex: 0 0 auto; margin: 0; padding: 2px 16px 14px; font-size: 12.5px; line-height: 1.4; color: #c9c1b0; text-align: center; }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-lb-hint { display: none; } }
+/* 1102 §5: a line's timeline - the controls, the overview (generations, places, history as bands), the events by century. */
+.sp-tl-go { margin: 6px 0 0; font-size: 14.5px; }
+.sp-cardw { position: relative; display: flex; min-width: 0; }
+.sp-cardw > .sp-card { flex: 1 1 auto; padding-bottom: 46px; }
+.sp-cardw > .sp-card-tl { position: absolute; right: 18px; bottom: 16px; font-size: 14px; }
+.sp-tl { display: flex; flex-direction: column; gap: 28px; }
+.sp-tl-ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.sp-tl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-tl-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--primary); border-radius: 17px; background: var(--tint, var(--surface-2)); font: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; }
+.sp-tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.sp-tl-chip[data-tl-k="hist"] .sp-tl-dot { background: var(--accent-text); }
+.sp-tl-chip[aria-pressed="false"] { border-color: var(--sp-frame, var(--border)); background: transparent; color: var(--text-light); }
+.sp-tl-chip[aria-pressed="false"] .sp-tl-dot { background: var(--sp-frame, var(--border)); }
+.sp-tl-chip:focus-visible, .sp-tl-c > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sp-tl-chart { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 10px; font-size: 13px; }
+.sp-tl-labs, .sp-tl-plot { display: flex; flex-direction: column; min-width: 0; }
+.sp-tl-plot { position: relative; }
+.sp-tl-lab { display: flex; align-items: center; height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-light); }
+.sp-tl-lab--gen { display: block; line-height: 22px; font-weight: 600; color: var(--text); }
+.sp-tl-lab--pl { display: block; line-height: 22px; }
+.sp-tl-first { border-top: 1px solid var(--divider); }
+.sp-tl-ticks { position: relative; display: block; height: 22px; font-size: 11.5px; color: var(--text-faint); }
+.sp-tl-ticks > span { position: absolute; top: 3px; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+.sp-tl-r { position: relative; display: block; height: 22px; }
+.sp-tl-bar { position: absolute; top: 7px; height: 8px; min-width: 3px; border-radius: 4px; }
+.sp-tl-bar--gen { background: var(--rod-bar); }
+.sp-tl-bar--pl { background: var(--accent-text); }
+.sp-tl-band { position: absolute; top: 22px; bottom: 0; min-width: 3px; background: var(--hist, var(--surface-2)); opacity: .85; }
+.sp-tl-note { margin: 4px 0 0; font-size: 12.5px; color: var(--text-light); }
+.sp-tl-ev { gap: 0; }
+.sp-tl-ev > .sp-h2 { margin-bottom: 6px; }
+.sp-tl-c > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; border-top: 1px solid var(--divider); cursor: pointer; list-style: none; }
+.sp-tl-c > summary::-webkit-details-marker { display: none; }
+.sp-tl-cn { flex: 1 1 auto; font-family: var(--font-serif); font-size: 17px; font-weight: 600; }
+.sp-tl-cc { font-size: 13px; color: var(--text-light); }
+.sp-tl-cc::after { content: " ▾"; }
+.sp-tl-c[open] .sp-tl-cc::after { content: " ▴"; }
+.sp-tl-rows { display: flex; flex-direction: column; margin: 0; padding: 0 0 8px; list-style: none; }
+.sp-tl-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; border-radius: 6px; }
+.sp-tl-row--hist { background: var(--hist, var(--surface-2)); }
+.sp-tl-y { padding: 6px 0 6px 6px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-tl-b { position: relative; display: flex; flex-direction: column; padding: 6px 8px 6px 14px; border-left: 2px solid var(--divider); font-size: 14px; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+.sp-tl-b::before { content: ""; position: absolute; left: -5px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.sp-tl-row--hist .sp-tl-b::before { background: var(--accent-text); }
+.sp-tl-k { font-size: 12px; font-weight: 600; color: var(--text-light); }
+.sp-tl-row--hist .sp-tl-k { color: var(--accent-text); }
+.sp-tl-pl { color: var(--text-light); }
+@media screen {
+  .sp-tl[data-off~="birth"] .sp-tl-row[data-k="birth"], .sp-tl[data-off~="marriage"] .sp-tl-row[data-k="marriage"],
+  .sp-tl[data-off~="death"] .sp-tl-row[data-k="death"], .sp-tl[data-off~="move"] .sp-tl-row[data-k="move"],
+  .sp-tl[data-off~="hist"] .sp-tl-row[data-k="hist"], .sp-tl[data-off~="hist"] .sp-tl-band, .sp-tl[data-off~="hist"] .sp-tl-note,
+  .sp-tl-c.sp-tl-none { display: none; }
+}
+@media (pointer: coarse) {
+  .sp-tl-chip, .sp-tl-seg button { min-height: 44px; }
+  .sp-tl-go .pp-link, .sp-card-tl { display: inline-flex; align-items: center; min-height: 44px; }
+  .sp-cardw > .sp-card { padding-bottom: 58px; }
+  .sp-cardw > .sp-card-tl { bottom: 6px; }
+}
+@media (max-width: 640px) {
+  .sp-tl-chart { grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
+  .sp-tl-lab-n { display: none; }
+  .sp-tl-row { grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
+  .sp-tl-y { padding-left: 2px; }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+  .sp-tl-chart { grid-template-columns: 110px minmax(0, 1fr); }
+}
 /* §8.3: the shown page only (all of them without the script), no breadcrumbs or folds, links as text, paper. */
 @media print {
 ${PRINT_ROOT_CSS}  body { background: #fff; }
@@ -468,6 +537,11 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   .sp-anc-sum { display: none !important; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
   .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kid, .sp-mar { break-inside: avoid; }
+  .sp-tl-ctl, .sp-tl-go, .sp-card-tl { display: none !important; }
+  .sp-tl-c > summary .sp-tl-cc::after { content: none; }
+  details.sp-tl-c::details-content { content-visibility: visible; display: contents; }
+  .sp-tl-row, .sp-tl-chart { break-inside: avoid; }
+  .sp-tl-row--hist, .sp-tl-band { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 `;
 
@@ -499,6 +573,10 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-app .sp-crumbs > .sp-crumb-back { display: none; }
 .sp-app button.sp-card { width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .sp-app button.sp-btn { font: inherit; cursor: pointer; }
+/* The timeline's tints on the app's tokens (1102 §5): the file has them in its root. */
+.sp-app .sp-tl { --tint: #f1ece1; --hist: #f3e3cf; --sp-frame: var(--border); }
+[data-theme="dark"] .sp-app .sp-tl { --tint: #35322a; --hist: #4d3d2a; }
+.sp-app button.sp-card-tl { font-size: 14px; }
 .sp-app button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) { .sp-app button.pp-link:hover, .sp-app .sp-crumbs button:hover { text-decoration-thickness: 2px; } }
 @media (min-width: 641px) and (max-width: 1024px) { .sp-app { padding: 20px 24px 32px; } }
@@ -704,4 +782,6 @@ window.addEventListener('hashchange',function(){if(on)cancel(true);shut();pickSh
 var opened=[];
 window.addEventListener('beforeprint',function(){opened=q('details.sp-kids:not([open]),details.sp-ix-more:not([open]),details.sp-pair:not([open]),details.sp-anc-more:not([open])');opened.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){opened.forEach(function(f){f.open=false});opened=[]});
-})();`;
+})();`
+// The lines' timelines (1102 §5.2).
+    + '\n' + rodTimelineScript();

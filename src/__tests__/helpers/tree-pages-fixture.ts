@@ -8,7 +8,9 @@
  * Every name and place is made up.
  */
 
-import { Gender, Partnership, PartnershipId, Person, PersonId, StromData } from '../../types.js';
+import { Gender, LifeEvent, Partnership, PartnershipId, Person, PersonId, StromData } from '../../types.js';
+import { HistoryPayload, parseHistoryPayload } from '../../history.js';
+import { placeKey } from '../../places.js';
 
 export const TP_NOW = new Date('2026-11-02T12:00:00Z');
 
@@ -225,4 +227,47 @@ export function ancestorsFixture(): AncestorsFixture {
         else t.marry(id, null, null, [child]);
     }
     return { data: t.data(), petr: kek.get(1)!, ondrej: kek.get(14)! };
+}
+
+/**
+ * The tree of `treePagesFixture` with what a line's timeline shows (1102 §5):
+ * Anna Lhotáková emigrates to Ashford (1888, a record) and dies there,
+ * Václav Lhoták moves to Smrkov (1879), Rosálie Rebarborová lived in Kvasín
+ * before her wedding (1860, not a move of the line) and moves to Zálesí
+ * (1870), Jiří Lhoták lives in Ashford from 1985 (located places in two
+ * countries: an emigration); the research's history of Lopuchov and of a
+ * place outside the lines (Brokolice). Every name and place is made up.
+ */
+export function timelineFixture(): TreePagesFixture & { history: HistoryPayload } {
+    const f = treePagesFixture();
+    const P = f.data.persons;
+    const ev = (id: string, type: LifeEvent['type'], date: string, place: string): LifeEvent => ({ id, type, date, place });
+    P[f.ids.anna] = { ...P[f.ids.anna], deathPlace: 'Ashford', events: [ev('tl-e1', 'emigration', '1888', 'Ashford')] };
+    P[f.ids.vaclav] = { ...P[f.ids.vaclav], events: [ev('tl-e2', 'residence', '1879', 'Smrkov čp. 7')] };
+    P[f.ids.rosalie] = { ...P[f.ids.rosalie], events: [ev('tl-e3', 'residence', '1860', 'Kvasín'), ev('tl-e4', 'residence', '1870', 'Zálesí')] };
+    P[f.ids.jiri] = { ...P[f.ids.jiri], events: [ev('tl-e5', 'residence', '1985', 'Ashford')] };
+    f.data.places = {
+        [placeKey('Lopuchov')]: { lat: 49.95, lon: 15.27 },
+        [placeKey('Ashford')]: { lat: 51.15, lon: 0.87 },
+    };
+    const region = { id: 'cz-bohemia', name: { cs: 'Čechy', en: 'Bohemia' } };
+    const lop = placeKey('Lopuchov');
+    const source = { title: 'Kronika', url: 'https://example.org/kronika' };
+    const history = parseHistoryPayload({
+        state: { on: true, search: 'done', at: '2026-10-27T14:05:00Z' }, lang: 'cs', hidden: [],
+        events: [
+            { source, id: 'cz-1866', from: 1866, kind: 'war', scope: 'region', region, text: { cs: 'Prusko-rakouská válka', en: 'Austro-Prussian War' } },
+            { source, id: 'cz-1914', from: 1914, to: 1918, kind: 'war', scope: 'region', region, text: { cs: 'První světová válka', en: 'First World War' } },
+            { source, id: 'lop-1831', from: 1831, kind: 'epidemic', scope: 'place', place: { key: lop }, text: { cs: 'Cholera v Lopuchově', en: 'Cholera in Lopuchov' } },
+            { source, id: 'lop-1890', from: 1890, kind: 'other', scope: 'place', place: { key: lop }, text: { cs: 'Požár mlýna', en: 'The mill burns down' } },
+            { source, id: 'cz-1900', from: 1900, kind: 'other', scope: 'region', region, text: { cs: 'Výstava v Praze', en: 'An exhibition in Prague' } },
+            { source, id: 'cz-1620', from: 1620, kind: 'war', scope: 'region', region, text: { cs: 'Bitva na Bílé hoře', en: 'Battle of White Mountain' } },
+            { source, id: 'bro-1850', from: 1850, kind: 'epidemic', scope: 'place', place: { key: placeKey('Brokolice') }, text: { cs: 'Neštovice v Brokolici', en: 'Smallpox in Brokolice' } },
+        ],
+        places: {
+            [lop]: { events: ['cz-1866', 'cz-1914', 'lop-1831', 'lop-1890', 'cz-1900', 'cz-1620'] },
+            [placeKey('Brokolice')]: { events: ['bro-1850'] },
+        },
+    }, '2026-10-27T14:05:00Z')!;
+    return { ...f, history };
 }

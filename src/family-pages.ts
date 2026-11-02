@@ -27,8 +27,9 @@ import {
 import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
+import type { HistoryPayload, PersonHistoryEnv } from './history.js';
 
-export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors';
+export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline';
 
 /** The four indexes (spec 026 §3.5). */
 export type PageSetIndexKind = 'persons' | 'families' | 'surnames' | 'places';
@@ -39,7 +40,7 @@ export interface SetPage {
     slug: string;
     kind: PageKind;
     /**
-     * What the page is about: a lineage's id ('rod'), a union's ('family'), a
+     * What the page is about: a lineage's id ('rod', 'rodTimeline'), a union's ('family'), a
      * person's ('person', 'branch' and 'ancestors': the starting person), the index's kind
      * ('index'); none for the hub, the tree and the map.
      */
@@ -89,6 +90,10 @@ export interface PageSetOptions {
     stories?: boolean;
     /** What the person pages carry (1102 §4.4, default all on); `sources` and `stories` here win over the fields above. */
     groups?: Partial<PageSetGroups>;
+    /** A timeline page for every line with a page (1102 §5, default false: the dialog's "Timelines", the window on). */
+    timelines?: boolean;
+    /** The research's history (the timelines' history layer); none: no layer. */
+    history?: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     now?: Date;
 }
 
@@ -115,7 +120,9 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories'>> & { now: Date; groups: PageSetGroups };
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines'>> & { now: Date; groups: PageSetGroups };
+    /** The research's history for the timelines (null: none). */
+    history: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     selection: Selection;
     protectedTree: ProtectedPersonPageTree;
     /** The lineages with a page, in reading order. */
@@ -127,6 +134,8 @@ export interface PageSet {
     personSlug: Map<PersonId, string>;
     familySlug: Map<PartnershipId, string>;
     rodSlug: Map<RodId, string>;
+    /** The lines' timeline pages (1102 §5). */
+    rodTimelineSlug: Map<RodId, string>;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
     mapSlug: string;
@@ -289,7 +298,7 @@ function roman(n: number): string {
  * living person, the surname only (under hidden names '' — the generic
  * "Family line"); otherwise the lineage label ("Lhoták (Čapkov)").
  */
-function setRodLabel(prot: ProtectedPersonPageTree, rod: Rod): string {
+export function pageSetRodLabel(prot: ProtectedPersonPageTree, rod: Rod): string {
     const label = prot.rodLabels.get(rod.id) ?? rod.surname;
     if (!prot.living.has(rod.founderId) || prot.privacy === 'full' || prot.privacy === 'minimal') return label;
     return prot.privacy === 'anonymous' ? '' : rod.surname;
@@ -346,7 +355,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const options: PageSet['options'] = {
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
-        sources, stories, groups, now: opts.now ?? new Date(),
+        sources, stories, groups, timelines: opts.timelines ?? false, now: opts.now ?? new Date(),
     };
     // Ancestors without a depth: the dialog's default (§4.1).
     if (spec.kind === 'ancestors' && spec.generations == null) spec = { ...spec, generations: PAGE_SET_ANCESTOR_GENERATIONS };
@@ -369,7 +378,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const rodIds = rods.map(r => r.id);
     const whole = spec.kind === 'tree';
     const small = whole ? otherRods(prot) : [];
-    const labels = new Map<RodId, string>([...rods, ...small].map(r => [r.id, setRodLabel(prot, r)]));
+    const labels = new Map<RodId, string>([...rods, ...small].map(r => [r.id, pageSetRodLabel(prot, r)]));
     const inRods = new Set(rodIds);
 
     const used = new Set<string>();
@@ -377,6 +386,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const personSlug = new Map<PersonId, string>();
     const familySlug = new Map<PartnershipId, string>();
     const rodSlug = new Map<RodId, string>();
+    const rodTimelineSlug = new Map<RodId, string>();
 
     // The introduction.
     let intro: SetPage;
@@ -404,14 +414,24 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     // The whole tree's breadcrumbs start with "Tree" (spec 026 P3 §2.1).
     const introCrumb: PageCrumb = { slug: intro.slug, label: whole ? F.crumbTree : intro.kind === 'hub' ? F.hub : intro.title };
 
-    // The lineages.
+    // The lineages, each followed by its timeline (1102 §5).
     for (const rod of rods) {
-        if (rodSlug.has(rod.id)) continue;
         const label = labels.get(rod.id) ?? '';
-        const slug = uniqueSlug(`rod-${asciiSlug(label) || 'rod'}`, used);
-        rodSlug.set(rod.id, slug);
         const title = rodTitleOf(lang, label);
-        pages.push({ slug, kind: 'rod', id: rod.id, title, crumbs: [introCrumb, { slug, label: title }], ...(whole ? { under: rod.id } : {}) });
+        let slug = rodSlug.get(rod.id);
+        if (!slug) {
+            slug = uniqueSlug(`rod-${asciiSlug(label) || 'rod'}`, used);
+            rodSlug.set(rod.id, slug);
+            pages.push({ slug, kind: 'rod', id: rod.id, title, crumbs: [introCrumb, { slug, label: title }], ...(whole ? { under: rod.id } : {}) });
+        }
+        if (!options.timelines) continue;
+        const tl = uniqueSlug(`casova-osa-${asciiSlug(label) || 'rod'}`, used);
+        rodTimelineSlug.set(rod.id, tl);
+        const rodCrumbs: PageCrumb[] = slug === intro.slug ? [] : [introCrumb];
+        pages.push({
+            slug: tl, kind: 'rodTimeline', id: rod.id, title: label ? F.rodTimeline(label) : F.timeline,
+            crumbs: [...rodCrumbs, { slug, label: title }, { slug: tl, label: F.timelineLink }], ...(whole ? { under: rod.id } : {}),
+        });
     }
     const rodCrumb = (rodId: RodId | null | undefined): PageCrumb => {
         const slug = rodId ? rodSlug.get(rodId) : undefined;
@@ -545,8 +565,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     });
 
     const out: PageSet = {
-        spec, options, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
-        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, indexSlug, mapSlug,
+        spec, options, history: opts.history ?? null, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
+        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, indexSlug, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);
@@ -682,6 +702,7 @@ const FAMILY_PAGE_BYTES = 9_000;
 const ROD_PAGE_BYTES = 8_000;
 const ROD_ROW_BYTES = 450;            // one person of the lineage's generations
 const INDEX_ROW_BYTES = 160;          // one row of an index
+const TIMELINE_ROW_BYTES = 900;       // a person's events on a line's timeline (birth, marriage, death, moves)
 const SEARCH_ENTRY_BYTES = 120;
 const MAP_PAGE_BYTES = 60_000;        // the outlines and the points
 /** A reduced JPEG (quality 0.82) in base64: about 0.25 B per pixel × 4/3. */
@@ -759,6 +780,11 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
             }
             case 'index': text += set.selection.personIds.length * INDEX_ROW_BYTES; break;
             case 'map': text += MAP_PAGE_BYTES; break;
+            case 'rodTimeline': {
+                const rod = page.id ? set.protectedTree.lineages.rods.get(page.id as RodId) : undefined;
+                text += ROD_PAGE_BYTES + (rod ? rod.memberIds.length + rod.spouses.length : 0) * TIMELINE_ROW_BYTES;
+                break;
+            }
         }
     }
     const same = clips === set.options.clips && photos === set.options.photos;

@@ -33,7 +33,7 @@ export type BookMode = 'book' | 'app' | 'file';
  * What a reference points to: a chapter or the lineage part of the book, a
  * person, or (pages of a set, spec 026 §0.8) a family or a lineage by id.
  */
-export type BookLinkTarget = { chapter: number } | { rod: number } | { person: PersonId } | { family: PartnershipId } | { rodId: RodId };
+export type BookLinkTarget = { chapter: number } | { rod: number } | { person: PersonId } | { family: PartnershipId } | { rodId: RodId } | { rodTimeline: RodId };
 
 /** The width of the type area in CSS px (166 mm). */
 export const BOOK_TEXT_WIDTH = 627;
@@ -1084,8 +1084,10 @@ function lineTimeHtml(line: PageLine, ctx: BookCtx, spans: ReturnType<typeof pla
     const placesChart = placeRows
         ? `<div class="sp-chart" id="${esc(bookId(ctx, 'sp-places'))}"><h3 class="sp-h3">${esc(branch ? F.placeSpansBranch : F.placeSpans)}</h3>${placeRows}${ticks}${more}</div>`
         : '';
+    // The line's timeline page, when the set has it (1102 §5).
+    const tl = line.rod && ctx.linkTo({ rodTimeline: line.rod.id }, ctx) ? `<p class="sp-tl-go">${link(ctx, { rodTimeline: line.rod.id }, esc(F.tlLink))}</p>` : '';
     return `<section class="sp-block sp-time" id="${esc(bookId(ctx, 'sp-time'))}"><h2 class="sp-h2">${esc(branch ? F.timelineBranch : F.timeline)}</h2>`
-        + `<div class="sp-charts">${gensChart}${placesChart}</div></section>`;
+        + `<div class="sp-charts">${gensChart}${placesChart}</div>${tl}</section>`;
 }
 
 /** A recorded marriage (not a partnership without one). */

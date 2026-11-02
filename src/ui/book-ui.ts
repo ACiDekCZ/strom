@@ -49,6 +49,7 @@ import { displayYear } from '../dates.js';
 import { openPersonPopover } from './person-popover.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
+import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons';
 type PersonKind = 'ancestors' | 'descendants';
@@ -100,6 +101,8 @@ interface DialogState {
     treeName: string;
     appLang: BookLang;
     hasHistory: boolean;
+    /** The research's history for the lines' timelines (1102 §5); null without it. */
+    history: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     kind: Kind;
     /** The chosen lineages, the person and the generations: kept while another kind is chosen. */
     rods: RodId[];
@@ -674,7 +677,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
     const p = s.pages;
     return {
         lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
-        map: p.include.map, groups: { ...p.groups },
+        map: p.include.map, groups: { ...p.groups }, timelines: p.include.timelines, history: s.history,
     };
 }
 
@@ -848,6 +851,7 @@ export const bookUiMethods = uiModule({
             data, index, treeId, appLang, rodChoices,
             treeName: TreeManager.getActiveTreeMetadata()?.name || '',
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
+            history: (firstId && this.personPageHistory(firstId as PersonId)) || null,
             kind: movedToTree ? 'tree' : sel.kind,
             rods: (sel.kind === 'rods' ? sel.rods : memory?.lastRods ?? []).filter(id => choosable.has(id)),
             person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : null) ?? focus,

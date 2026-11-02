@@ -43,6 +43,9 @@ import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from 
 import { fanZoomInlineScript } from './fan-zoom.js';
 import { ZipEntry, dataUrlBytes } from './zip.js';
 import { safeHttpUrl } from './validation.js';
+import {
+    ROD_TIMELINE_CHIPS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
+} from './rod-timeline.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -118,6 +121,7 @@ function targetSlug(set: PageSet, target: BookLinkTarget): string {
     if ('person' in target) return set.personSlug.get(target.person) ?? '';
     if ('family' in target) return set.familySlug.get(target.family) ?? '';
     if ('rodId' in target) return set.rodSlug.get(target.rodId) ?? '';
+    if ('rodTimeline' in target) return set.rodTimelineSlug.get(target.rodTimeline) ?? '';
     return '';
 }
 
@@ -599,7 +603,14 @@ function treeHubHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const rowsMode = lines.length >= HUB_ROWS_FROM;
     let list: string;
     if (!rowsMode) {
-        const cards = lines.map((l, i) => withKey(pageLink(r, l.slug, rodCardInner(r, ctx, l.rod, l.line, l.period, lo, span), 'sp-card'), i)).join('');
+        // A line's timeline beside its card (§1.3): a link of its own, over the card's corner.
+        const card = (l: HubLine, i: number): string => {
+            const html = pageLink(r, l.slug, rodCardInner(r, ctx, l.rod, l.line, l.period, lo, span), 'sp-card');
+            const tl = set.rodTimelineSlug.get(l.rod.id);
+            if (!tl) return withKey(html, i);
+            return `<div class="sp-cardw" data-sp-o="${sortKey(i)}">${html}${pageLink(r, tl, esc(F.timelineLink), 'pp-link sp-card-tl')}</div>`;
+        };
+        const cards = lines.map(card).join('');
         let other = '';
         if (set.otherSlug) {
             const names = otherNames(r);
@@ -1401,6 +1412,127 @@ function mapPageHtml(r: Render, page: SetPage): string {
     return `<header class="sp-head"><h1 class="sp-h1">${esc(F.map)}</h1></header>${map}<p class="sp-map-note">${esc(F.mapNote)}</p>`;
 }
 
+// ─── The timeline of a line (1102 §5) ────────────────────────────────────────
+
+/** A bar or band of the overview, placed on the whole axis (the script moves it on a zoom). */
+function tlBarHtml(cls: string, from: number, to: number, a: number, b: number, title: string): string {
+    const span = b - a;
+    const x = Math.max(from, a), y = Math.min(to, b);
+    const left = ((x - a) / span * 100).toFixed(2), width = (Math.max(y - x, 0.5) / span * 100).toFixed(2);
+    return `<span class="${cls}" data-f="${from}" data-t="${to}" style="left:${left}%;width:${width}%" title="${esc(title)}"></span>`;
+}
+
+function tlTicksHtml(a: number, b: number): string {
+    return rodTimelineTicks(a, b).map(y => `<span style="left:${((y - a) / (b - a) * 100).toFixed(2)}%">${y}</span>`).join('');
+}
+
+/** One event's row (§5.2): the year, the line with its dot, the kind, the person and the text. */
+function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
+    const F = r.S.familyPages;
+    const chip = rodTimelineChip(e.kind);
+    if (e.kind === 'history' && e.history) {
+        const h = e.history;
+        const kind = r.S.history.kinds[h.kind] ?? h.kind;
+        const years = h.to ? ` (${h.from}–${h.to})` : '';
+        const lang = h.textLang && h.textLang !== r.set.options.lang ? ` lang="${esc(h.textLang)}"` : '';
+        const where = h.place ? ` <span class="sp-tl-pl">· ${esc(h.place)}</span>` : '';
+        return `<li class="sp-tl-row sp-tl-row--hist" data-k="hist"><span class="sp-tl-y">${e.year}</span>`
+            + `<div class="sp-tl-b"><span class="sp-tl-k">${esc(F.tlHist(kind))}</span><span class="sp-tl-t"><span${lang}>${esc(h.text)}</span>${esc(years)}${where}</span></div></li>`;
+    }
+    const who = e.personId ? personLinkHtml(r, ctx, e.personId) : '';
+    const parts: string[] = [];
+    if (e.kind === 'marriage') {
+        let t = `⚭ ${e.partnerId ? personLinkHtml(r, ctx, e.partnerId) : '?'}`;
+        if (e.place) t += `, ${esc(e.place)}`;
+        parts.push(t);
+        if (e.rod) {
+            const label = rodLabel(r, ctx, e.rod.id);
+            parts.push(rodLinkHtml(r, e.rod.id, esc(e.rod.rel === 'birth' ? F.birthRod(label) : F.toRod(label))));
+        }
+    } else if (e.kind === 'move' || e.kind === 'emigration') {
+        parts.push(e.from ? `${esc(e.from)} → ${esc(e.place ?? '')}` : `→ ${esc(e.place ?? '')}`);
+    } else {
+        const t = [e.place ? esc(e.place) : '', e.kind === 'death' && e.age !== undefined ? esc(r.S.history.age(String(e.age))) : ''].filter(Boolean).join(', ');
+        if (t) parts.push(t);
+    }
+    const text = parts.join(' · ');
+    return `<li class="sp-tl-row" data-k="${chip}"><span class="sp-tl-y">${e.year}</span>`
+        + `<div class="sp-tl-b"><span class="sp-tl-k">${esc(F.tlEv[e.kind as Exclude<RodTimelineKind, 'history'>])}</span>`
+        + `<span class="sp-tl-t">${who}${who && text ? (e.kind === 'marriage' ? ' ' : ', ') : ''}${text}</span></div></li>`;
+}
+
+/** The page "Timeline of the line" (§5.2): the header, the controls (with the script), the overview and the events by century. */
+function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const rod = rodOf(r, page.id);
+    if (!rod) return '';
+    const tl = buildRodTimeline({
+        prot: set.protectedTree, rodId: rod.id, lang: set.options.lang, now: set.options.now,
+        history: set.history, historyOn: set.options.groups.history,
+    });
+    if (!tl) return '';
+    const hist = tl.events.filter(e => e.kind === 'history' && e.history);
+    const meta = [
+        tl.period ? (tl.period.from === tl.period.to ? String(tl.period.from) : `${tl.period.from}–${tl.period.to}`) : '',
+        tl.generations.length ? F.nGens(tl.generations.length) : '', F.tlCount(tl.events.length), F.nMembers(rod.realMemberCount),
+    ].filter(Boolean).join(' · ');
+    const head = `<header class="sp-head"><div class="sp-kicker">${esc(F.tlKicker)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(meta)}</p></header>`;
+    if (!tl.events.length) return `${head}<p class="sp-faint">${esc(F.tlNone)}</p>`;
+
+    // The controls (§5.2): the centuries with events (two or more) and the kinds of events; the script's.
+    const main = rodTimelineMainCentury(tl);
+    const seg = tl.centuries.length > 1
+        ? `<div class="sp-sort sp-tl-seg" role="radiogroup" aria-label="${esc(F.tlCentLabel)}">`
+            + `<button type="button" role="radio" data-tl-c="" aria-checked="true">${esc(F.tlAll)}</button>`
+            + tl.centuries.map(c => `<button type="button" role="radio" data-tl-c="${c.c}" aria-checked="false">${esc(F.tlCenturyShort(c.c))}</button>`).join('')
+            + `</div>` : '';
+    const kinds = ROD_TIMELINE_CHIPS.filter(k => k !== 'hist' || tl.history);
+    const chips = `<div class="sp-tl-chips" role="group" aria-label="${esc(F.tlKindsLabel)}">`
+        + kinds.map(k => `<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true"><span class="sp-tl-dot" aria-hidden="true"></span>${esc(F.tlKinds[k])}</button>`).join('')
+        + `</div>`;
+    const controls = `<div class="sp-tl-ctl js-only">${seg}${chips}</div>`;
+
+    // The overview (§5.2): generations, places, history as vertical bands; no bars of single people.
+    const ends: number[] = [];
+    for (const g of tl.generations) ends.push(g.from, g.to);
+    for (const p of tl.places) ends.push(p.from, p.to);
+    if (tl.period) ends.push(tl.period.from, tl.period.to);
+    const { a, b } = rodTimelineAxis(Math.min(...ends), Math.max(...ends));
+    const labels: string[] = ['<span class="sp-tl-lab sp-tl-lab--ax" aria-hidden="true"></span>'];
+    const rows: string[] = [];
+    for (const g of tl.generations) {
+        labels.push(`<span class="sp-tl-lab sp-tl-lab--gen">${roman(g.gen)}<span class="sp-tl-lab-n"> · ${g.count}</span></span>`);
+        rows.push(`<span class="sp-tl-r">${tlBarHtml('sp-tl-bar sp-tl-bar--gen', g.from, g.to, a, b, `${roman(g.gen)} · ${g.from}–${g.to}`)}</span>`);
+    }
+    tl.places.forEach((p, i) => {
+        const first = i === 0 ? ' sp-tl-first' : '';
+        labels.push(`<span class="sp-tl-lab sp-tl-lab--pl${first}" title="${esc(p.name)}">${esc(p.name)}</span>`);
+        rows.push(`<span class="sp-tl-r${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${p.from}–${p.to}`)}</span>`);
+    });
+    const bands = hist.map(e => {
+        const h = e.history!;
+        return tlBarHtml('sp-tl-band', h.from, (h.to ?? h.from) + 1, a, b, `${h.text} (${h.to ? `${h.from}–${h.to}` : h.from})`);
+    }).join('');
+    const more = tl.morePlaces ? `<p class="sp-faint sp-more">${esc(F.morePlaces(tl.morePlaces))}</p>` : '';
+    const note = bands ? `<p class="sp-tl-note">${esc(F.tlHistNote)}</p>` : '';
+    const overview = `<section class="sp-block sp-tl-over"><h2 class="sp-h2">${esc(F.tlOverview)}</h2>`
+        + `<div class="sp-tl-chart"><div class="sp-tl-labs">${labels.join('')}</div>`
+        + `<div class="sp-tl-plot">${bands}<span class="sp-tl-ticks" aria-hidden="true">${tlTicksHtml(a, b)}</span>${rows.join('')}</div></div>${more}${note}</section>`;
+
+    // The events by century (§5.2): every century open without the script; the script keeps the main one.
+    const byC = new Map<number, RodTimelineEvent[]>();
+    for (const e of tl.events) {
+        const c = Math.floor(e.year / 100) + 1;
+        const list = byC.get(c);
+        if (list) list.push(e); else byC.set(c, [e]);
+    }
+    const groups = tl.centuries.map(c => `<details class="sp-tl-c" data-c="${c.c}" open><summary><span class="sp-tl-cn">${esc(F.tlCentury(c.c))}</span>`
+        + `<span class="sp-tl-cc">${esc(F.tlCount(c.count))}</span></summary><ol class="sp-tl-rows">${(byC.get(c.c) ?? []).map(e => tlRowHtml(r, ctx, e)).join('')}</ol></details>`).join('');
+    const events = `<section class="sp-block sp-tl-ev"><h2 class="sp-h2">${esc(F.tlEvents)}</h2>${groups}</section>`;
+    return `${head}<div class="sp-tl" data-a="${a}" data-b="${b}" data-main="${main ?? ''}">${controls}${overview}${events}</div>`;
+}
+
 /** The pages drawn: every page, the map when its places make one. */
 function rendered(set: PageSet, page: SetPage): boolean {
     if (page.kind === 'map') return setMap(set).drawn;
@@ -1456,6 +1588,7 @@ function pageInnerHtml(r: Render, page: SetPage): string {
     else if (page.kind === 'family') body = familyPageHtml(r, page, ctx);
     else if (page.kind === 'index') body = indexPageHtml(r, page);
     else if (page.kind === 'map') body = mapPageHtml(r, page);
+    else if (page.kind === 'rodTimeline') body = rodTimelinePageHtml(r, page, ctx);
     return `${crumbs}<div class="sp-body">${body}</div>${r.foot}`;
 }
 
@@ -1477,7 +1610,7 @@ function fileTocHtml(r: Render, pages: readonly SetPage[]): string {
     };
     const intro = pages.filter(p => p.slug === r.set.introSlug);
     row(F.tocIntro, intro);
-    row(F.tocRods, pages.filter(p => (p.kind === 'rod' || p.kind === 'other') && p.slug !== r.set.introSlug));
+    row(F.tocRods, pages.filter(p => (p.kind === 'rod' || p.kind === 'other' || p.kind === 'rodTimeline') && p.slug !== r.set.introSlug));
     row(F.tocFams, pages.filter(p => p.kind === 'family'));
     row(F.tocPers, pages.filter(p => p.kind === 'person'));
     row(F.tocIdx, pages.filter(p => p.kind === 'index' || p.kind === 'map'));

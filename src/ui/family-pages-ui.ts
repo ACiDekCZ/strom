@@ -33,6 +33,8 @@ import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster
 import { shrinkImage } from './person-page-ui.js';
 import { uiModule } from './module.js';
 import { wireRodPicker, wireTreePages } from './rod-picker-ui.js';
+import { wireRodTimelines } from '../rod-timeline-wire.js';
+import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 
 /**
  * A page of a set in the window: the set by its selection, the page by its
@@ -72,9 +74,30 @@ function treeName(): string {
     return TreeManager.getActiveTreeMetadata()?.name || '';
 }
 
-/** The window's set for a selection: the app's language, full data, families as pages; kept until the tree changes. */
-function cacheKey(spec: BookSelectionSpec): string {
-    return `${DataManager.getCurrentTreeId() ?? ''}|${getCurrentLanguage()}|${JSON.stringify(spec)}`;
+/** The research's history for the lines' timelines (1102 §5): bound by the window's entry points to the app's. */
+type SetHistory = { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
+let historyOf: () => SetHistory = () => null;
+const payloadIds = new WeakMap<object, number>();
+let payloadNo = 0;
+
+function bindHistory(ui: { personPageHistory?: (id: PersonId) => { payload: HistoryPayload; env: PersonHistoryEnv } | undefined }): void {
+    historyOf = () => {
+        const first = Object.keys(DataManager.getData().persons)[0] as PersonId | undefined;
+        return (first && ui.personPageHistory?.(first)) || null;
+    };
+}
+
+/** The history's part of the cache key: the payload's identity, the kinds shown, the queued hidings. */
+function historyKey(h: SetHistory): string {
+    if (!h) return '';
+    let n = payloadIds.get(h.payload);
+    if (!n) { n = ++payloadNo; payloadIds.set(h.payload, n); }
+    return `${n}|${JSON.stringify(h.env?.kinds ?? null)}|${h.env?.queue?.length ?? 0}`;
+}
+
+/** The window's set for a selection: the app's language, full data, families as pages, the lines' timelines; kept until the tree changes. */
+function cacheKey(spec: BookSelectionSpec, history: SetHistory = historyOf()): string {
+    return `${DataManager.getCurrentTreeId() ?? ''}|${getCurrentLanguage()}|${JSON.stringify(spec)}|${historyKey(history)}`;
 }
 
 /** The window's set when it is built already (null: building it is still ahead). */
@@ -83,7 +106,8 @@ export function cachedPageSet(spec: BookSelectionSpec): PageSet | null {
 }
 
 export function windowPageSet(spec: BookSelectionSpec): PageSet {
-    const key = cacheKey(spec);
+    const history = historyOf();
+    const key = cacheKey(spec, history);
     const have = cache.get(key);
     if (have) {
         cache.delete(key);
@@ -94,7 +118,9 @@ export function windowPageSet(spec: BookSelectionSpec): PageSet {
         cacheWatched = true;
         window.addEventListener('strom:user-change', () => { cache.clear(); });
     }
-    const set = buildPageSet(DataManager.getData(), spec, { lang: getCurrentLanguage(), privacy: 'full', families: 'pages' }, { treeName: treeName() });
+    const set = buildPageSet(DataManager.getData(), spec, {
+        lang: getCurrentLanguage(), privacy: 'full', families: 'pages', timelines: true, history,
+    }, { treeName: treeName() });
     cache.set(key, set);
     while (cache.size > CACHE_SETS) cache.delete(cache.keys().next().value!);
     return set;
@@ -220,6 +246,7 @@ function kickerOf(page: SetPage): string {
         case 'other': return treeName() || F.kTree;
         case 'persons': return F.selKicker;
         case 'ancestors': return F.ancKicker;
+        case 'rodTimeline': return F.tlKicker;
         default: return F.winTitle;
     }
 }
@@ -254,7 +281,7 @@ function idle(): Promise<void> {
 function stepOf(page: SetPage | undefined): string {
     const S = strings.familyPages.step;
     switch (page?.kind) {
-        case 'rod': case 'branch': case 'ancestors': return S.rod;
+        case 'rod': case 'branch': case 'ancestors': case 'rodTimeline': return S.rod;
         case 'family': return S.family;
         case 'person': return S.person;
         case 'index': return S.index;
@@ -430,33 +457,39 @@ export const familyPagesMethods = uiModule({
      * selection points to (a line, its person's line, else the introduction).
      */
     openFamilyPages(spec: BookSelectionSpec = TREE_SPEC): void {
+        bindHistory(this);
         this.openPersonPageSet(treeRef(selectionTreeTarget(spec)));
     },
 
     /** The whole tree's window at its introduction (the tree overview's "Tree pages", For the family, the bottom sheet). */
     openTreePages(): void {
+        bindHistory(this);
         this.closeMobileMenu?.();
         this.openPersonPageSet(treeRef(''));
     },
 
     /** The dialog's "Open in window": its own selection, not the whole tree (§2.4). */
     openFamilyPagesExact(spec: BookSelectionSpec): void {
+        bindHistory(this);
         const set = windowPageSet(spec);
         this.openPersonPageSet(refOf(spec, set, set.introSlug));
     },
 
     /** The page of a lineage (the tree overview, the person card's lineage row, the person page): in the whole tree's window. */
     openRodPage(rodId: RodId): void {
+        bindHistory(this);
         this.openPersonPageSet(rodPageRef(rodId));
     },
 
     /** The whole tree's window at the line of a person (Actions → For the family, the bottom sheet). */
     openTreePagesForPerson(personId: PersonId): void {
+        bindHistory(this);
         this.openPersonPageSet(treeRef(personTreeTarget(personId)));
     },
 
     /** A `data-sp-open` link of the window. */
     openFamilyPagesTarget(current: SetRef | null, target: string): void {
+        bindHistory(this);
         const to = resolveSetTarget(current, target);
         if (!to) return;
         if ('person' in to) {
@@ -469,6 +502,7 @@ export const familyPagesMethods = uiModule({
     /** Draw a set's page in the window's body and header (the person page's window calls this for a set entry). */
     renderFamilyPagesEntry(overlay: HTMLElement, ref: SetRef): void {
         ensureAppCss();
+        bindHistory(this);
         const scroller = overlay.querySelector('.pp-body') as HTMLElement;
         const head = (title: string, kicker: string): void => {
             (overlay.querySelector('#pp-title') as HTMLElement).textContent = title;
@@ -508,7 +542,7 @@ export const familyPagesMethods = uiModule({
             + `<div class="sp-app"><div class="sp-results" aria-live="polite" hidden></div>${html}</div></div>`;
         wireWindowBar(scroller, set);
         const root = scroller.querySelector<HTMLElement>('.sp-appset');
-        if (root) { wireRodPicker(root); wireTreePages(root); }
+        if (root) { wireRodPicker(root); wireTreePages(root); wireRodTimelines(root); }
         const anchor = ref.anchor;
         if (anchor) {
             // Once: the block of a small line on "Other families" (the window's own scroll afterwards).

@@ -119,6 +119,36 @@ export function regionName(r: Region, lang: string): string {
     return lang === 'en' ? r.en : lang === 'de' ? r.de : r.name;
 }
 
+/** The country polygon at a point (its index among the countries) and the part that holds it; a point just off a coast takes the nearest part. */
+function countryHit(lon0: number, lat: number): { index: number; main: GeoLine } | null {
+    const lon = normLon(lon0);
+    const all = countries();
+    for (let k = 0; k < all.length; k++) {
+        const ring = all[k].find(r => inRings([r], lon, lat));
+        if (ring) return { index: k, main: ring };
+    }
+    let best = 0.3;
+    let hit: { index: number; main: GeoLine } | null = null;
+    for (let k = 0; k < all.length; k++) {
+        for (const r of all[k]) {
+            if (lon < r.w - best || lon > r.e + best || lat < r.s - best || lat > r.n + best) continue;
+            for (let i = 0; i + 1 < r.c.length; i += 2) {
+                const d = Math.hypot((r.c[i] - lon) * Math.cos((lat * Math.PI) / 180), r.c[i + 1] - lat);
+                if (d < best) { best = d; hit = { index: k, main: r }; }
+            }
+        }
+    }
+    return hit;
+}
+
+/**
+ * Which country a point lies in, as an opaque number (the same country gives
+ * the same number), or -1 outside the data: enough to tell a move abroad.
+ */
+export function countryIdAt(lon: number, lat: number): number {
+    return countryHit(lon, lat)?.index ?? -1;
+}
+
 /**
  * The country at a point: the parts of its polygon near the part that holds
  * the point (a part whose centre lies far outside it — an overseas territory,
@@ -127,28 +157,10 @@ export function regionName(r: Region, lang: string): string {
  * (within ~30 km).
  */
 export function countryAt(lon0: number, lat: number): GeoLine[] | null {
-    const lon = normLon(lon0);
-    const all = countries();
-    let parts: GeoLine[] | undefined;
-    let main: GeoLine | undefined;
-    for (const c of all) {
-        const ring = c.find(r => inRings([r], lon, lat));
-        if (ring) { parts = c; main = ring; break; }
-    }
-    if (!parts || !main) {
-        let best = 0.3;
-        for (const c of all) {
-            for (const r of c) {
-                if (lon < r.w - best || lon > r.e + best || lat < r.s - best || lat > r.n + best) continue;
-                for (let i = 0; i + 1 < r.c.length; i += 2) {
-                    const d = Math.hypot((r.c[i] - lon) * Math.cos((lat * Math.PI) / 180), r.c[i + 1] - lat);
-                    if (d < best) { best = d; parts = c; main = r; }
-                }
-            }
-        }
-    }
-    if (!parts || !main) return null;
-    const m = main;
+    const hit = countryHit(lon0, lat);
+    if (!hit) return null;
+    const parts = countries()[hit.index];
+    const m = hit.main;
     const pad = Math.max(1, 0.15 * Math.max(m.e - m.w, m.n - m.s));
     return parts.filter(r => {
         if (r === m) return true;
