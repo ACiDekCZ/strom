@@ -407,7 +407,9 @@ for (const theme of ['light', 'dark'] as const) {
                     document.querySelectorAll('.toast, .family-offer').forEach(t => t.remove());
                 }, { first: k('čp. 1'), town: BIG_TOWN });
                 await open(page, `town:${key(BIG_TOWN)}`);
-                await expect(modal(page).locator('.place-nearest')).toBeVisible();
+                // Two towns of the name, the nearest taken: the app's check marks it, with that sentence in the row.
+                await expect(row(page, k('čp. 1'))).toHaveAttribute('data-state', 'check');
+                await expect(row(page, k('čp. 1')).locator('.place-pin-text')).toBeVisible();
 
                 // The offer card (as after a hand search found the town).
                 await page.evaluate(({ k2, town }) => {
