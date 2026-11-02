@@ -25,22 +25,39 @@ import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
 import { buildZip } from '../zip.js';
-import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetBarHtml, pageSetRenderedPages, pageSetSearchHtml, pageSetSectionHtml } from '../family-pages-html.js';
+import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
-import { RodId, buildLineages, rodOf } from '../lineage.js';
+import { RodId, buildLineages, rodOfPersonForCrumbs, rods as allRods } from '../lineage.js';
 import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shrinkImage } from './person-page-ui.js';
 import { uiModule } from './module.js';
+import { wireRodPicker, wireTreePages } from './rod-picker-ui.js';
 
-/** A page of a set in the window: the set by its selection, the page by its slug, its title for "‹ Back". */
+/**
+ * A page of a set in the window: the set by its selection, the page by its
+ * slug, its title for "‹ Back". A page of the whole tree opened before its set
+ * is built (§3.3) carries `pending` instead (a `data-sp-open` target, '' the
+ * introduction): the slug and the title are filled in once the set is ready.
+ * `anchor`: a place in the page to scroll to when it is first drawn.
+ */
 export interface SetRef {
     spec: BookSelectionSpec;
     slug: string;
     title: string;
+    pending?: string;
+    anchor?: string;
 }
 
-let cache: { key: string; set: PageSet } | null = null;
+/** The window's selection (spec 026 P3 §2.4): the whole tree. */
+export const TREE_SPEC: BookSelectionSpec = { kind: 'tree' };
+
+/** From this many people the window shows the preparing state before it builds the whole tree's set (§3.3). */
+export const PREPARE_FROM_PERSONS = 1500;
+
+/** The window's sets: the whole tree's and the one a dialog opened ("Open in window"), kept until the tree changes. */
+const cache = new Map<string, PageSet>();
+const CACHE_SETS = 2;
 let cacheWatched = false;
 
 function esc(text: string): string {
@@ -56,28 +73,99 @@ function treeName(): string {
 }
 
 /** The window's set for a selection: the app's language, full data, families as pages; kept until the tree changes. */
+function cacheKey(spec: BookSelectionSpec): string {
+    return `${DataManager.getCurrentTreeId() ?? ''}|${getCurrentLanguage()}|${JSON.stringify(spec)}`;
+}
+
+/** The window's set when it is built already (null: building it is still ahead). */
+export function cachedPageSet(spec: BookSelectionSpec): PageSet | null {
+    return cache.get(cacheKey(spec)) ?? null;
+}
+
 export function windowPageSet(spec: BookSelectionSpec): PageSet {
-    const key = `${DataManager.getCurrentTreeId() ?? ''}|${getCurrentLanguage()}|${JSON.stringify(spec)}`;
-    if (cache?.key === key) return cache.set;
+    const key = cacheKey(spec);
+    const have = cache.get(key);
+    if (have) {
+        cache.delete(key);
+        cache.set(key, have);
+        return have;
+    }
     if (!cacheWatched) {
         cacheWatched = true;
-        window.addEventListener('strom:user-change', () => { cache = null; });
+        window.addEventListener('strom:user-change', () => { cache.clear(); });
     }
     const set = buildPageSet(DataManager.getData(), spec, { lang: getCurrentLanguage(), privacy: 'full', families: 'pages' }, { treeName: treeName() });
-    cache = { key, set };
+    cache.set(key, set);
+    while (cache.size > CACHE_SETS) cache.delete(cache.keys().next().value!);
     return set;
 }
 
-function refOf(spec: BookSelectionSpec, set: PageSet, slug: string): SetRef {
+function refOf(spec: BookSelectionSpec, set: PageSet, slug: string, anchor?: string): SetRef {
     const page = set.bySlug.get(slug) ?? set.bySlug.get(set.introSlug);
-    return { spec, slug: page?.slug ?? set.introSlug, title: page?.title ?? '' };
+    return { spec, slug: page?.slug ?? set.introSlug, title: page?.title ?? '', ...(anchor ? { anchor } : {}) };
 }
 
-/** The page of a lineage: the lineage's own set, its introduction. */
+/** Whether the window shows the preparing state before the whole tree's set is built (§3.3). */
+function needsPreparing(spec: BookSelectionSpec): boolean {
+    if (cachedPageSet(spec)) return false;
+    const persons = DataManager.getData().persons;
+    let n = 0;
+    for (const id in persons) if (!persons[id as PersonId].isPlaceholder && ++n >= PREPARE_FROM_PERSONS) return true;
+    return false;
+}
+
+/**
+ * A page of the whole tree's set by a `data-sp-open` target (§2.4): a line's
+ * page (a small line: its block on "Other families"), a family's, a page by
+ * its slug; '' or one the set does not have: the introduction.
+ */
+function treeTargetRef(set: PageSet, target: string): SetRef {
+    const at = target.indexOf(':');
+    const kind = at > 0 ? target.slice(0, at) : '';
+    const id = at > 0 ? target.slice(at + 1) : '';
+    if (kind === 'rod') {
+        const slug = set.rodSlug.get(id as RodId);
+        if (slug) return refOf(TREE_SPEC, set, slug);
+        const anchor = set.otherAnchor.get(id as RodId);
+        if (anchor && set.otherSlug) return refOf(TREE_SPEC, set, set.otherSlug, anchor);
+    }
+    if (kind === 'other' && set.otherSlug) return refOf(TREE_SPEC, set, set.otherSlug, id ? `${set.otherSlug}--${id}` : undefined);
+    if (kind === 'family') {
+        const slug = set.familySlug.get(id as PartnershipId);
+        if (slug) return refOf(TREE_SPEC, set, slug);
+    }
+    if (kind === 'page' && set.bySlug.has(id)) return refOf(TREE_SPEC, set, id);
+    return refOf(TREE_SPEC, set, set.introSlug);
+}
+
+/** The whole tree's window at a target: at once when its set is built or the tree is small, else pending (§3.3). */
+export function treeRef(target: string): SetRef {
+    if (needsPreparing(TREE_SPEC)) return { spec: TREE_SPEC, slug: '', title: treeName() || strings.familyPages.winTitle, pending: target };
+    return treeTargetRef(windowPageSet(TREE_SPEC), target);
+}
+
+/** The page of a lineage: in the whole tree's window (§2.4). */
 export function rodPageRef(rodId: RodId): SetRef {
-    const spec: BookSelectionSpec = { kind: 'rods', rods: [rodId] };
-    const set = windowPageSet(spec);
-    return refOf(spec, set, set.rodSlug.get(rodId) ?? set.introSlug);
+    return treeRef(`rod:${rodId}`);
+}
+
+/**
+ * Where the whole tree's window opens for a person (§2.4): the line of the
+ * person's breadcrumbs (a small line: its block on "Other families"), a
+ * person outside the lines: "Without a surname" there; else the introduction.
+ */
+function personTreeTarget(personId: PersonId): string {
+    const data = DataManager.getData();
+    if (!data.persons[personId] || data.persons[personId].isPlaceholder) return '';
+    const crumb = rodOfPersonForCrumbs(buildLineages(data), personId);
+    return crumb.rodId ? `rod:${crumb.rodId}` : 'other:bez-prijmeni';
+}
+
+/** A selection of the book or the dialog in the whole tree's window: its line, its person's line, else the introduction (§2.4). */
+function selectionTreeTarget(spec: BookSelectionSpec): string {
+    if (spec.kind === 'rods') return spec.rods.length ? `rod:${spec.rods[0]}` : '';
+    if (spec.kind === 'tree') return '';
+    return personTreeTarget(spec.person);
 }
 
 /** The introduction of a set (the hub, the lineage, the branch). */
@@ -108,18 +196,11 @@ export function resolveSetTarget(current: SetRef | null, target: string): { pers
     if (kind === 'family') {
         const slug = set?.familySlug.get(id as PartnershipId);
         if (set && current && slug) return { set: refOf(current.spec, set, slug) };
-        const data = DataManager.getData();
-        const u = data.partnerships[id as PartnershipId];
+        const u = DataManager.getData().partnerships[id as PartnershipId];
         if (!u) return null;
-        const index = buildLineages(data);
-        for (const pid of [u.person1Id, u.person2Id]) {
-            const rod = pid ? rodOf(index, pid) : null;
-            if (!rod) continue;
-            const spec: BookSelectionSpec = { kind: 'rods', rods: [rod] };
-            const other = windowPageSet(spec);
-            const fs = other.familySlug.get(u.id);
-            if (fs) return { set: refOf(spec, other, fs) };
-        }
+        // A family outside a dialog's set: its page in the whole tree's window.
+        const tree = windowPageSet(TREE_SPEC);
+        if (tree.familySlug.has(u.id)) return { set: treeTargetRef(tree, `family:${u.id}`) };
         return { person: u.person1Id };
     }
     return null;
@@ -134,6 +215,8 @@ function kickerOf(page: SetPage): string {
         case 'family': return F.kFam;
         case 'person': return F.kPer;
         case 'hub': return F.kHub;
+        case 'tree': return F.kTree;
+        case 'other': return treeName() || F.kTree;
         default: return F.winTitle;
     }
 }
@@ -276,7 +359,7 @@ function wireWindowBar(scroller: HTMLElement, set: PageSet): void {
         bar.classList.toggle('sp-fbar--has', value !== '');
         if (q) {
             if (!on) { on = true; saved = scroller.scrollTop; root.classList.add('sp-searching'); results.hidden = false; scroller.scrollTop = 0; }
-            results.innerHTML = pageSetSearchHtml(set, q);
+            results.innerHTML = renderPageSearch(set, q);
         } else if (on) {
             on = false;
             root.classList.remove('sp-searching');
@@ -321,16 +404,52 @@ function wireWindowBar(scroller: HTMLElement, set: PageSet): void {
     });
 }
 
+/** The window's preparing state (§3.3): the header of the introduction, a sliding bar, the skeleton of the cards. */
+function preparingHtml(lang: string, token: string): string {
+    const F = strings.familyPages;
+    const data = DataManager.getData();
+    const lines = allRods(buildLineages(data)).filter(r => !r.small).length;
+    let persons = 0;
+    for (const id in data.persons) if (!data.persons[id as PersonId].isPlaceholder) persons++;
+    return `<div class="sp-appset" lang="${esc(lang)}"><div class="sp-app"><section class="sp-page sp-page--tree" aria-busy="true">`
+        + `<header class="sp-head sp-head--tree"><div class="sp-kicker">${esc(F.kTree)}</div><h1 class="sp-h1">${esc(treeName() || F.kTree)}</h1>`
+        + `<p class="sp-sub sp-counts"><span>${esc(F.nPersons(persons))}</span><span>${esc(F.nRods(lines))}</span></p></header>`
+        + `<div class="sp-prep" role="status" data-sp-prep="${token}"><span class="sp-prep-t">${esc(F.preparing(lines))}</span><span class="sp-prep-bar" aria-hidden="true"></span>`
+        + `<p class="sp-prep-note">${esc(F.preparingNote)}</p></div>`
+        + `<div class="sp-skel" aria-hidden="true">${'<span></span>'.repeat(6)}</div></section></div></div>`;
+}
+
+let preparing = 0;
+
 export const familyPagesMethods = uiModule({
-    /** A set's page in the window (the introduction by default): on top of the window's stack, or a new window. */
-    openFamilyPages(spec: BookSelectionSpec, slug?: string): void {
-        const set = windowPageSet(spec);
-        this.openPersonPageSet(refOf(spec, set, slug ?? set.introSlug));
+    /**
+     * The pages' window (§2.4): always over the whole tree, at the page a
+     * selection points to (a line, its person's line, else the introduction).
+     */
+    openFamilyPages(spec: BookSelectionSpec = TREE_SPEC): void {
+        this.openPersonPageSet(treeRef(selectionTreeTarget(spec)));
     },
 
-    /** The page of a lineage (the tree overview, the person card's lineage row, the person page). */
+    /** The whole tree's window at its introduction (the tree overview's "Tree pages", For the family, the bottom sheet). */
+    openTreePages(): void {
+        this.closeMobileMenu?.();
+        this.openPersonPageSet(treeRef(''));
+    },
+
+    /** The dialog's "Open in window": its own selection, not the whole tree (§2.4). */
+    openFamilyPagesExact(spec: BookSelectionSpec): void {
+        const set = windowPageSet(spec);
+        this.openPersonPageSet(refOf(spec, set, set.introSlug));
+    },
+
+    /** The page of a lineage (the tree overview, the person card's lineage row, the person page): in the whole tree's window. */
     openRodPage(rodId: RodId): void {
         this.openPersonPageSet(rodPageRef(rodId));
+    },
+
+    /** The whole tree's window at the line of a person (Actions → For the family, the bottom sheet). */
+    openTreePagesForPerson(personId: PersonId): void {
+        this.openPersonPageSet(treeRef(personTreeTarget(personId)));
     },
 
     /** A `data-sp-open` link of the window. */
@@ -347,20 +466,52 @@ export const familyPagesMethods = uiModule({
     /** Draw a set's page in the window's body and header (the person page's window calls this for a set entry). */
     renderFamilyPagesEntry(overlay: HTMLElement, ref: SetRef): void {
         ensureAppCss();
+        const scroller = overlay.querySelector('.pp-body') as HTMLElement;
+        const head = (title: string, kicker: string): void => {
+            (overlay.querySelector('#pp-title') as HTMLElement).textContent = title;
+            (overlay.querySelector('.pp-sub') as HTMLElement).textContent = kicker;
+            (overlay.querySelector('.pp-mname') as HTMLElement).textContent = title;
+            (overlay.querySelector('.pp-myears') as HTMLElement).textContent = '';
+        };
+        if (ref.pending !== undefined) {
+            const ready = cachedPageSet(ref.spec);
+            if (!ready) {
+                // A large tree (§3.3): the window first, the set after the next frame, then the page asked for.
+                head(ref.title, strings.familyPages.kTree);
+                const token = String(++preparing);
+                scroller.innerHTML = preparingHtml(getCurrentLanguage(), token);
+                requestAnimationFrame(() => setTimeout(() => {
+                    windowPageSet(ref.spec);
+                    // Still this window's page (not closed, not left by "‹ Back" meanwhile).
+                    if (!scroller.isConnected || !scroller.querySelector(`.sp-prep[data-sp-prep="${token}"]`)) return;
+                    this.renderFamilyPagesEntry(overlay, ref);
+                    scroller.scrollTop = 0;
+                }, 0));
+                return;
+            }
+            const to = treeTargetRef(ready, ref.pending);
+            ref.slug = to.slug;
+            ref.title = to.title;
+            if (to.anchor) ref.anchor = to.anchor;
+            delete ref.pending;
+        }
         const set = windowPageSet(ref.spec);
         let slug = ref.slug;
-        let html = pageSetSectionHtml(set, slug);
-        if (!html) { slug = set.introSlug; html = pageSetSectionHtml(set, slug); }
+        let html = renderPage(set, slug);
+        if (!html) { slug = set.introSlug; html = renderPage(set, slug); }
         const page = set.bySlug.get(slug);
-        const title = page?.title ?? strings.familyPages.winTitle;
-        (overlay.querySelector('#pp-title') as HTMLElement).textContent = title;
-        (overlay.querySelector('.pp-sub') as HTMLElement).textContent = page ? kickerOf(page) : '';
-        (overlay.querySelector('.pp-mname') as HTMLElement).textContent = title;
-        (overlay.querySelector('.pp-myears') as HTMLElement).textContent = '';
-        const scroller = overlay.querySelector('.pp-body') as HTMLElement;
-        scroller.innerHTML = `<div class="sp-appset" lang="${esc(set.options.lang)}">${pageSetBarHtml(set, slug)}`
+        head(page?.title ?? strings.familyPages.winTitle, page ? kickerOf(page) : '');
+        scroller.innerHTML = `<div class="sp-appset" lang="${esc(set.options.lang)}">${renderPageBar(set, slug)}`
             + `<div class="sp-app"><div class="sp-results" aria-live="polite" hidden></div>${html}</div></div>`;
         wireWindowBar(scroller, set);
+        const root = scroller.querySelector<HTMLElement>('.sp-appset');
+        if (root) { wireRodPicker(root); wireTreePages(root); }
+        const anchor = ref.anchor;
+        if (anchor) {
+            // Once: the block of a small line on "Other families" (the window's own scroll afterwards).
+            delete ref.anchor;
+            requestAnimationFrame(() => scroller.querySelector<HTMLElement>(`#${CSS.escape(anchor)}`)?.scrollIntoView({ block: 'start' }));
+        }
     },
 
     /** "Save as file": the dialog with the pages output and this set's selection. */

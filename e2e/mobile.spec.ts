@@ -207,7 +207,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     const sub = sheet.locator('.bottom-sheet-subpage');
     await expect(sub).toBeVisible();
     await expect(sub.locator('.sheet-subhead-title')).toHaveText('For the family');
-    await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Family pages', 'Poster…', 'Slideshow (TV)']);
+    await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
     await expect(sheet.locator(':scope > .bottom-sheet-items')).toBeHidden();
     await sub.locator('.sheet-back').tap();
     await expect(sub).toHaveCount(0);

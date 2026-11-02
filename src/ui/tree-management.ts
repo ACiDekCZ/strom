@@ -691,6 +691,11 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         this.openFamilyPagesForFocus();
     },
+    /** For the family → Pages for the whole tree (P3 §3.2): the whole tree's window at its introduction. */
+    treeActionTreePages(): void {
+        this.closeActionsMenu();
+        this.openTreePages();
+    },
     treeActionExport(): void {
         // The one export hub for the active tree (JSON / App / GEDCOM / CSV /
         // Poster / Book / Share); its switch picks the whole tree or the view.

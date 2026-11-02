@@ -16689,6 +16689,7 @@
             border-bottom: 1px solid var(--divider);
         }
         .tov-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .tov-titlebar .tov-pages { flex: none; margin-left: auto; white-space: nowrap; }
         .modal.tov .tov-title { margin: 0; font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.3; min-width: 0; }
         .tov-close {
             flex: none; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; cursor: pointer;
@@ -16874,8 +16875,6 @@
         #book-modal .book-sec-h label { font: inherit; color: inherit; }
         #book-modal .book-hint { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         /* The switch to the pages moved the whole tree to a lineage: said once, gone at the next change (026 §9.8). */
-        #book-modal .book-tree-moved { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
-        #book-modal .book-tree-moved[hidden] { display: none; }
         /* What goes in the book: four cards 2 × 2 and the "House · later" placeholder */
         #book-modal .book-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         #book-modal .book-kind {
@@ -17348,6 +17347,7 @@
                 background: var(--surface); border-bottom: 1px solid var(--divider);
             }
             .modal.tov .tov-title { font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .tov-titlebar .tov-pages { min-height: 40px; padding: 0 10px; }
             .tov-close { width: 44px; height: 44px; }
             .tov-root {
                 position: sticky; top: 52px; z-index: 3; order: 1; padding: 8px 16px; flex-wrap: nowrap;
@@ -17399,6 +17399,7 @@
             .tov-root { order: 2; flex: none; flex-wrap: nowrap; }
             .tov-root-label, .tov-root-hint { display: none; }
             .tov-root-btn { height: 44px; max-width: 30vw; }
+            .tov-titlebar .tov-pages { order: 3; margin-left: 0; }
             .tov-close { order: 3; width: 44px; height: 44px; }
             .tov-inactive { order: 4; flex: 1 0 100%; margin-bottom: 6px; }
             .tov-foot { display: none; }
@@ -21161,6 +21162,9 @@
                         <div class="tree-switcher-action" id="actions-pages-row" onclick="window.Strom.UI.treeActionPages()" tabindex="0" role="menuitem">
                             <span data-i18n="familyPages.menuItem"></span>
                         </div>
+                        <div class="tree-switcher-action" id="actions-tree-pages-row" onclick="window.Strom.UI.treeActionTreePages()" tabindex="0" role="menuitem">
+                            <span data-i18n="familyPages.treePagesAction"></span>
+                        </div>
                         <div class="tree-switcher-action" id="actions-poster-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
                             <span data-i18n="menu.poster"></span>
                         </div>
@@ -22768,7 +22772,7 @@
                     </button>
                     <button class="menu-option active-tree-only" id="export-pages-btn" onclick="window.Strom.UI.showFamilyPagesDialog()">
                         <span class="option-text">
-                            <span class="option-title" data-i18n="familyPages.menuItem"></span>
+                            <span class="option-title" data-i18n="familyPages.exportPages"></span>
                             <span class="option-desc" data-i18n="familyPages.menuDesc"></span>
                         </span>
                     </button>

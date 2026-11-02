@@ -727,6 +727,8 @@ export const treeOverviewMethods = uiModule({
                 <div class="tov-foot"><button type="button" class="secondary" data-tov="close" data-key="foot-close">${esc(t.close)}</button></div>
             </div>`;
         }
+        // The whole tree's pages (spec 026 P3 §3.2): the window at the tree's introduction (its tree opened first).
+        const pagesBtn = `<button type="button" class="tov-btn tov-pages" data-tov="tree-pages" data-key="tree-pages">${esc(strings.familyPages.treePages)}</button>`;
         const nums = this.treeOverviewNumsHtml(header);
         const banner = st.active ? '' : `
             <div class="tov-inactive" role="note">
@@ -738,7 +740,7 @@ export const treeOverviewMethods = uiModule({
             <div class="modal tov" role="dialog" aria-modal="true" aria-labelledby="tov-title" data-dialog-kind="info" data-skeleton="skip">
                 <div class="tov-scroll">
                     <div class="tov-head">
-                        ${titleBar}
+                        ${titleBar.replace('<button type="button" class="tov-close"', `${pagesBtn}<button type="button" class="tov-close"`)}
                         <div class="tov-nums">${nums}</div>
                         ${banner}
                         <div class="tov-root">${this.treeOverviewRootHtml()}</div>
@@ -1655,6 +1657,15 @@ export const treeOverviewMethods = uiModule({
         this.openRodPage(id);
     },
 
+    /** "Tree pages": the whole tree's window at its introduction (its tree opened first; P3 §3.2). */
+    async openTreeOverviewPages(): Promise<void> {
+        if (!state) return;
+        const { treeId, active } = state;
+        this.closeTreeOverview();
+        if (!active) await this.switchToTree(treeId as TreeId);
+        this.openTreePages();
+    },
+
     /** "Family line book…": the book dialog for this lineage (its tree opened first). */
     async openTreeOverviewRodBook(id: RodId): Promise<void> {
         if (!state) return;
@@ -2266,6 +2277,9 @@ export const treeOverviewMethods = uiModule({
                 return;
             case 'rod-page':
                 void this.openTreeOverviewRodPage(target.dataset.id as RodId);
+                return;
+            case 'tree-pages':
+                void this.openTreeOverviewPages();
                 return;
             case 'rod-book':
                 void this.openTreeOverviewRodBook(target.dataset.id as RodId);

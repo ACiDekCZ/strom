@@ -53,7 +53,7 @@ test.describe('family book: the options dialog', () => {
     test('structure: presets, four kinds and House later, the parts with their reasons; a change makes the preset Custom @smoke', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
-        await expect(dialog.locator('#book-dlg-title')).toHaveText('Family book and pages');
+        await expect(dialog.locator('#book-dlg-title')).toHaveText('Book and pages');
         const presets = dialog.locator('[data-preset]');
         await expect(presets).toHaveText(['For the family', 'For researchers', 'Custom']);
         await expect(dialog.locator('[data-preset="family"]')).toHaveAttribute('aria-checked', 'true');
@@ -520,7 +520,7 @@ test.describe('family book: phone', () => {
         const more = book.locator('.book-more');
         await expect(more).toBeVisible();
         // Share only where files can be shared (not in this browser).
-        await expect(more.getByRole('menuitem')).toHaveText(['Save as HTML', 'Print', 'Change options', 'Family pages']);
+        await expect(more.getByRole('menuitem')).toHaveText(['Save as HTML', 'Print', 'Change options', 'Pages']);
         await book.keyboard.press('Escape');
         await expect(more).toBeHidden();
         await bar.getByRole('button', { name: 'Contents' }).click();

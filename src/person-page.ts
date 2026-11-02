@@ -66,6 +66,9 @@ export interface PersonPageSetLinks {
     personSlug: ReadonlyMap<PersonId, string>;
     familySlug?: ReadonlyMap<PartnershipId, string>;
     rodSlug?: ReadonlyMap<RodId, string>;
+    /** The whole tree's small lines: their block on "Other families" (`{slug}--{name}`), with the row's label. */
+    rodAnchor?: ReadonlyMap<RodId, string>;
+    rodAnchorLabel?: (label: string) => string;
 }
 
 export interface PersonPageGroups {
@@ -1135,6 +1138,14 @@ function rodRowHtml(c: Ctx, rod: RodRowValue): string {
         if ('text' in p) return `<span class="pp-rod-join">${esc(p.text)}</span>`;
         // In a set of family pages: the lineage's page when the set has one (spec 026 §0.8).
         if (set?.rodSlug?.has(p.rodId)) return setLinkHtml(c, 'pp-link pp-rod-link', { rod: p.rodId }, esc(p.label));
+        const anchor = set?.rodAnchor?.get(p.rodId);
+        if (anchor) {
+            const inner = esc(set?.rodAnchorLabel ? set.rodAnchorLabel(p.label) : p.label);
+            const page = anchor.slice(0, Math.max(0, anchor.indexOf('--')));
+            return c.app
+                ? `<button type="button" class="pp-link pp-rod-link" data-sp-open="page:${esc(page)}">${inner}</button>`
+                : `<a class="pp-link pp-rod-link" href="#${esc(anchor)}">${inner}</a>`;
+        }
         return links
             ? `<button type="button" class="pp-link pp-rod-link" data-pp-rod="${esc(p.rodId)}">${esc(p.label)}</button>`
             : `<span class="pp-rod-name">${esc(p.label)}</span>`;

@@ -22,7 +22,7 @@ import { buildBookModel, BookModel } from './book-model.js';
 import { BOOK_PART_KEYS, BookParts } from './book-options.js';
 import {
     BookCtx, BookLinkTarget, BookSourceNumbers, bookName, bookYears, birthRodNamed, diedYoung, founderNote, branchPageLine,
-    occupationOf, pageLineGenerationsHtml, pageLineHeadHtml, pageLinePeriod, pairFirstNames, rodLabelOf, rodLineageHtml, rodOverviewHtml,
+    occupationOf, PageLine, pageLineGenerationsHtml, pageLineHeadHtml, pageLinePeriod, pairFirstNames, rodLabelOf, rodLineageHtml, rodOverviewHtml,
     rodPageLine, roman,
 } from './book-blocks.js';
 import {
@@ -34,6 +34,7 @@ import {
     pageSetPlaces, pageSetSearchPeople, surnameFirst,
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
+import { RodPickerItem, rodPickKey, rodPickerHtml, rodPickerItems } from './rod-picker.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
 import {
     PLACES_MAP_SCRIPT, RodPlacePoint, collectRodPlacePoints, planPlacesMap, placesMapHtml, rodPlacePointSize,
@@ -69,6 +70,18 @@ interface Render {
     places?: SetPlaceRow[];
     /** A set of files (§6.4): the search's links lead to `{slug}.html`. */
     zip?: boolean;
+    /** The lines of the introduction with their periods, once asked for. */
+    hub?: HubLine[];
+    /** The whole tree's choice of a line (spec 026 P3 §2.3), once asked for. */
+    pick?: RodPickerItem[];
+}
+
+/** A line of the introduction: its page, its block line and its period without the protected. */
+interface HubLine {
+    rod: Rod;
+    slug: string;
+    line: PageLine;
+    period: { from: number; to: number } | null;
 }
 
 function esc(text: string): string {
@@ -222,20 +235,7 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const periods = lines.map(l => pageLinePeriod(l.line, ctx));
     const lo = Math.min(1700, ...periods.filter(p => !!p).map(p => Math.floor(p!.from / 50) * 50));
     const span = Math.max(1, nowYear - lo);
-    const cards = lines.map(({ rod, slug, line }, i) => {
-        const period = periods[i];
-        const founder = tree.persons[rod.founderId];
-        const g = founder?.gender === 'female' ? 'f' : founder?.gender === 'male' ? 'm' : 'u';
-        const founderLine = founder && !founder.isPlaceholder
-            ? `${esc(F.founder[g])} ${bookName(ctx, rod.founderId)}${founderNote(ctx, rod.founderId)}` : '';
-        const bar = period
-            ? `<span class="sp-axis" aria-hidden="true"><span class="sp-bar" style="left:${((period.from - lo) / span * 100).toFixed(1)}%;width:${(Math.max(0.5, (period.to - period.from) / span * 100)).toFixed(1)}%"></span></span>`
-            : '';
-        const meta = [period ? `${period.from}–${period.to}` : '', F.nMembers(rod.realMemberCount), F.nFams(rod.familyIds.length)].filter(Boolean).join(' · ');
-        const inner = `<span class="sp-card-t">${esc(line.title)}</span>${founderLine ? `<span class="sp-card-f">${founderLine}</span>` : ''}`
-            + `${bar}<span class="sp-card-m">${esc(meta)}</span><span class="sp-card-go">${esc(F.openRod)}</span>`;
-        return pageLink(r, slug, inner, 'sp-card');
-    }).join('');
+    const cards = lines.map(({ rod, slug, line }, i) => pageLink(r, slug, rodCardInner(r, ctx, rod, line, periods[i], lo, span), 'sp-card')).join('');
     // Marriages between the file's lineages: both partners members of two of them, neither protected.
     const index = set.protectedTree.lineages;
     const inSet = new Set(set.rodIds);
@@ -255,6 +255,339 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const crossHtml = cross.length ? `<section class="sp-cross"><h2 class="sp-h2">${esc(F.crossTitle)}</h2>${cross.join('')}</section>` : '';
     return `<header class="sp-head"><div class="sp-kicker">${esc(F.kHub)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(sub)}</p></header>`
         + `<div class="sp-cards">${cards}</div>${crossHtml}`;
+}
+
+/** A line's card (§1.5; the whole tree's §1.3): the name, the founder, the period on the axis, the counts. */
+function rodCardInner(r: Render, ctx: BookCtx, rod: Rod, line: PageLine, period: { from: number; to: number } | null, lo: number, span: number): string {
+    const F = r.S.familyPages;
+    const founder = r.set.protectedTree.tree.persons[rod.founderId];
+    const g = founder?.gender === 'female' ? 'f' : founder?.gender === 'male' ? 'm' : 'u';
+    const founderLine = founder && !founder.isPlaceholder
+        ? `${esc(F.founder[g])} ${bookName(ctx, rod.founderId)}${founderNote(ctx, rod.founderId)}` : '';
+    const meta = [period ? `${period.from}–${period.to}` : '', F.nMembers(rod.realMemberCount), F.nFams(rod.familyIds.length)].filter(Boolean).join(' · ');
+    return `<span class="sp-card-t">${esc(line.title)}</span>${founderLine ? `<span class="sp-card-f">${founderLine}</span>` : ''}`
+        + `${barOnAxis(period, lo, span)}<span class="sp-card-m">${esc(meta)}</span><span class="sp-card-go">${esc(F.openRod)}</span>`;
+}
+
+function barOnAxis(period: { from: number; to: number } | null, lo: number, span: number): string {
+    return period
+        ? `<span class="sp-axis" aria-hidden="true"><span class="sp-bar" style="left:${((period.from - lo) / span * 100).toFixed(1)}%;width:${(Math.max(0.5, (period.to - period.from) / span * 100)).toFixed(1)}%"></span></span>`
+        : '';
+}
+
+// ─── The whole tree (spec 026 P3 §1) ────────────────────────────────────────
+
+/** Cards up to 12 lines, rows from 13 (§1.3). */
+export const HUB_ROWS_FROM = 13;
+/** Rows shown before "Show all {n} lines" (§1.3). */
+const HUB_ROWS_SHOWN = 20;
+/** Pairs of lines shown before the link to the index of families (§1.5). */
+const HUB_PAIRS_SHOWN = 6;
+
+/** The introduction's lines (all but the small ones, largest first) with their periods without the protected. */
+function hubLines(r: Render): HubLine[] {
+    if (r.hub) return r.hub;
+    const { set } = r;
+    r.hub = set.rodIds.map(id => rodOf(r, id)).filter((x): x is Rod => !!x).map(rod => {
+        const slug = set.rodSlug.get(rod.id) ?? '';
+        const line = rodPageLine(rod, r.base, set.bySlug.get(slug)?.title);
+        return { rod, slug, line, period: pageLinePeriod(line, r.base) };
+    });
+    return r.hub;
+}
+
+/** The whole tree's axis (§1.3): from the oldest year rounded down to 50 (1700 at the latest) to this decade's end. */
+function treeAxis(r: Render): { lo: number; hi: number } {
+    const lo = Math.min(1700, ...hubLines(r).filter(l => !!l.period).map(l => Math.floor(l.period!.from / 50) * 50));
+    const hi = Math.ceil((r.set.options.now.getFullYear() + 1) / 10) * 10;
+    return { lo, hi };
+}
+
+/** The choice of a line in the whole tree's bar (§2.3). */
+function rodPickHtml(r: Render, page: SetPage | null): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    if (!r.pick) {
+        const periods = new Map(hubLines(r).map(l => [l.rod.id, l.period]));
+        r.pick = rodPickerItems(set.protectedTree.lineages, set, id => periods.get(id) ?? null);
+    }
+    const { lo, hi } = treeAxis(r);
+    return rodPickerHtml({
+        items: r.pick, current: page?.under ?? null, treeTitle: set.bySlug.get(set.introSlug)?.title ?? '', lo, hi,
+        texts: {
+            prefix: F.rodPickPrefix, all: F.rodPickAll, wholeTree: F.wholeTree, other: F.otherFams, placeholder: F.rodPickPh,
+            none: F.rodPickNone, label: F.rodPickLabel, members: F.nPersons,
+        },
+        link: (item, inner, cls) => item.slug ? pageLink(r, item.slug, inner, cls) : inner,
+    });
+}
+
+/** The marriages between two lines of the whole tree (§1.5): neither partner a placeholder, not both protected. */
+interface LinePair { a: RodId; b: RodId; label: string; fams: PartnershipId[] }
+
+function linePairs(r: Render): LinePair[] {
+    const { set } = r;
+    const tree = set.protectedTree.tree;
+    const index = set.protectedTree.lineages;
+    const inSet = new Set(set.rodIds);
+    const lang = set.options.lang;
+    const byKey = new Map<string, LinePair>();
+    for (const fid of set.selection.familyIds) {
+        const u = tree.partnerships[fid];
+        if (!u || !u.person1Id || !u.person2Id) continue;
+        const ids = [u.person1Id, u.person2Id];
+        if (ids.some(id => !realIn(tree, id))) continue;
+        if (ids.every(id => isProtectedPerson(set.protectedTree, id))) continue;
+        const rods = ids.map(id => index.rodByPerson.get(id) ?? null);
+        if (!rods[0] || !rods[1] || rods[0] === rods[1] || !inSet.has(rods[0]) || !inSet.has(rods[1])) continue;
+        const pair = rods.map(id => ({ id: id!, label: set.rodLabels.get(id!) || r.S.familyPages.rodGeneric }))
+            .sort((x, y) => x.label.localeCompare(y.label, lang));
+        const key = `${pair[0].id}\t${pair[1].id}`;
+        const have = byKey.get(key);
+        if (have) have.fams.push(fid);
+        else byKey.set(key, { a: pair[0].id, b: pair[1].id, label: `${pair[0].label} · ${pair[1].label}`, fams: [fid] });
+    }
+    const year = (fid: PartnershipId): number => yearOf(tree.partnerships[fid]?.startDate) ?? 9999;
+    const out = [...byKey.values()];
+    for (const p of out) p.fams.sort((x, y) => year(x) - year(y) || x.localeCompare(y));
+    return out.sort((x, y) => y.fams.length - x.fams.length || x.label.localeCompare(y.label, lang));
+}
+
+/** The pairs as folds (open in the markup: the script folds all but the first, `data-sp-fold`). */
+function pairsHtml(r: Render, pairs: readonly LinePair[], foldFrom: number): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const tree = set.protectedTree.tree;
+    return pairs.map((p, i) => {
+        const rows = p.fams.map(fid => {
+            const u = tree.partnerships[fid];
+            const y = isWedding(u) ? yearOf(u.startDate) : null;
+            const slug = set.familySlug.get(fid);
+            return `<li class="sp-pair-r"><span class="sp-sym">⚭</span>${y !== null ? ` <span class="sp-nw">${y}</span>` : ''} ${esc(familyTitle(tree, u, set.options.lang))}`
+                + `${slug ? ` · ${pageLink(r, slug, esc(F.famLink))}` : ''}</li>`;
+        }).join('');
+        return `<details class="sp-pair" open${i >= foldFrom ? ' data-sp-fold' : ''}><summary class="sp-pair-s"><span class="sp-pair-n">${esc(p.label)}</span>`
+            + ` <span class="sp-pair-c">— ${esc(F.pairCount(p.fams.length))}</span></summary><ul class="sp-pair-l">${rows}</ul></details>`;
+    }).join('');
+}
+
+/** The anchor of the marriages between lines in the index of families. */
+function pairsAnchor(r: Render): string {
+    return `${r.set.indexSlug.families}--mezi-rody`;
+}
+
+/** "Other families" (§1.3): the small lines' names, the first five and how many more. */
+function otherNames(r: Render): string[] {
+    const lang = r.set.options.lang;
+    return r.set.otherRodIds.map(id => r.set.rodLabels.get(id) ?? '').filter(Boolean).sort((a, b) => a.localeCompare(b, lang));
+}
+
+/** §1.2–§1.6: the whole tree's introduction. */
+function treeHubHtml(r: Render, page: SetPage, ctx: BookCtx): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const prot = set.protectedTree;
+    const tree = prot.tree;
+    const lines = hubLines(r);
+    const { lo, hi } = treeAxis(r);
+    const span = Math.max(1, hi - lo);
+
+    // The counts (§1.2): the period up to the last unprotected record, the people with the living, lines, families, generations.
+    let from = Infinity, to = -Infinity;
+    const note = (date: string | undefined): void => {
+        const y = yearOf(date);
+        if (y === null) return;
+        from = Math.min(from, y);
+        to = Math.max(to, y);
+    };
+    let persons = 0;
+    for (const id of set.selection.personIds) {
+        const p = realIn(tree, id);
+        if (!p) continue;
+        persons++;
+        if (isProtectedPerson(prot, id)) continue;
+        note(p.birthDate);
+        note(p.deathDate);
+    }
+    for (const fid of set.selection.familyIds) {
+        const u = tree.partnerships[fid];
+        if (u && ![u.person1Id, u.person2Id].some(id => id && isProtectedPerson(prot, id))) note(u.startDate);
+    }
+    const gens = Math.max(0, ...lines.map(l => l.rod.generations));
+    const counts = [
+        from <= to ? (from === to ? String(from) : `${from}–${to}`) : '', F.nPersons(persons), F.nRods(lines.length),
+        F.nFams(set.selection.familyIds.length), gens ? F.nGens(gens) : '',
+    ].filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('');
+    const places = [...placeRows(r)].sort((a, b) => b.personIds.length - a.personIds.length || a.name.localeCompare(b.name, lang));
+    const placeLinkHtml = (key: string, html: string): string => {
+        const to = r.base.placeLink?.(key);
+        if (!to) return html;
+        return r.mode === 'file' ? `<a class="pp-link" href="${esc(to)}">${html}</a>` : `<button type="button" class="pp-link" data-sp-open="${esc(to)}">${html}</button>`;
+    };
+    const map = drawnSlug(r, set.mapSlug);
+    const main = places.slice(0, 3).map(p => placeLinkHtml(p.key, esc(p.name)));
+    if (places.length > 3) main.push(`<span class="sp-faint">${esc(F.morePlaces(places.length - 3))}</span>`);
+    if (map) main.push(pageLink(r, map, esc(F.map)));
+    const head = `<header class="sp-head sp-head--tree"><div class="sp-kicker">${esc(F.kTree)}</div><h1 class="sp-h1">${esc(page.title)}</h1>`
+        + `<p class="sp-sub sp-counts">${counts}</p>`
+        + (places.length ? `<p class="sp-mainpl"><span class="sp-mainpl-k">${esc(F.mainPlaces)}:</span> ${main.join(' <span class="sp-sep" aria-hidden="true">·</span> ')}</p>` : '')
+        + `</header>`;
+
+    // The lines (§1.3): sorted by size, by age or by name (the script; the markup by size).
+    const order = (key: (l: HubLine) => number | string): number[] => {
+        const idx = lines.map((_, i) => i).sort((a, b) => {
+            const x = key(lines[a]), y = key(lines[b]);
+            return typeof x === 'number' && typeof y === 'number' ? x - y || a - b : String(x).localeCompare(String(y), lang) || a - b;
+        });
+        const rank: number[] = [];
+        idx.forEach((li, i) => { rank[li] = i; });
+        return rank;
+    };
+    const byOld = order(l => l.period?.from ?? 99999);
+    const byAbc = order(l => set.rodLabels.get(l.rod.id) || l.rod.surname);
+    const sortKey = (i: number): string => `${i} ${byOld[i]} ${byAbc[i]}`;
+    const withKey = (html: string, i: number, extra = ''): string => html.replace(/^<(a|button) /, `<$1 data-sp-o="${sortKey(i)}"${extra} `);
+    const seg = lines.length > 1
+        ? `<div class="sp-sort js-only" role="radiogroup" aria-label="${esc(F.sortLabel)}">`
+            + ([['size', F.sortSize], ['old', F.sortOld], ['abc', F.sortAbc]] as const)
+                .map(([k, l], i) => `<button type="button" role="radio" data-sp-sort="${i}" aria-checked="${i === 0}">${esc(l)}</button>`).join('')
+            + `</div>`
+        : '';
+    const otherDesc = F.otherDesc(set.otherRodIds.length, set.otherPersonIds.length);
+    const rowsMode = lines.length >= HUB_ROWS_FROM;
+    let list: string;
+    if (!rowsMode) {
+        const cards = lines.map((l, i) => withKey(pageLink(r, l.slug, rodCardInner(r, ctx, l.rod, l.line, l.period, lo, span), 'sp-card'), i)).join('');
+        let other = '';
+        if (set.otherSlug) {
+            const names = otherNames(r);
+            const shown = names.slice(0, 5).join(', ') + (names.length > 5 ? ` ${F.otherMoreNames(names.length - 5)}` : '');
+            other = pageLink(r, set.otherSlug, `<span class="sp-card-t">${esc(F.otherFams)}</span>${otherDesc ? `<span class="sp-card-f">${esc(otherDesc)}</span>` : ''}`
+                + `${shown ? `<span class="sp-card-m">${esc(shown)}</span>` : ''}<span class="sp-card-go">${esc(F.otherOpen)}</span>`, 'sp-card sp-card--other');
+        }
+        list = `<div class="sp-cards sp-sortable">${cards}${other}</div>`;
+    } else {
+        const ticks: string[] = [];
+        for (let y = Math.ceil(lo / 100) * 100; y <= hi; y += 100) ticks.push(`<span style="left:${((y - lo) / span * 100).toFixed(1)}%">${y}</span>`);
+        const rows = lines.map((l, i) => {
+            const label = set.rodLabels.get(l.rod.id) || l.rod.surname;
+            const key = rodPickKey([label, ...l.rod.forms, ...l.rod.otherForms].join(' '));
+            const inner = `<span class="sp-rrow-n">${esc(label)}</span>${barOnAxis(l.period, lo, span) || '<span class="sp-axis" aria-hidden="true"></span>'}`
+                + `<span class="sp-rrow-c">${l.rod.realMemberCount}</span>`;
+            return `<li class="sp-rrow" data-q="${esc(key)}" data-sp-o="${sortKey(i)}">${pageLink(r, l.slug, inner, 'sp-rrow-a')}</li>`;
+        }).join('');
+        const all = lines.length > HUB_ROWS_SHOWN
+            ? `<button type="button" class="sp-rrows-all js-only" data-sp-shown="${HUB_ROWS_SHOWN}">${esc(F.showAllRods(lines.length))} <span aria-hidden="true">▾</span></button>` : '';
+        const other = set.otherSlug
+            ? pageLink(r, set.otherSlug, `<span class="sp-orow-n">${esc(F.otherFams)}</span>${otherDesc ? `<span class="sp-orow-d">${esc(otherDesc)}</span>` : ''}`
+                + `<span class="sp-orow-go" aria-hidden="true">→</span>`, 'sp-orow') : '';
+        list = `<div class="sp-rods-f js-only"><label class="sp-search sp-rods-s"><span class="sp-ico" aria-hidden="true"></span>`
+            + `<input class="sp-q sp-rods-q" type="search" placeholder="${esc(F.rodsSearch)}" aria-label="${esc(F.rodsSearch)}" autocomplete="off" spellcheck="false"></label></div>`
+            + `<div class="sp-raxis" aria-hidden="true"><span class="sp-raxis-t">${ticks.join('')}</span></div>`
+            + `<ol class="sp-rrows sp-sortable"${all ? ` data-sp-cut="${HUB_ROWS_SHOWN}"` : ''}>${rows}</ol>`
+            + `<p class="sp-rodpick-none sp-rrows-none" hidden>${esc(F.rodPickNone)}</p>${all}${other}`;
+    }
+    const rodsHtml = lines.length || set.otherSlug
+        ? `<section class="sp-rods${rowsMode ? ' sp-rods--rows' : ''}"><div class="sp-rods-head"><h2 class="sp-h2">${esc(F.rodsH)}</h2>${seg}</div>${list}</section>` : '';
+
+    // The marriages between lines (§1.5), grouped by pairs.
+    const pairs = linePairs(r);
+    let pairsBlock = '';
+    if (pairs.length) {
+        const n = pairs.reduce((s, p) => s + p.fams.length, 0);
+        const shown = pairs.slice(0, HUB_PAIRS_SHOWN);
+        const rest = pairs.slice(HUB_PAIRS_SHOWN);
+        const more = rest.length
+            ? `<p class="sp-pairs-more">${anchorLink(r, set.indexSlug.families, pairsAnchor(r), esc(F.pairsMore(rest.length, rest.reduce((s, p) => s + p.fams.length, 0))))}</p>` : '';
+        pairsBlock = `<section class="sp-pairs"><h2 class="sp-h2">${esc(F.crossTitle)}</h2><p class="sp-pairs-head">${esc(F.pairs(n, pairs.length))}</p>`
+            + `<div class="sp-pairs-l">${pairsHtml(r, shown, 1)}</div>${more}</section>`;
+    }
+
+    // The indexes (§1.6).
+    const links = (['persons', 'families', 'surnames', 'places'] as const)
+        .map(k => [drawnSlug(r, set.indexSlug[k]), F.idxTabs[k]] as const)
+        .concat([[map, F.map] as const])
+        .filter(([slug]) => !!slug)
+        .map(([slug, label]) => pageLink(r, slug, esc(label), 'sp-btn'));
+    const idx = links.length ? `<section class="sp-idx"><h2 class="sp-h2">${esc(F.idxH)}</h2><div class="sp-btns">${links.join('')}</div></section>` : '';
+    return `${head}${rodsHtml}${pairsBlock}${idx}`;
+}
+
+/** §1.4: "Other families" — a block per small line, then the people outside the lines. */
+function otherFamiliesHtml(r: Render, page: SetPage): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const prot = set.protectedTree;
+    const tree = prot.tree;
+    const inSel = new Set(set.selection.personIds);
+    const intro = set.bySlug.get(set.introSlug);
+    const rods = set.otherRodIds.map(id => rodOf(r, id)).filter((x): x is Rod => !!x)
+        .map(rod => ({ rod, label: set.rodLabels.get(rod.id) || rod.surname }))
+        .sort((a, b) => a.label.localeCompare(b.label, lang));
+    const letters: string[] = [];
+    const firstOf = new Map<string, string>();
+    for (const { rod, label } of rods) {
+        const l = indexLetter(label, lang);
+        if (!l || firstOf.has(l)) continue;
+        firstOf.set(l, set.otherAnchor.get(rod.id) ?? '');
+        letters.push(l);
+    }
+    const noneAnchor = `${page.slug}--bez-prijmeni`;
+    const jump = (anchor: string, html: string): string => r.mode === 'file'
+        ? `<a class="sp-letter" href="#${esc(anchor)}">${html}</a>`
+        : `<button type="button" class="sp-letter" data-sp-jump="${esc(anchor)}">${html}</button>`;
+    const alpha = letters.map(l => jump(firstOf.get(l)!, esc(l)));
+    if (set.otherPersonIds.length) alpha.push(jump(noneAnchor, esc(F.noSurname)));
+    const yearsOf = (p: Person): string => bookYears(p);
+    const blocks = rods.map(({ rod, label }) => {
+        const ids = sortByBirth(tree, rod.memberIds.filter(id => inSel.has(id) && realIn(tree, id)));
+        let from = Infinity, to = -Infinity;
+        const rows = ids.map(id => {
+            const p = tree.persons[id];
+            const shielded = isProtectedPerson(prot, id);
+            if (!shielded) for (const d of [p.birthDate, p.deathDate]) {
+                const y = yearOf(d);
+                if (y !== null) { from = Math.min(from, y); to = Math.max(to, y); }
+            }
+            const y = yearsOf(p);
+            const unions = (p.partnerships ?? []).map(uid => tree.partnerships[uid]).filter((u): u is Partnership => !!u).map(u => {
+                const other = u.person1Id === id ? u.person2Id : u.person1Id;
+                const o = realIn(tree, other);
+                const yr = isWedding(u) ? yearOf(u.startDate) : null;
+                const fam = set.familySlug.get(u.id);
+                if (!o && !fam) return '';
+                return `<span class="sp-ofam-u"><span class="sp-sym">⚭</span>${yr !== null ? ` ${yr}` : ''}${o ? ` ${personNameLink(r, o.id, esc(shownNameOrEmpty(o) || '?'))}` : ''}`
+                    + `${fam ? ` · ${pageLink(r, fam, esc(F.famLink))}` : ''}</span>`;
+            }).filter(Boolean).join('');
+            const under = set.bySlug.get(set.personSlug.get(id) ?? '')?.under;
+            const into = under && under !== 'other' && under !== rod.id
+                ? `<span class="sp-ofam-to">${rodLinkHtml(r, under, esc(F.toRod(set.rodLabels.get(under) || F.rodGeneric)))}</span>` : '';
+            return `<li class="sp-ofam-p">${personNameLink(r, id, esc(shownNameOrEmpty(p) || '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}${livingTagHtml(r, id)}`
+                + `${unions}${into}</li>`;
+        }).join('');
+        const period = from <= to ? (from === to ? String(from) : `${from}–${to}`) : '';
+        const meta = [F.nPersons(ids.length), period].filter(Boolean).join(' · ');
+        return `<section class="sp-ofam" id="${esc(set.otherAnchor.get(rod.id) ?? '')}"><h2 class="sp-ofam-h">${esc(label)}</h2>`
+            + `<p class="sp-ofam-m">${esc(meta)}</p><ul class="sp-ofam-l">${rows}</ul></section>`;
+    }).join('');
+    let none = '';
+    if (set.otherPersonIds.length) {
+        const ids = sortByBirth(tree, [...set.otherPersonIds]);
+        const names = ids.map(id => {
+            const p = tree.persons[id];
+            const y = yearsOf(p);
+            return `<span class="sp-ofam-who">${personNameLink(r, id, esc(shownNameOrEmpty(p) || '?'))}${y ? ` <span class="sp-ix-y">${esc(y)}</span>` : ''}${livingTagHtml(r, id)}</span>`;
+        }).join('');
+        none = `<section class="sp-ofam sp-ofam--none" id="${esc(noneAnchor)}"><h2 class="sp-ofam-h">${esc(F.noSurname)}</h2>`
+            + `<p class="sp-ofam-m">${esc(F.noSurnameNote(ids.length))}</p><p class="sp-ofam-names">${names}</p></section>`;
+    }
+    const desc = F.otherDesc(set.otherRodIds.length, set.otherPersonIds.length);
+    return `<header class="sp-head"><div class="sp-kicker">${esc(intro?.title ?? '')}</div><h1 class="sp-h1">${esc(F.otherFams)}</h1>`
+        + `<p class="sp-sub">${esc([desc ? `${desc}.` : '', F.otherIntro].filter(Boolean).join(' '))}</p></header>`
+        + (alpha.length > 1 ? `<nav class="sp-letters sp-ofam-abc" aria-label="${esc(F.otherFams)}">${alpha.join('')}</nav>` : '')
+        + `<div class="sp-ofams">${blocks}${none}</div>`;
 }
 
 // ─── A family's page (§2.2) ─────────────────────────────────────────────────
@@ -311,7 +644,15 @@ function rodLabel(r: Render, ctx: BookCtx, rodId: RodId): string {
 /** A link to a lineage's page of the set, plain text when it has none. */
 function rodLinkHtml(r: Render, rodId: RodId, html: string): string {
     const slug = r.set.rodSlug.get(rodId);
-    return slug ? pageLink(r, slug, html) : html;
+    if (slug) return pageLink(r, slug, html);
+    const anchor = r.set.otherAnchor.get(rodId);
+    return anchor ? anchorLink(r, r.set.otherSlug, anchor, html) : html;
+}
+
+/** A link to an anchor inside a page: `#{anchor}` in the file, the page itself in the window. */
+function anchorLink(r: Render, slug: string, anchor: string, html: string, cls = 'pp-link'): string {
+    if (!drawnSlug(r, slug)) return html;
+    return r.mode === 'file' ? `<a class="${cls}" href="#${esc(anchor)}">${html}</a>` : pageLink(r, slug, html, cls);
 }
 
 function personLinkHtml(r: Render, ctx: BookCtx, id: PersonId): string {
@@ -612,7 +953,11 @@ function barHtml(r: Render, page: SetPage | null): string {
     ];
     const menu = menuItems.filter(([slug]) => !!slug)
         .map(([slug, label]) => mark(pageLink(r, slug, esc(label), 'sp-menu-a'), page?.slug === slug)).join('');
-    return `<div class="sp-fbar"><div class="sp-fbar-in">${home}<span class="sp-fbar-gap"></span>`
+    const whole = set.spec.kind === 'tree';
+    const pick = whole ? rodPickHtml(r, page) : '';
+    // On a phone the choice replaces the name on the pages of a line (§2.3); the file's script marks it per page.
+    const cls = whole ? ` sp-fbar--tree${page?.under ? ' sp-fbar--rod' : ''}` : '';
+    return `<div class="sp-fbar${cls}"><div class="sp-fbar-in">${home}${pick}<span class="sp-fbar-gap"></span>`
         + `<label class="sp-search"><span class="sp-ico" aria-hidden="true"></span>`
         + `<input class="sp-q" type="search" placeholder="${esc(F.searchPh)}" aria-label="${esc(F.searchLabel)}" autocomplete="off" spellcheck="false" enterkeyhint="search"></label>`
         + `<button type="button" class="sp-fbar-cancel">${esc(F.searchCancel)}</button>`
@@ -649,7 +994,11 @@ function jsonForScript(value: unknown): string {
  * index of people. '' for an empty query.
  */
 export function pageSetSearchHtml(set: PageSet, query: string, opts: PageSetHtmlOptions & { mode?: 'file' | 'app' } = {}): string {
-    const r = makeRender(set, opts.mode ?? 'app', opts);
+    return searchHtml(makeRender(set, opts.mode ?? 'app', opts), query);
+}
+
+function searchHtml(r: Render, query: string): string {
+    const set = r.set;
     const q = query.trim();
     if (!q) return '';
     const F = r.S.familyPages;
@@ -769,7 +1118,11 @@ function familiesIndexHtml(r: Render): string {
         return `<li class="sp-ix-row">${pageLink(r, set.familySlug.get(u.id)!, names, 'pp-link sp-ix-n')}`
             + `${year !== null ? ` <span class="sp-ix-y">${year}</span>` : ''} <span class="sp-ix-t">${esc(kids ? F.nKids(kids) : F.noKids)}</span></li>`;
     }).join('');
-    return `<ul class="sp-ix-list">${rows}</ul>`;
+    // The whole tree: all the marriages between lines by pairs (the introduction shows six, §1.5).
+    const pairs = set.spec.kind === 'tree' ? linePairs(r) : [];
+    const between = pairs.length
+        ? `<h2 class="sp-ix-h2" id="${esc(pairsAnchor(r))}">${esc(F.crossTitle)}</h2><div class="sp-pairs-l">${pairsHtml(r, pairs, Infinity)}</div>` : '';
+    return `<ul class="sp-ix-list">${rows}</ul>${between}`;
 }
 
 /** A row that unfolds the people it stands for (open without the script). */
@@ -790,11 +1143,13 @@ function surnamesIndexHtml(r: Render): string {
     const lang = set.options.lang;
     const tree = set.protectedTree.tree;
     const inSel = new Set(set.selection.personIds);
-    const rodRows = set.rodIds.map(rid => {
+    // The whole tree (§6.2): counts without the protected (a surname of the protected alone is left out), the small lines too.
+    const whole = set.spec.kind === 'tree';
+    const rodRows = [...set.rodIds, ...(whole ? set.otherRodIds : [])].map(rid => {
         const rod = rodOf(r, rid);
         if (!rod) return '';
         const label = set.rodLabels.get(rid) ?? '';
-        const n = rod.memberIds.filter(id => inSel.has(id) && realIn(tree, id)).length;
+        const n = rod.memberIds.filter(id => inSel.has(id) && realIn(tree, id) && !(whole && isProtectedPerson(set.protectedTree, id))).length;
         if (!n) return '';
         const nf = label ? rodNameForms(rod, tree) : { forms: [], feminine: [] };
         const forms = nf.forms.length ? nf.forms.join(' · ') : label || F.rodGeneric;
@@ -905,10 +1260,10 @@ function mapPageHtml(r: Render, page: SetPage): string {
     return `<header class="sp-head"><h1 class="sp-h1">${esc(F.map)}</h1></header>${map}<p class="sp-map-note">${esc(F.mapNote)}</p>`;
 }
 
-/** The pages drawn: every page but the whole tree (not yet), the map when its places make one. */
+/** The pages drawn: every page, the map when its places make one. */
 function rendered(set: PageSet, page: SetPage): boolean {
     if (page.kind === 'map') return setMap(set).drawn;
-    return page.kind !== 'tree';
+    return true;
 }
 
 /** The pages of the file, in its order (those drawn). */
@@ -923,7 +1278,11 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
         groups: { ...PERSON_PAGE_ALL_GROUPS, research: false, sources: set.options.sources, ...(r.opts.groups ?? {}) },
         privacy: set.options.privacy, toggles: { history: true, childEvents: true }, research: false,
         now: set.options.now, toc: false,
-        links: { mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug },
+        links: {
+            mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug,
+            // The whole tree: a small line's row leads to its block on "Other families" (spec 026 P3 §2.2).
+            ...(set.otherAnchor.size && drawnSlug(r, set.otherSlug) ? { rodAnchor: set.otherAnchor, rodAnchorLabel: r.S.familyPages.otherRow } : {}),
+        },
         idPrefix: page.slug,
         ...(r.mode === 'file' ? { images: set.images } : {}),
     };
@@ -943,6 +1302,8 @@ function pageInnerHtml(r: Render, page: SetPage): string {
     if (page.kind === 'rod') body = rodPageHtml(r, page, ctx);
     else if (page.kind === 'branch') body = branchPageHtml(r, page, ctx);
     else if (page.kind === 'hub') body = hubPageHtml(r, page, ctx);
+    else if (page.kind === 'tree') body = treeHubHtml(r, page, ctx);
+    else if (page.kind === 'other') body = otherFamiliesHtml(r, page);
     else if (page.kind === 'family') body = familyPageHtml(r, page, ctx);
     else if (page.kind === 'index') body = indexPageHtml(r, page);
     else if (page.kind === 'map') body = mapPageHtml(r, page);
@@ -951,7 +1312,9 @@ function pageInnerHtml(r: Render, page: SetPage): string {
 
 function sectionHtml(r: Render, page: SetPage): string {
     const intro = page.slug === r.set.introSlug ? ' data-sp-intro' : '';
-    return `<section class="sp-page sp-page--${page.kind}" id="${esc(page.slug)}" data-sp-title="${esc(page.title)}"${intro}>`
+    // The whole tree: the line the bar's choice shows on this page (§2.3).
+    const under = r.set.spec.kind === 'tree' ? ` data-sp-under="${esc(page.under ?? '')}"` : '';
+    return `<section class="sp-page sp-page--${page.kind}" id="${esc(page.slug)}" data-sp-title="${esc(page.title)}"${intro}${under}>`
         + `${pageInnerHtml(r, page)}</section>`;
 }
 
@@ -965,7 +1328,7 @@ function fileTocHtml(r: Render, pages: readonly SetPage[]): string {
     };
     const intro = pages.filter(p => p.slug === r.set.introSlug);
     row(F.tocIntro, intro);
-    row(F.tocRods, pages.filter(p => p.kind === 'rod' && p.slug !== r.set.introSlug));
+    row(F.tocRods, pages.filter(p => (p.kind === 'rod' || p.kind === 'other') && p.slug !== r.set.introSlug));
     row(F.tocFams, pages.filter(p => p.kind === 'family'));
     row(F.tocPers, pages.filter(p => p.kind === 'person'));
     row(F.tocIdx, pages.filter(p => p.kind === 'index' || p.kind === 'map'));
@@ -1028,6 +1391,49 @@ export function pageSetSectionHtml(set: PageSet, slug: string, opts: PageSetHtml
     return sectionHtml(makeRender(set, 'app', opts), page);
 }
 
+/** The window's renderer of a set and its last pages (spec 026 P3 §3.3). */
+interface WindowPages { r: Render; html: Map<string, string> }
+const windowPages = new WeakMap<PageSet, WindowPages>();
+/** Pages the window keeps drawn (the most recent ones). */
+export const RENDER_PAGE_CACHE = 50;
+
+function windowRender(set: PageSet): WindowPages {
+    let w = windowPages.get(set);
+    if (!w) { w = { r: makeRender(set, 'app', {}), html: new Map() }; windowPages.set(set, w); }
+    return w;
+}
+
+/**
+ * A page of the app's window drawn when it is opened (§3.3): the set's
+ * renderer once per set, the last RENDER_PAGE_CACHE pages kept; '' for a
+ * slug the set does not draw.
+ */
+export function renderPage(set: PageSet, slug: string): string {
+    const w = windowRender(set);
+    const hit = w.html.get(slug);
+    if (hit !== undefined) {
+        w.html.delete(slug);
+        w.html.set(slug, hit);
+        return hit;
+    }
+    const page = set.bySlug.get(slug);
+    if (!page || !rendered(set, page)) return '';
+    const html = sectionHtml(w.r, page);
+    w.html.set(slug, html);
+    if (w.html.size > RENDER_PAGE_CACHE) w.html.delete(w.html.keys().next().value!);
+    return html;
+}
+
+/** The window's bar of a page (the window's renderer). */
+export function renderPageBar(set: PageSet, slug: string): string {
+    return barHtml(windowRender(set).r, set.bySlug.get(slug) ?? null);
+}
+
+/** The window's search results (the window's renderer). */
+export function renderPageSearch(set: PageSet, query: string): string {
+    return searchHtml(windowRender(set).r, query);
+}
+
 // ─── The set of files (§6.4) ──────────────────────────────────────────────
 
 /** The file of a page in the set of files: the introduction is index.html. */
@@ -1060,10 +1466,12 @@ function zipLinks(set: PageSet, own: string, drawn: ReadonlySet<string>, html: s
 /** One file of the set: the shared styles and scripts by reference, the bar, the page. */
 function zipPageShell(r: Render, page: SetPage, body: string): string {
     const lang = r.set.options.lang;
-    return `<!doctype html><html lang="${esc(lang)}" class="no-js"><head>`
+    // A whole tree's file keeps its bar without the script: the choice of a line works as a plain `<details>` (§2.3).
+    const zipCls = r.set.spec.kind === 'tree' ? ' sp-zip' : '';
+    return `<!doctype html><html lang="${esc(lang)}" class="no-js${zipCls}"><head>`
         + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
         + `<meta name="generator" content="Strom"><title>${esc(page.title)}</title>`
-        + `<link rel="stylesheet" href="styl.css"></head><body><script>document.documentElement.className='js'</script>`
+        + `<link rel="stylesheet" href="styl.css"></head><body><script>document.documentElement.className='js${zipCls}'</script>`
         + barHtml(r, page) + `<main class="pp-file sp-file">${body}</main>`
         + `<script type="application/json" id="sp-strings">${jsonForScript(searchStrings(r))}</script>`
         + `<script src="hledani.js"></script><script src="skript.js"></script></body></html>`;

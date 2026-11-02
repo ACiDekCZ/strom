@@ -383,6 +383,7 @@ export const bottomSheetMethods = uiModule({
         const bookRow: MenuRow = { label: s.book.menu, id: 'sheet-book', run: () => this.showBookDialog() };
         // Wherever the book is, the family pages follow it (026 §9.6).
         const pagesRow: MenuRow = { label: s.familyPages.menuItem, id: 'sheet-pages', run: () => this.openFamilyPagesForFocus() };
+        const treePagesRow: MenuRow = { label: s.familyPages.treePagesAction, id: 'sheet-tree-pages', run: () => this.openTreePages() };
         const slideshowRow: MenuRow = { label: s.slideshow.menu, id: 'sheet-slideshow', run: () => this.startSlideshow() };
         // Under Export…, now and then, "Export all" (not backed up; once a day at most).
         const lastExport = viewMode ? undefined : this.exportReminderLast();
@@ -390,7 +391,7 @@ export const bottomSheetMethods = uiModule({
             : { id: 'sheet-export-reminder', text: this.exportReminderText(lastExport), link: s.snapshots.exportAll, run: () => this.researchActionExportAll() };
         // "For the family ›": the book and the family pages (an exported page has them too), the poster, the fly-through.
         const familyRow: MenuRow = { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
-            ...(active || viewMode ? [bookRow, pagesRow] : []),
+            ...(active || viewMode ? [bookRow, pagesRow, treePagesRow] : []),
             { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },
             slideshowRow,
         ] } };

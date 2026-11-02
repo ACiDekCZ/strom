@@ -103,7 +103,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(new Set(merges).size).toBe(merges.length);
     });
 
-    test('For the family ›: Family book, Family pages, Poster…, Slideshow (TV); hover opens it, one flyout at a time', async ({ page }) => {
+    test('For the family ›: Family book, Family pages, Pages for the whole tree, Poster…, Slideshow (TV); hover opens it, one flyout at a time', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.locator('.actions-menu-btn').click();
@@ -115,7 +115,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(family).toBeVisible();
         await expect(family).toHaveAttribute('role', 'menu');
         expect((await family.locator('[role="menuitem"]').allInnerTexts()).map(t => t.trim()))
-            .toEqual(['Family book', 'Family pages', 'Poster…', 'Slideshow (TV)']);
+            .toEqual(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
         // Opened by a click, then the other flyout: only one is open.
         await page.locator('#actions-family-row').click();
         await expect(page.locator('#actions-family-wrap')).toHaveClass(/submenu-open/);
@@ -145,10 +145,10 @@ test.describe('actions menu "Tree:" submenu', () => {
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-pages-row')).toBeFocused();
         await page.keyboard.press('ArrowDown');
+        await expect(page.locator('#actions-tree-pages-row')).toBeFocused();
+        await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-poster-row')).toBeFocused();
-        await page.keyboard.press('ArrowUp');
-        await page.keyboard.press('ArrowUp');
-        await page.keyboard.press('ArrowUp');
+        for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-slideshow-row')).toBeFocused();
         // ← closes the flyout and returns to its row.
         await page.keyboard.press('ArrowLeft');

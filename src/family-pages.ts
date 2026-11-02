@@ -21,12 +21,14 @@ import { shownNameOrEmpty, shownNameParts } from './person-name.js';
 import { feminineForm } from './surnames.js';
 import { asciiSlug } from './filenames.js';
 import { normalizeSearchText, searchableSurnames, alternateNames } from './name-search.js';
-import { LineageIndex, Rod, RodId, Selection, rodGenerations, rodNameForms, selection } from './lineage.js';
-import { BookSelectionSpec, chapterRods, lineageSpec } from './book-model.js';
+import {
+    LineageIndex, Rod, RodId, Selection, otherFamilyRods, rodGenerations, rodNameForms, rodOfPersonForCrumbs, rods as allRods, selection,
+} from './lineage.js';
+import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
 
-export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree';
+export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other';
 
 /** The four indexes (spec 026 §3.5). */
 export type PageSetIndexKind = 'persons' | 'families' | 'surnames' | 'places';
@@ -46,6 +48,12 @@ export interface SetPage {
     title: string;
     /** Where the page stands in the set (§3.2), the page itself last; [] for the introduction. */
     crumbs: PageCrumb[];
+    /**
+     * The whole tree (spec 026 P3 §2.3): the lineage the page stands under by
+     * its breadcrumbs ('other' = the "Other families"), the rod picker's current
+     * line; none for the introduction, the indexes and the map.
+     */
+    under?: RodId | 'other';
 }
 
 /** One person of the search index (§0.7); a protected person: `s` '', `n` and `k` from the protected name only. */
@@ -110,6 +118,16 @@ export interface PageSet {
     mapSlug: string;
     /** The introduction's slug: the hub, the single lineage or the branch. */
     introSlug: string;
+    /**
+     * The whole tree (spec 026 P3 §1.4): the page of the "Other families" ('' none),
+     * its small lineages (in the order of the overview, those of the protected
+     * living only left out) with their anchors, and the people outside the
+     * lineages it lists (with a page, by birth).
+     */
+    otherSlug: string;
+    otherRodIds: RodId[];
+    otherAnchor: Map<RodId, string>;
+    otherPersonIds: PersonId[];
     images: ImageRegistry;
     searchIndex: SearchEntry[];
 }
@@ -120,6 +138,7 @@ export const PAGE_SET_INDEX_SLUGS: Record<PageSetIndexKind, string> = {
     persons: 'rejstrik-osoby', families: 'rejstrik-rodiny', surnames: 'rejstrik-prijmeni', places: 'rejstrik-obce',
 };
 export const PAGE_SET_MAP_SLUG = 'mapa-obci';
+export const PAGE_SET_OTHER_SLUG = 'dalsi-rodiny';
 
 /**
  * A slug not used yet: `base`, else `base-2`, `base-3`… (§0.6); the result
@@ -262,12 +281,21 @@ function rodTitleOf(lang: Language, label: string): string {
     return label ? F.rodTitle(label) : F.rodGeneric;
 }
 
-/** The set's lineages: chosen ones; for the whole tree those the book tells as chapters; none for a branch. */
+/** The set's lineages: chosen ones; for the whole tree every lineage over the small ones (spec 026 P3 §1.1); none for a branch. */
 function setRods(prot: ProtectedPersonPageTree, spec: BookSelectionSpec): Rod[] {
     const index = prot.lineages;
     if (spec.kind === 'rods') return spec.rods.map(id => index.rods.get(id)).filter((r): r is Rod => !!r);
-    if (spec.kind === 'tree') return chapterRods(index);
+    if (spec.kind === 'tree') return allRods(index).filter(r => !r.small);
     return [];
+}
+
+/**
+ * The small lineages of the "Other families" (spec 026 P3 §1.4, §6.3): the
+ * overview's other families, without a lineage of protected living people only.
+ */
+function otherRods(prot: ProtectedPersonPageTree): Rod[] {
+    const tree = prot.tree;
+    return otherFamilyRods(prot.lineages).filter(rod => rod.memberIds.some(id => !!realPerson(tree, id) && !isProtectedPerson(prot, id)));
 }
 
 /** A member's generation within its lineage (I = the root). */
@@ -312,7 +340,9 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const sel = selection(index, lineageSpec(spec));
     const rods = setRods(prot, spec);
     const rodIds = rods.map(r => r.id);
-    const labels = new Map<RodId, string>(rods.map(r => [r.id, setRodLabel(prot, r)]));
+    const whole = spec.kind === 'tree';
+    const small = whole ? otherRods(prot) : [];
+    const labels = new Map<RodId, string>([...rods, ...small].map(r => [r.id, setRodLabel(prot, r)]));
     const inRods = new Set(rodIds);
 
     const used = new Set<string>();
@@ -334,14 +364,15 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
             slug: uniqueSlug(base, used), kind: 'branch', id: spec.person,
             title: spec.kind === 'ancestors' ? S.book.titleAncestors(name) : S.book.titleDescendants(name), crumbs: [],
         };
-    } else if (spec.kind === 'tree') {
+    } else if (whole) {
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'tree', title: ctx.treeName?.trim() || S.book.title, crumbs: [] };
     } else {
         const named = rods.map(r => labels.get(r.id) ?? '').filter(Boolean);
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'hub', title: named.length ? F.hubTitle(named) : F.rodGeneric, crumbs: [] };
     }
     pages.push(intro);
-    const introCrumb: PageCrumb = { slug: intro.slug, label: intro.kind === 'hub' || intro.kind === 'tree' ? F.hub : intro.title };
+    // The whole tree's breadcrumbs start with "Tree" (spec 026 P3 §2.1).
+    const introCrumb: PageCrumb = { slug: intro.slug, label: whole ? F.crumbTree : intro.kind === 'hub' ? F.hub : intro.title };
 
     // The lineages.
     for (const rod of rods) {
@@ -350,7 +381,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         const slug = uniqueSlug(`rod-${asciiSlug(label) || 'rod'}`, used);
         rodSlug.set(rod.id, slug);
         const title = rodTitleOf(lang, label);
-        pages.push({ slug, kind: 'rod', id: rod.id, title, crumbs: [introCrumb, { slug, label: title }] });
+        pages.push({ slug, kind: 'rod', id: rod.id, title, crumbs: [introCrumb, { slug, label: title }], ...(whole ? { under: rod.id } : {}) });
     }
     const rodCrumb = (rodId: RodId | null | undefined): PageCrumb => {
         const slug = rodId ? rodSlug.get(rodId) : undefined;
@@ -364,6 +395,14 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const famRod = new Map<PartnershipId, RodId | null>();
     for (const rod of rods) for (const fid of rod.familyIds) if (!famRod.has(fid)) famRod.set(fid, rod.id);
 
+    // The whole tree's "Other families" (spec 026 P3 §1.4): its small lineages and the people outside the lineages.
+    const otherIds = new Set(small.map(r => r.id));
+    const smallFam = new Set<PartnershipId>();
+    for (const rod of small) for (const fid of rod.familyIds) smallFam.add(fid);
+    const crumbOf = new Map<PersonId, RodId | null>();
+    const crumbUnion = new Map<PersonId, PartnershipId>();
+    const otherPersonIds: PersonId[] = [];
+
     // The families.
     const set = { protectedTree: prot };
     const families: PartnershipId[] = [];
@@ -376,19 +415,48 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         familySlug.set(fid, uniqueSlug(base, used));
         families.push(fid);
     }
-    for (const fid of families) {
-        const u = tree.partnerships[fid];
-        const slug = familySlug.get(fid)!;
-        const memberRod = famRod.get(fid) ?? partnersOf(tree, u).map(p => rodOfMember(p.id)).find(r => !!r) ?? null;
-        pages.push({
-            slug, kind: 'family', id: fid, title: familyTitle(tree, u, lang),
-            crumbs: [rodCrumb(memberRod), { slug, label: familyFirstNames(tree, u, lang) }],
-        });
-    }
 
     // The people: members and married-in spouses, the protected left out.
     const spouses = new Set(sel.spouseIds);
     const withPage = sel.personIds.filter(id => !!realPerson(tree, id) && !isProtectedPerson(prot, id));
+    if (whole) {
+        for (const id of withPage) {
+            const c = rodOfPersonForCrumbs(index, id);
+            const rodId = c.rodId && (inRods.has(c.rodId) || otherIds.has(c.rodId)) ? c.rodId : null;
+            crumbOf.set(id, rodId);
+            if (c.unionId && rodId) crumbUnion.set(id, c.unionId);
+            if (!rodId) otherPersonIds.push(id);
+        }
+    }
+    let otherSlug = '';
+    if (whole && (small.length || otherPersonIds.length)) {
+        otherSlug = uniqueSlug(PAGE_SET_OTHER_SLUG, used);
+        pages.push({ slug: otherSlug, kind: 'other', title: F.otherFams, crumbs: [introCrumb, { slug: otherSlug, label: F.otherFams }], under: 'other' });
+    }
+    const otherAnchor = new Map<RodId, string>();
+    {
+        const anchors = new Set<string>();
+        for (const rod of small) otherAnchor.set(rod.id, `${otherSlug}--${uniqueSlug(asciiSlug(labels.get(rod.id) || rod.surname) || 'rod', anchors)}`);
+    }
+    const otherCrumb: PageCrumb = otherSlug ? { slug: otherSlug, label: F.otherFams } : introCrumb;
+    /** Where a lineage of the whole tree stands: its page, else the "Other families". */
+    const underOf = (rodId: RodId | null | undefined): { crumb: PageCrumb; under: RodId | 'other' } =>
+        rodId && rodSlug.has(rodId) ? { crumb: rodCrumb(rodId), under: rodId } : { crumb: otherCrumb, under: 'other' };
+
+    for (const fid of families) {
+        const u = tree.partnerships[fid];
+        const slug = familySlug.get(fid)!;
+        const memberRod = famRod.get(fid) ?? partnersOf(tree, u).map(p => rodOfMember(p.id)).find(r => !!r) ?? null;
+        const self: PageCrumb = { slug, label: familyFirstNames(tree, u, lang) };
+        if (whole) {
+            // The husband's lineage (without a husband the mother's); a family of a small lineage under the "Other families".
+            const w = underOf(memberRod ?? (smallFam.has(fid) ? null : undefined));
+            pages.push({ slug, kind: 'family', id: fid, title: familyTitle(tree, u, lang), crumbs: [introCrumb, w.crumb, self], under: w.under });
+            continue;
+        }
+        pages.push({ slug, kind: 'family', id: fid, title: familyTitle(tree, u, lang), crumbs: [rodCrumb(memberRod), self] });
+    }
+
     for (const id of withPage) {
         personSlug.set(id, uniqueSlug(personPageFileName({ lang, tree, personId: id, privacy: prot.privacy, living: prot.living }).replace(/\.html$/, ''), used));
     }
@@ -397,25 +465,38 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         return slug && fid ? [{ slug, label: familyFirstNames(tree, tree.partnerships[fid], lang) }] : [];
     };
     const unionsOf = (id: PersonId): Partnership[] => (tree.persons[id]?.partnerships ?? []).map(pid => tree.partnerships[pid]).filter((u): u is Partnership => !!u);
+    // Each child's first union with a page (in the order of the tree's unions).
+    const parentsPage = new Map<PersonId, PartnershipId>();
+    for (const u of Object.values(tree.partnerships)) {
+        if (!familySlug.has(u.id)) continue;
+        for (const c of u.childIds ?? []) if (!parentsPage.has(c)) parentsPage.set(c, u.id);
+    }
     for (const id of withPage) {
         const slug = personSlug.get(id)!;
         const self: PageCrumb = { slug, label: nameOf(tree, id) };
         let crumbs: PageCrumb[];
-        if (spouses.has(id)) {
+        let under: RodId | 'other' | undefined;
+        if (whole) {
+            // Spec 026 P3 §2.1: a member under the own lineage and the parents' family, a spouse who married in under the
+            // husband's lineage and their family, the small lineages and the people outside them under the "Other families".
+            const w = underOf(crumbOf.get(id));
+            const via = crumbUnion.get(id);
+            crumbs = [introCrumb, w.crumb, ...famCrumb(via ?? parentsPage.get(id)), self];
+            under = w.under;
+        } else if (spouses.has(id)) {
             // A married-in spouse: the spouse's lineage (or the own birth lineage in the file), the own family.
             const own = unionsOf(id).find(u => familySlug.has(u.id));
             const viaSpouse = own ? partnersOf(tree, own).map(p => rodOfMember(p.id)).find(r => !!r) : null;
             crumbs = [rodCrumb(viaSpouse ?? rodOfMember(id)), ...famCrumb(own?.id), self];
         } else {
-            const parents = Object.values(tree.partnerships).find(u => u.childIds?.includes(id) && familySlug.has(u.id));
-            crumbs = [rodCrumb(rodOfMember(id)), ...famCrumb(parents?.id), self];
+            crumbs = [rodCrumb(rodOfMember(id)), ...famCrumb(parentsPage.get(id)), self];
         }
-        pages.push({ slug, kind: 'person', id, title: nameOf(tree, id), crumbs });
+        pages.push({ slug, kind: 'person', id, title: nameOf(tree, id), crumbs, ...(under ? { under } : {}) });
     }
 
     // The indexes and the map.
     const indexSlug = {} as Record<PageSetIndexKind, string>;
-    const startCrumb: PageCrumb = { slug: intro.slug, label: F.start };
+    const startCrumb: PageCrumb = whole ? introCrumb : { slug: intro.slug, label: F.start };
     for (const k of ['persons', 'families', 'surnames', 'places'] as const) {
         const slug = uniqueSlug(PAGE_SET_INDEX_SLUGS[k], used);
         indexSlug[k] = slug;
@@ -436,7 +517,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const out: PageSet = {
         spec, options, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
         pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, indexSlug, mapSlug,
-        introSlug: intro.slug, images, searchIndex: [],
+        introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [],
     };
     out.searchIndex = buildSearchIndex(out, rods);
     return out;

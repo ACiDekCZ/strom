@@ -109,10 +109,6 @@ interface DialogState {
     /** The book to print or the linked pages (026 §6.1). */
     output: BookOutput;
     pages: PagesChoices;
-    /** The whole tree turned into lineages by the pages (it comes back with the book). */
-    treeForced: boolean;
-    /** The lineage the switch to the pages chose in place of the whole tree: its line shows until the next change (§6.1, §9.8). */
-    treeMoved: RodId | null;
     phase: Phase;
     est: PagesEstimate | null;
     estTimer: number | null;
@@ -206,12 +202,12 @@ function optionsHtml(s: DialogState): string {
         tree: D.treeHint(persons, counts.rods, counts.other),
         rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants,
     };
-    // The pages of the whole tree come later (§6.1): the choice stays in sight, disabled, with the reason.
+    // The pages of the whole tree: its lineages and the other families (spec 026 P3 §3.1).
+    if (pages) hint.tree = F.treeHintPages(persons, counts.rods);
     const kinds = KINDS.map(k => {
-        const off = pages && k === 'tree';
-        return `<label class="book-kind${off ? ' is-disabled' : ''}" data-kind="${k}"${off ? ' aria-disabled="true"' : ''}>`
-            + `<input type="radio" name="book-kind" value="${k}"${off ? ' disabled' : ''}>`
-            + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(off ? F.treeLater : hint[k])}</span></span>`
+        return `<label class="book-kind" data-kind="${k}">`
+            + `<input type="radio" name="book-kind" value="${k}">`
+            + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
             + (k === 'tree' ? '' : `<button type="button" class="book-kind-sum" data-sub-open="sel" tabindex="-1"><span class="book-sum-v"></span><span class="book-chev" aria-hidden="true">›</span></button>`)
             + `</label>`;
     }).join('');
@@ -245,7 +241,7 @@ function optionsHtml(s: DialogState): string {
         + `<div class="book-kinds" role="radiogroup" aria-labelledby="book-what-h">${kinds}`
         + (pages ? '' : `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
             + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div>`)
-        + `</div>${pages ? '<p class="book-tree-moved" role="status" hidden></p>' : ''}</section>`
+        + `</div></section>`
         + `<section class="book-sec book-sec-sel" data-sec="sel"><h3 class="book-sec-h book-sub-only" data-sub-title></h3>`
         + `<div class="book-sel book-sel-tree"><p class="book-hint">${esc(D.treeSentence)}</p></div>`
         + `<div class="book-sel book-sel-rods">`
@@ -356,12 +352,6 @@ function sync(s: DialogState): void {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
         if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
     });
-    const moved = modal.querySelector<HTMLElement>('.book-tree-moved');
-    if (moved) {
-        const l = pages && s.treeMoved ? labels.get(s.treeMoved) ?? '' : '';
-        moved.hidden = !l;
-        moved.textContent = l ? F.treeMoved(l) : '';
-    }
 
     if (pages) setText(modal, '.book-preset-hint', '');
     const title = pages ? '' : syncBook(s, modal);
@@ -533,7 +523,7 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
     }
     const est = s.est;
     const sel = selectionOf(s);
-    const ready = selectionReady(sel) && sel.kind !== 'tree';
+    const ready = selectionReady(sel);
     const verdict = est ? sizeVerdict(est.size.bytes) : 'ok';
     const zip = savesZip(s);
     const estEl = foot.querySelector<HTMLElement>('.fp-est')!;
@@ -617,7 +607,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
 /** The set as chosen and its size, with the alternatives' sizes (§6.3); null without a selection. */
 function computeEstimate(s: DialogState): PagesEstimate | null {
     const sel = selectionOf(s);
-    if (!selectionReady(sel) || sel.kind === 'tree') return null;
+    if (!selectionReady(sel)) return null;
     const set = buildPageSet(s.data, sel, pageSetOptionsOf(s), { treeName: s.treeName });
     const size = estimatePageSetSize(set);
     const imgs = pageSetImages(set);
@@ -649,38 +639,6 @@ function scheduleEstimate(s: DialogState, now = false): void {
     s.estTimer = window.setTimeout(run, ESTIMATE_DEBOUNCE_MS);
 }
 
-/**
- * The lineage of the context (§6.1, §9.8): the lineage of the person in
- * focus (listed when small), else the largest lineage a book can choose.
- */
-function contextRod(s: DialogState): RodId | null {
-    const focus = TreeRenderer.getFocusPersonId();
-    const row = focus && s.data.persons[focus] ? personRodRow(s.index, focus) : null;
-    if (row && s.index.rods.has(row.rodId)) {
-        if (!s.rodChoices.includes(row.rodId)) s.rodChoices.push(row.rodId);
-        return row.rodId;
-    }
-    let best: Rod | null = null;
-    for (const id of s.rodChoices) {
-        const r = s.index.rods.get(id);
-        if (r && (!best || r.realMemberCount > best.realMemberCount)) best = r;
-    }
-    return best?.id ?? null;
-}
-
-/** The pages need lineages or a person: the whole tree turns into the lineage of the context. */
-function fitSelectionToOutput(s: DialogState): void {
-    if (s.output === 'pages' && s.kind === 'tree') {
-        s.kind = 'rods';
-        s.treeForced = true;
-        const rod = contextRod(s);
-        s.rods = rod ? [rod] : [];
-    } else if (s.output === 'book' && s.treeForced) {
-        if (s.kind === 'rods') s.kind = 'tree';
-        s.treeForced = false;
-    }
-}
-
 /** Write the options' rows for the output (once per opening and on a switch of the output). */
 function renderOptions(s: DialogState): void {
     const body = document.querySelector<HTMLElement>('#book-modal .book-dlg-opts');
@@ -694,7 +652,6 @@ function memoryExtra(s: DialogState): Parameters<typeof saveBookMemory>[3] {
 
 /** A change: remember the options (not the selection's person or the title) and refresh. */
 function changed(s: DialogState): void {
-    s.treeMoved = null;
     saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
     // A file made for other options is not the one to save.
     if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
@@ -725,20 +682,17 @@ export const bookUiMethods = uiModule({
     },
 
     /**
-     * Actions → For the family and the phone's bottom sheet (026 §7, §9.6):
-     * the pages' window with the lineage of the person in focus; a person
-     * without a lineage → the dialog with that person's branch; nobody in
-     * focus → the dialog as Export opens it.
+     * Actions → For the family and the phone's bottom sheet (026 §7, §9.6;
+     * P3 §2.4): the whole tree's window at the line of the person in focus
+     * (a small line or none: "Other families"); nobody in focus → its introduction.
      */
     openFamilyPagesForFocus(): void {
         this.closeMobileMenu?.();
         const data = DataManager.getData();
         const focus = TreeRenderer.getFocusPersonId();
         const p = focus ? data.persons[focus] : undefined;
-        if (!p || p.isPlaceholder) { this.showFamilyPagesDialog(); return; }
-        const row = personRodRow(buildLineages(data), p.id);
-        if (row) { this.openRodPage(row.rodId); return; }
-        this.openBookDialog({ kind: 'person', person: p.id }, undefined, { output: 'pages' });
+        if (!p || p.isPlaceholder) { this.openTreePages(); return; }
+        this.openTreePagesForPerson(p.id);
     },
 
     /** The book of a person's descendants, 4 generations (§4.8). */
@@ -799,8 +753,6 @@ export const bookUiMethods = uiModule({
             sub: null,
             output,
             pages: pagesChoicesFromMemory(memory),
-            treeForced: false,
-            treeMoved: null,
             phase: 'options',
             est: null,
             estTimer: null,
@@ -809,7 +761,6 @@ export const bookUiMethods = uiModule({
             file: null,
             zip: false,
         };
-        fitSelectionToOutput(st);
 
         const overlay = document.getElementById('book-modal');
         const modal = overlay?.querySelector<HTMLElement>('.book-dlg');
@@ -873,12 +824,8 @@ export const bookUiMethods = uiModule({
                 st.sub = null;
                 st.phase = 'options';
                 st.file = null;
-                const fromTree = out === 'pages' && st.kind === 'tree';
-                fitSelectionToOutput(st);
                 renderOptions(st);
                 changed(st);
-                // The whole tree is the book's alone so far: say once which lineage took its place.
-                if (fromTree && st.kind === 'rods' && st.rods.length) { st.treeMoved = st.rods[0]; sync(st); }
                 if (out === 'pages') scheduleEstimate(st, true);
                 return;
             }
@@ -967,7 +914,7 @@ export const bookUiMethods = uiModule({
         });
         modal.addEventListener('change', (e) => {
             const t = e.target as HTMLInputElement;
-            if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; s.treeForced = false; }); return; }
+            if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
             if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }
             if (t.name === 'fp-inc') {
@@ -1054,7 +1001,7 @@ export const bookUiMethods = uiModule({
         const s = st;
         if (!s || s.output !== 'pages' || s.phase !== 'options') return;
         const sel = selectionOf(s);
-        if (!selectionReady(sel) || sel.kind === 'tree') return;
+        if (!selectionReady(sel)) return;
         if (s.estTimer !== null) scheduleEstimate(s, true);
         if (!s.est) return;
         const zip = savesZip(s);
@@ -1123,9 +1070,9 @@ export const bookUiMethods = uiModule({
         const s = st;
         if (!s) return;
         const sel = selectionOf(s);
-        if (!selectionReady(sel) || sel.kind === 'tree') return;
+        if (!selectionReady(sel)) return;
         this.closeBookDialog();
-        this.openFamilyPages(sel);
+        this.openFamilyPagesExact(sel);
     },
 
     /** The book's HTML for these options: for the window, or for a saved file. */

@@ -1,12 +1,12 @@
 /**
- * The family pages in the dialog "Family book and pages" (spec 026 §6): the
+ * The family pages in the dialog "Book and pages" (spec 026 §6): the
  * output switch (the book's rows give way to the pages' rows, the whole tree
- * off with its reason), the estimate and its recount, the warning about the
+ * with its counts), the estimate and its recount, the warning about the
  * living under full data, the large file (> 15 MB: the offers with their own
  * estimates and the set of files as a choice; > 50 MB: the set of files only,
  * saved as a .zip that unpacks), the
  * memory of the choices per tree, the file built and saved (it opens on the
- * lineage's page), the pages' window's "Save as file", a phone's sheet,
+ * whole tree's introduction), the pages' window's "Save as file", a phone's sheet,
  * the dark theme and German without overflow; the entries (026 §7: the
  * overview's lineage detail, the card's ⋯ menu, Export, a followed tree,
  * Escape over the window, a phone); the family pages in the app (026 §2.4,
@@ -77,10 +77,10 @@ async function overflowing(dialog: Locator): Promise<string[]> {
 test.describe('family pages: the dialog', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
-    test('the output switch: the pages\' rows, the whole tree later, the estimate and its recount; back to the book @smoke', async ({ page }) => {
+    test('the output switch: the pages\' rows, the whole tree, the estimate and its recount; back to the book @smoke', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
-        await expect(dialog.locator('#book-dlg-title')).toHaveText('Family book and pages');
+        await expect(dialog.locator('#book-dlg-title')).toHaveText('Book and pages');
         await expect(dialog.locator('.book-out [data-output]')).toHaveText(['Printed book', 'Linked pages']);
         await expect(outBtn(dialog, 'book')).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('[data-sec="parts"]')).toBeVisible();
@@ -98,22 +98,17 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('[data-clips="full"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('[data-photos="full"]')).toHaveAttribute('aria-checked', 'true');
         for (const k of ['map', 'sources', 'stories']) await expect(dialog.locator(`input[name="fp-inc"][value="${k}"]`)).toBeChecked();
-        // The whole tree: disabled, with its reason; the lineages instead, the first one chosen.
+        // The whole tree stays chosen for the pages too (1102 §1), with its counts; nothing says it moved.
         const tree = dialog.locator('.book-kind[data-kind="tree"]');
-        await expect(tree.locator('input')).toBeDisabled();
-        await expect(tree.locator('.book-kind-h')).toHaveText('pages for the whole tree come later');
-        await expect(dialog.locator('input[name="book-kind"][value="rods"]')).toBeChecked();
-        await expect(dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input')).toBeChecked();
-        // One line says where the whole tree went (§9.8); the next change takes it away.
-        const moved = dialog.locator('.book-tree-moved');
-        await expect(moved).toHaveText('The whole tree is for the book only so far; the Brandvold family line is selected.');
-        await expect(moved).toHaveAttribute('role', 'status');
+        await expect(tree.locator('input')).toBeEnabled();
+        await expect(tree.locator('input')).toBeChecked();
+        await expect(tree.locator('.book-kind-h')).toHaveText(/^\d+ people · \d+ family lines and other families$/);
 
         // The estimate: one file, its pages, people and images, its size and name.
         await expect(dialog.locator('.fp-est-t')).toHaveText('One .html file');
         await expect(dialog.locator('.fp-est-d')).toHaveText(/^\d+ pages · \d+ people · 0 images$/);
         await expect(dialog.locator('.fp-est-s')).toHaveText(/^about \d+(\.\d)? MB$/);
-        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.html');
         await expect(dialog.locator('.fp-big')).toBeHidden();
         await expect(dialog.locator('#book-open .fp-l-wide')).toHaveText('Save file…');
         await expect(dialog.locator('#book-open')).toBeEnabled();
@@ -122,8 +117,10 @@ test.describe('family pages: the dialog', () => {
         const before = await pagesOf(dialog);
         await dialog.locator('input[name="fp-families"][value="section"]').check();
         await expect.poll(() => pagesOf(dialog)).toBeLessThan(before);
-        await expect(moved).toBeHidden();
-        // No lineage chosen: nothing to save or open.
+        // The lineages: one chosen names the file; none chosen, nothing to save or open.
+        await dialog.locator('input[name="book-kind"][value="rods"]').check();
+        await dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input').check();
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
         await dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input').uncheck();
         await expect(dialog.locator('.fp-est-t')).toHaveText('No family line is selected.');
         await expect(dialog.locator('#book-open')).toBeDisabled();
@@ -165,17 +162,17 @@ test.describe('family pages: the dialog', () => {
         await expect(zip).toHaveText('Set of files (.zip)');
         await expect(zip).toHaveAttribute('aria-pressed', 'false');
         await expect(dialog.locator('.fp-est-t')).toHaveText('One .html file');
-        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.html');
         // The set of files as a choice, and back.
         await zip.click();
         await expect(zip).toHaveAttribute('aria-pressed', 'true');
         await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
-        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.zip');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.zip');
         // A set of files is estimated as an upper bound (§9.4).
         await expect(dialog.locator('.fp-est-s')).toHaveText(/^at most about 2\d MB$/);
         await zip.click();
         await expect(zip).toHaveAttribute('aria-pressed', 'false');
-        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.html');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.html');
         await expect(dialog.locator('.fp-est-s')).toHaveText(/^about 2\d MB$/);
         await expect(dialog.locator('#book-open')).toBeEnabled();
         // The offer takes its choice: the photos reduced, the warning gone.
@@ -189,7 +186,7 @@ test.describe('family pages: the dialog', () => {
         await dialog.locator('[data-photos="full"]').click();
         await expect(dialog.locator('.fp-big-t')).toHaveText(/^One file would have 6\d MB; it is saved as a set of files\.$/);
         await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
-        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold-family-line.zip');
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.zip');
         await expect(dialog.locator('.fp-est-s')).toHaveText(/^at most about 6\d MB$/);
         await expect(big.locator('[data-offer="zip"]')).toHaveAttribute('aria-pressed', 'true');
         // The only way over 50 MB: a click does not turn it off.
@@ -199,7 +196,7 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('.fp-open')).toBeEnabled();
     });
 
-    test('the set of files: Save downloads Brandvold-family-line.zip; it unpacks and its index.html opens the lineage\'s page', async ({ page, context }) => {
+    test('the set of files: Save downloads Brandvold.zip; it unpacks and its index.html opens the whole tree\'s introduction', async ({ page, context }) => {
         await setup(page);
         await injectPhoto(page, 20_000_000);
         const dialog = await openDialog(page, 'pages');
@@ -207,9 +204,9 @@ test.describe('family pages: the dialog', () => {
         await dialog.locator('#book-open').click();
         const res = dialog.locator('.fp-res');
         await expect(res).toBeVisible();
-        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold-family-line\.zip · \d+\.\d MB$/);
+        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold\.zip · \d+\.\d MB$/);
         const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
-        expect(download.suggestedFilename()).toBe('Brandvold-family-line.zip');
+        expect(download.suggestedFilename()).toBe('Brandvold.zip');
         const dir = mkdtempSync(join(tmpdir(), 'strom-pages-zip-'));
         const saved = join(dir, download.suggestedFilename());
         await download.saveAs(saved);
@@ -221,7 +218,7 @@ test.describe('family pages: the dialog', () => {
         const file = await context.newPage();
         await file.goto(pathToFileURL(join(dir, 'out', 'index.html')).href);
         await expect(file.locator('section.sp-page')).toHaveCount(1);
-        await expect(file.locator('section.sp-page')).toHaveClass(/sp-page--rod/);
+        await expect(file.locator('section.sp-page')).toHaveClass(/sp-page--tree/);
         await expect(file.locator('section.sp-page')).toBeVisible();
         await file.close();
     });
@@ -259,7 +256,7 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('input[name="book-kind"][value="descendants"]')).toBeChecked();
     });
 
-    test('the file: built, Save downloads it, it opens on the lineage\'s page; Cancel during the build saves nothing', async ({ page, context }) => {
+    test('the file: built, Save downloads it, it opens on the tree\'s introduction; Cancel during the build saves nothing', async ({ page, context }) => {
         // A browser that cannot share files (Chrome Canary on a Mac can): no Share.
         await page.addInitScript(() => {
             Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true });
@@ -270,21 +267,21 @@ test.describe('family pages: the dialog', () => {
         const res = dialog.locator('.fp-res');
         await expect(res).toBeVisible();
         await expect(res.locator('.fp-res-t')).toHaveText('The file is ready');
-        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold-family-line\.html · \d+\.\d MB$/);
+        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold\.html · \d+\.\d MB$/);
         await expect(res.locator('.fp-res-n')).toContainText('Family book');
         // Share only where files can be shared.
         await expect(res.locator('.fp-res-share')).toBeHidden();
         await expect(dialog.locator('.book-dlg-foot .buttons')).toBeHidden();
         const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
-        expect(download.suggestedFilename()).toBe('Brandvold-family-line.html');
+        expect(download.suggestedFilename()).toBe('Brandvold.html');
         const saved = join(mkdtempSync(join(tmpdir(), 'strom-pages-dlg-')), download.suggestedFilename());
         await download.saveAs(saved);
         const file = await context.newPage();
         await file.goto(pathToFileURL(saved).href);
-        // The introduction of one lineage's set is the lineage's page.
+        // The whole tree's set opens on its introduction, named after the tree.
         await expect.poll(() => file.locator('section.sp-page').evaluateAll(els => els
             .filter(e => getComputedStyle(e).display !== 'none').map(e => `${e.className}|${e.getAttribute('data-sp-title')}`)))
-            .toEqual([expect.stringMatching(/sp-page--rod.*\|Brandvold family line$/)]);
+            .toEqual([expect.stringMatching(/sp-page--tree.*\|Brandvold$/)]);
         await file.close();
 
         // A change of the options drops the file: the options again.
@@ -330,10 +327,10 @@ test.describe('family pages: the dialog', () => {
         await expect(res.locator('.fp-res-share')).toBeVisible();
         await res.locator('.fp-res-share').click();
         await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: { name: string; type: string; size: number }[] }).__shared))
-            .toEqual([{ name: 'Brandvold-family-line.html', type: expect.stringMatching(/^text\/html/), size: expect.any(Number) }]);
+            .toEqual([{ name: 'Brandvold.html', type: expect.stringMatching(/^text\/html/), size: expect.any(Number) }]);
     });
 
-    test('the pages\' window: Save as file opens the dialog with the pages and the window\'s lineage', async ({ page }) => {
+    test('the pages\' window: Save as file opens the dialog with the pages and the window\'s whole tree', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showPersonPage('b12w' as never));
         const win = page.locator('#person-page-modal');
@@ -343,8 +340,8 @@ test.describe('family pages: the dialog', () => {
         const dialog = page.locator('#book-modal');
         await expect(dialog).toHaveClass(/active/);
         await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
-        await expect(dialog.locator('.book-rod-row', { hasText: 'Ostrander' }).locator('input')).toBeChecked();
-        await expect(dialog.locator('.book-rod-row', { hasText: 'Brandvold' }).locator('input')).not.toBeChecked();
+        await expect(dialog.locator('input[name="book-kind"][value="tree"]')).toBeChecked();
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.html');
     });
 
     test('the dark theme: the pages\' rows and footer on the dark surfaces', async ({ page }) => {
@@ -417,7 +414,7 @@ test.describe('family pages: the dialog in German', () => {
             await setup(page);
             await injectPhoto(page, 20_000_000);
             const dialog = await openDialog(page, 'pages');
-            await expect(dialog.locator('#book-dlg-title')).toHaveText('Familienbuch und -seiten');
+            await expect(dialog.locator('#book-dlg-title')).toHaveText('Buch und Seiten');
             await expect(dialog.locator('.fp-big')).toBeVisible();
             await expect(dialog.locator('.fp-big-t')).toHaveText(/^Die Datei wird groß \(etwa 2\d MB\)\.$/);
             expect(await overflowing(dialog)).toEqual([]);
@@ -485,7 +482,7 @@ test.describe('family pages: the entries', () => {
         await expect(win.locator('#pp-title')).toContainText('Brandvold');
     });
 
-    test('Actions → For the family → Family pages: the focus person\'s line opens in the window, the living marked; a person without a line gets the dialog with the branch (§9.6, §9.3)', async ({ page }) => {
+    test('Actions → For the family → Family pages: the focus person\'s line opens in the window, the living marked; a person without a line opens Other families of the whole tree (1102 §3)', async ({ page }) => {
         const tree = rodsTree();
         (tree.persons as Record<string, unknown>).solo = {
             id: 'solo', firstName: 'Ingvar', lastName: 'Sandmark', gender: 'male', isPlaceholder: false,
@@ -495,7 +492,7 @@ test.describe('family pages: the entries', () => {
         const viaMenu = async (): Promise<void> => {
             await page.locator('.actions-menu-btn').click();
             await page.locator('#actions-family-row').click();
-            await expect(page.locator('#actions-family-submenu [role="menuitem"]')).toHaveText(['Family book', 'Family pages', 'Poster…', 'Slideshow (TV)']);
+            await expect(page.locator('#actions-family-submenu [role="menuitem"]')).toHaveText(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
             await page.locator('#actions-pages-row').click();
         };
         await viaMenu();
@@ -514,14 +511,13 @@ test.describe('family pages: the entries', () => {
         await page.keyboard.press('Escape');
         await expect(win).toHaveCount(0);
 
-        // Ingvar has no line: the dialog with the pages and his branch.
+        // Ingvar has no line of his own: the window over the whole tree, on Other families with his surname's block.
         await page.evaluate(async () => { window.Strom.TreeRenderer.setFocus('solo' as never); await window.Strom.TreeRenderer.renderAsync(); });
         await viaMenu();
-        const dialog = page.locator('#book-modal');
-        await expect(dialog).toHaveClass(/active/);
-        await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
-        await expect(dialog.locator('input[name="book-kind"][value="descendants"]')).toBeChecked();
-        await expect(dialog.locator('.book-tree-moved')).toBeHidden();
+        await expect(win).toHaveClass(/pp-is-set/);
+        await expect(page.locator('#book-modal')).not.toHaveClass(/active/);
+        await expect(win.locator('.pp-body section.sp-page--other')).toBeVisible();
+        await expect(win.locator('.pp-body [data-sp-open="person:solo"]').first()).toBeVisible();
     });
 
     test('Export → Print and image: Family pages opens the dialog with the pages and the focus person\'s line; Family book the book', async ({ page }) => {
@@ -619,7 +615,7 @@ test.describe('family pages: the entries on a phone', () => {
         await page.locator('#bb-view-more').click();
         await page.locator('#sheet-family').click();
         const sub = page.locator('.bottom-sheet-subpage');
-        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Family pages', 'Poster…', 'Slideshow (TV)']);
+        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
         const row = page.locator('#sheet-pages');
         expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await row.click();
@@ -769,7 +765,7 @@ test.describe('family pages: the window\'s bar (§3.1, §3.4)', () => {
             await expect(crumbs).toBeVisible();
             if (w > 640) {
                 await expect(crumbs.locator('.sp-crumb-back'), `${w}×${h}`).toBeHidden();
-                expect(await seen(), `${w}×${h}`).toEqual(['Brandvold family line', '›', 'Karl and Ester']);
+                expect(await seen(), `${w}×${h}`).toEqual(['Tree', '›', 'Brandvold family line', '›', 'Karl and Ester']);
             } else {
                 await expect(crumbs.locator('.sp-crumb-back')).toBeVisible();
                 expect(await seen()).toEqual(['‹ Brandvold family line']);
@@ -847,5 +843,111 @@ test.describe('family pages: the window\'s bar (§3.1, §3.4)', () => {
         expect(await q.evaluate(el => getComputedStyle(el).fontSize)).toBe('16px');
         await win.locator('.sp-fbar .sp-fbar-cancel').click();
         await expect(search).toBeHidden();
+    });
+});
+
+/** The tree overview of the active tree, its "Tree pages" button clicked: the window over the whole tree. */
+async function treePagesFromOverview(page: Page): Promise<Locator> {
+    await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId() as never));
+    const btn = page.locator('#tree-overview-modal .tov-pages');
+    await expect(btn).toHaveText('Tree pages');
+    await btn.click();
+    await expect(page.locator('#tree-overview-modal')).toBeHidden();
+    const win = page.locator('#person-page-modal');
+    await expect(win).toHaveClass(/pp-is-set/);
+    await expect(win.locator('.pp-body section.sp-page--tree')).toBeVisible();
+    return win;
+}
+
+test.describe('the whole tree\'s pages (1102)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the overview\'s Tree pages: the introduction with the lines; the choice of a line filters, Enter opens the line, Back returns', async ({ page }) => {
+        await setup(page);
+        const win = await treePagesFromOverview(page);
+        const intro = win.locator('.pp-body section.sp-page--tree');
+        // The lines above four members as cards, the small families together as Other families.
+        await expect(intro).toContainText('Brandvold');
+        await expect(intro).toContainText('Tallqvist');
+        await expect(intro).toContainText('Other families');
+        const pick = win.locator('.sp-fbar details.sp-rodpick');
+        await expect(pick.locator('.sp-rodpick-btn')).toHaveText(/^Lines/);
+        await pick.locator('.sp-rodpick-btn').click();
+        await expect(pick).toHaveAttribute('open', '');
+        const q = pick.locator('.sp-rodpick-q');
+        await expect(q).toBeFocused();
+        await q.fill('tallq');
+        await expect(pick.locator('.sp-rodpick-rod:not([hidden])')).toHaveCount(1);
+        await q.press('Enter');
+        await expect(win.locator('.pp-body section.sp-page--rod')).toBeVisible();
+        await expect(win.locator('#pp-title')).toContainText('Tallqvist');
+        await expect(pick).not.toHaveAttribute('open', '');
+        await expect(win.locator('.sp-fbar .sp-rodpick-btn')).toContainText('Tallqvist');
+        // Escape closes the choice only, the window stays.
+        await win.locator('.sp-fbar .sp-rodpick-btn').click();
+        await page.keyboard.press('Escape');
+        await expect(win.locator('.sp-fbar details.sp-rodpick')).not.toHaveAttribute('open', '');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.pp-back').click();
+        await expect(win.locator('.pp-body section.sp-page--tree')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(win).toHaveCount(0);
+    });
+
+    test('the dialog: the whole tree for the pages; the zip of the whole tree has the choice of a line that works without scripts', async ({ page, browser }) => {
+        await setup(page);
+        await injectPhoto(page, 20_000_000);
+        const dialog = await openDialog(page, 'pages');
+        await expect(dialog.locator('input[name="book-kind"][value="tree"]')).toBeChecked();
+        await dialog.locator('.fp-big [data-offer="zip"]').click();
+        await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.zip');
+        await dialog.locator('#book-open').click();
+        const res = dialog.locator('.fp-res');
+        await expect(res).toBeVisible();
+        const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
+        const dir = mkdtempSync(join(tmpdir(), 'strom-tree-zip-'));
+        const saved = join(dir, download.suggestedFilename());
+        await download.saveAs(saved);
+        execFileSync('unzip', ['-q', saved, '-d', join(dir, 'out')]);
+        const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+        const file = await ctx.newPage();
+        await file.goto(pathToFileURL(join(dir, 'out', 'index.html')).href);
+        await expect(file.locator('section.sp-page--tree')).toBeVisible();
+        const pick = file.locator('.sp-fbar details.sp-rodpick');
+        await expect(pick).toBeVisible();
+        // Without scripts: no search field, the list itself; its links lead to the lines' files.
+        await pick.locator('summary').click();
+        await expect(pick.locator('.sp-rodpick-q')).toBeHidden();
+        const link = pick.locator('.sp-rodpick-rod a.sp-rodpick-a', { hasText: 'Hollberg' });
+        await expect(link).toBeVisible();
+        await expect(link).toHaveAttribute('href', /\.html(#.*)?$/);
+        await link.click();
+        await expect(file.locator('section.sp-page--rod')).toBeVisible();
+        await expect(file.locator('.sp-fbar .sp-rodpick-btn')).toContainText('Hollberg');
+        await ctx.close();
+    });
+});
+
+test.describe('the whole tree\'s pages on a phone (1102)', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the window fits 390 px; the choice of a line is a full-width panel with rows of 44 px', async ({ page }) => {
+        await setup(page);
+        const win = await treePagesFromOverview(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        expect(await win.locator('.pp-body').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        const pick = win.locator('.sp-fbar details.sp-rodpick');
+        await pick.locator('.sp-rodpick-btn').tap();
+        const pop = pick.locator('.sp-rodpick-pop');
+        await expect(pop).toBeVisible();
+        const box = (await pop.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(-1);
+        expect(box.x + box.width).toBeLessThanOrEqual(391);
+        for (const h of await pick.locator('.sp-rodpick-a').evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) {
+            expect(h).toBeGreaterThanOrEqual(44);
+        }
+        await pick.locator('.sp-rodpick-rod .sp-rodpick-a', { hasText: 'Brandvold' }).tap();
+        await expect(win.locator('.pp-body section.sp-page--rod')).toBeVisible();
+        await expect(win.locator('#pp-title')).toContainText('Brandvold');
     });
 });

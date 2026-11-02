@@ -858,6 +858,61 @@ export function personRodRow(index: LineageIndex, personId: PersonId): PersonRod
     return { kind: 'member', rodId: own.id, marriedInto: into };
 }
 
+/** Where a person stands for the breadcrumbs of the whole tree's pages (spec 026 P3 §2.1). */
+export interface CrumbRod {
+    /** The lineage the person is shown under; null: none (the set's "Other families"). */
+    rodId: RodId | null;
+    /** Married in: the union with the spouse of that lineage (the family crumb); null for a member. */
+    unionId: PartnershipId | null;
+}
+
+/**
+ * The lineage a person's page stands under in the whole tree (spec 026 P3
+ * §2.1). A spouse who married in (their row is "wife in …", or a daughter of
+ * a big lineage who took the surname of her husband's big lineage, recorded
+ * as her married surname) stands under the husband's lineage, through the
+ * family of the last such marriage; everyone else under their own lineage
+ * (a daughter married elsewhere keeps hers). Small lineages are the caller's
+ * to place ("Other families").
+ */
+export function rodOfPersonForCrumbs(index: LineageIndex, personId: PersonId): CrumbRod {
+    const { data } = index;
+    const p = data.persons[personId];
+    if (!p || p.isPlaceholder) return { rodId: null, unionId: null };
+    const ownId = rodOf(index, personId);
+    const own = ownId ? index.rods.get(ownId) ?? null : null;
+    // The last marriage into another big lineage (by year, else by the order of the unions).
+    let best: { rodId: RodId; unionId: PartnershipId; year: number; at: number } | null = null;
+    p.partnerships.forEach((uid, at) => {
+        const u = data.partnerships[uid];
+        if (!u) return;
+        const spouseId = u.person1Id === personId ? u.person2Id : u.person1Id;
+        if (!spouseId || lineCarrier(data, u) !== spouseId) return;
+        const rodId = rodOf(index, spouseId);
+        const rod = rodId ? index.rods.get(rodId) : undefined;
+        if (!rod || rod.small || rodId === ownId) return;
+        const year = yearOf(u.startDate) ?? -Infinity;
+        if (!best || year > best.year || (year === best.year && at > best.at)) best = { rodId: rod.id, unionId: uid, year, at };
+    });
+    const into = best as { rodId: RodId; unionId: PartnershipId } | null;
+    const row = personRodRow(index, personId);
+    if (row?.kind === 'spouse') {
+        if (into) return { rodId: into.rodId, unionId: into.unionId };
+        const uid = p.partnerships.find(id => {
+            const u = data.partnerships[id];
+            const s = u ? (u.person1Id === personId ? u.person2Id : u.person1Id) : null;
+            return !!s && rodOf(index, s) === row.rodId;
+        });
+        return { rodId: row.rodId, unionId: uid ?? null };
+    }
+    if (own && !own.small && into && p.gender === 'female') {
+        const married = p.marriedSurname?.trim();
+        const rod = index.rods.get(into.rodId)!;
+        if (married && [rod.surname, ...rod.forms].some(f => sameSurname(married, f, data))) return { rodId: into.rodId, unionId: into.unionId };
+    }
+    return { rodId: own?.id ?? null, unionId: null };
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 

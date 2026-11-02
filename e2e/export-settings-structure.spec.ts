@@ -30,7 +30,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     ]);
     expect(en[0].rows).toEqual(['Send to a relative']);
     expect(save).toEqual(['App with data (HTML)', 'Data backup (JSON)']);
-    expect(en[2].rows).toEqual(['Poster', 'Family book', 'Family pages']);
+    expect(en[2].rows).toEqual(['Poster', 'Family book', 'Linked pages']);
     expect(en[3].rows).toEqual(['GEDCOM', 'Person table (CSV)']);
 
     // Every row explains format/destination in its description.
@@ -53,7 +53,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     expect(cs.map((g) => g.group.toLowerCase())).toEqual([
         'sdílet', 'uložit a zálohovat', 'tisk a obraz', 'pro jiné programy',
     ]);
-    expect(cs[2].rows).toEqual(['Plakát', 'Kniha rodu', 'Stránky rodu']);
+    expect(cs[2].rows).toEqual(['Plakát', 'Kniha rodu', 'Propojené stránky']);
     await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Celý strom', 'Jen aktuální pohled (1 osoba)']);
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 
