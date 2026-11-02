@@ -18,7 +18,8 @@ import { yearOf } from './dates.js';
 import { placeAliasMap, variantGroupKey } from './place-groups.js';
 import { placeKey } from './places.js';
 import { shownNameOrEmpty, shownNameParts } from './person-name.js';
-import { feminineForm } from './surnames.js';
+import { feminineForm, isGapOnlyName } from './surnames.js';
+export { isGapOnlyName };
 import { asciiSlug } from './filenames.js';
 import { normalizeSearchText, searchableSurnames, alternateNames } from './name-search.js';
 import {
@@ -214,12 +215,6 @@ const TRANSCRIPTION_GAP = /\[[^\]]*\]/gu;
 
 /** The index key of the names that start with an unreadable place ("[?]a[?]har"): after the letters, before those without a surname (1102). */
 export const INDEX_UNCERTAIN = '?';
-
-/** A surname that is only unreadable places ("[?]", "[?] [?]"): no surname for the index (1102). */
-export function isGapOnlyName(text: string): boolean {
-    const t = text.trim();
-    return !!t && !/\p{L}/u.test(t.replace(TRANSCRIPTION_GAP, ''));
-}
 
 /**
  * The letter an index groups a name under (§3.5): Czech "Ch" is a letter of its own

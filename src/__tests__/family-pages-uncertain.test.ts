@@ -96,6 +96,9 @@ describe('the index split by letters with "[?]" surnames (1102)', () => {
         expect(html).toContain('[?]o[?]ral');
         expect(html).toContain('[?]ebrouch');
         expect(html).not.toMatch(/sp-ix-letter">\[\?\]</);
+        // "[?]" of some members is no form of the line's name.
+        expect(html).not.toContain('[?] ·');
+        expect(html).not.toMatch(/sp-ix-forms">[^<]*\[\?\](?![a-zA-Z\[])/);
         // The other letters' pages name it too.
         const first = pageSetSectionHtml(set, letters[0].slug);
         expect(first).toMatch(/title="Nejisté čtení" aria-label="Nejisté čtení"[^>]*>\?</);

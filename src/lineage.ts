@@ -54,7 +54,7 @@
 
 import { LineageOverrides, Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
 import {
-    addSurnameGroup, czechRulesApply, feminineForm, removeSurnameForm, sameSurname, surnameKey, withSurnameRules,
+    addSurnameGroup, czechRulesApply, feminineForm, isGapOnlyName, removeSurnameForm, sameSurname, surnameKey, withSurnameRules,
 } from './surnames.js';
 import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
@@ -1138,7 +1138,8 @@ export function rodNameForms(rod: Rod, data: StromData): { forms: string[]; femi
         const forms: string[] = [];
         const add = (f: string): void => {
             const t = f.trim();
-            if (t && !forms.some(o => surnameKey(o) === surnameKey(t))) forms.push(t);
+            // An unknown surname ("[?]") is no form of the line's name (1102).
+            if (t && (!forms.length || !isGapOnlyName(t)) && !forms.some(o => surnameKey(o) === surnameKey(t))) forms.push(t);
         };
         add(rod.surname);
         const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === surnameKey(rod.surname)));

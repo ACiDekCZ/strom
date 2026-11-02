@@ -120,6 +120,12 @@ function masculineCandidates(surname: string): string[] {
     return out;
 }
 
+/** A surname that is only unreadable places of a transcription ("[?]", "[?] [nečitelné]"): an unknown surname, no form of one (1102). */
+export function isGapOnlyName(text: string): boolean {
+    const t = text.trim();
+    return !!t && !/\p{L}/u.test(t.replace(/\[[^\]]*\]/gu, ''));
+}
+
 /**
  * The feminine form of a Czech masculine surname — the same rules read the other
  * way, so that searching either form reaches the whole family. Without it,
