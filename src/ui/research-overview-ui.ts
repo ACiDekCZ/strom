@@ -23,7 +23,7 @@ import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
-    WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
+    PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
 } from '../research-waiting.js';
 import { formatLiveClock } from '../live-time.js';
@@ -509,9 +509,10 @@ export const researchOverviewMethods = uiModule({
         gh.setAttribute('aria-expanded', String(open));
         const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
         chevron.setAttribute('aria-hidden', 'true');
-        const name = g.group?.name ?? L.waitingOtherGroup;
+        const places = g.key === PLACES_GROUP;
+        const name = places ? strings.places.waiting.group : g.group?.name ?? L.waitingOtherGroup;
         const title = el('span', 'research-overview__group-title', name);
-        const kind = L.waitingGroupKinds[g.group?.kind ?? 'other'];
+        const kind = places ? name : L.waitingGroupKinds[g.group?.kind ?? 'other'];
         gh.append(chevron, title);
         if (kind !== name) gh.appendChild(el('span', 'research-overview__group-kind', kind));
         gh.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
@@ -536,6 +537,21 @@ export const researchOverviewMethods = uiModule({
         const W = L.waitingWrite;
         const name = g.group?.name ?? L.waitingOtherGroup;
         const box = el('div', 'research-overview__waiting-groupactions');
+        // The questions about places: answered in their own window (the bridge takes them).
+        if (g.key === PLACES_GROUP) {
+            if (phase !== 'todo' || !this.waitingPlacesAccess().canAnswer) return null;
+            const P = strings.places.waiting;
+            const btn = el('button', 'live-waiting-answer research-overview__waiting-groupwrite research-overview__waiting-places', P.answer);
+            btn.type = 'button';
+            btn.dataset.action = 'places';
+            btn.setAttribute('aria-label', `${P.answer} · ${P.group}`);
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                this.showWaitingPlaces();
+            };
+            box.appendChild(btn);
+            return box;
+        }
         const task = mode === 'sheet' ? null : waitingGroupChatTask(g.items);
         const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
         if (url) {
@@ -691,6 +707,15 @@ export const researchOverviewMethods = uiModule({
     appendWaitingActions(host: HTMLElement, w: LiveWaiting, s: LiveSession, mode: Mode): boolean {
         const L = strings.live;
         const W = L.waitingWrite;
+        // A question about a place: its card, answered through the bridge (without it: as any item).
+        if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) {
+            const btn = el('button', 'live-waiting-answer research-overview__waiting-action is-primary', strings.places.waiting.answer);
+            btn.type = 'button';
+            btn.dataset.action = 'place';
+            btn.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
+            host.appendChild(btn);
+            return false;
+        }
         const offered = waitingTaskActions(w);
         const task = researchTaskRef(w.id);
         const writes = this.liveWaitingWrites(s);

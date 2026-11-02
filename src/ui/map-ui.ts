@@ -221,7 +221,7 @@ export const mapMethods = uiModule({
     /** The bar's actions after the map's own lookup. */
     mapBarAction(action: MapBarAction): void {
         if (action === 'geocode') { void this.startGeocoding(); return; }
-        if (action === 'confirm') { this.showResearchWaiting(); return; }
+        if (action === 'confirm') { this.openWaitingPlaces(); return; }
         this.showPlacesManager(undefined, undefined, undefined, { unplaced: action === 'research' });
         if (action === 'research' && document.getElementById('places-modal')) this.openPlacesBulk('look');
     },

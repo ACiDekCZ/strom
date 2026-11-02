@@ -161,17 +161,64 @@ export interface FakePlaces {
     identify: Record<string, unknown>[];
     /** The answer to `POST /places/identify` (default: every form queued or cancelled, nothing skipped). */
     identifyReply?: (body: Record<string, unknown>) => { status: number; body: unknown };
+    /** Every `POST /places/answer` body, parsed (`places.answer` in `features`). */
+    answers: Record<string, unknown>[];
+    /** Every `POST /places/undo` body, parsed (`places.undo` in `features`). */
+    undos: Record<string, unknown>[];
+    /**
+     * The answer to `POST /places/answer` (default: the questions answered go
+     * from `/status.waiting`, one undo id per step; `dry`: 3 facts a place).
+     */
+    answerReply?: (body: Record<string, unknown>) => { status: number; body: unknown } | null;
+    /** The answer to `POST /places/undo` (default: the step's questions come back to `/status.waiting`). */
+    undoReply?: (body: Record<string, unknown>) => { status: number; body: unknown } | null;
+    /** What each undo id took out of `/status.waiting`. */
+    steps?: Map<string, unknown[]>;
 }
 
 export function fakePlaces(init: Partial<FakePlaces> = {}): FakePlaces {
-    return { reply: { rev: 'p1', places: {}, forms: {} }, reads: 0, identify: [], ...init };
+    return { reply: { rev: 'p1', places: {}, forms: {} }, reads: 0, identify: [], answers: [], undos: [], ...init };
+}
+
+/** The default `POST /places/answer`: answered questions leave the waiting list, an undo id per step. */
+function answerPlaces(b: FakeBridge, p: FakePlaces, body: Record<string, unknown>): { status: number; body: unknown } {
+    const ids = typeof body.place === 'string' ? [body.place] : Array.isArray(body.places) ? body.places as string[] : [];
+    if (body.dry) return { status: 200, body: { places: ids.length, facts: ids.length * 3 } };
+    const waiting = b.waiting ?? [];
+    const taken = waiting.filter(w => ids.includes((w as { id?: string }).id ?? ''));
+    b.waiting = waiting.filter(w => !taken.includes(w));
+    p.steps ??= new Map();
+    const undo = `U${p.steps.size + 1}`;
+    p.steps.set(undo, taken);
+    return typeof body.place === 'string'
+        ? { status: 200, body: { ok: true, place: { id: body.place, names: ['Horní Lhota'], state: 'identified' }, undo } }
+        : { status: 200, body: { ok: true, done: taken.map(w => (w as { id: string }).id), skipped: [], undo } };
 }
 
 /** The answer to `/places*` (null: not it; 404 when not said in `features`). */
 function servePlaces(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
-    if (!/\/places(\/identify)?$/.test(url.pathname)) return null;
+    if (!/\/places(\/identify|\/answer|\/undo)?$/.test(url.pathname)) return null;
     const p = b.places;
-    if (!p || !(b.features ?? []).includes('places.identify')) return { status: 404, body: { error: 'unknown' } };
+    const has = (f: string): boolean => (b.features ?? []).includes(f);
+    if (url.pathname.endsWith('/answer') || url.pathname.endsWith('/undo')) {
+        const answer = url.pathname.endsWith('/answer');
+        if (!p || !has(answer ? 'places.answer' : 'places.undo')) return { status: 404, body: { error: 'unknown' } };
+        if (method !== 'POST') return { status: 405, body: { error: 'method' } };
+        const body = JSON.parse(posted ?? '{}') as Record<string, unknown>;
+        if (answer) {
+            p.answers.push(body);
+            return p.answerReply?.(body) ?? answerPlaces(b, p, body);
+        }
+        p.undos.push(body);
+        const own = p.undoReply?.(body);
+        if (own) return own;
+        const back = p.steps?.get(String(body.undo));
+        if (!back) return { status: 409, body: { code: 'places.undo.later', error: 'later' } };
+        p.steps!.delete(String(body.undo));
+        b.waiting = [...back, ...(b.waiting ?? [])];
+        return { status: 200, body: { ok: true } };
+    }
+    if (!p || !has('places.identify')) return { status: 404, body: { error: 'unknown' } };
     if (method === 'GET' && url.pathname.endsWith('/places')) {
         p.reads++;
         return { status: 200, body: p.reply };

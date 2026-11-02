@@ -337,7 +337,7 @@ export const placesIdentifyMethods = uiModule({
         const act = top.querySelector<HTMLButtonElement>('.places-context-act');
         if (act) act.onclick = () => {
             const kind = top.querySelector<HTMLElement>('.places-context')?.dataset.context;
-            if (kind === 'confirm') { this.closePlacesManager(); this.showResearchWaiting(); return; }
+            if (kind === 'confirm') { this.closePlacesManager(); this.openWaitingPlaces(); return; }
             if (kind === 'none') { this.openPlacesBulk('look'); return; }
             if (kind === 'check') { this.openPlacesBulk('check'); return; }
             if (kind === 'queue') {

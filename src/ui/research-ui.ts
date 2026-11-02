@@ -2955,7 +2955,14 @@ export const researchUiMethods = uiModule({
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
             li.appendChild(text);
-            if (answerable && this.canAnswerResearchWaiting(w)) {
+            if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) {
+                // A question about a place: its card, answered through the bridge.
+                const answer = el('button', 'live-waiting-answer', strings.places.waiting.answer);
+                answer.type = 'button';
+                answer.dataset.action = 'place';
+                answer.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
+                li.appendChild(answer);
+            } else if (answerable && this.canAnswerResearchWaiting(w)) {
                 const answer = setResearchOpenLabel(el('button', 'live-waiting-answer'), r.answer);
                 answer.type = 'button';
                 answer.onclick = () => this.answerResearchTask(w);

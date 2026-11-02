@@ -16,6 +16,8 @@ export type WaitingFilter = 'all' | WaitingSection;
 export const PANEL_WAITING = 5;
 /** The group items without a place of their own go to (always at the bottom). */
 export const OTHER_GROUP = 'other';
+/** The group every question about places goes under (spec 034 §9). */
+export const PLACES_GROUP = 'places';
 
 export function waitingPhase(w: LiveWaiting): WaitingPhase {
     return w.phase === 'sent' ? 'sent' : 'todo';
@@ -76,14 +78,16 @@ export interface WaitingGroupRows<T extends LiveWaiting = LiveWaiting> {
 export function groupWaiting<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
     const groups = new Map<string, WaitingGroupRows<T>>();
     for (const w of orderWaiting(items)) {
-        const key = w.group?.key ?? OTHER_GROUP;
+        // The research's questions about places go under one group "Places", whatever group they name.
+        const place = w.kind === 'place';
+        const key = place ? PLACES_GROUP : w.group?.key ?? OTHER_GROUP;
         let g = groups.get(key);
         if (!g) {
-            g = { key, group: w.group ?? null, items: [] };
+            g = { key, group: place ? null : w.group ?? null, items: [] };
             groups.set(key, g);
         }
         // An item without a place joins "other" under the research's name for it, when one came.
-        if (!g.group && w.group) g.group = w.group;
+        if (!g.group && w.group && !place) g.group = w.group;
         g.items.push(w);
     }
     const list = [...groups.values()];

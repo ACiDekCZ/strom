@@ -782,7 +782,11 @@ export const placesManagerMethods = uiModule({
         for (const b of own<HTMLButtonElement>('.place-look')) b.onclick = () => void this.queuePlaces([key], false);
         for (const b of own<HTMLButtonElement>('.place-check')) b.onclick = () => void this.queuePlaces([key], true);
         for (const b of own<HTMLButtonElement>('.place-unqueue')) b.onclick = () => void this.unqueuePlaceForms([...(managerPlaces.get(key)?.variants.keys() ?? [])], [key]);
-        for (const b of own<HTMLButtonElement>('.place-answer')) b.onclick = () => { this.closePlacesManager(); this.showResearchWaiting(); };
+        for (const b of own<HTMLButtonElement>('.place-answer')) b.onclick = () => {
+            const waiting = placesView.ids.get(key)?.waitingId;
+            this.closePlacesManager();
+            this.openWaitingPlaces(waiting);
+        };
         for (const b of own<HTMLButtonElement>('.place-keep')) b.onclick = () => this.keepPlaceLocation(key);
         for (const b of own<HTMLButtonElement>('.place-why-toggle')) b.onclick = () => this.togglePlaceWhy(row, key);
         const rename = row.querySelector<HTMLButtonElement>('.place-rename-open');

@@ -139,7 +139,7 @@ export const placeMenuMethods = uiModule({
     runPlaceMenu(action: PlaceMenuAction, key: string, id: PlaceIdentity): void {
         switch (action) {
             case 'answer':
-                this.leavePersonModalThen(() => this.showResearchWaiting());
+                this.leavePersonModalThen(() => this.openWaitingPlaces(id.waitingId));
                 return;
             case 'find':
                 this.leavePersonModalThen(() => this.showPlacesManager(key, undefined, 'tree'));

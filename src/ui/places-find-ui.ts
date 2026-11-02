@@ -48,21 +48,21 @@ const HAND_STEP = 48;
 const HAND_ZOOM = 11;
 
 /** A small map's view and its tiles, kept per element so a redraw only moves them. */
-interface SmallMapView { center: PlaceGeo; zoom: number }
+export interface SmallMapView { center: PlaceGeo; zoom: number }
 const tileCache = new WeakMap<HTMLElement, Map<string, HTMLImageElement>>();
 
 /** The tiles may be drawn: the map background was shown once (the same notice as the map's). */
-function tilesAllowed(): boolean {
+export function tilesAllowed(): boolean {
     return SettingsManager.isMapTilesAcknowledged();
 }
 
 /** The size of a small map as laid out, else its nominal size (not laid out yet). */
-function mapSize(el: HTMLElement, w: number, h: number): { width: number; height: number } {
+export function mapSize(el: HTMLElement, w: number, h: number): { width: number; height: number } {
     return { width: el.clientWidth || w, height: el.clientHeight || h };
 }
 
 /** Draw a small map's tiles (only when the background may load), kept by identity across redraws. */
-function drawTiles(layer: HTMLElement, view: SmallMapView, width: number, height: number): void {
+export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number, height: number): void {
     if (!tilesAllowed()) return;
     const live = tileCache.get(layer) ?? new Map<string, HTMLImageElement>();
     tileCache.set(layer, live);
@@ -89,7 +89,7 @@ function drawTiles(layer: HTMLElement, view: SmallMapView, width: number, height
 }
 
 /** The tree's places as grey dots of a small map. */
-function dotsHtml(tree: readonly FindTreePoint[], view: SmallMapView, width: number, height: number, esc: (s: string) => string): string {
+export function dotsHtml(tree: readonly FindTreePoint[], view: SmallMapView, width: number, height: number, esc: (s: string) => string): string {
     return tree.map(p => {
         const at = pointInViewport(p, view.center, view.zoom, width, height);
         if (at.x < -8 || at.y < -8 || at.x > width + 8 || at.y > height + 8) return '';
