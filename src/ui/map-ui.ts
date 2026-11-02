@@ -31,6 +31,7 @@ import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
+import { pickMapLabels, type LabelBox } from '../map-labels.js';
 import { mapSpellingPlaces } from '../place-groups.js';
 import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
@@ -87,6 +88,29 @@ interface MapMarkerInfo {
     display: string;
     /** Houses of a town point (the "⌂ N" tag), 0 for a place. */
     houses: number;
+}
+
+
+/**
+ * Nearby points: hide the names that would cover another name or another
+ * point's dot (kept by people, most first). A hidden name stays in the
+ * marker's accessible name and shows on hover or focus. Phones show no names.
+ */
+function declutterMapLabels(layer: HTMLElement): void {
+    if (window.matchMedia(MQ_MOBILE).matches) return;
+    const markers = Array.from(layer.querySelectorAll<HTMLElement>('.map-marker'));
+    if (markers.length < 2) return;
+    const box = (el: Element | null): LabelBox => {
+        const r = el?.getBoundingClientRect();
+        return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : { left: 0, top: 0, right: 0, bottom: 0 };
+    };
+    const candidates = markers.map(m => ({
+        label: box(m.querySelector('.map-marker-label')),
+        own: Array.from(m.querySelectorAll('.map-marker-dot, .map-marker-check, .map-marker-houses')).map(box),
+        weight: Number(m.querySelector('.map-marker-dot')?.textContent) || 0,
+    }));
+    const keep = pickMapLabels(candidates);
+    markers.forEach((m, i) => m.querySelector('.map-marker-label')?.classList.toggle('is-crowded', !keep[i]));
 }
 
 export const mapMethods = uiModule({
@@ -587,6 +611,7 @@ export const mapMethods = uiModule({
             const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
             return this.mapMarkerHtml(info, persons, false, width, height, check);
         }).join('');
+        declutterMapLabels(layer);
     },
 
     /**
@@ -724,6 +749,7 @@ export const mapMethods = uiModule({
             const fresh = upto.some(p => p.year > year - 10);
             return this.mapMarkerHtml(tp, persons, fresh, width, height);
         }).join('');
+        declutterMapLabels(markers);
 
         if (!lines) return;
         const margin = 100;

@@ -385,6 +385,14 @@ export const PLACE_STATE_GLYPHS: Readonly<Record<PlaceState, string>> = {
     none: '○', queued: '◌', running: '◐', confirm: '?', undet: '⊘', check: '!', verified: '✓', placed: '⌖', town: '⌖',
 };
 
+/**
+ * The extra class of a glyph's span: fonts draw the queue's ◌ as a plain circle
+ * (an empty radio button), so CSS draws it as a small dashed ring instead.
+ */
+export function placeGlyphClass(glyph: string): string {
+    return glyph === PLACE_STATE_GLYPHS.queued ? 'place-glyph-queued' : '';
+}
+
 export const PLACE_ORIGIN_GLYPHS: Readonly<Record<PlaceOrigin, string>> = {
     research: '◆', hand: '✛', map: '⌖', other: '⇄',
 };
@@ -447,7 +455,7 @@ export function placeStateBadge(id: PlaceIdentity, lang: Language, opts: PlaceBa
     if (id.state === 'placed') return placeOriginBadge(id.origin ?? 'map', lang, id.at, opts);
     const cls = ['place-state', opts.small ? 'is-small' : '', opts.className ?? ''].filter(Boolean).join(' ');
     const title = id.state === 'running' ? ` title="${esc(getStringsForLang(lang).places.state.runningTitle)}"` : '';
-    const badge = `<span class="${cls}" data-state="${id.state}"${title}><span aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(placeStateText(id, lang, opts.small))}</span>`;
+    const badge = `<span class="${cls}" data-state="${id.state}"${title}><span${placeGlyphClass(PLACE_STATE_GLYPHS[id.state]) ? ` class="${placeGlyphClass(PLACE_STATE_GLYPHS[id.state])}"` : ''} aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(placeStateText(id, lang, opts.small))}</span>`;
     const withOrigin = opts.origin && id.origin && (id.state === 'verified' || id.state === 'check' || id.state === 'town');
     // A confirmed place says the date in its own badge; its origin badge without it.
     return withOrigin ? `${badge} ${placeOriginBadge(id.origin!, lang, id.state === 'verified' ? undefined : id.at, opts)}` : badge;

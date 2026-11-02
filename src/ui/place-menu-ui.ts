@@ -9,7 +9,7 @@
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { collectPlaces, placeKey } from '../places.js';
-import { placeStateBadge, placeStateText, PLACE_STATE_GLYPHS, type PlaceIdentity } from '../place-identity.js';
+import { placeStateBadge, placeStateText, PLACE_STATE_GLYPHS, placeGlyphClass, type PlaceIdentity } from '../place-identity.js';
 import { placeMenu, placeMenuBadge, type PlaceMenuAction } from '../place-actions.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { uiModule } from './module.js';
@@ -98,7 +98,7 @@ export const placeMenuMethods = uiModule({
         };
         const stateLine = placeStateText(id, lang) + (id.state === 'undet' && id.why ? `: ${id.why}` : '');
         const head = `<div class="place-menu-head" role="presentation"><strong class="place-menu-name">${esc(place)}</strong>`
-            + `<span class="place-menu-state" data-state="${id.state}"><span aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(stateLine)}</span></div>`;
+            + `<span class="place-menu-state" data-state="${id.state}"><span class="${placeGlyphClass(PLACE_STATE_GLYPHS[id.state])}" aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(stateLine)}</span></div>`;
         const items = menu.items.map(it => `<button type="button" role="menuitem" class="place-menu-item${it.primary ? ' is-primary' : ''}" data-action="${it.action}">`
             + `${it.research ? '<span class="place-menu-diamond" aria-hidden="true">◆</span> ' : ''}${esc(labels[it.action])}</button>`).join('');
         const note = menu.note ? `<p class="place-menu-note">${esc(s.menu.note)}</p>` : '';

@@ -14,7 +14,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { collectPlaces, type PlaceUsage } from '../places.js';
 import {
     placeIdentities, placeStateSummary, placeSummaryChips, bulkCounts, bulkLookPreview, bulkCheckPreview,
-    placeOriginBadge, formatPlaceDate, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
+    placeOriginBadge, formatPlaceDate, placeGlyphClass, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
 } from '../place-identity.js';
 import {
     fetchBridgePlaces, postPlacesIdentify, placeCheckFlag, withBridgePlace, PLACES_IDENTIFY_FEATURE,
@@ -197,7 +197,7 @@ export const placesIdentifyMethods = uiModule({
         const f = this.placesFilter.state;
         const chips = placeSummaryChips(summary, !!ctx.researchId).map(c => `
             <button type="button" class="places-chip" data-filter="${c}" aria-pressed="${f === c}">
-                <span class="places-chip-icon" aria-hidden="true">${CHIP_GLYPHS[c]}</span>${this.escapeHtml(d.chip[c])}
+                <span class="places-chip-icon ${placeGlyphClass(CHIP_GLYPHS[c])}" aria-hidden="true">${CHIP_GLYPHS[c]}</span>${this.escapeHtml(d.chip[c])}
                 <span class="places-chip-n">${summary[c]}</span>
             </button>`).join('');
         const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
@@ -244,7 +244,7 @@ export const placesIdentifyMethods = uiModule({
         const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
         const line = (icon: string, tone: string, text: string, act?: { label: string; cls: string; title?: string }): string => `
             <div class="places-context" data-context="${kind}">
-                <span class="places-context-icon" data-tone="${tone}" aria-hidden="true">${icon}</span>
+                <span class="places-context-icon ${placeGlyphClass(icon)}" data-tone="${tone}" aria-hidden="true">${icon}</span>
                 <span class="places-context-text">${this.escapeHtml(text)}</span>
                 ${act ? `<button type="button" class="places-context-act ${act.cls}"${act.title ? ` title="${this.escapeHtml(act.title)}"` : ''}>${this.escapeHtml(act.label)}</button>` : ''}
             </div>`;

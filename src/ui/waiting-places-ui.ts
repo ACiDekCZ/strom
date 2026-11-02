@@ -168,7 +168,9 @@ export const waitingPlacesMethods = uiModule({
             card.scrollIntoView({ block: 'start' });
             card.querySelector<HTMLElement>('button:not([disabled])')?.focus();
         } else {
-            (overlay.querySelector('#waiting-places-close') as HTMLButtonElement).focus();
+            // A phone held sideways hides the footer: the header's × takes the focus.
+            const close = overlay.querySelector('#waiting-places-close') as HTMLButtonElement;
+            (close.offsetParent ? close : overlay.querySelector('#waiting-places-x') as HTMLButtonElement).focus();
         }
         // What the research says now (an older list may be shown first).
         void this.refreshWaitingPlacesStatus();
