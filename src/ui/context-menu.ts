@@ -18,6 +18,8 @@ import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { menuOffersLineJumps } from '../card-tap.js';
 import { personStoryChapterCount } from '../story-text.js';
+import { LineageIndex, RodId, realRodMembers, rodOf, spouseRodsOf } from '../lineage.js';
+import { clearRodSelection, getSelectedRod, rodIndex, setRodSelection } from './rod-view.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -26,6 +28,10 @@ const LINE_JUMP_PARENTS_ACTION = 'line-jump-parents';
 const LINE_JUMP_CHILDREN_ACTION = 'line-jump-children';
 /** The menu action of a name under "∞ Other partners" (+ the marriage's id, round 7 §50). */
 const PARTNER_HERE_ACTION = 'partner-here:';
+/** The menu action "Only the X line" (+ the line's id, spec 039 §2.1). */
+const ROD_ONLY_ACTION = 'rod-only:';
+/** The menu action "Show the whole tree" on the person's chosen line. */
+const ROD_CLEAR_ACTION = 'rod-clear';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -100,6 +106,38 @@ export function submenuRow(action: string, label: string, items: PersonMenuActio
 /** A group of rows: a divider before the first. */
 function group(items: PersonMenuAction[]): PersonMenuAction[] {
     return items.map((a, i) => (i === 0 ? { ...a, divider: true } : a));
+}
+
+/**
+ * "Only the X line" (spec 039 §2.1): the person's birth line first, then the
+ * lines they married into, each with at least two real members. One line:
+ * one row; two: two rows with "birth" / "wife" or "husband" as the meta;
+ * three and more: "Only one line ›". The chosen line's row shows the whole
+ * tree again instead. Views only: offered in every variant of the menu.
+ */
+export function rodMenuRows(index: LineageIndex, labels: ReadonlyMap<RodId, string>, personId: PersonId, selected: RodId | null): PersonMenuAction[] {
+    const person = index.data.persons[personId];
+    if (!person || person.isPlaceholder) return [];
+    const shown = (id: RodId): boolean => realRodMembers(index, id).length >= 2;
+    const own = rodOf(index, personId);
+    const birth = own && shown(own) ? own : null;
+    const married = spouseRodsOf(index, personId).filter(id => id !== own && shown(id));
+    const ids = [...(birth ? [birth] : []), ...married];
+    if (ids.length === 0) return [];
+    const r = strings.rodView;
+    const spouseMeta = person.gender === 'female' ? r.wife : person.gender === 'male' ? r.husband : undefined;
+    const label = (id: RodId): string => labels.get(id) ?? index.rods.get(id)?.surname ?? '';
+    const whole: PersonMenuAction[] = selected && ids.includes(selected)
+        ? [{ action: ROD_CLEAR_ACTION, label: r.whole, kind: 'focus' }] : [];
+    const rows: PersonMenuAction[] = ids.filter(id => id !== selected).map(id => ({
+        action: ROD_ONLY_ACTION + id, label: r.only(label(id)), kind: 'focus' as const,
+        ...(ids.length >= 2 ? { meta: id === birth ? r.birth : spouseMeta } : {}),
+    }));
+    if (ids.length < 3) {
+        // In the person's order: the chosen line's row (the whole tree) where that line stands.
+        return ids.map(id => (id === selected ? whole[0] : rows.find(a => a.action === ROD_ONLY_ACTION + id)!));
+    }
+    return [...whole, ...submenuRow('rod-only', r.onlySub, rows).map(a => ({ ...a, kind: 'focus' as const }))];
 }
 
 /** Label (+ the quiet right-aligned meta, AI label, the research's mark) of a person menu item, escaped. */
@@ -212,11 +250,15 @@ export const contextMenuMethods = uiModule({
             ...this.otherPartnersRows(personId),
         ];
         const children: PersonMenuAction[] = [...inPlace, ...this.elsewhereRows(personId)];
+        // "Only the X line" (spec 039 §2.1): a view, so in every variant, after the person's own rows.
+        const { index, labels } = rodIndex();
+        const rodRows = rodMenuRows(index, labels, personId, getSelectedRod());
         if (isViewMode) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
                 ...children,
                 ...readItems(false),
+                ...rodRows,
                 ...group([
                     { action: 'relationship', label: c.relationship },
                     { action: 'archives', label: c.archives },
@@ -231,6 +273,7 @@ export const contextMenuMethods = uiModule({
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: c.view },
                 ...readItems(false),
+                ...rodRows,
                 ...group([
                     ...research,
                     ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
@@ -244,6 +287,7 @@ export const contextMenuMethods = uiModule({
             { action: 'edit', label: c.edit },
             ...readItems(true),
             { action: 'descendants', label: c.showDescendants, kind: 'focus' },
+            ...rodRows,
             {
                 action: 'add', label: c.addSection, header: c.addSection, divider: true, chips: [
                     ...(DataManager.parentSlotFree(person.id) ? [chip('parent', c.chipParent, c.addParent)] : []),
@@ -388,6 +432,14 @@ export const contextMenuMethods = uiModule({
         }
         if (action.startsWith(CHILD_ELSEWHERE_ACTION)) {
             TreeRenderer.showChildElsewhereStep(action.slice(CHILD_ELSEWHERE_ACTION.length) as PersonId);
+            return;
+        }
+        if (action.startsWith(ROD_ONLY_ACTION)) {
+            setRodSelection(action.slice(ROD_ONLY_ACTION.length), 'menu');
+            return;
+        }
+        if (action === ROD_CLEAR_ACTION) {
+            clearRodSelection();
             return;
         }
         switch (action) {
