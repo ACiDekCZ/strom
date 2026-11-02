@@ -61,7 +61,8 @@ interface ToastOptions {
     closable?: boolean;
     kind?: string;
     /** `research`: it opens the research (its mark at the end, §6). */
-    action?: { label: string; run: () => void; research?: boolean };
+    /** `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too. */
+    action?: { label: string; run: () => void; research?: boolean; ai?: boolean };
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
@@ -1646,11 +1647,11 @@ export const miscMethods = uiModule({
             toast.appendChild(document.createTextNode(message));
         }
         if (opts.action) {
-            const { label, run, research } = opts.action;
+            const { label, run, research, ai } = opts.action;
             const act = document.createElement('button');
             act.type = 'button';
             act.className = 'toast-action';
-            if (research) setResearchOpenLabel(act, label);
+            if (research) setResearchOpenLabel(act, label, { ai });
             else act.textContent = label;
             act.onclick = () => {
                 toast.classList.remove('show');

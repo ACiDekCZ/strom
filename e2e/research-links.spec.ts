@@ -89,7 +89,9 @@ test('announced links: Send is one click and the excerpt opens at full quality',
     // Only the crop the research marked has an original there.
     const full = page.locator('.viewer-full-quality');
     await expect(full).toHaveCount(1);
-    await expect(full).toHaveText('Full quality, opens in the research');
+    // The excerpt opens in the system's viewer, no terminal: no mark.
+    await expect(full).toHaveText('Full quality');
+    await expect(full.locator('.research-open-mark')).toHaveCount(0);
     await full.click();
     const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
     await page.evaluate((id) => window.Strom.UI.sendTreeToResearch(id), treeId);

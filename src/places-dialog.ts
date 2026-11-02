@@ -19,16 +19,16 @@ import { getStringsForLang, type Language } from './strings.js';
 
 /**
  * What a row's state frame offers:
- * find / findQuiet: Find on the map (a button / a muted link); look / lookAgain: ◆ Look up;
+ * find / findQuiet: Find on the map (a button / a muted link); look / lookAgain: Look up;
  * unqueue: Remove from the queue; answer: Answer in Waiting; why / whyQuiet: Why here ▾;
- * keep: Keep (a check mark); change: Change (the search); check: ◆ Check; remove: Remove.
+ * keep: Keep (a check mark); change: Change (the search); check: Check; remove: Remove.
  */
 export type PlaceRowAction =
     | 'find' | 'findQuiet' | 'look' | 'lookAgain' | 'unqueue' | 'answer'
     | 'why' | 'whyQuiet' | 'keep' | 'change' | 'check' | 'remove';
 
 export interface RowActionContext {
-    /** The ◆ actions go (placesResearchContext().canResearch). */
+    /** The research's actions go (placesResearchContext().canResearch). */
     canResearch: boolean;
     /** The tree has a location of its own for the place (data.places). */
     hasGeo: boolean;
@@ -222,7 +222,7 @@ export function placesOfferStep(armed: boolean, access: PlacesResearchAccess): '
 /**
  * The one sentence over the list, by priority: another computer → phone →
  * the "To confirm" filter → "No location" (with the research here) → "Check"
- * → the queue. An old research says so only where a ◆ step would be offered.
+ * → the queue. An old research says so only where a step of the research would be offered.
  */
 export function placeContextLine(o: PlaceContextInput): PlaceContextKind | null {
     const can = o.access === 'ok';

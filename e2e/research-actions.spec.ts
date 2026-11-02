@@ -328,11 +328,11 @@ test.describe('person menu: Research ›', () => {
         const ask = sub.locator('[data-action="research-ask"]');
         await expect(ask.locator('.research-ai-badge')).toHaveText('AI');
         await expect(ask).toHaveAttribute('aria-label', 'Ask the agent, AI, opens in the research');
-        // A new direction is the agent's work: AI and the mark.
+        // A new direction: the research's terminal asks and writes its tasks, nothing paid on the click — the mark, no AI.
         const ancestors = sub.locator('[data-action="research-ancestors"]');
-        await expect(ancestors.locator('.research-ai-badge')).toHaveText('AI');
+        await expect(ancestors.locator('.research-ai-badge')).toHaveCount(0);
         await expect(ancestors.locator('.research-open-mark')).toHaveCount(1);
-        await expect(ancestors).toHaveAttribute('aria-label', 'Find ancestors, AI, opens in the research');
+        await expect(ancestors).toHaveAttribute('aria-label', 'Find ancestors, opens in the research');
         // "Review again" opens a dialog of the app first: no mark (its button carries it), the name is the label alone.
         const review = sub.locator('[data-action="research-review"]');
         await expect(review.locator('.research-open-mark')).toHaveCount(0);

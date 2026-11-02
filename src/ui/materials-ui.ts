@@ -15,13 +15,13 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { setMaterialsCountProvider } from '../card-signals.js';
-import { researchPersonRef, parseLiveBridge } from '../research-link.js';
+import { researchPersonRef, parseLiveBridge, researchLinkMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE, MATERIALS_EVENT,
@@ -703,7 +703,7 @@ export const materialsMethods = uiModule({
             const divider = i > 0 && DIVIDER_BEFORE.includes(a.id) ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.disabled ? ` aria-disabled="true" title="${esc(strings.materials.actionsWhenRunning)}"` : '';
             const danger = a.id === 'deleteFromTree' ? ' is-danger' : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger}" data-action="${a.id}"${off}>${a.id === 'openSystem' ? researchOpenLabel(ACTION_LABEL[a.id]()) : esc(ACTION_LABEL[a.id]())}</button>`;
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger}" data-action="${a.id}"${off}>${researchActionLabel(ACTION_LABEL[a.id](), a.id === 'openSystem' ? researchLinkMark('media') : 'none')}</button>`;
         }).join('');
         document.body.appendChild(menu);
         menuAnchor = anchor;

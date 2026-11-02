@@ -100,7 +100,7 @@ export const placeMenuMethods = uiModule({
         const head = `<div class="place-menu-head" role="presentation"><strong class="place-menu-name">${esc(place)}</strong>`
             + `<span class="place-menu-state" data-state="${id.state}"><span class="${placeGlyphClass(PLACE_STATE_GLYPHS[id.state])}" aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(stateLine)}</span></div>`;
         const items = menu.items.map(it => `<button type="button" role="menuitem" class="place-menu-item${it.primary ? ' is-primary' : ''}" data-action="${it.action}">`
-            + `${it.research ? '<span class="place-menu-diamond" aria-hidden="true">◆</span> ' : ''}${esc(labels[it.action])}</button>`).join('');
+            + `${esc(labels[it.action])}</button>`).join('');
         const note = menu.note ? `<p class="place-menu-note">${esc(s.menu.note)}</p>` : '';
         const label = s.menu.label(place);
         const run = (action: PlaceMenuAction): void => this.runPlaceMenu(action, info.key, id);

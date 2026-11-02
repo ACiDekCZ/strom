@@ -17,7 +17,7 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { researchPersonRef } from '../research-link.js';
+import { researchPersonRef, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
@@ -281,7 +281,7 @@ export const materialViewerMethods = uiModule({
         const type = materialType(item.mime, itemName(item));
         const systemLink = inArchive && ctx && sha && ctx.caps.links !== false
             ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
-        const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink), research: true }] : [];
+        const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink), research: researchLinkMark('media') !== 'none' }] : [];
         const startUrl = this.researchStartUrl();
         const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), primary: true, research: true }] : [];
         const fallback = () => slots.card(viewerCard(letters, m.openSystemText(ext), openSystem));
@@ -530,7 +530,7 @@ export const materialViewerMethods = uiModule({
                 else action(m.hide, () => this.materialAction('hide', [item], { where: 'viewer' }), { write: true, id: 'hide' });
             }
             const link = ctx && sha && ctx.caps.links !== false ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
-            if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: true });
+            if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: researchLinkMark('media') !== 'none' });
             if (up && sha && item.here) download(fileUrl(ctx!.base!, sha), name);
             else if (item.attachment?.dataUrl && !item.attachment.originalOnly) download(item.attachment.dataUrl, item.attachment.name);
         } else if (item.attachment) {

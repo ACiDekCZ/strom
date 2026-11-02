@@ -2,7 +2,7 @@
  * Place identification in the Places dialog (spec 034 §1–§5, §10): each
  * place's state from the tree, the app's own check and — with the research
  * on this computer — its live bridge; the summary with its state chips, the
- * context line, the ◆ steps (one place, a selection, all of them after a
+ * context line, the research's steps (one place, a selection, all of them after a
  * preview) with their Undo, "Keep" on a check mark and "Why here".
  *
  * The dialog itself (rows, search, rename, split, towns) is
@@ -14,7 +14,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { collectPlaces, knownStreets, type PlaceUsage } from '../places.js';
 import {
     placeIdentities, placeStateSummary, placeSummaryChips, bulkCounts, bulkLookPreview, bulkCheckPreview,
-    placeOriginBadge, formatPlaceDate, placeGlyphClass, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
+    placeOriginBadge, formatPlaceDate, placeGlyphClass, PLACE_STATE_GLYPHS, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
 } from '../place-identity.js';
 import {
     fetchBridgePlaces, postPlacesIdentify, placeCheckFlag, withBridgePlace, PLACES_IDENTIFY_FEATURE,
@@ -27,9 +27,11 @@ import {
     canCheck, canLookUp, groupCheckState, placeContextLine, placesOfferStep, placeWhyRows, selectionCounts,
 } from '../places-dialog.js';
 import { placeAliasMap, placeVariantGroups } from '../place-groups.js';
+import { researchLinkMark, type ResearchActionMark } from '../research-link.js';
+import { researchActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { uiModule } from './module.js';
 
-/** How long the toasts of the ◆ steps stand. */
+/** How long the toasts of the research's steps stand. */
 const TOAST_MS = 6000;
 /** How long the offer after an import or a link stands (it stays while the keyboard or pointer is on it). */
 const OFFER_MS = 15000;
@@ -216,11 +218,11 @@ export const placesIdentifyMethods = uiModule({
                 title="${this.escapeHtml(d.more)}" aria-label="${this.escapeHtml(d.more)}"><span aria-hidden="true">⋯</span></button>
             <div class="places-more" role="menu"${placesView.menu ? '' : ' hidden'}>
                 <button type="button" role="menuitem" class="places-more-item is-research" data-bulk="look"${counts.offMap ? '' : ' disabled'}>
-                    <span class="places-more-title">◆ ${this.escapeHtml(r.lookAll(counts.offMap))}</span>
+                    <span class="places-more-title">${this.escapeHtml(r.lookAll(counts.offMap))}</span>
                     <span class="places-more-sub">${this.escapeHtml(d.menuLookSub)}</span>
                 </button>
                 <button type="button" role="menuitem" class="places-more-item is-research" data-bulk="check"${counts.placed ? '' : ' disabled'}>
-                    <span class="places-more-title">◆ ${this.escapeHtml(r.checkAll(counts.placed))}</span>
+                    <span class="places-more-title">${this.escapeHtml(r.checkAll(counts.placed))}</span>
                     <span class="places-more-sub">${this.escapeHtml(d.menuCheckSub)}</span>
                 </button>
                 <span class="places-more-sep" role="separator"></span>
@@ -286,7 +288,7 @@ export const placesIdentifyMethods = uiModule({
         return bulkCounts([...ids].filter(([k]) => !same.has(k)).map(([, id]) => id)).offMap;
     },
 
-    /** Places of the whole tree with those not on the map, and the preview of looking them all up (as the map's ◆ button). */
+    /** Places of the whole tree with those not on the map, and the preview of looking them all up (as the map's button). */
     openPlacesLookAll(): void {
         this.showPlacesManager(undefined, undefined, 'tree', { unplaced: true });
         if (document.getElementById('places-modal')) this.openPlacesBulk('look');
@@ -307,11 +309,12 @@ export const placesIdentifyMethods = uiModule({
         const kind = placeContextLine({ access: ctx.access, filter: this.placesFilter.state, summary, queued });
         if (!kind) return '';
         const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
-        const line = (icon: string, tone: string, text: string, act?: { label: string; cls: string; title?: string }): string => `
+        // An action of the research carries its group's mark (Run now: the terminal and the agent); the bridge's steps none.
+        const line = (icon: string, tone: string, text: string, act?: { label: string; cls: string; title?: string; mark?: ResearchActionMark }): string => `
             <div class="places-context" data-context="${kind}">
                 <span class="places-context-icon ${placeGlyphClass(icon)}" data-tone="${tone}" aria-hidden="true">${icon}</span>
                 <span class="places-context-text">${this.escapeHtml(text)}</span>
-                ${act ? `<button type="button" class="places-context-act ${act.cls}"${act.title ? ` title="${this.escapeHtml(act.title)}"` : ''}>${this.escapeHtml(act.label)}</button>` : ''}
+                ${act ? `<button type="button" class="places-context-act ${act.cls}"${act.title ? ` title="${this.escapeHtml(act.title)}"` : ''}>${researchActionLabel(act.label, act.mark ?? 'none')}</button>` : ''}
             </div>`;
         switch (kind) {
             case 'elsewhere': return line('ⓘ', 'muted', d.elsewhere);
@@ -322,7 +325,7 @@ export const placesIdentifyMethods = uiModule({
             case 'check': return line('!', 'warn', d.ctxCheck,
                 ctx.canResearch ? { label: r.checkAll(counts.placed), cls: 'is-research' } : undefined);
             case 'queue': return line('◌', 'research', r.queueNote(queued),
-                this.placesRunLink() ? { label: r.runNow, cls: 'is-research', title: r.runNowTitle } : undefined);
+                this.placesRunLink() ? { label: r.runNow, cls: 'is-research', title: r.runNowTitle, mark: researchLinkMark('places') } : undefined);
         }
     },
 
@@ -341,7 +344,7 @@ export const placesIdentifyMethods = uiModule({
             n = p.total;
             head = d.bulkLookHead(n);
             go = d.bulkLookGo(n);
-            lines.push({ icon: '◆', tone: 'research', text: d.bulkLook(p.queue, p.again) });
+            lines.push({ icon: PLACE_STATE_GLYPHS.queued, tone: 'research', text: d.bulkLook(p.queue, p.again) });
             if (p.skipConfirm) lines.push({ icon: '–', tone: 'faint', text: d.bulkSkipConfirm(p.skipConfirm) });
             if (p.skipResearch) lines.push({ icon: '–', tone: 'faint', text: d.bulkSkipResearch(p.skipResearch) });
         } else {
@@ -464,7 +467,7 @@ export const placesIdentifyMethods = uiModule({
         this.refreshPlacesTop();
     },
 
-    // ==================== ◆ STEPS ====================
+    // ==================== RESEARCH STEPS ====================
 
     /** The app's check marks of the places, as the bridge's `flags` (by form). */
     placeCheckFlags(keys: readonly string[]): { flags?: Record<string, PlaceCheckFlag> } {
@@ -476,7 +479,7 @@ export const placesIdentifyMethods = uiModule({
         return Object.keys(flags).length ? { flags } : {};
     },
 
-    /** ◆ Look up / ◆ Check for these places (a row, or the selection). */
+    /** Look up / Check for these places (a row, or the selection). */
     async queuePlaces(keys: readonly string[], check: boolean): Promise<boolean> {
         if (!document.getElementById('places-modal')) this.preparePlacesOutside(keys);
         const take = keys.filter(k => { const id = placesView.ids.get(k); return !!id && (check ? canCheck(id) : canLookUp(id)); });
@@ -489,7 +492,7 @@ export const placesIdentifyMethods = uiModule({
     },
 
     /**
-     * A ◆ step from the map or the person card: the places' texts and states
+     * A step of the research from the map or the person card: the places' texts and states
      * from the whole tree, as the dialog would have them.
      */
     preparePlacesOutside(keys: readonly string[]): void {
@@ -567,7 +570,7 @@ export const placesIdentifyMethods = uiModule({
             default: text = res.reason || r.errFailed;
         }
         const link = res.code === 'link' ? res.link : undefined;
-        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchResearchLink(link) } } : {});
+        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {});
     },
 
     /** Take these forms out of the research's queue (a step's Undo, or "Remove from the queue"). */

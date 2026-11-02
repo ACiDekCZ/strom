@@ -206,6 +206,9 @@ test.describe('Kinds of history: aligning', () => {
         await expect(go(page)).toHaveCount(0);
         const terminal = dialog(page).locator('[data-hal="terminal"]');
         await expect(terminal).toHaveClass(/primary/);
+        // The terminal asks; nothing of an agent: the mark, no AI.
+        await expect(terminal.locator('.research-open-mark')).toHaveCount(1);
+        await expect(terminal.locator('.research-ai-badge')).toHaveCount(0);
         await expect(dialog(page).locator('.hal-terminal-note')).toHaveText("The research's terminal window completes the confirmation. The preview is the same as there.");
         // The terminal's sentence once, above the buttons; the ↻ block keeps its cost sentence.
         await expect(dialog(page).getByText('terminal window completes the confirmation')).toHaveCount(1);

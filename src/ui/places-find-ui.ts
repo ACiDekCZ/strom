@@ -9,7 +9,7 @@
  * among the tree's places; a click on a point picks it.
  *
  * Nothing found: a town nearby (the place is then "located by the town"),
- * placing by hand, and the research's way (◆ Look up), or, in a tree without
+ * placing by hand, and the research's way (Look up), or, in a tree without
  * a research, one sentence about what a research does.
  *
  * Placing by hand: a map with a fixed cross in the middle; it is dragged
@@ -267,7 +267,7 @@ export const placesFindMethods = uiModule({
         if (managerResearchActions()) {
             research = `
                 <div class="place-empty-research">
-                    <button type="button" class="place-empty-look">◆ ${esc(strings.places.research.look)}</button>
+                    <button type="button" class="place-empty-look">${esc(strings.places.research.look)}</button>
                     <p class="place-card-note">${esc(d.twoWays)}</p>
                 </div>`;
         } else if (!researchId) {

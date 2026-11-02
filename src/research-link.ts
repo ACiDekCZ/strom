@@ -49,6 +49,62 @@ export const RESEARCH_LINK_ACTIONS = [
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
+/**
+ * What an action of the research carries in the app, by what its link does there:
+ * - `none`: nothing opens a terminal (the app, the research's bridge, the system's viewer,
+ *   the app's own window filled by the research) — no mark;
+ * - `terminal`: the research's terminal opens and asks or shows (writing tasks, a confirmation,
+ *   an estimate before anything is paid) — the terminal mark;
+ * - `agent`: the terminal opens for an agent's work (a conversation, a session started on a yes,
+ *   paid by the agent's subscription) — the AI badge and the terminal mark.
+ * No other mark (no ◆, no ↗) goes with these actions; ↗ stays for the web in a new window.
+ */
+export type ResearchActionMark = 'none' | 'terminal' | 'agent';
+export const RESEARCH_ACTION_MARKS: readonly ResearchActionMark[] = ['none', 'terminal', 'agent'];
+
+/** The mark of each link by its action alone; `researchLinkMark` refines it by what is asked (`do=`). */
+export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchActionMark>> = {
+    // The research answers without a terminal: an excerpt or an original in the system's viewer,
+    // the tree into the app (as it is now, or followed live).
+    excerpt: 'none', media: 'none', app: 'none', live: 'none',
+    // Its terminal: shows, asks, writes tasks for later; nothing is paid on the click.
+    send: 'terminal', open: 'terminal', task: 'terminal', review: 'terminal', research: 'terminal',
+    new: 'terminal', update: 'terminal', sessions: 'terminal', conflict: 'terminal', story: 'terminal',
+    'sync-undo': 'terminal', setup: 'terminal', direction: 'terminal', finish: 'terminal', archive: 'terminal',
+    seal: 'terminal', experiment: 'terminal', fixes: 'terminal', doctor: 'terminal',
+    'history-kinds': 'terminal', 'history-align': 'terminal',
+    // The agent's work: a conversation, or a session the terminal starts with its estimate.
+    chat: 'agent', history: 'agent', places: 'agent',
+};
+
+/** What a link asks of the research besides its action (the `do=` of a task, a conflict, an experiment). */
+export interface ResearchLinkMarkParams {
+    taskDo?: string;
+    conflictDo?: string;
+    experimentDo?: string;
+}
+
+/** The mark of an action of the research, by its link (see `ResearchActionMark`). */
+export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark {
+    // A conversation about a task or a conflict is the agent's; an experiment switched off goes at once.
+    if (action === 'task' && p.taskDo === 'chat') return 'agent';
+    if (action === 'conflict' && p.conflictDo === 'agent') return 'agent';
+    if (action === 'experiment' && p.experimentDo === 'off') return 'none';
+    return RESEARCH_LINK_MARKS[action];
+}
+
+/**
+ * The mark of a ready link (one the research's bridge handed over): its action and `do=` read
+ * from the URL; null for anything that is not a known strom-research link.
+ */
+export function researchUrlMark(url: string): ResearchActionMark | null {
+    const m = /^strom-research(?:-[a-z0-9-]{1,32})?:\/\/([a-z-]+)(?:\?(.*))?$/.exec(url.trim());
+    if (!m || !(RESEARCH_LINK_ACTIONS as readonly string[]).includes(m[1])) return null;
+    const action = m[1] as ResearchLinkAction;
+    const what = new URLSearchParams(m[2] ?? '').get('do') ?? undefined;
+    return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what });
+}
+
 /** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */
 export type ResearchToolGroup = 'look' | 'task' | 'agent';
 export const RESEARCH_TOOL_GROUPS: readonly ResearchToolGroup[] = ['look', 'task', 'agent'];

@@ -35,7 +35,7 @@ export interface MapBarState {
 
 /**
  * The bar's actions. Before the map's lookup: look them up on the map and
- * Places. After it, with places it did not find: ◆ Look up in the research
+ * Places. After it, with places it did not find: Look up in the research
  * (the research here), "? N to confirm" (any research), Places.
  */
 export function mapBarState(i: MapBarInput): MapBarState {
@@ -53,18 +53,18 @@ export function mapBarState(i: MapBarInput): MapBarState {
 export interface MapBubbleResearch {
     /** The ochre block: the check's reason with Keep and Change. */
     check: boolean;
-    /** ◆ Check in the research. */
+    /** Check in the research. */
     checkResearch: boolean;
     /** "Why here ›" (a place the research identified). */
     whyHere: boolean;
-    /** "Check in the research works on the computer with the research." instead of ◆. */
+    /** "Check in the research works on the computer with the research." instead of the step. */
     note: boolean;
 }
 
 /** What the bubble of a located place adds to its people (§7). */
 export function mapBubbleResearch(id: PlaceIdentity, access: PlacesResearchAccess): MapBubbleResearch {
     const check = id.state === 'check';
-    // ◆ Check: a check mark, or a location the map's own lookup found.
+    // Check: a check mark, or a location the map's own lookup found.
     const offers = canCheck(id) && (check || id.origin === 'map');
     return {
         check,
@@ -82,7 +82,7 @@ export interface PlaceMenuItem {
     action: PlaceMenuAction;
     /** Drawn bold: the step the state asks for. */
     primary: boolean;
-    /** A ◆ step (the research here only). */
+    /** A step of the research (the research here only). */
     research: boolean;
 }
 
@@ -100,7 +100,7 @@ export function placeMenuBadge(id: PlaceIdentity): boolean {
 
 /**
  * The menu of a place without a location on the person card (§8), by its
- * state. ◆ steps only with the research here; any other research access
+ * state. The research's steps only with the research here; any other research access
  * says where they go instead (not for a place waiting for an answer).
  */
 export function placeMenu(id: PlaceIdentity, access: PlacesResearchAccess): PlaceMenu {

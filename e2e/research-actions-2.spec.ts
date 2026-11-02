@@ -176,7 +176,8 @@ test.describe('Follow live from the app', () => {
         await openResearchMenu(page, { expandMore: true });
         const item = page.locator('#research-item-live');
         await expect(item).toContainText('Follow live');
-        await expect(item.locator('.research-open-mark')).toHaveCount(1);
+        // The research fills the app's window: no terminal, no mark.
+        await expect(item.locator('.research-open-mark')).toHaveCount(0);
         await item.click();
         expect(await launched(page)).toEqual([`strom-research://live?tree=${UUID}`]);
         await expect(page.locator('.toast')).toContainText('Opening the research');

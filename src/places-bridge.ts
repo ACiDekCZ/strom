@@ -657,7 +657,7 @@ export function placesResearchAccess(env: PlacesResearchEnv): PlacesResearchAcce
     return 'ok';
 }
 
-/** The one rule for every ◆ action (Look up / Check / Select / ⋯ / Run now / Remove from the queue). */
+/** The one rule for every action of the research (Look up / Check / Select / ⋯ / Run now / Remove from the queue). */
 export function canResearchPlaces(env: PlacesResearchEnv): boolean {
     return placesResearchAccess(env) === 'ok';
 }

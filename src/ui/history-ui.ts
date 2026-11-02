@@ -18,7 +18,7 @@
  * restoreHistoryItem(), toggleLifelineHistory(), historyEnableSearch().
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
@@ -26,7 +26,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { shownName } from '../person-name.js';
 import {
-    parseLiveBridge, researchSchemeUrl, cleanText, type LiveStatus,
+    parseLiveBridge, researchSchemeUrl, researchLinkMark, researchUrlMark, cleanText, type LiveStatus, type ResearchActionMark,
     HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, HISTORY_FIRST_FEATURE, HISTORY_PLACE_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
     EXPERIMENTS_SPLIT_FEATURE,
 } from '../research-link.js';
@@ -693,9 +693,14 @@ export const historyMethods = uiModule({
             row.innerHTML = '';
         } else {
             const h = strings.history;
-            // Switching the search on or off in the research's terminal carries its mark; "off" here goes through the bridge.
+            // Switching the search on asks in the research's terminal (its mark); off goes through the bridge, or
+            // through the link at once without a terminal (no mark); a refused write's link by what it asks.
+            const mark = (action: HistorySettingsAction | 'errLink'): ResearchActionMark =>
+                action === 'linkOn' ? researchLinkMark('experiment', { experimentDo: 'on' })
+                    : action === 'linkOff' ? researchLinkMark('experiment', { experimentDo: 'off' })
+                        : action === 'errLink' && err?.link ? researchUrlMark(err.link) ?? 'terminal' : 'none';
             const button = (action: HistorySettingsAction | 'errLink', label: string): string =>
-                ` <button type="button" class="link" data-history-action="${action}" onclick="window.Strom.UI.historySettingsAction('${action}')">${action === 'off' ? esc(label) : researchOpenLabel(label, { size: 12 })}</button>`;
+                ` <button type="button" class="link" data-history-action="${action}" onclick="window.Strom.UI.historySettingsAction('${action}')">${researchActionLabel(label, mark(action), { size: 12 })}</button>`;
             let html = esc(said.text);
             if (said.action === 'linkOn') html += `${button('linkOn', h.enableSearch)} ${esc(h.enableSearchAlso)}`;
             else if (said.action) html += button(said.action, h.disableSearch);
@@ -850,7 +855,7 @@ export const historyMethods = uiModule({
             if (which === 'history') offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
             else {
                 const link = r.link;
-                this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal'), research: true } } : {});
+                this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal'), ...researchLinkFlags(link) } } : {});
             }
         }
         this.renderHistorySettingsIfOpen();

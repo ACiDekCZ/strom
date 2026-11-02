@@ -540,7 +540,7 @@ export const mapMethods = uiModule({
             const go = `onclick="window.Strom.UI.mapBarAction('${a}')"`;
             switch (a) {
                 case 'geocode': return `<button type="button" ${go}>${strings.map.lookUp(missing.length)}</button>`;
-                case 'research': return `<button type="button" class="map-status-research" ${go} title="${this.escapeHtml(om.lookResearchTitle)}"><span aria-hidden="true">◆</span> ${this.escapeHtml(om.lookResearch(missing.length))}</button>`;
+                case 'research': return `<button type="button" class="map-status-research" ${go} title="${this.escapeHtml(om.lookResearchTitle)}">${this.escapeHtml(om.lookResearch(missing.length))}</button>`;
                 case 'confirm': return `<button type="button" class="secondary map-status-confirm" ${go} title="${this.escapeHtml(om.confirmTitle)}"><span aria-hidden="true">?</span> ${this.escapeHtml(om.confirm(confirm))}</button>`;
                 case 'places': return `<button type="button" class="secondary" ${go}>${strings.map.managePlaces}</button>`;
             }
@@ -1014,8 +1014,8 @@ export const mapMethods = uiModule({
     /**
      * What the research adds to a bubble (§7): the one line of why the
      * research put it here with "Why here ›", the Check block with Keep /
-     * Change / ◆ Check, ◆ Check for a place the map found, ◆ Look up for
-     * the houses located by the town. ◆ only with the research here; a phone
+     * Change / Check, Check for a place the map found, Look up for
+     * the houses located by the town. The research's steps only with the research here; a phone
      * says where it goes instead.
      */
     mapPopupResearchHtml(point: MapPoint, id: PlaceIdentity | undefined): string {
@@ -1027,7 +1027,7 @@ export const mapMethods = uiModule({
         const key = esc(id ? (point.type === 'town' ? point.ownKey ?? point.key : point.key) : point.key);
         const note = (text: string): string => `<p class="map-popup-note">${esc(text)}</p>`;
         const diamond = (cls: string, label: string, data = ''): string =>
-            `<button type="button" class="${cls}" data-key="${key}"${data}><span aria-hidden="true">◆</span> ${esc(label)}</button>`;
+            `<button type="button" class="${cls}" data-key="${key}"${data}>${esc(label)}</button>`;
         const parts: string[] = [];
         if (id) {
             const b = mapBubbleResearch(id, access);

@@ -167,9 +167,9 @@ test.describe('places on the map with the research here', () => {
         expect(asked.length).toBeGreaterThan(0);
         await clearToasts(page);
         const buttons = await bar.locator('button').allTextContents();
-        expect(buttons.map(t => t.replace(/\s+/g, ' ').trim())).toEqual(['◆ Look up in the research (3)', '? 1 to confirm ›', 'Places']);
+        expect(buttons.map(t => t.replace(/\s+/g, ' ').trim())).toEqual(['Look up in the research (3)', '? 1 to confirm ›', 'Places']);
 
-        // ◆: Places with the "No location" chip and the preview of looking them up.
+        // Look up: Places with the "No location" chip and the preview of looking them up.
         await bar.locator('.map-status-research').click();
         const modal = page.locator('#places-modal');
         await expect(modal).toBeVisible();
@@ -203,7 +203,7 @@ test.describe('places on the map with the research here', () => {
         await expect(popup(page).locator('.map-popup-origin')).toContainText('From the map (OpenStreetMap)');
         await expect(check.getByRole('button', { name: 'Keep' })).toBeVisible();
         await expect(check.getByRole('button', { name: 'Change' })).toBeVisible();
-        await expect(check.locator('.map-popup-checkres')).toHaveText(/◆\s*Check in the research/);
+        await expect(check.locator('.map-popup-checkres')).toHaveText('Check in the research');
 
         await check.getByRole('button', { name: 'Keep' }).click();
         await expect(mark).toHaveCount(0);
@@ -248,7 +248,7 @@ test.describe('places without a location on the person card', () => {
         await expect(menu.locator('.place-menu-head')).toContainText('Horní Lhota');
         await expect(menu.locator('.place-menu-head')).toContainText('Not on the map yet');
         expect((await menu.locator('[data-action]').allTextContents()).map(t => t.replace(/\s+/g, ' ').trim()))
-            .toEqual(['Find on the map', '◆ Look up in the research', 'Open in Places']);
+            .toEqual(['Find on the map', 'Look up in the research', 'Open in Places']);
         await expect(menu.locator('.place-menu-item.is-primary')).toHaveText('Find on the map');
         expect((await menu.boundingBox())!.width).toBeCloseTo(300, 0);
         await menu.locator('[data-action="look"]').click();
@@ -262,7 +262,7 @@ test.describe('places without a location on the person card', () => {
         await placeIn(body, 'Łotów').locator('.pm-place-badge').click();
         await expect(menu).toBeVisible();
         expect((await menu.locator('[data-action]').allTextContents()).map(t => t.replace(/\s+/g, ' ').trim()))
-            .toEqual(['Open in Places', '◆ Look up again', 'Find on the map']);
+            .toEqual(['Open in Places', 'Look up again', 'Find on the map']);
         await expect(menu.locator('.place-menu-head')).toContainText('Not identified: Three villages of this name in the region.');
         await expect(menu.locator('[data-action="places"]')).toBeFocused();
         await page.keyboard.press('ArrowDown');

@@ -257,8 +257,8 @@ test.describe('place identification in the Places dialog', () => {
         const menu = modal(page).locator('.places-more');
         await expect(menu).toBeVisible();
         const look = menu.locator('[data-bulk="look"]');
-        await expect(look.locator('.places-more-title')).toHaveText('◆ Look up all not on the map (5)');
-        await expect(menu.locator('[data-bulk="check"] .places-more-title')).toHaveText('◆ Check all locations (4)');
+        await expect(look.locator('.places-more-title')).toHaveText('Look up all not on the map (5)');
+        await expect(menu.locator('[data-bulk="check"] .places-more-title')).toHaveText('Check all locations (4)');
         await look.click();
         await expect(menu).toBeHidden();
 

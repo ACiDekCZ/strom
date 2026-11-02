@@ -11,11 +11,11 @@
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { HISTORY_KINDS, type HistoryAlignPreview, type HistoryKind, alignBackfillCounts, alignHideCount } from '../history.js';
 import { getHistoryAlign, postHistoryAlign, postHistoryAlignUndo, type HistoryKindsRefusal } from '../history-bridge.js';
-import { researchSchemeUrl } from '../research-link.js';
+import { researchSchemeUrl, researchLinkMark, researchUrlMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { regionName } from '../history-manage.js';
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
 
@@ -170,7 +170,7 @@ export const historyAlignMethods = uiModule({
             foot += `<p class="hal-terminal-note">${esc(h.alignTerminalNote)}</p>`;
         }
         const primary = !pv || nothing(pv) ? ''
-            : six ? `<button type="button" class="primary" data-hal="terminal">${researchOpenLabel(h.placeGoTerminal, { ai: true })}</button>`
+            : six ? `<button type="button" class="primary" data-hal="terminal">${researchActionLabel(h.placeGoTerminal, (st.link && researchUrlMark(st.link)) || researchLinkMark('history-align'))}</button>`
                 : `<button type="button" class="primary" data-hal="go"${st.busy ? ' disabled aria-busy="true"' : ''}>${esc(st.busy ? h.alignWorking : h.alignGo)}</button>`;
         modal.innerHTML = '<div class="modal-header hal-header">'
             + `<h2 id="hal-title">${esc(h.alignTitle)}</h2>`

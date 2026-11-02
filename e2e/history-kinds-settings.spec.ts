@@ -134,10 +134,17 @@ test.describe('Kinds of history: Settings', () => {
         await pend.locator('[data-hk-action="cancel"]').click();
         await expect(pend).toHaveCount(0);
         await expect(kindSwitch(page, 'law')).toHaveAttribute('data-state', 'off');
-        // Again, and continue in the research.
+        // Again, and continue in the research: its terminal confirms, no agent works there — the mark, no AI.
         await kindSwitch(page, 'law').click();
-        await pend.locator('[data-hk-action="go"]').click();
+        const go = pend.locator('[data-hk-action="go"]');
+        await expect(go.locator('.research-open-mark')).toHaveCount(1);
+        await expect(go.locator('.research-ai-badge')).toHaveCount(0);
+        await expect(go).toHaveAccessibleName('Continue in the research, opens in the research');
+        await go.click();
         await expect(pend).toHaveClass(/is-waiting/);
+        const again = pend.locator('[data-hk-action="again"]');
+        await expect(again.locator('.research-open-mark')).toHaveCount(1);
+        await expect(again.locator('.research-ai-badge')).toHaveCount(0);
         await expect(pend.locator('.history-kinds-pend-title')).toHaveText('Waiting for confirmation in the research');
         expect(history.kindsWrites).toEqual([{ kinds: FAKE_KINDS.filter(k => k !== 'economy'), scope: 'tree' }]);
         const launched = await links(page);

@@ -335,10 +335,10 @@ test.describe('research directions', () => {
         await openPersonSubmenu(page, 'research');
         const anna = page.locator('.context-submenu [data-action="research-ancestors"]');
         await expect(anna.locator('.menu-item-note')).toHaveText('Paused · restart');
-        // Resuming is the agent's work: AI and the mark.
-        await expect(anna.locator('.research-ai-badge')).toHaveText('AI');
+        // Restarting it: the research's terminal asks — the mark, no AI.
+        await expect(anna.locator('.research-ai-badge')).toHaveCount(0);
         await expect(anna.locator('.research-open-mark')).toHaveCount(1);
-        await expect(anna).toHaveAttribute('aria-label', 'Find ancestors, Paused · restart, AI, opens in the research');
+        await expect(anna).toHaveAttribute('aria-label', 'Find ancestors, Paused · restart, opens in the research');
         await anna.click();
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0004&do=resume`]);
     });

@@ -224,8 +224,9 @@ test.describe('originals go to the research', () => {
         expect(att).toMatchObject({ originalOnly: true, mimeType: 'image/tiff' });
         expect(att.dataUrl).toMatch(/^data:image\/png;base64,/);
         expect(att.dataUrl.length).toBeLessThan(400);
-        // In the research now: opened there (a TIFF is not shown in the app).
-        await expect(row.locator('.media-full-quality .research-open-mark')).toHaveCount(1);
+        // In the research now: the system's viewer opens it (a TIFF is not shown in the app), no terminal: no mark.
+        await expect(row.locator('.media-full-quality')).toHaveText('Full quality');
+        await expect(row.locator('.media-full-quality .research-open-mark')).toHaveCount(0);
     });
 
     test('a TIFF for a research that does not take originals: refused as before, no attachment', async ({ page }) => {

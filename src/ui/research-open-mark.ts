@@ -9,6 +9,7 @@
 
 import { strings } from '../strings.js';
 import { researchOpenSvg } from '../history-symbols.js';
+import { researchUrlMark, type ResearchActionMark } from '../research-link.js';
 
 export type ResearchOpenMarkSize = 12 | 14 | 16;
 
@@ -78,4 +79,22 @@ export function researchOpenLabel(label: string, opts: ResearchOpenMarkOptions =
 export function setResearchOpenLabel<T extends HTMLElement>(el: T, label: string, opts: ResearchOpenMarkOptions = {}): T {
     el.innerHTML = researchOpenLabel(label, opts);
     return el;
+}
+
+/** The mark's options for an action's group (`RESEARCH_LINK_MARKS`); null: no mark at all. */
+export function researchMarkOptions(mark: ResearchActionMark, opts: ResearchOpenMarkOptions = {}): ResearchOpenMarkOptions | null {
+    if (mark === 'none') return null;
+    return { ...opts, ai: mark === 'agent' };
+}
+
+/** An action's label with the mark of its group: none (plain text), the terminal, or AI and the terminal. */
+export function researchActionLabel(label: string, mark: ResearchActionMark, opts: Omit<ResearchOpenMarkOptions, 'ai'> = {}): string {
+    const o = researchMarkOptions(mark, opts);
+    return o ? researchOpenLabel(label, o) : esc(researchLabelText(label));
+}
+
+/** A toast's or a sheet's action that launches a ready link: its flags by the link's group (a link not known: the terminal). */
+export function researchLinkFlags(url: string): { research: boolean; ai: boolean } {
+    const mark = researchUrlMark(url) ?? 'terminal';
+    return { research: mark !== 'none', ai: mark === 'agent' };
 }

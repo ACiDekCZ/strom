@@ -19,7 +19,7 @@ import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import {
-    researchSchemeUrl, HISTORY_KINDS_FEATURE, HISTORY_ALIGN_FEATURE, EXPERIMENTS_SPLIT_FEATURE, type LiveStatus,
+    researchSchemeUrl, researchLinkMark, HISTORY_KINDS_FEATURE, HISTORY_ALIGN_FEATURE, EXPERIMENTS_SPLIT_FEATURE, type LiveStatus,
 } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
@@ -27,7 +27,7 @@ import {
 } from '../history.js';
 import { getHistoryAlign, postHistoryKinds, type HistoryKindsBody, type HistoryKindsRefusal } from '../history-bridge.js';
 import { historyKindSvg } from '../history-symbols.js';
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
 
@@ -376,12 +376,12 @@ export const historyKindsMethods = uiModule({
             if (p.waiting) {
                 html += `<p class="history-kinds-pend-title">${esc(h.waitTitle)}</p><div class="history-kinds-chips">${chips}</div>`
                     + `<p>${esc(h.waitBody)}</p><div class="history-kinds-actions">`
-                    + `<button type="button" class="primary" data-hk-action="again" onclick="window.Strom.UI.historyKindsPendAction('again')">${researchOpenLabel(h.openAgain, { ai: true })}</button>`;
+                    + `<button type="button" class="primary" data-hk-action="again" onclick="window.Strom.UI.historyKindsPendAction('again')">${researchActionLabel(h.openAgain, researchLinkMark('history-kinds'))}</button>`;
             } else {
                 html += `<p class="history-kinds-pend-title">${esc(h.pendTitle(pend.length))}</p><div class="history-kinds-chips">${chips}</div>`
                     + `<p class="history-kinds-cost">${esc(this.historyKindsCostText(rid, searched.kinds, p))}</p>`
                     + `<p>${esc(h.pendTerminal)}</p><div class="history-kinds-actions">`
-                    + `<button type="button" class="primary" data-hk-action="go"${p.busy ? ' aria-disabled="true"' : ''} onclick="window.Strom.UI.historyKindsPendAction('go')">${researchOpenLabel(h.placeGoTerminal, { ai: true })}</button>`;
+                    + `<button type="button" class="primary" data-hk-action="go"${p.busy ? ' aria-disabled="true"' : ''} onclick="window.Strom.UI.historyKindsPendAction('go')">${researchActionLabel(h.placeGoTerminal, researchLinkMark('history-kinds'))}</button>`;
             }
             html += `<button type="button" class="secondary" data-hk-action="cancel" onclick="window.Strom.UI.historyKindsPendAction('cancel')">${esc(strings.buttons.cancel)}</button></div></div>`;
         }

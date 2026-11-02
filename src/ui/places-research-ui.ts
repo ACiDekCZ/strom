@@ -1,6 +1,6 @@
 /**
  * The research side of place identification (spec 034) for the dialogs: one
- * place that says whether the ◆ actions go for the open tree (Look up, Check,
+ * place that says whether the research's actions go for the open tree (Look up, Check,
  * Select, Run now, Remove from the queue), where its bridge is and what it
  * announced. The Places dialog, the map, the person card and the waiting list
  * all ask here, so they never disagree.
@@ -22,7 +22,7 @@ export interface PlacesResearchContext {
     /** What the bridge announced (empty when it does not answer). */
     features: readonly string[];
     access: PlacesResearchAccess;
-    /** The ◆ actions go (access 'ok'). */
+    /** The research's actions go (access 'ok'). */
     canResearch: boolean;
     /** What a refusal's `places` link is checked against. */
     linkCheck: PlacesLinkCheck | null;

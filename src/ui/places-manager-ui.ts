@@ -81,7 +81,7 @@ let offerTimer: number | null = null;
 let managerKnown: KnownStreets = () => undefined;
 /** The years each place is used in, read once per draw. */
 let managerYears = new Map<string, [number, number]>();
-/** The ◆ actions go (the research's bridge here), read once per draw. */
+/** The research's actions go (the research's bridge here), read once per draw. */
 let managerCanResearch = false;
 
 /** The dialog's place by key, as last drawn (the search of a row reads it). */
@@ -94,7 +94,7 @@ export function managerKnownStreets(): KnownStreets {
     return managerKnown;
 }
 
-/** Whether the ◆ actions go, as the dialog last read it. */
+/** Whether the research's actions go, as the dialog last read it. */
 export function managerResearchActions(): boolean {
     return managerCanResearch;
 }
@@ -639,8 +639,8 @@ export const placesManagerMethods = uiModule({
         switch (action) {
             case 'find': return `<button type="button" class="place-change place-find">${m.findOnMap}</button>`;
             case 'findQuiet': return `<button type="button" class="place-change place-link-btn is-quiet">${m.findOnMap}</button>`;
-            case 'look': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">◆ ${esc(r.look)}</button>`;
-            case 'lookAgain': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">◆ ${esc(r.lookAgain)}</button>`;
+            case 'look': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">${esc(r.look)}</button>`;
+            case 'lookAgain': return `<button type="button" class="place-look is-research" title="${esc(r.lookTitle)}">${esc(r.lookAgain)}</button>`;
             case 'unqueue': return `<button type="button" class="place-unqueue place-link-btn is-quiet">${esc(r.unqueue)}</button>`;
             case 'answer': return `<button type="button" class="place-answer">${esc(d.answer)}</button>`;
             case 'why':
@@ -648,7 +648,7 @@ export const placesManagerMethods = uiModule({
                 aria-expanded="${open}">${esc(d.why)} ▾</button>`;
             case 'keep': return `<button type="button" class="place-keep">${esc(d.keep)}</button>`;
             case 'change': return `<button type="button" class="place-change place-link-btn">${m.changePin}</button>`;
-            case 'check': return `<button type="button" class="place-check is-research">◆ ${esc(r.check)}</button>`;
+            case 'check': return `<button type="button" class="place-check is-research">${esc(r.check)}</button>`;
             case 'remove': return `<button type="button" class="place-remove place-link-btn is-quiet">${m.removePin}</button>`;
         }
     },

@@ -9,12 +9,12 @@
  * says `history.place.direct` takes it over the bridge (200: first in line).
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { manageCan, manageSwitchOn } from '../history-manage.js';
 import { historyPlaceOfferable, historyWaiting, pickHistoryText } from '../history.js';
 import { postBridgePlace, type HistoryWriteRefusal } from '../history-bridge.js';
-import { HISTORY_PLACE_DIRECT_FEATURE } from '../research-link.js';
+import { HISTORY_PLACE_DIRECT_FEATURE, researchLinkMark, researchUrlMark } from '../research-link.js';
 import { uiModule } from './module.js';
 
 export const HISTORY_PLACE_DIALOG_ID = 'history-place-modal';
@@ -122,7 +122,7 @@ export const historyPlaceMethods = uiModule({
             + `<button type="button" class="secondary" data-hpf="cancel">${esc(strings.buttons.cancel)}</button>`
             + `<button type="button" class="primary" data-hpf="go"${st.busy ? ' disabled aria-busy="true"' : ''}>`
             // The terminal: the research opens and its agent searches (AI); the direct form writes from here.
-            + `${terminal ? researchOpenLabel(h.placeGoTerminal, { ai: true }) : esc(h.placeGo)}</button>`
+            + `${terminal ? researchActionLabel(h.placeGoTerminal, (st.link && researchUrlMark(st.link)) || researchLinkMark('history')) : esc(h.placeGo)}</button>`
             + '</div>';
     },
 

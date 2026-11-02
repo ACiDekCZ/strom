@@ -15,7 +15,7 @@ import { PersonId, PartnershipId } from '../types.js';
 import { yearOf } from '../dates.js';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_TOOL_ACTIONS, RESEARCH_TOOL_GROUPS, ResearchLinkAction, ResearchReviewScope, ResearchStoryDo,
-    ResearchToolAction, researchPersonRef,
+    ResearchToolAction, researchPersonRef, researchLinkMark, type ResearchActionMark,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer, updateBusyText } from './research-ui.js';
@@ -398,7 +398,7 @@ export const researchActionsMethods = uiModule({
             // Right under the agent: following live, its overview; else "Follow live" — the research starts
             // (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
             if (this.isFollowingActiveResearch()) first.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
-            else if (!noAgent && this.researchLinkAvailable('live')) first.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
+            else if (!noAgent && this.researchLinkAvailable('live')) first.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: researchLinkMark('live') !== 'none' });
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
@@ -1000,12 +1000,16 @@ export const researchActionsMethods = uiModule({
             // Opens "Review again" here first (an app dialog: no mark); its button then opens the research and carries the mark.
             items.push({ action: 'research-review', label: r.reviewAction });
         }
+        // An item that opens the research: its group's mark (RESEARCH_LINK_MARKS) and the words of it.
+        const marked = (label: string, mark: ResearchActionMark, note?: string): Pick<PersonMenuAction, 'external' | 'badge' | 'ariaLabel'> => ({
+            external: mark !== 'none',
+            badge: mark === 'agent' ? 'ai' : undefined,
+            ariaLabel: [label, note, mark === 'agent' ? r.aiBadge : '', mark !== 'none' ? r.opensInResearchSr : ''].filter(Boolean).join(', '),
+        });
         if (this.researchLinkAvailable('research')) {
-            // A new direction is the agent's work (§6 state 3: AI and the mark).
-            items.push({ action: 'research-ancestors', label: r.findAncestors, external: true, badge: 'ai',
-                ariaLabel: `${r.findAncestors}, ${r.aiBadge}, ${r.opensInResearchSr}` });
-            items.push({ action: 'research-descendants', label: r.findDescendants, external: true, badge: 'ai',
-                ariaLabel: `${r.findDescendants}, ${r.aiBadge}, ${r.opensInResearchSr}` });
+            // A new direction: the research's terminal asks and writes its tasks; nothing is paid on the click.
+            items.push({ action: 'research-ancestors', label: r.findAncestors, ...marked(r.findAncestors, researchLinkMark('research')) });
+            items.push({ action: 'research-descendants', label: r.findDescendants, ...marked(r.findDescendants, researchLinkMark('research')) });
         }
         // A direction the person already has: say so instead of starting another.
         for (let i = 0; i < items.length; i++) {
@@ -1014,14 +1018,13 @@ export const researchActionsMethods = uiModule({
             if (d.state === 'active') {
                 items[i] = { ...items[i], external: false, badge: undefined, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
             } else if (this.researchLinkAvailable('direction')) {
-                // Resuming is the agent's work again (§6 state 3: AI and the mark).
+                // Restarting it: the research's terminal asks (its tasks wait for the next session).
                 const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
-                items[i] = { ...items[i], external: true, badge: 'ai', note, ariaLabel: `${items[i].label}, ${note}, ${r.aiBadge}, ${r.opensInResearchSr}` };
+                items[i] = { ...items[i], note, ...marked(items[i].label, researchLinkMark('direction', {}), note) };
             }
         }
         if (this.researchLinkAvailable('chat')) {
-            items.push({ action: 'research-ask', label: r.askAgent, external: true, badge: 'ai',
-                ariaLabel: `${r.askAgent}, ${r.aiBadge}, ${r.opensInResearchSr}` });
+            items.push({ action: 'research-ask', label: r.askAgent, ...marked(r.askAgent, researchLinkMark('chat')) });
         }
         return items;
     },
