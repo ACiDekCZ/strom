@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the hub of several lineages is unchanged > file and window, cs and en, protected and full data 1`] = `
+{
+  "cs-full-app": "2906:a9670bb24b3728dc14ecdb3b561ba61f4c67c7ab",
+  "cs-full-file": "2799:f25d443529eeb233f9d6b0245d03bbebe0795f34",
+  "cs-initials-app": "2747:f573b9dc0ecdac95ea7f57c566edf961e56ad542",
+  "cs-initials-file": "2647:6a3e3d13bac375d7413cf105aa461bf0601da1ef",
+  "cs-two-app": "1961:6f10832c1695bf326a7c0d5c0fc654394896a005",
+  "en-full-app": "2971:bc4854a3b56bce09b34ba498c3ec2c68d733dacb",
+  "en-full-file": "2864:872e0ce2ee2ba6e6295c557fc58301d7809666be",
+  "en-initials-app": "2809:c6c30b9aa4789b9e7f5c582eba75647a381753d9",
+  "en-initials-file": "2709:1eed3641c575e170cb1d83c10d2e4b25be46e1e6",
+}
+`;
