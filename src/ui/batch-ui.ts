@@ -282,7 +282,7 @@ export const batchMethods = uiModule({
                 <div class="batch-drop-title">${esc(b.bridgeDownTitle)}</div>
                 <div class="batch-drop-note">${esc(b.bridgeDownText)}</div>
                 ${this.researchLinkAvailable('open') || this.researchLinkAvailable('live')
-                    ? `<div class="batch-drop-buttons"><button type="button" class="primary" data-act="start">${esc(strings.sync.startResearch)}</button></div>` : ''}
+                    ? `<div class="batch-drop-buttons"><button type="button" class="primary" data-act="start">${this.researchSyncActionLabel('startResearch', strings.sync.startResearch)}</button></div>` : ''}
             </div>`;
         return `
                 <div class="modal-content batch-content">
