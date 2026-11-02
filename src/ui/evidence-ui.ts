@@ -14,6 +14,10 @@
  * group (with Next ›), a second click back to all three. The same highlight
  * also shows other groups of people (the live research's "changed while
  * watching").
+ *
+ * A family line chosen in the tree view (src/ui/rod-view.ts) is a group of
+ * kind 'rod': another group covers it and it comes back when that one ends;
+ * its × (and Escape) shows the whole tree again, its label opens the choice.
  */
 
 import { DataManager } from '../data.js';
@@ -26,6 +30,7 @@ import { EvidenceLevel, evidenceLevels } from '../evidence-level.js';
 import { assignGenerations } from '../generations.js';
 import { birthResearchStatus } from '../tree-overview.js';
 import { uiModule } from './module.js';
+import { clearRodSelection, rodViewDataChanged, rodViewUncovered } from './rod-view.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
@@ -173,6 +178,8 @@ export const evidenceUiMethods = uiModule({
 
     /** Recount after a change or a tree switch; nobody left ends the mode. */
     refreshEvidenceHighlight(): void {
+        // The chosen line first: the tree's remembered one put back, a line gone let go.
+        rodViewDataChanged();
         if (levelsMode && !evidence) {
             TreeRenderer.setEvidenceLevels(evidenceLevels(DataManager.getData()));
             this.renderEvidencePill();
@@ -215,6 +222,17 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceHighlight(null);
         TreeRenderer.setEvidenceLevels(null);
         document.getElementById('evidence-pill')?.remove();
+        // Another group ended: the chosen family line comes back from under it.
+        rodViewUncovered();
+    },
+
+    /**
+     * ×, Escape, "Back to overview": the group ends; on a family line that is
+     * the whole tree again (the choice cleared and forgotten).
+     */
+    dismissEvidenceHighlight(): void {
+        if (evidence?.kind === 'rod') clearRodSelection();
+        if (evidence || levelsMode) this.endEvidenceHighlight();
     },
 
     /**
@@ -271,7 +289,24 @@ export const evidenceUiMethods = uiModule({
                 what.textContent = evidence.label;
                 label.append(what, document.createTextNode(stepping ? ` · ${evidence.index + 1} / ${n}` : ` · ${n}`));
             }
-            pill.append(label);
+            if (evidence.kind === 'rod') {
+                // A family line (spec 039 §3.1): the label opens the choice of lines.
+                const pick = document.createElement('button');
+                pick.type = 'button';
+                pick.className = 'evidence-pill-label evidence-pill-label--pick';
+                pick.setAttribute('aria-haspopup', 'listbox');
+                pick.setAttribute('aria-label', strings.rodView.change);
+                pick.title = label.textContent ?? '';
+                const chev = document.createElement('span');
+                chev.className = 'evidence-pill-pick-chev';
+                chev.setAttribute('aria-hidden', 'true');
+                chev.textContent = '▾';
+                pick.append(...label.childNodes, chev);
+                pick.onclick = () => this.openRodPicker();
+                pill.append(pick);
+            } else {
+                pill.append(label);
+            }
         }
         pill.classList.toggle('evidence-pill--back', !!evidence?.returnTo);
         if (evidence) {
@@ -316,7 +351,7 @@ export const evidenceUiMethods = uiModule({
                 back.className = 'evidence-pill-back';
                 back.textContent = strings.treeOverview.back;
                 back.onclick = () => {
-                    this.endEvidenceHighlight();
+                    this.dismissEvidenceHighlight();
                     returnTo();
                 };
                 pill.append(back);
@@ -326,9 +361,11 @@ export const evidenceUiMethods = uiModule({
         close.type = 'button';
         close.className = 'evidence-pill-close';
         close.innerHTML = '&times;';
-        close.setAttribute('aria-label', s.highlightEnd);
-        close.title = s.highlightEnd;
-        close.onclick = () => this.endEvidenceHighlight();
+        // A family line: × shows the whole tree (spec 039 §3.1).
+        const closeText = evidence?.kind === 'rod' ? strings.rodView.whole : s.highlightEnd;
+        close.setAttribute('aria-label', closeText);
+        close.title = closeText;
+        close.onclick = () => this.dismissEvidenceHighlight();
         pill.append(close);
     },
 });

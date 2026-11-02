@@ -5630,6 +5630,7 @@ class TreeRendererClass {
                 relTypeLabel: (t) => strings.parentRelType[t],
                 addParentLabel: () => strings.contextMenu.addParent,
                 afterDraw: () => { if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight(); },
+                selectedRod: () => UI.selectedRod(),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),
                 personPage: id => UI.runPersonMenuAction(id, 'page'),
                 menuSheet: (menu, onClose) => UI.presentMenuSheet(menu.title, [

@@ -447,6 +447,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Linked in the view only: the live bridge's say, other windows' changes of the shown links.
     UI.initViewLinks();
 
+    // The family line chosen in the tree view (spec 039): remembered per tree.
+    UI.initRodView();
+
 
     // ---- Data: runs once the data is readable ----
 

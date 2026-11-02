@@ -94,6 +94,7 @@ import { readProposeMethods } from './read-propose-ui.js';
 import { researchImagesMethods } from './research-images-ui.js';
 import { readHistoryMethods } from './read-history-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
+import { rodViewMethods } from './rod-view.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
@@ -712,6 +713,9 @@ Object.assign(UIClass.prototype, readHistoryMethods);
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}
 Object.assign(UIClass.prototype, evidenceUiMethods);
+type RodViewMethods = typeof rodViewMethods;
+export interface UIClass extends RodViewMethods {}
+Object.assign(UIClass.prototype, rodViewMethods);
 type TreeOverviewMethods = typeof treeOverviewMethods;
 export interface UIClass extends TreeOverviewMethods {}
 Object.assign(UIClass.prototype, treeOverviewMethods);

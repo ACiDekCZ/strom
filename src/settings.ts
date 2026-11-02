@@ -186,8 +186,27 @@ class SettingsManagerClass {
 
     /** Forget a tree's timeline defaults (the tree was deleted). */
     forgetLifelineDefaults(treeId: string): void {
+        // The tree's chosen family line goes with it (spec 039 §3.5).
+        if (this.settings.rodByTree?.[treeId]) {
+            delete this.settings.rodByTree[treeId];
+            if (!this.settings.lifelineByTree?.[treeId]) { this.save(); return; }
+        }
         if (!this.settings.lifelineByTree?.[treeId]) return;
         delete this.settings.lifelineByTree[treeId];
+        this.save();
+    }
+
+    /** The family line chosen in a tree's view (spec 039 §3.5), or null. */
+    getRodForTree(treeId: string | null): string | null {
+        return (treeId && this.settings.rodByTree?.[treeId]) || null;
+    }
+
+    /** Remember (or, with null, forget) the family line chosen in a tree's view. */
+    setRodForTree(treeId: string, rodId: string | null): void {
+        const now = this.settings.rodByTree?.[treeId] ?? null;
+        if (now === rodId) return;
+        if (rodId) (this.settings.rodByTree ??= {})[treeId] = rodId;
+        else delete this.settings.rodByTree![treeId];
         this.save();
     }
 

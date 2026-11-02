@@ -467,6 +467,8 @@ export const miscMethods = uiModule({
         // reliable beat to keep the toolbar Undo/Redo state honest.
         this.refreshUndoRedoToolbar();
         const mode = TreeRenderer.getViewMode();
+        // The family line's choice (spec 039 §1.5): hidden on the timeline and the map.
+        this.syncRodPickerHost();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
         // Standalone views (map/timeline/fan) have their own top-left controls;
@@ -823,7 +825,7 @@ export const miscMethods = uiModule({
                 if (this.isEvidenceHighlightOn()
                     && this.dialogStack.length === 0
                     && document.querySelectorAll('.modal-overlay.active').length === 0) {
-                    this.endEvidenceHighlight();
+                    this.dismissEvidenceHighlight();
                     return;
                 }
 

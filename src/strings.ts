@@ -3705,6 +3705,17 @@ const stringsEN = {
     depth: {
         toggle: 'Number of generations',
     },
+    rodView: {
+        only: (l: string) => `Only the ${l} line`,
+        onlySub: 'Only one line',
+        birth: 'birth',
+        wife: 'wife',
+        husband: 'husband',
+        whole: 'Show the whole tree',
+        row: 'Family line',
+        change: 'Change family line',
+        moved: (n: string, l: string) => `Focus: ${n}, ${l} line`,
+    },
     focus: {
         focusedOn: 'Focused on',
         back: 'Back to previous person (Alt+←)',
@@ -10643,6 +10654,17 @@ const stringsCZ: StringsType = {
     depth: {
         toggle: 'Počet generací',
     },
+    rodView: {
+        only: (l: string) => `Jen rod ${l}`,
+        onlySub: 'Jen rod',
+        birth: 'rodný',
+        wife: 'manželka',
+        husband: 'manžel',
+        whole: 'Ukázat celý strom',
+        row: 'Rod',
+        change: 'Změnit rod',
+        moved: (n: string, l: string) => `Zaměření: ${n}, rod ${l}`,
+    },
     focus: {
         back: 'Zpět na předchozí osobu (Alt+←)',
         forward: 'Vpřed (Alt+→)',
@@ -17508,6 +17530,17 @@ const stringsDE: StringsType = {
     },
     depth: {
         toggle: 'Anzahl der Generationen',
+    },
+    rodView: {
+        only: (l: string) => `Nur Stammlinie ${l}`,
+        onlySub: 'Nur eine Stammlinie',
+        birth: 'Geburt',
+        wife: 'Ehefrau',
+        husband: 'Ehemann',
+        whole: 'Ganzen Stammbaum zeigen',
+        row: 'Stammlinie',
+        change: 'Stammlinie wechseln',
+        moved: (n: string, l: string) => `Fokus: ${n}, Stammlinie ${l}`,
     },
     focus: {
         focusedOn: 'Fokussiert auf',

@@ -733,6 +733,18 @@ export function rodMembers(index: LineageIndex, rodId: RodId): PersonId[] {
     return index.rods.get(rodId)?.memberIds ?? [];
 }
 
+/** The real members of a lineage (placeholders left out), in line order. */
+export function realRodMembers(index: LineageIndex, rodId: RodId): PersonId[] {
+    const rod = index.rods.get(rodId);
+    return rod ? rod.memberIds.filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
+}
+
+/** The real spouses who married into a lineage. */
+export function realRodSpouses(index: LineageIndex, rodId: RodId): PersonId[] {
+    const rod = index.rods.get(rodId);
+    return rod ? rod.spouses.map(s => s.personId).filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
+}
+
 /**
  * The lineage's real members by generation: index 0 = the founder's
  * generation (I), then each step down the line. Depth is counted along the

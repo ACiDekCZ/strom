@@ -62,6 +62,8 @@ export interface FanViewHost {
     esc(text: string): string;
     relTypeLabel: FanSvgOptions['relTypeLabel'];
     addParentLabel(): string;
+    /** The family line chosen in the tree view (its legend row marked). */
+    selectedRod?(): string | null;
     /** After every redraw of the SVG (the evidence highlight is put back). */
     afterDraw(): void;
     /** The person's detail (the same dialog as elsewhere; read-only where the tree is). */
@@ -1062,8 +1064,13 @@ export class FanViewController {
 
     private legendItemsHtml(): string {
         const esc = this.host.esc;
-        const rows = this.legendRows().map(r =>
-            `<div class="fan-legend-row" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
+        const legend = this.legendRows();
+        // The family line chosen in the tree view (spec 039 §4.2): its row marked; a line
+        // without a colour of its own marks "Other families".
+        const sel = this.host.settings().colorMode === 'rod' ? this.host.selectedRod?.() ?? null : null;
+        const selKey = sel === null ? null : legend.some(r => r.item.key === sel) ? sel : 'rodOther';
+        const rows = legend.map(r =>
+            `<div class="fan-legend-row${r.item.key === selKey ? ' is-selected' : ''}" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
             + `<span class="fan-legend-label">${esc(r.item.label)}</span>`
             + (r.item.who ? `<span class="fan-legend-who">${esc(r.item.who)}</span>` : '')
             + '</div>');
@@ -1103,6 +1110,11 @@ export class FanViewController {
         }
         const sheetItems = c.querySelector<HTMLElement>('#fan-sheet-items');
         if (sheetItems) sheetItems.innerHTML = items;
+    }
+
+    /** The legend again (the chosen family line changed). */
+    refreshLegend(): void {
+        this.renderLegend();
     }
 
     private toggleLegend(): void {

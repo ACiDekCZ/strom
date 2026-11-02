@@ -98,9 +98,10 @@ function escapeHtml(text: string): string {
 
 /**
  * Show "◎ Focused on {name} | ↩ Back"; `back` runs on "↩ Back" (the previous
- * view), after the confirmation has gone.
+ * view), after the confirmation has gone. `message` words it otherwise around
+ * the name (a move to a family line's member: "Focus: {name}, {line} line").
  */
-export function showFocusToast(name: string, back: () => void): void {
+export function showFocusToast(name: string, back: () => void, message: (name: string) => string = strings.focus.focusToast): void {
     hideFocusToast();
     const container_ = container();
     if (!container_) return;
@@ -108,7 +109,7 @@ export function showFocusToast(name: string, back: () => void): void {
     el.className = 'focus-toast-box';
     // The name in its own element (weight 600); the message is built around it.
     const marker = '\u0000';
-    const [before, after = ''] = strings.focus.focusToast(marker).split(marker);
+    const [before, after = ''] = message(marker).split(marker);
     el.innerHTML = `<span class="focus-toast-glyph" aria-hidden="true">◎</span>`
         + `<span class="focus-toast-msg">${escapeHtml(before)}<strong class="focus-toast-name">${escapeHtml(name)}</strong>${escapeHtml(after)}</span>`
         + `<span class="focus-toast-sep" aria-hidden="true"></span>`

@@ -9796,6 +9796,8 @@
         .fan-legend-items { display: none; padding: 2px 0 4px; }
         .fan-legend.is-open .fan-legend-items { display: block; }
         .fan-legend-row { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+        /* The family line chosen in the tree view (spec 039 §4.2). */
+        .fan-legend-row.is-selected { background: var(--primary-soft); font-weight: 600; border-radius: 6px; margin: 0 -4px; padding: 0 4px; }
         .fan-legend-label { min-width: 0; }
         .fan-legend-who { color: var(--text-light); margin-left: auto; padding-left: 8px; white-space: nowrap; }
         /* A swatch carries its colours for the light, dark and print themes. */
@@ -10592,6 +10594,59 @@
         /* Hovering the active tab keeps its copper indicator, not the flat
            hover text colour. */
         @media (hover: hover) { .view-mode-segment button.active:hover { color: var(--accent); background: transparent; } }
+        /* The family line's choice (spec 039 §1): the tree pages' "Line X ▾"
+           (src/family-pages-css.ts) before the view tabs, which then follow 6px
+           after it; the list's rows are buttons here (not the toolbar's green
+           ones). Hidden on the timeline and the map, in a tree without a line,
+           on the phone (src/ui/rod-view.ts). */
+        .rod-picker-host { display: flex; align-items: center; flex-shrink: 0; min-width: 0; margin-left: auto; }
+        .rod-picker-host[hidden] { display: none !important; }
+        .rod-picker-host:not([hidden]) + .view-mode-segment { margin-left: -2px; }
+        .toolbar:has(.rod-picker-host details[open]) { z-index: 270; }
+        .rod-picker-host .sp-rodpick-btn { max-width: none; font-size: 13px; background: var(--surface); }
+        .rod-picker-host .sp-rodpick-v { display: inline-flex; align-items: baseline; gap: 0; }
+        .rod-picker-host .sp-rodpick-pfx { white-space: pre; }
+        .rod-picker-host .sp-rodpick-v b { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; vertical-align: bottom; }
+        .rod-picker-host details[open] > .sp-rodpick-btn { border-color: var(--primary); background: var(--read-scan-bg); }
+        .rod-picker-host .sp-rodpick-pop { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 200px)); box-shadow: var(--shadow-lg); }
+        .rod-picker-host .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
+        .toolbar .rod-picker-host button.sp-rodpick-a, .toolbar .rod-picker-host button.sp-rodpick-x {
+            box-sizing: border-box; display: grid; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px;
+            border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 14.5px;
+            text-align: left; cursor: pointer; transition: none;
+        }
+        .toolbar .rod-picker-host button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
+        .toolbar .rod-picker-host .sp-rodpick-tree button.sp-rodpick-a, .toolbar .rod-picker-host button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
+        .toolbar .rod-picker-host .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
+        .rod-picker-host .sp-rodpick-xchev { color: var(--text-faint); }
+        .toolbar .rod-picker-host li[aria-current] > button.sp-rodpick-a { background: var(--read-scan-bg); font-weight: 600; }
+        .toolbar .rod-picker-host button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
+        .toolbar .rod-picker-host button.sp-rodpick-a:focus-visible, .toolbar .rod-picker-host button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) {
+            .toolbar .rod-picker-host button.sp-rodpick-a:hover, .toolbar .rod-picker-host button.sp-rodpick-x:hover { background: var(--hover-bg); }
+            .toolbar .rod-picker-host li[aria-current] > button.sp-rodpick-a:hover { background: var(--read-scan-bg); }
+        }
+        @media (pointer: coarse) {
+            .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
+            .toolbar .rod-picker-host .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
+        }
+        /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs. */
+        @media (min-width: 1025px) and (max-width: 1279px) {
+            .rod-picker-host .sp-rodpick-pfx { display: none; }
+            .rod-picker-host .sp-rodpick-v b { max-width: 150px; }
+            .toolbar:has(.rod-picker-host:not([hidden])) .view-mode-segment button { padding: 0 9px; }
+        }
+        /* Tablet: at the right end of the bar after the focus, the list opening leftwards. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body:not(.descendants-view) .rod-picker-host { margin-left: 0; }
+            .rod-picker-host .sp-rodpick-pfx { display: none; }
+            .rod-picker-host .sp-rodpick-v b { max-width: 130px; }
+            .rod-picker-host .sp-rodpick-pop { left: auto; right: 0; }
+        }
+        /* A phone sideways: the list comes from the More sheet (spec 039 §5.3). */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .rod-picker-host { display: none !important; }
+        }
         /* Descendants badge bar */
         .collab-bar {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -16549,6 +16604,15 @@
             box-shadow: var(--shadow-lg); font-size: 13px;
         }
         .evidence-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
+        /* A family line's label opens the choice of lines (spec 039 §3.1). */
+        .evidence-pill-label--pick {
+            display: block; height: 30px; margin-left: -10px; padding: 0 8px 0 10px; border: 0; border-radius: 999px;
+            background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+        }
+        .evidence-pill-pick-chev { margin-left: 4px; color: var(--text-faint); }
+        @media (hover: hover) { .evidence-pill-label--pick:hover { background: var(--hover-bg); } }
+        .evidence-pill-label--pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) { .evidence-pill-label--pick { min-height: 44px; } }
         .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: 999px;
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
@@ -21194,6 +21258,9 @@
 
         <!-- A build of the family pages in the background (1102 §7.2): its progress, then "ready"; opens the dialog -->
         <button type="button" id="pages-bg-chip" class="pages-bg-chip" hidden onclick="window.Strom.UI.openPagesFromChip()"><span class="pages-bg-bar" aria-hidden="true"><span class="pages-bg-fill"></span></span><span class="pages-bg-t" aria-hidden="true"></span><span class="pages-bg-s" aria-hidden="true"></span></button>
+
+        <!-- The family line's choice (spec 039 §1): before the view tabs on desktop, at the right end on tablet -->
+        <div class="rod-picker-host desktop-only" id="view-rod-picker" hidden></div>
 
         <!-- Family / Descendants view tabs (desktop) — pushed to the right -->
         <div class="view-mode-segment desktop-only" id="view-mode-segment">

@@ -62,6 +62,7 @@ import { buildLineages, rodLabels, RodId } from '../lineage.js';
 import { familyFirstNames, familyHasWindowPage } from '../family-pages.js';
 import { partnershipsInOrder } from '../story-text.js';
 import { personRodRowValue } from '../lineage-row.js';
+import { clearRodSelection, getSelectedRod, setRodSelection } from './rod-view.js';
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
@@ -408,7 +409,7 @@ export const personModalMethods = uiModule({
             + ` aria-label="${esc(R.menu)}" title="${esc(R.menu)}">⋯</button>`
             + `<div class="pm-rod-menu" role="menu" aria-label="${esc(R.menu)}" hidden>`
             // 026 §7, 1102 §3.2: Show in tree · Family line page · Family page (…) · Family book… · Pages for selected people… · Edit… · Start…
-            + item('show', R.showInTree) + item('page', strings.familyPages.rodPage) + famHtml + item('book', R.book)
+            + item('show', getSelectedRod() === value.row.rodId ? strings.rodView.whole : R.showInTree) + item('page', strings.familyPages.rodPage) + famHtml + item('book', R.book)
             + item('selpages', strings.familyPages.selPersonsAction)
             + item('edit', R.edit, locked) + item('split', R.split, locked)
             + (locked ? `<p class="pm-rod-menu-note">${esc(hint)}</p>` : '')
@@ -458,9 +459,10 @@ export const personModalMethods = uiModule({
         this.closePersonModalRodMenu();
         switch (itemEl.dataset.rodAct) {
             case 'show':
+                // The family line chosen in the tree view (spec 039 §2.3); chosen already: the whole tree.
                 this.leavePersonModalThen(() => {
-                    const group = this.rodHighlightGroup(rodId);
-                    if (group) this.highlightGroup(group);
+                    if (getSelectedRod() === rodId) clearRodSelection();
+                    else setRodSelection(rodId, 'person');
                 });
                 break;
             case 'edit':

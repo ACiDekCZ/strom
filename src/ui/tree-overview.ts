@@ -58,6 +58,7 @@ import { openPersonPopover } from './person-popover.js';
 import { yearOf } from '../dates.js';
 import { uiModule } from './module.js';
 import { evidenceIds, type HighlightGroup } from './evidence-ui.js';
+import { setRodSelection } from './rod-view.js';
 import {
     LineageIndex, Rod, RodId, SMALL_ROD_MAX_MEMBERS, buildLineages, marriedInto, otherFamilyRods, rodGenerations, rodLabels, rodOf,
 } from '../lineage.js';
@@ -231,18 +232,6 @@ interface RodsData {
     living: Map<RodId, number>;
     /** Each lineage's real members by generation (filled as rows ask). */
     generations: Map<RodId, PersonId[][]>;
-}
-
-/** The real members of a lineage (placeholders left out). */
-function realRodMembers(index: LineageIndex, id: RodId): PersonId[] {
-    const rod = index.rods.get(id);
-    return rod ? rod.memberIds.filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
-}
-
-/** The real spouses who married into a lineage. */
-function realRodSpouses(index: LineageIndex, id: RodId): PersonId[] {
-    const rod = index.rods.get(id);
-    return rod ? rod.spouses.map(s => s.personId).filter(m => index.data.persons[m] && !index.data.persons[m].isPlaceholder) : [];
 }
 
 /**
@@ -1618,34 +1607,17 @@ export const treeOverviewMethods = uiModule({
         await this.showTreeOverview(treeId, { section: 'rods', scroll: true });
     },
 
-    /** "Show in tree" on a lineage: its members highlighted, the spouses who married in faintly. */
-    showTreeOverviewRodInTree(id: RodId): void {
-        if (!state) return;
-        const d = this.treeOverviewRodsData();
-        const group = this.rodHighlightGroup(id, d.index, d.labels);
-        if (group) void this.startTreeOverviewHighlight(group);
-    },
-
     /**
-     * The highlight of a lineage: its members framed, the spouses who married
-     * in faintly, recounted after a change. Without an index: the open tree's.
+     * "Show in tree" on a lineage: the family line chosen in the tree view
+     * (spec 039 §0, remembered for the tree), its members highlighted, the
+     * spouses who married in faintly, with "Back to overview" (not remembered).
      */
-    rodHighlightGroup(id: RodId, index?: LineageIndex, labels?: ReadonlyMap<RodId, string>): Omit<HighlightGroup, 'returnTo'> | null {
-        const idx = index ?? buildLineages(DataManager.getData());
-        const rod = idx.rods.get(id);
-        if (!rod) return null;
-        const label = (labels ?? rodLabels(idx)).get(id) ?? rod.surname;
-        let latest: LineageIndex | null = null;
-        return {
-            kind: 'rod', cite: false,
-            personIds: realRodMembers(idx, id),
-            title: (n) => strings.treeOverview.rods.highlight(label, n),
-            recount: () => {
-                latest = buildLineages(DataManager.getData());
-                return realRodMembers(latest, id);
-            },
-            faint: () => realRodSpouses(latest ?? idx, id),
-        };
+    async showTreeOverviewRodInTree(id: RodId): Promise<void> {
+        if (!state) return;
+        const { treeId, active } = state;
+        this.closeTreeOverview();
+        if (!active) await this.switchToTree(treeId as TreeId);
+        setRodSelection(id, 'overview', { back: () => void this.reopenTreeOverview(treeId) });
     },
 
     /** "Family line page": the lineage's page in the pages' window (its tree opened first; 026 §7). */
@@ -2273,7 +2245,7 @@ export const treeOverviewMethods = uiModule({
                 this.goToTreeOverviewRod(target.dataset.id as RodId);
                 return;
             case 'rod-show':
-                this.showTreeOverviewRodInTree(target.dataset.id as RodId);
+                void this.showTreeOverviewRodInTree(target.dataset.id as RodId);
                 return;
             case 'rod-page':
                 void this.openTreeOverviewRodPage(target.dataset.id as RodId);
