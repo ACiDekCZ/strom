@@ -27,7 +27,6 @@ const focusOf = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.ge
 
 async function setupFixture(page: Page, fixture: string, focus: string, center?: string): Promise<void> {
     await openApp(page);
-    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', `${fixture}.json`), 'utf-8'));
     await page.evaluate(async ([tree, f]) => {
         await window.Strom.DataManager.importAsNewTree(tree as never, 'History');

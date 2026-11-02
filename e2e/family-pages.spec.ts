@@ -26,7 +26,6 @@ import { rodsTree } from './rods-fixture.js';
 
 async function setup(page: Page, tree: ReturnType<typeof rodsTree> = rodsTree()): Promise<void> {
     await openApp(page);
-    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.evaluate(async (data) => {
         const S = window.Strom;
         await S.DataManager.importAsNewTree(data, 'Brandvold');

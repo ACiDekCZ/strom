@@ -32,7 +32,6 @@ const rowsUrl = (() => {
 
 async function setup(page: Page, data: object = rodsTree()): Promise<void> {
     await openApp(page);
-    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.evaluate(async (d) => {
         const S = window.Strom;
         await S.DataManager.importAsNewTree(d as never, 'Brandvold');

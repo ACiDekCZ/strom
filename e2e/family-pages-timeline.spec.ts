@@ -108,7 +108,6 @@ test.describe('a line\'s timeline: the window', () => {
 
     test('the line page\'s link opens the timeline in the window; the controls work; the dark theme\'s tokens', async ({ page }) => {
         await openApp(page);
-        await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
         await page.evaluate(async (data) => {
             const S = window.Strom;
             await S.DataManager.importAsNewTree(data, 'Brandvold');

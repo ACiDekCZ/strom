@@ -4,6 +4,7 @@ import { openApp, createFirstPerson, waitForPersist } from './helpers.js';
 /**
  * Anniversaries + "on this day": a person whose birthday is today triggers the
  * once-a-day card (gone after dismiss + reload) and is listed in the panel.
+ * The card is on here (`onThisDay: true`); openApp keeps it off elsewhere.
  */
 test('on-this-day card shows once and the anniversaries panel lists today\'s birthday', async ({ page }) => {
     const now = new Date();
@@ -11,7 +12,7 @@ test('on-this-day card shows once and the anniversaries panel lists today\'s bir
     const dd = String(now.getDate()).padStart(2, '0');
     const birthDate = `1980-${mm}-${dd}`;  // born today, decades ago
 
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Marie', 'Novak', { gender: 'female', birthDate });
     await waitForPersist(page, 'Marie');
 
@@ -44,7 +45,7 @@ test('on-this-day card shows once and the anniversaries panel lists today\'s bir
 test('the on-this-day card belongs to the open tree and goes when switching trees', async ({ page }) => {
     const now = new Date();
     const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
     await waitForPersist(page, 'Vera');
     const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
@@ -68,7 +69,7 @@ test('the on-this-day card belongs to the open tree and goes when switching tree
 test('"also from my other visible trees": off by default; on, it names the tree and a click opens it', async ({ page }) => {
     const now = new Date();
     const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
     await waitForPersist(page, 'Vera');
     const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
@@ -111,7 +112,7 @@ test('phone: the on-this-day card sits above the bottom bar and steps aside for 
     const now = new Date();
     const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     await page.setViewportSize({ width: 390, height: 800 });
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
     await waitForPersist(page, 'Vera');
     await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
@@ -139,7 +140,7 @@ function birthInDays(days: number, year: number): string {
 
 test('the anniversaries count says it covers the next 7 days, in the menu and atop the panel (T33)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     // One birthday in 3 days (counted), one in 20 days (listed, not counted).
     await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: birthInDays(3, 1980) });
     await waitForPersist(page, 'Soon');
@@ -164,7 +165,7 @@ test('the anniversaries count says it covers the next 7 days, in the menu and at
 
 test('phone: the More sheet\'s anniversaries row names what its count covers (T33)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: birthInDays(2, 1980) });
     await waitForPersist(page, 'Soon');
     await page.locator('#bb-view-more').click();
@@ -176,7 +177,7 @@ test('phone: the More sheet\'s anniversaries row names what its count covers (T3
 test('the tree overview writes an anniversary day first in English ("15 May")', async ({ page }) => {
     const now = new Date();
     const birthDate = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    await openApp(page);
+    await openApp(page, { onThisDay: true });
     await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate });
     await waitForPersist(page, 'Vera');
     await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'highlights' }));

@@ -20,7 +20,6 @@ import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 async function setup(page: Page, tree: { defaultPersonId?: string } & object = rodsTree(), name = 'Brandvold'): Promise<void> {
     await openApp(page);
-    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.evaluate(async ({ data, name }) => {
         const S = window.Strom;
         await S.DataManager.importAsNewTree(data, name);

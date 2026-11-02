@@ -789,7 +789,6 @@ async function seedTraveller(page: Page): Promise<void> {
         lhota: { lat: 49.9, lon: 15.3 }, linz: { lat: 48.31, lon: 14.29 }, toronto: { lat: 43.65, lon: -79.38 },
     };
     await page.evaluate(async ({ persons, partnerships, places }) => {
-        window.Strom.SettingsManager.setOnThisDay(false);
         await window.Strom.DataManager.importAsNewTree({ persons, partnerships, places } as never, 'Hollerbach');
         await window.Strom.TreeRenderer.setFocus('karl' as never);
     }, { persons, partnerships, places });

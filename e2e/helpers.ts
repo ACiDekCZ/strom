@@ -84,15 +84,20 @@ export async function stubPersistence(page: Page, granted: boolean): Promise<voi
  * the one-time tour offer after the sample tree counts as already made unless
  * `{ tourOffer: true }` — it sits over the bottom of the screen for 15 s and
  * would make every click there wait it out; the "What's new" of this version
- * counts as seen unless `{ whatsNew: true }` (see seedWhatsNewSeen).
+ * counts as seen unless `{ whatsNew: true }` (see seedWhatsNewSeen); the
+ * "On this day" card is off unless `{ onThisDay: true }` — the fixtures and
+ * the sample tree have anniversaries, and on those dates the card (shown once
+ * the tree is idle) would cover the controls a suite taps, so a suite would
+ * fail only on those days.
  */
 export async function openApp(
     page: Page,
-    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean; whatsNew?: boolean } = {},
+    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean; whatsNew?: boolean; onThisDay?: boolean } = {},
 ): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
     if (!opts.whatsNew) await seedWhatsNewSeen(page);
     if (!opts.fileCopyReminders) await seedSetting(page, 'fileCopyReminders', false);
+    if (!opts.onThisDay) await seedSetting(page, 'onThisDay', false);
     if (!opts.tourOffer) {
         await page.addInitScript(() => {
             try {

@@ -49,7 +49,6 @@ async function setup(page: Page, opts: { history?: FakeHistory; ged?: string; wi
     const ged = opts.ged ?? historyGed();
     await fakeBridge(page, { features: HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
-    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await poll(page);
     await expect.poll(() => history.reads).toBeGreaterThan(0);
     return history;
