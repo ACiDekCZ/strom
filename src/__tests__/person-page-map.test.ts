@@ -339,7 +339,8 @@ describe('clusters of close points (round 4, K4-29)', () => {
         const plan = planPlacesMap(pts(), GEO, { kidPlaces: true });
         for (const mode of ['d', 'p'] as const) {
             const cl = plan.clusters![mode];
-            expect(cl.map(c => [c.text, c.members.map(m => m.name)])).toEqual([['1–2', ['Čapkov', 'Lhotka']]]);
+            // The pill shows the count (1102); the numbers are kept for its tooltip.
+            expect(cl.map(c => [c.text, c.nums, c.members.map(m => m.name)])).toEqual([['2 places', '1–2', ['Čapkov', 'Lhotka']]]);
             const [a, b] = cl[0].members;
             expect(cl[0].x).toBeCloseTo((a.x! + b.x!) / 2, 5);
             // The members have no label of their own there.
@@ -354,11 +355,11 @@ describe('clusters of close points (round 4, K4-29)', () => {
         expect(plain.clusters).toBeUndefined();
     });
 
-    it('a pill with the ranges, one label with both names and the years (desktop), a click selects all its rows', () => {
+    it('a pill with the count, the ranges in its tooltip, one label with both names and the years (desktop), a click selects all its rows', () => {
         const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true });
         const keys = `${placeKey('Čapkov')}\t${placeKey('Lhotka')}`;
         expect(html).toContain(`<button type="button" class="pp-map-pt pp-map-cl" style="left:`);
-        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl"[^>]*data-pp-map-place="${keys}" aria-label="1–2 Čapkov, Lhotka">1–2</button>`));
+        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl"[^>]*data-pp-map-place="${keys}" aria-label="Místa 1–2: Čapkov, Lhotka" title="Místa 1–2">2 místa</button>`));
         expect(html).toMatch(/<span class="pp-map-lb pp-map-lb--cl lb-d-\w+ lb-p-\w+" style="[^"]*--hw:\d+px" aria-hidden="true">Čapkov · Lhotka<span class="pp-map-yr y-d">1860–1883<\/span><\/span>/);
         // The members' own points stay for the selection, hidden in the box where they are clustered.
         expect(html).toMatch(/class="pp-map-pt cl-d cl-p"[^>]*data-pp-map-place="capkov"/);
@@ -377,7 +378,7 @@ describe('clusters of close points (round 4, K4-29)', () => {
     it('the CSS hides the members in the box where they are clustered and the other box\'s pill and path', () => {
         expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(min-width: 641px\) \{[^@]*\.pp-map-pt\.cl-d, \.pp-map-cl--p, \.pp-map-route\.r-p, \.pp-map-i--p/);
         expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-pt\.cl-p, \.pp-map-cl--d, \.pp-map-route\.r-d, \.pp-map-i--d/);
-        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.lb-d-a \{ transform: translate\(calc\(-1 \* var\(--hw\)\), calc\(-100% - 13px\)\); \}/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.lb-d-a \{ transform: translate\(calc\(-1 \* var\(--hw\)\), calc\(-100% - var\(--hh\) - 2px\)\); \}/);
     });
 
     it('the world inset: far places close together are one dot with one label', () => {
@@ -498,14 +499,15 @@ describe('clusters with children\'s and partners\' places (round 5, K5-33)', () 
         const c = plan.clusters!.d[0];
         expect(c.members.map(m => m.name)).toEqual(['Čapkov', 'Lhotka']);
         expect(c.rels.map(m => m.name)).toEqual(['Bystřice']);
-        expect(c.text).toBe('1–2');
+        expect(c.text).toBe('2 places');
+        expect(c.nums).toBe('1–2');
         expect(clusterLabel(c, cs).name).toBe('Čapkov · Lhotka');
         const byst = plan.places.find(m => m.name === 'Bystřice')!;
         expect(byst.cl?.d).toBe(0);
         expect(byst.side!.d).toBe('hide');
         const html = placesMapHtml(pts, GEO, { lang: 'cs', mode: 'file', kidPlaces: true });
         const keys = `${placeKey('Čapkov')}\t${placeKey('Lhotka')}\t${placeKey('Bystřice')}`;
-        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl pp-map-cl--d" style="[^"]*" data-pp-map-place="${keys}" aria-label="Místa 1–2 a 1 místo dětí">1–2<span class="pp-map-cl-ring" aria-hidden="true"></span></button>`));
+        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl pp-map-cl--d" style="[^"]*" data-pp-map-place="${keys}" aria-label="Místa 1–2 a 1 místo dětí" title="Místa 1–2 a 1 místo dětí">2 místa<span class="pp-map-cl-ring" aria-hidden="true"></span></button>`));
         // The hollow point gives way to the pill in the box where it is clustered.
         expect(html).toMatch(/class="pp-map-pt pp-map-pt--rel cl-d[^"]*"[^>]*data-pp-map-place="bystrice"/);
         // Selecting the relative's row selects the pill too.

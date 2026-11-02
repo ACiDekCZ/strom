@@ -6602,6 +6602,9 @@ const stringsEN = {
                 const r = `${rel} ${rel === 1 ? 'children’s place' : 'children’s places'}`;
                 return nums ? `${own === 1 ? 'Place' : 'Places'} ${nums} and ${r}` : r;
             },
+            // A cluster's pill (1102): how many of the person's places it holds; their numbers in its tooltip.
+            clusterCount: (n: number) => nEn(n, 'place', 'places'),
+            clusterNums: (nums: string) => `Places ${nums}`,
             dirs: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Location in the country',
@@ -13522,6 +13525,9 @@ const stringsCZ: StringsType = {
                 const r = `${nCs(rel, 'místo', 'místa', 'míst')} dětí`;
                 return nums ? `${own === 1 ? 'Místo' : 'Místa'} ${nums} a ${r}` : r;
             },
+            // A cluster's pill (1102): how many of the person's places it holds; their numbers in its tooltip.
+            clusterCount: (n: number) => nCs(n, 'místo', 'místa', 'míst'),
+            clusterNums: (nums: string) => `Místa ${nums}`,
             dirs: ['S', 'SV', 'V', 'JV', 'J', 'JZ', 'Z', 'SZ'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Poloha v zemi',
@@ -20355,6 +20361,9 @@ const stringsDE: StringsType = {
                 const r = `${nDe(rel, 'Ort', 'Orte')} der Kinder`;
                 return nums ? `${own === 1 ? 'Ort' : 'Orte'} ${nums} und ${r}` : r;
             },
+            // A cluster's pill (1102): how many of the person's places it holds; their numbers in its tooltip.
+            clusterCount: (n: number) => nDe(n, 'Ort', 'Orte'),
+            clusterNums: (nums: string) => `Orte ${nums}`,
             dirs: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Lage im Land',

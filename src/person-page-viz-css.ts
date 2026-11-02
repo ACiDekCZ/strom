@@ -43,8 +43,10 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-pt.is-sel { z-index: 3; width: 26px; height: 26px; margin: -13px 0 0 -13px; line-height: 22px; background: var(--accent); }
 .pp-map-pt--rel.is-sel { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: var(--accent); background: var(--surface); }
 .pp-map-pt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.pp-map-cl { width: auto; min-width: 22px; margin: 0; padding: 0 6px; border-radius: 11px; transform: translate(-50%, -50%); white-space: nowrap; }
-.pp-map-cl.is-sel { width: auto; min-width: 26px; height: 26px; margin: 0; padding: 0 8px; border-radius: 13px; }
+/* A cluster's pill (1102): the count of its places, the text centred; it grows with the text (a larger font,
+   200 % text size) rather than clipping it. */
+.pp-map-cl { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: auto; height: auto; min-width: 22px; min-height: 22px; margin: 0; padding: 1px 7px; border-radius: 999px; line-height: 1.25; transform: translate(-50%, -50%); white-space: nowrap; }
+.pp-map-cl.is-sel { width: auto; height: auto; min-width: 26px; min-height: 26px; margin: 0; padding: 1px 9px; border-radius: 999px; line-height: 1.25; }
 /* Round 5 (K5-33): a cluster with relatives' places has a hollow ring after the numbers; a cluster of those
    places only is a hollow pill with their count. */
 .pp-map-cl-ring { display: inline-block; box-sizing: border-box; width: 8px; height: 8px; margin-left: 4px; border: 1.5px solid currentColor; border-radius: 50%; vertical-align: 0; }
@@ -53,7 +55,7 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-lb--cl { font-weight: 600; }
 /* A label stays legible over the coasts and borders of a zoomed-out map (a whole continent or the world):
    an almost opaque plate in the map's surface colour (the token's translucent one where color-mix is unknown). */
-.pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
+.pp-map-lb { --hw: 11px; --hh: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .pp-map-lb--rel { font-weight: 500; color: var(--text-light); }
 .pp-map-yr { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-faint); }
 .pp-map-yr.y-p { display: none; }
@@ -137,8 +139,8 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-mini { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 9.5px; font-weight: 600; line-height: 15px; text-align: center; vertical-align: 1px; }
 @media (min-width: 641px) {
   .lb-d-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }
-  .lb-d-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - 13px)); }
-  .lb-d-b { transform: translate(calc(-1 * var(--hw)), 13px); }
+  .lb-d-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - var(--hh) - 2px)); }
+  .lb-d-b { transform: translate(calc(-1 * var(--hw)), calc(var(--hh) + 2px)); }
   .lb-d-hide { display: none; }
   .pp-map-rl--p { display: none; }
   .pp-map-pt.cl-d, .pp-map-cl--p, .pp-map-route.r-p, .pp-map-i--p, .rg-d-hide { display: none; }
@@ -150,8 +152,8 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map { aspect-ratio: 4 / 3; }
   .pp-map-in { left: -25%; width: 150%; }
   .lb-p-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }
-  .lb-p-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - 13px)); }
-  .lb-p-b { transform: translate(calc(-1 * var(--hw)), 13px); }
+  .lb-p-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - var(--hh) - 2px)); }
+  .lb-p-b { transform: translate(calc(-1 * var(--hw)), calc(var(--hh) + 2px)); }
   .lb-p-hide { display: none; }
   .pp-map-pt.cl-p, .pp-map-cl--d, .pp-map-route.r-d, .pp-map-i--d, .rg-p-hide { display: none; }
   .pp-map-ilb--wide { display: none; }

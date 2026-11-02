@@ -345,7 +345,10 @@ export type LabelSide = 'l' | 'r' | 'a' | 'b' | 'hide';
 /**
  * A cluster of numbered points (K4-29): points whose centres lie closer than
  * 26 px (phone 24) in the frame, chained, drawn as one pill at their centroid
- * ("1–2", "1, 3–4") with one label. Its members' rows are selected together.
+ * with one label; a pill that would touch another pill or a point takes it in
+ * (1102). The pill shows how many places it holds ("3 places"), their numbers
+ * ("1, 3–4") are in its tooltip and accessible name and in the list under the
+ * map. Its members' rows are selected together.
  */
 export interface MapCluster {
     /** The person's places in it, in the order of their numbers. */
@@ -357,8 +360,13 @@ export interface MapCluster {
     rels: PlannedPlace[];
     x: number;
     y: number;
-    /** The pill's text: the numbers as ranges; the count of places for a pill of relatives' places only. */
+    /**
+     * The pill's text: the count of the person's places ("3 places"); one place of the person (with relatives'
+     * places): its number; a bare count for a pill of relatives' places only.
+     */
     text: string;
+    /** The person's places' numbers as ranges ("1, 3–4"; '' for a pill of relatives' places only): the tooltip's. */
+    nums: string;
     side: LabelSide;
 }
 /** The orientation layer of a small neighbourhood (§1.3a); positions in view units. */
@@ -513,13 +521,15 @@ export interface LabelInput {
     x: number; y: number;
     /** label width in px */
     w: number;
-    /** Half the point's width in px (11 for a point, more for a cluster's pill). */
+    /** Half the point's width in px (11 for a point, more for a cluster's pill or a family line's bigger point). */
     hw?: number;
+    /** Half the point's height in px (11; a family line's bigger point more). */
+    hh?: number;
 }
 
-/** A point's (or pill's) box in view units: `hw` half its width in px, 11 px half its height. */
+/** A point's (or pill's) box in view units: `hw` half its width in px, `hh` (11) half its height. */
 export function pointRect(p: LabelInput, pxToUnit: number): Rect {
-    const hw = (p.hw ?? 11) * pxToUnit, hh = 11 * pxToUnit;
+    const hw = (p.hw ?? 11) * pxToUnit, hh = (p.hh ?? 11) * pxToUnit;
     return { x: p.x - hw, y: p.y - hh, w: 2 * hw, h: 2 * hh };
 }
 
@@ -528,10 +538,10 @@ export function pointRect(p: LabelInput, pxToUnit: number): Rect {
  * below it 3 px off, aligned to the point's left edge (as the CSS of `.lb-d-*` / `.lb-p-*`).
  */
 export function labelRect(p: LabelInput, side: Exclude<LabelSide, 'hide'>, pxToUnit: number): Rect {
-    const u = pxToUnit, w = p.w * u, h = 20 * u, hw = (p.hw ?? 11) * u;
+    const u = pxToUnit, w = p.w * u, h = 20 * u, hw = (p.hw ?? 11) * u, off = ((p.hh ?? 11) + 3) * u;
     if (side === 'r') return { x: p.x + hw + 5 * u, y: p.y - h / 2, w, h };
     if (side === 'l') return { x: p.x - hw - 5 * u - w, y: p.y - h / 2, w, h };
-    return { x: p.x - hw, y: side === 'a' ? p.y - 14 * u - h : p.y + 14 * u, w, h };
+    return { x: p.x - hw, y: side === 'a' ? p.y - off - h : p.y + off, w, h };
 }
 
 /**
@@ -587,14 +597,47 @@ export function chainClusters<T extends { x: number; y: number }>(pts: readonly 
     return [...groups.values()].filter(g => g.length > 1);
 }
 
-/** The pill's half width in px: 6 px padding, 2 px border, ≈ 6.5 px a character of 11.5 px digits; at least a point's 11. */
+/** The pill's half width in px: 7 px padding, 2 px border, ≈ 6.5 px a character of 11.5 px text; at least a point's 11. */
 export function pillHalfWidth(text: string): number {
-    return Math.max(11, Math.ceil((16 + text.length * 6.5) / 2));
+    return Math.max(11, Math.ceil((18 + text.length * 6.5) / 2));
 }
 
 /** A cluster's pill half width in px: with places of the person and relatives, the ring (8 px, 4 px off) after the numbers. */
 export function clusterHalfWidth(c: Pick<MapCluster, 'text' | 'members' | 'rels'>): number {
     return pillHalfWidth(c.text) + (c.members.length && c.rels.length ? 6 : 0);
+}
+
+/**
+ * Clusters settled (1102): a cluster whose pill (half width `hwOf`, 22 px high) would come closer than
+ * `gap` px to another pill or to a lone point takes it in, and two lone points (round, radius `halfOf`,
+ * 11 px) that would touch become a cluster, until nothing touches; a wide pill never covers a neighbour.
+ * Groups keep the order of the points; `pxToUnit` converts the px sizes.
+ */
+export function settleClusters<T extends { x: number; y: number }>(
+    pts: readonly T[], groups: readonly (readonly T[])[], hwOf: (g: readonly T[]) => number, pxToUnit: number,
+    halfOf: (q: T) => number = () => 11, gap = 2,
+): T[][] {
+    const order = new Map(pts.map((q, i) => [q, i]));
+    const byOrder = (g: T[]) => g.sort((a, b) => order.get(a)! - order.get(b)!);
+    let gs = groups.map(g => byOrder([...g]));
+    for (;;) {
+        const inGroup = new Set(gs.flat());
+        const units = [
+            ...gs.map(g => ({ g, x: g.reduce((t, m) => t + m.x, 0) / g.length, y: g.reduce((t, m) => t + m.y, 0) / g.length, hw: hwOf(g), hh: 11 })),
+            ...pts.filter(q => !inGroup.has(q)).map(q => ({ g: [q], x: q.x, y: q.y, hw: halfOf(q), hh: halfOf(q) })),
+        ];
+        let hit: [number, number] | null = null;
+        for (let i = 0; i < units.length && !hit; i++) for (let j = i + 1; j < units.length; j++) {
+            const a = units[i], b = units[j];
+            const touch = a.g.length < 2 && b.g.length < 2
+                ? Math.hypot(a.x - b.x, a.y - b.y) < (a.hw + b.hw + gap) * pxToUnit
+                : Math.abs(a.x - b.x) < (a.hw + b.hw + gap) * pxToUnit && Math.abs(a.y - b.y) < (a.hh + b.hh + gap) * pxToUnit;
+            if (touch) { hit = [i, j]; break; }
+        }
+        if (!hit) return gs.sort((a, b) => order.get(a[0])! - order.get(b[0])!);
+        const [a, b] = [units[hit[0]].g, units[hit[1]].g];
+        gs = [...gs.filter(g => g !== a && g !== b), byOrder([...a, ...b])];
+    }
 }
 
 /** A cluster's label: the members' names (more than two: "first +n") and, on desktop, their years first–last. */
@@ -633,7 +676,11 @@ export function labelWidthPx(name: string, years: string): number {
  */
 export function planPlacesMap(
     points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined,
-    opts: { kidPlaces: boolean; lang?: Language; minPlaces?: number },
+    opts: {
+        kidPlaces: boolean; lang?: Language; minPlaces?: number;
+        /** A family line's map: a point's size in px by its place (else 22). */
+        pointPx?: (placeKey: string) => number;
+    },
 ): MapPlan {
     const g = geo ?? {};
     const lang: Language = opts.lang ?? 'en';
@@ -752,19 +799,32 @@ export function planPlacesMap(
 
     // Clusters (K4-29): points closer than 26 px on desktop, 24 px on a phone, chained; the relatives'
     // hollow points join them the same way (round 5, K5-33).
+    // A pill shows the count of the person's places, their numbers go to its tooltip (1102); one place of the
+    // person with relatives' places keeps its number. A pill that would touch another pill or a point takes it
+    // in (settleClusters), so no two pills cover each other.
     const clusters: { d: MapCluster[]; p: MapCluster[] } = { d: [], p: [] };
+    // Half a lone point's size in px: 11, a family line's point by its people.
+    const half = (q: PlannedPlace): number => (opts.pointPx && !q.rel ? opts.pointPx(q.placeKey) / 2 : 11);
+    const toCluster = (all: readonly PlannedPlace[]): MapCluster => {
+        const ms = all.filter(m => !m.rel).sort((a, b) => a.num - b.num);
+        const rs = all.filter(m => m.rel);
+        return {
+            members: ms, rels: rs, side: 'hide',
+            text: ms.length > 1 ? S.personPage.map.clusterCount(ms.length) : ms.length ? String(ms[0].num) : String(rs.length),
+            nums: numberRanges(ms.map(m => m.num)),
+            x: all.reduce((t, m) => t + m.x!, 0) / all.length, y: all.reduce((t, m) => t + m.y!, 0) / all.length,
+        };
+    };
     for (const mode of ['d', 'p'] as const) {
         const min = mode === 'd' ? 26 * pxD : 24 * pxP;
-        for (const group of chainClusters([...ownGeo, ...near].map(q => ({ q, x: q.x!, y: q.y! })), min)) {
+        const pts = [...ownGeo, ...near].map(q => ({ q, x: q.x!, y: q.y! }));
+        const groups = settleClusters(pts, chainClusters(pts, min), g => clusterHalfWidth(toCluster(g.map(m => m.q))), mode === 'd' ? pxD : pxP,
+            m => half(m.q));
+        for (const group of groups) {
             const all = group.map(m => m.q);
-            const ms = all.filter(m => !m.rel).sort((a, b) => a.num - b.num);
-            const rs = all.filter(m => m.rel);
             const idx = clusters[mode].length;
             for (const m of all) m.cl = { ...m.cl, [mode]: idx };
-            clusters[mode].push({
-                members: ms, rels: rs, side: 'hide', text: ms.length ? numberRanges(ms.map(m => m.num)) : String(rs.length),
-                x: all.reduce((t, m) => t + m.x!, 0) / all.length, y: all.reduce((t, m) => t + m.y!, 0) / all.length,
-            });
+            clusters[mode].push(toCluster(all));
         }
     }
     // The path as drawn: a member at its cluster's pill, no segment inside a cluster.
@@ -840,7 +900,7 @@ export function planPlacesMap(
         for (const p of onMain) {
             const ci = p.cl?.[mode];
             if (ci === undefined) {
-                out.push({ input: { x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points)[mode]) },
+                out.push({ input: { x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points)[mode]), hw: half(p), hh: half(p) },
                     set: side => { p.side = { ...(p.side ?? { d: 'hide', p: 'hide' }), [mode]: side }; } });
                 continue;
             }
@@ -1020,6 +1080,8 @@ export function whereInset(at: PlaceGeo, frame?: GeoBounds, corner?: 'br' | 'tl'
 
 const pxD = UNITS_ACROSS.desk / BOX_PX.desk;
 const pxP = UNITS_ACROSS.phone / BOX_PX.phone;
+/** View units per px on desktop (d) and a phone (p). */
+export const PX_TO_UNIT = { d: pxD, p: pxP } as const;
 
 function anchorRect(a: { name: string; x: number }  & { y: number }): Rect {
     return { x: a.x - 6 * pxD, y: a.y - 10 * pxD, w: (16 + a.name.length * 6.6) * pxD, h: 20 * pxD };
@@ -1317,7 +1379,7 @@ function osaOf(p: PlannedPlace): string {
  *   - `data-pp-action="map:open"` (app): open the application map.
  */
 export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, ctx: PlacesMapCtx): string {
-    const plan = planPlacesMap(points, geo, { kidPlaces: ctx.kidPlaces, lang: ctx.lang });
+    const plan = planPlacesMap(points, geo, { kidPlaces: ctx.kidPlaces, lang: ctx.lang, ...(ctx.group ? { pointPx: ctx.group.size } : {}) });
     if (plan.state === 'none') return '';
     const S = getStringsForLang(ctx.lang);
     const M = S.personPage.map;
@@ -1548,7 +1610,9 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
         const yrs = group ? { d: period, p: period } : labelYears(p.points);
         const side = p.side ?? { d: 'r', p: 'r' };
         if (side.d === 'hide' && side.p === 'hide') continue;
-        labels += `<span class="pp-map-lb lb-d-${side.d} lb-p-${side.p}${p.rel ? ' pp-map-lb--rel' : ''}" style="${pos}" aria-hidden="true">`
+        // A family line's bigger point moves its label off its edge (1102).
+        const big = group && !p.rel && group.size(p.placeKey) !== 22 ? `;--hw:${group.size(p.placeKey) / 2}px;--hh:${group.size(p.placeKey) / 2}px` : '';
+        labels += `<span class="pp-map-lb lb-d-${side.d} lb-p-${side.p}${p.rel ? ' pp-map-lb--rel' : ''}" style="${pos}${big}" aria-hidden="true">`
             + `${esc(p.name)}${yrs.d ? `<span class="pp-map-yr y-d">${esc(yrs.d)}</span>` : ''}${yrs.p ? `<span class="pp-map-yr y-p">${esc(yrs.p)}</span>` : ''}</span>`;
     }
 
@@ -1563,11 +1627,11 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
         const pos = `left:${pct(c.x, VIEW_W)};top:${pct(c.y, VIEW_H)}`;
         const lab = clusterLabel(c, S);
         const relOnly = !c.members.length;
-        const aria = c.rels.length
-            ? M.clusterAria(relOnly ? '' : c.text, c.members.length, c.rels.length)
-            : `${c.text} ${c.members.map(m => m.full).join(', ')}`;
+        // The pill shows the count; its tooltip and accessible name carry the places' numbers (1102).
+        const nums = c.rels.length ? M.clusterAria(c.nums, c.members.length, c.rels.length) : M.clusterNums(c.nums);
+        const aria = c.rels.length ? nums : `${nums}: ${c.members.map(m => m.full).join(', ')}`;
         // A pill of relatives' places only names them in its tooltip (it has no label).
-        const title = relOnly ? ` title="${esc(c.rels.map(m => m.name).join(', '))}"` : '';
+        const title = ` title="${esc(relOnly ? c.rels.map(m => m.name).join(', ') : nums)}"`;
         const ring = c.rels.length && !relOnly ? '<span class="pp-map-cl-ring" aria-hidden="true"></span>' : '';
         pts += `<button type="button" class="pp-map-pt pp-map-cl${relOnly ? ' pp-map-cl--rel' : ''}${only ? ` pp-map-cl--${only}` : ''}${isSel}" style="${pos}" data-pp-map-place="${esc(keys.join(KEY_SEP))}" aria-label="${esc(aria)}"${title}>${esc(c.text)}${ring}</button>`;
         if (relOnly || (sides.d === 'hide' && sides.p === 'hide')) return;

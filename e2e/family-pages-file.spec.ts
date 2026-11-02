@@ -24,6 +24,7 @@ import { buildPageSetFilesAsync, buildPageSetHtml } from '../src/family-pages-ht
 import { buildZip } from '../src/zip';
 import { buildLineages, rods } from '../src/lineage';
 import { familyPagesFixture, FP_NOW } from '../src/__tests__/helpers/family-pages-fixture';
+import { crowdedMapFixture } from '../src/__tests__/helpers/crowded-map-fixture';
 
 const dir = mkdtempSync(join(tmpdir(), 'strom-family-pages-'));
 
@@ -582,6 +583,49 @@ test.describe('family pages file: the map of places (§3.7)', () => {
             expect(seen.points, scheme).toBeGreaterThan(0);
             expect(seen.contrast, scheme).toBeGreaterThanOrEqual(4.5);
             expect(seen.alpha, scheme).toBeGreaterThanOrEqual(0.9);
+        }
+    });
+
+    test('a crowded map: a cluster\'s pill shows the count with the numbers in its tooltip, its text whole and centred; nothing overlaps at 1440 and 390 px (1102)', async ({ page }) => {
+        const { data: crowdedData } = crowdedMapFixture();
+        const crowdedRods = rods(buildLineages(crowdedData)).filter(r => !r.small).map(r => r.id);
+        const crowdedSet = buildPageSet(crowdedData, { kind: 'rods', rods: crowdedRods }, { lang: 'cs', now: FP_NOW });
+        const crowdedUrl = saveSet('Rody-mapa.html', crowdedSet);
+        for (const width of [1440, 390]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto(`${crowdedUrl}#${crowdedSet.mapSlug}`);
+            await expect.poll(() => shown(page)).toEqual([crowdedSet.mapSlug]);
+            const map = page.locator(`#${crowdedSet.mapSlug} .pp-map`);
+            await expect(map.locator('.pp-map-cl').first()).toBeVisible();
+            const seen = await map.evaluate((m) => {
+                const vis = (e: Element) => e.getClientRects().length > 0;
+                const box = (e: Element) => e.getBoundingClientRect();
+                const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+                const pills = [...m.querySelectorAll<HTMLElement>('.pp-map-cl')].filter(vis);
+                const marks = [...pills, ...[...m.querySelectorAll<HTMLElement>('.pp-map-pt:not(.pp-map-cl)')].filter(vis), ...[...m.querySelectorAll<HTMLElement>('.pp-map-lb')].filter(vis)];
+                const overlaps: string[] = [];
+                marks.forEach((a, i) => marks.slice(i + 1).forEach(b => { if (hit(box(a), box(b))) overlaps.push(`${a.textContent} × ${b.textContent}`); }));
+                return {
+                    pills: pills.map(e => {
+                        const range = document.createRange();
+                        range.selectNodeContents(e.firstChild!);
+                        const t = range.getBoundingClientRect(), r = box(e);
+                        return { text: e.textContent ?? '', title: e.title, clipped: e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth, off: Math.abs((t.top + t.bottom) / 2 - (r.top + r.bottom) / 2) };
+                    }),
+                    overlaps,
+                    sideways: document.documentElement.scrollWidth > window.innerWidth,
+                };
+            });
+            expect(seen.pills.length, `${width}`).toBeGreaterThanOrEqual(3);
+            for (const p of seen.pills) {
+                expect(p.text, `${width}`).toMatch(/^\d+ míst[ao]?$/);
+                expect(p.title, `${width}`).toMatch(/^Místa \d/);
+                expect(p.clipped, `${width} ${p.text}`).toBe(false);
+                expect(p.off, `${width} ${p.text}`).toBeLessThanOrEqual(1.5);
+            }
+            expect(seen.pills.map(p => p.text), `${width}`).toContain('46 míst');
+            expect(seen.overlaps, `${width}`).toEqual([]);
+            expect(seen.sideways, `${width}`).toBe(false);
         }
     });
 });
