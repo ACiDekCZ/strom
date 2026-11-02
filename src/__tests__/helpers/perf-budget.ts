@@ -90,3 +90,76 @@ export function machineFactor(calibrationMs: number, referenceMs: number): numbe
 export function normalizedMs(measuredMs: number, calibrationMs: number, referenceMs: number): number {
     return measuredMs / machineFactor(calibrationMs, referenceMs);
 }
+
+export interface BudgetMeasure {
+    /** The best normalized time of the judged pairs (Infinity when none was judged). */
+    ms: number;
+    /** That run as measured, and the machine factor of its pair. */
+    measuredMs: number;
+    factor: number;
+    /** At least one pair ran on a machine no more than CAP_FACTOR times slower than the reference. */
+    judged: boolean;
+    /** Pairs measured (calibration + run). */
+    pairs: number;
+}
+
+export interface BudgetOptions {
+    /** The spec's budget on the reference machine at rest (ms, normalized). */
+    budgetMs: number;
+    calibrationRounds: number;
+    /** The calibration's best time on the reference machine at rest (ms). */
+    referenceMs: number;
+    /** Pairs measured at least (default 3) and at most (default 10). */
+    minPairs?: number;
+    maxPairs?: number;
+    /** No new pair after this much wall time (ms, default 15 000), so the runner's limit never decides. */
+    maxWallMs?: number;
+}
+
+/**
+ * The time of `run` against a budget (see the file comment): a warm-up of
+ * both, then pairs of a calibration and the run right after it; the best
+ * normalized run counts. It stops as soon as a run is within the budget
+ * (after `minPairs`), else after `maxPairs` or `maxWallMs`.
+ *
+ * A pair whose calibration was more than CAP_FACTOR times slower than the
+ * reference ran on a machine too busy (or too slow, a CI runner at its worst)
+ * to judge the code by: it does not count either way. When no pair could be
+ * judged the result says so (`judged: false`) and the caller reports it
+ * instead of failing: a slower code still fails on any machine that is not
+ * that busy, as its calibration stays fast.
+ */
+export function measureAgainstBudget(run: () => unknown, o: BudgetOptions): BudgetMeasure {
+    const minPairs = o.minPairs ?? 3;
+    const maxPairs = o.maxPairs ?? 10;
+    const maxWallMs = o.maxWallMs ?? 15_000;
+    run();
+    calibrationWorkload(o.calibrationRounds);
+    const out: BudgetMeasure = { ms: Infinity, measuredMs: 0, factor: 0, judged: false, pairs: 0 };
+    const start = performance.now();
+    while (out.pairs < maxPairs) {
+        const c0 = performance.now();
+        calibrationWorkload(o.calibrationRounds);
+        const calMs = performance.now() - c0;
+        const t0 = performance.now();
+        run();
+        const ms = performance.now() - t0;
+        out.pairs++;
+        const factor = calMs / o.referenceMs;
+        if (factor <= CAP_FACTOR) {
+            const n = normalizedMs(ms, calMs, o.referenceMs);
+            out.judged = true;
+            if (n < out.ms) { out.ms = n; out.measuredMs = ms; out.factor = machineFactor(calMs, o.referenceMs); }
+        }
+        if (out.pairs >= minPairs && out.ms < o.budgetMs) break;
+        if (performance.now() - start > maxWallMs) break;
+    }
+    return out;
+}
+
+/** One line for the test's log: the verdict's numbers, or why there is none. */
+export function budgetReport(label: string, m: BudgetMeasure, budgetMs: number): string {
+    return m.judged
+        ? `[${label}] ${m.ms.toFixed(1)} ms normalized of ${budgetMs} (${m.measuredMs.toFixed(1)} ms, machine ×${m.factor.toFixed(2)}, ${m.pairs} pairs)`
+        : `[${label}] not judged: the machine was over ×${CAP_FACTOR} slower than the reference in all ${m.pairs} pairs`;
+}

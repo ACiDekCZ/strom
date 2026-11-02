@@ -16,12 +16,14 @@ import { StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
 import { familyPagesFixture, FP_NOW, CLIP_IMG, PHOTO_IMG } from './helpers/family-pages-fixture.js';
 import { syntheticTree } from './helpers/synthetic-tree.js';
-import { calibrationWorkload, normalizedMs } from './helpers/perf-budget.js';
+import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
 /** Calibration rounds for the set's budget: about as long as building the set of 500 people. */
 const SET_CALIBRATION_ROUNDS = 40;
 /** Best time of those rounds on the reference machine at rest (Apple M-series laptop). */
 const SET_CALIBRATION_REFERENCE_MS = 212;
+/** The set of about 500 people built and drawn (§6.5, normalized ms). */
+const SET_BUDGET_MS = 1500;
 
 afterEach(() => setLanguage('cs'));
 
@@ -478,19 +480,16 @@ describe('time (§6.5)', () => {
         const { data } = syntheticTree({ persons: 500, founders: 10 });
         const rodIds = rods(buildLineages(data)).filter(r => !r.small).map(r => r.id);
         const run = (): string => buildPageSetHtml(buildPageSet(data, { kind: 'rods', rods: rodIds }, { lang: 'cs', now: FP_NOW }));
-        // Warm-up, then each run right after a calibration run (helpers/perf-budget.ts); the best normalized run counts.
+        // Each run right after a calibration run (helpers/perf-budget.ts); the best normalized run counts,
+        // a machine over 5× slower than the reference in every pair is reported, not failed.
         const persons = (run().match(/<section class="sp-page sp-page--person"/g) ?? []).length;
         expect(persons).toBeGreaterThan(400);
-        let ms = Infinity;
-        for (let i = 0; i < 3; i++) {
-            const c0 = performance.now();
-            calibrationWorkload(SET_CALIBRATION_ROUNDS);
-            const calMs = performance.now() - c0;
-            const t0 = performance.now();
-            run();
-            ms = Math.min(ms, normalizedMs(performance.now() - t0, calMs, SET_CALIBRATION_REFERENCE_MS));
-        }
-        expect(ms).toBeLessThan(1500);
-        // The budget is the normalized time above; the runner's own 5 s limit would count the wall clock of eight runs.
+        const m = measureAgainstBudget(run, {
+            budgetMs: SET_BUDGET_MS, calibrationRounds: SET_CALIBRATION_ROUNDS, referenceMs: SET_CALIBRATION_REFERENCE_MS,
+            maxWallMs: 10_000,
+        });
+        console.log(budgetReport('family pages set 500 people', m, SET_BUDGET_MS));
+        if (m.judged) expect(m.ms).toBeLessThan(SET_BUDGET_MS);
+        // The budget is the normalized time above; the runner's own 5 s limit would count the wall clock of the pairs.
     }, 30_000);
 });
