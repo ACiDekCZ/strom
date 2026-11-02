@@ -206,6 +206,9 @@ test.describe('Kinds of history: aligning', () => {
         const terminal = dialog(page).locator('[data-hal="terminal"]');
         await expect(terminal).toHaveClass(/primary/);
         await expect(dialog(page).locator('.hal-terminal-note')).toHaveText("The research's terminal window completes the confirmation. The preview is the same as there.");
+        // The terminal's sentence once, above the buttons; the ↻ block keeps its cost sentence.
+        await expect(dialog(page).getByText('terminal window completes the confirmation')).toHaveCount(1);
+        await expect(block(page, 'is-fill').locator('.hal-note')).toHaveCount(1);
         await terminal.click();
         await expect(dialog(page)).toHaveCount(0);
         expect(await links(page)).toContain(`strom-research://history-align?tree=${UUID}`);
@@ -222,6 +225,7 @@ test.describe('Kinds of history: aligning', () => {
         await expect(terminal).toBeVisible();
         await expect(terminal).toBeFocused();
         await expect(dialog(page).locator('.hal-terminal-note')).toBeVisible();
+        await expect(dialog(page).getByText('terminal window completes the confirmation')).toHaveCount(1);
         await terminal.click();
         expect(await links(page)).toContain(link);
     });

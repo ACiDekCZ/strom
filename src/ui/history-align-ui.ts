@@ -222,7 +222,8 @@ export const historyAlignMethods = uiModule({
                     + (b.years?.length ? `<span class="hal-fill-years">${esc(b.years.join(', '))}</span>` : '') + '</li>').join('') + '</ul>'
                 + (rest > 0 ? `<button type="button" class="link hal-more" data-hal="more" aria-expanded="${st.more}">${esc(st.more ? h.alignLess : h.alignMore(rest))}</button>` : '')
                 + `<p class="hal-note">${esc(h.alignCost(pv.sessions, paceText))}</p>`
-                + `<p class="hal-note">${esc(h.pendTerminal)}</p>`);
+                // The terminal variant (6c) says it once, above the buttons.
+                + (st.link || onlyBackfill(pv) ? '' : `<p class="hal-note">${esc(h.pendTerminal)}</p>`));
         }
         if (pv.busy.length) {
             html += block('is-busy', '', h.alignBusyHead, '',
