@@ -366,6 +366,8 @@ export const researchAdoptMethods = uiModule({
         this.updateTreeManagerList();
         this.refreshActionMenuBadges();
         TreeRenderer.render();
+        // Linked with the research: its places not on the map, offered once (spec 034 U5 point 7).
+        this.armPlacesOffer(tree.id);
         if (ownInstall || moved) {
             if (fromInstall) this.finishResearchInstall(offer.token);
             void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople, moved?.from);

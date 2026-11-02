@@ -1763,7 +1763,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
 }
 
 /** The research opened in the app (`ged`: its file, default researchGed()); its bridge remembered (as after a ?live= / ?send=); optionally changed. */
-export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean; media?: boolean; ged?: string } = {}): Promise<void> {
+export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean; media?: boolean; ged?: string; placesOffer?: boolean } = {}): Promise<void> {
     await openApp(page);
     await page.evaluate(() => {
         // Opening links in the system is not testable: record them instead.
@@ -1781,13 +1781,15 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
     }
     // By hand, a new tie's default (sending by itself: research-auto-send.spec.ts, chosen here) — chosen,
     // so the one-time question does not come (its own tests take it away).
-    await page.evaluate((auto) => {
+    await page.evaluate(({ auto, placesOffer }) => {
         const tm = window.Strom.TreeManager;
         const id = tm.getActiveTreeId()!;
         tm.patchResearchLink(id, { sendMode: auto ? 'auto' : 'manual' });
-        // Sending by hand goes at once in these tests ("What will be sent" first: its own tests).
-        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true, skipPreview: true }));
-    }, !!opts.auto);
+        // Sending by hand goes at once in these tests ("What will be sent" first: its own tests);
+        // the offer of the places not on the map was made (places-offer.spec.ts keeps it).
+        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'),
+            modeAsked: true, skipPreview: true, ...(placesOffer ? {} : { placesOffer: 'done' }) }));
+    }, { auto: !!opts.auto, placesOffer: !!opts.placesOffer });
     if (opts.edit) await editJan(page);
 }
 

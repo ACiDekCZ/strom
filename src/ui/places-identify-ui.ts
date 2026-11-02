@@ -11,7 +11,7 @@
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { collectPlaces, type PlaceUsage } from '../places.js';
+import { collectPlaces, knownStreets, type PlaceUsage } from '../places.js';
 import {
     placeIdentities, placeStateSummary, placeSummaryChips, bulkCounts, bulkLookPreview, bulkCheckPreview,
     placeOriginBadge, formatPlaceDate, placeGlyphClass, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
@@ -22,14 +22,23 @@ import {
 } from '../places-bridge.js';
 import { checkPlacesCached } from '../place-check.js';
 import { placeGeoHash } from '../place-records.js';
-import { storedResearchWaiting } from '../research-device.js';
+import { patchResearchAutoState, researchAutoState, storedResearchWaiting } from '../research-device.js';
 import {
-    canCheck, canLookUp, groupCheckState, placeContextLine, placeWhyRows, selectionCounts,
+    canCheck, canLookUp, groupCheckState, placeContextLine, placesOfferStep, placeWhyRows, selectionCounts,
 } from '../places-dialog.js';
+import { placeAliasMap, placeVariantGroups } from '../place-groups.js';
 import { uiModule } from './module.js';
 
 /** How long the toasts of the ◆ steps stand. */
 const TOAST_MS = 6000;
+/** How long the offer after an import or a link stands (it stays while the keyboard or pointer is on it). */
+const OFFER_MS = 15000;
+/** The offer is being counted (one at a time). */
+let offerBusy = false;
+/** A dialog or an editor is open (the offer does not come over it). */
+function dialogOpen(): boolean {
+    return !!document.querySelector('.modal-overlay.active');
+}
 /** A press this long on a row (touch) starts the selection. */
 const LONG_PRESS_MS = 500;
 
@@ -225,6 +234,62 @@ export const placesIdentifyMethods = uiModule({
                 </div>
                 ${acts}
             </div>`;
+    },
+
+    // ==================== THE OFFER AFTER AN IMPORT OR A LINK ====================
+
+    /**
+     * A tree just imported or linked with a research: "N places not on the
+     * map – look them up?" once its research here looks up places (spec 034
+     * U5 point 7). Once per tree: armed now, done once offered.
+     */
+    armPlacesOffer(treeId: string): void {
+        if (researchAutoState(treeId).placesOffer) return;
+        patchResearchAutoState(treeId, { placesOffer: 'armed' });
+        void this.maybeOfferPlaces();
+    },
+
+    /** The armed offer of the open tree, when its research here takes places (the research's status calls it too). */
+    async maybeOfferPlaces(): Promise<void> {
+        const treeId = DataManager.getCurrentTreeId();
+        if (offerBusy || !treeId || researchAutoState(treeId).placesOffer !== 'armed') return;
+        const step = placesOfferStep(true, this.placesResearchContext().access);
+        if (step === 'drop') patchResearchAutoState(treeId, { placesOffer: 'done' });
+        // Over a dialog it waits for the research's next status.
+        if (step !== 'ask' || dialogOpen()) return;
+        offerBusy = true;
+        try {
+            await this.loadPlacesLive();
+            if (DataManager.getCurrentTreeId() !== treeId || !this.placesResearchContext().canResearch || dialogOpen()) return;
+            const n = this.placesOffMapCount();
+            patchResearchAutoState(treeId, { placesOffer: 'done' });
+            if (n < 1) return;
+            const r = strings.places.research;
+            this.showToast(r.offer(n), OFFER_MS, {
+                kind: 'places-offer', closable: true, hold: true, notice: true,
+                action: { label: r.offerGo, run: () => this.openPlacesLookAll() },
+            });
+        } finally {
+            offerBusy = false;
+        }
+    },
+
+    /** "Look up all not on the map (N)" for the whole tree, as the Places dialog counts it. */
+    placesOffMapCount(): number {
+        const live = this.placesLivePayload();
+        if (live?.counts) return live.counts.offMap;
+        const data = DataManager.getData();
+        const places = new Map(this.placesForManager('tree').map(p => [p.key, p.usage] as const));
+        const same = new Set(placeVariantGroups(places, { data, live, aliases: placeAliasMap(data), known: knownStreets(data) })
+            .flatMap(g => g.members.filter(m => m.same).map(m => m.key)));
+        const ids = this.placeIdentitiesNow(places.keys());
+        return bulkCounts([...ids].filter(([k]) => !same.has(k)).map(([, id]) => id)).offMap;
+    },
+
+    /** Places of the whole tree with those not on the map, and the preview of looking them all up (as the map's ◆ button). */
+    openPlacesLookAll(): void {
+        this.showPlacesManager(undefined, undefined, 'tree', { unplaced: true });
+        if (document.getElementById('places-modal')) this.openPlacesBulk('look');
     },
 
     /** The research's live places for the open tree (null: none read). */

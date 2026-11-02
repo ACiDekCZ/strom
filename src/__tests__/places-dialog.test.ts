@@ -4,7 +4,7 @@ import type { PlaceIdentity, PlaceStateSummary } from '../place-identity.js';
 import {
     placeRowActions, canLookUp, canCheck, hasWhyHere, groupCheckState, selectionCounts, placeContextLine,
     placeYearSpans, formatYearSpan, checkFindingText, countryName, formerNameText, placeLocationLabel,
-    placeFormerLine, placeWhyRows, variantRowAction, townGroupsBesideVariants, variantGroupView,
+    placeFormerLine, placeWhyRows, variantRowAction, townGroupsBesideVariants, variantGroupView, placesOfferStep,
     type VariantGroupFilterInput, type VariantMemberFilter,
 } from '../places-dialog.js';
 import type { PlaceVariantGroup } from '../place-groups.js';
@@ -88,6 +88,17 @@ describe('placeContextLine', () => {
         expect(placeContextLine({ access: 'none', filter: 'check', summary: summary(), queued: 0 })).toBe('check');
         expect(placeContextLine({ access: 'old', filter: 'none', summary: summary(), queued: 0 })).toBe('old');
         expect(placeContextLine({ access: 'old', filter: 'all', summary: summary(), queued: 4 })).toBeNull();
+    });
+});
+
+describe('placesOfferStep (the offer after an import or a link)', () => {
+    it('only armed; asks with the research here, drops it without one or with one that does not look up places, else waits', () => {
+        expect(placesOfferStep(false, 'ok')).toBe('idle');
+        expect(placesOfferStep(true, 'ok')).toBe('ask');
+        expect(placesOfferStep(true, 'none')).toBe('drop');
+        expect(placesOfferStep(true, 'old')).toBe('drop');
+        expect(placesOfferStep(true, 'phone')).toBe('wait');
+        expect(placesOfferStep(true, 'elsewhere')).toBe('wait');
     });
 });
 

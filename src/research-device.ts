@@ -388,6 +388,11 @@ export interface ResearchAutoState {
     settledConflicts?: { base: string; ids: string[] };
     /** Whether a person comes back or goes, asked by a written send (`sync.removed`): until the research has it decided. */
     removedAsk?: ResearchRemovedAsk[];
+    /**
+     * "N places not on the map – look them up?" (spec 034 U5 point 7): `armed` once the tree was
+     * imported or linked with a research, `done` once it was offered (or there was nothing to offer).
+     */
+    placesOffer?: 'armed' | 'done';
 }
 
 /**
@@ -591,6 +596,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;
+        if (p.placesOffer === 'armed' || p.placesOffer === 'done') out.placesOffer = p.placesOffer;
         const sc = p.settledConflicts as Record<string, unknown> | undefined;
         if (sc && typeof sc.base === 'string' && Array.isArray(sc.ids)) {
             out.settledConflicts = { base: sc.base, ids: sc.ids.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 50) };

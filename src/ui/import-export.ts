@@ -1299,6 +1299,8 @@ export const importExportMethods = uiModule({
     async afterImport(treeId: TreeId): Promise<void> {
         await this.offerPostImportValidation(treeId);
         await this.offerPostImportSplit(treeId);
+        // A tree of a research: its places not on the map, once the research here takes them (spec 034 U5 point 7).
+        if (TreeManager.getTreeMetadata(treeId)?.research) this.armPlacesOffer(treeId);
     },
 
     /**

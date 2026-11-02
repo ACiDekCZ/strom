@@ -1810,6 +1810,8 @@ export const researchUiMethods = uiModule({
         this.refreshResearchSyncUi();
         // Shown links the new version no longer holds: said once (after the load's own notice).
         if (!created && previous) this.noteViewLinksAfterLoad(treeId, previous);
+        // A tree new from the research: its places not on the map, offered once (spec 034 U5 point 7).
+        if (created && source.treeId) this.armPlacesOffer(treeId);
         return treeId;
     },
 

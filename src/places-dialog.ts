@@ -206,6 +206,20 @@ export interface PlaceContextInput {
 }
 
 /**
+ * The offer after a tree was imported or linked with a research ("N places
+ * not on the map – look them up?", spec 034 U5 point 7), by where the
+ * research's place actions stand: `idle` not armed; `ask` count and offer
+ * now; `drop` never for this tree (no research, or one that does not look up
+ * places); `wait` until the research here answers (a phone, its bridge not
+ * answering yet).
+ */
+export function placesOfferStep(armed: boolean, access: PlacesResearchAccess): 'idle' | 'ask' | 'drop' | 'wait' {
+    if (!armed) return 'idle';
+    if (access === 'ok') return 'ask';
+    return access === 'none' || access === 'old' ? 'drop' : 'wait';
+}
+
+/**
  * The one sentence over the list, by priority: another computer → phone →
  * the "To confirm" filter → "No location" (with the research here) → "Check"
  * → the queue. An old research says so only where a ◆ step would be offered.
