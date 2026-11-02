@@ -182,6 +182,7 @@ async function sectorPoint(page: Page, name: string): Promise<{ x: number; y: nu
 
 async function openFan(page: Page): Promise<void> {
     await openApp(page);
+    // The demo tree's anniversaries show the "on this day" card over the controls on those dates.
     await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();

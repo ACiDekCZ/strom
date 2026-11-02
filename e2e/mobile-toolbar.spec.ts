@@ -346,6 +346,7 @@ test('a standalone file: its banner sits under the person row, never over it (op
 
 test('back and forward stand over the bottom bar, never half under it (fan, family, tablet)', async ({ page }) => {
     await openApp(page);
+    // The demo tree's anniversaries show the "on this day" card over the controls on those dates.
     await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
