@@ -167,3 +167,62 @@ export function manyLinesFixture(lines = 60): StromData {
     for (let i = 0; i < lines; i++) t.line(surnames[i % surnames.length], places[Math.floor(i / surnames.length) % places.length], 1700 + (i * 7) % 200);
     return t.data();
 }
+
+export interface AncestorsFixture {
+    data: StromData;
+    petr: PersonId;
+    /** The mother's mother's father (Kekulé 14), whose mother is not recorded. */
+    ondrej: PersonId;
+}
+
+/**
+ * The ancestors of the living Petr Lhoták (* 1978) over four generations
+ * (1102 §4.3): parents 2 of 2, grandparents 4 of 4, great-grandparents 7 of 8
+ * (the mother's mother's mother not recorded), the next generation 13 of 16
+ * (the parents of the unknown one and the mother of Ondřej Šalvěj missing):
+ * 26 known of 30, the oldest born 1851. Every name and place is made up.
+ */
+export function ancestorsFixture(): AncestorsFixture {
+    const t = new Builder();
+    const kek = new Map<number, PersonId>();
+    const people: [number, P][] = [
+        [1, { first: 'Petr', last: 'Lhoták', g: 'male', b: '1978', place: 'Lopuchov' }],
+        [2, { first: 'Jiří', last: 'Lhoták', g: 'male', b: '1945', d: '2015', place: 'Lopuchov' }],
+        [3, { first: 'Marta', last: 'Kvapilová', g: 'female', b: '1950', d: '2019', place: 'Kvasín' }],
+        [4, { first: 'Josef', last: 'Lhoták', g: 'male', b: '1915', d: '1980', place: 'Lopuchov' }],
+        [5, { first: 'Vlasta', last: 'Pažitková', g: 'female', b: '1918', d: '1990', place: 'Pažitkov' }],
+        [6, { first: 'Alois', last: 'Kvapil', g: 'male', b: '1920', d: '1985', place: 'Kvasín' }],
+        [7, { first: 'Irena', last: 'Šalvějová', g: 'female', b: '1922', d: '1995', place: 'Zálesí' }],
+        [8, { first: 'Bedřich', last: 'Lhoták', g: 'male', b: '1885', d: '1950', place: 'Lopuchov' }],
+        [9, { first: 'Hedvika', last: 'Kapustová', g: 'female', b: '1888', d: '1960', place: 'Lopuchov' }],
+        [10, { first: 'Ignác', last: 'Pažitka', g: 'male', b: '1890', d: '1955', place: 'Pažitkov' }],
+        [11, { first: 'Johana', last: 'Rebarborová', g: 'female', b: '1892', d: '1965', place: 'Pažitkov' }],
+        [12, { first: 'Tomáš', last: 'Kvapil', g: 'male', b: '1893', d: '1960', place: 'Kvasín' }],
+        [13, { first: 'Kristýna', last: 'Celerová', g: 'female', b: '1895', d: '1970', place: 'Kvasín' }],
+        [14, { first: 'Ondřej', last: 'Šalvěj', g: 'male', b: '1897', d: '1962', place: 'Zálesí' }],
+        [16, { first: 'Vojtěch', last: 'Lhoták', g: 'male', b: '1851', d: '1920', place: 'Lopuchov' }],
+        [17, { first: 'Ludmila', last: 'Tykvičková', g: 'female', b: '1855', d: '1925', place: 'Lopuchov' }],
+        [18, { first: 'Kryštof', last: 'Kapusta', g: 'male', b: '1856', d: '1921', place: 'Lopuchov' }],
+        [19, { first: 'Anežka', last: 'Hrášková', g: 'female', b: '1858', d: '1930', place: 'Hráškov' }],
+        [20, { first: 'Prokop', last: 'Pažitka', g: 'male', b: '1860', d: '1925', place: 'Pažitkov' }],
+        [21, { first: 'Terezie', last: 'Bodláková', g: 'female', b: '1862', d: '1931', place: 'Pažitkov' }],
+        [22, { first: 'Šimon', last: 'Rebarbora', g: 'male', b: '1861', d: '1928', place: 'Kedlubnov' }],
+        [23, { first: 'Klára', last: 'Kmínková', g: 'female', b: '1864', d: '1933', place: 'Kedlubnov' }],
+        [24, { first: 'Pavel', last: 'Kvapil', g: 'male', b: '1863', d: '1929', place: 'Kvasín' }],
+        [25, { first: 'Zdenka', last: 'Rybízová', g: 'female', b: '1866', d: '1936', place: 'Kvasín' }],
+        [26, { first: 'Jindřich', last: 'Celer', g: 'male', b: '1865', d: '1930', place: 'Zálesí' }],
+        [27, { first: 'Barbora', last: 'Petrželová', g: 'female', b: '1868', d: '1938', place: 'Zálesí' }],
+        [28, { first: 'Karel', last: 'Šalvěj', g: 'male', b: '1866', d: '1932', place: 'Zálesí' }],
+    ];
+    for (const [k, x] of people) kek.set(k, t.add(x, `a${k}`));
+    for (const [k, id] of kek) {
+        if (k === 1) continue;
+        // Each couple once, from the father's slot; a father without a recorded wife alone.
+        if (k % 2 === 1 && kek.has(k - 1)) continue;
+        const child = kek.get(k >> 1)!;
+        const mother = k % 2 === 0 ? kek.get(k + 1) ?? null : null;
+        if (k % 2 === 0) t.marry(id, mother, null, [child]);
+        else t.marry(id, null, null, [child]);
+    }
+    return { data: t.data(), petr: kek.get(1)!, ondrej: kek.get(14)! };
+}

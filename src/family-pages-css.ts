@@ -217,6 +217,37 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
   .sp-toc-row a { display: inline-block; padding: 10px 0; }
   .sp-clip-scan a { display: inline-flex; align-items: center; min-height: 44px; }
 }
+/* Chosen people (1102 §4.2): groups by line; a line of ancestors (§4.3): generations in Kekulé order. */
+.sp-sel { display: flex; flex-direction: column; gap: 22px; }
+.sp-sel-group { display: flex; flex-direction: column; }
+.sp-sel-h { margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 600; color: var(--text-light); overflow-wrap: anywhere; }
+.sp-sel-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 9px 0; border-bottom: 1px solid var(--divider); font-size: 15px; overflow-wrap: anywhere; }
+.sp-sel-n { font-weight: 600; min-width: 0; }
+.sp-sel-d { flex: 1 1 200px; font-size: 13.5px; color: var(--text-light); }
+.sp-anc { display: flex; flex-direction: column; gap: 18px; }
+.sp-anc-gen { display: flex; flex-direction: column; }
+.sp-anc-h { --gr: var(--accent-text); }
+.sp-anc-h .sp-roman { color: var(--gr); }
+.sp-anc-gt { font-family: var(--font-serif); font-size: 18px; font-weight: 600; }
+.sp-anc-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--divider); }
+.sp-anc-rel { font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+.sp-anc-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.sp-anc-n { font-weight: 600; }
+.sp-anc-rod { font-size: 13px; color: var(--text-faint); }
+.sp-anc-row--none .sp-anc-unk { font-style: italic; color: var(--text-faint); }
+.sp-anc-sum { display: inline-flex; align-items: center; min-height: 36px; font-size: 14px; color: var(--primary); cursor: pointer; }
+.sp-anc-more[open] > .sp-anc-sum { display: none; }
+.sp-anc-sum:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (hover: hover) { .sp-anc-sum:hover { text-decoration: underline; } }
+@media (max-width: 640px) {
+  .sp-anc-row { grid-template-columns: 84px minmax(0, 1fr); gap: 10px; }
+  .sp-anc-rel { font-size: 12px; }
+}
+@media (pointer: coarse) {
+  .sp-anc-sum { min-height: 44px; }
+  .sp-sel-n > .pp-link, .sp-anc-n > .pp-link { display: inline-flex; align-items: center; min-height: 44px; }
+  .sp-sel-row, .sp-anc-row { padding: 2px 0; }
+}
 /* The whole tree (spec 026 P3 §1, §2.3): its introduction, the choice of a line, "Other families". */
 .sp-counts { display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .sp-counts > span { white-space: nowrap; }
@@ -433,7 +464,8 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   .sp-rrow[hidden] { display: list-item !important; }
   details.sp-pair::details-content { content-visibility: visible; display: contents; }
   .sp-map-people { display: flex !important; flex-wrap: wrap; gap: 0 12px; }
-  details.sp-ix-more::details-content { content-visibility: visible; display: contents; }
+  details.sp-ix-more::details-content, details.sp-anc-more::details-content { content-visibility: visible; display: contents; }
+  .sp-anc-sum { display: none !important; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
   .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kid, .sp-mar { break-inside: avoid; }
 }
@@ -567,7 +599,7 @@ if(e){if(!/(^|--)obr-/.test(id))e.scrollIntoView()}else if(!first)window.scrollT
 var mk=s.classList.contains('sp-page--map')&&/--m-(.+)$/.exec(id);if(mk)selPlace(s,mk[1])}
 function selPlace(m,k){q('[data-pp-map-place]',m).forEach(function(x){x.classList.toggle('is-sel',x.getAttribute('data-pp-map-place').split('\\t').indexOf(k)>=0)})}
 h.classList.add('sp-on');
-q('details.sp-kids[open],details.sp-ix-more[open]').forEach(function(f){f.open=false});
+q('details.sp-kids[open],details.sp-ix-more[open],details.sp-anc-more[open]').forEach(function(f){f.open=false});
 var bar0=d.querySelector('.sp-fbar');
 function pkey(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/\\s+/g,' ').trim()}
 var pick=d.querySelector('.sp-fbar .sp-rodpick'),pq=pick&&pick.querySelector('.sp-rodpick-q'),fine=window.matchMedia&&matchMedia('(pointer: fine)').matches;
@@ -670,6 +702,6 @@ window.addEventListener('popstate',lbSync);
 lbSync();
 window.addEventListener('hashchange',function(){if(on)cancel(true);shut();pickShut();route(false);lbSync()});
 var opened=[];
-window.addEventListener('beforeprint',function(){opened=q('details.sp-kids:not([open]),details.sp-ix-more:not([open]),details.sp-pair:not([open])');opened.forEach(function(f){f.open=true})});
+window.addEventListener('beforeprint',function(){opened=q('details.sp-kids:not([open]),details.sp-ix-more:not([open]),details.sp-pair:not([open]),details.sp-anc-more:not([open])');opened.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){opened.forEach(function(f){f.open=false});opened=[]});
 })();`;

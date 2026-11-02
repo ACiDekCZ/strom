@@ -12,7 +12,9 @@ import { buildLineages, LineageIndex, otherFamilyRods, Rod, RodId, rodLabels, ro
 export type BookSelectionSpec =
     | { kind: 'tree' }
     | { kind: 'rods'; rods: RodId[] }
-    | { kind: 'ancestors' | 'descendants'; person: PersonId; generations?: number };
+    | { kind: 'ancestors' | 'descendants'; person: PersonId; generations?: number | 'all' }
+    /** Chosen people (linked pages only, 1102 §4.1): families only where both partners are chosen. */
+    | { kind: 'persons'; ids: PersonId[] };
 
 /** One chapter: a family (a union) of the line. */
 export interface BookChapter {
@@ -63,7 +65,8 @@ export function lineageSpec(spec: BookSelectionSpec): SelectionSpec {
     switch (spec.kind) {
         case 'tree': return { kind: 'tree' };
         case 'rods': return { kind: 'rods', rodIds: spec.rods };
-        default: return { kind: spec.kind, personId: spec.person, ...(spec.generations != null ? { generations: spec.generations } : {}) };
+        case 'persons': return { kind: 'persons', personIds: spec.ids };
+        default: return { kind: spec.kind, personId: spec.person, ...(typeof spec.generations === 'number' ? { generations: spec.generations } : {}) };
     }
 }
 
@@ -142,6 +145,10 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
             const toldIds = new Set(told.map(r => r.id));
             smallRods = otherFamilyRods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0);
         }
+    } else if (spec.kind === 'persons') {
+        // Chosen people: the families of two chosen partners, oldest first.
+        const members = new Set(sel.memberIds);
+        for (const uid of sel.familyIds) add(uid, null, 1, memberOf(uid, id => members.has(id)));
     } else {
         const members = new Set(sel.memberIds);
         const dist = new Map<PersonId, number>();
@@ -183,7 +190,7 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
         }
     }
     for (const g of groups) for (const id of g.rod.memberIds) if (data.persons[id]) personIds.add(id);
-    if (spec.kind === 'ancestors' || spec.kind === 'descendants') for (const id of sel.memberIds) personIds.add(id);
+    if (spec.kind === 'ancestors' || spec.kind === 'descendants' || spec.kind === 'persons') for (const id of sel.memberIds) personIds.add(id);
     const ownChapter = new Map<PersonId, number>([...ownChapters].map(([id, list]) => [id, list[0]]));
 
     return {

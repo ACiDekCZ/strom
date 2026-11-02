@@ -96,7 +96,7 @@ test.describe('person family line row', () => {
         await expect(menu).toBeVisible();
         await expect(more).toHaveAttribute('aria-expanded', 'true');
         await expect(menu.getByRole('menuitem')).toHaveText([
-            'Show family line in tree', 'Family line page', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+            'Show family line in tree', 'Family line page', 'Family line book…', 'Pages for selected people…', 'Edit family line…', 'Start a family line from this person…',
         ]);
         await expect(menu.locator('[aria-disabled="true"]')).toHaveCount(0);
         await expect(menu.locator('.pm-rod-menu-note')).toHaveCount(0);

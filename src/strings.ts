@@ -431,8 +431,8 @@ const stringsEN = {
                 auto: (p: string) => `The change switched from “${p}” to Custom. “${p}” restores its settings.`,
             },
             what: 'What goes in the book',
-            kind: { tree: 'Whole tree', rods: 'Family lines', ancestors: 'Ancestors of a person', descendants: 'Descendants of a person' } as Record<'tree' | 'rods' | 'ancestors' | 'descendants', string>,
-            kindHint: { rods: 'one or more', ancestors: 'up from the chosen person', descendants: 'with the branch of the line' } as Record<'rods' | 'ancestors' | 'descendants', string>,
+            kind: { tree: 'Whole tree', rods: 'Family lines', ancestors: 'Ancestors of a person', descendants: 'Descendants of a person', persons: 'Selected people' } as Record<'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons', string>,
+            kindHint: { rods: 'one or more', ancestors: 'up from the chosen person', descendants: 'with the branch of the line', persons: 'linked pages only' } as Record<'rods' | 'ancestors' | 'descendants' | 'persons', string>,
             treeHint: (persons: number, rods: number, other: number) =>
                 `${nEn(persons, 'person', 'people')} · ${nEn(rods, 'family line', 'family lines')} and ${nEn(other, 'other family', 'other families')}`,
             house: 'House · later',
@@ -6862,7 +6862,7 @@ const stringsEN = {
         tagRod: (label: string, gen: string) => `${label} family line, generation ${gen}`,
         recordedAs: { m: (form: string) => `recorded as ${form}`, f: (form: string) => `recorded as ${form}`, u: (form: string) => `recorded as ${form}` } as Record<'m' | 'f' | 'u', (form: string) => string>,
         spouseIn: { m: (label: string) => `husband in the ${label} family line`, f: (label: string) => `wife in the ${label} family line`, u: (label: string) => `spouse in the ${label} family line` } as Record<'m' | 'f' | 'u', (label: string) => string>,
-        fileStem: { rod: 'Family-line', descendants: 'Descendants', ancestors: 'Ancestors', tree: 'Family-tree' } as Record<'rod' | 'descendants' | 'ancestors' | 'tree', string>,
+        fileStem: { rod: 'Family-line', descendants: 'Descendants', ancestors: 'Ancestors', tree: 'Family-tree', persons: 'Selected-people' } as Record<'rod' | 'descendants' | 'ancestors' | 'tree' | 'persons', string>,
         privacyWarn: (n: number) => `The selection includes ${nEn(n, 'living person', 'living people')}. The file will carry their names, dates and places.`,
         // The pages (spec 026 §1, §8.4).
         kRod: 'Family line',
@@ -6982,8 +6982,8 @@ const stringsEN = {
         nPhotos: (n: number) => nEn(n, 'photo', 'photos'),
         imagesShort: { both: 'Excerpts, photos', clips: 'Excerpts only', photos: 'Photos only', none: 'No images' } as Record<'both' | 'clips' | 'photos' | 'none', string>,
         include: 'Includes',
-        inc: { map: 'Map of places', sources: 'Sources', stories: 'Stories' } as Record<'map' | 'sources' | 'stories', string>,
-        incShort: { map: 'map', sources: 'sources', stories: 'stories' } as Record<'map' | 'sources' | 'stories', string>,
+        inc: { map: 'Map of places', timelines: 'Timelines of lines' } as Record<'map' | 'timelines', string>,
+        incShort: { map: 'map', timelines: 'timelines' } as Record<'map' | 'timelines', string>,
         incNone: 'Pages only',
         estFile: 'One .html file',
         estZip: 'Set of files (.zip)',
@@ -7064,6 +7064,41 @@ const stringsEN = {
         treePagesAction: 'Pages for the whole tree',
         exportPages: 'Linked pages',
         treeHintPages: (persons: number, rods: number) => `${nEn(persons, 'person', 'people')} · ${nEn(rods, 'family line', 'family lines')} and other families`,
+        // Selected people and ancestors (1102 §4).
+        selPersonsAction: 'Pages for selected people…',
+        selPersons: 'Selected people',
+        selNone: 'Nobody selected yet. A set needs at least two people.',
+        selOne: 'One person = a person page.',
+        selMeta: (n: number, m: number) => `${nEn(n, 'person', 'people')} · ${nEn(m, 'family', 'families')} with a page (both partners selected) · other relatives as plain text`,
+        selMoved: 'Selected people are for pages only; the whole tree is selected.',
+        selKicker: 'Selection',
+        selFamsNote: 'A family has a page when both partners are selected.',
+        selSub: (n: number, tree: string) => tree ? `${nEn(n, 'person', 'people')} from the family tree ${tree}` : nEn(n, 'person', 'people'),
+        selPick: 'Find a person…',
+        selMore: (n: number) => `+ ${n} more`,
+        selRemove: (name: string) => `Remove ${name}`,
+        selDone: 'Done',
+        selPersonPage: 'Person page…',
+        ancKicker: 'Ancestors',
+        ancTitle: (name: string) => `Ancestors of ${name}`,
+        ancGen: (g: number) => ['Starting person', 'Parents', 'Grandparents', 'Great-grandparents', '2× great-grandparents'][g - 1] ?? `Generation ${g}`,
+        ancMeta: (n: number, k: number, m: number, oldest: number | null) => `${nEn(n, 'generation', 'generations')} · ${k} of ${m} known${oldest !== null ? ` · oldest ${oldest}` : ''}`,
+        ancOf: (k: number, m: number) => `${k} of ${m}`,
+        ancCount: (k: number, m: number) => `${k} of ${m} ancestors`,
+        ancRel: (path: readonly ('f' | 'm')[]): string => {
+            const own = (x: 'f' | 'm'): string => x === 'f' ? 'father' : 'mother';
+            const label = (p: readonly ('f' | 'm')[]): string => p.length === 1 ? own(p[0])
+                : p.length === 2 ? `${own(p[0])}’s ${own(p[1])}` : `${own(p[p.length - 1])} · ${label(p.slice(0, -1))}`;
+            return path.length ? label(path) : '';
+        },
+        ancUnknown: { m: 'not recorded', f: 'not recorded', u: 'not recorded' } as Record<'m' | 'f' | 'u', string>,
+        ancShow: (n: number) => `Show ${nEn(n, 'person', 'people')}`,
+        ancRod: (label: string) => `${label} line`,
+        gensOf: 'Generations',
+        gensAll: 'All',
+        groupsRow: 'Person pages',
+        groups: { history: 'History', childEvents: 'Children’s events', stories: 'Stories', sources: 'Sources', materials: 'Materials', pdf: 'PDF attachments' } as Record<'history' | 'childEvents' | 'stories' | 'sources' | 'materials' | 'pdf', string>,
+        alwaysIdx: 'Index and search are always included.',
     },
 };
 
@@ -7303,8 +7338,8 @@ const stringsCZ: StringsType = {
                 auto: (p: string) => `Změna přepnula z „${p}“ na Vlastní. Klepnutím na „${p}“ se vrátí jeho nastavení.`,
             },
             what: 'Co do knihy',
-            kind: { tree: 'Celý strom', rods: 'Rody', ancestors: 'Předci osoby', descendants: 'Potomci osoby' },
-            kindHint: { rods: 'jeden nebo víc', ancestors: 'od zvolené osoby nahoru', descendants: 'i větev rodu' },
+            kind: { tree: 'Celý strom', rods: 'Rody', ancestors: 'Předci osoby', descendants: 'Potomci osoby', persons: 'Vybrané osoby' },
+            kindHint: { rods: 'jeden nebo víc', ancestors: 'od zvolené osoby nahoru', descendants: 'i větev rodu', persons: 'jen propojené stránky' },
             treeHint: (persons: number, rods: number, other: number) =>
                 `${nCs(persons, 'osoba', 'osoby', 'osob')} · ${nCs(rods, 'rod', 'rody', 'rodů')} a ${nCs(other, 'další rodina', 'další rodiny', 'dalších rodin')}`,
             house: 'Dům (obec + čp.) · později',
@@ -13668,7 +13703,7 @@ const stringsCZ: StringsType = {
         tagRod: (label: string, gen: string) => `rod ${label}, ${gen}. generace`,
         recordedAs: { m: (form: string) => `zapsán jako ${form}`, f: (form: string) => `zapsána jako ${form}`, u: (form: string) => `zapsáno jako ${form}` },
         spouseIn: { m: (label: string) => `manžel v rodu ${label}`, f: (label: string) => `manželka v rodu ${label}`, u: (label: string) => `sňatkem v rodu ${label}` },
-        fileStem: { rod: 'Rod', descendants: 'Potomci', ancestors: 'Predci', tree: 'Rodokmen' },
+        fileStem: { rod: 'Rod', descendants: 'Potomci', ancestors: 'Predci', tree: 'Rodokmen', persons: 'Vybrane-osoby' },
         privacyWarn: (n: number) => `Ve výběru ${plural('cs', n, 'je', 'jsou', 'je')} ${nCs(n, 'žijící osoba', 'žijící osoby', 'žijících osob')}. Soubor ponese jejich jména, data a místa.`,
         // The pages (spec 026 §1, §8.4).
         kRod: 'Rod',
@@ -13788,8 +13823,8 @@ const stringsCZ: StringsType = {
         nPhotos: (n: number) => nCs(n, 'fotka', 'fotky', 'fotek'),
         imagesShort: { both: 'Výřezy, fotky', clips: 'Jen výřezy', photos: 'Jen fotky', none: 'Bez obrázků' } as Record<'both' | 'clips' | 'photos' | 'none', string>,
         include: 'Obsahuje',
-        inc: { map: 'Mapa obcí', sources: 'Prameny', stories: 'Vyprávění' } as Record<'map' | 'sources' | 'stories', string>,
-        incShort: { map: 'mapa', sources: 'prameny', stories: 'vyprávění' } as Record<'map' | 'sources' | 'stories', string>,
+        inc: { map: 'Mapa obcí', timelines: 'Časové osy rodů' } as Record<'map' | 'timelines', string>,
+        incShort: { map: 'mapa', timelines: 'časové osy' } as Record<'map' | 'timelines', string>,
         incNone: 'Jen stránky',
         estFile: 'Jeden soubor .html',
         estZip: 'Sada souborů (.zip)',
@@ -13870,6 +13905,42 @@ const stringsCZ: StringsType = {
         treePagesAction: 'Stránky celého stromu',
         exportPages: 'Propojené stránky',
         treeHintPages: (persons: number, rods: number) => `${nCs(persons, 'osoba', 'osoby', 'osob')} · ${nCs(rods, 'rod', 'rody', 'rodů')} a Další rodiny`,
+        // Vybrané osoby a předci (1102 §4).
+        selPersonsAction: 'Stránky vybraných osob…',
+        selPersons: 'Vybrané osoby',
+        selNone: 'Zatím nikdo. Sada vznikne od dvou osob.',
+        selOne: 'Jedna osoba = stránka osoby.',
+        selMeta: (n: number, m: number) => `${nCs(n, 'osoba', 'osoby', 'osob')} · ${nCs(m, 'rodina', 'rodiny', 'rodin')} se stránkou (oba partneři vybraní) · ostatní příbuzní jako text bez odkazu`,
+        selMoved: 'Vybrané osoby jsou jen pro stránky, vybrán celý strom.',
+        selKicker: 'Výběr osob',
+        selFamsNote: 'Stránku má rodina, když jsou vybraní oba partneři.',
+        selSub: (n: number, tree: string) => tree ? `${nCs(n, 'osoba', 'osoby', 'osob')} z rodokmenu ${tree}` : nCs(n, 'osoba', 'osoby', 'osob'),
+        selPick: 'Hledat osobu…',
+        selMore: (n: number) => `+ ${nCs(n, 'další', 'další', 'dalších')}`,
+        selRemove: (name: string) => `Odebrat: ${name}`,
+        selDone: 'Hotovo',
+        selPersonPage: 'Stránka osoby…',
+        ancKicker: 'Předci',
+        ancTitle: (name: string) => `Předci: ${name}`,
+        ancGen: (g: number) => ['Výchozí osoba', 'Rodiče', 'Prarodiče', 'Praprarodiče', 'Prapraprarodiče'][g - 1] ?? `${g}. generace předků`,
+        ancMeta: (n: number, k: number, m: number, oldest: number | null) => `${nCs(n, 'generace', 'generace', 'generací')} předků · ${k} známých ${zeCs(m)} ${m}${oldest !== null ? ` · nejstarší ${oldest}` : ''}`,
+        ancOf: (k: number, m: number) => `${k} ${zeCs(m)} ${m}`,
+        ancCount: (k: number, m: number) => `${nCs(k, 'předek', 'předci', 'předků')} ${zeCs(m)} ${m}`,
+        ancRel: (path: readonly ('f' | 'm')[]): string => {
+            const own = (x: 'f' | 'm'): string => x === 'f' ? 'otec' : 'matka';
+            const of = (x: 'f' | 'm'): string => x === 'f' ? 'otce' : 'matky';
+            const label = (p: readonly ('f' | 'm')[]): string => p.length === 1 ? own(p[0])
+                : p.length === 2 ? `${own(p[1])} ${of(p[0])}` : `${own(p[p.length - 1])} · ${label(p.slice(0, -1))}`;
+            return path.length ? label(path) : '';
+        },
+        ancUnknown: { m: 'neuveden', f: 'neuvedena', u: 'neuvedeno' } as Record<'m' | 'f' | 'u', string>,
+        ancShow: (n: number) => `Zobrazit ${nCs(n, 'osobu', 'osoby', 'osob')}`,
+        ancRod: (label: string) => `rod ${label}`,
+        gensOf: 'Generací předků',
+        gensAll: 'Všechny',
+        groupsRow: 'Stránky osob',
+        groups: { history: 'Dějiny', childEvents: 'Události dětí', stories: 'Vyprávění', sources: 'Prameny', materials: 'Materiály', pdf: 'PDF přílohy' } as Record<'history' | 'childEvents' | 'stories' | 'sources' | 'materials' | 'pdf', string>,
+        alwaysIdx: 'Rejstřík a hledání jsou vždy.',
     },
 };
 
@@ -14105,8 +14176,8 @@ const stringsDE: StringsType = {
                 auto: (p: string) => `Die Änderung hat von „${p}“ auf „Eigene“ umgestellt. „${p}“ stellt dessen Einstellung wieder her.`,
             },
             what: 'Was ins Buch kommt',
-            kind: { tree: 'Ganzer Stammbaum', rods: 'Stammlinien', ancestors: 'Vorfahren einer Person', descendants: 'Nachkommen einer Person' },
-            kindHint: { rods: 'eine oder mehrere', ancestors: 'von der gewählten Person aufwärts', descendants: 'mit dem Zweig der Linie' },
+            kind: { tree: 'Ganzer Stammbaum', rods: 'Stammlinien', ancestors: 'Vorfahren einer Person', descendants: 'Nachkommen einer Person', persons: 'Ausgewählte Personen' },
+            kindHint: { rods: 'eine oder mehrere', ancestors: 'von der gewählten Person aufwärts', descendants: 'mit dem Zweig der Linie', persons: 'nur verknüpfte Seiten' },
             treeHint: (persons: number, rods: number, other: number) =>
                 `${nDe(persons, 'Person', 'Personen')} · ${nDe(rods, 'Stammlinie', 'Stammlinien')} und ${nDe(other, 'weitere Familie', 'weitere Familien')}`,
             house: 'Haus · später',
@@ -20395,7 +20466,7 @@ const stringsDE: StringsType = {
         tagRod: (label: string, gen: string) => `Stammlinie ${label}, ${gen}. Generation`,
         recordedAs: { m: (form: string) => `eingetragen als ${form}`, f: (form: string) => `eingetragen als ${form}`, u: (form: string) => `eingetragen als ${form}` },
         spouseIn: { m: (label: string) => `Ehemann in der Stammlinie ${label}`, f: (label: string) => `Ehefrau in der Stammlinie ${label}`, u: (label: string) => `Ehepartner in der Stammlinie ${label}` },
-        fileStem: { rod: 'Stammlinie', descendants: 'Nachkommen', ancestors: 'Vorfahren', tree: 'Stammbaum' },
+        fileStem: { rod: 'Stammlinie', descendants: 'Nachkommen', ancestors: 'Vorfahren', tree: 'Stammbaum', persons: 'Ausgewaehlte-Personen' },
         privacyWarn: (n: number) => `Die Auswahl enthält ${nDe(n, 'lebende Person', 'lebende Personen')}. Die Datei enthält ihre Namen, Daten und Orte.`,
         // The pages (spec 026 §1, §8.4).
         kRod: 'Stammlinie',
@@ -20515,8 +20586,8 @@ const stringsDE: StringsType = {
         nPhotos: (n: number) => nDe(n, 'Foto', 'Fotos'),
         imagesShort: { both: 'Ausschnitte, Fotos', clips: 'Nur Ausschnitte', photos: 'Nur Fotos', none: 'Ohne Bilder' } as Record<'both' | 'clips' | 'photos' | 'none', string>,
         include: 'Enthält',
-        inc: { map: 'Ortskarte', sources: 'Quellen', stories: 'Erzählungen' } as Record<'map' | 'sources' | 'stories', string>,
-        incShort: { map: 'Karte', sources: 'Quellen', stories: 'Erzählungen' } as Record<'map' | 'sources' | 'stories', string>,
+        inc: { map: 'Ortskarte', timelines: 'Zeitleisten der Stammlinien' } as Record<'map' | 'timelines', string>,
+        incShort: { map: 'Karte', timelines: 'Zeitleisten' } as Record<'map' | 'timelines', string>,
         incNone: 'Nur Seiten',
         estFile: 'Eine .html-Datei',
         estZip: 'Dateisatz (.zip)',
@@ -20597,6 +20668,42 @@ const stringsDE: StringsType = {
         treePagesAction: 'Seiten für den ganzen Stammbaum',
         exportPages: 'Verknüpfte Seiten',
         treeHintPages: (persons: number, rods: number) => `${nDe(persons, 'Person', 'Personen')} · ${nDe(rods, 'Stammlinie', 'Stammlinien')} und weitere Familien`,
+        // Ausgewählte Personen und Vorfahren (1102 §4).
+        selPersonsAction: 'Seiten für ausgewählte Personen…',
+        selPersons: 'Ausgewählte Personen',
+        selNone: 'Noch niemand ausgewählt. Eine Sammlung braucht mindestens zwei Personen.',
+        selOne: 'Eine Person = eine Personenseite.',
+        selMeta: (n: number, m: number) => `${nDe(n, 'Person', 'Personen')} · ${nDe(m, 'Familie', 'Familien')} mit eigener Seite (beide Partner ausgewählt) · übrige Verwandte als Text ohne Link`,
+        selMoved: 'Ausgewählte Personen gibt es nur für Seiten; der ganze Stammbaum ist ausgewählt.',
+        selKicker: 'Auswahl',
+        selFamsNote: 'Eine Familie hat eine eigene Seite, wenn beide Partner ausgewählt sind.',
+        selSub: (n: number, tree: string) => tree ? `${nDe(n, 'Person', 'Personen')} aus dem Stammbaum ${tree}` : nDe(n, 'Person', 'Personen'),
+        selPick: 'Person suchen…',
+        selMore: (n: number) => `+ ${n} weitere`,
+        selRemove: (name: string) => `${name} entfernen`,
+        selDone: 'Fertig',
+        selPersonPage: 'Personenseite…',
+        ancKicker: 'Vorfahren',
+        ancTitle: (name: string) => `Vorfahren von ${name}`,
+        ancGen: (g: number) => ['Ausgangsperson', 'Eltern', 'Großeltern', 'Urgroßeltern', 'Ururgroßeltern'][g - 1] ?? `Generation ${g}`,
+        ancMeta: (n: number, k: number, m: number, oldest: number | null) => `${nDe(n, 'Generation', 'Generationen')} · ${k} von ${m} bekannt${oldest !== null ? ` · älteste ${oldest}` : ''}`,
+        ancOf: (k: number, m: number) => `${k} von ${m}`,
+        ancCount: (k: number, m: number) => `${k} von ${m} Vorfahren`,
+        ancRel: (path: readonly ('f' | 'm')[]): string => {
+            const own = (x: 'f' | 'm'): string => x === 'f' ? 'Vater' : 'Mutter';
+            const of = (x: 'f' | 'm'): string => x === 'f' ? 'des Vaters' : 'der Mutter';
+            const label = (p: readonly ('f' | 'm')[]): string => p.length === 1 ? own(p[0])
+                : p.length === 2 ? `${own(p[1])} ${of(p[0])}` : `${own(p[p.length - 1])} · ${label(p.slice(0, -1))}`;
+            return path.length ? label(path) : '';
+        },
+        ancUnknown: { m: 'nicht erfasst', f: 'nicht erfasst', u: 'nicht erfasst' } as Record<'m' | 'f' | 'u', string>,
+        ancShow: (n: number) => `${nDe(n, 'Person', 'Personen')} anzeigen`,
+        ancRod: (label: string) => `Linie ${label}`,
+        gensOf: 'Generationen',
+        gensAll: 'Alle',
+        groupsRow: 'Personenseiten',
+        groups: { history: 'Geschichte', childEvents: 'Ereignisse der Kinder', stories: 'Erzählungen', sources: 'Quellen', materials: 'Materialien', pdf: 'PDF-Anhänge' } as Record<'history' | 'childEvents' | 'stories' | 'sources' | 'materials' | 'pdf', string>,
+        alwaysIdx: 'Register und Suche sind immer enthalten.',
     },
 };
 

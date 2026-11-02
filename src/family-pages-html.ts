@@ -15,7 +15,7 @@
 import { Partnership, PartnershipId, Person, PersonId, PlaceGeo, StromData } from './types.js';
 import { getStringsForLang, Language } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { Rod, RodId, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
+import { Rod, RodId, rods as allRods, ancestorSlots, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty, shownNameParts, shownSurnameIsBirth } from './person-name.js';
 import { buildBookModel, BookModel } from './book-model.js';
@@ -255,6 +255,147 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const crossHtml = cross.length ? `<section class="sp-cross"><h2 class="sp-h2">${esc(F.crossTitle)}</h2>${cross.join('')}</section>` : '';
     return `<header class="sp-head"><div class="sp-kicker">${esc(F.kHub)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(sub)}</p></header>`
         + `<div class="sp-cards">${cards}</div>${crossHtml}`;
+}
+
+// ─── Chosen people and a line of ancestors (1102 §4.2, §4.3) ──────────────────
+
+/** A chosen person's short line: the birth place or the occupation, or "wife in the Lhoták line" when married into another line. */
+function selPersonNote(r: Render, ctx: BookCtx, p: Person): string {
+    const F = r.S.familyPages;
+    const index = r.set.protectedTree.lineages;
+    const into = marriedInto(index, p.id).find(m => !index.rods.get(m.rodId)?.small);
+    if (into) {
+        const label = rodLabel(r, ctx, into.rodId);
+        if (label) return F.spouseIn[gKey(p)](label);
+    }
+    return p.birthPlace?.trim() || occupationOf(p);
+}
+
+/** §4.2: the introduction of chosen people — grouped by line (the tree's order), the families with a page, the indexes. */
+function personsHubHtml(r: Render, page: SetPage, ctx: BookCtx): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const prot = set.protectedTree;
+    const tree = prot.tree;
+    const index = prot.lineages;
+    const people = sortByBirth(tree, set.selection.personIds.filter(id => !!realIn(tree, id) && !isProtectedPerson(prot, id)));
+    const order = allRods(index).filter(rod => !rod.small).map(rod => rod.id);
+    const groups = new Map<RodId | 'other', PersonId[]>();
+    for (const id of people) {
+        const rodId = index.rodByPerson.get(id);
+        const key: RodId | 'other' = rodId && !index.rods.get(rodId)?.small ? rodId : 'other';
+        const list = groups.get(key) ?? [];
+        list.push(id);
+        groups.set(key, list);
+    }
+    const keys: (RodId | 'other')[] = [...order.filter(id => groups.has(id)), ...(groups.has('other') ? ['other' as const] : [])];
+    const years: number[] = [];
+    for (const id of people) {
+        const p = tree.persons[id];
+        for (const y of [yearOf(p.birthDate), yearOf(p.deathDate)]) if (y !== null) years.push(y);
+    }
+    const fams = set.selection.familyIds.filter(fid => set.familySlug.has(fid));
+    const sub = [F.selSub(people.length, set.treeName), years.length ? `${Math.min(...years)}–${Math.max(...years)}` : '', F.nFams(fams.length)]
+        .filter(Boolean).join(' · ');
+    const groupHtml = keys.map(key => {
+        const ids = groups.get(key)!;
+        const head = key === 'other' ? F.otherFams : F.rodTitle(rodLabel(r, ctx, key));
+        const rows = ids.map(id => {
+            const p = tree.persons[id];
+            const yrs = yearsTagHtml(r, id, bookYears(p), 'sp-yrs');
+            const note = selPersonNote(r, ctx, p);
+            return `<div class="sp-sel-row"><span class="sp-sel-n">${personLinkHtml(r, ctx, id)}</span>${yrs}`
+                + `${note ? `<span class="sp-sel-d">${esc(note)}</span>` : ''}</div>`;
+        }).join('');
+        return `<section class="sp-sel-group"><h2 class="sp-sel-h">${esc(head)} · ${esc(F.nPersons(ids.length))}</h2>${rows}</section>`;
+    }).join('');
+    const famRows = fams.map(fid => {
+        const u = tree.partnerships[fid];
+        const year = isWedding(u) ? yearOf(u.startDate) : null;
+        return `<div class="sp-cross-row">${familyLinkHtml(r, fid, esc(familyTitle(tree, u, set.options.lang)))}`
+            + `${year !== null ? `<span class="sp-cross-rods">${year}</span>` : ''}</div>`;
+    }).join('');
+    const famHtml = fams.length
+        ? `<section class="sp-cross"><h2 class="sp-h2">${esc(F.families)}</h2><p class="sp-row-sub">${esc(F.selFamsNote)}</p>${famRows}</section>`
+        : '';
+    return `<header class="sp-head"><div class="sp-kicker">${esc(F.selKicker)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(sub)}</p></header>`
+        + `<div class="sp-sel">${groupHtml}</div>${famHtml}${teaserHtml(r, false)}`;
+}
+
+/** The steps from the starting person to the ancestor of a Kekulé number: 'f' father, 'm' mother, the nearest first. */
+function kekulePath(k: number): ('f' | 'm')[] {
+    const bits = k.toString(2).slice(1);
+    return [...bits].map(b => b === '0' ? 'f' : 'm');
+}
+
+/** Above this many places a generation folds (§4.3); without the script it stays open. */
+const ANC_FOLD_SLOTS = 8;
+
+/** §4.3: the line of ancestors — a heading per generation, the ancestors in Kekulé order, the missing ones muted. */
+function ancestorsPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const prot = set.protectedTree;
+    const tree = prot.tree;
+    const index = prot.lineages;
+    const rootId = page.id as PersonId;
+    const spec = set.spec;
+    const depth = spec.kind === 'ancestors' && typeof spec.generations === 'number' ? spec.generations : undefined;
+    const gens = ancestorSlots(tree, rootId, depth);
+    const n = depth ?? Math.max(0, gens.length - 1);
+    let last = 0;
+    gens.forEach((g, i) => { if (g.length) last = i; });
+    const known = gens.slice(1).reduce((sum, g) => sum + g.length, 0);
+    let oldest: number | null = null;
+    for (const g of gens.slice(1)) for (const a of g) {
+        const y = yearOf(tree.persons[a.id]?.birthDate);
+        if (y !== null && (oldest === null || y < oldest)) oldest = y;
+    }
+    const meta = F.ancMeta(n, known, Math.pow(2, n + 1) - 2, oldest);
+    const rodOfAnc = (id: PersonId): string => {
+        const rodId = index.rodByPerson.get(id);
+        const rod = rodId ? index.rods.get(rodId) : undefined;
+        if (!rod || rod.small) return F.otherFams;
+        const label = rodLabel(r, ctx, rod.id);
+        return label ? F.ancRod(label) : F.otherFams;
+    };
+    const blocks: string[] = [];
+    for (let g = 0; g <= last; g++) {
+        const slots = gens[g];
+        const byK = new Map(slots.map(a => [a.k, a.id]));
+        const prevK = g > 0 ? new Set(gens[g - 1].map(a => a.k)) : new Set<number>();
+        const rows: string[] = [];
+        const first = Math.pow(2, g);
+        for (let k = first; k < first * 2; k++) {
+            const id = byK.get(k);
+            const rel = g === 0 ? '' : esc(F.ancRel(kekulePath(k)));
+            if (!id) {
+                // A missing ancestor only where the child is known (§4.3).
+                if (!prevK.has(k >> 1)) continue;
+                const gk: 'm' | 'f' = k % 2 === 0 ? 'm' : 'f';
+                rows.push(`<div class="sp-anc-row sp-anc-row--none"><span class="sp-anc-rel">${rel}</span>`
+                    + `<span class="sp-anc-main"><span class="sp-anc-unk">${esc(F.ancUnknown[gk])}</span></span></div>`);
+                continue;
+            }
+            const p = tree.persons[id];
+            const shielded = isProtectedPerson(prot, id);
+            const yrs = g === 0 && !shielded
+                ? [yearOf(p.birthDate) !== null ? `* ${yearOf(p.birthDate)}` : '', p.birthPlace?.trim() ?? ''].filter(Boolean).join(', ')
+                : bookYears(p);
+            rows.push(`<div class="sp-anc-row"><span class="sp-anc-rel">${rel}</span><span class="sp-anc-main">`
+                + `<span class="sp-anc-n">${personLinkHtml(r, ctx, id)}</span>${yearsTagHtml(r, id, yrs, 'sp-yrs')}`
+                + `<span class="sp-anc-rod">${esc(rodOfAnc(id))}</span></span></div>`);
+        }
+        const places = first;
+        const head = `<h2 class="sp-gen-h sp-anc-h"><span class="sp-roman">${roman(g + 1)}</span><span class="sp-anc-gt">${esc(F.ancGen(g + 1))}</span>`
+            + `${g > 0 ? `<span class="sp-gen-meta">${esc(F.ancOf(slots.length, places))}</span>` : ''}</h2>`;
+        const list = `<div class="sp-anc-list">${rows.join('')}</div>`;
+        blocks.push(places > ANC_FOLD_SLOTS && rows.length
+            ? `<section class="sp-anc-gen">${head}<details class="sp-anc-more" open><summary class="sp-anc-sum">${esc(F.ancShow(rows.length))} <span aria-hidden="true">▾</span></summary>${list}</details></section>`
+            : `<section class="sp-anc-gen">${head}${list}</section>`);
+    }
+    return `<header class="sp-head"><div class="sp-kicker">${esc(F.ancKicker)}</div><h1 class="sp-h1">${esc(page.title)}</h1><p class="sp-sub">${esc(meta)}</p></header>`
+        + `<div class="sp-anc">${blocks.join('')}</div>${teaserHtml(r, false)}`;
 }
 
 /** A line's card (§1.5; the whole tree's §1.3): the name, the founder, the period on the axis, the counts. */
@@ -1275,7 +1416,13 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
     const set = r.set;
     return {
         personId: page.id as PersonId, lang: set.options.lang, mode: r.mode,
-        groups: { ...PERSON_PAGE_ALL_GROUPS, research: false, sources: set.options.sources, ...(r.opts.groups ?? {}) },
+        groups: {
+            ...PERSON_PAGE_ALL_GROUPS, research: false, sources: set.options.sources,
+            // The dialog's "Person pages" (1102 §4.4); stories are the protected copy's (buildPageSet).
+            history: set.options.groups.history, childEvents: set.options.groups.childEvents,
+            materials: set.options.groups.materials, pdf: set.options.groups.pdf,
+            ...(r.opts.groups ?? {}),
+        },
         privacy: set.options.privacy, toggles: { history: true, childEvents: true }, research: false,
         now: set.options.now, toc: false,
         links: {
@@ -1302,6 +1449,8 @@ function pageInnerHtml(r: Render, page: SetPage): string {
     if (page.kind === 'rod') body = rodPageHtml(r, page, ctx);
     else if (page.kind === 'branch') body = branchPageHtml(r, page, ctx);
     else if (page.kind === 'hub') body = hubPageHtml(r, page, ctx);
+    else if (page.kind === 'persons') body = personsHubHtml(r, page, ctx);
+    else if (page.kind === 'ancestors') body = ancestorsPageHtml(r, page, ctx);
     else if (page.kind === 'tree') body = treeHubHtml(r, page, ctx);
     else if (page.kind === 'other') body = otherFamiliesHtml(r, page);
     else if (page.kind === 'family') body = familyPageHtml(r, page, ctx);

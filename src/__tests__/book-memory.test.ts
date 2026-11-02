@@ -152,8 +152,12 @@ describe('book memory: per tree on this device', () => {
     it('the output and the family pages\' choices (spec 026 §6.6): remembered with the book\'s, kept when a save does not give them', () => {
         const s = fakeStorage();
         expect(pagesChoicesFromMemory(null)).toEqual(defaultPagesChoices());
-        expect(defaultPagesChoices()).toEqual({ families: 'pages', clips: 'full', photos: 'full', include: { map: true, sources: true, stories: true } });
-        const pages = { families: 'section' as const, clips: 'none' as const, photos: 'small' as const, include: { map: false, sources: true, stories: false } };
+        const allGroups = { history: true, childEvents: true, stories: true, sources: true, materials: true, pdf: true };
+        expect(defaultPagesChoices()).toEqual({ families: 'pages', clips: 'full', photos: 'full', groups: allGroups, include: { map: true, timelines: true } });
+        const pages = {
+            families: 'section' as const, clips: 'none' as const, photos: 'small' as const,
+            groups: { ...allGroups, history: false, pdf: false }, include: { map: false, timelines: true },
+        };
         saveBookMemory(s, 't', opts({ selection: { kind: 'rods', rods: ['r1'] as RodId[] } }), { output: 'pages', pages });
         const m = loadBookMemory(s, 't')!;
         expect(m.output).toBe('pages');
@@ -166,10 +170,26 @@ describe('book memory: per tree on this device', () => {
         // The selection is still not remembered.
         expect(Object.keys(JSON.parse(s.map.get('strom.book.t')!))).not.toContain('selection');
         // Malformed fields fall back one by one.
-        const bad = parseBookMemory(JSON.stringify({ output: 'poster', pages: { families: 'all', clips: 'small', photos: 7, include: { map: false, sources: 'no' } } }))!;
+        const bad = parseBookMemory(JSON.stringify({ output: 'poster', pages: { families: 'all', clips: 'small', photos: 7, include: { map: false, sources: 'no' }, groups: { pdf: 0 } } }))!;
         expect(bad.output).toBeUndefined();
-        expect(bad.pages).toEqual({ families: 'pages', clips: 'small', photos: 'full', include: { map: false, sources: true, stories: true } });
+        expect(bad.pages).toEqual({ families: 'pages', clips: 'small', photos: 'full', groups: allGroups, include: { map: false, timelines: true } });
         expect(parseBookMemory('{"pages":{"families":"x"}}')).toBeNull();
+    });
+
+    it('1102 §4.4: an entry from before the person pages\' groups moves its sources and stories from "Includes" into the groups', () => {
+        const old = parseBookMemory(JSON.stringify({ pages: { families: 'pages', clips: 'full', photos: 'full', include: { map: false, sources: false, stories: false } } }))!;
+        expect(old.pages!.include).toEqual({ map: false, timelines: true });
+        expect(old.pages!.groups).toEqual({ history: true, childEvents: true, stories: false, sources: false, materials: true, pdf: true });
+        expect(Object.keys(old.pages!.include)).not.toContain('sources');
+        // Saved again, the entry carries the new shape only.
+        const s = fakeStorage();
+        saveBookMemory(s, 't', opts(), { pages: old.pages });
+        const raw = JSON.parse(s.map.get('strom.book.t')!);
+        expect(raw.pages.include).toEqual({ map: false, timelines: true });
+        expect(raw.pages.groups.sources).toBe(false);
+        // A new entry's groups win over the old fields.
+        const both = parseBookMemory(JSON.stringify({ pages: { include: { sources: false }, groups: { sources: true, history: false } } }))!;
+        expect(both.pages!.groups).toMatchObject({ sources: true, history: false });
     });
 
     it('the book\'s options never touch the person card\'s settings or lifelineDefaults: one key of its own', () => {

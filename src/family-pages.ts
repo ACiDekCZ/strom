@@ -28,7 +28,7 @@ import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
 
-export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other';
+export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors';
 
 /** The four indexes (spec 026 §3.5). */
 export type PageSetIndexKind = 'persons' | 'families' | 'surnames' | 'places';
@@ -40,7 +40,7 @@ export interface SetPage {
     kind: PageKind;
     /**
      * What the page is about: a lineage's id ('rod'), a union's ('family'), a
-     * person's ('person', and 'branch': the ancestor), the index's kind
+     * person's ('person', 'branch' and 'ancestors': the starting person), the index's kind
      * ('index'); none for the hub, the tree and the map.
      */
     id?: string;
@@ -87,8 +87,22 @@ export interface PageSetOptions {
     sources?: boolean;
     /** The stories of persons and couples (default true). */
     stories?: boolean;
+    /** What the person pages carry (1102 §4.4, default all on); `sources` and `stories` here win over the fields above. */
+    groups?: Partial<PageSetGroups>;
     now?: Date;
 }
+
+/** The groups of the person pages a set carries (1102 §4.4); stories and sources also on the family pages. */
+export interface PageSetGroups {
+    history: boolean;
+    childEvents: boolean;
+    stories: boolean;
+    sources: boolean;
+    materials: boolean;
+    pdf: boolean;
+}
+
+export const PAGE_SET_GROUP_KEYS: readonly (keyof PageSetGroups)[] = ['history', 'childEvents', 'stories', 'sources', 'materials', 'pdf'];
 
 export interface PageSetContext {
     /** A reduced copy of an image for 'small' (made beforehand: the canvas is asynchronous). */
@@ -101,7 +115,7 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories'>> & { now: Date };
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories'>> & { now: Date; groups: PageSetGroups };
     selection: Selection;
     protectedTree: ProtectedPersonPageTree;
     /** The lineages with a page, in reading order. */
@@ -130,7 +144,12 @@ export interface PageSet {
     otherPersonIds: PersonId[];
     images: ImageRegistry;
     searchIndex: SearchEntry[];
+    /** The tree's name as the app gave it ('' none): the introduction of chosen people names it. */
+    treeName: string;
 }
+
+/** The depth of a set of ancestors when none is chosen (1102 §4.1). */
+export const PAGE_SET_ANCESTOR_GENERATIONS = 4;
 
 /** Fixed slugs (§0.6): the same in every language, stable between saves. */
 export const PAGE_SET_HUB_SLUG = 'uvod';
@@ -281,7 +300,7 @@ function rodTitleOf(lang: Language, label: string): string {
     return label ? F.rodTitle(label) : F.rodGeneric;
 }
 
-/** The set's lineages: chosen ones; for the whole tree every lineage over the small ones (spec 026 P3 §1.1); none for a branch. */
+/** The set's lineages: chosen ones; for the whole tree every lineage over the small ones (spec 026 P3 §1.1); none for a branch, ancestors or chosen people. */
 function setRods(prot: ProtectedPersonPageTree, spec: BookSelectionSpec): Rod[] {
     const index = prot.lineages;
     if (spec.kind === 'rods') return spec.rods.map(id => index.rods.get(id)).filter((r): r is Rod => !!r);
@@ -318,11 +337,19 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const lang = opts.lang;
     const S = getStringsForLang(lang);
     const F = S.familyPages;
+    const sources = opts.groups?.sources ?? opts.sources ?? true;
+    const stories = opts.groups?.stories ?? opts.stories ?? true;
+    const groups: PageSetGroups = {
+        history: opts.groups?.history ?? true, childEvents: opts.groups?.childEvents ?? true, stories, sources,
+        materials: opts.groups?.materials ?? true, pdf: opts.groups?.pdf ?? true,
+    };
     const options: PageSet['options'] = {
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
-        sources: opts.sources ?? true, stories: opts.stories ?? true, now: opts.now ?? new Date(),
+        sources, stories, groups, now: opts.now ?? new Date(),
     };
+    // Ancestors without a depth: the dialog's default (§4.1).
+    if (spec.kind === 'ancestors' && spec.generations == null) spec = { ...spec, generations: PAGE_SET_ANCESTOR_GENERATIONS };
     const prot = protectPersonPageTree(data, options.privacy, options.now);
     if (!options.stories) {
         // Without stories: the protected copy loses them (the tree itself is untouched).
@@ -357,13 +384,16 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         const rod = rods[0];
         intro = { slug: uniqueSlug(`rod-${asciiSlug(labels.get(rod.id) ?? '') || 'rod'}`, used), kind: 'rod', id: rod.id, title: rodTitleOf(lang, labels.get(rod.id) ?? ''), crumbs: [] };
         rodSlug.set(rod.id, intro.slug);
-    } else if (spec.kind === 'ancestors' || spec.kind === 'descendants') {
+    } else if (spec.kind === 'ancestors') {
+        // The ancestors' page (1102 §4.3): the generations of a pedigree.
         const name = nameOf(tree, spec.person);
-        const base = `${spec.kind === 'ancestors' ? 'predci' : 'potomci'}-${asciiSlug(name)}`;
-        intro = {
-            slug: uniqueSlug(base, used), kind: 'branch', id: spec.person,
-            title: spec.kind === 'ancestors' ? S.book.titleAncestors(name) : S.book.titleDescendants(name), crumbs: [],
-        };
+        intro = { slug: uniqueSlug(`predci-${asciiSlug(name)}`, used), kind: 'ancestors', id: spec.person, title: F.ancTitle(name), crumbs: [] };
+    } else if (spec.kind === 'descendants') {
+        const name = nameOf(tree, spec.person);
+        intro = { slug: uniqueSlug(`potomci-${asciiSlug(name)}`, used), kind: 'branch', id: spec.person, title: S.book.titleDescendants(name), crumbs: [] };
+    } else if (spec.kind === 'persons') {
+        // Chosen people (1102 §4.2): their introduction groups them by line.
+        intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'persons', title: F.selPersons, crumbs: [] };
     } else if (whole) {
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'tree', title: ctx.treeName?.trim() || S.book.title, crumbs: [] };
     } else {
@@ -517,7 +547,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const out: PageSet = {
         spec, options, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
         pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, indexSlug, mapSlug,
-        introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [],
+        introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);
     return out;
@@ -623,6 +653,9 @@ export function pageSetFileName(set: PageSet): string {
         case 'descendants':
             stem = set.protectedTree.living.has(set.spec.person) ? F.fileStem[set.spec.kind] : fileWords(intro?.title ?? '');
             break;
+        case 'persons':
+            stem = F.fileStem.persons;
+            break;
         case 'tree':
             stem = fileWords(intro?.title ?? '') || F.fileStem.tree;
             break;
@@ -717,9 +750,10 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
         switch (page.kind) {
             case 'person': text += PERSON_PAGE_BYTES; break;
             case 'family': text += FAMILY_PAGE_BYTES; break;
-            case 'rod': case 'branch': case 'hub': case 'tree': {
+            case 'rod': case 'branch': case 'hub': case 'tree': case 'persons': case 'ancestors': {
                 const rod = page.kind === 'rod' && page.id ? set.protectedTree.lineages.rods.get(page.id as RodId) : undefined;
-                const people = rod ? rod.memberIds.length + rod.spouses.length : page.kind === 'branch' ? set.selection.personIds.length : 0;
+                const listed = page.kind === 'branch' || page.kind === 'persons' || page.kind === 'ancestors';
+                const people = rod ? rod.memberIds.length + rod.spouses.length : listed ? set.selection.personIds.length : 0;
                 text += ROD_PAGE_BYTES + people * ROD_ROW_BYTES;
                 break;
             }

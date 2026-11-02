@@ -6,7 +6,9 @@
  * book's language, the Custom preset's own values (§4.9) — plus the last choice of lineages, which the menu entry
  * offers again while those lineages still exist, the output (the book or
  * the linked family pages, spec 026 §6.6) and the pages' own choices
- * (families, images, what they include). Never remembered: the
+ * (families, the person pages' groups, images, what they include; 1102
+ * §4.4 moved the old `include.sources` / `include.stories` into `groups`).
+ * Never remembered: the
  * selection itself (whole tree, ancestors, descendants, the person) and the
  * title. The book's options never touch the person card's settings or
  * `lifelineDefaults`: this module writes its own key and nothing else.
@@ -51,20 +53,30 @@ export interface BookMemory {
 
 export type BookOutput = 'book' | 'pages';
 
-/** What the family pages include besides the pages themselves (§6.2). */
-export interface PagesInclude { map: boolean; sources: boolean; stories: boolean }
+/** What the family pages include besides the pages and the indexes (1102 §4.4). */
+export interface PagesInclude { map: boolean; timelines: boolean }
+
+/** What the person pages of a set carry (1102 §4.4); stories and sources also on the family pages. */
+export interface PagesGroups { history: boolean; childEvents: boolean; stories: boolean; sources: boolean; materials: boolean; pdf: boolean }
+
+export const PAGES_GROUP_KEYS: readonly (keyof PagesGroups)[] = ['history', 'childEvents', 'stories', 'sources', 'materials', 'pdf'];
 
 /** The family pages' rows of the dialog (§6.2). */
 export interface PagesChoices {
     families: 'pages' | 'section';
     clips: ImageChoice;
     photos: ImageChoice;
+    groups: PagesGroups;
     include: PagesInclude;
 }
 
 /** The pages' rows when nothing is remembered: families as pages where it makes sense, images as they are, everything in. */
 export function defaultPagesChoices(): PagesChoices {
-    return { families: 'pages', clips: 'full', photos: 'full', include: { map: true, sources: true, stories: true } };
+    return {
+        families: 'pages', clips: 'full', photos: 'full',
+        groups: { history: true, childEvents: true, stories: true, sources: true, materials: true, pdf: true },
+        include: { map: true, timelines: true },
+    };
 }
 
 /** How the dialog was opened (§4.8): the entry decides the first selection. */
@@ -86,7 +98,7 @@ const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymo
 const OUTPUTS: readonly BookOutput[] = ['book', 'pages'];
 const FAMILIES: readonly PagesChoices['families'][] = ['pages', 'section'];
 const IMAGES: readonly ImageChoice[] = ['full', 'small', 'none'];
-const INCLUDE_KEYS: readonly (keyof PagesInclude)[] = ['map', 'sources', 'stories'];
+const INCLUDE_KEYS: readonly (keyof PagesInclude)[] = ['map', 'timelines'];
 
 function oneOf<T extends string>(list: readonly T[], x: unknown): T | undefined {
     return typeof x === 'string' && (list as readonly string[]).includes(x) ? x as T : undefined;
@@ -179,6 +191,12 @@ function parsePagesChoices(v: unknown): PagesChoices | null {
     if (o.include && typeof o.include === 'object' && !Array.isArray(o.include)) {
         const src = o.include as Record<string, unknown>;
         for (const k of INCLUDE_KEYS) if (typeof src[k] === 'boolean') { out.include[k] = src[k] as boolean; any = true; }
+        // Before 1102 the sources and the stories were rows of "Includes": now groups of the person pages.
+        for (const k of ['sources', 'stories'] as const) if (typeof src[k] === 'boolean') { out.groups[k] = src[k] as boolean; any = true; }
+    }
+    if (o.groups && typeof o.groups === 'object' && !Array.isArray(o.groups)) {
+        const src = o.groups as Record<string, unknown>;
+        for (const k of PAGES_GROUP_KEYS) if (typeof src[k] === 'boolean') { out.groups[k] = src[k] as boolean; any = true; }
     }
     return any ? out : null;
 }
@@ -223,7 +241,7 @@ export function saveBookMemory(
 }
 
 function clonePages(p: PagesChoices): PagesChoices {
-    return { ...p, include: { ...p.include } };
+    return { ...p, groups: { ...p.groups }, include: { ...p.include } };
 }
 
 /** The pages' choices on opening: the remembered ones, else the defaults. */

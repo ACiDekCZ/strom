@@ -93,11 +93,13 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('[data-sec="parts"]')).toHaveCount(0);
         await expect(dialog.locator('.book-presets')).toBeHidden();
         await expect(dialog.locator('.book-dlg-side')).toBeHidden();
-        for (const sec of ['privacy', 'families', 'images', 'include']) await expect(dialog.locator(`[data-sec="${sec}"]`)).toBeVisible();
+        for (const sec of ['privacy', 'families', 'groups', 'images', 'include']) await expect(dialog.locator(`[data-sec="${sec}"]`)).toBeVisible();
         await expect(dialog.locator('input[name="fp-families"][value="pages"]')).toBeChecked();
         await expect(dialog.locator('[data-clips="full"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('[data-photos="full"]')).toHaveAttribute('aria-checked', 'true');
-        for (const k of ['map', 'sources', 'stories']) await expect(dialog.locator(`input[name="fp-inc"][value="${k}"]`)).toBeChecked();
+        for (const k of ['map', 'timelines']) await expect(dialog.locator(`input[name="fp-inc"][value="${k}"]`)).toBeChecked();
+        // The person pages' groups (1102 §4.4): all on by default; the sources and the stories moved here from Includes.
+        for (const k of ['history', 'childEvents', 'stories', 'sources', 'materials', 'pdf']) await expect(dialog.locator(`input[name="fp-grp"][value="${k}"]`)).toBeChecked();
         // The whole tree stays chosen for the pages too (1102 §1), with its counts; nothing says it moved.
         const tree = dialog.locator('.book-kind[data-kind="tree"]');
         await expect(tree.locator('input')).toBeEnabled();
@@ -238,7 +240,7 @@ test.describe('family pages: the dialog', () => {
             await expect(dialog.locator('[data-clips="none"]')).toHaveAttribute('aria-checked', 'true');
             await expect(dialog.locator('[data-photos="small"]')).toHaveAttribute('aria-checked', 'true');
             await expect(dialog.locator('input[name="fp-inc"][value="map"]')).not.toBeChecked();
-            await expect(dialog.locator('input[name="fp-inc"][value="sources"]')).toBeChecked();
+            await expect(dialog.locator('input[name="fp-grp"][value="sources"]')).toBeChecked();
         };
         // The menu's dialog takes the remembered output.
         dialog = await openDialog(page);
@@ -376,10 +378,11 @@ test.describe('family pages: the dialog on a phone', () => {
         const modal = dialog.locator('.book-dlg');
         const box = (await modal.boundingBox())!;
         expect(box.width).toBe(390);
-        await expect(dialog.locator('.book-sum-row .book-sum-l')).toHaveText(['Privacy of living people', 'Families', 'Images', 'Includes']);
+        await expect(dialog.locator('.book-sum-row .book-sum-l')).toHaveText(['Privacy of living people', 'Families', 'Person pages', 'Images', 'Includes']);
         await expect(dialog.locator('[data-sum="privacy"]')).toHaveText('Initials');
         await expect(dialog.locator('[data-sum="families"]')).toHaveText('Pages of their own');
-        await expect(dialog.locator('[data-sum="include"]')).toHaveText('Map, sources, stories');
+        await expect(dialog.locator('[data-sum="groups"]')).toHaveText('6 of 6');
+        await expect(dialog.locator('[data-sum="include"]')).toHaveText('Map, timelines');
         await expect(dialog.locator('[data-sec="families"]')).toBeHidden();
         await expect(dialog.locator('#book-open .fp-l-phone')).toHaveText('Save and share…');
         await expect(dialog.locator('#book-open .fp-l-wide')).toBeHidden();
@@ -467,7 +470,7 @@ test.describe('family pages: the entries', () => {
         await setup(page);
         const menu = await openCardRodMenu(page, 'b16');
         await expect(menu.getByRole('menuitem')).toHaveText([
-            'Show family line in tree', 'Family line page', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+            'Show family line in tree', 'Family line page', 'Family line book…', 'Pages for selected people…', 'Edit family line…', 'Start a family line from this person…',
         ]);
         await menu.locator('[data-rod-act="page"]').click();
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
@@ -660,7 +663,7 @@ test.describe('family pages: the families in the app', () => {
         await setup(page);
         const menu = await openCardRodMenu(page, 'b14');
         await expect(menu.getByRole('menuitem')).toHaveText([
-            'Show family line in tree', 'Family line page', 'Family page (Karl and Ester)', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+            'Show family line in tree', 'Family line page', 'Family page (Karl and Ester)', 'Family line book…', 'Pages for selected people…', 'Edit family line…', 'Start a family line from this person…',
         ]);
         await menu.locator('[data-rod-act="family"][data-fam="bu8"]').click();
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
@@ -682,7 +685,7 @@ test.describe('family pages: the families in the app', () => {
         let menu = await openCardRodMenu(page, 'b14');
         const many = menu.locator('[data-rod-act="families"]');
         await expect(menu.getByRole('menuitem')).toHaveText([
-            'Show family line in tree', 'Family line page', 'Family pages', 'Family line book…', 'Edit family line…', 'Start a family line from this person…',
+            'Show family line in tree', 'Family line page', 'Family pages', 'Family line book…', 'Pages for selected people…', 'Edit family line…', 'Start a family line from this person…',
         ]);
         await expect(many).toHaveAttribute('aria-expanded', 'false');
         await many.click();

@@ -1367,7 +1367,8 @@ export type SelectionSpec =
     | { kind: 'tree' }
     | { kind: 'rods'; rodIds: RodId[] }
     | { kind: 'ancestors'; personId: PersonId; generations?: number }
-    | { kind: 'descendants'; personId: PersonId; generations?: number };
+    | { kind: 'descendants'; personId: PersonId; generations?: number }
+    | { kind: 'persons'; personIds: PersonId[] };
 
 /** The people and families of one output. */
 export interface Selection {
@@ -1480,6 +1481,47 @@ function ancestors(data: StromData, personId: PersonId, generations?: number): S
     return makeSelection(data, ordered, families);
 }
 
+/** A known ancestor in a pedigree: Kekulé number `k` (1 = the starting person, 2k the father, 2k+1 the mother). */
+export interface AncestorSlot { k: number; id: PersonId }
+
+/** The deepest pedigree the pages count (Kekulé numbers stay exact far beyond it). */
+export const ANCESTOR_SLOTS_MAX_GENERATIONS = 40;
+
+/**
+ * The known ancestors by generation and Kekulé number (1102 §4.3): [0] the
+ * person, [1] the parents, [2] the grandparents…, each by its number; the
+ * father and mother as fatherOf / motherOf choose them, placeholders unknown.
+ * Up to `generations` generations above the person (none = until nobody is known).
+ */
+export function ancestorSlots(data: StromData, personId: PersonId, generations?: number): AncestorSlot[][] {
+    const root = data.persons[personId];
+    if (!root) return [];
+    const out: AncestorSlot[][] = [[{ k: 1, id: personId }]];
+    const limit = Math.min(generations ?? ANCESTOR_SLOTS_MAX_GENERATIONS, ANCESTOR_SLOTS_MAX_GENERATIONS);
+    for (let g = 1; g <= limit; g++) {
+        const next: AncestorSlot[] = [];
+        for (const slot of out[g - 1]) {
+            const child = data.persons[slot.id];
+            if (!child) continue;
+            const f = fatherOf(data, child);
+            const m = motherOf(data, child);
+            if (f && !f.isPlaceholder) next.push({ k: slot.k * 2, id: f.id });
+            if (m && !m.isPlaceholder && m.id !== f?.id) next.push({ k: slot.k * 2 + 1, id: m.id });
+        }
+        if (!next.length && generations == null) break;
+        out.push(next);
+    }
+    return out;
+}
+
+/** "26 of 30": the known ancestors' slots over `generations` generations and all possible (2 + 4 + … = 2^(n+1) − 2). */
+export function ancestorCount(data: StromData, personId: PersonId, generations?: number): { known: number; total: number; generations: number } {
+    const gens = ancestorSlots(data, personId, generations);
+    const n = generations ?? Math.max(0, gens.length - 1);
+    const known = gens.slice(1).reduce((sum, g) => sum + g.length, 0);
+    return { known, total: Math.pow(2, n + 1) - 2, generations: n };
+}
+
 /** What one output shows: people and families for the chosen part of the tree. */
 export function selection(source: StromData | LineageIndex, spec: SelectionSpec): Selection {
     const index = 'rodByPerson' in source ? source : null;
@@ -1516,6 +1558,16 @@ export function selection(source: StromData | LineageIndex, spec: SelectionSpec)
             return ancestors(data, spec.personId, spec.generations);
         case 'descendants':
             return branch(data, spec.personId, spec.generations);
+        case 'persons': {
+            // Chosen people (1102 §4.2): only them, by birth; a family only when both partners are chosen.
+            const chosen = new Set(spec.personIds.filter(id => !!data.persons[id]));
+            const memberIds = sortByBirth(data, [...chosen]);
+            const familyIds = unionsOfMembers(data, memberIds).filter(uid => {
+                const u = data.partnerships[uid];
+                return chosen.has(u.person1Id) && chosen.has(u.person2Id);
+            });
+            return makeSelection(data, memberIds, familyIds, []);
+        }
         default: {
             const never: never = spec;
             return never;

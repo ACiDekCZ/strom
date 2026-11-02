@@ -567,7 +567,9 @@ export class PersonPicker {
 
 /** The multi-person mode (assigning a file to several people): chips of the chosen, a search, a list with checkboxes. */
 export interface MultiPersonPickerOptions {
-    containerId: string;
+    /** The host: by id, or the element itself (a dialog's rows written as markup). */
+    containerId?: string;
+    container?: HTMLElement;
     multi: true;
     persons?: Person[];
     data?: StromData;
@@ -584,6 +586,11 @@ export interface MultiPersonPickerOptions {
     removeLabel: (name: string) => string;
     maxLabel?: (max: number) => string;
     fixedLabel?: string;
+    /** Chosen at the start (in this order). */
+    initial?: PersonId[];
+    /** At most this many chips, then "+ N more" (moreLabel); default all. */
+    chipsShown?: number;
+    moreLabel?: (n: number) => string;
 }
 
 const MULTI_BATCH = 100;
@@ -602,10 +609,12 @@ export class MultiPersonPicker {
 
     constructor(options: MultiPersonPickerOptions) {
         this.options = { max: 50, ...options };
-        const container = document.getElementById(options.containerId);
-        if (!container) throw new Error(`Container not found: ${options.containerId}`);
+        const container = options.container ?? (options.containerId ? document.getElementById(options.containerId) : null);
+        if (!container) throw new Error(`Container not found: ${options.containerId ?? ''}`);
         this.container = container;
         this.allPersons = options.persons ?? DataManager.getAllPersons();
+        const known = new Set(this.allPersons.map(p => p.id));
+        this.chosen = (options.initial ?? []).filter((id, i, all) => known.has(id) && all.indexOf(id) === i);
         this.build();
     }
 
@@ -697,11 +706,14 @@ export class MultiPersonPicker {
             this.chips.innerHTML = `<span class="ppm-none">${this.esc(this.options.noneLabel)}</span>`;
             return;
         }
-        this.chips.innerHTML = this.chosen.map(id => {
+        const limit = this.options.chipsShown ?? Infinity;
+        const shown = this.chosen.length > limit ? this.chosen.slice(0, limit) : this.chosen;
+        const rest = this.chosen.length - shown.length;
+        this.chips.innerHTML = shown.map(id => {
             const p = this.allPersons.find(x => x.id === id);
             const name = p ? `${p.firstName} ${p.lastName}`.trim() : id;
             return `<span class="ppm-chip">${this.esc(name)}<button type="button" class="ppm-chip-x" data-remove="${this.esc(id)}" aria-label="${this.esc(this.options.removeLabel(name))}">&times;</button></span>`;
-        }).join('');
+        }).join('') + (rest > 0 && this.options.moreLabel ? `<span class="ppm-chip ppm-chip--more">${this.esc(this.options.moreLabel(rest))}</span>` : '');
     }
 
     private renderList(refilter = true): void {

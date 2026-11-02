@@ -17084,6 +17084,7 @@
         }
         @media (pointer: coarse) {
             #book-modal .book-presets button, #book-modal .book-seg button { min-height: 44px; }
+            #book-modal .book-sel-persons .ppm-chip-x { width: 44px; height: 44px; margin: -8px -2px -8px 0; }
             #book-modal .book-rod-row, #book-modal .book-part, #book-modal .book-radio { min-height: 44px; }
             #book-modal .book-step { width: 44px; height: 44px; }
             #book-modal .book-person-btn { min-height: 44px; }
@@ -17122,6 +17123,20 @@
         #book-modal .fp-img-n { font-size: 12.5px; color: var(--text-light); }
         #book-modal .fp-inc { display: flex; flex-wrap: wrap; gap: 2px 22px; }
         #book-modal .fp-inc input { margin: 0; accent-color: var(--primary); }
+        #book-modal .fp-inc .book-radio[hidden] { display: none; }
+        /* 1102 §4.1: the pages' depth of ancestors with its count; chosen people (chips, search, a list of 7 rows); the book's line after chosen people */
+        #book-modal .book-sel-moved { margin: 8px 2px 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        #book-modal .book-sel-moved[hidden], #book-modal .book-anc-line[hidden], #book-modal .book-gens[hidden], #book-modal .book-gens-t[hidden] { display: none; }
+        #book-modal .book-anc-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+        #book-modal .book-anc-l { font-size: 13.5px; color: var(--text-light); }
+        #book-modal .book-anc-seg [data-anc-gen="all"] { display: none; }
+        #book-modal .book-anc-n { font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        #book-modal .book-sel-persons { display: flex; flex-direction: column; gap: 8px; }
+        #book-modal .book-sel-persons .person-picker--multi { display: flex; flex-direction: column; gap: 8px; }
+        #book-modal .book-sel-persons .ppm-list { max-height: calc(7 * 44px); }
+        #book-modal .book-sel-persons .ppm-chip--more { padding: 2px 10px; background: var(--card-bg-2); color: var(--text-light); }
+        #book-modal .book-sel-state { margin: 0; }
+        #book-modal .book-sub-done { display: none; }
         #book-modal .fp-foot { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
         #book-modal .fp-foot[hidden] { display: none; }
         #book-modal .fp-foot p { margin: 0; }
@@ -17177,7 +17192,11 @@
             #book-modal .book-kind.is-disabled { flex-wrap: wrap; padding: 8px 14px; }
             #book-modal .book-dlg[data-sub="families"] [data-sec="families"],
             #book-modal .book-dlg[data-sub="images"] [data-sec="images"],
-            #book-modal .book-dlg[data-sub="include"] [data-sec="include"] { display: block; border-top: 0; padding-top: 4px; }
+            #book-modal .book-dlg[data-sub="include"] [data-sec="include"],
+            #book-modal .book-dlg[data-sub="groups"] [data-sec="groups"] { display: block; border-top: 0; padding-top: 4px; }
+            #book-modal .book-dlg[data-sub="sel"] .book-anc-seg [data-anc-gen="all"] { display: block; }
+            #book-modal .book-dlg[data-sub="sel"][data-kind="persons"] .book-sub-done { display: block; min-height: 48px; margin-top: 4px; }
+            #book-modal .book-sel-persons .ppm-list { max-height: 42vh; }
             #book-modal .fp-img-row { flex-direction: column; align-items: stretch; gap: 6px; }
             #book-modal .fp-img-row + .fp-img-row { margin-top: 16px; }
             #book-modal .fp-img-l { flex: none; }

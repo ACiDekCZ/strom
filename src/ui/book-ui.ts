@@ -30,7 +30,7 @@ import {
     autoBookTitle, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
-    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PagesChoices,
+    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups,
     bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, pagesChoicesFromMemory, saveBookMemory,
 } from '../book-memory.js';
 import { BookPresetState, choosePreset, initialPresetState, presetValuesChanged } from '../book-preset.js';
@@ -40,7 +40,8 @@ import {
 } from '../family-pages.js';
 import { PagesCancelled, PagesFile, PagesJob, buildPagesFile, canSharePagesFile, downloadPagesFile, sharePagesFile } from './family-pages-ui.js';
 import { pageSetZipName } from '../family-pages-html.js';
-import { LineageIndex, Rod, RodId, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
+import { LineageIndex, Rod, RodId, ancestorCount, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
+import { MultiPersonPicker } from '../person-picker.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shownName } from '../person-name.js';
@@ -49,22 +50,28 @@ import { openPersonPopover } from './person-popover.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
 
-type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants';
+type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons';
 type PersonKind = 'ancestors' | 'descendants';
 /** The phone's sub-sheets (§4.1, 4b; the pages' rows, 026 6b). */
-type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'include';
+type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'groups' | 'include';
 /**
  * The pages' footer (026 §6.5, §6.6): the options with the estimate; the
  * file being built (its progress only after ~1 s); the file ready to save.
  */
 type Phase = 'options' | 'building' | 'progress' | 'result';
 
-const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants'];
+/** Chosen people are a selection of the pages only (1102 §4.1). */
+const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'persons'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
 const LANGS: readonly BookLang[] = ['cs', 'en', 'de'];
 const IMAGE_CHOICES: readonly ImageChoice[] = ['full', 'small', 'none'];
-const INCLUDES = ['map', 'sources', 'stories'] as const;
+const INCLUDES = ['map', 'timelines'] as const;
+/** The pages' depths of ancestors (1102 §4.1); "All" in the phone's sub-sheet only. */
+const ANC_GENS: readonly (number | 'all')[] = [2, 3, 4, 5, 6, 8, 'all'];
+const ANC_GENS_DEFAULT = 4;
+/** Chips of chosen people shown before "+ N more". */
+const SEL_CHIPS = 6;
 /** The pages' estimate is recomputed this long after the last change (§6.3). */
 const ESTIMATE_DEBOUNCE_MS = 150;
 /** The build's progress shows only after this long (§6.5). */
@@ -98,6 +105,11 @@ interface DialogState {
     rods: RodId[];
     person: PersonId | null;
     gens: Record<PersonKind, number>;
+    /** The pages' chosen people (not remembered) and depth of ancestors (1102 §4.1). */
+    selIds: PersonId[];
+    ancGens: number | 'all';
+    /** The book took the whole tree for chosen people: said once under the selection, until the next change. */
+    moved: boolean;
     /** The options apart from the selection (that one comes from kind / rods / person). */
     opts: BookOptions;
     /** The preset chosen, Custom's own values and the hint line (§4.9). */
@@ -127,6 +139,7 @@ function savesZip(s: DialogState): boolean {
 
 let st: DialogState | null = null;
 let closePicker: (() => void) | null = null;
+let selPicker: MultiPersonPicker | null = null;
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -146,13 +159,23 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
     switch (s.kind) {
         case 'tree': return { kind: 'tree' };
         case 'rods': return { kind: 'rods', rods: [...s.rods] };
-        default: return s.person ? { kind: s.kind, person: s.person, generations: s.gens[s.kind] } : null;
+        case 'persons': return { kind: 'persons', ids: [...s.selIds] };
+        default:
+            if (!s.person) return null;
+            // The pages' ancestors: the segment's depth (1102 §4.1); the book keeps its stepper.
+            if (s.kind === 'ancestors' && s.output === 'pages') return { kind: 'ancestors', person: s.person, generations: s.ancGens };
+            return { kind: s.kind, person: s.person, generations: s.gens[s.kind] };
     }
 }
 
-/** The book can be opened: something is chosen. */
+/** The book can be opened: something is chosen (a set of chosen people from two of them; one is a person page). */
 function selectionReady(sel: BookSelectionSpec | null): sel is BookSelectionSpec {
-    return !!sel && !(sel.kind === 'rods' && sel.rods.length === 0);
+    return !!sel && !(sel.kind === 'rods' && sel.rods.length === 0) && !(sel.kind === 'persons' && sel.ids.length < 2);
+}
+
+/** One chosen person: the primary button opens the person page's export (1102 §4.1). */
+function onePerson(s: DialogState): PersonId | null {
+    return s.output === 'pages' && s.kind === 'persons' && s.selIds.length === 1 ? s.selIds[0] : null;
 }
 
 function currentOptions(s: DialogState): BookOptions {
@@ -200,11 +223,11 @@ function optionsHtml(s: DialogState): string {
     const persons = Object.values(s.data.persons).filter(p => !p.isPlaceholder).length;
     const hint: Record<Kind, string> = {
         tree: D.treeHint(persons, counts.rods, counts.other),
-        rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants,
+        rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants, persons: D.kindHint.persons,
     };
     // The pages of the whole tree: its lineages and the other families (spec 026 P3 §3.1).
     if (pages) hint.tree = F.treeHintPages(persons, counts.rods);
-    const kinds = KINDS.map(k => {
+    const kinds = KINDS.filter(k => pages || k !== 'persons').map(k => {
         return `<label class="book-kind" data-kind="${k}">`
             + `<input type="radio" name="book-kind" value="${k}">`
             + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
@@ -241,7 +264,7 @@ function optionsHtml(s: DialogState): string {
         + `<div class="book-kinds" role="radiogroup" aria-labelledby="book-what-h">${kinds}`
         + (pages ? '' : `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
             + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div>`)
-        + `</div></section>`
+        + `</div><p class="book-sel-moved" role="status" hidden></p></section>`
         + `<section class="book-sec book-sec-sel" data-sec="sel"><h3 class="book-sec-h book-sub-only" data-sub-title></h3>`
         + `<div class="book-sel book-sel-tree"><p class="book-hint">${esc(D.treeSentence)}</p></div>`
         + `<div class="book-sel book-sel-rods">`
@@ -252,7 +275,16 @@ function optionsHtml(s: DialogState): string {
         + `<span class="book-gens"><button type="button" class="book-step" data-gen="-1" aria-label="${esc(D.fewer)}">−</button>`
         + `<output class="book-gens-n" aria-live="polite"></output>`
         + `<button type="button" class="book-step" data-gen="1" aria-label="${esc(D.more)}">+</button></span></div>`
-        + `<p class="book-hint book-gens-t"></p></div></section>`;
+        + `<p class="book-hint book-gens-t"></p>`
+        + (pages ? `<div class="book-anc-line"><span class="book-anc-l" id="book-anc-l">${esc(F.gensOf)}</span>`
+            + `<div class="book-seg book-anc-seg" role="radiogroup" aria-labelledby="book-anc-l">`
+            + ANC_GENS.map(g => `<button type="button" role="radio" data-anc-gen="${g}">${esc(g === 'all' ? F.gensAll : String(g))}</button>`).join('')
+            + `</div><span class="book-anc-n" aria-live="polite"></span></div>` : '')
+        + `</div>`
+        + (pages ? `<div class="book-sel book-sel-persons"><div class="book-sel-picker"></div>`
+            + `<p class="book-hint book-sel-state" aria-live="polite"></p>`
+            + `<button type="button" class="primary book-sub-done">${esc(F.selDone)}</button></div>` : '')
+        + `</section>`;
     const privacyRadios = `<div class="book-radios" role="radiogroup" aria-labelledby="book-privacy-h">`
         + PRIVACY.map(m => `<label class="book-radio"><input type="radio" name="book-privacy" value="${m}"><span>${esc(privacyLabel[m])}</span></label>`).join('')
         + `</div>`;
@@ -290,19 +322,23 @@ function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadio
         + `<div class="book-seg" role="radiogroup" aria-labelledby="fp-img-${key}">`
         + IMAGE_CHOICES.map(c => `<button type="button" role="radio" data-${key}="${c}">${esc(F.imgChoice[c])}</button>`).join('')
         + `</div><span class="fp-img-n" data-n="${key}"></span></div>`;
-    return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('images', F.images)}${sum('include', F.include)}</div>`
+    return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('groups', F.groupsRow)}${sum('images', F.images)}${sum('include', F.include)}</div>`
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
         + privacyRadios + `<p class="fp-warn" role="status" hidden></p><p class="book-hint">${esc(F.privacyHint)}</p></section>`
         + `<section class="book-sec" data-sec="families"><h3 class="book-sec-h" id="fp-families-h">${esc(F.families)}</h3>`
         + `<div class="book-radios" role="radiogroup" aria-labelledby="fp-families-h">`
         + (['pages', 'section'] as const).map(v => `<label class="book-radio"><input type="radio" name="fp-families" value="${v}"><span>${esc(F.famOpt[v])}</span></label>`).join('')
         + `</div></section>`
+        + `<section class="book-sec" data-sec="groups"><h3 class="book-sec-h" id="fp-groups-h">${esc(F.groupsRow)}</h3>`
+        + `<div class="fp-inc fp-groups" role="group" aria-labelledby="fp-groups-h">`
+        + PAGES_GROUP_KEYS.map(k => `<label class="book-radio"><input type="checkbox" name="fp-grp" value="${k}"><span>${esc(F.groups[k])}</span></label>`).join('')
+        + `</div></section>`
         + `<section class="book-sec" data-sec="images"><h3 class="book-sec-h">${esc(F.images)}</h3>`
         + imgRow('clips', F.clips) + imgRow('photos', F.photos) + `</section>`
         + `<section class="book-sec" data-sec="include"><h3 class="book-sec-h" id="fp-inc-h">${esc(F.include)}</h3>`
         + `<div class="fp-inc" role="group" aria-labelledby="fp-inc-h">`
-        + INCLUDES.map(k => `<label class="book-radio"><input type="checkbox" name="fp-inc" value="${k}"><span>${esc(F.inc[k])}</span></label>`).join('')
-        + `</div></section>`;
+        + INCLUDES.map(k => `<label class="book-radio" data-inc="${k}"><input type="checkbox" name="fp-inc" value="${k}"><span>${esc(F.inc[k])}</span></label>`).join('')
+        + `</div><p class="book-hint">${esc(F.alwaysIdx)}</p></section>`;
 }
 
 function setText(root: ParentNode, sel: string, text: string): void {
@@ -330,10 +366,35 @@ function sync(s: DialogState): void {
     modal.querySelector<HTMLElement>('.book-sel-tree')!.hidden = s.kind !== 'tree';
     modal.querySelector<HTMLElement>('.book-sel-rods')!.hidden = s.kind !== 'rods';
     modal.querySelector<HTMLElement>('.book-sel-person')!.hidden = s.kind !== 'ancestors' && s.kind !== 'descendants';
+    const selPersons = modal.querySelector<HTMLElement>('.book-sel-persons');
+    if (selPersons) selPersons.hidden = s.kind !== 'persons';
+    const moved = modal.querySelector<HTMLElement>('.book-sel-moved');
+    if (moved) {
+        moved.hidden = !s.moved || pages;
+        setText(modal, '.book-sel-moved', s.moved && !pages ? F.selMoved : '');
+    }
     const chosen = new Set(s.rods);
     modal.querySelectorAll<HTMLInputElement>('.book-rod-row input').forEach(i => { i.checked = chosen.has(i.value as RodId); });
     const label = personLabel(s.data, s.person);
     setText(modal, '.book-person-name', label || D.choosePerson);
+    // The pages' ancestors: the segment of depths and the count instead of the stepper (1102 §4.1).
+    const ancSeg = pages && s.kind === 'ancestors';
+    const stepper = modal.querySelector<HTMLElement>('.book-gens');
+    if (stepper) stepper.hidden = ancSeg;
+    const gensT = modal.querySelector<HTMLElement>('.book-gens-t');
+    if (gensT) gensT.hidden = ancSeg;
+    const ancLine = modal.querySelector<HTMLElement>('.book-anc-line');
+    if (ancLine) ancLine.hidden = !ancSeg;
+    if (ancSeg) {
+        modal.querySelectorAll<HTMLElement>('[data-anc-gen]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.ancGen === String(s.ancGens))));
+        const c = s.person ? ancestorCount(s.data, s.person, s.ancGens === 'all' ? undefined : s.ancGens) : null;
+        setText(modal, '.book-anc-n', c ? F.ancCount(c.known, c.total) : '');
+    }
+    if (s.kind === 'persons') {
+        const n = s.selIds.length;
+        const fams = s.est && s.est.set.spec.kind === 'persons' ? s.est.set.familySlug.size : 0;
+        setText(modal, '.book-sel-state', n === 0 ? F.selNone : n === 1 ? F.selOne : F.selMeta(n, fams));
+    }
     if (s.kind === 'ancestors' || s.kind === 'descendants') {
         const n = s.gens[s.kind];
         setText(modal, '.book-gens-n', String(n));
@@ -347,6 +408,7 @@ function sync(s: DialogState): void {
     sum('privacy', D.privacyShort[s.opts.privacy]);
     const labels = rodLabels(s.index);
     const selSum = s.kind === 'rods' ? (s.rods.map(id => labels.get(id) ?? '').filter(Boolean).join(', ') || D.choose)
+        : s.kind === 'persons' ? (s.selIds.length ? F.nPersons(s.selIds.length) : D.choose)
         : s.kind === 'tree' ? '' : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
     modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
@@ -362,7 +424,7 @@ function sync(s: DialogState): void {
     if (s.sub) modal.dataset.sub = s.sub; else delete modal.dataset.sub;
     const subTitle: Record<Sub, string> = {
         sel: D.kind[s.kind], parts: D.parts, detail: D.detail, notes: D.notesRow, privacy: D.privacy, lang: D.lang, title: D.title,
-        families: F.families, images: F.images, include: F.include,
+        families: F.families, images: F.images, groups: F.groupsRow, include: F.include,
     };
     setText(modal, '.book-sub-title', s.sub ? subTitle[s.sub] : '');
     setText(modal, '[data-sub-title]', D.kind[s.kind]);
@@ -458,6 +520,11 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     modal.querySelectorAll<HTMLElement>('[data-clips]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.clips === p.clips)));
     modal.querySelectorAll<HTMLElement>('[data-photos]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.photos === p.photos)));
     modal.querySelectorAll<HTMLInputElement>('input[name="fp-inc"]').forEach(i => { i.checked = p.include[i.value as typeof INCLUDES[number]]; });
+    modal.querySelectorAll<HTMLInputElement>('input[name="fp-grp"]').forEach(i => { i.checked = p.groups[i.value as keyof PagesGroups]; });
+    // The lines' timelines: hidden for a selection without lines (1102 §4.4).
+    const noLines = s.kind === 'persons' || s.kind === 'ancestors' || s.kind === 'descendants';
+    const tl = modal.querySelector<HTMLElement>('[data-inc="timelines"]');
+    if (tl) tl.hidden = noLines;
     setText(modal, '.fp-img-n[data-n="clips"]', s.est ? F.nClips(s.est.clips) : '');
     setText(modal, '.fp-img-n[data-n="photos"]', s.est ? F.nPhotos(s.est.photos) : '');
     const warn = modal.querySelector<HTMLElement>('.fp-warn');
@@ -470,7 +537,9 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     sum('families', F.famShort[p.families]);
     const clips = p.clips !== 'none', photos = p.photos !== 'none';
     sum('images', F.imagesShort[clips && photos ? 'both' : clips ? 'clips' : photos ? 'photos' : 'none']);
-    const inc = INCLUDES.filter(k => p.include[k]).map(k => F.incShort[k]).join(', ');
+    const grp = PAGES_GROUP_KEYS.filter(k => p.groups[k]).length;
+    sum('groups', strings.book.dlg.partsCount(grp, PAGES_GROUP_KEYS.length));
+    const inc = INCLUDES.filter(k => p.include[k] && !(k === 'timelines' && noLines)).map(k => F.incShort[k]).join(', ');
     sum('include', inc ? inc.charAt(0).toLocaleUpperCase() + inc.slice(1) : F.incNone);
 }
 
@@ -503,9 +572,12 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
         }
         return;
     }
-    if (open.dataset.out !== 'pages') {
-        open.dataset.out = 'pages';
-        open.innerHTML = `<span class="fp-l-wide">${esc(F.saveFile)}</span><span class="fp-l-phone">${esc(F.saveShare)}</span>`;
+    const one = onePerson(s);
+    const want = one ? 'person' : 'pages';
+    if (open.dataset.out !== want) {
+        open.dataset.out = want;
+        if (one) open.textContent = F.selPersonPage;
+        else open.innerHTML = `<span class="fp-l-wide">${esc(F.saveFile)}</span><span class="fp-l-phone">${esc(F.saveShare)}</span>`;
     }
     setText(modal, '.fp-open', F.openWin);
     const view = s.phase === 'progress' ? 'progress' : s.phase === 'result' ? 'result' : 'options';
@@ -530,7 +602,9 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
     estEl.classList.toggle('is-empty', !ready);
     estEl.classList.toggle('is-big', verdict !== 'ok');
     estEl.classList.toggle('is-stale', s.estTimer !== null);
-    setText(foot, '.fp-est-t', !ready ? (s.kind === 'rods' ? strings.book.noRodSelected : strings.book.dlg.noPerson) : zip ? F.estZip : F.estFile);
+    const notReady = s.kind === 'rods' ? strings.book.noRodSelected
+        : s.kind === 'persons' ? (s.selIds.length === 1 ? F.selOne : F.selNone) : strings.book.dlg.noPerson;
+    setText(foot, '.fp-est-t', !ready ? notReady : zip ? F.estZip : F.estFile);
     setText(foot, '.fp-est-d', ready && est ? F.estDetail(est.size.pages, est.size.persons, est.size.images) : '');
     // The set of files is reckoned as the one file: an upper bound (§6.3, §9.4).
     setText(foot, '.fp-est-s', ready && est ? (zip ? F.estAtMost : F.estSize)(mbText(est.size.bytes)) : '');
@@ -552,7 +626,7 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
         big.querySelector<HTMLElement>('[data-offer="zip"]')!.setAttribute('aria-pressed', String(zip));
     }
     // Over 50 MB only the set of files is saved; the window still opens.
-    open.disabled = !ready || !est || s.phase !== 'options';
+    open.disabled = one ? s.phase !== 'options' : !ready || !est || s.phase !== 'options';
     win.disabled = !ready || s.phase !== 'options';
 }
 
@@ -600,7 +674,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
     const p = s.pages;
     return {
         lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
-        map: p.include.map, sources: p.include.sources, stories: p.include.stories,
+        map: p.include.map, groups: { ...p.groups },
     };
 }
 
@@ -641,8 +715,31 @@ function scheduleEstimate(s: DialogState, now = false): void {
 
 /** Write the options' rows for the output (once per opening and on a switch of the output). */
 function renderOptions(s: DialogState): void {
+    selPicker?.destroy();
+    selPicker = null;
     const body = document.querySelector<HTMLElement>('#book-modal .book-dlg-opts');
-    if (body) { body.innerHTML = optionsHtml(s); body.scrollTop = 0; }
+    if (!body) return;
+    body.innerHTML = optionsHtml(s);
+    body.scrollTop = 0;
+    const host = body.querySelector<HTMLElement>('.book-sel-picker');
+    if (host) mountSelPicker(s, host);
+}
+
+/** The chosen people's picker under "Selected people" (1102 §4.1): chips, the search, the list with checkboxes. */
+function mountSelPicker(s: DialogState, host: HTMLElement): void {
+    const F = strings.familyPages;
+    selPicker = new MultiPersonPicker({
+        container: host, multi: true, data: s.data,
+        persons: Object.values(s.data.persons).filter(p => !p.isPlaceholder),
+        placeholder: F.selPick, max: Infinity, initial: s.selIds, chipsShown: SEL_CHIPS, moreLabel: F.selMore,
+        noneLabel: '', removeLabel: F.selRemove,
+        onChange: (ids) => {
+            if (st !== s) return;
+            s.moved = false;
+            s.selIds = ids;
+            changed(s);
+        },
+    });
 }
 
 /** What the memory keeps besides the options: the output, the pages' choices, the preset and Custom's values. */
@@ -695,6 +792,11 @@ export const bookUiMethods = uiModule({
         this.openTreePagesForPerson(p.id);
     },
 
+    /** The person card's "Pages for selected people…" (1102 §3.2): the dialog's pages with this person chosen. */
+    openSelectedPersonsPages(personId: PersonId): void {
+        this.openBookDialog({ kind: 'menu' }, undefined, { output: 'pages', selection: { kind: 'persons', ids: [personId] } });
+    },
+
     /** The book of a person's descendants, 4 generations (§4.8). */
     openBookForPerson(personId: PersonId): void {
         this.openBookDialog({ kind: 'person', person: personId });
@@ -733,19 +835,26 @@ export const bookUiMethods = uiModule({
         };
         const focus = real(TreeRenderer.getFocusPersonId());
         const gens = { ancestors: BOOK_GENERATIONS_DEFAULT, descendants: BOOK_GENERATIONS_DEFAULT };
-        if (sel.kind === 'ancestors' || sel.kind === 'descendants') gens[sel.kind] = clampBookGenerations(sel.generations ?? BOOK_GENERATIONS_DEFAULT);
+        if (sel.kind === 'ancestors' || sel.kind === 'descendants') {
+            gens[sel.kind] = clampBookGenerations(typeof sel.generations === 'number' ? sel.generations : BOOK_GENERATIONS_DEFAULT);
+        }
         const firstId = Object.keys(data.persons)[0];
         const output: BookOutput = over?.output ?? (!reuse && entry.kind === 'menu' ? memory?.output ?? 'book' : 'book');
+        // Chosen people are for the pages only: the book takes the whole tree and says so (1102 §3.1).
+        const movedToTree = sel.kind === 'persons' && output !== 'pages';
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
         st = {
             data, index, treeId, appLang, rodChoices,
             treeName: TreeManager.getActiveTreeMetadata()?.name || '',
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
-            kind: sel.kind,
+            kind: movedToTree ? 'tree' : sel.kind,
             rods: (sel.kind === 'rods' ? sel.rods : memory?.lastRods ?? []).filter(id => choosable.has(id)),
             person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : null) ?? focus,
             gens,
+            selIds: sel.kind === 'persons' ? sel.ids.filter((id, i, all) => !!real(id) && all.indexOf(id) === i) : [],
+            ancGens: sel.kind === 'ancestors' && sel.generations != null ? sel.generations : ANC_GENS_DEFAULT,
+            moved: movedToTree,
             opts,
             presets: initialPresetState(opts, memory),
             titleEdited: !!opts.title?.trim(),
@@ -804,6 +913,7 @@ export const bookUiMethods = uiModule({
     wireBookDialog(modal: HTMLElement): void {
         const update = (fn: (s: DialogState) => void): void => {
             if (!st) return;
+            st.moved = false;
             fn(st);
             changed(st);
         };
@@ -822,6 +932,8 @@ export const bookUiMethods = uiModule({
                 closePicker?.();
                 st.output = out;
                 st.sub = null;
+                st.moved = out === 'book' && st.kind === 'persons';
+                if (st.moved) st.kind = 'tree';
                 st.phase = 'options';
                 st.file = null;
                 renderOptions(st);
@@ -880,7 +992,7 @@ export const bookUiMethods = uiModule({
                 modal.querySelector<HTMLElement>('.book-sub-back')?.focus();
                 return;
             }
-            if (t.closest('.book-sub-back') && st) {
+            if ((t.closest('.book-sub-back') || t.closest('.book-sub-done')) && st) {
                 const was = st.sub;
                 st.sub = null;
                 sync(st);
@@ -888,6 +1000,12 @@ export const bookUiMethods = uiModule({
                 return;
             }
             if (t.closest('.book-person-btn')) { this.openBookPersonPicker(); return; }
+            const anc = t.closest<HTMLElement>('[data-anc-gen]');
+            if (anc) {
+                const v = anc.dataset.ancGen === 'all' ? 'all' as const : Number(anc.dataset.ancGen);
+                update(s => { s.ancGens = v; });
+                return;
+            }
             const step = t.closest<HTMLButtonElement>('[data-gen]');
             if (step) {
                 update(s => {
@@ -917,6 +1035,11 @@ export const bookUiMethods = uiModule({
             if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
             if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }
+            if (t.name === 'fp-grp') {
+                const k = t.value as keyof PagesGroups;
+                update(s => { s.pages = { ...s.pages, groups: { ...s.pages.groups, [k]: t.checked } }; });
+                return;
+            }
             if (t.name === 'fp-inc') {
                 const k = t.value as typeof INCLUDES[number];
                 update(s => { s.pages = { ...s.pages, include: { ...s.pages.include, [k]: t.checked } }; });
@@ -987,6 +1110,8 @@ export const bookUiMethods = uiModule({
 
     closeBookDialog(): void {
         closePicker?.();
+        selPicker?.destroy();
+        selPicker = null;
         // A file being built is dropped: nothing is saved.
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
@@ -1113,7 +1238,19 @@ export const bookUiMethods = uiModule({
     generateFamilyBook(): void {
         const s = st;
         if (!s) return;
-        if (s.output === 'pages') { void this.buildPagesFromDialog(); return; }
+        if (s.output === 'pages') {
+            // One chosen person: that person's page and its export (025), not a set (1102 §4.1).
+            const one = onePerson(s);
+            if (one) {
+                if (s.phase !== 'options') return;
+                this.closeBookDialog();
+                this.showPersonPage(one);
+                this.showPersonPageExport(false);
+                return;
+            }
+            void this.buildPagesFromDialog();
+            return;
+        }
         const sel = selectionOf(s);
         if (!selectionReady(sel)) return;
         if (Object.keys(s.data.persons).length === 0) {

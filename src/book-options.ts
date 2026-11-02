@@ -142,6 +142,7 @@ export function autoBookTitle(data: StromData, spec: BookSelectionSpec, lang: Bo
         }
         case 'ancestors': return B.titleAncestors(personName(data, spec.person));
         case 'descendants': return B.titleDescendants(personName(data, spec.person));
+        case 'persons': return getStringsForLang(lang).familyPages.selPersons;
     }
 }
 

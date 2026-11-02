@@ -407,8 +407,9 @@ export const personModalMethods = uiModule({
             + `<span class="pm-rod-more"><button type="button" class="pm-rod-more-btn" aria-haspopup="menu" aria-expanded="false"`
             + ` aria-label="${esc(R.menu)}" title="${esc(R.menu)}">⋯</button>`
             + `<div class="pm-rod-menu" role="menu" aria-label="${esc(R.menu)}" hidden>`
-            // 026 §7: Show in tree · Family line page · Family page (…) · Family book… · Edit… · Start…
+            // 026 §7, 1102 §3.2: Show in tree · Family line page · Family page (…) · Family book… · Pages for selected people… · Edit… · Start…
             + item('show', R.showInTree) + item('page', strings.familyPages.rodPage) + famHtml + item('book', R.book)
+            + item('selpages', strings.familyPages.selPersonsAction)
             + item('edit', R.edit, locked) + item('split', R.split, locked)
             + (locked ? `<p class="pm-rod-menu-note">${esc(hint)}</p>` : '')
             + `</div></span>`;
@@ -473,6 +474,9 @@ export const personModalMethods = uiModule({
                 break;
             case 'book':
                 this.leavePersonModalThen(() => this.openBookForRods([rodId]));
+                break;
+            case 'selpages':
+                this.leavePersonModalThen(() => this.openSelectedPersonsPages(personId));
                 break;
             case 'family': {
                 const uid = itemEl.dataset.fam;

@@ -165,6 +165,7 @@ function personTreeTarget(personId: PersonId): string {
 function selectionTreeTarget(spec: BookSelectionSpec): string {
     if (spec.kind === 'rods') return spec.rods.length ? `rod:${spec.rods[0]}` : '';
     if (spec.kind === 'tree') return '';
+    if (spec.kind === 'persons') return spec.ids.length ? personTreeTarget(spec.ids[0]) : '';
     return personTreeTarget(spec.person);
 }
 
@@ -217,6 +218,8 @@ function kickerOf(page: SetPage): string {
         case 'hub': return F.kHub;
         case 'tree': return F.kTree;
         case 'other': return treeName() || F.kTree;
+        case 'persons': return F.selKicker;
+        case 'ancestors': return F.ancKicker;
         default: return F.winTitle;
     }
 }
@@ -251,7 +254,7 @@ function idle(): Promise<void> {
 function stepOf(page: SetPage | undefined): string {
     const S = strings.familyPages.step;
     switch (page?.kind) {
-        case 'rod': case 'branch': return S.rod;
+        case 'rod': case 'branch': case 'ancestors': return S.rod;
         case 'family': return S.family;
         case 'person': return S.person;
         case 'index': return S.index;
@@ -351,7 +354,7 @@ function wireWindowBar(scroller: HTMLElement, set: PageSet): void {
     const menuBtn = bar?.querySelector<HTMLElement>('.sp-fbar-menu');
     if (!root || !bar || !input || !results || !menu || !menuBtn) return;
     // The folds of the indexes start folded, as in the file (open in its markup for a file without the script).
-    root.querySelectorAll<HTMLDetailsElement>('details.sp-ix-more[open]').forEach(f => { f.open = false; });
+    root.querySelectorAll<HTMLDetailsElement>('details.sp-ix-more[open], details.sp-anc-more[open]').forEach(f => { f.open = false; });
     let on = false;
     let saved = 0;
     const setQuery = (value: string, keep = false): void => {
@@ -521,6 +524,7 @@ export const familyPagesMethods = uiModule({
 
     /** "Family book": the book's window with the same selection. */
     familyPagesWindowBook(ref: SetRef): void {
-        this.openFamilyBookFor(ref.spec);
+        // Chosen people are for pages only (1102 §3.1): the book takes the whole tree.
+        this.openFamilyBookFor(ref.spec.kind === 'persons' ? TREE_SPEC : ref.spec);
     },
 });
