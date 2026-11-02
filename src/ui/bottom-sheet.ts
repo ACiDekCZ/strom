@@ -20,6 +20,7 @@ import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js'
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
+import { getSelectedRod, rodLabel, rodPickerOffered } from './rod-view.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -58,10 +59,14 @@ interface MenuRow {
 interface TreeRow { prefix: string; name: string; run: () => void; }
 /** The "Only in browser" state row on top of the "More" sheet. */
 interface StorageRow { title: string; sub?: string; run: () => void; }
+/** "Family line · {line} ›" under the view tiles (a phone, spec 039 §5.1): the line chosen or the whole tree. */
+interface ValueRow { label: string; value: string; run: () => void; id?: string; }
 interface MenuBlock {
     header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string;
     /** A quiet label at the start of the pair's line ("View:"). */
     pairLabel?: string;
+    /** A framed row across the sheet under the pair ("Family line · Whole tree ›"). */
+    valueRow?: ValueRow;
     /** The research group (a narrow window with a mouse): title, state, frequent actions, "All research actions ›". */
     research?: ResearchSheetGroup;
     /** A quiet line with its link before the block (the research programs out of the browser's reach); hidden until it applies. */
@@ -414,11 +419,17 @@ export const bottomSheetMethods = uiModule({
             ] });
         }
 
-        // 5) View: Fan | Map tiles (no bottom-bar tab of their own).
+        // 5) View: Fan | Map tiles (no bottom-bar tab of their own); on a phone under them the
+        //    family line's choice (spec 039 §5.1: not on the timeline and the map, nor in a tree
+        //    without a line; a tablet has it in its top bar).
+        const rod = getSelectedRod();
+        const rodRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && rodPickerOffered()
+            ? { label: s.rodView.row, value: rod ? rodLabel(rod) : s.familyPages.wholeTree, id: 'sheet-rod', run: () => this.showRodPickerSheet() }
+            : undefined;
         blocks.push({ divider: true, rows: [], pairLabel: s.menu.sectionView, pair: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
-        ] });
+        ], valueRow: rodRow });
 
         // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.
         // ("AI ancestor research" only where the research group is not: it is this tree's research.)
@@ -654,6 +665,32 @@ export const bottomSheetMethods = uiModule({
             return btn;
         };
 
+        const makeValueButton = (row: ValueRow): HTMLButtonElement => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'bottom-sheet-item more-rod-row';
+            if (row.id) btn.id = row.id;
+            btn.setAttribute('role', 'menuitem');
+            btn.setAttribute('aria-haspopup', 'dialog');
+            const label = document.createElement('span');
+            label.className = 'more-rod-row-label';
+            label.textContent = row.label;
+            const value = document.createElement('span');
+            value.className = 'more-rod-row-value';
+            value.textContent = row.value;
+            value.title = row.value;
+            const chevron = document.createElement('span');
+            chevron.className = 'bottom-sheet-tree-chevron';
+            chevron.setAttribute('aria-hidden', 'true');
+            chevron.textContent = '›';
+            btn.append(label, value, chevron);
+            btn.addEventListener('click', () => {
+                this.hideBottomSheet();
+                row.run();
+            });
+            return btn;
+        };
+
         const makeStorageButton = (row: StorageRow): HTMLButtonElement => {
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -836,6 +873,7 @@ export const bottomSheetMethods = uiModule({
                 for (const row of block.pair) pairRow.appendChild(makeButton(row));
                 list.appendChild(pairRow);
             }
+            if (block.valueRow) list.appendChild(makeValueButton(block.valueRow));
         }
 
         overlay.appendChild(sheet);

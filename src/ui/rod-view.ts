@@ -18,9 +18,9 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { LineageIndex, RodId, buildLineages, rodLabels, realRodMembers, realRodSpouses } from '../lineage.js';
+import { LineageIndex, RodId, buildLineages, rodLabels, rods, realRodMembers, realRodSpouses } from '../lineage.js';
 import { rodFocusTarget } from '../rod-focus.js';
-import { rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
+import { RodPickerItem, rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { showFocusToast } from '../focus-toast.js';
 import { shownNameFull } from '../person-name.js';
@@ -283,6 +283,36 @@ const HOST_DELAY_MS = 150;
 const AXIS_LO = 1650;
 const AXIS_HI = 2030;
 
+/** The tree has a line worth choosing (not only small families): the choice is offered (§1.5, §5.1). */
+export function rodPickerOffered(): boolean {
+    return rods(rodIndex().index).some(r => !r.small);
+}
+
+/** The choice's markup (the toolbar's and the phone's sheet): the tree view's list, small lines unfolding. */
+function viewPickerHtml(items: RodPickerItem[], current: RodId | null): string {
+    const { index, labels } = rodIndex();
+    const treeId = DataManager.getCurrentTreeId();
+    const treeTitle = treeId ? TreeManager.getTreeMetadata(treeId as TreeId)?.name ?? '' : '';
+    return rodPickerHtml({
+        items, small: rodPickerSmallItems(index, getCurrentLanguage(), labels), otherMode: 'expand',
+        current, treeTitle, lo: AXIS_LO, hi: AXIS_HI, texts: pickerTexts(),
+        link: (_item, inner, cls) => `<button type="button" class="${cls}">${inner}</button>`,
+    });
+}
+
+/** What a pick does: the whole tree, or the line chosen. */
+function pickRod(rod: string): void {
+    if (rod === 'tree') clearRodSelection();
+    else if (rod && rod !== 'other') setRodSelection(rod, 'picker');
+}
+
+/** Swipe down from the sheet's head closes it (the list itself scrolls). */
+const SHEET_SWIPE_CLOSE_PX = 80;
+
+function esc(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function pickerTexts() {
     const F = strings.familyPages;
     return {
@@ -303,6 +333,7 @@ export const rodViewMethods = uiModule({
             rodViewChanged: () => this.rodViewChanged(),
         });
         this.listenForEvidenceChanges();
+        setRodPickerSheetOpener(() => this.showRodPickerSheet());
         getSelectedRod();
         this.syncRodPickerHost();
     },
@@ -380,21 +411,14 @@ export const rodViewMethods = uiModule({
         hostGeneration = generation;
         hostAbort?.abort();
         hostAbort = null;
-        const { index, labels } = rodIndex();
-        const items = rodPickerItems(index);
+        const items = rodPickerItems(rodIndex().index);
         if (!items.some(i => i.id !== 'tree' && i.id !== 'other')) {
             el.innerHTML = '';
             el.hidden = true;
             return;
         }
         ensureFamilyPagesAppCss();
-        const treeId = DataManager.getCurrentTreeId();
-        const treeTitle = treeId ? TreeManager.getTreeMetadata(treeId as TreeId)?.name ?? '' : '';
-        el.innerHTML = rodPickerHtml({
-            items, small: rodPickerSmallItems(index, getCurrentLanguage(), labels), otherMode: 'expand',
-            current, treeTitle, lo: AXIS_LO, hi: AXIS_HI, texts: pickerTexts(),
-            link: (_item, inner, cls) => `<button type="button" class="${cls}">${inner}</button>`,
-        });
+        el.innerHTML = viewPickerHtml(items, current);
         const pick = el.querySelector<HTMLDetailsElement>('details.sp-rodpick');
         if (!pick) return;
         const summary = pick.querySelector<HTMLElement>('summary');
@@ -416,10 +440,7 @@ export const rodViewMethods = uiModule({
             if (!pick.open) this.syncRodPickerHost();
         });
         hostAbort = new AbortController();
-        wireRodPicker(el, (rod) => {
-            if (rod === 'tree') clearRodSelection();
-            else if (rod && rod !== 'other') setRodSelection(rod, 'picker');
-        }, { pick, signal: hostAbort.signal, outside: document, markFirst: true });
+        wireRodPicker(el, pickRod, { pick, signal: hostAbort.signal, outside: document, markFirst: true });
         el.hidden = false;
         if (reopen) pick.open = true;
     },
@@ -444,6 +465,62 @@ export const rodViewMethods = uiModule({
         if (sheetOpener) { sheetOpener(); return; }
         const treeId = DataManager.getCurrentTreeId();
         if (treeId) void this.showTreeOverview(treeId, { section: 'rods', scroll: true });
+    },
+    /**
+     * The phone's list (§5.2, §5.3): a bottom sheet of the window's height
+     * less 40px (beside the side bar when the phone is held sideways) with
+     * the title, ×, the search field (focused only when tapped: no keyboard
+     * over the list) and the tree view's list, small lines unfolding.
+     * Opened from More → Family line and from the pill's label.
+     */
+    showRodPickerSheet(): void {
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        const items = rodPickerItems(rodIndex().index);
+        if (!items.some(i => i.id !== 'tree' && i.id !== 'other')) return;
+        ensureFamilyPagesAppCss();
+        const title = strings.familyPages.rodPickLabel;
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay rod-pick-overlay';
+        overlay.innerHTML = `<div class="bottom-sheet rod-pick-sheet" role="dialog" aria-modal="true" aria-labelledby="rod-pick-sheet-title">`
+            + `<div class="rod-pick-sheet-head"><div class="bottom-sheet-handle"></div>`
+            + `<div class="rod-pick-sheet-bar"><h2 class="rod-pick-sheet-title" id="rod-pick-sheet-title">${esc(title)}</h2>`
+            + `<button type="button" class="rod-pick-sheet-x" aria-label="${esc(strings.buttons.close)}">×</button></div></div>`
+            + viewPickerHtml(items, getSelectedRod())
+            + '</div>';
+        const sheet = overlay.querySelector<HTMLElement>('.rod-pick-sheet')!;
+        const pick = sheet.querySelector<HTMLDetailsElement>('details.sp-rodpick')!;
+        const close = (): void => { if (this.bottomSheet === overlay) this.hideBottomSheet(); };
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        sheet.querySelector('.rod-pick-sheet-x')?.addEventListener('click', close);
+        // The list stays open in the sheet: a pick, Escape (its own) and nothing else closes it — and the sheet with it.
+        wireRodPicker(sheet, (rod) => { close(); pickRod(rod); }, { pick, outside: new EventTarget(), markFirst: true });
+        pick.addEventListener('toggle', () => { if (!pick.open) close(); });
+        pick.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());
+        // Swipe down from the head closes (as the other sheets; the list scrolls on its own).
+        const head = sheet.querySelector<HTMLElement>('.rod-pick-sheet-head')!;
+        let startY = 0;
+        head.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; sheet.style.transition = 'none'; }, { passive: true });
+        head.addEventListener('touchmove', (e) => {
+            const dy = e.touches[0].clientY - startY;
+            if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+        }, { passive: true });
+        head.addEventListener('touchend', (e) => {
+            sheet.style.transition = '';
+            if (e.changedTouches[0].clientY - startY > SHEET_SWIPE_CLOSE_PX) close();
+            else sheet.style.transform = '';
+        });
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        pick.open = true;
+        // The chosen line in view (a long list scrolls to it).
+        requestAnimationFrame(() => {
+            overlay.classList.add('active');
+            sheet.querySelector<HTMLElement>('.sp-rodpick-list li[aria-current]')?.scrollIntoView({ block: 'nearest' });
+            if (document.activeElement === document.body || !sheet.contains(document.activeElement)) {
+                sheet.querySelector<HTMLElement>('.rod-pick-sheet-x')?.focus({ preventScroll: true });
+            }
+        });
     },
 });
 

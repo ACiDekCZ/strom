@@ -301,7 +301,11 @@ export const evidenceUiMethods = uiModule({
                 chev.className = 'evidence-pill-pick-chev';
                 chev.setAttribute('aria-hidden', 'true');
                 chev.textContent = '▾';
-                pick.append(...label.childNodes, chev);
+                // The text cut with an ellipsis, the chevron always shown.
+                const text = document.createElement('span');
+                text.className = 'evidence-pill-pick-text';
+                text.append(...label.childNodes);
+                pick.append(text, chev);
                 pick.onclick = () => this.openRodPicker();
                 pill.append(pick);
             } else {

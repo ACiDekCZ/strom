@@ -10610,25 +10610,25 @@
         .rod-picker-host details[open] > .sp-rodpick-btn { border-color: var(--primary); background: var(--read-scan-bg); }
         .rod-picker-host .sp-rodpick-pop { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 200px)); box-shadow: var(--shadow-lg); }
         .rod-picker-host .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
-        .toolbar .rod-picker-host button.sp-rodpick-a, .toolbar .rod-picker-host button.sp-rodpick-x {
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x {
             box-sizing: border-box; display: grid; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px;
             border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 14.5px;
             text-align: left; cursor: pointer; transition: none;
         }
-        .toolbar .rod-picker-host button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
-        .toolbar .rod-picker-host .sp-rodpick-tree button.sp-rodpick-a, .toolbar .rod-picker-host button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
-        .toolbar .rod-picker-host .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
-        .rod-picker-host .sp-rodpick-xchev { color: var(--text-faint); }
-        .toolbar .rod-picker-host li[aria-current] > button.sp-rodpick-a { background: var(--read-scan-bg); font-weight: 600; }
-        .toolbar .rod-picker-host button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
-        .toolbar .rod-picker-host button.sp-rodpick-a:focus-visible, .toolbar .rod-picker-host button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
+        :is(.rod-picker-host, .rod-pick-sheet) .sp-rodpick-xchev { color: var(--text-faint); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) li[aria-current] > button.sp-rodpick-a { background: var(--read-scan-bg); font-weight: 600; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) {
-            .toolbar .rod-picker-host button.sp-rodpick-a:hover, .toolbar .rod-picker-host button.sp-rodpick-x:hover { background: var(--hover-bg); }
-            .toolbar .rod-picker-host li[aria-current] > button.sp-rodpick-a:hover { background: var(--read-scan-bg); }
+            :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:hover, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:hover { background: var(--hover-bg); }
+            :is(.toolbar .rod-picker-host, .rod-pick-sheet) li[aria-current] > button.sp-rodpick-a:hover { background: var(--read-scan-bg); }
         }
         @media (pointer: coarse) {
             .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
-            .toolbar .rod-picker-host .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
+            :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
         /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs. */
         @media (min-width: 1025px) and (max-width: 1279px) {
@@ -10646,6 +10646,76 @@
         /* A phone sideways: the list comes from the More sheet (spec 039 §5.3). */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .rod-picker-host { display: none !important; }
+        }
+        /* The phone's list of lines (spec 039 §5.2): a sheet of the window's
+           height less 40px — handle, title and ×, the search field (44px, 16px
+           text: no zoom on iOS), the list scrolling under them. Whole tree
+           56px, lines 48px, Other families 52px, the small lines 44px. */
+        /* The sheet scrolls; the head and the search field stay on top (sticky:
+           a <details> does not pass a flex layout on to its content). */
+        .bottom-sheet.rod-pick-sheet {
+            --rod-pick-head: 64px;
+            display: block; height: calc(100vh - 40px); height: calc(100dvh - 40px);
+            max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 env(safe-area-inset-bottom, 0px);
+            scroll-padding-top: calc(var(--rod-pick-head) + 56px);
+        }
+        .rod-pick-sheet-head {
+            position: sticky; top: 0; z-index: 2; box-sizing: border-box; height: var(--rod-pick-head);
+            padding-top: 2px; background: var(--card-bg, #fff); touch-action: none;
+        }
+        .rod-pick-sheet .bottom-sheet-handle { margin: 6px auto 4px; }
+        .rod-pick-sheet-bar { display: flex; align-items: center; gap: 8px; padding: 0 8px 4px 18px; }
+        .rod-pick-sheet-title {
+            flex: 1; min-width: 0; margin: 0; font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .rod-pick-sheet-x {
+            flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none;
+            color: var(--text-light); font-size: 24px; line-height: 1; cursor: pointer;
+        }
+        .rod-pick-sheet-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .rod-pick-sheet-x:hover { background: var(--hover-bg); color: var(--text); } }
+        .rod-pick-sheet details.sp-rodpick { position: static; display: block; }
+        .rod-pick-sheet .sp-rodpick-btn { display: none; }
+        .rod-pick-sheet .sp-rodpick-pop {
+            position: static; display: block; width: auto; max-width: none; max-height: none;
+            padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+        }
+        .rod-pick-sheet .sp-rodpick-f {
+            position: sticky; top: var(--rod-pick-head); z-index: 1; padding: 0 14px 10px;
+            border-bottom: 1px solid var(--divider); background: var(--card-bg, #fff);
+        }
+        .rod-pick-sheet input.sp-rodpick-q {
+            width: 100%; height: 44px; margin: 0; padding: 0 12px; font-size: 16px;
+            border: 1px solid var(--sp-frame, var(--border)); border-radius: 10px; background: var(--input-bg); transition: none;
+        }
+        .rod-pick-sheet .sp-rodpick-list { max-height: none; padding: 4px 0 12px; overflow: visible; }
+        /* .bottom-sheet.rod-pick-sheet .sp-rodpick-list: above the toolbar list's sizes shared through :is() above. */
+        .bottom-sheet.rod-pick-sheet .sp-rodpick-list button.sp-rodpick-a, .bottom-sheet.rod-pick-sheet .sp-rodpick-list button.sp-rodpick-x { min-height: 48px; padding: 2px 18px; border-radius: 0; font-size: 15px; }
+        .bottom-sheet.rod-pick-sheet .sp-rodpick-list button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 64px 32px; }
+        .bottom-sheet.rod-pick-sheet .sp-rodpick-list .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) auto; min-height: 56px; }
+        .rod-pick-sheet .sp-rodpick-tree { border-bottom: 1px solid var(--divider); }
+        .bottom-sheet.rod-pick-sheet .sp-rodpick-list button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 52px; }
+        .bottom-sheet.rod-pick-sheet .sp-rodpick-list .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 32px; min-height: 44px; padding-left: 40px; }
+        .rod-pick-sheet .sp-rodpick-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+        .rod-pick-sheet .sp-rodpick-other { margin-top: 0; padding-top: 0; }
+        .rod-pick-sheet .sp-rodpick-none { margin: 14px 18px; font-size: 15px; }
+        /* A phone sideways (§5.3): beside the side bar, the whole width of the tree's area. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-overlay.rod-pick-overlay { padding-left: var(--side-bar-w); }
+            .bottom-sheet.rod-pick-sheet { max-width: none; margin: 0; }
+        }
+        /* More → View (§5.1, a phone): "Family line · {line} ›" under the
+           Fan | Map tiles, across the sheet, framed like the tiles. */
+        .bottom-sheet-menu .bottom-sheet-item.more-rod-row {
+            justify-content: flex-start; gap: 10px; width: calc(100% - 16px); min-height: 52px; margin: 6px 8px 2px; padding: 0 14px;
+            background: var(--surface-2); border-radius: var(--r-md); font-size: 15px;
+        }
+        .more-rod-row-label { flex: none; }
+        .more-rod-row-value { flex: 1 1 auto; min-width: 0; text-align: right; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .more-rod-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-item.more-rod-row { grid-column: 1 / -1; width: 100%; min-height: 44px; margin: 2px 0; }
         }
         /* Descendants badge bar */
         .collab-bar {
@@ -16606,10 +16676,11 @@
         .evidence-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
         /* A family line's label opens the choice of lines (spec 039 §3.1). */
         .evidence-pill-label--pick {
-            display: block; height: 30px; margin-left: -10px; padding: 0 8px 0 10px; border: 0; border-radius: 999px;
+            display: flex; align-items: center; height: 30px; margin-left: -10px; padding: 0 8px 0 10px; border: 0; border-radius: 999px;
             background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer;
         }
-        .evidence-pill-pick-chev { margin-left: 4px; color: var(--text-faint); }
+        .evidence-pill-pick-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .evidence-pill-pick-chev { flex: none; margin-left: 4px; color: var(--text-faint); }
         @media (hover: hover) { .evidence-pill-label--pick:hover { background: var(--hover-bg); } }
         .evidence-pill-label--pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (pointer: coarse) { .evidence-pill-label--pick { min-height: 44px; } }
