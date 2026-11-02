@@ -3112,9 +3112,11 @@ const stringsEN = {
             whoHand: 'The research never changes a hand-placed location; it asks in Waiting if it finds a conflict.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `${km} km from the other places of the ${family} family in ${a === b ? a : `${a}–${b}`}.`,
-            checkDistrict: (expected: string, actual: string, parish: boolean) => parish
+            checkDistrict: (expected: string, actual: string, parish: boolean, titled = false) => parish
                 ? `The records name the parish of ${expected}; the location is in ${actual} District.`
-                : `The records name ${expected} District; the location is in ${actual} District.`,
+                : titled
+                    ? `The records name ${expected}; the location is in ${actual} District.`
+                    : `The records name ${expected} District; the location is in ${actual} District.`,
             checkStreet: 'The map found a street, not a town.',
             checkArea: 'The map found an area, not a town.',
             checkOtherTown: 'The label of the location names another town.',
@@ -10055,9 +10057,11 @@ const stringsCZ: StringsType = {
             whoHand: 'Ruční polohu výzkum nemění, jen se zeptá v Čeká, když najde rozpor.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `Leží ${km} km od ostatních míst rodiny ${family} ${a === b ? `v roce ${a}` : `v letech ${a}–${b}`}.`,
-            checkDistrict: (expected: string, actual: string, parish: boolean) => parish
+            checkDistrict: (expected: string, actual: string, parish: boolean, titled = false) => parish
                 ? `Záznamy uvádějí faru ${expected}, poloha je v okrese ${actual}.`
-                : `Záznamy uvádějí okres ${expected}, poloha je v okrese ${actual}.`,
+                : titled
+                    ? `Záznamy uvádějí ${expected}, poloha je v okrese ${actual}.`
+                    : `Záznamy uvádějí okres ${expected}, poloha je v okrese ${actual}.`,
             checkStreet: 'Mapa našla ulici, ne obec.',
             checkArea: 'Mapa našla oblast, ne obec.',
             checkOtherTown: 'Štítek polohy uvádí jinou obec.',
@@ -16924,9 +16928,11 @@ const stringsDE: StringsType = {
             whoHand: 'Eine von Hand gesetzte Lage ändert die Forschung nicht, bei Widerspruch fragt sie in Offen.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `${km} km von den übrigen Orten der Familie ${family} ${a === b ? a : `${a}–${b}`}.`,
-            checkDistrict: (expected: string, actual: string, parish: boolean) => parish
+            checkDistrict: (expected: string, actual: string, parish: boolean, titled = false) => parish
                 ? `Die Einträge nennen die Pfarrei ${expected}, die Lage ist im Bezirk ${actual}.`
-                : `Die Einträge nennen den Bezirk ${expected}, die Lage ist im Bezirk ${actual}.`,
+                : titled
+                    ? `Die Einträge nennen ${expected}, die Lage ist im Bezirk ${actual}.`
+                    : `Die Einträge nennen den Bezirk ${expected}, die Lage ist im Bezirk ${actual}.`,
             checkStreet: 'Die Karte fand eine Straße, keinen Ort.',
             checkArea: 'Die Karte fand ein Gebiet, keinen Ort.',
             checkOtherTown: 'Die Bezeichnung der Lage nennt einen anderen Ort.',

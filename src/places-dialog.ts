@@ -13,6 +13,7 @@ import type { PlacesResearchAccess } from './places-bridge.js';
 import type { PlaceMemberTag, PlaceVariantGroup } from './place-groups.js';
 import { forEachPlaceFact, placeKey } from './places.js';
 import { yearOf } from './dates.js';
+import { foldText } from './streets.js';
 import { getStringsForLang, type Language } from './strings.js';
 
 // ==================== ROW ACTIONS ====================
@@ -260,12 +261,34 @@ export function formatYearSpan(span: readonly [number, number] | undefined): str
 
 // ==================== TEXTS ====================
 
+/**
+ * Words that say a name is already a district's full title ("okresní
+ * hejtmanství Kolín", "Bezirk Kolin", "Kolin District"), folded: such a name
+ * gets no district word of its own in front or behind.
+ */
+const DISTRICT_TITLE_WORDS: ReadonlySet<string> = new Set([
+    'okres', 'okresni', 'okresu', 'hejtmanstvi', 'kraj', 'soudni',
+    'district', 'county',
+    'bezirk', 'bezirkshauptmannschaft', 'kreis', 'landkreis', 'amt', 'oberamt', 'gerichtsbezirk',
+    'powiat', 'okrug', 'megye', 'jaras',
+]);
+
+/** Does a district's name carry its own title ("okres Kolín", "okresní hejtmanství Kolín", "Kolin District")? */
+export function districtNameHasTitle(name: string): boolean {
+    return foldText(name).split(/[^\p{L}\p{N}]+/u).some(w => DISTRICT_TITLE_WORDS.has(w));
+}
+
+/** A district as a label shows it: "okres Kolín", or the name alone when it carries its title already. */
+export function districtText(name: string, lang: Language): string {
+    return districtNameHasTitle(name) ? name : getStringsForLang(lang).places.dialog.district(name);
+}
+
 /** The sentence of a finding of the app's own check (§5). */
 export function checkFindingText(f: CheckFinding, lang: Language): string {
     const d = getStringsForLang(lang).places.dialog;
     switch (f.kind) {
         case 'far': return d.checkFar(f.km, f.family, f.years[0], f.years[1]);
-        case 'district': return d.checkDistrict(f.expected, f.actual, f.jurisdiction === 'parish');
+        case 'district': return d.checkDistrict(f.expected, f.actual, f.jurisdiction === 'parish', districtNameHasTitle(f.expected));
         case 'label': return f.type === 'street' ? d.checkStreet : f.type === 'area' ? d.checkArea : d.checkOtherTown;
         case 'multi': return d.checkMulti;
     }
@@ -299,7 +322,7 @@ export function formerNameText(n: PlaceRecordName, lang: Language): string {
 export function placeLocationLabel(id: PlaceIdentity, geo: PlaceGeo | undefined, lang: Language): string {
     if (id.today) {
         const d = getStringsForLang(lang).places.dialog;
-        return [id.today.name, id.today.district ? d.district(id.today.district) : '', countryName(id.today.country, lang)]
+        return [id.today.name, id.today.district ? districtText(id.today.district, lang) : '', countryName(id.today.country, lang)]
             .filter(Boolean).join(', ');
     }
     if (!geo) return '';

@@ -4,7 +4,7 @@ import type { PlaceIdentity, PlaceStateSummary } from '../place-identity.js';
 import {
     placeRowActions, canLookUp, canCheck, hasWhyHere, groupCheckState, selectionCounts, placeContextLine,
     placeYearSpans, formatYearSpan, checkFindingText, countryName, formerNameText, placeLocationLabel,
-    placeFormerLine, placeWhyRows, variantRowAction, townGroupsBesideVariants, variantGroupView, placesOfferStep,
+    placeFormerLine, placeWhyRows, districtNameHasTitle, variantRowAction, townGroupsBesideVariants, variantGroupView, placesOfferStep,
     type VariantGroupFilterInput, type VariantMemberFilter,
 } from '../places-dialog.js';
 import type { PlaceVariantGroup } from '../place-groups.js';
@@ -155,6 +155,29 @@ describe('texts', () => {
         expect(placeLocationLabel(id('placed'), { ...geo, label: 'Lhota, Jinov' }, 'en')).toBe('Lhota, Jinov');
         expect(placeLocationLabel(id('placed'), geo, 'en')).toBe('49.612, 15.235');
         expect(placeLocationLabel(id('none'), undefined, 'en')).toBe('');
+    });
+
+    it('a district name that carries its title gets no second one', () => {
+        const titled = id('verified', { today: { name: 'Bělušice', district: 'okresní hejtmanství Kolín' } });
+        expect(placeLocationLabel(titled, undefined, 'cs')).toBe('Bělušice, okresní hejtmanství Kolín');
+        expect(placeLocationLabel(titled, undefined, 'en')).toBe('Bělušice, okresní hejtmanství Kolín');
+        expect(placeLocationLabel(titled, undefined, 'de')).toBe('Bělušice, okresní hejtmanství Kolín');
+        expect(placeLocationLabel(id('placed', { today: { name: 'Lhota', district: 'Bezirk Lhotau' } }), undefined, 'cs')).toBe('Lhota, Bezirk Lhotau');
+        expect(placeLocationLabel(id('placed', { today: { name: 'Lhota', district: 'Lhotov District' } }), undefined, 'de')).toBe('Lhota, Lhotov District');
+        // A bare name gets the language's word.
+        const bare = id('placed', { today: { name: 'Lhota', district: 'Lhotov' } });
+        expect(placeLocationLabel(bare, undefined, 'cs')).toBe('Lhota, okres Lhotov');
+        expect(placeLocationLabel(bare, undefined, 'de')).toBe('Lhota, Bezirk Lhotov');
+        // A name merely containing the letters of a title word is not titled.
+        expect(districtNameHasTitle('Okresice')).toBe(false);
+        expect(districtNameHasTitle('Krajková')).toBe(false);
+        expect(districtNameHasTitle('Landkreis Lhotau')).toBe(true);
+        // The check's sentence too.
+        const f = { kind: 'district', expected: 'okresní hejtmanství Kolín', actual: 'Nymburk' } as const;
+        expect(checkFindingText(f, 'cs')).toBe('Záznamy uvádějí okresní hejtmanství Kolín, poloha je v okrese Nymburk.');
+        expect(checkFindingText(f, 'en')).toBe('The records name okresní hejtmanství Kolín; the location is in Nymburk District.');
+        expect(checkFindingText(f, 'de')).toBe('Die Einträge nennen okresní hejtmanství Kolín, die Lage ist im Bezirk Nymburk.');
+        expect(checkFindingText({ ...f, expected: 'Kolín' }, 'cs')).toBe('Záznamy uvádějí okres Kolín, poloha je v okrese Nymburk.');
     });
 
     it('the former line only when today’s name differs from what the tree writes', () => {

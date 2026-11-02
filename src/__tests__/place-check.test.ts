@@ -9,6 +9,8 @@ import {
     PLACE_FAR_KM, PLACE_NEAR_KM,
 } from '../place-check.js';
 import { placeGeoHash } from '../place-records.js';
+import { sanitizeBridgePlaces } from '../places-bridge.js';
+import { placeIdentity } from '../place-identity.js';
 import { StromData, Person, PersonId, PlaceGeo } from '../types.js';
 
 const BASE = { lat: 49.6, lon: 15.2 };
@@ -92,6 +94,26 @@ describe('Keep and the research’s confirmation', () => {
         expect(checkPlaces(t).has('lhotinek')).toBe(false);
         t.placeRecords.L1.coords = north(100);
         expect(checkPlaces(t).has('lhotinek')).toBe(true);
+    });
+
+    it('a location the research confirmed live (the bridge, no GEDCOM records) is not checked while it stays', () => {
+        const t = tree(120);
+        const live = (at: { lat: number; lon: number }) => sanitizeBridgePlaces({
+            places: { L0007: { name: 'Lhotínek', state: 'identified', by: 'research', coords: at, verified: '2026-11-02' } },
+            forms: { 'Lhotínek': { place: 'L0007' } },
+        })!;
+        // The same spot (within the tolerance of the tree's records): exempt.
+        expect(checkPlaces(t, { live: live({ lat: north(120).lat + 0.0003, lon: BASE.lon }) }).has('lhotinek')).toBe(false);
+        // Confirmed somewhere else: the location here is checked.
+        expect(checkPlaces(t, { live: live(north(100)) }).has('lhotinek')).toBe(true);
+        // Without the bridge: checked.
+        expect(checkPlaces(t).has('lhotinek')).toBe(true);
+        // Through the cache too, and the state the dialog shows is "verified", not "check".
+        const l = live(north(120));
+        const checks = checkPlacesCached(t, l);
+        expect(checks.has('lhotinek')).toBe(false);
+        expect(checkPlacesCached(t).has('lhotinek')).toBe(true);
+        expect(placeIdentity('lhotinek', { data: t, live: l, checks }).state).toBe('verified');
     });
 });
 

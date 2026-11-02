@@ -333,6 +333,29 @@ test.describe('place identification in the Places dialog', () => {
         await expect(chip(page, 'check').locator('.places-chip-n')).toHaveText('1');
     });
 
+    test('a place the research confirmed live at the same spot: Verified, no Check mark; a district named with its title gets no second one', async ({ page }) => {
+        const b = await research(page);
+        const reply = b.places!.reply;
+        b.places!.reply = {
+            ...reply,
+            places: {
+                ...(reply.places as Record<string, unknown>),
+                L0003: {
+                    name: 'Jinov', district: 'okresní hejtmanství Jinov', country: 'CZ',
+                    coords: { lat: 50.3003, lon: 16.9 }, state: 'identified', by: 'research', at: '2026-10-21', verified: '2026-10-22',
+                    forms: ['Jinov'], facts: 1, persons: 1,
+                },
+            },
+        };
+        await openLive(page, b);
+        const r = row(page, 'Jinov');
+        await expect(r).toHaveAttribute('data-state', 'verified');
+        await expect(r).not.toHaveClass(/is-check/);
+        await expect(r.locator('.place-keep')).toHaveCount(0);
+        await expect(chip(page, 'check')).toHaveCount(0);
+        await expect(r.locator('.place-pin-label')).toContainText('Jinov, okresní hejtmanství Jinov, Czechia');
+    });
+
     test('a research without place identification: the states, but no ◆ step, Select or ⋯', async ({ page }) => {
         const b = await research(page, { features: [] });
         await open(page);

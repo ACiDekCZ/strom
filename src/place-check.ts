@@ -20,6 +20,7 @@ import { surnameForms, surnameKey } from './surnames.js';
 import { foldText, tokens, streetWord } from './streets.js';
 import { placeGeoHash, sameCoords } from './place-records.js';
 import { expandPlaceQuery } from './place-query.js';
+import type { BridgePlaces } from './places-bridge.js';
 
 /** A place farther than this from its family's other places is marked (km). */
 export const PLACE_FAR_KM = 60;
@@ -267,16 +268,32 @@ function findingsFor(
     return out;
 }
 
-/** Is this location exempt from the check: answered "Keep", or confirmed by the research (both while it stays)? */
-export function checkExempt(data: StromData, key: string, geo: PlaceGeo): boolean {
+/** The research's live record of a place (`GET /places`), by the text's form or the tree's ref. */
+function liveRecordOf(data: StromData, key: string, live: BridgePlaces | null | undefined): PlaceRecord | undefined {
+    if (!live) return undefined;
+    const id = live.formsByKey[key]?.place ?? data.placeRefs?.[key];
+    return id ? live.places[id] : undefined;
+}
+
+/** A record that confirms this location: verified, and at the same spot when it has one. */
+const confirms = (rec: PlaceRecord | undefined, geo: PlaceGeo): boolean =>
+    !!rec?.verified && (!rec.coords || sameCoords(rec.coords, geo));
+
+/**
+ * Is this location exempt from the check: answered "Keep", or confirmed by
+ * the research (both while it stays). The confirmation counts from the live
+ * bridge reply as well as from the tree's records (GEDCOM).
+ */
+export function checkExempt(data: StromData, key: string, geo: PlaceGeo, live?: BridgePlaces | null): boolean {
     if (geo.keptAt && geo.keptAt === placeGeoHash(geo)) return true;
-    const rec = recordOf(data, key);
-    return !!rec?.verified && (!rec.coords || sameCoords(rec.coords, geo));
+    return confirms(liveRecordOf(data, key, live), geo) || confirms(recordOf(data, key), geo);
 }
 
 export interface CheckOptions {
     /** Only these places (placeKeys); all located ones when absent. */
     keys?: Iterable<string>;
+    /** The research's live places (`GET /places`): its confirmations exempt locations too. */
+    live?: BridgePlaces | null;
 }
 
 /**
@@ -291,7 +308,7 @@ export function checkPlaces(data: StromData, opts: CheckOptions = {}): Map<strin
     const out = new Map<string, CheckFinding[]>();
     for (const key of keys) {
         const geo = places[key];
-        if (!geo || checkExempt(data, key, geo)) continue;
+        if (!geo || checkExempt(data, key, geo, opts.live)) continue;
         const found = findingsFor(data, key, geo, facts, places);
         if (found.length) out.set(key, found);
     }
@@ -322,14 +339,34 @@ export function placeCheckKey(data: StromData): string {
     return `${h1.toString(36)}${h2.toString(36)}`;
 }
 
-let cache: { key: string; result: Map<string, CheckFinding[]> } | null = null;
+/** What the check reads of the live places: each text's record and the records' confirmations and spots. */
+const liveKeys = new WeakMap<BridgePlaces, string>();
+function liveCheckKey(live: BridgePlaces | null | undefined): string {
+    if (!live) return '';
+    const known = liveKeys.get(live);
+    if (known !== undefined) return known;
+    const refs = Object.keys(live.formsByKey).sort().map(k => `${k}=${live.formsByKey[k].place ?? ''}`);
+    const recs = Object.keys(live.places).sort().map(id => {
+        const r = live.places[id];
+        return `${id}:${r.verified ?? ''}:${r.coords ? `${r.coords.lat},${r.coords.lon}` : ''}`;
+    });
+    const out = `${refs.join('|')}#${recs.join('|')}`;
+    liveKeys.set(live, out);
+    return out;
+}
 
-/** checkPlaces over the whole tree, computed again only when what it reads changed (placeCheckKey). */
-export function checkPlacesCached(data: StromData): Map<string, CheckFinding[]> {
+let cache: { key: string; live: string; result: Map<string, CheckFinding[]> } | null = null;
+
+/**
+ * checkPlaces over the whole tree, computed again only when what it reads
+ * changed (placeCheckKey, and the live places' confirmations when given).
+ */
+export function checkPlacesCached(data: StromData, live?: BridgePlaces | null): Map<string, CheckFinding[]> {
     const key = placeCheckKey(data);
-    if (cache?.key === key) return cache.result;
-    const result = checkPlaces(data);
-    cache = { key, result };
+    const liveKey = liveCheckKey(live);
+    if (cache?.key === key && cache.live === liveKey) return cache.result;
+    const result = checkPlaces(data, { live });
+    cache = { key, live: liveKey, result };
     return result;
 }
 

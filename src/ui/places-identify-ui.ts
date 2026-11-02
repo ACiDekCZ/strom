@@ -102,7 +102,7 @@ export const placesIdentifyMethods = uiModule({
         const ctx = this.placesResearchContext();
         const live = ctx.researchId && placesView.live?.researchId === ctx.researchId ? placesView.live.payload : null;
         const waiting = ctx.researchId ? storedResearchWaiting(ctx.researchId)?.items : undefined;
-        const ids = placeIdentities(keys, { data, live, checks: checkPlacesCached(data), waiting });
+        const ids = placeIdentities(keys, { data, live, checks: checkPlacesCached(data, live), waiting });
         for (const k of placesView.queuedLocal) {
             const id = ids.get(k);
             if (id && id.state !== 'queued' && id.state !== 'running') ids.set(k, { ...id, state: 'queued' });
