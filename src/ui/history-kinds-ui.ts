@@ -7,8 +7,9 @@
  * with the choice (`history.align`; the dialog is history-align-ui.ts). The
  * history manager shows the same kinds in its header (`historyKindsManageHtml`).
  *
- * Taking a kind away is written at once through the bridge; adding one is
- * never written here: it waits on this page with the research's estimate
+ * Taking a kind away is written through the bridge once a confirmation has
+ * shown what it does (how many found events an alignment would hide; nothing
+ * disappears before it); adding one is never written here: it waits on this page with the research's estimate
  * until the research's terminal confirms it (the `history-kinds` link), and
  * the next status says it. Without `history.kinds` in the research's status
  * Settings stay exactly as they were.
@@ -21,7 +22,9 @@ import {
     researchSchemeUrl, HISTORY_KINDS_FEATURE, HISTORY_ALIGN_FEATURE, EXPERIMENTS_SPLIT_FEATURE, type LiveStatus,
 } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
-import { HISTORY_KINDS, alignBackfillCounts, alignHideCount, type HistoryAlignPreview, type HistoryKind } from '../history.js';
+import {
+    HISTORY_KINDS, alignBackfillCounts, alignHideCount, alignHideCountOfKind, type HistoryAlignPreview, type HistoryKind,
+} from '../history.js';
 import { getHistoryAlign, postHistoryKinds, type HistoryKindsBody, type HistoryKindsRefusal } from '../history-bridge.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { researchOpenLabel } from './research-open-mark.js';
@@ -51,6 +54,8 @@ interface KindsPage extends HistoryKindsDraft {
     written?: { kinds: HistoryKind[]; own?: boolean; at: number };
     /** A write on its way (the switches wait). */
     busy: boolean;
+    /** A switch-off is being confirmed (its preview loading or its dialog open). */
+    asking?: boolean;
     /** Searches of origin switched off from here (their sentence), and those waiting for the terminal. */
     originOff: Set<Origin>;
     originWait: Set<Origin>;
@@ -73,6 +78,8 @@ let manageOpen = false;
 
 /** How long a written value stands against a status that does not say it yet. */
 const WRITTEN_SETTLE_MS = 15_000;
+/** How long the confirmation of a switch-off waits for its preview before it asks without a number. */
+const OFF_PREVIEW_TIMEOUT_MS = 4000;
 const OPEN_KEY = 'strom.historyKindsOpen';
 /** Marks every node this module adds to #history-kinds (removed without the feature). */
 const ADDED = 'hk-added';
@@ -502,26 +509,51 @@ export const historyKindsMethods = uiModule({
 
     /**
      * A kind's Search switch (§2), shared with the history manager: on → off is
-     * written at once; off → it waits (with the estimate) for "Continue in the
-     * research"; waiting → it stops waiting.
+     * written after its confirmation (Cancel keeps the kind on); off → it waits
+     * (with the estimate) for "Continue in the research"; waiting → it stops waiting.
      */
-    historyKindSearchClick(kind: HistoryKind): void {
+    async historyKindSearchClick(kind: HistoryKind): Promise<void> {
         const rid = activeResearchId();
         if (!rid || !(HISTORY_KINDS as readonly string[]).includes(kind)) return;
         const searched = this.historyKindsSearched(rid);
         const p = page(rid);
-        if (!searched || !this.researchBridgeUp(rid) || p.busy || p.waiting) return;
+        if (!searched || !this.researchBridgeUp(rid) || p.busy || p.waiting || p.asking) return;
         if (p.pend.has(kind)) {
             p.pend.delete(kind);
             if (!p.pend.size) delete p.inherit;
         } else if (!searched.kinds.includes(kind)) {
             p.pend.add(kind);
         } else {
-            void this.historyKindsWrite(rid, { kinds: searched.kinds.filter(k => k !== kind), scope: searched.own === false ? 'default' : 'tree' }, kind);
+            p.asking = true;
+            let ok = false;
+            try { ok = await this.historyKindOffConfirm(rid, kind, searched.kinds); } finally { p.asking = false; }
+            // The kinds may have changed while the dialog was open: switch off what is searched now.
+            const now = this.historyKindsSearched(rid);
+            if (!ok || !now || !now.kinds.includes(kind) || !this.researchBridgeUp(rid) || p.busy || p.waiting) return;
+            await this.historyKindsWrite(rid, { kinds: now.kinds.filter(k => k !== kind), scope: now.own === false ? 'default' : 'tree' }, kind);
             return;
         }
         this.renderHistorySettingsIfOpen();
         this.renderHistoryManageIfOpen();
+    },
+
+    /**
+     * The confirmation of a switch-off: what an alignment would hide of the kind
+     * (`GET /history/align?kinds=<without it>`; without `history.align` or a
+     * preview the dialog says it without a number), that nothing disappears
+     * before it and that turning it back on does not search places gone through.
+     */
+    async historyKindOffConfirm(rid: string, kind: HistoryKind, kinds: readonly HistoryKind[]): Promise<boolean> {
+        const h = strings.history;
+        const base = bridgeBase(rid);
+        const features = this.historyKindsStatusOf(rid)?.features ?? [];
+        let n: number | null = null;
+        if (base && features.includes(HISTORY_ALIGN_FEATURE)) {
+            const r = await getHistoryAlign(base, kinds.filter(k => k !== kind), { timeoutMs: OFF_PREVIEW_TIMEOUT_MS });
+            if (r.ok) n = alignHideCountOfKind(r.preview, kind);
+        }
+        const hide = n === null ? h.offAskHideUnknown : n ? h.offAskHide(n) : h.offAskHideNone;
+        return this.showConfirm(`${hide} ${h.offAskKeep}\n\n${h.offAskAgain}`, h.offAskTitle(kindName(kind)), { confirmLabel: h.offAskGo });
     },
 
     /** The history manager redraws its own kinds block when it is open (part B). */

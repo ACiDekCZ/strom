@@ -39,6 +39,14 @@ async function setup(page: Page, opts: { history?: Partial<FakeHistory>; feature
 const openSettings = (page: Page) => page.evaluate(() => window.Strom.UI.showSettingsDialog());
 const box = (page: Page) => page.locator('#history-kinds');
 const kindSwitch = (page: Page, k: string) => page.locator(`[data-search-kind="${k}"]`);
+const confirmDialog = (page: Page) => page.locator('#confirmation-modal.active');
+/** A kind switched off: its confirmation (1102) shows the impact first, then the write. */
+const switchOff = async (page: Page, k: string) => {
+    await kindSwitch(page, k).click();
+    await expect(confirmDialog(page)).toBeVisible();
+    await page.locator('#confirm-ok-btn').click();
+    await expect(confirmDialog(page)).toHaveCount(0);
+};
 const openKinds = async (page: Page) => {
     await page.locator('#history-kinds .history-kinds-toggle').click();
     await expect(page.locator('#history-kinds-search')).toBeVisible();
@@ -71,11 +79,26 @@ test.describe('Kinds of history: Settings', () => {
         await expect(page.locator('#history-kinds-search')).toBeVisible();
     });
 
-    test('§2: a kind switched off is written at once; the sentence offers the alignment', async ({ page }) => {
+    test('§2: a kind switched off only after its confirmation with the impact; Cancel keeps it on', async ({ page }) => {
         const { history } = await setup(page);
         await openSettings(page);
         await openKinds(page);
         await kindSwitch(page, 'economy').click();
+        // The impact first: what an alignment would hide of the kind, asked for the kinds without it.
+        await expect(confirmDialog(page)).toBeVisible();
+        await expect(page.locator('#confirm-title')).toHaveText('Turn off search: Economy');
+        await expect(page.locator('#confirm-message')).toContainText('Aligning history with the settings would hide 1 found event of this kind. Nothing disappears before that.');
+        await expect(page.locator('#confirm-message')).toContainText('Turning the kind back on does not search again in places the research has already gone through.');
+        expect(history.align!.reads.at(-1)!.split(',')).not.toContain('economy');
+        await expect(page.locator('#confirm-ok-btn')).toHaveText('Turn off');
+        // Cancel: the kind stays on, nothing written.
+        await page.locator('#confirm-cancel-btn').click();
+        await expect(confirmDialog(page)).toHaveCount(0);
+        await expect(kindSwitch(page, 'economy')).toHaveAttribute('data-state', 'on');
+        expect(history.kindsWrites ?? []).toEqual([]);
+        await expect(page.locator('#settings-modal')).toBeVisible();
+        // Confirmed: written.
+        await switchOff(page, 'economy');
         await expect(kindSwitch(page, 'economy')).toHaveAttribute('data-state', 'off');
         await expect.poll(() => history.kindsWrites).toEqual([{ kinds: FAKE_KINDS.filter(k => k !== 'economy'), scope: 'default' }]);
         const off = page.locator('.history-kinds-off');
@@ -87,7 +110,7 @@ test.describe('Kinds of history: Settings', () => {
         await expect(kindSwitch(page, 'economy')).toHaveAttribute('data-state', 'off');
         // A refusal takes it back with a toast.
         history.kindsReply = { status: 503, body: { error: 'busy', code: 'research.busy', text: 'busy' } };
-        await kindSwitch(page, 'war').click();
+        await switchOff(page, 'war');
         await expect(page.locator('.toast').last()).toBeVisible();
         await expect(kindSwitch(page, 'war')).toHaveAttribute('data-state', 'on');
     });
@@ -127,6 +150,29 @@ test.describe('Kinds of history: Settings', () => {
         await expect(page.locator('.toast').last()).toContainText('Law is searched again.');
         await expect(pend).toHaveCount(0);
         await expect(kindSwitch(page, 'law')).toHaveAttribute('data-state', 'on');
+    });
+
+    test('§2: the confirmation of a switch-off without a preview says it without a number', async ({ page }) => {
+        const { history } = await setup(page, { features: KINDS_FEATURES.filter(f => f !== 'history.align') });
+        await openSettings(page);
+        await openKinds(page);
+        await kindSwitch(page, 'war').click();
+        await expect(confirmDialog(page)).toBeVisible();
+        await expect(page.locator('#confirm-message')).toContainText('Found events of this kind would be hidden only by aligning history with the settings. Nothing disappears before that.');
+        await page.locator('#confirm-ok-btn').click();
+        await expect.poll(() => history.kindsWrites).toEqual([{ kinds: FAKE_KINDS.filter(k => k !== 'war'), scope: 'default' }]);
+    });
+
+    test('§2: a preview the research refuses: the confirmation without a number', async ({ page }) => {
+        const { history } = await setup(page, { history: { align: fakeAlign({ previewReply: { status: 503, body: { error: 'busy', code: 'research.busy', text: 'busy' } } }) } });
+        await openSettings(page);
+        await openKinds(page);
+        await kindSwitch(page, 'war').click();
+        await expect(page.locator('#confirm-message')).toContainText('Found events of this kind would be hidden only by aligning history with the settings.');
+        await page.keyboard.press('Escape');
+        await expect(confirmDialog(page)).toHaveCount(0);
+        await expect(kindSwitch(page, 'war')).toHaveAttribute('data-state', 'on');
+        expect(history.kindsWrites ?? []).toEqual([]);
     });
 
     test('§2: no kind searched says so', async ({ page }) => {
@@ -213,7 +259,7 @@ test.describe('Kinds of history: Settings', () => {
         await openSettings(page);
         await openKinds(page);
         await kindSwitch(page, 'law').click();
-        await kindSwitch(page, 'economy').click();
+        await switchOff(page, 'economy');
         await expect(page.locator('#history-kinds-pend')).toBeVisible();
         await expect(page.locator('.history-kinds-off')).toBeVisible();
         const over = await page.evaluate(() => {

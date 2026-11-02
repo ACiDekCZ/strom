@@ -150,6 +150,7 @@ test.describe('Kinds of history: aligning', () => {
         const { history } = await setup(page, { kinds: [...FAKE_KINDS], earlier: false });
         await openSettingsKinds(page);
         await page.locator('[data-search-kind="economy"]').click();
+        await page.locator('#confirm-ok-btn').click();
         await expect.poll(() => history.kindsWrites?.length ?? 0).toBe(1);
         const off = page.locator('.history-kinds-off [data-hk-action="align"]');
         await expect(off).toBeVisible();
@@ -314,8 +315,15 @@ test.describe('Kinds of history: the manager', () => {
         // Three columns on a desktop.
         const cols = await box.locator('.hm-kinds-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
         expect(cols).toBe(3);
-        // The same switch as in Settings: a kind switched off is written at once.
+        // The same switch as in Settings: a kind switched off is written after its confirmation (1102).
         await box.locator('[data-search-kind="state"]').click();
+        await expect(page.locator('#confirmation-modal.active #confirm-message')).toContainText('would hide 1 found event of this kind');
+        await page.locator('#confirm-cancel-btn').click();
+        await expect(box.locator('[data-search-kind="state"]')).toHaveAttribute('data-state', 'on');
+        expect(history.kindsWrites ?? []).toEqual([]);
+        await expect(manager(page)).toBeVisible();
+        await box.locator('[data-search-kind="state"]').click();
+        await page.locator('#confirm-ok-btn').click();
         await expect.poll(() => history.kindsWrites).toEqual([{ kinds: SEARCHED.filter(k => k !== 'state'), scope: 'tree' }]);
         await expect(box.locator('[data-search-kind="state"]')).toHaveAttribute('data-state', 'off');
         await expect(box.locator('.history-align-badge')).toHaveText('3 to hide');

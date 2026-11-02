@@ -4,9 +4,10 @@ import {
     historyKindsValue, postHistoryAlign, postHistoryAlignUndo, postHistoryKinds,
 } from '../history-bridge.js';
 import {
-    alignBackfillCounts, alignHideCount, parseHistoryAlignPreview, parseHistoryKindList, parseHistoryPayload, parseKindsFill,
+    alignBackfillCounts, alignHideCount, alignHideCountOfKind, parseHistoryAlignPreview, parseHistoryKindList, parseHistoryPayload, parseKindsFill,
     type HistoryKind,
 } from '../history.js';
+import { strings, setLanguage } from '../strings.js';
 import {
     HISTORY_ALIGN_FEATURE, HISTORY_KINDS_FEATURE, historyKindsLinkValue, researchSchemeUrl, sanitizeLiveStatus,
 } from '../research-link.js';
@@ -136,6 +137,39 @@ describe('the alignment preview', () => {
         expect(alignBackfillCounts(p)).toEqual({ regions: 1, places: 1 });
         expect(parseHistoryAlignPreview({ ...PREVIEW, plan: 'XYZ' })).toBeNull();
         expect(parseHistoryAlignPreview(null)).toBeNull();
+    });
+
+    it('counts what an alignment would hide of one kind (the confirmation of a switch-off)', () => {
+        const p = parseHistoryAlignPreview(PREVIEW)!;
+        expect(alignHideCountOfKind(p, 'law')).toBe(2);
+        expect(alignHideCountOfKind(p, 'economy')).toBe(1);
+        expect(alignHideCountOfKind(p, 'war')).toBe(0);
+        // Nothing to hide at all: 0, not unknown.
+        const none = parseHistoryAlignPreview({ ...PREVIEW, hide: { general: { n: 0, kinds: {} }, local: { n: 0, kinds: {} } } })!;
+        expect(alignHideCountOfKind(none, 'law')).toBe(0);
+        // Something hidden but not by kind: the dialog asks without a number.
+        const bare = parseHistoryAlignPreview({ ...PREVIEW, hide: { general: { n: 4 }, local: { n: 0 } } })!;
+        expect(alignHideCountOfKind(bare, 'law')).toBeNull();
+    });
+
+    it('the confirmation of a switch-off says it in every language, impersonally', () => {
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            setLanguage(lang);
+            const h = strings.history;
+            const texts = [h.offAskTitle(h.kinds.war), h.offAskHide(1), h.offAskHide(3), h.offAskHide(7), h.offAskHideNone,
+                h.offAskHideUnknown, h.offAskKeep, h.offAskAgain, h.offAskGo, h.manageKindsNote];
+            for (const t of texts) {
+                expect(t.trim().length).toBeGreaterThan(0);
+                expect(t).not.toMatch(/\b(you|your|vy|váš|vaše|Sie|Ihr|du)\b/i);
+            }
+            expect(h.offAskHide(3)).toContain('3');
+            expect(h.manageKindsNote).not.toMatch(/at once|hned|sofort/);
+        }
+        setLanguage('en');
+        expect(strings.history.offAskHide(1)).toBe('Aligning history with the settings would hide 1 found event of this kind.');
+        setLanguage('cs');
+        expect(strings.history.offAskHide(3)).toBe('Srovnání dějin s nastavením by skrylo 3 nalezené události tohoto druhu.');
+        setLanguage('en');
     });
 
     it('reads GET /history/align with and without kinds', async () => {

@@ -720,6 +720,18 @@ export function alignHideCount(p: HistoryAlignPreview): number {
     return p.hide.general.n + p.hide.local.n;
 }
 
+/**
+ * How many found events of one kind an alignment would hide (the preview asked
+ * for the kinds without it). Null when the preview cannot tell: it hides
+ * something but says nothing by kind.
+ */
+export function alignHideCountOfKind(p: HistoryAlignPreview, kind: HistoryKind): number | null {
+    const { general, local } = p.hide;
+    const byKind = Object.keys(general.kinds).length + Object.keys(local.kinds).length > 0;
+    if (!byKind) return general.n + local.n ? null : 0;
+    return (general.kinds[kind] ?? 0) + (local.kinds[kind] ?? 0);
+}
+
 /** How many regions and places an alignment would search the added kinds in. */
 export function alignBackfillCounts(p: HistoryAlignPreview): { regions: number; places: number } {
     return {
