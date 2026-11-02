@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { openApp, card } from './helpers.js';
 import { fakeBridge, fakeHistory, historyGed, openResearch, poll, HISTORY_FEATURES } from './research-bridge.js';
@@ -1053,6 +1053,126 @@ test.describe('person page 2: the saved file follows the window\'s switches', ()
         await sw.click();
         await expect(filePage.locator('.pp-row--kid').first()).toBeVisible();
         await ctx.close();
+    });
+});
+
+/**
+ * The kinds of places above the map (spec 031 P2), the main map's chips and
+ * its device setting: Karl has a birth (Capkov), a death (Wien), a marriage
+ * (Wien) and military service (Graz).
+ */
+test.describe('person page 2: the kinds of places on the map', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    const own = (root: Page | Locator, key: string): Locator => root.locator(`.pp-map-row:not(.pp-map-row--rel)[data-pp-map-place="${key}"]`);
+
+    test('the window: a chip switches its kind (the main map\'s setting), the map follows; the last kind on stays', async ({ page }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        const sec = w.locator('#pp-sec-places');
+        const kinds = sec.locator('.pp-map-kinds');
+        await expect(kinds).toHaveAttribute('role', 'group');
+        await expect(kinds).toHaveAttribute('aria-label', 'Kinds of places');
+        await expect(kinds.locator('[data-pp-kind]')).toHaveText(['✓*Births', '✓†Deaths', '✓⚭Marriages', '✓•Other events']);
+        await expect(kinds.locator('[aria-pressed="true"]')).toHaveCount(4);
+        await expect(own(sec, 'graz')).toBeVisible();
+
+        // Other events off: Graz leaves the map and the list; the main map's setting follows.
+        await kinds.locator('[data-pp-kind="event"]').click();
+        const chip = (k: string) => w.locator(`#pp-sec-places [data-pp-kind="${k}"]`);
+        await expect(chip('event')).toHaveAttribute('aria-pressed', 'false');
+        await expect(chip('event')).toBeFocused();
+        await expect(own(w, 'graz')).toHaveCount(0);
+        await expect(own(w, 'wien')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getMapKinds())).toEqual(['birth', 'death', 'wedding']);
+        // Deaths and Marriages off: Capkov alone, its chip locked with the reason in its title.
+        await chip('death').click();
+        await chip('wedding').click();
+        await expect(own(w, 'wien')).toHaveCount(0);
+        // A single place: the list beside "where in the country" (its row not selectable).
+        await expect(w.locator('#pp-sec-places .pp-map-row', { hasText: 'Capkov' })).toBeVisible();
+        await expect(w.locator('#pp-sec-places .pp-map')).toHaveCount(0);
+        await expect(chip('birth')).toHaveAttribute('aria-disabled', 'true');
+        await expect(chip('birth')).toHaveAttribute('title', 'Place of birth and baptism. At least one kind stays on.');
+        await chip('birth').click({ force: true });
+        await expect(chip('birth')).toHaveAttribute('aria-pressed', 'true');
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getMapKinds())).toEqual(['birth']);
+        // Back on: the map again.
+        await chip('event').click();
+        await expect(chip('birth')).not.toHaveAttribute('aria-disabled', 'true');
+        await expect(w.locator('#pp-sec-places .pp-map')).toBeVisible();
+        await expect(own(w, 'graz')).toBeVisible();
+    });
+
+    test('the saved file starts with the window\'s kinds, its chips switch them; without JavaScript the chosen map alone', async ({ page, browser }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        await w.locator('#pp-sec-places [data-pp-kind="event"]').click();
+        await expect(w.locator('#pp-sec-places [data-pp-kind="event"]')).toHaveAttribute('aria-pressed', 'false');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('data-pp-kinds="birth,death,wedding"');
+        expect(html).not.toMatch(/https?:\/\/[^"'\s]*(tile|openstreetmap)/i);
+
+        const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+        const plain = await noJs.newPage();
+        await plain.setContent(html, { waitUntil: 'load' });
+        await expect(plain.locator('.pp-map')).toBeVisible();
+        await expect(own(plain, 'wien')).toBeVisible();
+        await expect(own(plain, 'graz')).toHaveCount(0);
+        await noJs.close();
+
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        const file = await ctx.newPage();
+        await file.setContent(html, { waitUntil: 'load' });
+        const chip = (k: string) => file.locator(`[data-pp-kind="${k}"]`);
+        await expect(chip('event')).toHaveAttribute('aria-pressed', 'false');
+        // A place selected stays selected when the kinds change.
+        await file.locator('.pp-map-pt[data-pp-map-place="wien"]').click();
+        await chip('event').click();
+        await expect(chip('event')).toHaveAttribute('aria-pressed', 'true');
+        await expect(own(file, 'graz')).toBeVisible();
+        await expect(own(file, 'wien')).toHaveClass(/is-sel/);
+        await expect(file.locator('.pp-map')).toHaveCount(1);
+        // Down to Births: Capkov alone, no map; its chip locked.
+        for (const k of ['death', 'wedding', 'event']) await chip(k).click();
+        await expect(file.locator('.pp-map')).toHaveCount(0);
+        await expect(file.locator('.pp-map-row', { hasText: 'Capkov' })).toBeVisible();
+        await expect(own(file, 'graz')).toHaveCount(0);
+        await expect(chip('birth')).toHaveAttribute('aria-disabled', 'true');
+        await expect(chip('birth')).toHaveAttribute('title', 'Place of birth and baptism. At least one kind stays on.');
+        await chip('birth').click({ force: true });
+        await expect(chip('birth')).toHaveAttribute('aria-pressed', 'true');
+        // And back to all four: the map as the window drew it.
+        for (const k of ['death', 'wedding', 'event']) await chip(k).click();
+        await expect(file.locator('.pp-map')).toHaveCount(1);
+        await expect(own(file, 'graz')).toBeVisible();
+        await expect(own(file, 'wien')).toHaveClass(/is-sel/);
+        await ctx.close();
+    });
+});
+
+test.describe('person page 2: the kinds of places on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the chips wrap in the page, 44 px to touch, nothing wider than the screen', async ({ page }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        const chips = w.locator('#pp-sec-places [data-pp-kind]');
+        await expect(chips).toHaveCount(4);
+        for (const h of await chips.evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(44);
+        const fits = await w.locator('.pp-body').evaluate((el) => el.scrollWidth <= el.clientWidth);
+        expect(fits).toBe(true);
+        await chips.nth(3).tap();
+        await expect(w.locator('#pp-sec-places [data-pp-kind="event"]')).toHaveAttribute('aria-pressed', 'false');
     });
 });
 

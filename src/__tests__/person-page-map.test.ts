@@ -10,9 +10,10 @@ import {
     collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, labelRect, scaleBar, labelYears,
     numberRanges, chainClusters, clusterLabel, isSelected, PLACES_MAP_SCRIPT,
     ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, insetHitHalves, SAFE, VIEW_W, VIEW_H, type PlacePoint,
+    placePointKind, filterPlacePoints, placeKindsPresent, placeKindsKey,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
-import { placeKey } from '../places.js';
+import { placeKey, MAP_KINDS, type MapKind } from '../places.js';
 import { getStringsForLang } from '../strings.js';
 import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
 import type { StromData, PersonId, PartnershipId, Person, Gender, Partnership, PlaceGeo } from '../types.js';
@@ -557,5 +558,93 @@ describe('the world inset is clickable (round 5, answer 39)', () => {
         expect(insetHitHalves([{ x: 0, y: 0 }, { x: 24, y: 12 }], 120)).toEqual([6, 6]);
         expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(pointer: coarse\) \{[^@]*\.pp-map-ihit \{ width: min\(44px, calc\(2 \* var\(--n\)\)\)/);
         expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-ihit \{ --n: var\(--np, 22px\); \}/);
+    });
+});
+
+describe('kinds of places, as the main map (spec 031 P2)', () => {
+    const pts = () => collectPersonPlacePoints(tree(), JAN, { now: 2026 });
+    const kinds = (...k: MapKind[]) => new Set<MapKind>(k);
+    const chips = (html: string) => [...html.matchAll(/data-pp-kind="(\w+)"[^>]*aria-pressed="(\w+)"/g)].map(m => `${m[1]}:${m[2]}`);
+
+    it('a point\'s kind: baptism a birth, burial a death, the marriage and its banns a wedding, the rest (a divorce too) other events; a relative\'s by its event', () => {
+        const by = (f: (p: PlacePoint) => boolean) => placePointKind(pts().find(f)!);
+        expect(by(p => p.kind === 'birth')).toBe('birth');
+        expect(by(p => p.eventType === 'baptism')).toBe('birth');
+        expect(by(p => p.eventType === 'burial')).toBe('death');
+        expect(by(p => p.kind === 'death')).toBe('death');
+        expect(by(p => p.eventType === 'residence')).toBe('event');
+        expect(by(p => p.kind === 'marriage')).toBe('wedding');
+        expect(by(p => p.rel?.ev === 'birth')).toBe('birth');
+        expect(by(p => p.rel?.ev === 'emigration')).toBe('event');
+        const pt = (x: Partial<PlacePoint>): PlacePoint => ({ placeKey: 'x', place: 'X', sortKey: null, year: null, kind: 'event', ...x });
+        expect(placePointKind(pt({ kind: 'divorce' }))).toBe('event');
+        expect(placePointKind(pt({ kind: 'coupleEvent', coupleType: 'banns' }))).toBe('wedding');
+        expect(placePointKind(pt({ kind: 'coupleEvent', coupleType: 'residence' }))).toBe('event');
+        expect(placePointKind(pt({ kind: 'event', eventType: 'cremation' }))).toBe('death');
+        // The chips come from the person's own places; a filter keeps the relatives' places of its kinds too.
+        expect(placeKindsPresent(pts())).toEqual(['birth', 'death', 'wedding', 'event']);
+        expect(placeKindsPresent(pts().filter(p => p.rel || p.kind === 'birth'))).toEqual(['birth']);
+        expect(filterPlacePoints(pts(), kinds('wedding')).map(p => p.place)).toEqual(['Lhotka']);
+        expect(placeKindsKey(['birth', 'death', 'event'], kinds('event', 'birth', 'wedding'))).toBe('birth,event');
+        expect(placeKindsKey(['birth', 'death'], kinds('wedding'))).toBe('-');
+    });
+
+    it('the window: the chips of the kinds present, the map of the kinds on, the last one on locked; no chips without the setting', () => {
+        const all = placesMapHtml(pts(), GEO, { lang: 'en', mode: 'app', kidPlaces: true, kinds: new Set(MAP_KINDS) });
+        expect(all).toContain('<div class="pp-map-kinds" role="group" aria-label="Kinds of places">');
+        expect(chips(all)).toEqual(['birth:true', 'death:true', 'wedding:true', 'event:true']);
+        expect(all).toContain('title="Marriage, engagement, banns, marriage contract"');
+        // All on: the same map as without chips, once.
+        const plain = placesMapHtml(pts(), GEO, { lang: 'en', mode: 'app', kidPlaces: true });
+        expect(plain).not.toContain('pp-map-kind');
+        const inner = plain.slice(plain.indexOf('</div></div>') + 12, -'</section>'.length);
+        expect(all).toContain(`<div class="pp-kv">${inner}</div></section>`);
+        expect(all).not.toContain('<template');
+        // Births only: Čapkov alone, a list beside "where in the country"; its chip stays on.
+        const births = placesMapHtml(pts(), GEO, { lang: 'en', mode: 'app', kidPlaces: true, kinds: kinds('birth') });
+        expect(chips(births)).toEqual(['birth:true', 'death:false', 'wedding:false', 'event:false']);
+        expect(births).toMatch(/data-pp-kind="birth"[^>]*aria-pressed="true" aria-disabled="true" title="Place of birth and baptism\. At least one kind stays on\."/);
+        expect(births).toContain('data-pp-kinds="birth"');
+        expect(births).not.toContain('class="pp-map pp-wide');
+        expect(births).toContain('Čapkov');
+        expect(births).not.toContain('Kolín');
+        // A family line's map has none.
+        const group = placesMapHtml(pts(), GEO, { lang: 'en', mode: 'app', kidPlaces: false, kinds: new Set(MAP_KINDS),
+            group: { title: '', size: () => 22, row: () => '' } });
+        expect(group).not.toContain('pp-map-kind');
+    });
+
+    it('kinds on that none of the places has: the chips stay with a sentence; one kind of places only: no chips', () => {
+        const t = tree();
+        const jan = t.persons[JAN];
+        jan.events = [];
+        jan.partnerships = [];
+        const two = collectPersonPlacePoints(t, JAN, { now: 2026 });
+        const html = placesMapHtml(two, GEO, { lang: 'cs', mode: 'app', kidPlaces: true, kinds: kinds('wedding') });
+        expect(chips(html)).toEqual(['birth:false', 'death:false']);
+        expect(html).toContain('<p class="pp-map-note pp-map-none">Žádná místa zapnutých druhů.</p>');
+        jan.deathPlace = undefined;
+        jan.events = [{ id: 'e1', type: 'baptism', date: '1860', place: 'Lhotka' }];
+        const births = collectPersonPlacePoints(t, JAN, { now: 2026 });
+        expect(placesMapHtml(births, GEO, { lang: 'cs', mode: 'app', kidPlaces: true, kinds: new Set(MAP_KINDS) })).not.toContain('pp-map-kind');
+    });
+
+    it('a saved file: the chosen map in the page, a template for every other choice (alike ones once), the script switching them', () => {
+        const html = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true, kinds: kinds('birth', 'death', 'event') });
+        expect(html).toContain('data-pp-kinds="birth,death,event" data-pp-kinds-last="Aspoň jeden druh zůstává zapnutý."');
+        expect((html.match(/<div class="pp-kv" /g) ?? []).length).toBe(1);
+        expect(html).toMatch(/<div class="pp-kv" data-pp-kv="([^"]* )?birth,death,event( [^"]*)?">/);
+        // Every choice of the four kinds (none too) is named once among the maps.
+        const keys = [...html.matchAll(/data-pp-kv="([^"]+)"/g)].flatMap(m => m[1].split(' '));
+        expect(keys).toHaveLength(16);
+        expect(new Set(keys).size).toBe(16);
+        expect(keys).toContain('-');
+        // Only the chosen map is in the page; the others are inert until chosen.
+        const page = html.replace(/<template[\s\S]*?<\/template>/g, '');
+        expect((page.match(/class="pp-map pp-wide/g) ?? []).length).toBe(1);
+        expect(html).toContain('<template data-pp-kv="');
+        expect(PLACES_MAP_SCRIPT).toContain("closest(s)");
+        expect(PLACES_MAP_SCRIPT).toContain("[data-pp-kind]");
+        expect(PLACES_MAP_SCRIPT).toContain("template[data-pp-kv]");
     });
 });

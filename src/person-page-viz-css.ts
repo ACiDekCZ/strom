@@ -79,6 +79,17 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-tools { align-items: center; }
 .pp-map-tools .pp-act { margin-top: 0; min-height: 34px; }
 .pp-places { scroll-margin-top: 12px; }
+/* The kinds of places (spec 031 P2): the main map's chips, in the page's flow above the map. */
+.pp-map-kinds { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; margin: 0 0 10px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.pp-map-kind { display: flex; align-items: center; gap: 7px; padding: 5px 10px 5px 8px; border: none; border-radius: 6px; background: none; color: var(--text-faint); font: 400 13px/1.3 var(--font-sans); white-space: nowrap; cursor: pointer; }
+.pp-map-kind-check { flex: none; display: grid; place-items: center; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--text-faint); border-radius: 4px; color: transparent; font-size: 10px; line-height: 1; }
+.pp-map-kind-mark { flex: none; min-width: 9px; text-align: center; font-weight: 700; opacity: .6; }
+.pp-map-kind[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary-dark, var(--primary)); font-weight: 600; }
+.pp-map-kind[aria-pressed="true"] .pp-map-kind-check { border-color: var(--primary); background: var(--primary); color: var(--on-primary, #fff); }
+.pp-map-kind[aria-pressed="true"] .pp-map-kind-mark { opacity: 1; }
+.pp-map-kind[aria-disabled="true"] { cursor: not-allowed; }
+.pp-map-kind:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .pp-map-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pp-map-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 14px; line-height: 1.45; }
 .pp-map-row[data-pp-map-place] { cursor: pointer; }
@@ -161,6 +172,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-where--tl { left: 8px; top: 8px; }
   .pp-map-where svg { width: 96px; height: 56px; border-radius: 7px; }
   .pp-map-brief { gap: 12px; }
+  .pp-map-kind { padding: 5px 8px 5px 6px; gap: 6px; font-size: 12.5px; }
 }
 @media ${LANDSCAPE} {
   .pp-map { aspect-ratio: 3 / 1; }
@@ -174,6 +186,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-ihit:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .pp-map-row[data-pp-map-place]:hover { background: var(--hover-bg); }
   .pp-map-pt:hover { filter: brightness(1.12); }
+  .pp-map-kind[aria-pressed="false"]:hover { background: var(--surface-2); }
 }
 @media (pointer: coarse) {
   .pp-map-tools .pp-act { min-height: 44px; }
@@ -181,6 +194,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-pt--rel::before { inset: -15px; }
   .pp-map-ihit { width: min(44px, calc(2 * var(--n))); height: min(44px, calc(2 * var(--n))); }
   .pp-map-row { min-height: 44px; align-items: center; }
+  .pp-map-kind { min-height: 44px; }
 }
 @media print {
   .pp-places, .pp-chart { ${PERSON_PAGE_VIZ_PRINT_TOKENS} -webkit-print-color-adjust: exact; print-color-adjust: exact; }

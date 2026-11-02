@@ -349,7 +349,7 @@ span.pp-gal-thumb { cursor: default; }
    blocks (.pp-wide: In brief, the map, the chart, the gallery, the family tree) take the whole column. Print unchanged. */
 @media screen and (min-width: 1280px) {
   .pp { max-width: 960px; }
-  .pp > :not(section):not(.pp-wide):not(.pp-lb), .pp > section > :not(.pp-wide) { max-width: 660px; }
+  .pp > :not(section):not(.pp-wide):not(.pp-lb), .pp > section > :not(.pp-wide):not(.pp-kv), .pp-kv > :not(.pp-wide) { max-width: 660px; }
   .pp-fam.pp-wide .pp-ft { max-width: 680px; margin-inline: auto; }
   /* The tree keeps 680 px in the middle; the variant whose children's row uses the whole column replaces it (K5-37). */
   .pp-fam.pp-wide .pp-ft9 { display: block; max-width: 960px; margin-inline: auto; }

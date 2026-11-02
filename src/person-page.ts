@@ -18,7 +18,7 @@ import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
     computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints, HISTORY_KINDS,
 } from './history.js';
-import { placeKey } from './places.js';
+import { placeKey, type MapKind } from './places.js';
 import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
 import { getStringsForLang, getCurrentLanguage, setLanguage, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
@@ -126,6 +126,12 @@ export interface PersonPageOptions {
      * places map's Children's places (missing = on).
      */
     toggles: { history: boolean; childEvents: boolean; kidPlaces?: boolean };
+    /**
+     * The kinds of places switched on (spec 031 P2, the main map's device
+     * setting): the places map's chips. The window and the saved person page
+     * pass it; without it (a family set's pages), no chips.
+     */
+    mapKinds?: readonly MapKind[];
     /** Window: the place selected in the places map (placeKey). */
     selectedPlace?: string | null;
     /** Window: the life chart's width in px (the column, measured by the window); default 680. */
@@ -3093,6 +3099,7 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
     const kidPlaces = opts.toggles.kidPlaces !== false;
     const places = placesMapHtml(page.places, page.geo, {
         lang: page.lang, mode: c.app ? 'app' : 'file', kidPlaces,
+        ...(opts.mapKinds ? { kinds: new Set(opts.mapKinds) } : {}),
         ...(c.app && opts.selectedPlace ? { selected: opts.selectedPlace } : {}),
         // The places manager keeps one position per name and no candidates: nothing to tell.
         ambiguous: new Set<string>(),

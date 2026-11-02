@@ -26,7 +26,8 @@ import type { Language } from './strings.js';
 import { getStringsForLang } from './strings.js';
 import type { StromData, PersonId, PartnershipId, PlaceGeo, LifeEventType, CoupleEventType, Person } from './types.js';
 import { computePersonLifeline } from './timeline.js';
-import { placeKey } from './places.js';
+import { placeKey, MAP_KINDS, lifeEventKind, coupleEventKind, type MapKind } from './places.js';
+import { KIND_MARK } from './map-bubble.js';
 import { yearOf, yearFraction, parseFlexDate } from './dates.js';
 import { isLivingPerson } from './privacy.js';
 import { lifeEventLabel, coupleEventLabelIn } from './person-sources.js';
@@ -631,7 +632,8 @@ export function labelWidthPx(name: string, years: string): number {
  * label sides.
  */
 export function planPlacesMap(
-    points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, opts: { kidPlaces: boolean; lang?: Language },
+    points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined,
+    opts: { kidPlaces: boolean; lang?: Language; minPlaces?: number },
 ): MapPlan {
     const g = geo ?? {};
     const lang: Language = opts.lang ?? 'en';
@@ -651,7 +653,8 @@ export function planPlacesMap(
     }
     const own = [...groups.values()];
     const empty: MapPlan = { state: 'none', places: [], noPos: [], route: [] };
-    if (own.length <= 1) return empty;
+    // A page shows at least two places (§1.5); a map filtered by kind keeps one place too.
+    if (own.length < (opts.minPlaces ?? 2)) return empty;
 
     const ownGeo = own.filter(p => p.geo);
     const noPos = own.filter(p => !p.geo);
@@ -1203,6 +1206,14 @@ export interface PlacesMapCtx {
     /** Section id (default 'pp-sec-places'). */
     id?: string;
     /**
+     * The kinds of places switched on (spec 031 P2: the main map's chips, its
+     * device setting). With it and the person's places of two kinds or more,
+     * the chips of those kinds above the map and the map of the kinds on; a
+     * saved file holds a map for each choice and switches between them.
+     * Without it (a family line's map), no chips.
+     */
+    kinds?: ReadonlySet<MapKind>;
+    /**
      * A family line's map (spec 026 §3.7): no path between the places, no
      * switch or button, a point's size by `size` (px), the list's row after
      * the place's name from `row` (HTML), the label's years the place's
@@ -1326,18 +1337,103 @@ export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Recor
     const head = title || tools.length
         ? `<div class="pp-sec-head">${title ? `<h2>${esc(title)}</h2>` : ''}${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>` : '';
 
-    const map = plan.state === 'map' ? mapHtml(plan, S, sel, ctx.lang, group) : '';
+    const open = `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}"`;
+    const body = (pl: MapPlan): string => placesBodyHtml(pl, S, ctx, sel);
+
+    // The kinds of places (spec 031 P2): chips of the kinds the person's places have, when two or more.
+    const present = ctx.kinds && !group ? placeKindsPresent(points) : [];
+    if (present.length < 2) return `${open}>${head}${body(plan)}</section>`;
+    const on = ctx.kinds!;
+    const planOf = (kinds: ReadonlySet<MapKind>): MapPlan => (present.every(k => kinds.has(k)) ? plan
+        : planPlacesMap(filterPlacePoints(points, kinds), geo, { kidPlaces: ctx.kidPlaces, lang: ctx.lang, minPlaces: 1 }));
+    const variant = (kinds: ReadonlySet<MapKind>): string => {
+        const pl = planOf(kinds);
+        return pl.state === 'none' ? `<p class="pp-map-note pp-map-none">${esc(S.map.noPlacesOfKinds)}</p>` : body(pl);
+    };
+    const chips = placeKindChipsHtml(present, on, S);
+    const attrs = ` data-pp-kinds="${MAP_KINDS.filter(k => on.has(k)).join(',')}" data-pp-kinds-last="${esc(S.map.kindsLastOn)}"`;
+    if (app) return `${open}${attrs}>${head}${chips}<div class="pp-kv">${variant(on)}</div></section>`;
+    // A saved file: a map for each choice of the kinds present (alike ones once), the chosen one in the page,
+    // the others in inert <template>s its script swaps in (without JavaScript the page shows the chosen one).
+    const shownKey = placeKindsKey(present, on);
+    const byHtml = new Map<string, string[]>();
+    for (let mask = 0; mask < 1 << present.length; mask++) {
+        const kinds = new Set(present.filter((_, i) => mask & (1 << i)));
+        const html = variant(kinds);
+        byHtml.set(html, [...(byHtml.get(html) ?? []), placeKindsKey(present, kinds)]);
+    }
+    let live = '';
+    let spare = '';
+    for (const [html, keys] of byHtml) {
+        if (keys.includes(shownKey)) live = `<div class="pp-kv" data-pp-kv="${keys.join(' ')}">${html}</div>`;
+        else spare += `<template data-pp-kv="${keys.join(' ')}">${html}</template>`;
+    }
+    return `${open}${attrs}>${head}${chips}${live}${spare}</section>`;
+}
+
+/** The section's map, list and notes for one plan (the head apart). */
+function placesBodyHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string | null): string {
+    const M = S.personPage.map;
+    const app = ctx.mode === 'app';
+    const map = plan.state === 'map' ? mapHtml(plan, S, sel, ctx.lang, ctx.group) : '';
     const list = listHtml(plan, S, ctx, sel);
     const note = plan.state === 'noGeo'
         ? `<p class="pp-map-note">${esc(M.noGeo)}${app ? ` ${esc(M.noGeoHint)}` : ''}</p>` : '';
+    const sub = plan.state === 'tiny' ? `<p class="pp-map-sub">${esc(M.tiny)}</p>` : '';
     // No map ('tiny', 'list'): the list beside the "where in the country" inset (§1.3a).
     if (plan.state !== 'map' && plan.where) {
-        const sub = plan.state === 'tiny' ? `<p class="pp-map-sub">${esc(M.tiny)}</p>` : '';
-        return `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}">${head}`
-            + `<div class="pp-map-brief"><div class="pp-map-brief-main">${sub}${list}</div>${whereHtml(plan.where, S)}</div>${note}</section>`;
+        return `<div class="pp-map-brief"><div class="pp-map-brief-main">${sub}${list}</div>${whereHtml(plan.where, S)}</div>${note}`;
     }
-    const sub = plan.state === 'tiny' ? `<p class="pp-map-sub">${esc(M.tiny)}</p>` : '';
-    return `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}">${head}${sub}${map}${list}${note}</section>`;
+    return `${sub}${map}${list}${note}`;
+}
+
+// ─── Kinds of places (spec 031 P2) ──────────────────────────────────────────
+
+/**
+ * A place point as the main map's kind: a birth and baptism, a death, burial
+ * and cremation, a marriage and the steps to it (engagement, banns …), and
+ * every other event (a divorce too); a relative's place by its event.
+ */
+export function placePointKind(p: PlacePoint): MapKind {
+    switch (p.kind) {
+        case 'birth': return 'birth';
+        case 'death': return 'death';
+        case 'marriage': return 'wedding';
+        case 'divorce': return 'event';
+        case 'event': return p.eventType ? lifeEventKind(p.eventType) : 'event';
+        case 'coupleEvent': return p.coupleType ? coupleEventKind(p.coupleType) : 'event';
+        case 'relative': return p.rel?.ev === 'birth' ? 'birth' : p.rel?.ev === 'death' ? 'death' : 'event';
+    }
+}
+
+/** The person's places of the kinds switched on (the relatives' places too). */
+export function filterPlacePoints(points: readonly PlacePoint[], kinds: ReadonlySet<MapKind>): PlacePoint[] {
+    return points.filter(p => kinds.has(placePointKind(p)));
+}
+
+/** The kinds the person's own places have, in the map's order (relatives' places offer no chip). */
+export function placeKindsPresent(points: readonly PlacePoint[]): MapKind[] {
+    const has = new Set(points.filter(p => !p.rel).map(placePointKind));
+    return MAP_KINDS.filter(k => has.has(k));
+}
+
+/** The key of a choice among the kinds present ('-' none), as the file's maps name theirs. */
+export function placeKindsKey(present: readonly MapKind[], on: ReadonlySet<MapKind>): string {
+    return present.filter(k => on.has(k)).join(',') || '-';
+}
+
+/** The chips of the kinds present, pressed when on; the last kind on stays (its title says why). */
+function placeKindChipsHtml(present: readonly MapKind[], on: ReadonlySet<MapKind>, S: MapStrings): string {
+    const m = S.map;
+    const chips = present.map(k => {
+        const pressed = on.has(k);
+        const locked = pressed && on.size === 1;
+        return `<button type="button" class="pp-map-kind" data-pp-kind="${k}" data-hint="${esc(m.kindHint[k])}" aria-pressed="${pressed}"`
+            + `${locked ? ' aria-disabled="true"' : ''} title="${esc(locked ? `${m.kindHint[k]}. ${m.kindsLastOn}` : m.kindHint[k])}">`
+            + `<span class="pp-map-kind-check" aria-hidden="true">✓</span><span class="pp-map-kind-mark" aria-hidden="true">${KIND_MARK[k]}</span>`
+            + `<span>${esc(m.kinds[k])}</span></button>`;
+    }).join('');
+    return `<div class="pp-map-kinds" role="group" aria-label="${esc(m.kindsAria)}">${chips}</div>`;
 }
 
 /** The "where in the country" inset: the country, the frame (map) or a dot (beside the list), the attribution under it. */
@@ -1699,14 +1795,33 @@ export function selectMapPlace(root: ParentNode, key: string | null): Element | 
  * in the text (an anchor to the section) selects its place too. Listens on
  * the document and works per map (its `.pp-places`), so one file may hold
  * many pages with a map each (spec 026 §0.3); a link in the text selects in
- * the map of its own page (`.pp` or section).
+ * the map of its own page (`.pp` or section). A chip of the kinds of places
+ * (spec 031 P2) switches its kind and shows the section's map for the kinds
+ * on (`data-pp-kv`); the last kind on stays.
  */
 export const PLACES_MAP_SCRIPT = `(function(){var d=document;
-function sel(root,k){var on=(k||'').split('\\t');root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',!!k&&el.getAttribute('data-pp-map-place').split('\\t').some(function(x){return on.indexOf(x)>=0;}));});}
+function sel(root,k){root.setAttribute('data-pp-sel',k||'');var on=(k||'').split('\\t');root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',!!k&&el.getAttribute('data-pp-map-place').split('\\t').some(function(x){return on.indexOf(x)>=0;}));});}
 function act(root,el){var k=el.getAttribute('data-pp-map-place');var was=el.classList.contains('is-sel');sel(root,k);
 if(was&&el.classList.contains('pp-map-row')){var a=el.getAttribute('data-pp-osa');var t=a&&d.getElementById(a);if(t)t.scrollIntoView({block:'center'});}}
 function hit(e,s){var el=e.target.closest&&e.target.closest(s);var root=el&&el.closest('.pp-places');return root?[root,el]:null;}
 d.addEventListener('click',function(e){var h=hit(e,'[data-pp-map-place]');if(h){act(h[0],h[1]);return;}
 var a=e.target.closest&&e.target.closest('a[data-pp-to-place]');if(!a)return;var s=a.closest('.pp')||a.closest('section')||d;var root=s.querySelector('.pp-places');if(root)sel(root,a.getAttribute('data-pp-to-place'));});
 d.addEventListener('keydown',function(e){if(e.key!=='Enter'&&e.key!==' ')return;var h=hit(e,'li[data-pp-map-place]');if(h){e.preventDefault();act(h[0],h[1]);}});
+var ORDER=['birth','death','wedding','event'];
+function kinds(root,k){var on=(root.getAttribute('data-pp-kinds')||'').split(',').filter(Boolean);var i=on.indexOf(k);
+if(i>=0){if(on.length===1)return;on.splice(i,1);}else on.push(k);
+on=ORDER.filter(function(x){return on.indexOf(x)>=0;});root.setAttribute('data-pp-kinds',on.join(','));
+var chips=root.querySelectorAll('[data-pp-kind]');var key=[];
+chips.forEach(function(c){var x=c.getAttribute('data-pp-kind');var p=on.indexOf(x)>=0;if(p)key.push(x);var lock=p&&on.length===1;
+c.setAttribute('aria-pressed',String(p));if(lock)c.setAttribute('aria-disabled','true');else c.removeAttribute('aria-disabled');
+c.title=c.getAttribute('data-hint')+(lock?'. '+root.getAttribute('data-pp-kinds-last'):'');});
+show(root,' '+(key.join(',')||'-')+' ');}
+function has(el,want){return (' '+el.getAttribute('data-pp-kv')+' ').indexOf(want)>=0;}
+function show(root,want){var live=root.querySelector('.pp-kv');if(!live||has(live,want))return;var t=null;
+root.querySelectorAll('template[data-pp-kv]').forEach(function(x){if(has(x,want))t=x;});if(!t)return;
+var keep=d.createElement('template');keep.setAttribute('data-pp-kv',live.getAttribute('data-pp-kv'));
+while(live.firstChild)keep.content.appendChild(live.firstChild);root.appendChild(keep);
+live.appendChild(t.content);live.setAttribute('data-pp-kv',t.getAttribute('data-pp-kv'));t.remove();
+var s=root.getAttribute('data-pp-sel');if(s)sel(root,s);}
+d.addEventListener('click',function(e){var h=hit(e,'[data-pp-kind]');if(h)kinds(h[0],h[1].getAttribute('data-pp-kind'));});
 })();`;

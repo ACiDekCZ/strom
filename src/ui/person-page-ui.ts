@@ -15,7 +15,8 @@ import { buildLineages, type RodId } from '../lineage.js';
 import { windowFamilyPages } from '../family-pages.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { PrivacyMode } from '../privacy.js';
-import { placeKey } from '../places.js';
+import { placeKey, isMapKind } from '../places.js';
+import { SettingsManager } from '../settings.js';
 import { researchPersonRef } from '../research-link.js';
 import { personSourceRows } from '../person-sources.js';
 import { shownName } from '../person-name.js';
@@ -465,6 +466,26 @@ export const personPageMethods = uiModule({
         chartObserver.observe(host);
     },
 
+    /**
+     * A chip of the places map's kinds (spec 031 P2): the main map's setting
+     * switched, the page drawn again where it was (the map's frame changes);
+     * the last kind on stays (its title says why).
+     */
+    togglePersonPageMapKind(kind: string | undefined): void {
+        if (!isMapKind(kind)) return;
+        const on = new Set(SettingsManager.getMapKinds());
+        if (on.has(kind)) {
+            if (on.size === 1) return;
+            on.delete(kind);
+        } else on.add(kind);
+        SettingsManager.setMapKinds([...on]);
+        // The main map behind the window follows its setting.
+        this.refreshMapContent();
+        this.snapshotPersonPage();
+        this.renderPersonPage();
+        overlayEl()?.querySelector<HTMLElement>(`[data-pp-kind="${kind}"]`)?.focus({ preventScroll: true });
+    },
+
     /** The options of the window's page (mode 'app') or the file's (mode 'file'). */
     personPageOptions(personId: PersonId, over: Partial<PersonPageOptions>): PersonPageOptions {
         return {
@@ -477,6 +498,8 @@ export const personPageMethods = uiModule({
             toggles: { history: true, childEvents: true },
             research: this.activeResearchId() !== null,
             now: new Date(),
+            // The main map's kinds of places (a device setting): the window's chips and the file's start.
+            mapKinds: SettingsManager.getMapKinds(),
             ...over,
         };
     },
@@ -685,6 +708,8 @@ export const personPageMethods = uiModule({
         }
         const fold = target.closest<HTMLElement>('[data-pp-toggle]');
         if (fold) { this.togglePersonPageFold(fold, fold.getAttribute('aria-expanded') !== 'true'); return; }
+        const kindChip = target.closest<HTMLElement>('[data-pp-kind]');
+        if (kindChip) { this.togglePersonPageMapKind(kindChip.dataset.ppKind); return; }
         const sw = target.closest<HTMLElement>('[data-pp-switch]');
         if (sw?.dataset.ppSwitch === 'kidPlaces') {
             // Children's places change the map's frame: the page is drawn again where it was.
