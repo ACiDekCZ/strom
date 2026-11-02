@@ -31,6 +31,15 @@ export type RodTimelineKind = 'birth' | 'marriage' | 'death' | 'move' | 'emigrat
 export type RodTimelineChip = 'birth' | 'marriage' | 'death' | 'move' | 'hist';
 export const ROD_TIMELINE_CHIPS: readonly RodTimelineChip[] = ['birth', 'marriage', 'death', 'move', 'hist'];
 
+/**
+ * The symbol of a chip's kind, the same the rows draw before a marriage's partner and a move's place (and the person
+ * page's chart uses for its marks). History has none of its own (each kind of history event has its symbol), so its
+ * chip keeps a dot.
+ */
+export const ROD_TIMELINE_SYMBOLS: Readonly<Record<RodTimelineChip, string>> = {
+    birth: '*', marriage: '⚭', death: '†', move: '→', hist: '',
+};
+
 export function rodTimelineChip(kind: RodTimelineKind): RodTimelineChip {
     return kind === 'history' ? 'hist' : kind === 'emigration' ? 'move' : kind;
 }

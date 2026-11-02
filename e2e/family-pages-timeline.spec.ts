@@ -130,7 +130,9 @@ test.describe('a line\'s timeline: the window', () => {
         await expect(win.locator('#pp-title')).toContainText('Tallqvist');
         // No history without the research: no History chip.
         await expect(tl.locator('[data-tl-k="hist"]')).toHaveCount(0);
-        await expect(tl.locator('[data-tl-k]')).toHaveText(['Births', 'Marriages', 'Deaths', 'Moves']);
+        // Each chip: its kind's symbol, then its name.
+        await expect(tl.locator('[data-tl-k]')).toHaveText([/^\*\s*Births$/, /^⚭\s*Marriages$/, /^†\s*Deaths$/, /^→\s*Moves$/]);
+        await expect(tl.locator('[data-tl-k] .sp-tl-sym[aria-hidden="true"]')).toHaveCount(4);
         const centuries = await tl.locator('[data-tl-c]').count();
         expect(centuries).toBeGreaterThan(2);
         expect((await openCenturies(tl)).length).toBe(1);

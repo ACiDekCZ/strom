@@ -488,6 +488,9 @@ html.sp-lb-open { overflow: hidden; }
 .sp-tl-chip[data-tl-k="hist"] .sp-tl-dot { background: var(--accent-text); }
 .sp-tl-chip[aria-pressed="false"] { border-color: var(--sp-frame, var(--border)); background: transparent; color: var(--text-light); }
 .sp-tl-chip[aria-pressed="false"] .sp-tl-dot { background: var(--sp-frame, var(--border)); }
+.sp-tl-sym { display: inline-block; min-width: 1em; font-size: 15px; font-weight: 700; line-height: 1; text-align: center; color: var(--primary); }
+.sp-tl-chip[data-tl-k="birth"] .sp-tl-sym { position: relative; top: .2em; font-size: 17px; }
+.sp-tl-chip[aria-pressed="false"] .sp-tl-sym { color: var(--text-faint); }
 .sp-tl-chip:focus-visible, .sp-tl-c > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .sp-tl-chart { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 10px; font-size: 13px; }
 .sp-tl-labs, .sp-tl-plot { display: flex; flex-direction: column; min-width: 0; }

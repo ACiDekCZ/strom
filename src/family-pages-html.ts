@@ -47,7 +47,7 @@ import { ZipEntry, dataUrlBytes } from './zip.js';
 export { indexLetter };
 import { safeHttpUrl } from './validation.js';
 import {
-    ROD_TIMELINE_CHIPS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
+    ROD_TIMELINE_CHIPS, ROD_TIMELINE_SYMBOLS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
 } from './rod-timeline.js';
 
 export interface PageSetHtmlOptions {
@@ -1546,7 +1546,7 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
     const who = e.personId ? personLinkHtml(r, ctx, e.personId) : '';
     const parts: string[] = [];
     if (e.kind === 'marriage') {
-        let t = `⚭ ${e.partnerId ? personLinkHtml(r, ctx, e.partnerId) : '?'}`;
+        let t = `${ROD_TIMELINE_SYMBOLS.marriage} ${e.partnerId ? personLinkHtml(r, ctx, e.partnerId) : '?'}`;
         if (e.place) t += `, ${esc(e.place)}`;
         parts.push(t);
         if (e.rod) {
@@ -1555,7 +1555,8 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
         }
     } else if (e.kind === 'move' || e.kind === 'emigration') {
         // An emigration record without a known destination has only the place left.
-        parts.push(e.from && e.place ? `${esc(e.from)} → ${esc(e.place)}` : e.from ? esc(F.tlLeft(e.from)) : `→ ${esc(e.place ?? '')}`);
+        const to = ROD_TIMELINE_SYMBOLS.move;
+        parts.push(e.from && e.place ? `${esc(e.from)} ${to} ${esc(e.place)}` : e.from ? esc(F.tlLeft(e.from)) : `${to} ${esc(e.place ?? '')}`);
     } else {
         const t = [e.place ? esc(e.place) : '', e.kind === 'death' && e.age !== undefined ? esc(r.S.history.age(String(e.age))) : ''].filter(Boolean).join(', ');
         if (t) parts.push(t);
@@ -1594,7 +1595,12 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
             + `</div>` : '';
     const kinds = ROD_TIMELINE_CHIPS.filter(k => k !== 'hist' || tl.history);
     const chips = `<div class="sp-tl-chips" role="group" aria-label="${esc(F.tlKindsLabel)}">`
-        + kinds.map(k => `<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true"><span class="sp-tl-dot" aria-hidden="true"></span>${esc(F.tlKinds[k])}</button>`).join('')
+        + kinds.map(k => {
+            // The kind's symbol (a dot for history); decorative, the chip's name is its text.
+            const sym = ROD_TIMELINE_SYMBOLS[k];
+            const mark = sym ? `<span class="sp-tl-sym" aria-hidden="true">${sym}</span>` : '<span class="sp-tl-dot" aria-hidden="true"></span>';
+            return `<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true">${mark}${esc(F.tlKinds[k])}</button>`;
+        }).join('')
         + `</div>`;
     const controls = `<div class="sp-tl-ctl js-only">${seg}${chips}</div>`;
 

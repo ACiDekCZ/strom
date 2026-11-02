@@ -11,6 +11,7 @@ import { PageSet, PageSetOptions, buildPageSet } from '../family-pages.js';
 import { buildPageSetHtml, renderPage } from '../family-pages-html.js';
 import { buildRodTimeline, rodTimelineAxis, rodTimelineMainCentury, rodTimelineTicks, RodTimeline } from '../rod-timeline.js';
 import { rodTimelineScript } from '../rod-timeline-wire.js';
+import { FAMILY_PAGES_BODY_CSS } from '../family-pages-css.js';
 import { PersonId, StromData } from '../types.js';
 import { timelineFixture, TP_NOW } from './helpers/tree-pages-fixture.js';
 
@@ -233,6 +234,19 @@ describe('the page in the set (§5.1)', () => {
         const html = renderPage(set, p.slug);
         expect(html).toContain('history · war');
         expect(html).toContain('19th century');
+    });
+
+    it('the chips carry their kind\'s symbol, hidden from screen readers; History keeps the dot', () => {
+        const html = renderPage(full, slugOf(full, F.ids.vaclav));
+        const chip = (k: string) => new RegExp(`<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true">(<span[^>]*>[^<]*</span>)`).exec(html)?.[1];
+        expect(chip('birth')).toBe('<span class="sp-tl-sym" aria-hidden="true">*</span>');
+        expect(chip('marriage')).toBe('<span class="sp-tl-sym" aria-hidden="true">⚭</span>');
+        expect(chip('death')).toBe('<span class="sp-tl-sym" aria-hidden="true">†</span>');
+        expect(chip('move')).toBe('<span class="sp-tl-sym" aria-hidden="true">→</span>');
+        expect(chip('hist')).toBe('<span class="sp-tl-dot" aria-hidden="true"></span>');
+        expect(html).not.toMatch(/data-tl-k="(?!hist)\w+" aria-pressed="true"><span class="sp-tl-dot"/);
+        // A chip turned off greys its symbol as it greys the dot.
+        expect(FAMILY_PAGES_BODY_CSS).toMatch(/\.sp-tl-chip\[aria-pressed="false"\] \.sp-tl-sym \{ color: var\(--text-faint\)/);
     });
 
     it('the controls\' script is valid source text', () => {
