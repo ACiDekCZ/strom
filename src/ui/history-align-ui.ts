@@ -226,7 +226,7 @@ export const historyAlignMethods = uiModule({
         }
         if (pv.busy.length) {
             html += block('is-busy', '', h.alignBusyHead, '',
-                `<p class="hal-note">${esc(h.alignBusy(joinAnd(getCurrentLanguage(), pv.busy.map(b => b.label || b.id))))}</p>`);
+                `<p class="hal-note">${esc(h.alignBusy(joinAnd(getCurrentLanguage(), pv.busy.map(b => b.label || b.id)), pv.busy.length))}</p>`);
         }
         if (pv.shared.n) {
             const kinds = HISTORY_KINDS.filter(k => pv.shared.kinds[k]).map(kindName);

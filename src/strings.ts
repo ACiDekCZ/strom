@@ -6505,7 +6505,9 @@ const stringsEN = {
         alignMore: (n: number) => `and ${n} more`,
         alignLess: 'Show less',
         alignBusyHead: 'Being searched now',
-        alignBusy: (l: string) => `${capFirst(l)} will be aligned once its search finishes.`,
+        alignBusy: (l: string, n: number) => n === 1
+            ? `${capFirst(l)} will be aligned once its search finishes.`
+            : `${capFirst(l)} will be aligned once their searches finish.`,
         alignSharedHead: 'Shared catalogues',
         alignShared: (n: number, l: string) =>
             `${nEn(n, 'event', 'events')}${l ? ` (${l})` : ''} ${n === 1 ? 'is' : 'are'} no longer searched by any tree on this computer. Deleting them from the shared catalogues is done only in the research.`,
@@ -13284,7 +13286,9 @@ const stringsCZ: StringsType = {
         alignMore: (n: number) => `a dalších ${n}`,
         alignLess: 'Ukázat méně',
         alignBusyHead: 'Teď se hledá',
-        alignBusy: (l: string) => `${capFirst(l)} se srovná, až hledání doběhne.`,
+        alignBusy: (l: string, n: number) => n === 1
+            ? `${capFirst(l)} se srovná, až hledání doběhne.`
+            : `${capFirst(l)} se srovnají, až hledání doběhne.`,
         alignSharedHead: 'Sdílené katalogy',
         alignShared: (n: number, l: string) =>
             `${nCs(n, 'událost', 'události', 'událostí')}${l ? ` (${l})` : ''} už žádný strom na tomto počítači nehledá. Smazat je ze sdílených katalogů jde jen ve výzkumu.`,
@@ -19976,7 +19980,9 @@ const stringsDE: StringsType = {
         alignMore: (n: number) => `und ${n} weitere`,
         alignLess: 'Weniger zeigen',
         alignBusyHead: 'Wird gerade gesucht',
-        alignBusy: (l: string) => `${capFirst(l)} wird angepasst, sobald die Suche fertig ist.`,
+        alignBusy: (l: string, n: number) => n === 1
+            ? `${capFirst(l)} wird angepasst, sobald die Suche fertig ist.`
+            : `${capFirst(l)} werden angepasst, sobald die Suche fertig ist.`,
         alignSharedHead: 'Gemeinsame Kataloge',
         alignShared: (n: number, l: string) =>
             `${nDe(n, 'Ereignis', 'Ereignisse')}${l ? ` (${l})` : ''} sucht kein Stammbaum auf diesem Computer mehr. Aus den gemeinsamen Katalogen löschen geht nur in der Forschung.`,

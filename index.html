@@ -2489,11 +2489,11 @@
         .history-kinds-col.is-search small { font-size: 11px; }
         .history-search-cell, .history-search-pair { display: flex; align-items: center; justify-content: center; }
         .history-search-pair {
-            flex-direction: column; gap: 3px; align-self: stretch; justify-self: center; width: 60px; margin: 4px 0;
+            flex-direction: column; gap: 3px; align-self: stretch; justify-self: center; width: 66px; margin: 4px 0;
             background: var(--research-soft); border: 1px solid var(--research-line); border-radius: 9px; padding: 4px 2px;
         }
         .history-search-pair:empty, .history-search-cell:empty { background: none; border: 0; }
-        .history-search-pair-label { font-size: 10.5px; line-height: 1.2; color: var(--research); text-align: center; overflow-wrap: anywhere; }
+        .history-search-pair-label { font-size: 10.5px; line-height: 1.2; color: var(--research); text-align: center; overflow-wrap: break-word; hyphens: auto; -webkit-hyphens: auto; }
         /* The Search switch: 32×18 like the kinds' Show switches; waiting for the research's terminal: dashed. */
         .modal button.history-search-switch {
             position: relative; flex: none; width: 32px; height: 18px; min-height: 0; padding: 0; margin: 0;
@@ -2544,7 +2544,8 @@
         .history-kind-search-mark { flex: none; display: inline-flex; color: var(--text-light); }
         .history-kind-search-row[data-state="off"] .history-kind-search-mark { color: var(--text-faint); }
         .history-kind-search-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-        .history-kind-search-row .history-search-switch { margin-right: 6px; }
+        /* Centred under the Search column (the generic switch rule resets the margin). */
+        .modal #history-kinds .history-kind-search-row .history-search-switch { margin-right: 6px; }
         .history-kinds-search-note:empty { display: none; }
         .history-kinds-search-note > div { margin-top: 8px; border-radius: 8px; padding: 9px 12px; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
         .history-kinds-off { background: var(--surface-2); border: 1px solid var(--divider); color: var(--text-light); }
@@ -2577,6 +2578,7 @@
             .history-kinds-head { padding-left: 42px; }
             .modal button.history-kinds-toggle { padding-left: 42px; padding-right: 12px; }
             .history-kinds-search { padding-left: 42px; padding-right: 12px; }
+            .modal #history-kinds .history-kind-search-row .history-search-switch { margin-right: 8px; }
             .history-kinds-down, .history-origin-note { padding-left: 42px; }
         }
         @media (pointer: coarse) {
@@ -2966,8 +2968,9 @@
         .hal-origin { display: flex; align-items: baseline; gap: 7px; font-size: 13px; color: var(--text); min-width: 0; }
         .hal-origin-mark { flex: none; width: 12px; text-align: center; font-size: 11px; color: var(--hist-mark); }
         .hal-origin.is-local .hal-origin-mark { color: var(--hist-local); font-size: 9px; }
-        .hal-origin-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-        .hal-origin-n { flex: none; font-variant-numeric: tabular-nums; color: var(--text-light); }
+        .hal-origin-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .hal-origin-n { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-light); }
+        .hal-origin-n::before { content: '·'; margin-right: 5px; font-weight: 400; }
         .hal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
         .hal-chip {
             display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 9px; border-radius: var(--r-pill);
@@ -2989,7 +2992,7 @@
         .hal-foot { flex: none; border-top: 1px solid var(--divider); padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 10px; }
         .hal-err { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--danger-soft); color: var(--text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
         .hal-terminal-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; overflow-wrap: anywhere; }
-        .hal-modal .hal-foot .buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; border: 0; }
+        .hal-modal .hal-foot .buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; border: 0; background: none; }
         .hal-modal .hal-foot .buttons button { width: auto; white-space: normal; }
         .hal-modal .hal-foot button:disabled { opacity: 0.6; cursor: default; }
         @media (max-width: 640px) {
@@ -3044,7 +3047,7 @@
         .modal .hm-kinds button.link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .hm-fill { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--research); }
         .hm-fill-dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; border: 1.5px dashed var(--research); align-self: center; }
-        .hm-fill.is-running .hm-fill-dot { border-style: solid; background: var(--research-soft); }
+        .hm-fill.is-running .hm-fill-dot { border-style: solid; background: var(--research); }
         .hm-fill-text { min-width: 0; overflow-wrap: anywhere; }
         .hm-fill-kind { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
         .hm-detail-fill { margin: 0; }
