@@ -79,7 +79,7 @@ test.describe('a tree with a research record of a place', () => {
         await expect(group(page)).toHaveCount(1);
         const head = group(page).locator(':scope > .place-group-head');
         await expect(head.locator('.place-title').first()).toHaveText('Horní Lhota');
-        await expect(head).toContainText('2 spellings · 1 house · 5 facts · 4 people');
+        await expect(head).toContainText('3 spellings · 1 house · 5 facts · 4 people');
         await openGroup(page);
 
         const main = group(page).locator('.place-row-main');

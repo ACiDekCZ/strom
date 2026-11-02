@@ -14,6 +14,7 @@
  * pattern.
  */
 
+import { stampedGeo } from '../place-find.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
@@ -1261,7 +1262,8 @@ export const mapMethods = uiModule({
         const found = new Map<string, PlaceGeo>();
         for (const [name, geo] of results) {
             const key = keyOfName.get(name);
-            if (key && geo) found.set(key, geo);
+            // Taken by the app from the geocoder (spec 034), dated.
+            if (key && geo) found.set(key, stampedGeo(geo, 'map'));
         }
         if (found.size > 0) DataManager.setPlaceGeos(found);
 

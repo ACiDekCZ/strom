@@ -52,7 +52,7 @@ export interface PlaceVariantGroup {
     ownKey: string;
     /** The other members: other spellings, old names, streets, houses — in that order. */
     members: PlaceVariantMember[];
-    /** Members other than the main form and the houses (the "3 spellings" of the head). */
+    /** Ways the place itself is written: its own row and the other spellings and old names (the "3 spellings" of the head). */
     spellings: number;
     /** Houses and streets (the "1 house" of the head). */
     houses: number;
@@ -259,7 +259,7 @@ export function placeVariantGroups(places: ReadonlyMap<string, PlaceUsage>, ctx:
         }
         out.push({
             key: groupKey, head, ownKey: own.key, members,
-            spellings: members.filter(m => m.tag !== 'house').length,
+            spellings: 1 + members.filter(m => m.tag === 'var' || m.tag === 'old').length,
             houses: members.filter(m => m.tag === 'house' || m.tag === 'street').length,
             facts, persons: people.size,
         });

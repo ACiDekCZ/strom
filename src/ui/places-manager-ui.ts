@@ -30,9 +30,7 @@ import {
     houseKey, TownGroup, TownHousePlace, TOWN_POINT_PREFIX,
 } from '../places.js';
 import { foldText, KnownStreets } from '../streets.js';
-import {
-    geocodeTown, placesCentroid, searchPlaceCandidates, hitKind, hitLabelParts, GeocodeCandidate,
-} from '../geocode.js';
+import { stampedGeo } from '../place-find.js';
 import { fixText, STREET_PLACES_FIX } from '../research-fixes.js';
 import { onComputer } from './research-ui.js';
 import { SettingsManager } from '../settings.js';
@@ -85,6 +83,21 @@ let managerKnown: KnownStreets = () => undefined;
 let managerYears = new Map<string, [number, number]>();
 /** The ◆ actions go (the research's bridge here), read once per draw. */
 let managerCanResearch = false;
+
+/** The dialog's place by key, as last drawn (the search of a row reads it). */
+export function managerPlaceUsage(key: string): PlaceUsage | undefined {
+    return managerPlaces.get(key);
+}
+
+/** The tree's streets as the dialog last read them. */
+export function managerKnownStreets(): KnownStreets {
+    return managerKnown;
+}
+
+/** Whether the ◆ actions go, as the dialog last read it. */
+export function managerResearchActions(): boolean {
+    return managerCanResearch;
+}
 
 /** Members shown in an opened group before "Show all N". */
 const GROUP_FIRST = 8;
@@ -422,7 +435,7 @@ export const placesManagerMethods = uiModule({
         const own = byKey.get(v.ownKey);
         if (!own) return '';
         const d = strings.places.dialog;
-        const meta = [d.groupMeta(v.spellings, v.houses), d.facts(v.facts), strings.map.usedBy(v.persons)].filter(Boolean).join(' · ');
+        const meta = [d.groupMeta(v.spellings > 1 ? v.spellings : 0, v.houses), d.facts(v.facts), strings.map.usedBy(v.persons)].filter(Boolean).join(' · ');
         const head = this.renderPlaceRow(own, { group: g, meta, title: v.head });
         const ownTag: PlaceMemberTag = placeKey(own.usage.display) === placeKey(v.head) ? 'main' : 'var';
         const main = this.renderVariantRow(own, { key: own.key, tag: ownTag, same: true }, v, true);
@@ -1190,69 +1203,6 @@ export const placesManagerMethods = uiModule({
         this.refreshPlacesManager();
     },
 
-    /**
-     * Search under whatever name was typed and offer what comes back. Nothing
-     * found and the name holds a house: the town is looked up instead (as the
-     * automatic run does) and its location attached "by the town".
-     */
-    async searchPlaceFromManager(key: string, query: string, row: HTMLElement): Promise<void> {
-        const results = row.querySelector('.place-results') as HTMLElement;
-        const text = query.trim();
-        if (!text || this.placeSearchBusy) return;
-        // The typed name goes out too, so the same consent rule applies.
-        if (!await this.confirmGeocoding(1)) return;
-
-        results.innerHTML = `<span class="place-hint">${strings.map.searching}</span>`;
-        this.placeSearchBusy = true;
-        const data = DataManager.getData();
-        let candidates: GeocodeCandidate[];
-        let byTown: PlaceGeo | null = null;
-        try {
-            candidates = await searchPlaceCandidates(text);
-            if (candidates.length === 0) {
-                const parsed = townOfPlace(text, knownStreets(data));
-                if (parsed) byTown = await geocodeTown(parsed.town, { centroid: placesCentroid(data.places) });
-            }
-        } finally {
-            this.placeSearchBusy = false;
-        }
-        if (byTown?.byTown) {
-            this.attachPlaceByTown(key, byTown, byTown.byTown);
-            return;
-        }
-        if (candidates.length === 0) {
-            results.innerHTML = `<span class="place-hint">${strings.map.noCandidates}</span>`;
-            return;
-        }
-
-        const kindText = strings.map.hitKind;
-        results.innerHTML = candidates.map((c, i) => {
-            const { name, region } = hitLabelParts(c.geo.label);
-            const sub = [kindText(hitKind(c)), region].filter(Boolean).join(' · ');
-            return `
-                <button type="button" class="place-candidate" data-index="${i}">
-                    <strong>${this.escapeHtml(name || `${c.geo.lat}, ${c.geo.lon}`)}</strong>
-                    ${sub ? `<span class="place-candidate-sub">${this.escapeHtml(sub)}</span>` : ''}
-                </button>`;
-        }).join('');
-        results.querySelectorAll<HTMLButtonElement>('.place-candidate').forEach(btn => {
-            btn.onclick = () => {
-                const c = candidates[Number(btn.dataset.index)];
-                // A settlement for a place with a house: the town's location, "by the town".
-                const usage = managerPlaces.get(key);
-                const parsed = c.settlement && usage ? townOfPlace(usage.display, managerKnown) : null;
-                if (parsed) {
-                    this.attachPlaceByTown(key, { ...c.geo, byTown: parsed.town }, parsed.town);
-                    return;
-                }
-                // An exact point: no longer "by the town".
-                DataManager.setPlaceGeos(new Map([[key, c.geo]]));
-                this.showToast(strings.map.matched(c.geo.label ?? ''));
-                this.refreshPlacesManager();
-            };
-        });
-    },
-
     /** Attach a location found by the town and offer it for the town's other house places without one. */
     attachPlaceByTown(key: string, geo: PlaceGeo, town: string): void {
         DataManager.setPlaceGeos(new Map([[key, geo]]));
@@ -1292,7 +1242,8 @@ export const placesManagerMethods = uiModule({
         }
         (card.querySelector('.place-offer-skip') as HTMLButtonElement).onclick = dismiss;
         (card.querySelector('.place-offer-go') as HTMLButtonElement).onclick = () => {
-            const geo: PlaceGeo = { ...offer.geo, byTown: offer.town };
+            // The same location by the same hand, dated today; the Keep of the first place is not theirs.
+            const geo: PlaceGeo = stampedGeo({ ...offer.geo, byTown: offer.town }, offer.geo.origin ?? 'map');
             // Only those still without a location (an Undo in between may have changed it).
             const places = DataManager.getData().places ?? {};
             const todo = offer.others.filter(k => !places[k]);

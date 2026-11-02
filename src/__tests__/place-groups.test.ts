@@ -48,6 +48,7 @@ describe('placeVariantGroups', () => {
             { key: k('Horní Lhota, Lhotákova 23'), tag: 'street', same: false },
             { key: k('Horní Lhota 16'), tag: 'house', same: false },
         ]);
+        // Horní Lhota itself, H. Lhota and Ober-Lhota; the street and the house are counted as houses only.
         expect(g.spellings).toBe(3);
         expect(g.houses).toBe(2);
     });
@@ -57,6 +58,7 @@ describe('placeVariantGroups', () => {
         const [g] = placeVariantGroups(places(usage('H. Lhota', 2), usage('Hor. Lhota', 5)), { data });
         expect(g).toMatchObject({ head: 'Horní Lhota', ownKey: k('Hor. Lhota') });
         expect(g!.members).toEqual([{ key: k('H. Lhota'), tag: 'var', same: true }]);
+        expect(g!.spellings).toBe(2);
     });
 
     it('groups the other names written down by Unify', () => {

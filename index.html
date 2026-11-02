@@ -5320,6 +5320,101 @@
         .place-candidate strong { font-weight: 600; overflow-wrap: anywhere; }
         .place-candidate-sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
         .place-results > .place-hint { padding: 6px 0 0; }
+        /* Find on the map (spec 034 §6): the forms asked, results A–E with a small map, nothing found, place by hand. */
+        .place-found, .place-empty, .place-hand { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 4px; }
+        .place-tried { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12.5px; color: var(--text-light); }
+        .place-tried-label { margin-right: 2px; }
+        .place-tried-chip {
+            padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text);
+            font-size: 12.5px; overflow-wrap: anywhere; min-width: 0;
+        }
+        .place-found-body { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px; align-items: start; }
+        .place-found-list { display: flex; flex-direction: column; min-width: 0; }
+        .places-modal button.place-candidate.place-result { flex-wrap: nowrap; align-items: flex-start; gap: 10px; }
+        .place-result-letter {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+            border-radius: 50%; background: var(--text-light); color: var(--surface); font-size: 12px; font-weight: 700;
+        }
+        .place-result[data-tone="near"] .place-result-letter { background: var(--primary); }
+        .place-result[data-tone="warn"] .place-result-letter { background: var(--map-check); }
+        .place-result-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .place-result-km { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 12.5px; color: var(--text-light); }
+        .place-result-near {
+            padding: 0 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark);
+            font-size: 12px; font-weight: 600; overflow-wrap: anywhere;
+        }
+        .place-result-as { font-style: italic; overflow-wrap: anywhere; }
+        .place-result-warn { font-size: 12.5px; color: var(--warn-text); overflow-wrap: anywhere; }
+        .place-mini { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .place-mini-map, .place-hand-map {
+            position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+        }
+        .place-mini-map { height: 200px; }
+        .place-mini-tiles, .place-mini-marks { position: absolute; inset: 0; }
+        .place-mini-tiles .map-tile { position: absolute; width: 256px; height: 256px; pointer-events: none; user-select: none; }
+        .place-mini-dot {
+            position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+            background: var(--text-faint); border: 1px solid var(--surface);
+        }
+        .place-mini-dot.is-legend { position: static; display: inline-block; margin: 0 6px 0 0; vertical-align: middle; }
+        .place-mini-legend { font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
+        .places-modal button.place-mini-pin {
+            position: absolute; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+            min-height: 0; margin: -11px 0 0 -11px; padding: 0; border: 2px solid var(--surface); border-radius: 50%;
+            background: var(--text-light); color: var(--surface); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+        }
+        .places-modal button.place-mini-pin[data-tone="near"] { background: var(--primary); }
+        .places-modal button.place-mini-pin[data-tone="warn"] { background: var(--map-check); }
+        .places-modal button.place-mini-toggle, .places-modal button.place-none-fits, .places-modal button.place-empty-more {
+            align-self: flex-start; min-height: 0; padding: 2px 0; border: 0; background: none; color: var(--primary-dark);
+            font: inherit; font-size: 13px; text-align: left; white-space: normal; cursor: pointer;
+        }
+        .places-modal button.place-mini-toggle { display: none; }
+        .place-empty-head { font-size: 13.5px; overflow-wrap: anywhere; }
+        .place-near { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); }
+        .places-modal input.place-near-town { flex: 1 1 auto; min-width: 0; }
+        .places-modal button.place-near-go { flex: none; height: 36px; padding: 0 14px; font-size: 13.5px; font-weight: 600; }
+        .place-near-note[data-tone="warn"] { color: var(--warn-text); }
+        .place-empty-research { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+        .places-modal button.place-empty-look {
+            min-height: 0; padding: 7px 14px; border: 1px solid var(--research-line); border-radius: 8px;
+            background: var(--research-soft); color: var(--research); font: inherit; font-size: 13.5px;
+            font-weight: 600; text-align: left; white-space: normal; cursor: pointer;
+        }
+        .places-modal p.place-empty-research { display: block; }
+        .place-hand-map { height: 240px; cursor: grab; touch-action: none; }
+        .place-hand-map.is-dragging { cursor: grabbing; }
+        .place-hand-map:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .place-hand-cross { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; }
+        .place-hand-cross::before, .place-hand-cross::after { content: ''; position: absolute; background: var(--primary-dark); }
+        .place-hand-cross::before { left: 12px; top: -8px; width: 2px; height: 42px; }
+        .place-hand-cross::after { top: 12px; left: -8px; height: 2px; width: 42px; }
+        .place-hand-zoom { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .places-modal .place-hand-zoom button {
+            width: 32px; height: 32px; min-height: 0; padding: 0; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 17px; line-height: 1; cursor: pointer;
+        }
+        .place-hand-attr {
+            position: absolute; right: 0; bottom: 0; padding: 1px 4px; background: var(--surface); color: var(--text-light);
+            font-size: 10px; opacity: 0.85; pointer-events: none;
+        }
+        .place-hand-at { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+        @media (max-width: 640px) {
+            .place-found-body { grid-template-columns: minmax(0, 1fr); }
+            .place-mini { display: none; order: -1; }
+            .places-modal button.place-mini-toggle { display: inline-block; }
+            .place-found.is-map-open .place-mini { display: flex; }
+            .place-found.is-map-open .place-mini-map { height: 180px; }
+            .place-hand-map { height: 220px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .place-found-body { grid-template-columns: minmax(0, 1fr); }
+            .place-mini { display: none; order: -1; }
+            .places-modal button.place-mini-toggle { display: inline-block; }
+            .place-found.is-map-open .place-mini { display: flex; }
+            .place-found.is-map-open .place-mini-map { height: 180px; }
+            .place-hand-map { height: 150px; }
+        }
         /* A town group: the head, the strip (shown closed too), its houses indented. */
         .place-group { border-bottom: 1px solid var(--divider); }
         .place-group > .place-group-head, .place-group-title { border-bottom: 0; }
@@ -5372,6 +5467,10 @@
         .place-unify-line strong { overflow-wrap: anywhere; min-width: 0; }
         @media (hover: hover) {
             .places-modal button.place-candidate:hover { background: var(--surface-2); }
+            .places-modal button.place-mini-toggle:hover, .places-modal button.place-none-fits:hover,
+            .places-modal button.place-empty-more:hover { text-decoration: underline; }
+            .places-modal button.place-mini-pin:hover { box-shadow: 0 0 0 2px var(--primary-dark); }
+            .places-modal .place-hand-zoom button:hover { background: var(--surface-2); }
             .places-modal button.place-act:hover, .places-modal button.place-link-btn:hover,
             .places-modal button.place-show-all:hover { text-decoration: underline; color: var(--text); }
             .places-modal button.place-act.is-research:hover { color: var(--research); }
@@ -5441,6 +5540,10 @@
             .places-modal input.place-new-name, .places-modal input.place-query { height: 44px; font-size: 16px; }
             .places-modal button.place-search-go, .place-card-buttons button { min-height: 44px; }
             .places-modal button.place-candidate { min-height: 44px; }
+            .places-modal button.place-mini-toggle, .places-modal button.place-none-fits, .places-modal button.place-empty-more,
+            .places-modal button.place-near-go, .places-modal button.place-empty-look { min-height: 44px; }
+            .places-modal input.place-near-town { height: 44px; font-size: 16px; }
+            .places-modal .place-hand-zoom button { width: 44px; height: 44px; }
             .places-modal button.places-chip, .places-modal button.places-select-btn, .places-modal button.places-more-btn,
             .places-modal button.places-context-act, .places-modal button.places-more-item { min-height: 44px; }
             .places-modal button.places-more-btn { min-width: 44px; }

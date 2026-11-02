@@ -140,7 +140,8 @@ test.describe('the Places dialog with towns and houses', () => {
 
         // Nothing under the whole name: the town is asked for and attached by the town.
         await expect(r.locator('.place-bytown')).toHaveText(`⌖ Located by the town of ${TOWN}`);
-        expect(asked).toEqual([`${TOWN} čp. 4`, TOWN]);
+        // Every form of the name first (here: without diacritics), then the town.
+        expect(asked).toEqual([`${TOWN} čp. 4`, 'Belokamen cp. 4', TOWN]);
         const offer = r.locator('.place-offer');
         await expect(offer).toContainText(`Location attached to ${TOWN} čp. 4, by town.`);
         await expect(offer.locator('.place-offer-go')).toHaveText(`Use for the other house numbers in ${TOWN} too (9)`);

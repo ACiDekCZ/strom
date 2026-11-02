@@ -118,6 +118,7 @@ import { mapMethods, MapScope } from './map-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
 import { placesIdentifyMethods } from './places-identify-ui.js';
+import { placesFindMethods } from './places-find-ui.js';
 import type { PlaceStateFilter } from '../place-identity.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
@@ -796,6 +797,10 @@ Object.assign(UIClass.prototype, placesResearchMethods);
 type PlacesIdentifyMethods = typeof placesIdentifyMethods;
 export interface UIClass extends PlacesIdentifyMethods {}
 Object.assign(UIClass.prototype, placesIdentifyMethods);
+
+type PlacesFindMethods = typeof placesFindMethods;
+export interface UIClass extends PlacesFindMethods {}
+Object.assign(UIClass.prototype, placesFindMethods);
 
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}

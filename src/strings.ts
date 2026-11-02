@@ -3040,6 +3040,7 @@ const stringsEN = {
             near: 'near the other places',
             kmFrom: (k: number, t: string) => `${k} km from ${t}`,
             kmFam: (k: number) => `${k} km from the family’s other places`,
+            kmAt: (t: string) => `right at ${t}`,
             rTown: 'town',
             rPart: 'part of town',
             rStreet: 'street',
@@ -3119,7 +3120,6 @@ const stringsEN = {
         search: 'Search',
         searchLabel: 'Search for this place under another name',
         searching: 'Searching…',
-        noCandidates: 'Nothing found. Try the nearest town, or add the country.',
         matched: (label: string) => label ? `Matched to ${label}` : 'Matched',
         geocodingProgress: (done: number, total: number, place: string) =>
             `Looking up places… ${done}/${total} (${place})`,
@@ -9665,6 +9665,7 @@ const stringsCZ: StringsType = {
             near: 'blízko ostatních míst',
             kmFrom: (k: number, t: string) => `${k} km od místa ${t}`,
             kmFam: (k: number) => `${k} km od ostatních míst rodiny`,
+            kmAt: (t: string) => `přímo u místa ${t}`,
             rTown: 'obec',
             rPart: 'část obce',
             rStreet: 'ulice',
@@ -9745,7 +9746,6 @@ const stringsCZ: StringsType = {
         search: 'Hledat',
         searchLabel: 'Najít toto místo pod jiným názvem',
         searching: 'Hledám…',
-        noCandidates: 'Nic nenalezeno. Pomůže nejbližší město nebo doplněná země.',
         matched: (label: string) => label ? `Napárováno na ${label}` : 'Napárováno',
         geocodingProgress: (done: number, total: number, place: string) =>
             `Dohledávám místa… ${done}/${total} (${place})`,
@@ -16215,6 +16215,7 @@ const stringsDE: StringsType = {
             near: 'nahe den übrigen Orten',
             kmFrom: (k: number, t: string) => `${k} km von ${t}`,
             kmFam: (k: number) => `${k} km von den übrigen Orten der Familie`,
+            kmAt: (t: string) => `direkt bei ${t}`,
             rTown: 'Ort',
             rPart: 'Ortsteil',
             rStreet: 'Straße',
@@ -16294,7 +16295,6 @@ const stringsDE: StringsType = {
         search: 'Suchen',
         searchLabel: 'Diesen Ort unter einem anderen Namen suchen',
         searching: 'Suche läuft…',
-        noCandidates: 'Nichts gefunden. Tipp: die nächstgelegene Stadt versuchen oder das Land hinzufügen.',
         matched: (label: string) => label ? `Zugeordnet zu ${label}` : 'Zugeordnet',
         geocodingProgress: (done: number, total: number, place: string) =>
             `Orte werden nachgeschlagen… ${done}/${total} (${place})`,

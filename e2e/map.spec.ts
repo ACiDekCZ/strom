@@ -461,7 +461,7 @@ test('a hand search that finds nothing says so and keeps the place', async ({ pa
     await row.locator('.place-search-go').click();
     await page.getByRole('button', { name: 'Look them up' }).click();
 
-    await expect(row.getByText(/Nothing found/i)).toBeVisible();
+    await expect(row.getByText(/The map found nothing under Lhota u Nikde/)).toBeVisible({ timeout: 10000 });
     // A failed search must not invent coordinates.
     expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().places ?? {}))).toEqual([]);
 });
