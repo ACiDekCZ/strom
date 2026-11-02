@@ -8,10 +8,10 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.js';
-import { keepPlaceOrigins, placesWithoutMeta } from './place-records.js';
+import { keepPlaceOrigins, placesWithoutMeta, isPlaceRecordId, cleanCoords } from './place-records.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 
@@ -43,7 +43,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor',
+    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -174,6 +174,8 @@ export interface ResearchLinkParams {
     fix?: string;
     /** `fixes`: ask to undo what the fix fixed (only with `fix`); the research asks in its terminal. */
     fixDo?: 'undo';
+    /** `places`: run the queue of places to identify (with `place`: that one place); the research asks in its terminal. */
+    placesDo?: 'run';
 }
 
 /**
@@ -281,6 +283,13 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             // Only the place's record id and a fixed value (R6): never a place name.
             const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
             return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
+        }
+        case 'places': {
+            // spec 034: the fixed `do=run`, and one place only by its record id — never a place name.
+            if (p.placesDo !== 'run') return null;
+            if (p.place === undefined) return `${base}&do=run`;
+            const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
+            return place ? `${base}&do=run&place=${place}` : null;
         }
         case 'fixes': {
             // A fix's id from the research's fixed list and the fixed `do=undo`: nothing else (ZADANI_VYZKUM §1).
@@ -1325,7 +1334,22 @@ export interface LiveWaiting {
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission' | WaitingTaskKind;
+    kind?: 'story' | 'permission' | 'place' | WaitingTaskKind;
+    /**
+     * 'place' (spec 034 §9, `places.answer`): the research asks where a place
+     * is. Its record id (the item's id is the same "L…"), the texts of the
+     * tree's facts that belong to it, and the question with what it offers.
+     */
+    place?: string;
+    forms?: string[];
+    question?: WaitingPlaceQuestion;
+    /** propose / conflict: 1–3 candidates (c1–c3). */
+    candidates?: WaitingPlaceCandidate[];
+    /** conflict: the location the place has now, and who gave it. */
+    current?: { lat: number; lon: number; label?: string };
+    by?: PlaceRecordBy;
+    /** form: the change of the facts' place text the research proposes. */
+    change?: WaitingPlaceChange;
     /** A couple's story: the other partner (REFN). */
     partner?: string;
     /** A permission: the archive's host name. */
@@ -1356,6 +1380,26 @@ export interface LiveWaiting {
     actions?: WaitingAction[];
 }
 
+/** What a place question asks: pick a candidate, a location against another, a change of the written place. */
+export type WaitingPlaceQuestion = 'propose' | 'conflict' | 'form';
+const PLACE_QUESTIONS: readonly string[] = ['propose', 'conflict', 'form'];
+
+/** A candidate location of a place question. */
+export interface WaitingPlaceCandidate {
+    id: 'c1' | 'c2' | 'c3';
+    name: string;
+    district?: string;
+    country?: string;
+    lat: number;
+    lon: number;
+    why?: string;
+    source?: { title: string; url?: string };
+}
+
+/** A place and house as written in the facts (form question). */
+export interface WaitingPlaceForm { place: string; house?: string }
+export interface WaitingPlaceChange { from: WaitingPlaceForm; to: WaitingPlaceForm; facts: number }
+
 /** The bridge feature that sends the fields of `waiting` items above. */
 export const WAITING_GROUPS_FEATURE = 'waiting.groups';
 /** A task's kind in the waiting list (`waiting.groups`). */
@@ -1372,7 +1416,7 @@ export const WAITING_ACTIONS = ['answer', 'file', 'note', 'folder', 'sent', 'cha
 export type WaitingAction = typeof WAITING_ACTIONS[number];
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
-    story: 'decide', permission: 'decide', takeover: 'decide', check: 'decide',
+    story: 'decide', permission: 'decide', place: 'decide', takeover: 'decide', check: 'decide',
     images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
 };
 
@@ -1970,9 +2014,77 @@ function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind'
     return out;
 }
 
+function placeForm(value: unknown): WaitingPlaceForm | null {
+    const r = asRecord(value);
+    const place = r ? cleanText(r.place, 200) : '';
+    if (!r || !place) return null;
+    const house = cleanText(r.house, 80);
+    return house ? { place, house } : { place };
+}
+
+/**
+ * The fields of a place question (kind 'place'), or null when it is not a
+ * valid one (no record id, an unknown question, nothing to answer with):
+ * the item is then read as any other.
+ */
+export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWaiting> | null {
+    const place = isPlaceRecordId(r.place) ? r.place : isPlaceRecordId(r.id) ? r.id as string : null;
+    const question = typeof r.question === 'string' && PLACE_QUESTIONS.includes(r.question) ? r.question as WaitingPlaceQuestion : null;
+    if (!place || !question) return null;
+    const forms = (Array.isArray(r.forms) ? r.forms : []).slice(0, 50).map(f => cleanText(f, 200)).filter(Boolean);
+    const out: Partial<LiveWaiting> = { kind: 'place', place, question, forms: [...new Set(forms)] };
+    if (question === 'form') {
+        const c = asRecord(r.change);
+        const from = c ? placeForm(c.from) : null;
+        const to = c ? placeForm(c.to) : null;
+        const facts = c ? asCount(c.facts) : null;
+        if (!from || !to || facts === null) return null;
+        out.change = { from, to, facts };
+        return out;
+    }
+    const seen = new Set<string>();
+    const candidates: WaitingPlaceCandidate[] = [];
+    for (const raw of Array.isArray(r.candidates) ? r.candidates.slice(0, 10) : []) {
+        const c = asRecord(raw);
+        const id = c && typeof c.id === 'string' && /^c[1-3]$/.test(c.id) ? c.id as WaitingPlaceCandidate['id'] : null;
+        const name = c ? cleanText(c.name, 200) : '';
+        const at = c ? cleanCoords(c.lat, c.lon) : undefined;
+        if (!c || !id || !name || !at || seen.has(id)) continue;
+        seen.add(id);
+        const cand: WaitingPlaceCandidate = { id, name, ...at };
+        const district = cleanText(c.district, MAX_NAME);
+        if (district) cand.district = district;
+        const country = cleanText(c.country, MAX_NAME);
+        if (country) cand.country = country;
+        const why = cleanText(c.why, 600);
+        if (why) cand.why = why;
+        const s = asRecord(c.source);
+        const title = s ? cleanText(s.title, 300) : '';
+        if (title) {
+            const url = webUrl(s!.url);
+            cand.source = url ? { title, url } : { title };
+        }
+        candidates.push(cand);
+        if (candidates.length >= 3) break;
+    }
+    if (candidates.length) out.candidates = candidates;
+    if (question === 'conflict') {
+        const cur = asRecord(r.current);
+        const at = cur ? cleanCoords(cur.lat, cur.lon) : undefined;
+        if (!cur || !at) return null;
+        const label = cleanText(cur.label, 300);
+        out.current = label ? { ...at, label } : at;
+        if (r.by === 'research' || r.by === 'person' || r.by === 'adopted') out.by = r.by;
+    } else if (!candidates.length) {
+        return null;
+    }
+    return out;
+}
+
 /**
  * The `waiting` list of the status. Untrusted input. `groups`: the research
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
+ * A place question (kind 'place') is read with or without them.
  */
 export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
@@ -1993,13 +2105,15 @@ export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
         // A newer research names every item's kind; an unknown one is "other".
         const task: WaitingTaskKind | null = !groups || story || host || r.kind === 'story' || r.kind === 'permission' ? null
             : TASK_KINDS.includes(r.kind as WaitingTaskKind) ? r.kind as WaitingTaskKind : 'other';
-        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : task ?? undefined;
+        const placeQ = !story && !host && r.kind === 'place' ? waitingPlaceFields(r) : null;
+        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : task ?? undefined;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),
-            ...(task ? { kind: task } : {}),
+            ...(task && !placeQ ? { kind: task } : {}),
+            ...(placeQ ?? {}),
             ...(groups ? waitingGroupFields(r, kind) : {}),
         });
     }

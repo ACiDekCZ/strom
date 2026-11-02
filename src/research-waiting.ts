@@ -34,7 +34,7 @@ export function waitingTodoCount(items: readonly LiveWaiting[]): number {
 /** The item's chip: as the research says, else by its kind (a story or an archive's question is a decision). */
 export function waitingSection(w: LiveWaiting): WaitingSection {
     if (w.section) return w.section;
-    return w.kind === 'story' || w.kind === 'permission' || w.kind === 'takeover' || w.kind === 'check' ? 'decide' : 'other';
+    return w.kind === 'story' || w.kind === 'permission' || w.kind === 'place' || w.kind === 'takeover' || w.kind === 'check' ? 'decide' : 'other';
 }
 
 /** The research's order; `order` only settles what a filter left (the list comes sorted). */
