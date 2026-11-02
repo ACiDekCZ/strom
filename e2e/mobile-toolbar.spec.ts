@@ -346,6 +346,7 @@ test('a standalone file: its banner sits under the person row, never over it (op
 
 test('back and forward stand over the bottom bar, never half under it (fan, family, tablet)', async ({ page }) => {
     await openApp(page);
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
     // Another person focused: there is a way back.

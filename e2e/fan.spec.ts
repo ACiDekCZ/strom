@@ -182,6 +182,7 @@ async function sectorPoint(page: Page, name: string): Promise<{ x: number; y: nu
 
 async function openFan(page: Page): Promise<void> {
     await openApp(page);
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));

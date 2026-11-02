@@ -10,6 +10,7 @@ test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true
 
 async function sample(page: Page): Promise<void> {
     await openApp(page);
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
 }
