@@ -56,7 +56,8 @@ function placesReply(): Record<string, unknown> {
                 source: { title: 'Parish register Lhota 1850–1890', url: 'https://example.org/lhota' },
                 forms: ['Lhota'], facts: 1, persons: 1,
             },
-            [L2]: { name: 'Łotów', state: 'unlocated', unlocated: 'Three villages of this name in the region.', needs: 'The parish of the record.', forms: ['Łotów'] },
+            // The bridge's own shape: the reason as `why` (+ `needs`); the older `unlocated: "<reason>"` is in places-map-person.
+            [L2]: { name: 'Łotów', state: 'unlocated', why: 'Three villages of this name in the region.', needs: 'The parish of the record.', forms: ['Łotów'] },
         },
         forms: { 'H. Lhota': { state: 'queued' } },
         queue: { queued: 1, running: 0 },
