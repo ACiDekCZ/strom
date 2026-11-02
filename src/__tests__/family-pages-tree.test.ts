@@ -55,6 +55,11 @@ describe('the whole tree\'s introduction (§1)', () => {
         // Counts: people, lines, families.
         expect(html).toMatch(/<p class="sp-sub sp-counts"><span>1760–\d{4}<\/span>/);
         expect(plain(html)).toContain('8 rodu');
+        // The main places: the dot stays at the end of the line with the place before it, never starting a line.
+        const main = html.slice(html.indexOf('<p class="sp-mainpl">'), html.indexOf('</p>', html.indexOf('<p class="sp-mainpl">')));
+        expect(main).toContain('<span class="sp-sep" aria-hidden="true">·</span>');
+        expect(main).not.toMatch(/ <span class="sp-sep"/);
+        expect(count(main, /\u00a0<span class="sp-sep"/g)).toBe(count(main, /class="sp-sep"/g));
     });
 
     it(`${HUB_ROWS_FROM} and more lines are rows (sixty: the first twenty, then "Show all 60")`, () => {

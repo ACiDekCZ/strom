@@ -258,4 +258,40 @@ test.describe('a large set of pages on a phone held sideways (1102 §7.2)', () =
         await dialog.locator('.fp-prog .fp-prog-bg').click();
         await chipFits(page);
     });
+
+    test('the side column with the large file and the option for people with a name and years: its top reachable, the buttons in view', async ({ page }) => {
+        test.setTimeout(120_000);
+        await setup(page, synthetic(1200), 'Smyslenov');
+        const dialog = await openDialog(page);
+        await expect(dialog.locator('.fp-min')).toBeVisible();
+        const foot = dialog.locator('.book-dlg-foot');
+        const f = (await foot.boundingBox())!;
+        // The column scrolls from its top: nothing above it out of reach.
+        expect((await dialog.locator('.fp-est').boundingBox())!.y).toBeGreaterThanOrEqual(f.y - 0.5);
+        for (const b of [dialog.locator('#book-open'), dialog.locator('.fp-open')]) {
+            const box = (await b.boundingBox())!;
+            expect(box.x).toBeGreaterThanOrEqual(f.x);
+            expect(box.x + box.width).toBeLessThanOrEqual(844);
+            expect(box.y + box.height).toBeLessThanOrEqual(390);
+        }
+        await foot.evaluate(el => { el.scrollTop = el.scrollHeight; });
+        await expect(dialog.locator('.fp-min')).toBeInViewport();
+        await expect(dialog.locator('#book-open')).toBeInViewport({ ratio: 1 });
+    });
+});
+
+test.describe('a large set of pages on a tablet (1102 §7.2)', () => {
+    test.use({ viewport: { width: 1024, height: 768 } });
+
+    test('the short chip: the tree\'s and the focus person\'s names keep their room', async ({ page }) => {
+        await setup(page);
+        const dialog = await openDialog(page);
+        await slowPages(page, 200);
+        await dialog.locator('#book-open').click();
+        await dialog.locator('.fp-prog .fp-prog-bg').click();
+        // The short chip (the bar and the percentage), as on a phone.
+        await chipFits(page);
+        await page.locator('#pages-bg-chip').click();
+        await dialog.locator('.fp-prog-cancel').click();
+    });
 });

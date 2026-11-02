@@ -588,7 +588,7 @@ function treeHubHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     if (map) main.push(pageLink(r, map, esc(F.map)));
     const head = `<header class="sp-head sp-head--tree"><div class="sp-kicker">${esc(F.kTree)}</div><h1 class="sp-h1">${esc(page.title)}</h1>`
         + `<p class="sp-sub sp-counts">${counts}</p>`
-        + (places.length ? `<p class="sp-mainpl"><span class="sp-mainpl-k">${esc(F.mainPlaces)}:</span> ${main.join(' <span class="sp-sep" aria-hidden="true">·</span> ')}</p>` : '')
+        + (places.length ? `<p class="sp-mainpl"><span class="sp-mainpl-k">${esc(F.mainPlaces)}:</span> ${main.join('\u00a0<span class="sp-sep" aria-hidden="true">·</span> ')}</p>` : '')
         + `</header>`;
 
     // The lines (§1.3): sorted by size, by age or by name (the script; the markup by size).
@@ -1597,8 +1597,8 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     }
     tl.places.forEach((p, i) => {
         const first = i === 0 ? ' sp-tl-first' : '';
-        labels.push(`<span class="sp-tl-lab sp-tl-lab--pl${first}" title="${esc(p.name)}">${esc(p.name)}</span>`);
-        rows.push(`<span class="sp-tl-r${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${p.from}–${p.to}`)}</span>`);
+        labels.push(`<span class="sp-tl-lab sp-tl-lab--pl${first}" title="${esc(p.name)}"><span class="sp-tl-pln">${esc(p.name)}</span></span>`);
+        rows.push(`<span class="sp-tl-r sp-tl-r--pl${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${p.from}–${p.to}`)}</span>`);
     });
     const bands = hist.map(e => {
         const h = e.history!;

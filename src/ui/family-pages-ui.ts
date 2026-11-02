@@ -592,7 +592,10 @@ export const familyPagesMethods = uiModule({
         bindHistory(this);
         const scroller = overlay.querySelector('.pp-body') as HTMLElement;
         const head = (title: string, kicker: string): void => {
-            (overlay.querySelector('#pp-title') as HTMLElement).textContent = title;
+            const h2 = overlay.querySelector('#pp-title') as HTMLElement;
+            h2.textContent = title;
+            // Two lines at most in the header (index.html .pp-titles h2): the whole title on hover.
+            h2.title = title;
             (overlay.querySelector('.pp-sub') as HTMLElement).textContent = kicker;
             (overlay.querySelector('.pp-mname') as HTMLElement).textContent = title;
             (overlay.querySelector('.pp-myears') as HTMLElement).textContent = '';

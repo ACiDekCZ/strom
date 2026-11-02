@@ -8469,12 +8469,17 @@
             .pages-bg-chip { position: relative; }
             .pages-bg-chip::before { content: ''; position: absolute; inset: -6px 0; }
         }
-        /* Phone and sideways: the bar and the percentage only, beside the magnifier; gone while the search holds the bar */
-        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .pages-bg-chip { height: 36px; padding: 0 10px; margin: 0 2px; gap: 6px; }
+        /* A tablet's toolbar is full (the tree, the search, the focus person, the steppers): the short chip there too,
+           so the tree's and the focus person's names are not cut to a letter */
+        @media (max-width: 1024px) {
+            .pages-bg-chip { padding: 0 10px; gap: 6px; }
             .pages-bg-bar { width: 28px; }
             .pages-bg-t { display: none; }
             .pages-bg-s { display: inline; }
+        }
+        /* Phone and sideways: the bar and the percentage only, beside the magnifier; gone while the search holds the bar */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .pages-bg-chip { height: 36px; margin: 0 2px; }
             body.search-open .pages-bg-chip, body.search-active .pages-bg-chip, body.search-filters-open .pages-bg-chip { display: none; }
         }
 
@@ -17114,6 +17119,7 @@
         }
         @media (pointer: coarse) {
             #book-modal .book-presets button, #book-modal .book-seg button { min-height: 44px; }
+            #book-modal .book-seg button { min-width: 44px; }
             #book-modal .book-sel-persons .ppm-chip-x { width: 44px; height: 44px; margin: -8px -2px -8px 0; }
             #book-modal .book-rod-row, #book-modal .book-part, #book-modal .book-radio { min-height: 44px; }
             #book-modal .book-step { width: 44px; height: 44px; }
@@ -17254,12 +17260,19 @@
         @media (pointer: coarse) {
             #book-modal .fp-min { min-height: 44px; align-items: center; }
             #book-modal .fp-min input { margin: 0; width: 20px; height: 20px; }
+            #book-modal .book-dlg-foot .buttons button, #book-modal .book-dlg-foot .buttons .primary, #book-modal .fp-prog-b button, #book-modal .fp-res-b button { min-height: 44px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             #book-modal .book-dlg-head { flex-wrap: wrap; row-gap: 4px; }
             #book-modal .book-out { order: 5; }
             #book-modal .modal.book-dlg[data-out="pages"] { grid-template-columns: minmax(0, 1fr) 240px; grid-template-rows: auto auto minmax(0, 1fr); }
-            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot { grid-column: 2; grid-row: 3; justify-content: flex-end; overflow-y: auto; border-top: 0; border-left: 1px solid var(--divider); }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot { grid-column: 2; grid-row: 3; flex-wrap: nowrap; justify-content: flex-start; overflow-y: auto; border-top: 0; border-left: 1px solid var(--divider); }
+            /* Bottom-aligned while it fits; a taller column (the large-file block, the option for people with a name
+               and years) scrolls from its top instead of overflowing upwards, nothing wraps into a column beside it and the buttons stay in view. */
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot::before { content: ""; flex: 1 0 0; margin-bottom: -8px; }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot > * { flex-shrink: 0; }
+            #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons { position: sticky; bottom: calc(-12px - env(safe-area-inset-bottom)); z-index: 1;
+                padding: 8px 0 calc(12px + env(safe-area-inset-bottom)); margin-bottom: calc(-12px - env(safe-area-inset-bottom)); background: var(--card-bg); }
         }
         /* Life and health, Family through time, Data quality, Highlights */
         .tov-block { display: flex; flex-direction: column; gap: 8px; }
@@ -19199,8 +19212,10 @@
             border-bottom: 1px solid var(--divider);
         }
         .pp-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        /* A long title (a set's line, a place) takes two lines at most, the whole of it in the title attribute. */
         .pp-titles h2 {
             margin: 0; font-family: var(--font-serif); font-size: 17px; font-weight: 600; line-height: 1.25; color: var(--text);
+            display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
         }
         .pp-sub {
             font-size: 12.5px; color: var(--text-light);
@@ -19288,6 +19303,9 @@
             .modal.modal--page { width: min(760px, calc(100vw - 48px)); max-height: 92vh; }
             .pp-toc { display: none; }
             .modal--page .pp-head button { min-height: 44px; }
+            /* A tablet's narrow header: the title keeps room for whole words, the back button gives way (its name ellipsized). */
+            .pp-titles { min-width: 150px; }
+            .modal--page .pp-head .pp-back { flex: 0 1 auto; min-width: 56px; }
             .modal--page .pp-head .pp-more, .modal--page .pp-head .pp-close { width: 44px; }
         }
         /* A phone, and a phone held sideways: the window is the whole screen;
@@ -19308,7 +19326,7 @@
             .pp-myears { display: none; }
             .modal--page .pp-head button { min-height: 44px; border-color: transparent; }
             .modal--page .pp-head .pp-share { color: var(--primary); padding: 0 10px; }
-            .modal--page .pp-head .pp-back { width: 44px; max-width: 44px; padding: 0; margin: 0; }
+            .modal--page .pp-head .pp-back { flex: none; width: 44px; min-width: 0; max-width: 44px; padding: 0; margin: 0; }
             .pp-back-name { display: none; }
             .pp-back-arrow { font-size: 26px; }
             .pp-layout { padding: 20px 16px 40px; }
@@ -20756,8 +20774,9 @@
             background: var(--primary-soft); color: var(--primary-dark); font-size: 13px;
         }
         .ppm-chip-x {
+            display: inline-flex; align-items: center; justify-content: center;
             width: 24px; height: 24px; border: none; border-radius: 999px; background: none; color: inherit;
-            font-size: 15px; line-height: 1; cursor: pointer; padding: 0; flex: none;
+            font-size: 15px; line-height: 1; cursor: pointer; padding: 0 0 2px; box-sizing: border-box; flex: none;
         }
         @media (hover: hover) { .ppm-chip-x:hover { background: rgba(0,0,0,0.08); } }
         .ppm-none { font-size: 13px; color: var(--text-faint); }
@@ -20766,11 +20785,18 @@
             border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
         }
         .person-picker--multi .ppm-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-        .ppm-list { display: flex; flex-direction: column; max-height: 300px; overflow: auto; overscroll-behavior: contain; }
-        .ppm-row {
-            display: flex; gap: 10px; align-items: flex-start; min-height: 44px; box-sizing: border-box;
-            padding: 10px 6px; border-radius: 8px; cursor: pointer;
+        @media (pointer: coarse) {
+            .person-picker--multi .ppm-search { height: 44px; font-size: 16px; }
+            /* The chips' 44 px × reach 6 px over and under a chip: the rows keep them apart. */
+            .ppm-chips { row-gap: 12px; }
         }
+        .ppm-list { display: flex; flex-direction: column; max-height: 300px; overflow: auto; overscroll-behavior: contain; }
+        /* A row is a label: `.modal label { display: block; color; size; margin }` must not reach it. */
+        .ppm-row, .modal label.ppm-row {
+            display: flex; gap: 10px; align-items: flex-start; min-height: 44px; box-sizing: border-box; margin: 0;
+            padding: 10px 6px; border-radius: 8px; cursor: pointer; color: var(--text); font-size: 14px; font-weight: 400;
+        }
+        .modal label.ppm-row.is-blocked { color: var(--text-faint); }
         @media (hover: hover) { .ppm-row:not(.is-blocked):not(.is-fixed):hover { background: var(--hover-bg); } }
         .ppm-check {
             appearance: none; -webkit-appearance: none; width: 18px; height: 18px; flex: none; margin: 1px 0 0;
@@ -20786,7 +20812,7 @@
         .ppm-row.is-fixed .ppm-check { opacity: 0.55; cursor: default; }
         .ppm-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
         .ppm-name { font-size: 14px; overflow-wrap: anywhere; }
-        .ppm-name .birth-year { color: var(--text-faint); font-size: 12.5px; margin-left: 4px; }
+        .ppm-name .birth-year { color: var(--text-light); font-size: 12.5px; margin-left: 4px; }
         .ppm-why { font-size: 12.5px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
         .ppm-note { font-size: 12.5px; color: var(--text-light); }
         .ppm-note[hidden] { display: none; }

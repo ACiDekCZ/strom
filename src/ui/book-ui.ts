@@ -424,8 +424,14 @@ function sync(s: DialogState): void {
     }
     if (s.kind === 'persons') {
         const n = s.selIds.length;
-        const fams = s.est && s.est.set.spec.kind === 'persons' ? s.est.set.familySlug.size : 0;
-        setText(modal, '.book-sel-state', n === 0 ? F.selNone : n === 1 ? F.selOne : F.selMeta(n, fams));
+        const set = s.est && s.est.set.spec.kind === 'persons' ? s.est.set : null;
+        const fams = set ? set.familySlug.size : 0;
+        // The chosen without a page of their own (protected living people): the footer counts the people's pages.
+        // Only the ones the last estimate knew (a newly ticked person is counted when the estimate follows).
+        const known = set && set.spec.kind === 'persons' ? set.spec.ids : [];
+        const noPage = set ? known.filter(id => s.selIds.includes(id) && !set.personSlug.has(id)).length : 0;
+        setText(modal, '.book-sel-state', n === 0 ? F.selNone : n === 1 ? F.selOne
+            : F.selMeta(n, fams) + (noPage ? ` · ${F.selNoPage(noPage)}` : ''));
     }
     if (s.kind === 'ancestors' || s.kind === 'descendants') {
         const n = s.gens[s.kind];

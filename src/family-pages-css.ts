@@ -214,6 +214,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 }
 @media (pointer: coarse) {
   .sp-crumbs a, .sp-crumbs [aria-current], .sp-crumb-back { min-height: 44px; }
+  .sp-crumb-back, .sp-kids > summary { min-width: 44px; }
   .sp-btn, .sp-kids > summary, .sp-go, .sp-famcard { min-height: 44px; }
   .sp-toc-row a { display: inline-block; padding: 10px 0; }
   .sp-clip-scan a { display: inline-flex; align-items: center; min-height: 44px; }
@@ -250,8 +251,9 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
   .sp-sel-row, .sp-anc-row { padding: 2px 0; }
 }
 /* The whole tree (spec 026 P3 §1, §2.3): its introduction, the choice of a line, "Other families". */
-.sp-counts { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.sp-counts { display: flex; flex-wrap: wrap; gap: 2px 6px; }
 .sp-counts > span { white-space: nowrap; }
+.sp-counts > span:not(:last-child)::after { content: "\\00a0\\00b7"; color: var(--text-faint); }
 .sp-mainpl { margin: 0; font-size: 14.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .sp-mainpl .sp-sep { margin: 0 2px; color: var(--text-faint); }
 .sp-rods, .sp-pairs, .sp-idx { display: flex; flex-direction: column; gap: 12px; }
@@ -340,7 +342,10 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 }
 @media (max-width: 640px) { .sp-ofams { grid-template-columns: minmax(0, 1fr); } }
 @media (pointer: coarse) {
-  .sp-rodpick-btn, .sp-sort button, .sp-rrow-a { min-height: 44px; }
+  .sp-rodpick-btn, .sp-fbar--rod .sp-rodpick-btn, .sp-sort button, .sp-rrow-a { min-height: 44px; }
+  .sp-sort button { min-width: 44px; }
+  .sp-rodpick-q, .sp-rods-f .sp-q, .sp-fbar .sp-q { height: 44px; }
+  .sp-fbar-home { min-height: 44px; line-height: 44px; }
   .sp-ofam-names > span, .sp-ofam-p > .pp-link:first-child { display: inline-flex; align-items: center; min-height: 44px; }
 }
 /* The file's bar (§3.1): the name, the search, Index and Map of places; on a phone the magnifier and Menu. */
@@ -352,7 +357,8 @@ html:not(.sp-on):not(.sp-zip) body > .sp-fbar { display: none; }
 html.sp-on main [id] { scroll-margin-top: 64px; }
 /* A page's own address opens it at the very top (an opened Menu then pushes the page down, not over it). */
 html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
-.sp-fbar-in { box-sizing: border-box; max-width: 960px; height: 56px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; gap: 16px; }
+/* The bar's name starts where the page's column does (the column: 960 px inside the file's 40 px margins). */
+.sp-fbar-in { box-sizing: border-box; max-width: 1040px; height: 56px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; gap: 16px; }
 .sp-fbar-home { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text); text-decoration: none; }
 .sp-fbar-gap { flex: 1 1 auto; }
 .sp-search { position: relative; display: flex; align-items: center; flex: 0 1 240px; min-width: 0; color: var(--text-light); }
@@ -419,7 +425,7 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-abc-l:focus-visible, .sp-abc-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) { a.sp-abc-l:hover, button.sp-abc-l:hover { background: var(--hover-bg); } a.sp-abc-step:hover, button.sp-abc-step:hover { text-decoration: underline; } }
 @media (max-width: 640px) { .sp-abc-hint { display: none; } .sp-abc-pager { justify-content: space-between; } }
-@media (pointer: coarse) { .sp-abc-l { min-width: 44px; height: 44px; } .sp-abc-step { display: inline-flex; align-items: center; min-height: 44px; } }
+@media (pointer: coarse) { .sp-abc-l { min-width: 44px; height: 44px; } .sp-abc-step { display: inline-flex; align-items: center; min-height: 44px; } .sp-abc-next { justify-content: flex-end; } }
 .sp-app button.sp-abc-l, .sp-app button.sp-abc-step { font: inherit; font-size: 14px; background: none; margin: 0; cursor: pointer; }
 .sp-app button.sp-abc-step { border: 0; padding: 0; color: var(--primary); }
 .sp-fbar-a:focus-visible, .sp-fbar-home:focus-visible, .sp-fbar-cancel:focus-visible, .sp-fbar-lupa:focus-visible, .sp-fbar-menu:focus-visible, .sp-menu-a:focus-visible,
@@ -429,12 +435,12 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
   .sp-letter:hover, .sp-menu-a:hover, .sp-fbar-lupa:hover, .sp-fbar-menu:hover, .sp-fbar-cancel:hover { background: var(--hover-bg); }
   .sp-ix-sum:hover { color: var(--primary); }
 }
-@media (min-width: 641px) and (max-width: 1024px) { .sp-fbar-in { padding: 0 28px; } }
+@media (min-width: 641px) and (max-width: 1024px) { .sp-fbar-in { max-width: 1016px; padding: 0 28px; } }
 /* Phone and a phone held sideways: the name, the magnifier and Menu; the magnifier turns the bar into the field. */
 @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
   .sp-fbar-in { padding: 0 8px 0 16px; gap: 4px; }
   .sp-fbar-home { flex: 1 1 auto; }
-  .sp-fbar-gap, .sp-search, .sp-fbar-nav, .sp-fbar--has .sp-fbar-cancel { display: none; }
+  .sp-fbar-gap, .sp-fbar .sp-search, .sp-fbar-nav, .sp-fbar--has .sp-fbar-cancel { display: none; }
   .sp-fbar-lupa, .sp-fbar-menu { display: inline-flex; }
   .sp-fbar-lupa { width: 44px; padding: 0; color: var(--text); }
   .sp-fbar-lupa .sp-ico { width: 16px; height: 16px; }
@@ -471,8 +477,9 @@ html.sp-lb-open { overflow: hidden; }
 /* 1102 §5: a line's timeline - the controls, the overview (generations, places, history as bands), the events by century. */
 .sp-tl-go { margin: 6px 0 0; font-size: 14.5px; }
 .sp-cardw { position: relative; display: flex; min-width: 0; }
-.sp-cardw > .sp-card { flex: 1 1 auto; padding-bottom: 46px; }
-.sp-cardw > .sp-card-tl { position: absolute; right: 18px; bottom: 16px; font-size: 14px; }
+.sp-cardw > .sp-card { flex: 1 1 auto; }
+.sp-cardw > .sp-card .sp-card-go { padding-right: 7em; }
+.sp-cardw > .sp-card-tl { position: absolute; right: 18px; bottom: 16px; font-size: 14px; line-height: 21px; }
 .sp-tl { display: flex; flex-direction: column; gap: 28px; }
 .sp-tl-ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .sp-tl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -524,12 +531,15 @@ html.sp-lb-open { overflow: hidden; }
 @media (pointer: coarse) {
   .sp-tl-chip, .sp-tl-seg button { min-height: 44px; }
   .sp-tl-go .pp-link, .sp-card-tl { display: inline-flex; align-items: center; min-height: 44px; }
-  .sp-cardw > .sp-card { padding-bottom: 58px; }
-  .sp-cardw > .sp-card-tl { bottom: 6px; }
+  .sp-cardw > .sp-card-tl { bottom: 4px; right: 10px; padding: 0 8px; }
 }
 @media (max-width: 640px) {
-  .sp-tl-chart { grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
+  .sp-tl-chart { grid-template-columns: 88px minmax(0, 1fr); column-gap: 8px; }
   .sp-tl-lab-n { display: none; }
+  .sp-tl-lab--pl { display: flex; align-items: center; height: 32px; white-space: normal; font-size: 12px; line-height: 16px; }
+  .sp-tl-pln { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-height: 32px; overflow: hidden; overflow-wrap: anywhere; }
+  .sp-tl-r--pl { height: 32px; }
+  .sp-tl-r--pl > .sp-tl-bar { top: 12px; }
   .sp-tl-row { grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
   .sp-tl-y { padding-left: 2px; }
 }
@@ -616,7 +626,11 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-app button.sp-tab[aria-current] { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
 .sp-app button.sp-letter { font-size: 14px; color: var(--primary); }
 .sp-app button.sp-letter[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
-.sp-appset .sp-fbar-in { max-width: none; }
+/* The window's bar over the page's column (.sp-app: 960 px, its own margins), its name where the page starts. */
+.sp-appset .sp-fbar-in { max-width: 960px; padding: 0 32px; }
+@media (min-width: 641px) and (max-width: 1024px) { .sp-appset .sp-fbar-in { padding: 0 24px; } }
+@media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-appset .sp-fbar-in { padding: 0 8px 0 16px; } }
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-appset .sp-fbar-in { padding: 0 16px 0 24px; } }
 .sp-appset button.sp-rodpick-a, .sp-app button.sp-rrow-a, .sp-app button.sp-orow, .sp-app button.sp-rrows-all {
   font: inherit; background: none; border: 0; margin: 0; cursor: pointer; text-align: inherit;
 }
@@ -627,6 +641,7 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-appset .sp-fbar input.sp-rodpick-q { width: 100%; height: 40px; padding: 0 10px; font-size: 16px; border: 1px solid var(--border); border-radius: 8px; transition: none; }
 .sp-app label.sp-search.sp-rods-s { display: flex; margin: 0; font-size: inherit; font-weight: inherit; color: var(--text-light); }
 .sp-app .sp-rods-s input.sp-q { width: 100%; height: 40px; padding: 0 10px 0 33px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; transition: none; }
+@media (pointer: coarse) { .sp-appset .sp-fbar input.sp-rodpick-q, .sp-app .sp-rods-s input.sp-q { height: 44px; } }
 /* The window's preparing state of a large tree (§3.3): a sliding bar and the skeleton of the cards. */
 .sp-prep { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 12px; background: var(--surface-2); }
 .sp-prep-t { font-weight: 600; }
@@ -647,6 +662,7 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
   .sp-appset .sp-fbar.sp-fbar--q label.sp-search { display: flex; flex: 1 1 auto; }
   .sp-appset .sp-fbar .sp-search input.sp-q { height: 40px; font-size: 16px; }
 }
+@media (pointer: coarse) { .sp-appset .sp-fbar .sp-search input.sp-q { height: 44px; } }
 `;
 
 /**

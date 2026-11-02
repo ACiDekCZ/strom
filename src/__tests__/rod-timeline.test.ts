@@ -16,6 +16,10 @@ import { timelineFixture, TP_NOW } from './helpers/tree-pages-fixture.js';
 
 const F = timelineFixture();
 
+function count(html: string, re: RegExp): number {
+    return (html.match(re) ?? []).length;
+}
+
 function tlSet(extra: Partial<PageSetOptions> = {}, data: StromData = F.data): PageSet {
     return buildPageSet(data, { kind: 'tree' }, {
         lang: 'cs', now: TP_NOW, timelines: true, history: { payload: F.history }, ...extra,
@@ -178,6 +182,10 @@ describe('the page in the set (§5.1)', () => {
         expect(html).toMatch(/<details class="sp-tl-c" data-c="19" open/);
         expect(html).toContain('Smrkov čp. 7');
         expect(html).toContain('Prusko-rakouská válka');
+        // The places' rows carry their own class: on a phone a long name takes two lines and its row grows with it.
+        expect(count(html, /class="sp-tl-lab sp-tl-lab--pl/g)).toBeGreaterThan(0);
+        expect(count(html, /class="sp-tl-r sp-tl-r--pl/g)).toBe(count(html, /class="sp-tl-lab sp-tl-lab--pl/g));
+        expect(count(html, /<span class="sp-tl-pln">/g)).toBe(count(html, /class="sp-tl-lab sp-tl-lab--pl/g));
     });
 
     it('the saved file: links by anchor, every century open without scripts, the controls\' script inside', () => {

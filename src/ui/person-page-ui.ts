@@ -366,7 +366,9 @@ export const personPageMethods = uiModule({
             return;
         }
         if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }
-        (overlay.querySelector('#pp-title') as HTMLElement).textContent = P.title;
+        const h2 = overlay.querySelector('#pp-title') as HTMLElement;
+        h2.textContent = P.title;
+        h2.removeAttribute('title');
         const lang = getCurrentLanguage();
         // The families with a page of their own get a card leading to it (spec 026 §2.4).
         const data = DataManager.getData();
