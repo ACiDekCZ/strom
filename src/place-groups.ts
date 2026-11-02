@@ -35,6 +35,12 @@ export interface PlaceVariantMember {
     tag: PlaceMemberTag;
     /** An old name's years ("1838–1845"), from the record's names. */
     period?: string;
+    /**
+     * The member is a way of writing the place itself (its record or other
+     * names say so): on the map as the place. A house joined by its town
+     * keeps its own location (031).
+     */
+    same: boolean;
 }
 
 export interface PlaceVariantGroup {
@@ -208,21 +214,25 @@ export function placeVariantGroups(places: ReadonlyMap<string, PlaceUsage>, ctx:
             ?? [...(plain.length ? plain : list)].sort((a, b) => b.usage.count - a.usage.count || a.usage.display.localeCompare(b.usage.display))[0]!.usage.display;
         const headKey = placeKey(head);
         const own = plain.find(m => m.key === headKey)
+            ?? [...plain].filter(m => !townOfPlace(m.usage.display, ctx.known)).sort((a, b) => b.usage.count - a.usage.count || a.usage.display.localeCompare(b.usage.display))[0]
             ?? [...plain].sort((a, b) => b.usage.count - a.usage.count || a.usage.display.localeCompare(b.usage.display))[0];
         if (!own) continue;
         const members: PlaceVariantMember[] = [];
         for (const m of list) {
             if (m === own) continue;
             if (m.house !== undefined) {
-                members.push({ key: m.key, tag: houseIsStreet(m.house) ? 'street' : 'house' });
+                members.push({ key: m.key, tag: houseIsStreet(m.house) ? 'street' : 'house', same: false });
                 continue;
             }
             const old = recNames.slice(1).find(n => placeKey(n.name) === m.key);
+            const town = old ? null : townOfPlace(m.usage.display, ctx.known);
             if (old) {
                 const period = periodText(old);
-                members.push({ key: m.key, tag: 'old', ...(period ? { period } : {}) });
+                members.push({ key: m.key, tag: 'old', ...(period ? { period } : {}), same: true });
+            } else if (town && !town.bare && placeKey(town.town) !== m.key) {
+                members.push({ key: m.key, tag: houseIsStreet(town.house) ? 'street' : 'house', same: true });
             } else {
-                members.push({ key: m.key, tag: 'var' });
+                members.push({ key: m.key, tag: 'var', same: true });
             }
         }
         members.sort((a, b) => TAG_ORDER[a.tag] - TAG_ORDER[b.tag]
@@ -245,14 +255,14 @@ export function placeVariantGroups(places: ReadonlyMap<string, PlaceUsage>, ctx:
 }
 
 /**
- * The spellings of one place on the map (§4): each member other than a house
- * or street → the group's own key. A house keeps its own point (by its town,
- * 031). The map draws one point per group.
+ * The spellings of one place on the map (§4): each way of writing the place
+ * (not a house) → the group's own key. A house keeps its own point (by its
+ * town, 031). The map draws one point per group.
  */
 export function placeSpellingTargets(groups: readonly PlaceVariantGroup[]): Map<string, string> {
     const out = new Map<string, string>();
     for (const g of groups) {
-        for (const m of g.members) if (m.tag === 'var' || m.tag === 'old') out.set(m.key, g.ownKey);
+        for (const m of g.members) if (m.same && m.tag !== 'house') out.set(m.key, g.ownKey);
     }
     return out;
 }

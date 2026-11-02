@@ -43,6 +43,10 @@ interface NominatimHit {
     type?: string;
     /** What the hit is as an address part ("village", "town", "road", "house"…). */
     addresstype?: string;
+    /** The hit's own name (jsonv2). */
+    name?: string;
+    /** The address parts, with `addressdetails=1`. */
+    address?: Record<string, unknown>;
 }
 
 /** Address types of a settlement: a town looked up by name takes only these. */
@@ -63,9 +67,13 @@ export function isSettlementHit(hit: unknown): boolean {
     return h.category === 'place' && !!h.type && SETTLEMENT_TYPES.has(h.type);
 }
 
-export function buildGeocodeUrl(place: string, limit = 1): string {
+/**
+ * `details`: ask for the address parts too (`addressdetails=1`) — the
+ * search of the Places dialog shows a result's district and country.
+ */
+export function buildGeocodeUrl(place: string, limit = 1, details = false): string {
     const params = new URLSearchParams({
-        q: place, format: 'jsonv2', limit: String(limit), email: GEOCODER_CONTACT,
+        q: place, format: 'jsonv2', limit: String(limit), ...(details ? { addressdetails: '1' } : {}), email: GEOCODER_CONTACT,
     });
     return `${GEOCODER_URL}?${params.toString()}`;
 }
@@ -105,6 +113,35 @@ export interface GeocodeCandidate {
     settlement: boolean;
     /** The geocoder's address type ("village", "road", "house"…), when it says. */
     kind?: string;
+    /** The hit's name and where it lies, from its address parts (with `addressdetails=1`). */
+    place?: HitAddress;
+}
+
+/** A search result's name, district and country (parseHitAddress). */
+export interface HitAddress {
+    name?: string;
+    /** The district (county) or, without one, the region. */
+    district?: string;
+    country?: string;
+}
+
+const text = (v: unknown): string | undefined => typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : undefined;
+
+/**
+ * The name, district and country of a Nominatim hit from its `name` and its
+ * `address` (`addressdetails=1`): the district is the county, else the state
+ * district, else the state. Undefined when the hit says none of it.
+ */
+export function parseHitAddress(hit: unknown): HitAddress | undefined {
+    const h = hit as NominatimHit | null;
+    if (!h || typeof h !== 'object') return undefined;
+    const a = h.address && typeof h.address === 'object' && !Array.isArray(h.address) ? h.address : {};
+    const kind = h.addresstype ?? '';
+    const name = text(h.name) ?? (kind ? text(a[kind]) : undefined);
+    const district = text(a.county) ?? text(a.state_district) ?? text(a.state);
+    const country = text(a.country);
+    if (!name && !district && !country) return undefined;
+    return { ...(name ? { name } : {}), ...(district ? { district } : {}), ...(country ? { country } : {}) };
 }
 
 /** Read every usable hit with its kind, for the Places dialog's search. */
@@ -116,7 +153,8 @@ export function parseGeocodeCandidateDetails(body: unknown): GeocodeCandidate[] 
         if (!geo) continue;
         const h = hit as NominatimHit;
         const kind = h.addresstype || h.type;
-        out.push({ geo, settlement: isSettlementHit(hit), ...(kind ? { kind } : {}) });
+        const place = parseHitAddress(hit);
+        out.push({ geo, settlement: isSettlementHit(hit), ...(kind ? { kind } : {}), ...(place ? { place } : {}) });
     }
     return out;
 }
@@ -254,7 +292,7 @@ export async function geocodeCandidates(query: string, options: GeocodeOptions =
 export async function searchPlaceCandidates(query: string, options: GeocodeOptions = {}): Promise<GeocodeCandidate[]> {
     const doFetch = options.fetchFn ?? fetch;
     try {
-        const response = await doFetch(buildGeocodeUrl(query, CANDIDATE_LIMIT), {
+        const response = await doFetch(buildGeocodeUrl(query, CANDIDATE_LIMIT, true), {
             headers: { Accept: 'application/json' },
             signal: options.signal,
         });
@@ -341,6 +379,39 @@ export async function geocodePlaces(places: string[], options: GeocodePlacesOpti
         }
         found.set(place, geo);
         options.onProgress?.(i + 1, places.length, place);
+    }
+    return found;
+}
+
+/** A result of searchPlaceForms: the option and the form it was found under. */
+export interface FormCandidate {
+    candidate: GeocodeCandidate;
+    form: string;
+}
+
+/**
+ * The Places dialog's search under every form of the name (expandPlaceQuery,
+ * at most MAX_PLACE_QUERIES): one request per form, REQUEST_INTERVAL_MS
+ * between them, the same spot found twice kept once (under the first form).
+ * `onForm` after every form, with what is found so far.
+ */
+export async function searchPlaceForms(forms: readonly string[], options: GeocodeOptions & {
+    onForm?: (found: readonly FormCandidate[], asked: number) => void;
+} = {}): Promise<FormCandidate[]> {
+    const wait = options.waitFn ?? defaultWait;
+    const found: FormCandidate[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < forms.length; i++) {
+        if (options.signal?.aborted) break;
+        if (i > 0) await wait(REQUEST_INTERVAL_MS);
+        if (options.signal?.aborted) break;
+        for (const c of await searchPlaceCandidates(forms[i]!, options)) {
+            const spot = `${c.geo.lat.toFixed(4)},${c.geo.lon.toFixed(4)}`;
+            if (seen.has(spot)) continue;
+            seen.add(spot);
+            found.push({ candidate: c, form: forms[i]! });
+        }
+        options.onForm?.(found, i + 1);
     }
     return found;
 }

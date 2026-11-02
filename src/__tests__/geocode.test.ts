@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
     parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates, hitKind, hitLabelParts,
-    CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS,
+    CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS, parseHitAddress, searchPlaceForms,
 } from '../geocode.js';
 
 const hit = (lat: string, lon: string, name = 'Somewhere'): unknown =>
@@ -248,5 +248,33 @@ describe('a search option in the Places dialog: its kind and its name', () => {
         expect(hitLabelParts('Bělokamen, okres Horní, Česko')).toEqual({ name: 'Bělokamen', region: 'okres Horní, Česko' });
         expect(hitLabelParts('Lhota')).toEqual({ name: 'Lhota', region: '' });
         expect(hitLabelParts(undefined)).toEqual({ name: '', region: '' });
+    });
+});
+
+describe('parseHitAddress and searchPlaceForms', () => {
+    it('reads a hit’s name, district and country from its address parts', () => {
+        expect(parseHitAddress({ name: 'Lhotov', addresstype: 'village', address: { village: 'Lhotov', county: 'Okres Testov', state: 'Kraj Testov', country: 'Česko' } }))
+            .toEqual({ name: 'Lhotov', district: 'Okres Testov', country: 'Česko' });
+        expect(parseHitAddress({ addresstype: 'town', address: { town: 'Jinov', state: 'Kraj Testov' } }))
+            .toEqual({ name: 'Jinov', district: 'Kraj Testov' });
+        expect(parseHitAddress({ lat: '1', lon: '2' })).toBeUndefined();
+        expect(new URL(buildGeocodeUrl('Lhotov', 5, true)).searchParams.get('addressdetails')).toBe('1');
+        expect(new URL(buildGeocodeUrl('Lhotov', 5)).searchParams.has('addressdetails')).toBe(false);
+    });
+
+    it('asks every form in turn and keeps a spot found twice once', async () => {
+        const asked: string[] = [];
+        const waits: number[] = [];
+        const hit = (lat: string) => ({ lat, lon: '15', display_name: 'x', category: 'place', type: 'village', addresstype: 'village' });
+        const fetchFn = (async (url: string) => {
+            const q = new URL(url).searchParams.get('q')!;
+            asked.push(q);
+            const body = q === 'Lhotov' ? [hit('50')] : [hit('50'), hit('49')];
+            return { ok: true, json: async () => body } as Response;
+        }) as unknown as typeof fetch;
+        const found = await searchPlaceForms(['Lhotov', 'Lhotow'], { fetchFn, waitFn: async ms => { waits.push(ms); } });
+        expect(asked).toEqual(['Lhotov', 'Lhotow']);
+        expect(waits).toHaveLength(1);
+        expect(found.map(f => [f.candidate.geo.lat, f.form])).toEqual([[50, 'Lhotov'], [49, 'Lhotow']]);
     });
 });

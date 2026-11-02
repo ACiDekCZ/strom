@@ -43,10 +43,10 @@ describe('placeVariantGroups', () => {
         const g = groups[0]!;
         expect(g).toMatchObject({ key: 'L0012', head: 'Horní Lhota', ownKey: k('Horní Lhota'), facts: 19, persons: 6 });
         expect(g.members).toEqual([
-            { key: k('H. Lhota'), tag: 'var' },
-            { key: k('Ober-Lhota'), tag: 'old', period: '1838–1845' },
-            { key: k('Horní Lhota, Lhotákova 23'), tag: 'street' },
-            { key: k('Horní Lhota 16'), tag: 'house' },
+            { key: k('H. Lhota'), tag: 'var', same: true },
+            { key: k('Ober-Lhota'), tag: 'old', period: '1838–1845', same: true },
+            { key: k('Horní Lhota, Lhotákova 23'), tag: 'street', same: false },
+            { key: k('Horní Lhota 16'), tag: 'house', same: false },
         ]);
         expect(g.spellings).toBe(3);
         expect(g.houses).toBe(2);
@@ -56,14 +56,21 @@ describe('placeVariantGroups', () => {
         const data = tree({ [k('H. Lhota')]: 'L0012', [k('Hor. Lhota')]: 'L0012' });
         const [g] = placeVariantGroups(places(usage('H. Lhota', 2), usage('Hor. Lhota', 5)), { data });
         expect(g).toMatchObject({ head: 'Horní Lhota', ownKey: k('Hor. Lhota') });
-        expect(g!.members).toEqual([{ key: k('H. Lhota'), tag: 'var' }]);
+        expect(g!.members).toEqual([{ key: k('H. Lhota'), tag: 'var', same: true }]);
     });
 
     it('groups the other names written down by Unify', () => {
         const data = { persons: {}, partnerships: {}, placeAliases: { [k('Lhotov')]: ['Lhotow'] } } as unknown as StromData;
         const aliases = placeAliasMap(data);
         const [g] = placeVariantGroups(places(usage('Lhotov', 9), usage('Lhotow', 1)), { data, aliases });
-        expect(g).toMatchObject({ key: k('Lhotov'), head: 'Lhotov', ownKey: k('Lhotov'), members: [{ key: k('Lhotow'), tag: 'var' }] });
+        expect(g).toMatchObject({ key: k('Lhotov'), head: 'Lhotov', ownKey: k('Lhotov'), members: [{ key: k('Lhotow'), tag: 'var', same: true }] });
+    });
+
+    it('tags a street the record itself names as a street on the map as the place', () => {
+        const data = tree({ [k('Horní Lhota')]: 'L0012', [k('Horní Lhota, Lhotákova')]: 'L0012' });
+        const [g] = placeVariantGroups(places(usage('Horní Lhota', 4), usage('Horní Lhota, Lhotákova', 1)), { data, known: () => new Set(['lhotakova']) });
+        expect(g!.members).toEqual([{ key: k('Horní Lhota, Lhotákova'), tag: 'street', same: true }]);
+        expect(placeSpellingTargets([g!]).get(k('Horní Lhota, Lhotákova'))).toBe(k('Horní Lhota'));
     });
 
     it('changes nothing without a record or another name', () => {
