@@ -1031,7 +1031,7 @@ function childCardHtml(r: Render, ctx: BookCtx, c: Person): string {
         // Nothing else (§9.2): a marriage missing from the data is no fact, so no "unmarried".
     }
     const yrs = bookYears(c);
-    return `<div class="sp-kid${young ? ' sp-kid--young' : ''}"><span class="sp-kid-name">${personLinkHtml(r, ctx, c.id)}</span>`
+    return `<div class="sp-kidcard${young ? ' sp-kidcard--young' : ''}"><span class="sp-kid-name">${personLinkHtml(r, ctx, c.id)}</span>`
         + yearsTagHtml(r, c.id, yrs, 'sp-yrs')
         + (note ? `<span class="sp-kid-note">${note}</span>` : '') + '</div>';
 }

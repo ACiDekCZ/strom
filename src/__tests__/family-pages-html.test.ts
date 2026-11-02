@@ -198,7 +198,7 @@ describe('a family\'s page (§2.2)', () => {
         expect(page).toContain('Oddací matrika Čapkov 1840–1860, fol. 12');
         // The children: seven, those who died young tinted, a married son leading to his family, a daughter to her husband's.
         expect(page).toContain('<h2 class="sp-h2">Děti (7)</h2>');
-        expect(page.match(/class="sp-kid sp-kid--young"/g)).toHaveLength(3);
+        expect(page.match(/class="sp-kidcard sp-kidcard--young"/g)).toHaveLength(3);
         expect(page).toContain('zemřela v dětství');
         expect(page).toMatch(/<a class="pp-link" href="#rodina-[^"]+">→ rodina Jan a Rosálie<\/a>/);
         expect(page).toMatch(/→ rodina Matouš a Anna/);
@@ -397,7 +397,7 @@ describe('round 2 of the design (§9.2, §9.3, §9.9)', () => {
             // Kateřina (no union): her card on her parents' page carries no note.
             const parentsUnion = Object.values(data.partnerships).find(u => u.childIds.includes(ids.katerina))!;
             const parents = section(html, set.familySlug.get(parentsUnion.id)!);
-            expect(parents).toMatch(/<div class="sp-kid">[^]*?Kateřina Fíšková[^]*?<\/div>/);
+            expect(parents).toMatch(/<div class="sp-kidcard">[^]*?Kateřina Fíšková[^]*?<\/div>/);
             const card = parents.slice(parents.indexOf('Kateřina Fíšková'));
             expect(card.slice(0, card.indexOf('</div>'))).not.toContain('sp-kid-note');
             // Her own page: the family section says that nothing is recorded.

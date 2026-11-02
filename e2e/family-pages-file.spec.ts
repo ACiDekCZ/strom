@@ -154,7 +154,7 @@ test.describe('family pages file: a family\'s page', () => {
         await expect(page).toHaveTitle('Josef Fíšek a Anna Kvapilová');
         await expect(page.locator(`#${f9} .sp-h1`)).toHaveText('Josef Fíšek ⚭ Anna Kvapilová');
         await expect(page.locator(`#${f9} .sp-partner`)).toHaveCount(2);
-        await expect(page.locator(`#${f9} .sp-kid`)).toHaveCount(7);
+        await expect(page.locator(`#${f9} .sp-kidcard`)).toHaveCount(7);
         // Josef's second marriage and back.
         await page.locator(`#${f9} .sp-other a.pp-link[href="#${f10}"]`).click();
         await expect.poll(() => shown(page)).toEqual([f10]);
@@ -182,7 +182,7 @@ test.describe('family pages file: a family\'s page', () => {
         const jj = set.familySlug.get(unions.jaroslavJana)!;
         await page.goto(`${url}#${jj}`);
         await expect.poll(() => shown(page)).toEqual([jj]);
-        const kids = page.locator(`#${jj} .sp-kid`);
+        const kids = page.locator(`#${jj} .sp-kidcard`);
         await expect(kids).toHaveCount(2);
         await expect(kids.first().locator('a')).toHaveCount(0);
         expect(await page.locator('section.sp-page[id^="rodina-"]').evaluateAll(els => els.filter(e => /Petr|\bEva\b/.test(e.textContent ?? '')).length)).toBe(0);
@@ -210,8 +210,35 @@ test.describe('family pages file: a family\'s page', () => {
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
     });
 
+    test('a union\'s children on a lineage page are a line "Name, Name", not cards: in the window, dark and print (1102)', async ({ page }) => {
+        await page.goto(`${url}#${rodFisek}`);
+        await expect.poll(() => shown(page)).toEqual([rodFisek]);
+        const fold = page.locator(`#${rodFisek} details.sp-kids`).filter({ has: page.locator('.sp-kid ~ .sp-kid') }).first();
+        await fold.evaluate(d => { (d as HTMLDetailsElement).open = true; });
+        const look = () => fold.locator('.sp-kid-list').evaluate(list => {
+            const kids = [...list.querySelectorAll<HTMLElement>('.sp-kid')];
+            return {
+                displays: [...new Set(kids.map(k => getComputedStyle(k).display))],
+                borders: [...new Set(kids.map(k => getComputedStyle(k).borderTopWidth))],
+                text: list.textContent ?? '',
+            };
+        });
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            const l = await look();
+            expect(l.displays).toEqual(['inline']);
+            expect(l.borders).toEqual(['0px']);
+            expect(l.text).toMatch(/\S, \S/);
+            expect(l.text).not.toMatch(/\s,/);
+        }
+        await page.emulateMedia({ media: 'print' });
+        const p = await look();
+        expect(p.displays).toEqual(['inline']);
+        expect(p.borders).toEqual(['0px']);
+    });
+
     test('the system\'s dark scheme: the paper and the tinted child who died young darken', async ({ page }) => {
-        const tint = () => page.locator(`#${f9} .sp-kid--young`).first().evaluate(e => getComputedStyle(e).backgroundColor);
+        const tint = () => page.locator(`#${f9} .sp-kidcard--young`).first().evaluate(e => getComputedStyle(e).backgroundColor);
         await page.goto(`${url}#${f9}`);
         await expect.poll(() => shown(page)).toEqual([f9]);
         const light = await tint();

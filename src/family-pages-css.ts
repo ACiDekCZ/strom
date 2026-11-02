@@ -160,8 +160,8 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-res, .sp-src { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
 .sp-src { font-size: 14px; color: var(--text-light); }
 .sp-kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.sp-kid { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
-.sp-kid--young { background: var(--card-bg-2); color: var(--text-light); }
+.sp-kidcard { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.sp-kidcard--young { background: var(--card-bg-2); color: var(--text-light); }
 .sp-kid-name { font-size: 15px; font-weight: 600; }
 .sp-kid-note { font-size: 13px; color: var(--text-light); }
 .sp-story .pp-couple-story { margin: 0; }
@@ -563,7 +563,7 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   details.sp-ix-more::details-content, details.sp-anc-more::details-content { content-visibility: visible; display: contents; }
   .sp-anc-sum { display: none !important; }
   .sp-on .sp-print-foot { display: block; margin-top: 24px; padding-top: 8px; border-top: 1px solid #cfcfcf; font-size: 11px; color: #4d4d4d; }
-  .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kid, .sp-mar { break-inside: avoid; }
+  .sp-card, .sp-row, .sp-union, .sp-partner, .sp-kidcard, .sp-mar { break-inside: avoid; }
   .sp-tl-ctl, .sp-tl-go, .sp-card-tl { display: none !important; }
   .sp-tl-c > summary .sp-tl-cc::after { content: none; }
   details.sp-tl-c::details-content { content-visibility: visible; display: contents; }
