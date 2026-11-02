@@ -1073,6 +1073,69 @@ export interface PlaceGeo {
     byTown?: string;
     /** How many towns of that name the geocoder offered, only when more than one (the nearest was taken). */
     townChoices?: number;
+    /**
+     * Who put the place there (spec 034): 'hand' = picked or placed by hand,
+     * 'map' = taken from the geocoder in bulk. Absent on locations written by
+     * older builds — read as 'map', which cannot be told apart anymore.
+     */
+    origin?: 'hand' | 'map';
+    /** When the location was written (ISO date). */
+    at?: string;
+    /**
+     * The location's hash (placeGeoHash) when a check warning was answered
+     * "Keep": the check stays silent while the location is the same.
+     */
+    keptAt?: string;
+}
+
+/** A name of a research place record, with the language and years it was used in. */
+export interface PlaceRecordName {
+    name: string;
+    lang?: string;
+    from?: number;
+    to?: number;
+}
+
+/** Kinds of jurisdictions a research place record names (parish, civil district…). */
+export type PlaceJurisdictionKind = 'parish' | 'civil' | 'diocese' | 'manor' | 'district' | 'county' | 'state' | 'other';
+
+/** A jurisdiction of a place over a span of years ("parish Lhotov from 1784"). */
+export interface PlaceJurisdiction {
+    kind: PlaceJurisdictionKind;
+    name: string;
+    from?: number;
+    to?: number;
+}
+
+/** Who identified a research place: the research, a person in the research, or taken from elsewhere. */
+export type PlaceRecordBy = 'research' | 'person' | 'adopted';
+
+/**
+ * A place identified by Strom Research (spec 034), read from its GEDCOM
+ * (`0 @L0012@ _STROM_PLACE`). Owned by the research: replaced whole by every
+ * new research version, never edited or exported by the app.
+ */
+export interface PlaceRecord {
+    /** The research's id, "L" + digits. */
+    id: string;
+    /** Names, today's first; older and other-language names after it. */
+    names: PlaceRecordName[];
+    coords?: { lat: number; lon: number };
+    jurisdictions?: PlaceJurisdiction[];
+    /** The place this one lies in (a part of a town → the town), its record id. */
+    parent?: string;
+    by?: PlaceRecordBy;
+    /** When it was identified (ISO date). */
+    at?: string;
+    /** Why here, in the research's words. */
+    why?: string;
+    source?: { title: string; url?: string };
+    /** When the location was confirmed (ISO date); absent = not confirmed. */
+    verified?: string;
+    /** Why the place could not be located, when it could not ('' = no reason given). */
+    unlocated?: string;
+    /** What would help to locate it. */
+    needs?: string;
 }
 
 export interface StromData {
@@ -1095,6 +1158,11 @@ export interface StromData {
 
     /** Coordinates for places, keyed by placeKey(). Filled in by geocoding (opt-in). */
     places?: Record<string, PlaceGeo>;
+
+    /** Places identified by Strom Research, keyed by their id "L…" (spec 034). Research trees only. */
+    placeRecords?: Record<string, PlaceRecord>;
+    /** Which research place record each place of the facts is, keyed by placeKey(). */
+    placeRefs?: Record<string, string>;
 
     /**
      * Surnames that mean the same family, written down once for the whole tree:

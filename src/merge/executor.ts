@@ -23,6 +23,7 @@ import {
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
+import { mergePlaceRecords } from '../place-records.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
 import {
     MergeState,
@@ -229,6 +230,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // Coordinates: union, the existing tree wins where both know a place.
         if (state.incomingData.places && Object.keys(state.incomingData.places).length > 0) {
             mergedData.places = { ...structuredClone(state.incomingData.places), ...(mergedData.places ?? {}) };
+        }
+        // The research's place records: union, the existing tree wins.
+        if (state.incomingData.placeRefs && Object.keys(state.incomingData.placeRefs).length > 0) {
+            const merged = mergePlaceRecords(mergedData, state.incomingData);
+            if (merged.placeRecords) mergedData.placeRecords = structuredClone(merged.placeRecords);
+            if (merged.placeRefs) mergedData.placeRefs = merged.placeRefs;
         }
         // Surname groups: addSurnameGroup merges overlapping groups transitively,
         // so both trees' equivalences end up in one consistent registry.

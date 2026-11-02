@@ -47,6 +47,7 @@ import {
     generateParticipantId,
     generateSourceId,
     PlaceGeo,
+    PlaceRecord,
     PersonResearch,
     ResearchConflictValue,
     ResearchEdge,
@@ -68,6 +69,7 @@ import { gedcomDatePhrase, parseGedcomDate } from './gedcom-date-read';
 import { localAge } from './recorded-age';
 import { isGedcomDateFormOf } from './gedcom-date-form';
 import { placeKey } from './places';
+import { isPlaceRecordId, sanitizePlaceRecord, PLACE_TEXT_LIMITS } from './place-records';
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER, SURNAME_GROUP_SEP, formatGedcomDate } from './ged-exporter';
@@ -1077,6 +1079,10 @@ export interface ParsedGedcom {
     droppedTags: Map<string, number>;
     /** Coordinates read from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
     places: Map<string, PlaceGeo>;
+    /** Strom Research's place records (`0 @L0012@ _STROM_PLACE`), by id; only valid ones. */
+    placeRecords?: Map<string, PlaceRecord>;
+    /** Which record a place is (`2 PLAC` > `3 _STROM_PLACE @L0012@`), keyed by placeKey(). */
+    placeRefs?: Map<string, string>;
     /** Surname-variant groups read from the header NOTE (see exporter marker). */
     surnameGroups: string[][];
     /** Rejected spelling suggestions read from their header NOTE (SURNAME_REJECTIONS_MARKER). */
@@ -1569,6 +1575,100 @@ function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
  * to a plain degree value. Returns null for anything unparseable so a malformed
  * MAP block is skipped rather than poisoning the place with NaN.
  */
+/** A Strom Research place record being read (`0 @L0012@ _STROM_PLACE`), as raw values for sanitizePlaceRecord. */
+interface OpenPlaceRecord {
+    id: string;
+    names: { name: string; lang?: string; from?: number; to?: number }[];
+    lat?: number;
+    lon?: number;
+    jurisdictions: { kind: string; name: string; from?: number; to?: number }[];
+    parent?: string;
+    by?: string;
+    at?: string;
+    why?: string;
+    source?: { title: string; url?: string };
+    verified?: string;
+    unlocated?: string;
+    needs?: string;
+    /** The level-1 tag the following level-2 lines belong to. */
+    sub: string | null;
+}
+
+/** "FROM 1784", "TO 1945", "FROM 1784 TO 1850" → the years; anything else → none. */
+function placeRecordSpan(value: string): { from?: number; to?: number } {
+    const m = /^(?:FROM\s+(\d{1,4}))?\s*(?:TO\s+(\d{1,4}))?$/i.exec(value.trim());
+    if (!m || (!m[1] && !m[2])) return {};
+    return { ...(m[1] ? { from: Number(m[1]) } : {}), ...(m[2] ? { to: Number(m[2]) } : {}) };
+}
+
+/** Appends a CONT/CONC line to a text, up to the limit (beyond it the text is cut off, not grown). */
+function continueText(text: string | undefined, tag: string, value: string, max: number): string | undefined {
+    if (text === undefined) return text;
+    const next = text + (tag === 'CONT' ? '\n' : '') + value;
+    return next.length > max ? next.slice(0, max) : next;
+}
+
+/**
+ * Reads one line under a `_STROM_PLACE` record (spec 034, the research's
+ * tags). Lines it does not know are skipped silently — the record is the
+ * research's, and nothing of it is a fact the import would lose.
+ */
+function readPlaceRecordLine(rec: OpenPlaceRecord, level: number, tag: string, value: string): void {
+    if (level === 1) {
+        rec.sub = tag;
+        switch (tag) {
+            case 'NAME':
+                if (value && rec.names.length < 30) rec.names.push({ name: value });
+                break;
+            case '_STROM_JUR': {
+                const m = /^(\S+)\s+(.+)$/.exec(value);
+                if (m && rec.jurisdictions.length < 30) rec.jurisdictions.push({ kind: m[1].toLowerCase(), name: m[2] });
+                break;
+            }
+            case '_STROM_IN': {
+                const id = value.replace(/^@|@$/g, '');
+                if (isPlaceRecordId(id)) rec.parent = id;
+                break;
+            }
+            case '_STROM_BY': rec.by = value.toLowerCase(); break;
+            case '_STROM_AT': rec.at = value; break;
+            case '_STROM_WHY': rec.why = value; break;
+            case '_STROM_SRC': rec.source = { title: value }; break;
+            case '_STROM_VERIFIED': rec.verified = value; break;
+            case '_STROM_UNLOCATED': rec.unlocated = value; break;
+        }
+        return;
+    }
+    if (level !== 2) return;
+    const lastName = rec.names[rec.names.length - 1];
+    const lastJur = rec.jurisdictions[rec.jurisdictions.length - 1];
+    if (rec.sub === 'NAME' && lastName) {
+        if (tag === 'LANG') lastName.lang = value.toLowerCase();
+        else if (tag === 'DATE') Object.assign(lastName, placeRecordSpan(value));
+    } else if (rec.sub === '_STROM_JUR' && lastJur && tag === 'DATE') {
+        Object.assign(lastJur, placeRecordSpan(value));
+    } else if (rec.sub === 'MAP' && (tag === 'LATI' || tag === 'LONG')) {
+        const coord = parseGedcomCoord(value);
+        if (coord !== null) { if (tag === 'LATI') rec.lat = coord; else rec.lon = coord; }
+    } else if (rec.sub === '_STROM_WHY' && (tag === 'CONT' || tag === 'CONC')) {
+        rec.why = continueText(rec.why, tag, value, PLACE_TEXT_LIMITS.why + 1);
+    } else if (rec.sub === '_STROM_SRC' && rec.source) {
+        if (tag === 'WWW' || tag === 'URL') rec.source.url = value;
+        else if (tag === 'CONT' || tag === 'CONC') rec.source.title = continueText(rec.source.title, tag, value, PLACE_TEXT_LIMITS.title + 1) ?? '';
+    } else if (rec.sub === '_STROM_UNLOCATED' && tag === '_STROM_NEEDS') {
+        rec.needs = value;
+    }
+}
+
+/** The record read, sanitized (undefined when it has no name or a bad id). */
+function finishPlaceRecord(rec: OpenPlaceRecord): PlaceRecord | undefined {
+    const { sub: _sub, lat, lon, ...rest } = rec;
+    return sanitizePlaceRecord({
+        ...rest,
+        ...(lat !== undefined && lon !== undefined ? { coords: { lat, lon } } : {}),
+    });
+}
+
 function parseGedcomCoord(raw: string): number | null {
     const m = /^([NSEW])?\s*(-?\d+(?:\.\d+)?)$/i.exec(raw.trim());
     if (!m) return null;
@@ -1759,6 +1859,18 @@ export function parseGedcom(content: string): ParsedGedcom {
     const placeCoords = new Map<string, PlaceGeo>();
     /** The PLAC value a MAP substructure is currently describing. */
     let currentPlaceValue: string | null = null;
+    /** The `2 PLAC` value a `3 _STROM_PLACE` ref may follow (cleared by any other level ≤ 2 line). */
+    let refPlaceValue: string | null = null;
+    /** Strom Research's place records and refs (spec 034). */
+    const placeRecords = new Map<string, PlaceRecord>();
+    const placeRefs = new Map<string, string>();
+    let openPlaceRecord: OpenPlaceRecord | null = null;
+    const closePlaceRecord = (): void => {
+        if (!openPlaceRecord) return;
+        const done = finishPlaceRecord(openPlaceRecord);
+        if (done && placeRecords.size < 50000) placeRecords.set(done.id, done);
+        openPlaceRecord = null;
+    };
     /** Inside the 0 HEAD record (its NOTE may carry surname-variant groups). */
     let inHeader = false;
     /** The current header NOTE is one of the surname markers' notes (which one). */
@@ -1791,6 +1903,17 @@ export function parseGedcom(content: string): ParsedGedcom {
             value = noteRecords.get(value) ?? '';
         }
 
+        // A place record of Strom Research: its lines are read here and go
+        // nowhere else (none of them is a fact of a person).
+        if (level === 0) closePlaceRecord();
+        if (openPlaceRecord && level > 0) {
+            readPlaceRecordLine(openPlaceRecord, level, tag, value);
+            continue;
+        }
+        if (level === 0 && /^@L\d{1,7}@$/.test(tag) && value.trim() === '_STROM_PLACE') {
+            openPlaceRecord = { id: tag.slice(1, -1), names: [], jurisdictions: [], sub: null };
+        }
+
         // Citation DATA > DATE (the entry recording date) may sit under a
         // citation at any depth — on the person, a name, an event, a family —
         // so it is tracked here by level, apart from the per-record dispatch.
@@ -1810,6 +1933,16 @@ export function parseGedcom(content: string): ParsedGedcom {
         // here — before the per-record dispatch — against the most recent PLAC.
         if (level <= 1) currentPlaceValue = null;
         if (level === 2 && tag === 'PLAC' && value) currentPlaceValue = value;
+        if (level <= 2) refPlaceValue = level === 2 && tag === 'PLAC' && value ? value : null;
+        // The research's place record this place is: 2 PLAC > 3 _STROM_PLACE @L0012@.
+        if (tag === '_STROM_PLACE' && level > 0) {
+            const id = value.trim().replace(/^@|@$/g, '');
+            if (level === 3 && refPlaceValue && isPlaceRecordId(id)) {
+                const key = placeKey(refPlaceValue);
+                if (key && key.length <= PLACE_TEXT_LIMITS.key && !placeRefs.has(key)) placeRefs.set(key, id);
+            }
+            continue;
+        }
         if ((level === 3 && tag === 'MAP')
             || (level === 4 && (tag === 'LATI' || tag === 'LONG'))) {
             if (level === 4 && currentPlaceValue) {
@@ -1957,7 +2090,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
-                if (!KNOWN_RECORD_TYPES.has(recordType) && recordType) drop(recordType);
+                if (!KNOWN_RECORD_TYPES.has(recordType) && recordType && !openPlaceRecord) drop(recordType);
             }
             currentSubTag = null;
             currentEvent = null;
@@ -2919,6 +3052,10 @@ export function parseGedcom(content: string): ParsedGedcom {
         c.list[c.index] = derived;
     }
 
+    closePlaceRecord();
+    // A ref to a record the file does not have says nothing.
+    for (const [key, id] of placeRefs) if (!placeRecords.has(id)) placeRefs.delete(key);
+
     // Keep only places whose MAP carried BOTH a latitude and a longitude.
     const places = new Map<string, PlaceGeo>();
     for (const [key, geo] of placeCoords) {
@@ -2931,6 +3068,8 @@ export function parseGedcom(content: string): ParsedGedcom {
 
     return {
         individuals, families, sources, repositories, droppedTags, places, surnameGroups,
+        ...(placeRecords.size > 0 ? { placeRecords } : {}),
+        ...(placeRefs.size > 0 ? { placeRefs } : {}),
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(lineageMarker ? { lineageMarker } : {}),
@@ -3723,6 +3862,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnerships,
             ...(Object.keys(sources).length > 0 ? { sources } : {}),
             ...(gedcom.places.size > 0 ? { places: Object.fromEntries(gedcom.places) } : {}),
+            // Strom Research's place records (spec 034): the research's, read as they come.
+            ...(gedcom.placeRecords?.size ? { placeRecords: Object.fromEntries(gedcom.placeRecords) } : {}),
+            ...(gedcom.placeRecords?.size && gedcom.placeRefs?.size ? { placeRefs: Object.fromEntries(gedcom.placeRefs) } : {}),
             // A marker with nothing under it (the research's "none") is an
             // empty list, no marker no list: carryOverTreeDecisions tells the
             // two apart when a research version is loaded; migrateData drops

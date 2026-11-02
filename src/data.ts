@@ -64,6 +64,7 @@ import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { restoreViewLinks } from './view-links.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
+import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 
 /** Extended updates for Partnership */
 
@@ -228,6 +229,20 @@ export function migrateData(data: unknown): StromData {
     // restart, opening a shared file. Add new StromData fields here too.
     if (d.places && typeof d.places === 'object') {
         result.places = d.places as StromData['places'];
+        // The app's own fields of a location (spec 034): only valid values.
+        for (const [key, geo] of Object.entries(result.places!)) {
+            if (!geo || typeof geo !== 'object' || !('origin' in geo || 'at' in geo || 'keptAt' in geo)) continue;
+            const { origin: _o, at: _a, keptAt: _k, ...rest } = geo;
+            result.places![key] = { ...rest, ...cleanPlaceGeoMeta(geo as unknown as Record<string, unknown>) };
+        }
+    }
+
+    // The research's place records and which record each place is (spec 034).
+    const placeRecords = sanitizePlaceRecords(d.placeRecords);
+    if (placeRecords) {
+        result.placeRecords = placeRecords;
+        const placeRefs = sanitizePlaceRefs(d.placeRefs, placeRecords);
+        if (placeRefs) result.placeRefs = placeRefs;
     }
 
     if (Array.isArray(d.surnameVariants) && d.surnameVariants.length > 0) {

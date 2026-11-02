@@ -11,6 +11,7 @@
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.js';
+import { keepPlaceOrigins, placesWithoutMeta } from './place-records.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 
@@ -561,7 +562,9 @@ function fingerprintParts(raw: StromData): unknown[] {
         withoutAppLocal(data.persons ?? {}),
         data.partnerships ?? {},
         data.sources ?? null,
-        data.places ?? null,
+        // Without the app's own bookkeeping of a location (who, when, "Keep"):
+        // the research never has it, a tree in step stays in step.
+        placesWithoutMeta(data.places) ?? null,
         data.surnameVariants?.length ? data.surnameVariants : null,
         // Rejected spelling suggestions go to the research with the next send
         // (spec 021 §4.4). Only when there are some, so a tree without any
@@ -1146,7 +1149,8 @@ export interface MediaCarryOver {
  *   only those cut here from an attachment.
  * - a source's reading marks (`reading`, `readingEntry`, `readingSha`) when
  *   the research's source with the same id has none;
- * - the tree's decisions on its data quality (carryOverTreeDecisions).
+ * - the tree's decisions on its data quality (carryOverTreeDecisions);
+ * - the app's own fields of locations that did not move (keepPlaceOrigins).
  * What belongs to a person or source missing from `next` is counted as lost.
  * Returns a new object; neither input is changed.
  */
@@ -1225,7 +1229,9 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     // The tree's own decisions on its data (the "not an error" marks; the
     // spelling groups and rejections when the research's file says nothing
     // of them) — the research's GEDCOM does not carry the marks.
-    const data = carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous);
+    // The app's own fields of a location (who put it there, "Keep") — the
+    // research's GEDCOM carries the coordinates only (spec 034).
+    const data = keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous), previous);
     return { data, lost };
 }
 

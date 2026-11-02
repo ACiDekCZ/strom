@@ -92,8 +92,18 @@ function fullTree(): Required<StromData> {
             },
         },
         places: {
-            'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko', byTown: 'Kolín', townChoices: 2 },
+            'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko', byTown: 'Kolín', townChoices: 2,
+                origin: 'hand', at: '2026-11-02', keptAt: 'abc123' },
         },
+        placeRecords: {
+            L0012: {
+                id: 'L0012', names: [{ name: 'Kolín' }, { name: 'Kolin', lang: 'de', to: 1945 }],
+                coords: { lat: 50.0281, lon: 15.2003 }, jurisdictions: [{ kind: 'parish', name: 'Kolín', from: 1784 }],
+                by: 'research', at: '2026-11-01', why: 'Parish of the baptisms.', source: { title: 'Register', url: 'https://example.org/r' },
+                verified: '2026-11-01',
+            },
+        },
+        placeRefs: { kolin: 'L0012' },
         surnameVariants: [['Fíšek', 'Fyšek', 'Fischek']],
         surnameRejections: [{ forms: ['Lhoták', 'Lhota'], id: 'sg_lhotak_lhota', at: '2026-10-20T10:00:00.000Z' }],
         qualityDismissed: [{ kind: 'possibleDuplicate', persons: [ALICE, BOB].sort(), at: '2026-10-21T09:00:00.000Z', sync: 'sent' }],
@@ -476,6 +486,26 @@ describe('merge keeps every tree-level field', () => {
         expect(result.mergedData.surnameVariants).toContainEqual(['Svoboda', 'Swoboda']);
         expect(result.mergedData.surnameVariants).toContainEqual(['Fíšek', 'Fyšek', 'Fischek']);
     });
+
+    it('the incoming tree’s research place records come along, the existing ones win', async () => {
+        const incoming = fullTree();
+        incoming.placeRecords = {
+            L0012: { id: 'L0012', names: [{ name: 'Jinov' }] },
+            L0013: { id: 'L0013', names: [{ name: 'Lhotov' }], parent: 'L0014' },
+            L0014: { id: 'L0014', names: [{ name: 'Horní Lhota' }] },
+        };
+        incoming.placeRefs = { kolin: 'L0012', lhotov: 'L0013', jinov: 'L0012' };
+        const state: MergeState = {
+            existingData: fullTree(),
+            incomingData: incoming,
+            matches: [], unmatchedExisting: [], unmatchedIncoming: [],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.mergedData.placeRecords?.['L0012']).toEqual(fullTree().placeRecords['L0012']);
+        expect(result.mergedData.placeRefs).toEqual({ kolin: 'L0012', lhotov: 'L0013' });
+        expect(Object.keys(result.mergedData.placeRecords ?? {}).sort()).toEqual(['L0012', 'L0013', 'L0014']);
+    });
 });
 
 describe('split (extractSubtree) keeps every tree-level field', () => {
@@ -489,6 +519,8 @@ describe('split (extractSubtree) keeps every tree-level field', () => {
             expect({ [key]: out[key] }).toBeDefined();
         }
         expect(out.places?.['kolin']).toEqual(full.places['kolin']);
+        expect(out.placeRecords).toEqual(full.placeRecords);
+        expect(out.placeRefs).toEqual(full.placeRefs);
         expect(out.surnameVariants).toEqual(full.surnameVariants);
         expect(out.sources?.['s1']).toBeDefined();
     });
@@ -499,6 +531,15 @@ describe('split (extractSubtree) keeps every tree-level field', () => {
         const out = extractSubtree(full, new Set([ALICE, BOB]));
         expect(out.places?.['kolin']).toBeDefined();
         expect(out.places?.['praha']).toBeUndefined();
+    });
+
+    it('prunes research place records the kept half never uses', () => {
+        const full = fullTree();
+        full.placeRecords['L0099'] = { id: 'L0099', names: [{ name: 'Lhotínek' }] };
+        full.placeRefs['lhotinek'] = 'L0099';
+        const out = extractSubtree(full, new Set([ALICE, BOB]));
+        expect(out.placeRefs).toEqual({ kolin: 'L0012' });
+        expect(Object.keys(out.placeRecords ?? {})).toEqual(['L0012']);
     });
 });
 

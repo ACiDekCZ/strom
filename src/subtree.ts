@@ -14,6 +14,7 @@ import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipa
 import { placeKey } from './places.js';
 import { dismissalsWithin } from './quality-dismiss.js';
 import { cleanLineageOverrides } from './lineage.js';
+import { placeRecordsFor } from './place-records.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -114,6 +115,12 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
             if (usedPlaces.has(key)) places[key] = structuredClone(geo);
         }
         if (Object.keys(places).length > 0) result.places = places;
+    }
+    // The research's place records of the places the kept persons use.
+    if (data.placeRefs) {
+        const picked = placeRecordsFor(data, collectSubtreePlaceKeys(result));
+        if (picked.placeRecords) result.placeRecords = structuredClone(picked.placeRecords);
+        if (picked.placeRefs) result.placeRefs = picked.placeRefs;
     }
     if (data.surnameVariants && data.surnameVariants.length > 0) {
         result.surnameVariants = structuredClone(data.surnameVariants);
