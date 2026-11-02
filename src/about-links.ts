@@ -43,7 +43,7 @@ export function changelogAnchor(version: string): string {
 
 /** The UI languages with a changelog file of their own; any other reads the English one. */
 function changelogLanguage(lang: Language): Language {
-    return lang === 'cs' || lang === 'de' ? lang : 'en';
+    return lang === 'cs' || lang === 'de' || lang === 'pl' ? lang : 'en';
 }
 
 /** The changelog file of a changelog language (en → CHANGELOG.md, cs → CHANGELOG.cs.md, …). */

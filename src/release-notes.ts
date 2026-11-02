@@ -4,15 +4,15 @@
  * dialog appears. The DOM half lives in src/ui/release-notes-ui.ts.
  *
  * The section of the running version is cut out of CHANGELOG.md /
- * CHANGELOG.cs.md / CHANGELOG.de.md at build time (scripts/bundle.js runs
+ * CHANGELOG.cs.md / CHANGELOG.de.md / CHANGELOG.pl.md at build time (scripts/bundle.js runs
  * changelogSection on each file) and embedded in the bundle: the dialog never
  * asks a server for anything and works offline.
  */
 
 /** Languages with a changelog file of their own; any other UI language reads the English one. */
-export type ChangelogLanguage = 'en' | 'cs' | 'de';
+export type ChangelogLanguage = 'en' | 'cs' | 'de' | 'pl';
 
-export const CHANGELOG_LANGUAGES: ChangelogLanguage[] = ['en', 'cs', 'de'];
+export const CHANGELOG_LANGUAGES: ChangelogLanguage[] = ['en', 'cs', 'de', 'pl'];
 
 /** The changelog file of a changelog language (en → CHANGELOG.md, cs → CHANGELOG.cs.md, …). */
 export function changelogFileName(lang: ChangelogLanguage): string {
@@ -21,7 +21,7 @@ export function changelogFileName(lang: ChangelogLanguage): string {
 
 /** The changelog language of a UI language. */
 export function changelogLanguageOf(lang: string): ChangelogLanguage {
-    return lang === 'cs' || lang === 'de' ? lang : 'en';
+    return lang === 'cs' || lang === 'de' || lang === 'pl' ? lang : 'en';
 }
 
 /** What the build embeds: the version and its section per changelog language (null: none). */

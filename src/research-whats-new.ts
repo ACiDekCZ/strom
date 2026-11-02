@@ -63,7 +63,7 @@ export function sanitizeResearchWhatsNew(value: unknown): ResearchWhatsNew | nul
         const text = point.replace(/\s+/g, ' ').trim().slice(0, MAX_RESEARCH_POINT_LENGTH).trim();
         if (text !== '') points.push(text);
     }
-    const lang = r.lang === 'cs' || r.lang === 'de' || r.lang === 'en' ? r.lang : 'en';
+    const lang = r.lang === 'cs' || r.lang === 'de' || r.lang === 'pl' || r.lang === 'en' ? r.lang : 'en';
     return { version, lang, url: researchChangelogUrl(r.url), points };
 }
 

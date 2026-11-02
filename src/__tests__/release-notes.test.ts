@@ -57,7 +57,7 @@ describe('changelog section', () => {
 
     it('every changelog file of the repository has the section of the version in package.json', () => {
         const version = JSON.parse(readFileSync('package.json', 'utf-8')).version as string;
-        for (const file of ['CHANGELOG.md', 'CHANGELOG.cs.md', 'CHANGELOG.de.md']) {
+        for (const file of ['CHANGELOG.md', 'CHANGELOG.cs.md', 'CHANGELOG.de.md', 'CHANGELOG.pl.md']) {
             const section = changelogSection(readFileSync(file, 'utf-8'), version);
             expect(section, file).not.toBeNull();
             expect(parseReleaseNotes(section!).length, file).toBeGreaterThan(0);
@@ -66,10 +66,11 @@ describe('changelog section', () => {
 
     it('the language versions of the section have the same points', () => {
         const version = JSON.parse(readFileSync('package.json', 'utf-8')).version as string;
-        const counts = ['CHANGELOG.md', 'CHANGELOG.cs.md', 'CHANGELOG.de.md'].map(file =>
+        const counts = ['CHANGELOG.md', 'CHANGELOG.cs.md', 'CHANGELOG.de.md', 'CHANGELOG.pl.md'].map(file =>
             changelogSection(readFileSync(file, 'utf-8'), version)!.split('\n').filter(line => line.startsWith('- ')).length);
         expect(counts[1]).toBe(counts[0]);
         expect(counts[2]).toBe(counts[0]);
+        expect(counts[3]).toBe(counts[0]);
     });
 });
 
@@ -137,6 +138,7 @@ describe('language of the notes', () => {
     it('reads the changelog of the UI language, any other one the English', () => {
         expect(changelogLanguageOf('cs')).toBe('cs');
         expect(changelogLanguageOf('de')).toBe('de');
+        expect(changelogLanguageOf('pl')).toBe('pl');
         expect(changelogLanguageOf('en')).toBe('en');
         expect(changelogLanguageOf('sk')).toBe('en');
         expect(releaseNotesFor(embedded, 'cs')![0].inline[1].text).toBe(': česky');

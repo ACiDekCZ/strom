@@ -11,7 +11,7 @@ console.log('Building TypeScript...');
 const pkgVersion = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
 // "What's new" after an update: the section of this version from each
-// changelog (CHANGELOG.md, .cs.md, .de.md), cut by the same code the app's
+// changelog (CHANGELOG.md, .cs.md, .de.md, .pl.md), cut by the same code the app's
 // tests check (src/release-notes.ts), embedded so the dialog needs no network.
 const notesHelper = buildSync({
     entryPoints: ['src/release-notes.ts'], bundle: true, format: 'esm', platform: 'neutral', write: false,

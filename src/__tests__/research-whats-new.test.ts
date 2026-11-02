@@ -30,6 +30,7 @@ describe('the bridge\'s /whats-new answer', () => {
         expect(sanitizeResearchWhatsNew({ version: '1.15.0', lang: 'fr', points: [] })?.lang).toBe('en');
         expect(sanitizeResearchWhatsNew({ version: '1.15.0', points: [] })?.lang).toBe('en');
         expect(sanitizeResearchWhatsNew({ version: '1.15.0', lang: 'de', points: [] })?.lang).toBe('de');
+        expect(sanitizeResearchWhatsNew({ version: '1.15.0', lang: 'pl', points: [] })?.lang).toBe('pl');
     });
 
     it('keeps a link only into the research\'s repository on GitHub', () => {

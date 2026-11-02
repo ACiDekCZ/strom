@@ -144,6 +144,7 @@ test('it waits while something is in the way (the "new version available" toast)
 for (const { locale, title, dontShow, close, full } of [
     { locale: 'cs-CZ', title: 'Co je nového', dontShow: 'Příště nezobrazovat', close: 'Zavřít', full: 'Všechny změny ↗' },
     { locale: 'de-DE', title: 'Was ist neu', dontShow: 'Nächstes Mal nicht anzeigen', close: 'Schließen', full: 'Alle Änderungen ↗' },
+    { locale: 'pl-PL', title: 'Co nowego', dontShow: 'Nie pokazuj następnym razem', close: 'Zamknij', full: 'Wszystkie zmiany ↗' },
 ]) {
     test.describe(`What's new (${locale})`, () => {
         test.use({ locale });
@@ -157,10 +158,10 @@ for (const { locale, title, dontShow, close, full } of [
             await expect(d.getByRole('heading', { name: title })).toBeVisible();
             await expect(d.getByLabel(dontShow)).toBeVisible();
             await expect(d.locator('.release-notes-close')).toHaveText(close);
-            const file = locale === 'cs-CZ' ? 'CHANGELOG.cs.md' : 'CHANGELOG.de.md';
+            const file = `CHANGELOG.${locale.slice(0, 2)}.md`;
             await expect(d.getByRole('link', { name: full })).toHaveAttribute('href', new RegExp(`/${file.replace(/\./g, '\\.')}#\\d+$`));
-            // The note in preparation (cs "připravuje", de "Vorbereitung") is not shown.
-            await expect(d).not.toContainText(locale === 'cs-CZ' ? 'připravuje' : 'Vorbereitung');
+            // The note in preparation (cs "připravuje", de "Vorbereitung", pl "przygotowaniu") is not shown.
+            await expect(d).not.toContainText({ 'cs-CZ': 'připravuje', 'de-DE': 'Vorbereitung', 'pl-PL': 'przygotowaniu' }[locale]!);
             await expect(d.locator('.release-notes-list li').first()).toBeVisible();
         });
     });

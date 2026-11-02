@@ -28,6 +28,8 @@ describe("About: the What's new link", () => {
         ['de', true, '3.12.0-beta.5', `${BASE}/beta/CHANGELOG.de.md#3120`],
         ['cs', false, '3.11.0', `${BASE}/main/CHANGELOG.cs.md#3110`],
         ['de', true, '3.12.0', `${BASE}/beta/CHANGELOG.de.md#3120`],
+        ['pl', false, '3.21.0', `${BASE}/main/CHANGELOG.pl.md#3210`],
+        ['pl', true, '3.21.0-beta.5', `${BASE}/beta/CHANGELOG.pl.md#3210`],
     ];
     for (const [lang, beta, version, href] of cases) {
         it(`${lang}, ${beta ? 'beta' : 'main'}, ${version} → ${href}`, () => {
