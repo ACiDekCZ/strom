@@ -153,6 +153,34 @@ describe('the kind in the record, the GEDCOM and “formerly”', () => {
         expect(placeIdentity(k('Lhota Dolní'), { data: old }).former).toEqual([{ name: 'Lhota Dolní' }]);
     });
 
+    it('another name still in use is no former name: “Vienna”, never “formerly Wien” (detail: Other name, Other spelling)', () => {
+        const rec: PlaceRecord = {
+            id: 'L0050', coords: { lat: 48.2, lon: 16.4 }, by: 'research',
+            names: [{ name: 'Vídeň' }, { name: 'Wien', lang: 'de', kind: 'alt' }, { name: 'Viden', kind: 'form' }, { name: 'Vindobona', kind: 'alt', to: 500 }],
+        };
+        const data = tree(rec, ['Vídeň', 'Wien', 'Viden', 'Vindobona']);
+        const id = placeIdentity(k('Wien'), { data });
+        expect(id.former).toEqual([{ name: 'Vindobona', kind: 'alt', to: 500 }]);
+        expect(id.others).toEqual([{ name: 'Wien', lang: 'de', kind: 'alt' }]);
+        expect(id.spellings).toEqual([{ name: 'Viden', kind: 'form' }]);
+        // The tree writes the other name: no "formerly" line at all.
+        expect(placeFormerLine(id, 'Wien', 'cs')).toBe('');
+        // The tree writes the old name: "formerly" that one.
+        expect(placeFormerLine(id, 'Vindobona', 'cs')).toBe('dříve Vindobona (do 500)');
+        const rows = placeWhyRows(id, undefined, 'cs');
+        expect(rows.filter(r => ['before', 'alt', 'form'].includes(r.kind)).map(r => [r.kind, r.label, r.text])).toEqual([
+            ['before', 'Dřív', 'Vindobona (do 500)'],
+            ['alt', 'Jiné jméno', 'Wien'],
+            ['form', 'Jiný zápis', 'Viden'],
+        ]);
+        // Only a name still in use: nothing under "Earlier".
+        const onlyAlt = tree({ ...rec, names: [{ name: 'Vídeň' }, { name: 'Wien', lang: 'de', kind: 'alt' }] }, ['Vídeň', 'Wien']);
+        const id2 = placeIdentity(k('Wien'), { data: onlyAlt });
+        expect(id2.former).toBeUndefined();
+        expect(placeWhyRows(id2, undefined, 'en').find(r => r.kind === 'before')).toBeUndefined();
+        expect(placeWhyRows(id2, undefined, 'pl').find(r => r.kind === 'alt')?.label).toBe('Inna nazwa');
+    });
+
     it('names a name’s language in the UI language', () => {
         expect(languageName('de', 'cs')).toBe('němčina');
         expect(languageName('de', 'en')).toBe('German');

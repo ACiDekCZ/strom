@@ -607,6 +607,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         answer: 'Odpowiedz',
         followLive: 'Śledź na żywo',
         answerWhere: 'Odpowiada się w badaniu. Drzewo zaktualizuje się samo po odpowiedzi.',
+        answerHere: 'Na pytania o miejsca odpowiada się tutaj. Drzewo zaktualizuje się samo po odpowiedzi.',
+        answerMixed: 'Na pytania o miejsca odpowiada się tutaj, na pozostałe w badaniu. Drzewo zaktualizuje się samo po odpowiedzi.',
         panelIdle: 'Badanie',
         waitingAsOf: (d: string) => `Stan na ${d}. Badanie teraz nie działa.`,
         opening: 'Otwieranie badania…',

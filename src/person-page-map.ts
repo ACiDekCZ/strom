@@ -640,10 +640,17 @@ export function settleClusters<T extends { x: number; y: number }>(
     }
 }
 
+/** The last year of a "1890–1900" year label; null for anything else ("před 1965", one year). */
+function rangeEnd(label: string | undefined): number | null {
+    const m = label ? /^\d{1,4}–(\d{1,4})$/.exec(label) : null;
+    return m ? Number(m[1]) : null;
+}
+
 /** A cluster's label: the members' names (more than two: "first +n") and, on desktop, their years first–last. */
 export function clusterLabel(c: Pick<MapCluster, 'members'>, S: MapStrings): { name: string; years: string } {
     const name = S.personPage.map.cluster(c.members.map(m => m.name));
-    const ys = c.members.flatMap(m => m.points.map(q => q.year)).filter((y): y is number => y !== null);
+    // A point's last year counts too: a range ("1810–2019", a place of the Map of places) ends at its second year.
+    const ys = c.members.flatMap(m => m.points.flatMap(q => [q.year, rangeEnd(q.yearLabel)])).filter((y): y is number => y !== null);
     const lo = Math.min(...ys), hi = Math.max(...ys);
     return { name, years: !ys.length ? '' : lo === hi ? String(lo) : `${lo}–${hi}` };
 }

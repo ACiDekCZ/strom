@@ -347,14 +347,17 @@ export function placeLocationLabel(id: PlaceIdentity, geo: PlaceGeo | undefined,
  */
 export function placeFormerLine(id: PlaceIdentity, display: string, lang: Language): string {
     if (!id.today || !id.former?.length || placeKey(id.today.name) === placeKey(display)) return '';
-    const written = id.former.filter(n => placeKey(n.name) === placeKey(display));
+    // The tree writes a name still in use ("Wien" for Vídeň): not a former name, and the old ones would read as if it were.
+    const key = placeKey(display);
+    if (id.others?.some(n => placeKey(n.name) === key) && !id.former.some(n => placeKey(n.name) === key)) return '';
+    const written = id.former.filter(n => placeKey(n.name) === key);
     const names = (written.length ? written : id.former).map(n => formerNameText(n, lang));
     return getStringsForLang(lang).places.dialog.formerly(names.join(' · '));
 }
 
 /** A row of "Why here". `origin`: the Who row carries the origin badge. */
 export interface PlaceWhyRow {
-    kind: 'today' | 'before' | 'who' | 'why' | 'decide' | 'check' | 'source';
+    kind: 'today' | 'before' | 'alt' | 'form' | 'who' | 'why' | 'decide' | 'check' | 'source';
     /** The row's label ('' = a continuation of the row above). */
     label: string;
     text: string;
@@ -373,7 +376,10 @@ export function placeWhyRows(id: PlaceIdentity, geo: PlaceGeo | undefined, lang:
     const out: PlaceWhyRow[] = [];
     const today = placeLocationLabel(id, id.located ? geo : undefined, lang);
     if (today && id.state !== 'undet') out.push({ kind: 'today', label: d.dToday, text: today });
+    // Old names under "Earlier"; a name still in use and a spelling of the facts each under their own label, as the list tags them.
     if (id.former?.length) out.push({ kind: 'before', label: d.dBefore, text: id.former.map(n => formerNameText(n, lang)).join(' · ') });
+    if (id.others?.length) out.push({ kind: 'alt', label: d.dAlt, text: id.others.map(n => formerNameText(n, lang)).join(' · ') });
+    if (id.spellings?.length) out.push({ kind: 'form', label: d.dForm, text: id.spellings.map(n => n.name).join(' · ') });
     if (id.origin) {
         out.push({ kind: 'who', label: d.dWho, text: '', origin: id.origin, ...(id.at ? { at: id.at } : {}) });
         if (id.origin === 'hand') out.push({ kind: 'who', label: '', text: d.whoHand, tone: 'muted' });

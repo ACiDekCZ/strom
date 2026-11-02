@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { researchSchemeUrl, sanitizeWaiting, WAITING_GROUPS_FEATURE } from '../research-link.js';
+import { researchSchemeUrl, sanitizeWaiting, waitingAnswerPlace, WAITING_GROUPS_FEATURE } from '../research-link.js';
+import { getStringsForLang } from '../strings.js';
 import { noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import { waitingSection } from '../research-waiting.js';
 
@@ -93,5 +94,23 @@ describe('the places link', () => {
             .toBe(`strom-research://places?tree=${TREE}&do=run&place=L0012`);
         expect(researchSchemeUrl('places', { tree: TREE })).toBeNull();
         expect(researchSchemeUrl('places', { tree: TREE, placesDo: 'run', place: 'x&y' })).toBeNull();
+    });
+});
+
+describe('waitingAnswerPlace: the hint under Waiting says where its items are answered', () => {
+    it('questions about places are answered here when the bridge lets the app answer them', () => {
+        expect(waitingAnswerPlace([{ kind: 'place' }, { kind: 'place' }], true)).toBe('here');
+        expect(waitingAnswerPlace([{ kind: 'place' }, {}], true)).toBe('mixed');
+        expect(waitingAnswerPlace([{ kind: 'place' }], false)).toBe('research');
+        expect(waitingAnswerPlace([{}, { kind: 'story' }], true)).toBe('research');
+    });
+
+    it('never says a place question is answered in the research (cs/en/de/pl)', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const r = getStringsForLang(lang).research;
+            expect(r.answerHere).not.toBe(r.answerWhere);
+            expect(r.answerMixed).not.toBe(r.answerWhere);
+        }
+        expect(getStringsForLang('cs').research.answerHere).toBe('Na otázky k místům se odpovídá tady. Strom se po odpovědi aktualizuje sám.');
     });
 });

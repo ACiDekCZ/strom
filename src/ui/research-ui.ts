@@ -43,7 +43,7 @@ import {
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { withAppVersion, researchGedcomTitles, researchSendsReadings, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, researchSendsReadings, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
     activeDirections, directionGlyph, directionsMulti, keepLineFocus, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
@@ -3295,7 +3295,11 @@ export const researchUiMethods = uiModule({
         // What waits for the user comes before what changed: it needs them.
         if (s.waiting.length > 0) {
             const host = this.appendWaitingSection(body, s.waiting, !s.ended, fold('waiting'));
-            if (!s.ended) host.appendChild(el('p', 'live-panel-hint', r.answerWhere));
+            if (!s.ended) {
+                // A question about a place is answered here (its Answer opens the dialog), the rest in the research.
+                const where = waitingAnswerPlace(s.waiting, this.waitingPlacesAccess().canAnswer);
+                host.appendChild(el('p', 'live-panel-hint', where === 'here' ? r.answerHere : where === 'mixed' ? r.answerMixed : r.answerWhere));
+            }
         }
 
         // What changed: the last few here, all of them in the overview; a selected line: only its own.

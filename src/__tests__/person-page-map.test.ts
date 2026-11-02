@@ -650,3 +650,18 @@ describe('kinds of places, as the main map (spec 031 P2)', () => {
         expect(PLACES_MAP_SCRIPT).toContain("template[data-pp-kv]");
     });
 });
+
+
+describe('clusterLabel: a cluster’s years', () => {
+    it('reach the last year of a point with a range (the Map of places), not only its first', () => {
+        const cs = getStringsForLang('cs');
+        const pt = (year: number, yearLabel?: string): PlacePoint =>
+            ({ placeKey: 'x', place: 'x', sortKey: year, year, kind: 'event', ...(yearLabel ? { yearLabel } : {}) });
+        const members = [
+            { name: 'Dolní Lhota', points: [pt(1810, '1810–2019')] },
+            { name: 'Zlín', points: [pt(1983)] },
+            { name: 'Brno', points: [pt(1950, 'před 1950')] },
+        ] as unknown as Parameters<typeof clusterLabel>[0]['members'];
+        expect(clusterLabel({ members }, cs).years).toBe('1810–2019');
+    });
+});

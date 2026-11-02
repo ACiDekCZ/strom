@@ -2,7 +2,8 @@
  * The free check of locations (spec 034 §5): a location that does not fit
  * the tree gets the mark "Check". Offline, deterministic, from the tree alone:
  *   - far: the place lies more than PLACE_FAR_KM from the median of the
- *     family's other places within ±PLACE_YEARS of the facts there;
+ *     family's other places within ±PLACE_YEARS of the facts there, and
+ *     none of those places lies within PLACE_NEAR_KM of it;
  *   - district: the research's record names a parish/district the location's
  *     label does not;
  *   - label: the geocoder's label names a street, a part of a town or another
@@ -121,6 +122,8 @@ interface FamilyContext {
     family: string;
     median: { lat: number; lon: number };
     years: [number, number];
+    /** The family's other located places counted (one point each). */
+    points: { lat: number; lon: number }[];
 }
 
 /** Needs at least this many other places of the family to say anything. */
@@ -144,6 +147,7 @@ function familyContexts(key: string, facts: FactIndex, places: Record<string, Pl
             family,
             median: { lat: median(refs.map(r => places[r.key].lat)), lon: median(refs.map(r => places[r.key].lon)) },
             years: [Math.min(...years), Math.max(...years)],
+            points: [...new Set(refs.map(r => r.key))].map(k => places[k]),
         });
     }
     return out;
@@ -249,6 +253,9 @@ function findingsFor(
     const out: CheckFinding[] = [];
     let far: { km: number; ctx: FamilyContext } | undefined;
     for (const ctx of familyContexts(key, facts, places)) {
+        // Another place of the family lies near: not alone out there. The median of a family whose branch
+        // emigrated lies with the branch, and would make the home village "far" (7557 km from Chicago).
+        if (ctx.points.some(p => distanceKm(geo, p) <= PLACE_NEAR_KM)) continue;
         const km = distanceKm(geo, ctx.median);
         if (km > PLACE_FAR_KM && (!far || km > far.km)) far = { km, ctx };
     }

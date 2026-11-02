@@ -1048,10 +1048,15 @@ export function effectiveHidden(p: HistoryPayload | null, queue: readonly Histor
 
 // ─── Text ──────────────────────────────────────────────────────────────────
 
-/** A text by language: UI language, then the research's, then the first there is. */
+/**
+ * A text by language: UI language, then English (read more widely than the
+ * research's own language: a Polish UI gets English, not Czech), then the
+ * research's, then the first there is.
+ */
 export function pickHistoryText(t: HistoryText | undefined, lang: string, payloadLang?: string): { text: string; lang: string } | null {
     if (!t) return null;
     if (t[lang]) return { text: t[lang], lang };
+    if (t.en) return { text: t.en, lang: 'en' };
     if (payloadLang && t[payloadLang]) return { text: t[payloadLang], lang: payloadLang };
     const first = Object.keys(t)[0];
     return first ? { text: t[first], lang: first } : null;

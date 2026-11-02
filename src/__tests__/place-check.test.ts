@@ -51,6 +51,28 @@ function tree(farKm: number, farGeo: Partial<PlaceGeo> = {}): StromData {
 }
 
 describe('far: from the family’s other places', () => {
+    it('a home village beside a family place is not far, though the family’s branch overseas holds most facts', () => {
+        const chicago = { lat: 41.88, lon: -87.63 };
+        const people = [
+            ...['1891', '1895', '1900', '1905', '1910'].map(y => person('Horák', 'Lhota', y)),
+            person('Horák', 'Jinov', '1900'),
+            ...['1895', '1900', '1905', '1908', '1912', '1915', '1920'].map(y => person('Horák', 'Chicago', y)),
+        ];
+        const data: StromData = {
+            persons: Object.fromEntries(people.map(p => [p.id, p])), partnerships: {},
+            places: {
+                lhota: { ...BASE, label: 'Lhota, okres Jinov, Česko' },
+                jinov: { ...north(15), label: 'Jinov, okres Jinov, Česko' },
+                chicago: { ...chicago, label: 'Chicago, Illinois, USA' },
+            },
+        } as StromData;
+        const found = checkPlaces(data);
+        expect(found.get('lhota')?.find(f => f.kind === 'far')).toBeUndefined();
+        expect(found.get('jinov')?.find(f => f.kind === 'far')).toBeUndefined();
+        // The branch's one place overseas, alone there, still asks for a check.
+        expect(found.get('chicago')?.[0]).toMatchObject({ kind: 'far', family: 'Horák' });
+    });
+
     it('marks a place beyond PLACE_FAR_KM with the family and its years', () => {
         const found = checkPlaces(tree(120)).get('lhotinek');
         expect(found?.[0]).toMatchObject({ kind: 'far', family: 'Lhoták', years: [1840, 1850] });

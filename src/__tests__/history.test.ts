@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    parseHistoryPayload, parseHistoryText, parseHistoryEvent, isHistoryLang, matchHistoryPlace,
+    pickHistoryText, parseHistoryPayload, parseHistoryText, parseHistoryEvent, isHistoryLang, matchHistoryPlace,
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historyClusterKinds, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
@@ -766,5 +766,17 @@ describe('local history on request in the card (1028 §6a)', () => {
         expect(row('empty')?.kind).toBe('empty');
         expect(row('waiting', { why: 'no agent' })).toEqual({ kind: 'waiting', key: 'Horní Lhota', name: 'Horní Lhota', why: 'no agent' });
         expect(row('done')).toBeNull();
+    });
+});
+
+describe('pickHistoryText: the language of a text', () => {
+    it('the UI language first, then English, then the research’s, then the first there is', () => {
+        const t = { cs: 'Povodeň', en: 'Flood', de: 'Hochwasser' };
+        expect(pickHistoryText(t, 'de', 'cs')).toEqual({ text: 'Hochwasser', lang: 'de' });
+        // A Polish UI without a Polish text reads English, not the research's Czech.
+        expect(pickHistoryText(t, 'pl', 'cs')).toEqual({ text: 'Flood', lang: 'en' });
+        expect(pickHistoryText({ cs: 'Povodeň', de: 'Hochwasser' }, 'pl', 'cs')).toEqual({ text: 'Povodeň', lang: 'cs' });
+        expect(pickHistoryText({ de: 'Hochwasser' }, 'pl', 'cs')).toEqual({ text: 'Hochwasser', lang: 'de' });
+        expect(pickHistoryText(undefined, 'pl')).toBeNull();
     });
 });

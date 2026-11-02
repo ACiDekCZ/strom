@@ -1415,6 +1415,18 @@ export interface LiveWorker {
 }
 
 /** Something the research waits for from the user. */
+/**
+ * Where the waiting items are answered, for the hint under them: a question
+ * about a place is answered here in the app when the bridge lets it
+ * (`placesHere`), everything else in the research. 'here' when all of them
+ * are such questions, 'mixed' when only some are, 'research' otherwise.
+ */
+export function waitingAnswerPlace(items: readonly Pick<LiveWaiting, 'kind'>[], placesHere: boolean): 'here' | 'mixed' | 'research' {
+    const here = placesHere ? items.filter(w => w.kind === 'place').length : 0;
+    if (here === 0) return 'research';
+    return here === items.length ? 'here' : 'mixed';
+}
+
 export interface LiveWaiting {
     id: string;
     what: string;

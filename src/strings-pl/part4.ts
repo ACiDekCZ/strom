@@ -371,6 +371,8 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             district: (d: string) => `powiat ${d}`,
             dToday: 'Dziś',
             dBefore: 'Wcześniej',
+            dAlt: 'Inna nazwa',
+            dForm: 'Inny zapis',
             dWho: 'Kto',
             dWhy: 'Dlaczego',
             dDecide: 'Co by rozstrzygnęło',

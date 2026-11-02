@@ -17,7 +17,7 @@ import type { CheckFinding } from './place-check.js';
 import type { LiveWaiting } from './research-link.js';
 import { originOfBy, type BridgePlace, type BridgePlaces, type BridgePlaceState } from './places-bridge.js';
 import { sameCoords } from './place-records.js';
-import { variantGroupKey } from './place-groups.js';
+import { recordNameTag, variantGroupKey } from './place-groups.js';
 import { placeKey, sortPlacesByName, townOfPlace, TOWN_POINT_PREFIX, type PlaceUsage } from './places.js';
 import type { KnownStreets } from './streets.js';
 import { formatFlexDate } from './dates.js';
@@ -50,8 +50,12 @@ export interface PlaceIdentity {
     record?: string;
     /** Today's name of the record, with its district and country when known. */
     today?: { name: string; district?: string; country?: string };
-    /** The record's other names (by period). */
+    /** The record's old names: other names that ended (research 1.25 `kind: alt` with a "to" year; every other name of an older research). */
     former?: PlaceRecordName[];
+    /** The record's other names still in use (`kind: alt` without a "to" year, e.g. another language): never "formerly". */
+    others?: PlaceRecordName[];
+    /** The record's other spellings of the facts (`kind: form`): never "formerly". */
+    spellings?: PlaceRecordName[];
     /** The research's sentence why it is there (or why it stays undetermined). */
     why?: string;
     /** undet: what would decide. */
@@ -113,9 +117,15 @@ export function placeIdentity(key: string, ctx: PlaceIdentityContext): PlaceIden
             const d = rec.jurisdictions?.find(j => j.kind === 'district' && !j.to);
             if (d) out.today.district = d.name;
         }
-        // The other names, not the spellings of the facts (research 1.25 `kind: form`): "formerly Lhotau", never "formerly Lhota Dolní".
-        const former = rec.names.slice(1).filter(n => n.kind !== 'form');
+        // Each other name by its kind, as the list of places tags it (recordNameTag): only an old name is "formerly";
+        // never a spelling of the facts ("formerly Lhota Dolní") nor a name still in use ("formerly Wien").
+        const other = rec.names.slice(1);
+        const former = other.filter(n => recordNameTag(n) === 'old');
+        const others = other.filter(n => recordNameTag(n) === 'alt');
+        const spellings = other.filter(n => recordNameTag(n) === 'var');
         if (former.length) out.former = former;
+        if (others.length) out.others = others;
+        if (spellings.length) out.spellings = spellings;
         if (rec.why) out.why = rec.why;
         if (rec.source) out.source = rec.source;
         if (live.checkWhy) out.checkWhy = live.checkWhy;
