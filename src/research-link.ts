@@ -187,6 +187,8 @@ export interface ResearchLinkParams {
     kindsScope?: 'tree' | 'default';
     /** `history-kinds`: drop this research's own value (only with `kindsScope: 'tree'`, without `kinds`). */
     inherit?: boolean;
+    /** `history-align`: the terminal's alignment offers deleting from the shared catalogues too (`prune=1`). */
+    prune?: boolean;
 }
 
 /** A value of `history.kinds` for the `history-kinds` link: `all`, `none`, kinds, or `all` without kinds — else null. */
@@ -315,8 +317,8 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return kinds ? `${base}&scope=${p.kindsScope}&kinds=${kinds}` : null;
         }
         case 'history-align':
-            // spec 035: the research's terminal shows the preview and asks; `prune` stays the terminal's own option.
-            return base;
+            // spec 035: the research's terminal shows the preview and asks; `prune=1` leads to the shared catalogues (only there).
+            return p.prune ? `${base}&prune=1` : base;
         case 'places': {
             // spec 034: the fixed `do=run`, and one place only by its record id — never a place name.
             if (p.placesDo !== 'run') return null;

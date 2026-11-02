@@ -62,6 +62,7 @@ describe('the history-kinds and history-align links', () => {
         expect(researchSchemeUrl('history-kinds', { tree: TREE, kindsScope: 'tree', kinds: 'war,magic' })).toBeNull();
         expect(researchSchemeUrl('history-kinds', { tree: TREE, kinds: 'war' })).toBeNull();
         expect(researchSchemeUrl('history-align', { tree: TREE })).toBe(`strom-research://history-align?tree=${TREE}`);
+        expect(researchSchemeUrl('history-align', { tree: TREE, prune: true })).toBe(`strom-research://history-align?tree=${TREE}&prune=1`);
         expect(historyKindsLinkValue('all,-law,-economy')).toBe('all,-law,-economy');
         expect(historyKindsLinkValue('all,law')).toBeNull();
         expect(historyKindsLinkValue('war,war')).toBeNull();

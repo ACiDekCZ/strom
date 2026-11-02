@@ -13,7 +13,7 @@ import {
     computePersonHistory, HISTORY_KINDS, type PersonHistoryEnv,
     effectiveHidden, historyHiddenCount, historyPlaceOfferable, historyWaiting, pickHistoryText,
     type HistoryPayload, type HistoryRegion, type HistoryHideOp, type HistoryEvent, type HistoryText,
-    type EffectiveHidden, type HistoryPlace, type HistoryPlaceRegion,
+    type EffectiveHidden, type HistoryPlace, type HistoryPlaceRegion, type HistoryKind, type HistoryKindsFill,
 } from './history.js';
 import {
     HISTORY_FIRST_FEATURE, HISTORY_HIDE_ALL_FEATURE, HISTORY_SKIP_FEATURE, HISTORY_DELETE_FEATURE,
@@ -201,6 +201,8 @@ export interface RegionRow {
     meta: string;
     /** "years without events 1870–1913 · filling queued" ('' none). */
     gaps: string;
+    /** spec 035: a task searching kinds added to the search (`kindsFill`). */
+    fill?: HistoryKindsFill;
     /** The state's mark and text ('' none: an older research or `none`). */
     glyph: string;
     tone: ManageTone;
@@ -310,6 +312,7 @@ export function regionGroups(p: HistoryPayload, env: ManageEnv, names: ManageNam
             actions: [],
             search: searchText(name, ...allTexts(r.name), parent, r.id),
         };
+        if (r.kindsFill) row.fill = r.kindsFill;
         if (r.state === 'done' && r.gaps?.length) {
             row.gaps = s.regionGaps(gapsLabel(r.gaps))
                 + (r.fill === 'queued' ? ` ${s.gapsFillQueued}` : r.fill === 'running' ? ` ${s.gapsFillRunning}` : '');
@@ -398,6 +401,7 @@ export function regionGroups(p: HistoryPayload, env: ManageEnv, names: ManageNam
             events: n, hidden: hiddenCounts.get(`p:${key}`) ?? 0, dim: false, open: n > 0, actions: [],
             search: searchText(name, key, ...(place.also ?? []), area),
         };
+        if (place.kindsFill) row.fill = place.kindsFill;
         if (st === 'first') { row.glyph = '↑'; row.tone = 'primary'; row.state = s.rsFirst; }
         else if (st === 'running') { row.glyph = '●'; row.tone = 'primary'; row.state = s.rsRunning; }
         else if (st === 'done') { row.glyph = '✓'; row.state = s.rsDone(place.at ? env.formatDate(place.at) : ''); }
@@ -424,6 +428,8 @@ export interface PlaceRow {
     meta: string;
     /** unlocated: the research's sentence. */
     why: string;
+    /** spec 035: a task searching kinds added to the search (`kindsFill`). */
+    fill?: HistoryKindsFill;
     persons: number;
     state: string;
     tone: ManageTone;
@@ -489,6 +495,7 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
             events: place.events.length, dim: false, assign: false, find: false, actions: [],
             search: searchText(name, key, ...(place.also ?? []), regionText),
         };
+        if (place.kindsFill) row.fill = place.kindsFill;
         if (place.skip) {
             row.state = s.rsSkipped;
             row.tone = 'faint';
@@ -839,6 +846,8 @@ export function hiddenRows(p: HistoryPayload, env: ManageEnv, names: ManageNames
     const counts = regionEventCounts(p);
     const out: (HiddenRow & { at: number; order: number })[] = [];
     effectiveHidden(p, env.queue ?? []).forEach((h, order) => {
+        // Hidden by aligning with the kinds searched: the Hidden tab's own group (hiddenAlignKinds).
+        if (h.by === 'align' && h.event) return;
         const at = h.at ? Date.parse(h.at) : NaN;
         const pending = h.queued ? ` · ${s.pendingSync}` : '';
         if (!h.event) {
@@ -873,6 +882,54 @@ export function hiddenRows(p: HistoryPayload, env: ManageEnv, names: ManageNames
         return tb - ta || b.order - a.order;
     });
     return out.map(({ at: _a, order: _o, ...row }) => row);
+}
+
+/** Events hidden by aligning with the kinds searched (spec 035 §4), by kind. */
+export interface HiddenAlignKind {
+    kind: HistoryKind;
+    /** Distinct events. */
+    n: number;
+    /** Of them regional history (`scope: "region"`) and local history (the research's own records and a place's own history). */
+    general: number;
+    local: number;
+    events: string[];
+    /** The alignment's undo id when every one of these events was hidden by it and it hid nothing else. */
+    undo?: string;
+}
+
+/** The Hidden tab's "Hidden by aligning" group: one row per kind, in the kinds' order. */
+export function hiddenAlignKinds(p: HistoryPayload, env: Pick<ManageEnv, 'queue'>): HiddenAlignKind[] {
+    const byId = new Map(p.events.map(e => [e.id, e]));
+    const groups = new Map<HistoryKind, { events: Set<string>; general: number; local: number; undos: Set<string | undefined> }>();
+    /** Per undo id: the kinds of the events it hid. */
+    const undoKinds = new Map<string, Set<HistoryKind>>();
+    for (const h of effectiveHidden(p, env.queue ?? [])) {
+        if (h.by !== 'align' || !h.event) continue;
+        const ev = byId.get(h.event);
+        if (!ev) continue;
+        if (h.align) {
+            const set = undoKinds.get(h.align) ?? new Set<HistoryKind>();
+            set.add(ev.kind);
+            undoKinds.set(h.align, set);
+        }
+        const g = groups.get(ev.kind) ?? { events: new Set<string>(), general: 0, local: 0, undos: new Set<string | undefined>() };
+        groups.set(ev.kind, g);
+        g.undos.add(h.align);
+        if (g.events.has(ev.id)) continue;
+        g.events.add(ev.id);
+        if (ev.scope === 'region') g.general++;
+        else g.local++;
+    }
+    const out: HiddenAlignKind[] = [];
+    for (const kind of HISTORY_KINDS) {
+        const g = groups.get(kind);
+        if (!g) continue;
+        const row: HiddenAlignKind = { kind, n: g.events.size, general: g.general, local: g.local, events: [...g.events] };
+        const [only] = [...g.undos];
+        if (g.undos.size === 1 && only && undoKinds.get(only)?.size === 1) row.undo = only;
+        out.push(row);
+    }
+    return out;
 }
 
 // ─── Deleted ───────────────────────────────────────────────────────────────

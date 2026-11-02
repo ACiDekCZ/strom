@@ -1055,6 +1055,10 @@ export const miscMethods = uiModule({
                         this.closeHistoryPlaceFind();
                         return;
                     }
+                    if (currentDialog === 'history-align-modal') {
+                        this.closeHistoryAlign();
+                        return;
+                    }
                     if (currentDialog === 'history-map-modal') {
                         this.historyMapEscape();
                         return;

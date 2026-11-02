@@ -4,7 +4,8 @@
  * layer — the history of regions and of places (`experiments.split`), the nine
  * kinds of events (`history.kinds`), whose choice it is (this tree's or the
  * default of the computer's researches) and the row aligning the found events
- * with the choice (`history.align`; the dialog itself is part B's).
+ * with the choice (`history.align`; the dialog is history-align-ui.ts). The
+ * history manager shows the same kinds in its header (`historyKindsManageHtml`).
  *
  * Taking a kind away is written at once through the bridge; adding one is
  * never written here: it waits on this page with the research's estimate
@@ -66,6 +67,9 @@ const chains = new Map<string, Promise<void>>();
 const lastStatus = new Map<string, LiveStatus>();
 /** Whether each research's bridge was up at the last look (the column redraws when that changes). */
 const lastUp = new Map<string, boolean>();
+
+/** The history manager's kinds box open (this page only). */
+let manageOpen = false;
 
 /** How long a written value stands against a status that does not say it yet. */
 const WRITTEN_SETTLE_MS = 15_000;
@@ -200,6 +204,7 @@ export const historyKindsMethods = uiModule({
     /** Test hook: forget the page's state (a new page). */
     resetHistoryKindsState(): void {
         pages.clear(); estimates.clear(); previews.clear(); chains.clear(); lastStatus.clear(); lastUp.clear();
+        manageOpen = false;
     },
 
     /**
@@ -339,8 +344,12 @@ export const historyKindsMethods = uiModule({
         return html + '</div>';
     },
 
-    /** The notes under the kinds (§2): kinds switched off, kinds waiting (with the estimate) or the terminal waited for, none searched. */
-    historyKindsNotesHtml(rid: string, searched: { kinds: HistoryKind[] }, p: KindsPage): string {
+    /**
+     * The notes under the kinds (§2): kinds switched off, kinds waiting (with
+     * the estimate) or the terminal waited for, none searched. `ids` false: the
+     * manager's copy (Settings may be open beneath it with the same notes).
+     */
+    historyKindsNotesHtml(rid: string, searched: { kinds: HistoryKind[] }, p: KindsPage, ids = true): string {
         const h = strings.history;
         const features = this.historyKindsStatusOf(rid)?.features ?? [];
         const align = features.includes(HISTORY_ALIGN_FEATURE);
@@ -356,7 +365,7 @@ export const historyKindsMethods = uiModule({
         if (p.pend.size) {
             const pend = ordered(p.pend);
             const chips = pend.map(k => `<span class="history-kinds-chip">${historyKindSvg(k, 13)}${esc(kindName(k))}</span>`).join('');
-            html += `<div class="history-kinds-pend${p.waiting ? ' is-waiting' : ''}" id="history-kinds-pend">`;
+            html += `<div class="history-kinds-pend${p.waiting ? ' is-waiting' : ''}"${ids ? ' id="history-kinds-pend"' : ''}>`;
             if (p.waiting) {
                 html += `<p class="history-kinds-pend-title">${esc(h.waitTitle)}</p><div class="history-kinds-chips">${chips}</div>`
                     + `<p>${esc(h.waitBody)}</p><div class="history-kinds-actions">`
@@ -409,13 +418,79 @@ export const historyKindsMethods = uiModule({
         const key = `${status.historyRev ?? ''}|${(status.experiments?.kinds ?? []).join(',')}`;
         const was = previews.get(rid);
         if (was && was.key === key) return;
-        previews.set(rid, { key, preview: was?.preview ?? null, loading: true });
+        // The entry itself marks the load: an answer read before a later write (same key) is dropped.
+        const entry = { key, preview: was?.preview ?? null, loading: true };
+        previews.set(rid, entry);
         void getHistoryAlign(base).then(r => {
-            const now = previews.get(rid);
-            if (!now || now.key !== key) return;
+            if (previews.get(rid) !== entry) return;
             previews.set(rid, { key, preview: r.ok ? r.preview : null, loading: false });
-            if ((r.ok ? alignHideCount(r.preview) : 0) !== (was?.preview ? alignHideCount(was.preview) : 0)) this.renderHistorySettingsIfOpen();
+            if ((r.ok ? alignHideCount(r.preview) : 0) !== (was?.preview ? alignHideCount(was.preview) : 0)) {
+                this.renderHistorySettingsIfOpen();
+                this.renderHistoryManageIfOpen();
+            }
         });
+    },
+
+    /** The alignment dialog read a preview (or aligned: null): the badge takes it, one source for both. */
+    historyAlignNotePreview(rid: string, preview: HistoryAlignPreview | null): void {
+        const was = previews.get(rid)?.preview ?? null;
+        if (!preview) previews.delete(rid);
+        else {
+            const status = this.historyKindsStatusOf(rid);
+            previews.set(rid, { key: `${status?.historyRev ?? ''}|${(status?.experiments?.kinds ?? []).join(',')}`, preview, loading: false });
+        }
+        if ((preview ? alignHideCount(preview) : 0) !== (was ? alignHideCount(was) : 0)) this.renderHistorySettingsIfOpen();
+    },
+
+    /**
+     * The history manager's "What the research searches" (spec 035 §1 of part
+     * B): under the switches of regions and places, a box with the kinds'
+     * summary and "Align history with the settings…"; open, the same nine
+     * switches as Settings (one `historyKindSearchClick`) with their notes.
+     * '' without `history.kinds`, with the bridge down or for an archive.
+     */
+    historyKindsManageHtml(rid: string): string {
+        const status = this.historyKindsStatusOf(rid);
+        const searched = this.historyKindsSearched(rid);
+        if (!status || !searched || !this.researchBridgeUp(rid)) return '';
+        if (status.treeState && status.treeState !== 'research') return '';
+        const h = strings.history;
+        const p = page(rid);
+        const on = searched.kinds;
+        const sum = on.length === HISTORY_KINDS.length ? h.kindsAll : on.length ? h.kindsSum(on.length) : h.kindsNone;
+        const align = (status.features ?? []).includes(HISTORY_ALIGN_FEATURE);
+        if (manageOpen && align) this.historyAlignBadgeLoad(rid, status);
+        const pv = previews.get(rid)?.preview;
+        const n = pv ? alignHideCount(pv) : 0;
+        let html = '<div class="hm-kinds" id="hm-kinds"><div class="hm-kinds-head">'
+            + `<button type="button" class="hm-kinds-toggle" data-hm="kindsToggle" aria-expanded="${manageOpen}" aria-controls="hm-kinds-body">`
+            + `<span class="hm-kinds-title">${esc(h.manageKindsTitle)}</span><span class="hm-kinds-chev" aria-hidden="true">▾</span>`
+            + `<span class="hm-kinds-sum">${esc(sum)}</span></button>`
+            + (align ? `<button type="button" class="link hm-kinds-align" data-hm="align">${esc(h.alignLink)}`
+                + (n ? ` <span class="history-align-badge">${esc(h.alignBadge(n))}</span>` : '') + '</button>' : '')
+            + '</div>';
+        if (manageOpen) {
+            const locked = p.busy || p.waiting;
+            html += `<div class="hm-kinds-body" id="hm-kinds-body"><p class="hm-kinds-note">${esc(h.manageKindsNote)}</p><div class="hm-kinds-grid">`;
+            for (const k of HISTORY_KINDS) {
+                const state = p.pend.has(k) ? 'pend' : on.includes(k) ? 'on' : 'off';
+                const name = kindName(k);
+                const shown = name.charAt(0).toLocaleUpperCase() + name.slice(1);
+                html += `<label class="history-kind-search-row hm-kind-row" data-state="${state}"><span class="history-kind-search-mark">${historyKindSvg(k, 15)}</span>`
+                    + `<span class="history-kind-search-name">${esc(shown)}</span>`
+                    + switchHtml(`data-search-kind="${k}" onclick="window.Strom.UI.historyKindSearchClick('${k}')"`, state, `${h.colSearch}: ${shown}`, locked)
+                    + '</label>';
+            }
+            html += `</div><div class="history-kinds-search-note hm-kinds-notes" aria-live="polite">${this.historyKindsNotesHtml(rid, searched, p, false)}</div></div>`;
+        }
+        return html + '</div>';
+    },
+
+    /** The manager's kinds box open or closed. */
+    historyKindsManageToggle(): void {
+        manageOpen = !manageOpen;
+        this.renderHistoryManageIfOpen();
+        document.querySelector<HTMLElement>('#hm-kinds .hm-kinds-toggle')?.focus();
     },
 
     /** The kinds' row open or closed (kept for the browser tab's session). */
@@ -603,14 +678,8 @@ export const historyKindsMethods = uiModule({
         if (url) this.launchResearchLink(url, 'terminal');
     },
 
-    /**
-     * "Align history with the settings…" — the dialog is part B's; until then
-     * the research's terminal shows the same preview and asks (`history-align`).
-     */
+    /** "Align history with the settings…" (Settings, the sentence of a kind switched off, the manager): the preview dialog. */
     openHistoryAlign(): void {
-        const rid = activeResearchId();
-        if (!rid) return;
-        const url = researchSchemeUrl('history-align', { tree: rid }, announcedResearchScheme());
-        if (url) this.launchResearchLink(url, 'terminal');
+        this.openHistoryAlignDialog();
     },
 });

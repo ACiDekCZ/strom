@@ -969,6 +969,10 @@ export interface EffectiveHidden {
     /** Tree id of the person (a queued hiding of a person without REFN). */
     personId?: string;
     at?: string;
+    /** spec 035: hidden by aligning the events with the kinds searched. */
+    by?: 'align';
+    /** spec 035: the alignment's undo id. */
+    align?: string;
     /** Not confirmed by the research yet (queued on this device). */
     queued: boolean;
 }

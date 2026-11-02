@@ -17,15 +17,19 @@ import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
 import { placeKey } from '../places.js';
 import { MQ_MOBILE, MQ_DESKTOP } from '../breakpoints.js';
-import { treePlaceNames, type HistoryPayload, type HistoryDeleted, type EffectiveHidden } from '../history.js';
 import {
-    regionGroups, placeGroups, hiddenRows, deletedRows, manageHeader, manageCan, matchesQuery, regionName, manageSearchOn,
+    treePlaceNames, HISTORY_KINDS, type HistoryPayload, type HistoryDeleted, type EffectiveHidden, type HistoryKind, type HistoryKindsFill,
+} from '../history.js';
+import {
+    regionGroups, placeGroups, hiddenRows, hiddenAlignKinds, deletedRows, manageHeader, manageCan, matchesQuery, regionName, manageSearchOn,
     type ManageEnv, type ManageNames, type ManageTab, type RegionRow, type PlaceRow, type RegionGroup, type PlaceGroup,
-    type HiddenRow, type DeletedRow, type PlaceSort,
+    type HiddenRow, type HiddenAlignKind, type DeletedRow, type PlaceSort,
 } from '../history-manage.js';
 import {
-    postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, type HistoryWriteRefusal, type HistorySkipBody,
+    postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, postHistoryAlignUndo, type HistoryWriteRefusal, type HistorySkipBody,
 } from '../history-bridge.js';
+import { HISTORY_ALIGN_FEATURE } from '../research-link.js';
+import { historyKindSvg } from '../history-symbols.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
@@ -121,7 +125,18 @@ interface TabRows {
     regions: RegionGroup[];
     places: PlaceGroup[];
     hidden: HiddenRow[];
+    /** spec 035: events hidden by aligning with the kinds searched, by kind (the Hidden tab's first group). */
+    alignHidden: HiddenAlignKind[];
     deleted: DeletedRow[];
+}
+
+/** spec 035: "searching kinds: ⚔ war · queued" under a region's or a place's row (a task for kinds added to the search). */
+function kindsFillHtml(fill: HistoryKindsFill | undefined, cls: string): string {
+    if (!fill || !fill.kinds.length) return '';
+    const h = strings.history;
+    const kinds = fill.kinds.map(k => `<b class="hm-fill-kind">${historyKindSvg(k, 12)}${esc(h.kinds[k])}</b>`).join(', ');
+    return `<span class="hm-fill ${cls} is-${fill.state}"><span class="hm-fill-dot" aria-hidden="true"></span>`
+        + `<span class="hm-fill-text">${esc(h.kindsFillLabel)} ${kinds} · ${esc(fill.state === 'running' ? h.kindsFillRunning : h.kindsFillQueued)}</span></span>`;
 }
 
 export const historyManageMethods = uiModule({
@@ -232,7 +247,13 @@ export const historyManageMethods = uiModule({
             body.innerHTML = '';
             return;
         }
-        // Header (§1.2).
+        // Header (§1.2). The kinds box's control keeps the focus across the redraw.
+        const activeEl = document.activeElement as HTMLElement | null;
+        const kindsFocus = activeEl && stateEl.contains(activeEl) && activeEl.closest('#hm-kinds')
+            ? (activeEl.dataset.searchKind ? `[data-search-kind="${activeEl.dataset.searchKind}"]`
+                : activeEl.dataset.hkAction ? `[data-hk-action="${activeEl.dataset.hkAction}"]`
+                    : activeEl.dataset.hm ? `[data-hm="${activeEl.dataset.hm}"]` : '')
+            : '';
         const head = manageHeader(d.payload, d.env);
         const link = head.link === 'enable'
             ? ` <button type="button" class="link hm-state-link" data-hm="enable">${researchOpenLabel(h.enableSearch, { size: 12 })}</button>` : '';
@@ -251,7 +272,10 @@ export const historyManageMethods = uiModule({
             + `<button type="button" class="hm-state-toggle" data-hm="state" aria-expanded="${view.stateOpen}">${esc(h.manageStateToggle)} <span aria-hidden="true">▾</span></button>`
             // After the toggle: on a phone held sideways "Status ▾" stays beside the sentence.
             + switches
-            + `<div class="hm-state-extra${view.stateOpen ? ' is-open' : ''}">${extra}</div>`;
+            + `<div class="hm-state-extra${view.stateOpen ? ' is-open' : ''}">${extra}</div>`
+            // spec 035: what the research searches (the same switches as Settings), and the alignment's link.
+            + this.historyKindsManageHtml(d.rid);
+        if (kindsFocus) stateEl.querySelector<HTMLElement>(`#hm-kinds ${kindsFocus}`)?.focus({ preventScroll: true });
 
         const rows = this.historyManageRows(d);
         this.renderHistoryManageTabs(rows);
@@ -278,6 +302,7 @@ export const historyManageMethods = uiModule({
             regions: regionGroups(p, d.env, d.names),
             places: placeGroups(p, d.env, d.names, sort),
             hidden: hiddenRows(p, d.env, d.names),
+            alignHidden: hiddenAlignKinds(p, d.env),
             deleted: deletedRows(p, d.env, d.names),
         };
     },
@@ -292,7 +317,7 @@ export const historyManageMethods = uiModule({
         const list: [ManageTab, string, number][] = [
             ['regions', h.tabRegions, regionCount],
             ['places', h.tabPlaces, placeCount],
-            ['hidden', h.tabHidden, rows?.hidden.length ?? 0],
+            ['hidden', h.tabHidden, rows ? rows.hidden.length + rows.alignHidden.reduce((n, k) => n + k.n, 0) : 0],
         ];
         if (rows && rows.deleted.length) list.push(['deleted', h.tabDeleted, rows.deleted.length]);
         // Nothing deleted (any more): Hidden. While the copy loads the asked tab stays.
@@ -307,7 +332,7 @@ export const historyManageMethods = uiModule({
         const clear = document.getElementById('history-manage-clear');
         if (count) {
             const total = !rows ? 0 : view.tab === 'regions' ? regionCount : view.tab === 'places' ? Object.keys(this.historyManageDrawn()?.payload?.places ?? {}).length
-                : view.tab === 'hidden' ? rows.hidden.length : rows.deleted.length;
+                : view.tab === 'hidden' ? rows.hidden.length + rows.alignHidden.length : rows.deleted.length;
             const found = !rows || !view.query ? 0 : this.historyManageMatches(rows).length;
             count.textContent = view.query ? h.searchCount(found, total) : '';
         }
@@ -322,7 +347,10 @@ export const historyManageMethods = uiModule({
             const all = rows.places.find(g => g.key === 'all')?.rows ?? [];
             return all.filter(r => matchesQuery(r.search, q)).map(r => r.key);
         }
-        if (view.tab === 'hidden') return rows.hidden.filter(r => matchesQuery(r.search, q)).map((_, i) => String(i));
+        if (view.tab === 'hidden') {
+            return [...rows.alignHidden.filter(k => matchesQuery(this.historyAlignKindSearch(k.kind), q)).map(k => `kind:${k.kind}`),
+                ...rows.hidden.filter(r => matchesQuery(r.search, q)).map((_, i) => String(i))];
+        }
         return rows.deleted.filter(r => matchesQuery(r.search, q)).map(r => r.event);
     },
 
@@ -374,11 +402,24 @@ export const historyManageMethods = uiModule({
         }
         if (view.tab === 'hidden') {
             const note = `<p class="hm-note">${esc(h.hiddenListNote)}</p>`;
-            if (!rows.hidden.length) return note + `<p class="hm-empty">${esc(h.hiddenEmpty)}</p>`;
-            const items = rows.hidden.map((r, i) => ({ r, i })).filter(x => matchesQuery(x.r.search, q));
-            if (!items.length) return note + none;
             const canHide = manageCan(d.env, 'hide') || manageCan(d.env, 'hideAll');
-            return note + `<div class="hm-rows">${page('hidden', items.map(({ r, i }) => this.historyManageHiddenRow(r, i, canHide)))}</div>`;
+            const hand = (): string => {
+                if (!rows.hidden.length) return note + `<p class="hm-empty">${esc(h.hiddenEmpty)}</p>`;
+                const items = rows.hidden.map((r, i) => ({ r, i })).filter(x => matchesQuery(x.r.search, q));
+                if (!items.length) return note + none;
+                return note + `<div class="hm-rows">${page('hidden', items.map(({ r, i }) => this.historyManageHiddenRow(r, i, canHide)))}</div>`;
+            };
+            // spec 035: events hidden by aligning go first, by kind; then the hidings by hand as before.
+            if (!rows.alignHidden.length && !d.features.includes(HISTORY_ALIGN_FEATURE)) return hand();
+            const kinds = rows.alignHidden.filter(k => matchesQuery(this.historyAlignKindSearch(k.kind), q));
+            const align = q && !kinds.length ? ''
+                : '<section class="hm-group hm-align-group" data-group="align"><div class="hm-group-head">'
+                    + `<h3 class="hm-group-title">${esc(h.hiddenAlignGroup)}</h3><span class="hm-group-note">${esc(h.hiddenAlignSub)}</span></div>`
+                    + (kinds.length ? `<div class="hm-align-rows">${kinds.map(k => this.historyManageAlignRow(k, canHide)).join('')}</div>`
+                        : `<p class="hm-align-empty">${esc(h.hiddenAlignEmpty)}</p>`)
+                    + `<p class="hm-note hm-align-note">${esc(h.hiddenAlignNote)}</p></section>`;
+            return align + `<section class="hm-group hm-hand-group" data-group="hand"><div class="hm-group-head"><h3 class="hm-group-title">${esc(h.hiddenHandGroup)}</h3></div>`
+                + hand() + '</section>';
         }
         const note = `<p class="hm-note">${esc(h.deletedNote)}</p>`;
         const items = rows.deleted.filter(r => matchesQuery(r.search, q));
@@ -405,7 +446,8 @@ export const historyManageMethods = uiModule({
             + `<div class="hm-r-name"><span class="hm-r-title-line">${mark}<span class="hm-r-title">${esc(r.name)}</span>`
             + (r.parent ? `<span class="hm-r-parent">${esc(r.parent)}</span>` : '') + '</span>'
             + (r.meta ? `<span class="hm-r-meta">${esc(r.meta)}</span>` : '')
-            + (r.gaps ? `<span class="hm-r-gaps">${esc(r.gaps)}</span>` : '') + '</div>'
+            + (r.gaps ? `<span class="hm-r-gaps">${esc(r.gaps)}</span>` : '')
+            + kindsFillHtml(r.fill, 'hm-r-fill') + '</div>'
             + `<div class="hm-r-state tone-${r.tone}">${state}</div>`
             + `<div class="hm-r-count"><span class="hm-r-events">${r.events === null ? '–' : r.events}</span>`
             + (r.hidden ? `<span class="hm-r-hidden">${esc(h.regionHidden(r.hidden))}</span>` : '') + '</div>'
@@ -440,7 +482,8 @@ export const historyManageMethods = uiModule({
             + `<div class="hm-p-main">${name}`
             + (r.meta ? `<span class="hm-p-meta">${esc(r.meta)}</span>` : '')
             + (group === 'unassigned' && !r.meta && r.persons ? `<span class="hm-p-meta">${esc(h.placePersons(r.persons))}</span>` : '')
-            + (r.why ? `<span class="hm-p-why">${esc(r.why)}</span>` : '') + '</div>'
+            + (r.why ? `<span class="hm-p-why">${esc(r.why)}</span>` : '')
+            + kindsFillHtml(r.fill, 'hm-p-fill') + '</div>'
             + (r.state || r.link ? `<span class="hm-p-state tone-${r.tone}">${esc(r.state)}`
                 + (r.link ? ` <button type="button" class="link hm-row-link" data-hm="${r.link === 'auto' ? 'mapAuto' : 'searchAgainPlace'}" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${esc(r.link === 'auto' ? h.mapAuto : h.searchAgain)}</button>` : '')
                 + '</span>' : '')
@@ -480,6 +523,23 @@ export const historyManageMethods = uiModule({
             + `<span class="hm-h-main"><span class="hm-h-text"${langAttr(r.textLang)}>${esc(r.text)}</span><span class="hm-h-meta">${esc(r.meta)}</span></span>`
             + (canShow ? `<button type="button" class="link hm-h-act" data-hm="restoreHidden" data-index="${index}">${esc(r.region ? h.showAgain : h.restore)}</button>` : '')
             + '</div>';
+    },
+
+    /** A kind hidden by aligning: its symbol, "War · 3", regional and local, Show again. */
+    historyManageAlignRow(k: HiddenAlignKind, canShow: boolean): string {
+        const h = strings.history;
+        const name = h.kinds[k.kind];
+        const shown = name.charAt(0).toLocaleUpperCase() + name.slice(1);
+        return `<div class="hm-row hm-align-kind" data-kind="${k.kind}">`
+            + `<span class="hm-ak-mark" aria-hidden="true">${historyKindSvg(k.kind, 15)}</span>`
+            + `<span class="hm-h-main"><span class="hm-h-text">${esc(shown)} · ${k.n}</span><span class="hm-h-meta">${esc(h.hiddenAlignMeta(k.general, k.local))}</span></span>`
+            + (canShow ? `<button type="button" class="hm-ak-act" data-hm="showAgainKind" data-key="${k.kind}"${view.busy.has(`kind:${k.kind}`) ? ' disabled' : ''}>${esc(h.showAgain)}</button>` : '')
+            + '</div>';
+    },
+
+    /** What the Hidden tab's search finds a kind by: its name in the UI language. */
+    historyAlignKindSearch(kind: HistoryKind): string {
+        return strings.history.kinds[kind].toLocaleLowerCase();
     },
 
     historyManageDeletedRow(r: DeletedRow, canRestore: boolean): string {
@@ -534,11 +594,13 @@ export const historyManageMethods = uiModule({
             ? `${state ? ' · ' : ''}<button type="button" class="link hm-detail-again" data-hm="placeAgain" data-key="${esc(placeKeyOf)}" data-hfocus="placeAgain">${esc(strings.history.placeSearchAgain)}</button>`
             : '';
         const note = view.notes.get(key);
+        const fill = this.historyManageDetailFill(d, key);
         body.innerHTML = `<div class="hm-detail" data-key="${esc(key)}">`
             + '<div class="hm-detail-head"><div class="hm-detail-line">'
             + `<h3 class="hm-detail-title" tabindex="-1" data-hfocus="title">${mark}<span class="hm-detail-name">${esc(title)}</span>`
             + (head.sub ? ` <span class="hm-detail-sub">${esc(head.sub)}</span>` : '') + '</h3>' + dots + '</div>'
             + (state || again ? `<p class="hm-detail-state">${esc(state)}${again}</p>` : '')
+            + (fill ? `<p class="hm-detail-fill">${fill}</p>` : '')
             + (note ? `<p class="hm-detail-note is-${note.tone}" role="status">${esc(note.text)}</p>` : '')
             + '</div><div class="hm-detail-body"></div></div>';
         this.renderHistoryRegionDetail(body.querySelector('.hm-detail-body') as HTMLElement, key, d);
@@ -549,6 +611,12 @@ export const historyManageMethods = uiModule({
         if (caret && target instanceof HTMLInputElement) {
             try { target.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
         }
+    },
+
+    /** spec 035: the detail's "searching kinds" line (a region's or a place's `kindsFill`). */
+    historyManageDetailFill(d: Drawn, key: string): string {
+        const fill = key.startsWith('place:') ? d.payload?.places[key.slice('place:'.length)]?.kindsFill : d.payload?.regions?.[key]?.kindsFill;
+        return kindsFillHtml(fill, 'hm-detail-fill-line');
     },
 
     /** Open a row's detail (a click on the row). */
@@ -679,6 +747,9 @@ export const historyManageMethods = uiModule({
             case 'find': this.historyManagePlaceHook('find')?.(key); return;
             case 'placeAgain': void this.historyPlaceSearchAgain(key); return;
             case 'restoreHidden': this.historyManageRestoreHidden(Number(el.dataset.index)); return;
+            case 'kindsToggle': this.historyKindsManageToggle(); return;
+            case 'align': this.openHistoryAlign(); return;
+            case 'showAgainKind': if ((HISTORY_KINDS as readonly string[]).includes(key)) void this.historyManageShowAgainKind(key as HistoryKind); return;
             case 'restoreDeleted': void this.historyManageRestoreDeleted(key); return;
             case 'noteLink': view.notes.get(key)?.link?.run(); return;
             default: return;
@@ -942,6 +1013,51 @@ export const historyManageMethods = uiModule({
             return;
         }
         this.restoreHistoryHide(by);
+    },
+
+    /**
+     * "Show again" of a kind hidden by aligning (spec 035): the alignment's
+     * undo when it hid exactly these events, else each event shown again in
+     * the tree (`do: "show"`). Undo in the toast hides them again by hand.
+     */
+    async historyManageShowAgainKind(kind: HistoryKind): Promise<void> {
+        const d = this.historyManageDrawn();
+        const rowKey = `kind:${kind}`;
+        if (!d?.payload || view.busy.has(rowKey)) return;
+        const k = hiddenAlignKinds(d.payload, d.env).find(x => x.kind === kind);
+        if (!k) return;
+        const h = strings.history;
+        const name = h.kinds[kind];
+        const hideAgain = async (): Promise<void> => {
+            for (const event of k.events) await this.applyHistoryHide({ event, tree: true, at: nowIso() });
+        };
+        const shown = (): void => {
+            this.showToast(h.tShownKind(name), 8000, { kind: 'history-hide', action: { label: h.undo, run: () => { void hideAgain(); } } });
+        };
+        if (k.undo && d.base && d.features.includes(HISTORY_ALIGN_FEATURE)) {
+            view.busy.add(rowKey);
+            this.renderHistoryManage();
+            const before = this.researchHeadNow(d.rid);
+            const r = await postHistoryAlignUndo(d.base, k.undo, d.features);
+            view.busy.delete(rowKey);
+            if (r.ok) {
+                this.historyManageWritten(d.rid, before, r);
+                this.historyAlignNotePreview(d.rid, null);
+                this.renderHistoryManage();
+                shown();
+                return;
+            }
+            if (r.code !== 'gone' && r.code !== 'undone') {
+                this.showToast(r.code === 'busy' ? h.errBusy : r.reason || strings.live.waitingWrite.writeFailed, 5000);
+                this.renderHistoryManage();
+                return;
+            }
+            // That alignment is gone or undone already: each event on its own.
+        }
+        for (const event of k.events) await this.applyHistoryHide({ event, tree: true, do: 'show', at: nowIso() });
+        this.historyAlignNotePreview(d.rid, null);
+        this.renderHistoryManage();
+        shown();
     },
 
     /** The Deleted tab's "Restore" (`do: "restore"`). */

@@ -137,6 +137,7 @@ import { researchUiMethods } from './research-ui.js';
 import { researchSyncMethods } from './research-sync-ui.js';
 import { historyMethods } from './history-ui.js';
 import { historyKindsMethods } from './history-kinds-ui.js';
+import { historyAlignMethods } from './history-align-ui.js';
 import { qualityMethods } from './quality-ui.js';
 import { researchFixesMethods } from './research-fixes-ui.js';
 import { duplicateVerdictsMethods } from './duplicate-verdicts-ui.js';
@@ -667,6 +668,9 @@ Object.assign(UIClass.prototype, historyMethods);
 type HistoryKindsMethods = typeof historyKindsMethods;
 export interface UIClass extends HistoryKindsMethods {}
 Object.assign(UIClass.prototype, historyKindsMethods);
+type HistoryAlignMethods = typeof historyAlignMethods;
+export interface UIClass extends HistoryAlignMethods {}
+Object.assign(UIClass.prototype, historyAlignMethods);
 type QualityMethods = typeof qualityMethods;
 export interface UIClass extends QualityMethods {}
 Object.assign(UIClass.prototype, qualityMethods);

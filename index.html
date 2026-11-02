@@ -2928,6 +2928,160 @@
         @media (hover: hover) {
             .hpf-modal button.link:hover { text-decoration-thickness: 2px; }
         }
+        /* Aligning the found history with the kinds searched (spec 035 §3): the preview over Settings
+           or the manager — 560px centred, the body scrolls, the footer stays; a bottom sheet on a phone. */
+        #history-align-modal { z-index: 226; }
+        /* The alignment's toasts (Undo) stand over Settings and the manager they come back to. */
+        .toast[data-kind="history-align"] { z-index: 250; }
+        body:has(#history-align-modal) .toast:not([data-kind="materials"]) { z-index: 250; }
+        .modal.modal--md.hal-modal {
+            width: 560px; max-width: min(560px, 94vw); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+            display: flex; flex-direction: column; padding: 0; overflow: hidden;
+        }
+        .hal-modal .hal-header { flex: none; align-items: flex-start; gap: 10px; padding: 18px 20px 10px; margin: 0; border-bottom: 1px solid var(--divider); }
+        .hal-modal .hal-header h2 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; text-wrap: pretty; overflow-wrap: anywhere; }
+        .hal-modal .modal-content.hal-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 20px 8px; display: flex; flex-direction: column; }
+        .hal-body p { margin: 0; }
+        .hal-changed { margin: 10px 0 4px !important; padding: 8px 12px; border-radius: 8px; background: var(--research-soft); color: var(--research); font-size: 13px; line-height: 1.45; }
+        .hal-loading { padding: 16px 0; font-size: 13.5px; color: var(--text-light); }
+        .hal-error { padding: 12px; margin: 12px 0 !important; border-radius: 8px; background: var(--danger-soft); color: var(--text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .hal-block { display: flex; gap: 12px; padding: 14px 0; min-width: 0; }
+        .hal-block + .hal-block { border-top: 1px solid var(--divider); }
+        .hal-mark {
+            flex: none; box-sizing: border-box; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; line-height: 1;
+            background: var(--surface-2); border: 1px solid var(--border); color: var(--text-light);
+        }
+        .hal-block.is-show .hal-mark { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .hal-block.is-fill .hal-mark { background: var(--research-soft); border-color: var(--research-line); color: var(--research); }
+        .hal-block.is-busy .hal-mark { background: none; border: 2px dashed var(--research); }
+        .hal-block.is-shared .hal-mark { border-radius: 5px; font-size: 11px; }
+        .hal-block.is-nothing .hal-mark { background: var(--primary); border-color: var(--primary); color: #fff; font-size: 12px; }
+        .hal-block-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+        .hal-head { display: flex; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--text); }
+        .hal-head > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .hal-total { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-light); font-size: 13px; }
+        .hal-block.is-fill .hal-total { color: var(--research); font-weight: 500; text-align: right; flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .hal-sub, .hal-note { font-size: 12.5px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; overflow-wrap: anywhere; }
+        .hal-origin { display: flex; align-items: baseline; gap: 7px; font-size: 13px; color: var(--text); min-width: 0; }
+        .hal-origin-mark { flex: none; width: 12px; text-align: center; font-size: 11px; color: var(--hist-mark); }
+        .hal-origin.is-local .hal-origin-mark { color: var(--hist-local); font-size: 9px; }
+        .hal-origin-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .hal-origin-n { flex: none; font-variant-numeric: tabular-nums; color: var(--text-light); }
+        .hal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .hal-chip {
+            display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 9px; border-radius: var(--r-pill);
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text-light); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
+        }
+        .hal-chip svg, .hal-fill-kind svg, .hm-fill-kind svg { flex: none; }
+        .hal-chip b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+        .hal-fill-list { list-style: none; margin: 0; padding: 0; }
+        .hal-fill-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--divider); font-size: 13px; min-width: 0; }
+        .hal-fill-label { font-weight: 600; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+        .hal-fill-kinds { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; min-width: 0; }
+        .hal-fill-kind { display: inline-flex; align-items: center; gap: 4px; color: var(--research); font-size: 12.5px; }
+        .hal-fill-years { color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .hal-modal button.link {
+            background: none; border: 0; padding: 0; font: inherit; color: var(--primary); cursor: pointer; min-height: 0; width: auto;
+            text-decoration: underline; text-underline-offset: 2px; text-align: left; overflow-wrap: anywhere;
+        }
+        .hal-modal button.link.hal-more { align-self: flex-start; font-size: 12.5px; font-weight: 600; }
+        .hal-foot { flex: none; border-top: 1px solid var(--divider); padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 10px; }
+        .hal-err { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--danger-soft); color: var(--text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .hal-terminal-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; overflow-wrap: anywhere; }
+        .hal-modal .hal-foot .buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; border: 0; }
+        .hal-modal .hal-foot .buttons button { width: auto; white-space: normal; }
+        .hal-modal .hal-foot button:disabled { opacity: 0.6; cursor: default; }
+        @media (max-width: 640px) {
+            /* A bottom sheet as high as its text, its footer stuck to the bottom. */
+            #history-align-modal { align-items: flex-end; padding: 0; }
+            .modal.modal--md.hal-modal { width: 100%; max-width: 100vw; max-height: 90%; border-radius: 18px 18px 0 0; margin: 0; min-width: 0; }
+            .hal-modal::before { content: ''; flex: none; align-self: center; width: 36px; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--border); }
+            .hal-modal .hal-header { padding: 10px 16px 8px; }
+            .hal-modal .modal-content.hal-body { padding: 4px 16px 8px; }
+            .hal-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
+            .hal-modal .hal-foot .buttons button { width: 100%; min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* Little height: a sheet from the top that scrolls as a whole (the footer goes with it). */
+            #history-align-modal { align-items: flex-start; padding: 0; }
+            .modal.modal--md.hal-modal {
+                width: min(600px, calc(100% - 24px)); max-width: none; margin-top: 8px; max-height: calc(100vh - 8px); max-height: calc(100dvh - 8px);
+                border-radius: 14px 14px 0 0; overflow-y: auto; display: block;
+            }
+            .hal-modal::before { display: none; }
+            .hal-modal .hal-header { padding: 10px 16px 6px; }
+            .hal-modal .modal-content.hal-body { overflow: visible; padding: 2px 16px 6px; }
+            .hal-block { padding: 10px 0; }
+            .hal-foot { padding: 8px 16px 10px; }
+        }
+        @media (pointer: coarse) {
+            .hal-modal .hal-foot .buttons button, .hal-modal button.link { min-height: 44px; }
+        }
+        @media (hover: hover) {
+            .hal-modal button.link:hover { text-decoration-thickness: 2px; }
+        }
+        /* spec 035 in the manager: what the research searches (under the switches), a task searching added
+           kinds under a region's or a place's row, and the Hidden tab's group hidden by aligning. */
+        .hm-kinds { margin-top: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); min-width: 0; }
+        .hm-kinds-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; padding: 6px 12px; min-width: 0; }
+        #history-modal button.hm-kinds-toggle {
+            flex: 1 1 260px; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-height: 32px; padding: 4px 0;
+            border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer;
+        }
+        .hm-kinds-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+        .hm-kinds-chev { font-size: 11px; color: var(--text-faint); transition: transform 0.15s; }
+        .hm-kinds-toggle[aria-expanded="true"] .hm-kinds-chev { transform: rotate(180deg); }
+        .hm-kinds-sum { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }
+        #history-modal button.link.hm-kinds-align { flex: 0 1 auto; font-size: 12.5px; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+        .hm-kinds-align .history-align-badge { text-decoration: none; display: inline-block; font-weight: 400; }
+        .hm-kinds-body { padding: 0 12px 10px; border-top: 1px solid var(--divider); }
+        .hm-kinds-note { padding-top: 8px; font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        .hm-kinds-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 18px; margin-top: 4px; }
+        .modal .hm-kinds-grid label.history-kind-search-row + label.history-kind-search-row { border-top: 0; }
+        .hm-kinds-notes { font-size: 12.5px; }
+        .hm-kinds-notes > div { background-clip: padding-box; }
+        .modal .hm-kinds button.link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+        .hm-fill { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--research); }
+        .hm-fill-dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; border: 1.5px dashed var(--research); align-self: center; }
+        .hm-fill.is-running .hm-fill-dot { border-style: solid; background: var(--research-soft); }
+        .hm-fill-text { min-width: 0; overflow-wrap: anywhere; }
+        .hm-fill-kind { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
+        .hm-detail-fill { margin: 0; }
+        .hm-align-rows { margin: 0 20px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .hm-align-kind { display: flex; align-items: center; gap: 12px; padding: 9px 12px; }
+        .hm-align-rows > .hm-align-kind:first-child { border-top: 0; }
+        .hm-ak-mark {
+            flex: none; box-sizing: border-box; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+            background: var(--surface-2); border: 1px solid var(--divider); color: var(--text-light);
+        }
+        .hm-align-kind .hm-h-text { font-weight: 600; color: var(--text); }
+        #history-modal button.hm-ak-act {
+            flex: none; min-height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+            color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+        }
+        #history-modal button.hm-ak-act:disabled { opacity: 0.5; cursor: default; }
+        .hm-align-empty { margin: 0 20px; padding: 12px; border: 1px dashed var(--border); border-radius: 10px; font-size: 13px; color: var(--text-faint); }
+        .hm-align-note { padding-top: 8px; }
+        @media (hover: hover) {
+            #history-modal button.hm-kinds-toggle:hover .hm-kinds-title { text-decoration: underline; }
+            #history-modal button.hm-ak-act:not(:disabled):hover { background: var(--hover-bg); }
+        }
+        @media (max-width: 640px) {
+            .hm-kinds-grid { grid-template-columns: minmax(0, 1fr); }
+            .hm-align-rows, .hm-align-empty { margin: 0 14px; }
+            .hm-align-kind { flex-wrap: wrap; }
+            .hm-align-kind .hm-h-main { flex: 1 1 140px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .hm-kinds { margin-top: 2px; }
+            .hm-kinds-head { padding: 2px 10px; }
+            .hm-kinds-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (pointer: coarse) {
+            #history-modal button.hm-kinds-toggle, #history-modal button.link.hm-kinds-align, #history-modal button.hm-ak-act { min-height: 44px; }
+            .modal .hm-kinds button.link { min-height: 44px; }
+        }
         /* Places: a place's History line (§4.6). */
         .place-history {
             display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 6px 0 2px; padding: 7px 10px;

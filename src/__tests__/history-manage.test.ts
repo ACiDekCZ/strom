@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    foldSearch, matchesQuery, manageRegions, regionParents, regionGroups, placeGroups, hiddenRows,
+    foldSearch, matchesQuery, manageRegions, regionParents, regionGroups, placeGroups, hiddenRows, hiddenAlignKinds,
     deletedRows, manageHeader, manageCan, gapsLabel, waitingPlaces, regionPicker, pickerCheck, pickerBody, pickerYear,
     mapResultText, placesHistoryLine, manageSummaries, type ManageEnv, type ManageNames,
     detailOwner, detailEvents, filterDetailEvents, detailFacets, detailCenturies, centuryGroups, emptyDetailFilter,
@@ -699,5 +699,55 @@ describe('region of a place by hand (R5)', () => {
         expect(placesHistoryLine(p, env(), 'nowhere')).toBeNull();
         const old = payload({ places: { a: { events: ['x', 'y'] } } });
         expect(placesHistoryLine(old, env(), 'a')).toEqual({ text: 'History: 2 events', action: 'manage', legacy: true });
+    });
+});
+
+describe('kinds of history (spec 035)', () => {
+    const events = [
+        ev('w1', { kind: 'war' }),
+        ev('w2', { kind: 'war', scope: 'local', region: undefined }),
+        ev('l1', { kind: 'law' }),
+        ev('l2', { kind: 'law', scope: 'place', region: undefined, place: { key: 'lhota' } }),
+        ev('e1', { kind: 'economy' }),
+    ];
+    const hidden: HistoryPayload['hidden'] = [
+        { event: 'w1', tree: true, by: 'align', align: '20261102125010-000001', at: '2026-11-02T10:00:00Z' },
+        { event: 'w2', tree: true, by: 'align', align: '20261102125010-000001', at: '2026-11-02T10:00:00Z' },
+        { event: 'l1', tree: true, by: 'align', align: '20261102125010-000002', at: '2026-11-02T11:00:00Z' },
+        { event: 'l2', tree: true, by: 'align', align: '20261102125010-000003', at: '2026-11-02T11:00:00Z' },
+        { event: 'e1', place: 'lhota', at: '2026-11-01T10:00:00Z' },
+    ];
+
+    it('groups the events hidden by aligning by kind, with the undo only when it hid exactly them', () => {
+        const kinds = hiddenAlignKinds(payload({ events, hidden }), env());
+        expect(kinds).toEqual([
+            { kind: 'war', n: 2, general: 1, local: 1, events: ['w1', 'w2'], undo: '20261102125010-000001' },
+            // Two alignments hid the law: no single undo.
+            { kind: 'law', n: 2, general: 1, local: 1, events: ['l1', 'l2'] },
+        ]);
+        // An alignment that hid two kinds is no kind's undo.
+        const mixed = hiddenAlignKinds(payload({ events, hidden: hidden.map(h => (h.event === 'l1' ? { ...h, align: '20261102125010-000001' } : h)) }), env());
+        expect(mixed.find(k => k.kind === 'war')?.undo).toBeUndefined();
+        // A queued show takes the event out at once.
+        expect(hiddenAlignKinds(payload({ events, hidden }), env({ queue: [{ event: 'w1', tree: true, do: 'show', at: '2026-11-02T10:00:00Z' }] }))[0])
+            .toMatchObject({ kind: 'war', n: 1, events: ['w2'] });
+    });
+
+    it('leaves the events hidden by aligning out of the hidings by hand', () => {
+        const rows = hiddenRows(payload({ events, hidden }), env(), names);
+        expect(rows.map(r => r.hide.event)).toEqual(['e1']);
+    });
+
+    it('carries a task searching added kinds on regions and places', () => {
+        const fill = { kinds: ['law' as const], state: 'running' as const };
+        const p = payload({
+            events, regions: { bohemia: region('bohemia', { state: 'done', kindsFill: fill }) },
+            places: { lhota: { events: ['l2'], history: 'done', kindsFill: { kinds: ['war'], state: 'queued' } } },
+        });
+        const rows = regionGroups(p, env(), names).flatMap(g => g.rows);
+        expect(rows.find(r => r.key === 'bohemia')?.fill).toEqual(fill);
+        expect(rows.find(r => r.key === 'place:lhota')?.fill).toEqual({ kinds: ['war'], state: 'queued' });
+        const places = placeGroups(p, env(), names).flatMap(g => g.rows);
+        expect(places.find(r => r.key === 'lhota')?.fill).toEqual({ kinds: ['war'], state: 'queued' });
     });
 });
