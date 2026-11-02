@@ -186,6 +186,18 @@ describe('formatFlexDate', () => {
         expect(formatFlexDate('1880-05', 'de')).toBe('5/1880');
     });
 
+    it('formats Polish: day and month with two digits, the other languages unchanged', () => {
+        expect(formatFlexDate('1890-03-12', 'pl')).toBe('12.03.1890');
+        expect(formatFlexDate('1890-11-05', 'pl')).toBe('05.11.1890');
+        expect(formatFlexDate('1890-12-24', 'pl')).toBe('24.12.1890');
+        expect(formatFlexDate('~1890-03-12', 'pl')).toBe('ok. 12.03.1890');
+        expect(formatFlexDate('1890-03-12..1891-01-02', 'pl')).toBe('między 12.03.1890 a 02.01.1891');
+        expect(formatFlexDate('1890-03', 'pl')).toBe('3/1890');
+        expect(normalizeDateInput('12.03.1890')).toBe('1890-03-12');
+        expect(formatFlexDate('1890-03-12', 'de')).toBe('12.3.1890');
+        expect(formatFlexDate('1890-03-12', 'cs')).toBe('12. 3. 1890');
+    });
+
     it('passes through unparseable legacy values', () => {
         expect(formatFlexDate('divné datum', 'cs')).toBe('divné datum');
         expect(formatFlexDate(undefined, 'cs')).toBe('');

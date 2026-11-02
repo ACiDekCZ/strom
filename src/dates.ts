@@ -312,7 +312,7 @@ const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', '
  *   cs: '15. 5. 1880', '5/1880', 'kolem 1880'
  *   en: '15 May 1880', 'May 1880', 'about 1880'
  *   de: '15.5.1880', '5/1880', 'um 1880'
- *   pl: '15.5.1880', '5/1880', 'ok. 1880'
+ *   pl: '15.05.1880', '5/1880', 'ok. 1880' (Polish writes day and month with two digits)
  * English names the month: an all-numeric '3/4/1850' reads differently in the
  * US and in Britain. Every English form parses back through normalizeDateInput.
  */
@@ -326,8 +326,10 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de' | 'pl')
     if (d.day !== undefined && d.month !== undefined) {
         core = locale === 'cs'
             ? `${d.day}. ${d.month}. ${d.year}`
-            : locale === 'de' || locale === 'pl'
+            : locale === 'de'
                 ? `${d.day}.${d.month}.${d.year}`
+                : locale === 'pl'
+                ? `${String(d.day).padStart(2, '0')}.${String(d.month).padStart(2, '0')}.${d.year}`
                 : `${d.day} ${MONTH_ABBR_EN[d.month - 1]} ${d.year}`;
     } else if (d.month !== undefined) {
         core = locale === 'en' ? `${MONTH_ABBR_EN[d.month - 1]} ${d.year}` : `${d.month}/${d.year}`;
