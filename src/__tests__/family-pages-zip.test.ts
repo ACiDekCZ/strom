@@ -112,6 +112,16 @@ describe('the zip (§6.4)', () => {
     });
 });
 
+/** A relative link of a file in the zip as a path of the zip ('../' climbs a folder). */
+export function resolveIn(from: string, href: string): string {
+    const parts = from.split('/').slice(0, -1);
+    for (const seg of href.split('/')) {
+        if (seg === '..') parts.pop();
+        else if (seg !== '.') parts.push(seg);
+    }
+    return parts.join('/');
+}
+
 describe('the set of files (§6.4)', () => {
     it('index.html first, a file per page, the shared styles and scripts, the images as files, the search as a script', async () => {
         const { data } = familyPagesFixture();
@@ -119,33 +129,38 @@ describe('the set of files (§6.4)', () => {
         expect(pageSetZipName(set)).toBe('Rody-Fisek-Repik-Kvapil.zip');
         const one = rods(buildLineages(data)).filter(r => !r.small)[0].id;
         expect(pageSetZipName(buildPageSet(data, { kind: 'rods', rods: [one] }, { lang: 'cs', now: FP_NOW }))).toBe('Rod-Fisek.zip');
-        const j = `${set.personSlug.get('josef' as PersonId)}.html`;
+        const j = `osoby/${set.personSlug.get('josef' as PersonId)}.html`;
         const entries = await buildPageSetFilesAsync(set);
         const paths = entries.map(e => e.path);
         expect(paths[0]).toBe('index.html');
-        expect(paths).toEqual(expect.arrayContaining(['styl.css', 'skript.js', 'hledani.js', j, 'mapa-obci.html', 'rejstrik-osoby.html']));
+        // 1102 §7.5: the pages in folders, only index.html at the top.
+        expect(paths).toEqual(expect.arrayContaining(['_soubory/styl.css', '_soubory/skript.js', '_soubory/hledani.js', j, 'rejstrik/mapa-obci.html', 'rejstrik/osoby.html']));
         expect(paths).not.toContain(`${set.introSlug}.html`);
+        expect(paths.filter(p => !p.includes('/'))).toEqual(['index.html']);
         const by = new Map(entries.map(e => [e.path, e]));
         // The images: bytes in obrazky/, the styles point there; no data URL in a page.
         const imgs = paths.filter(p => p.startsWith('obrazky/'));
         expect(imgs).toEqual(expect.arrayContaining([expect.stringMatching(/^obrazky\/img-\d+\.jpg$/)]));
         const photo = dataUrlBytes(PHOTO_IMG)!.bytes;
         expect(imgs.some(p => { const d = by.get(p)!.data as Uint8Array; return d.length === photo.length && d.every((b, i) => b === photo[i]); })).toBe(true);
-        const css = text(by.get('styl.css'));
-        for (const p of imgs) expect(css).toContain(`background-image:url("${p}")`);
+        const css = text(by.get('_soubory/styl.css'));
+        for (const p of imgs) expect(css).toContain(`background-image:url("../${p}")`);
         for (const e of entries.filter(x => x.path.endsWith('.html'))) {
             const html = text(e);
+            const up = e.path.includes('/') ? '../' : '';
             expect(html, e.path).not.toContain('data:image');
-            expect(html, e.path).toContain('<link rel="stylesheet" href="styl.css">');
-            expect(html, e.path).toContain('<script src="hledani.js"></script><script src="skript.js"></script>');
+            expect(html, e.path).toContain(`<link rel="stylesheet" href="${up}_soubory/styl.css">`);
+            expect(html, e.path).toContain(`<script src="${up}_soubory/hledani.js"></script><script src="${up}_soubory/skript.js"></script>`);
             expect(html.match(/<section class="sp-page /g), e.path).toHaveLength(1);
         }
         // The search: the index as a script, the strings know the files.
-        const ix = JSON.parse(text(by.get('hledani.js')).replace(/^window\.__spIndex=/, '').replace(/;\s*$/, ''));
+        const ix = JSON.parse(text(by.get('_soubory/hledani.js')).replace(/^window\.__spIndex=/, '').replace(/;\s*$/, ''));
         expect(ix.length).toBe(set.searchIndex.length);
         const strs = JSON.parse(text(by.get('index.html')).match(/<script type="application\/json" id="sp-strings">([^<]*)<\/script>/)![1]);
-        expect(strs).toMatchObject({ zip: true, home: set.introSlug });
-        expect(text(by.get('skript.js'))).toContain('window.__spIndex');
+        expect(strs).toMatchObject({ zip: true, root: '', pdir: 'osoby/', idxp: 'rejstrik/osoby.html' });
+        const deep = JSON.parse(text(by.get(j)).match(/<script type="application\/json" id="sp-strings">([^<]*)<\/script>/)![1]);
+        expect(deep).toMatchObject({ zip: true, root: '../' });
+        expect(text(by.get('_soubory/skript.js'))).toContain('window.__spIndex');
     });
 
     it('links between the files: a page, an anchor in a page, the introduction, the map with a place; inside a page as they were', async () => {
@@ -156,20 +171,24 @@ describe('the set of files (§6.4)', () => {
         const js = set.personSlug.get('josef' as PersonId)!;
         const home = by.get('index.html')!;
         expect(home).toContain('<nav class="sp-toc-file"');
-        expect(home).toContain(`href="${js}.html"`);
+        expect(home).toContain(`href="osoby/${js}.html"`);
         expect(home).not.toMatch(new RegExp(`href="#(?!${set.introSlug}\\b)[a-z]`));
-        const josef = by.get(`${js}.html`)!;
-        expect(josef).toContain('class="sp-fbar-home" href="index.html"');
+        const josef = by.get(`osoby/${js}.html`)!;
+        expect(josef).toContain('class="sp-fbar-home" href="../index.html"');
         expect(josef).toMatch(new RegExp(`href="#${js}--[^"]+"`));
         expect(josef).not.toContain(`href="${js}.html`);
+        expect(josef).not.toContain(`href="../osoby/${js}.html"`);
         // A place of a lineage's header: the map with the place selected.
-        const rod = by.get(entries.find(e => /^rod-/.test(e.path))!.path)!;
-        expect(rod).toContain('href="mapa-obci.html#mapa-obci--m-capkov" data-sp-place="capkov"');
-        // Every link to a file leads to a file of the set.
+        const rod = by.get(entries.find(e => /^rody\/rod-/.test(e.path))!.path)!;
+        expect(rod).toContain('href="../rejstrik/mapa-obci.html#mapa-obci--m-capkov" data-sp-place="capkov"');
+        // Every link to a file leads to a file of the set, relative to the page's folder (1102 §8).
         const files = new Set(entries.map(e => e.path));
         for (const [path, html] of by) {
             if (!path.endsWith('.html')) continue;
-            for (const m of html.matchAll(/href="([^"#:]+\.html)/g)) expect(files.has(m[1]), `${path} → ${m[1]}`).toBe(true);
+            for (const m of html.matchAll(/(?:href|src)="([^"#:]+\.(?:html|css|js))/g)) {
+                const to = resolveIn(path, m[1]);
+                expect(files.has(to), `${path} → ${m[1]}`).toBe(true);
+            }
         }
     });
 

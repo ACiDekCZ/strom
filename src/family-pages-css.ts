@@ -405,6 +405,23 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-ix-sum::after { content: "▸"; color: var(--text-faint); }
 .sp-ix-more[open] > .sp-ix-sum::after { content: "▾"; }
 .sp-ix-sub { padding: 0 0 10px 16px; font-size: 14.5px; line-height: 1.8; }
+/* 1102 §7.4: an index split by letters - the alphabet (a letter without rows muted), the count, the groups by surname, "‹ K · M ›". */
+.sp-abc { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
+.sp-abc-l { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 6px; font-size: 14px; color: var(--primary); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; }
+.sp-abc-l[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
+.sp-abc-off { color: var(--text-faint); border-color: transparent; }
+.sp-abc-meta { margin: 0 0 16px; font-size: 13.5px; color: var(--text-light); }
+.sp-ix-forms { margin-left: 8px; font-family: var(--font-sans, inherit); font-size: 13px; font-weight: 400; color: var(--text-light); }
+.sp-abc-pager { display: flex; align-items: center; gap: 12px; margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--divider); font-size: 14.5px; }
+.sp-abc-step { flex: none; min-width: 48px; color: var(--primary); text-decoration: none; }
+.sp-abc-next { text-align: right; }
+.sp-abc-hint { flex: 1 1 auto; text-align: center; font-size: 13px; color: var(--text-faint); }
+.sp-abc-l:focus-visible, .sp-abc-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (hover: hover) { a.sp-abc-l:hover, button.sp-abc-l:hover { background: var(--hover-bg); } a.sp-abc-step:hover, button.sp-abc-step:hover { text-decoration: underline; } }
+@media (max-width: 640px) { .sp-abc-hint { display: none; } .sp-abc-pager { justify-content: space-between; } }
+@media (pointer: coarse) { .sp-abc-l { min-width: 44px; height: 44px; } .sp-abc-step { display: inline-flex; align-items: center; min-height: 44px; } }
+.sp-app button.sp-abc-l, .sp-app button.sp-abc-step { font: inherit; font-size: 14px; background: none; margin: 0; cursor: pointer; }
+.sp-app button.sp-abc-step { border: 0; padding: 0; color: var(--primary); }
 .sp-fbar-a:focus-visible, .sp-fbar-home:focus-visible, .sp-fbar-cancel:focus-visible, .sp-fbar-lupa:focus-visible, .sp-fbar-menu:focus-visible, .sp-menu-a:focus-visible,
 .sp-tab:focus-visible, .sp-letter:focus-visible, .sp-ix-sum:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) {
@@ -528,7 +545,7 @@ ${PRINT_ROOT_CSS}  body { background: #fff; }
   .sp-btns, .sp-card-go, .sp-go, .sp-famcard-go { display: none !important; }
   details.sp-kids > summary { display: none !important; }
   details.sp-kids::details-content { content-visibility: visible; display: contents; }
-  .sp-letters, .sp-tabs, .sp-ix-sum::after { display: none !important; }
+  .sp-letters, .sp-abc, .sp-abc-pager, .sp-tabs, .sp-ix-sum::after { display: none !important; }
   .sp-rodpick, .sp-sort, .sp-rods-f, .sp-rrows-all, .sp-pair-s::after { display: none !important; }
   .sp-rrow[hidden] { display: list-item !important; }
   details.sp-pair::details-content { content-visibility: visible; display: contents; }
@@ -657,7 +674,8 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
  * The map of places (§3.7): a place of a lineage's header selects its row;
  * a hash `{map}--m-{key}` selects it on opening. In the set of files (§6.4)
  * each file holds one page, the search index comes from hledani.js
- * (`window.__spIndex`) and the results lead to `{slug}.html`.
+ * (`window.__spIndex`) and the results lead to the people's folder
+ * (`{root}{pdir}{slug}.html`, 1102 §7.5), the index to its file.
  */
 export const PAGE_SET_SCRIPT = `(function(){var d=document,h=d.documentElement;
 var q=function(s,r){return Array.prototype.slice.call((r||d).querySelectorAll(s))};
@@ -722,7 +740,7 @@ menuBtn=bar&&bar.querySelector('.sp-fbar-menu'),lang=h.lang||'en',ix=null,str=nu
 try{pr=new Intl.PluralRules(lang)}catch(x){}
 function pl(t,n){t=t||{};return String(t[pr?pr.select(n):'other']||t.other||'').replace('{n}',String(n))}
 function fill(t,v){return String(t||'').replace('{q}',function(){return v})}
-function to(slug){return !slug?'':str&&str.zip?esc(slug===str.home?'index.html':slug+'.html'):d.getElementById(slug)?'#'+esc(slug):''}
+function to(slug){return !slug?'':str&&str.zip?esc((str.root||'')+(slug===str.idx?str.idxp:(str.pdir||'')+slug+'.html')):d.getElementById(slug)?'#'+esc(slug):''}
 function link(slug,html){var u=to(slug);return u?'<a class="pp-link" href="'+u+'">'+html+'</a>':html}
 function draw(v){ix=ix||window.__spIndex||J('sp-index')||[];str=str||J('sp-strings')||{};var r=spSearch(ix,v,lang,10),o;
 if(!r.total)o='<div class="sp-res-none"><p class="sp-res-none-t">'+esc(fill(str.none,v))+'</p><p class="sp-res-hint">'+esc(str.hint||'')+'</p><p>'+link(str.idx,esc(str.toIdx||''))+'</p></div>';

@@ -30,8 +30,9 @@ import {
     personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, safeImage, shownExcerpt,
 } from './person-page.js';
 import {
-    PageSet, PageSetIndexKind, SetPage, SetPlaceRow, familyFirstNames, familyTitle, isProtectedPerson, pageSetFileName, pageSetLivingNames,
-    pageSetPlaces, pageSetSearchPeople, surnameFirst,
+    PageSet, PageSetIndexKind, SetPage, SetPlaceRow, familyFirstNames, familyIndexLetter, familyIndexSort, familyTitle, indexLetter, indexPageOf,
+    isProtectedPerson, pageSetFileName, pageSetFolders, pageSetLivingNames, pageSetPath, pageSetPlaces, pageSetSearchPeople, personIndexLetter,
+    personIndexSort, surnameFirst, ZIP_PICK_LINES,
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { RodPickerItem, rodPickKey, rodPickerHtml, rodPickerItems } from './rod-picker.js';
@@ -42,6 +43,8 @@ import {
 import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { fanZoomInlineScript } from './fan-zoom.js';
 import { ZipEntry, dataUrlBytes } from './zip.js';
+
+export { indexLetter };
 import { safeHttpUrl } from './validation.js';
 import {
     ROD_TIMELINE_CHIPS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
@@ -71,8 +74,10 @@ interface Render {
     gens: Map<RodId, Map<PersonId, number>>;
     /** The index of places' rows, once asked for (the index and the lineages' headers). */
     places?: SetPlaceRow[];
-    /** A set of files (§6.4): the search's links lead to `{slug}.html`. */
+    /** A set of files (§6.4): the search's links lead to the pages' files. */
     zip?: boolean;
+    /** The set of files: the page being written, its way up to the set's root ('' or '../', 1102 §7.5). */
+    root?: string;
     /** The lines of the introduction with their periods, once asked for. */
     hub?: HubLine[];
     /** The whole tree's choice of a line (spec 026 P3 §2.3), once asked for. */
@@ -169,8 +174,10 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
         const slug = drawnSlug(r, set.indexSlug.places);
         if (!slug) return null;
         if (mode === 'app') return pageSetAppTarget(set.bySlug.get(slug)!);
-        const i = placeRows(r).findIndex(p => p.key === key || !!p.alsoKeys?.includes(key));
-        return `#${i < 0 ? slug : placeAnchor(slug, i)}`;
+        const rows = placeRows(r);
+        const i = rows.findIndex(p => p.key === key || !!p.alsoKeys?.includes(key));
+        if (i < 0) return `#${slug}`;
+        return `#${placeAnchor(indexPageOf(set, 'places', indexLetter(rows[i].name, lang)), i)}`;
     };
     return r;
 }
@@ -457,8 +464,13 @@ function rodPickHtml(r: Render, page: SetPage | null): string {
         r.pick = rodPickerItems(set.protectedTree.lineages, set, id => periods.get(id) ?? null);
     }
     const { lo, hi } = treeAxis(r);
+    // A set of files repeats the choice in every file (1102 §7.5): with many lines only the
+    // introduction (which lists them all) and the lines' pages carry the whole list, the
+    // other pages the whole tree, their own line and Other families.
+    const short = !!r.zip && set.rodIds.length > ZIP_PICK_LINES && !!page && page.kind !== 'tree' && page.kind !== 'rod' && page.kind !== 'other';
+    const items = short ? r.pick.filter(i => i.id === 'tree' || i.id === 'other' || i.id === page.under) : r.pick;
     return rodPickerHtml({
-        items: r.pick, current: page?.under ?? null, treeTitle: set.bySlug.get(set.introSlug)?.title ?? '', lo, hi,
+        items, current: page?.under ?? null, treeTitle: set.bySlug.get(set.introSlug)?.title ?? '', lo, hi,
         texts: {
             prefix: F.rodPickPrefix, all: F.rodPickAll, wholeTree: F.wholeTree, other: F.otherFams, placeholder: F.rodPickPh,
             none: F.rodPickNone, label: F.rodPickLabel, members: F.nPersons,
@@ -1131,7 +1143,8 @@ function searchStrings(r: Render): Record<string, unknown> {
         more: pluralTemplates(lang, n => F.searchMore(n)),
         none: F.none('{q}'), hint, toIdx: F.toIdx, idx: drawnSlug(r, set.indexSlug.persons),
         lbHint: F.lbHint,
-        ...(r.zip ? { zip: true, home: set.introSlug } : {}),
+        // The set of files (1102 §7.5): a hit leads to the people's folder, the index to its file, both from the page's folder.
+        ...(r.zip ? { zip: true, root: r.root ?? '', pdir: `${pageSetFolders(set).persons}/`, idxp: drawnSlug(r, set.indexSlug.persons) ? pageSetPath(set, set.indexSlug.persons) : '' } : {}),
     };
 }
 
@@ -1174,21 +1187,6 @@ export function pageSetBarHtml(set: PageSet, slug: string, opts: PageSetHtmlOpti
 
 // ─── The indexes (§3.5) ─────────────────────────────────────────────────────
 
-/**
- * The letter an index groups a name under: Czech "Ch" is a letter of its own
- * (after H); a letter the language does not tell from its base letter goes
- * with it (Á with A in Czech, Ä with A in German), one that it does stays
- * apart (Č, Ř, Š in Czech).
- */
-export function indexLetter(text: string, lang: Language): string {
-    const t = text.trim();
-    if (!t) return '';
-    if (lang === 'cs' && /^ch/i.test(t)) return 'Ch';
-    const ch = Array.from(t)[0].toLocaleUpperCase(lang);
-    const base = ch.normalize('NFD').replace(/\p{M}/gu, '');
-    return base && base !== ch && new Intl.Collator(lang, { sensitivity: 'base' }).compare(ch, base) === 0 ? base : ch;
-}
-
 function placeRows(r: Render): SetPlaceRow[] {
     if (!r.places) r.places = pageSetPlaces(r.set);
     return r.places;
@@ -1211,7 +1209,8 @@ function emptyIndex(r: Render): string {
 }
 
 /** People: "Surname, Given · years · tag" by initial letter, the letters above filter (anchors without the script). */
-function personsIndexHtml(r: Render, slug: string): string {
+function personsIndexHtml(r: Render, page: SetPage): string {
+    const slug = page.slug;
     const { set, S } = r;
     const F = S.familyPages;
     const lang = set.options.lang;
@@ -1224,9 +1223,11 @@ function personsIndexHtml(r: Render, slug: string): string {
         const giv = parts.given.trim();
         const prot = isProtectedPerson(set.protectedTree, id);
         const shown = prot ? e.n : sur && giv ? `${sur}, ${giv}` : sur || giv || e.n;
-        return { id, e, shown, sort: `${sur ? '0' : '1'} ${e.o}`, letter: indexLetter(sur, lang) };
+        const p = tree.persons[id]!;
+        return { id, e, shown, sur, sort: personIndexSort(p), letter: personIndexLetter(p, lang) };
     }).sort((a, b) => a.sort.localeCompare(b.sort, lang) || a.e.y.localeCompare(b.e.y));
     if (!items.length) return emptyIndex(r);
+    if (page.letter !== undefined) return personsLetterHtml(r, page, items.filter(it => it.letter === page.letter));
     const groups = new Map<string, typeof items>();
     for (const it of items) {
         const g = groups.get(it.letter);
@@ -1253,15 +1254,17 @@ function personsIndexHtml(r: Render, slug: string): string {
 }
 
 /** Families with a page: "Josef Fíšek ⚭ Anna Kvapilová · 1846 · 7 children". */
-function familiesIndexHtml(r: Render): string {
+function familiesIndexHtml(r: Render, page: SetPage): string {
     const { set, S } = r;
     const F = S.familyPages;
     const lang = set.options.lang;
     const tree = set.protectedTree.tree;
-    const fams = set.selection.familyIds.filter(fid => set.familySlug.has(fid) && tree.partnerships[fid]).map(fid => {
+    const split = page.letter !== undefined;
+    const fams = set.selection.familyIds.filter(fid => set.familySlug.has(fid) && tree.partnerships[fid]
+        && (!split || familyIndexLetter(tree, tree.partnerships[fid], lang) === page.letter)).map(fid => {
         const u = tree.partnerships[fid];
         const ps = coupleOf(tree, u);
-        return { u, ps, sort: ps.map(p => surnameFirst(p)).join(' '), year: isWedding(u) ? yearOf(u.startDate) : null };
+        return { u, ps, sort: familyIndexSort(tree, u), year: isWedding(u) ? yearOf(u.startDate) : null };
     }).sort((a, b) => a.sort.localeCompare(b.sort, lang) || (a.year ?? 9999) - (b.year ?? 9999));
     if (!fams.length) return emptyIndex(r);
     const rows = fams.map(({ u, ps, year }) => {
@@ -1270,11 +1273,12 @@ function familiesIndexHtml(r: Render): string {
         return `<li class="sp-ix-row">${pageLink(r, set.familySlug.get(u.id)!, names, 'pp-link sp-ix-n')}`
             + `${year !== null ? ` <span class="sp-ix-y">${year}</span>` : ''} <span class="sp-ix-t">${esc(kids ? F.nKids(kids) : F.noKids)}</span></li>`;
     }).join('');
-    // The whole tree: all the marriages between lines by pairs (the introduction shows six, §1.5).
-    const pairs = set.spec.kind === 'tree' ? linePairs(r) : [];
+    // The whole tree: all the marriages between lines by pairs (the introduction shows six, §1.5); a split index on its first page.
+    const pairs = set.spec.kind === 'tree' && page.slug === set.indexSlug.families ? linePairs(r) : [];
     const between = pairs.length
         ? `<h2 class="sp-ix-h2" id="${esc(pairsAnchor(r))}">${esc(F.crossTitle)}</h2><div class="sp-pairs-l">${pairsHtml(r, pairs, Infinity)}</div>` : '';
-    return `<ul class="sp-ix-list">${rows}</ul>${between}`;
+    const list = `<ul class="sp-ix-list">${rows}</ul>${between}`;
+    return split ? letterPageHtml(r, page, list, null) : list;
 }
 
 /** A row that unfolds the people it stands for (open without the script). */
@@ -1326,13 +1330,98 @@ function surnamesIndexHtml(r: Render): string {
 }
 
 /** Places: "Čapkov · 1702–2010 · 37 people", unfolding who had a record there (the protected left out). */
-function placesIndexHtml(r: Render, slug: string): string {
+function placesIndexHtml(r: Render, page: SetPage): string {
     const F = r.S.familyPages;
-    const rows = placeRows(r);
-    if (!rows.length) return emptyIndex(r);
-    return `<div class="sp-ix-folds">${rows.map((p, i) => foldRowHtml(r, placeAnchor(slug, i),
+    const slug = page.slug;
+    const lang = r.set.options.lang;
+    const all = placeRows(r);
+    if (!all.length) return emptyIndex(r);
+    // A split index (1102 §7.4): the letter's places, their anchors by their place in the whole index.
+    const rows = all.map((p, i) => ({ p, i })).filter(x => page.letter === undefined || indexLetter(x.p.name, lang) === page.letter);
+    const folds = `<div class="sp-ix-folds">${rows.map(({ p, i }) => foldRowHtml(r, placeAnchor(slug, i),
         `<span class="sp-ix-n">${esc(p.name)}</span> <span class="sp-ix-dot" aria-hidden="true">·</span> <span class="sp-ix-y">${p.from === p.to ? p.from : `${p.from}–${p.to}`}</span>`
         + ` <span class="sp-ix-dot" aria-hidden="true">·</span> <span class="sp-ix-t">${esc(F.nPersons(p.personIds.length))}</span>`, p.personIds)).join('')}</div>`;
+    return page.letter === undefined ? folds : letterPageHtml(r, page, folds, null);
+}
+
+/** The letters of a language's alphabet for a split index (1102 §7.4); a letter of the names not among them is added. */
+const INDEX_ALPHABET: Record<Language, string[]> = {
+    cs: 'A B C Č D E F G H Ch I J K L M N O P Q R Ř S Š T U V W X Y Z Ž'.split(' '),
+    en: 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z'.split(' '),
+    de: 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z'.split(' '),
+};
+
+/**
+ * A page of a split index (1102 §7.4): the alphabet above (a letter without
+ * rows muted, the page's own current), the rows, then "‹ K" · the hint · "M ›".
+ * `meta` is the line under the alphabet (the count of the letter's rows).
+ */
+function letterPageHtml(r: Render, page: SetPage, body: string, meta: string | null): string {
+    const F = r.S.familyPages;
+    const kind = page.id as PageSetIndexKind;
+    const letters = r.set.indexLetters[kind];
+    const have = new Map(letters.map(l => [l.key, l.slug]));
+    const alphabet = [...(INDEX_ALPHABET[r.set.options.lang] ?? INDEX_ALPHABET.en)];
+    for (const l of letters) if (l.key && !alphabet.includes(l.key)) alphabet.push(l.key);
+    if (have.has('')) alphabet.push('');
+    const label = (k: string): string => k || r.S.book.noSurname;
+    const cells = alphabet.map(k => {
+        const slug = have.get(k);
+        if (k === page.letter) return `<span class="sp-abc-l" aria-current="page">${esc(label(k))}</span>`;
+        return slug ? pageLink(r, slug, esc(label(k)), 'sp-abc-l') : `<span class="sp-abc-l sp-abc-off" aria-disabled="true">${esc(label(k))}</span>`;
+    }).join('');
+    const at = letters.findIndex(l => l.key === page.letter);
+    const prev = at > 0 ? letters[at - 1] : null;
+    const next = at >= 0 && at < letters.length - 1 ? letters[at + 1] : null;
+    const pager = `<nav class="sp-abc-pager" aria-label="${esc(F.idxLetters)}">`
+        + `${prev ? pageLink(r, prev.slug, `‹ ${esc(label(prev.key))}`, 'sp-abc-step') : '<span class="sp-abc-step"></span>'}`
+        + `<span class="sp-abc-hint">${esc(F.idxHint)}</span>`
+        + `${next ? pageLink(r, next.slug, `${esc(label(next.key))} ›`, 'sp-abc-step sp-abc-next') : '<span class="sp-abc-step"></span>'}</nav>`;
+    return `<nav class="sp-abc" aria-label="${esc(F.idxLetters)}">${cells}</nav>`
+        + `${meta ? `<p class="sp-abc-meta">${esc(meta)}</p>` : ''}${body}${pager}`;
+}
+
+/**
+ * A letter's page of the index of people (1102 §7.4): the rows grouped by
+ * surname — a line's surname with its other forms and the feminine ones.
+ */
+function personsLetterHtml(r: Render, page: SetPage, items: { id: PersonId; e: { y: string; t: string }; shown: string; sur: string }[]): string {
+    const { set, S } = r;
+    const F = S.familyPages;
+    const lang = set.options.lang;
+    const tree = set.protectedTree.tree;
+    // A surname of a line goes under the line's surname (its forms, the feminine ones).
+    const lineOf = new Map<string, Rod>();
+    for (const rid of [...set.rodIds, ...set.otherRodIds]) {
+        const rod = rodOf(r, rid);
+        if (!rod) continue;
+        const nf = rodNameForms(rod, tree);
+        for (const f of [rod.surname, ...nf.forms, ...nf.feminine]) {
+            const k = f.trim().toLocaleLowerCase(lang);
+            if (k && !lineOf.has(k)) lineOf.set(k, rod);
+        }
+    }
+    const groups = new Map<string, { head: string; rod: Rod | null; rows: typeof items }>();
+    for (const it of items) {
+        const rod = it.sur ? lineOf.get(it.sur.toLocaleLowerCase(lang)) ?? null : null;
+        const head = rod ? rod.surname : it.sur;
+        const key = rod ? `rod:${rod.id}` : `s:${head.toLocaleLowerCase(lang)}`;
+        const g = groups.get(key);
+        if (g) g.rows.push(it); else groups.set(key, { head, rod, rows: [it] });
+    }
+    const body = [...groups.values()].sort((a, b) => a.head.localeCompare(b.head, lang)).map(g => {
+        let forms = '';
+        if (g.rod) {
+            const nf = rodNameForms(g.rod, tree);
+            const other = nf.forms.filter(f => f !== g.head);
+            const bits = [other.length ? F.idxAlso(other.join(', ')) : '', nf.feminine.length ? F.feminine(nf.feminine.join(', ')) : ''].filter(Boolean);
+            if (bits.length) forms = ` <span class="sp-ix-forms">${esc(bits.join(' · '))}</span>`;
+        }
+        const rows = g.rows.map(it => `<li class="sp-ix-row">${personNameLink(r, it.id, esc(it.shown), 'pp-link sp-ix-n')}`
+            + `${it.e.y ? ` <span class="sp-ix-y">${esc(it.e.y)}</span>` : ''}${livingTagHtml(r, it.id)}${it.e.t ? ` <span class="sp-ix-t">${esc(it.e.t)}</span>` : ''}</li>`).join('');
+        return `<div class="sp-ix-group"><h2 class="sp-ix-letter">${esc(g.head || S.book.noSurname)}${forms}</h2><ul class="sp-ix-list">${rows}</ul></div>`;
+    }).join('');
+    return letterPageHtml(r, page, body, F.nPersons(items.length));
 }
 
 /** One index (§3.5): "Index", the four tabs, its rows. */
@@ -1345,11 +1434,12 @@ function indexPageHtml(r: Render, page: SetPage): string {
         return k === kind ? `<span class="sp-tab" aria-current="page">${esc(F.idxTabs[k])}</span>` : pageLink(r, slug, esc(F.idxTabs[k]), 'sp-tab');
     }).join('');
     let body = '';
-    if (kind === 'persons') body = personsIndexHtml(r, page.slug);
-    else if (kind === 'families') body = familiesIndexHtml(r);
+    if (kind === 'persons') body = personsIndexHtml(r, page);
+    else if (kind === 'families') body = familiesIndexHtml(r, page);
     else if (kind === 'surnames') body = surnamesIndexHtml(r);
-    else body = placesIndexHtml(r, page.slug);
-    return `<header class="sp-head"><h1 class="sp-h1">${esc(F.index)}</h1></header>`
+    else body = placesIndexHtml(r, page);
+    // A page of a split index carries its letter in the heading (1102 §7.4).
+    return `<header class="sp-head"><h1 class="sp-h1">${esc(page.letter !== undefined ? page.title : F.index)}</h1></header>`
         + `<nav class="sp-tabs" aria-label="${esc(F.idxNav)}">${tabs}</nav><div class="sp-ix sp-ix--${kind}">${body}</div>`;
 }
 
@@ -1716,11 +1806,11 @@ export function renderPageSearch(set: PageSet, query: string): string {
     return searchHtml(windowRender(set).r, query);
 }
 
-// ─── The set of files (§6.4) ──────────────────────────────────────────────
+// ─── The set of files (§6.4, 1102 §7.5) ─────────────────────────────────
 
-/** The file of a page in the set of files: the introduction is index.html. */
-function zipFileOf(set: PageSet, slug: string): string {
-    return slug === set.introSlug ? 'index.html' : `${slug}.html`;
+/** The way up from a file of the set to its root: '' for index.html, '../' from a folder. */
+function rootOf(path: string): string {
+    return '../'.repeat(path.split('/').length - 1);
 }
 
 const IMAGE_EXT: Record<string, string> = {
@@ -1728,12 +1818,13 @@ const IMAGE_EXT: Record<string, string> = {
 };
 
 /**
- * A page's links in the set of files: `#slug` of another page becomes
- * `slug.html` (the introduction `index.html`), `#slug--x` `slug.html#slug--x`,
- * a link inside the page stays; a place of a lineage's header leads to the
- * map with the place selected (`mapa-obci.html#mapa-obci--m-{key}`).
+ * A page's links in the set of files: `#slug` of another page becomes the
+ * relative path of its file (`../osoby/x.html`, the introduction
+ * `../index.html`), `#slug--x` the file with the anchor, a link inside the
+ * page stays; a place of a lineage's header leads to the map with the place
+ * selected (`../rejstrik/mapa-obci.html#mapa-obci--m-{key}`).
  */
-function zipLinks(set: PageSet, own: string, drawn: ReadonlySet<string>, html: string): string {
+function zipLinks(set: PageSet, own: string, root: string, drawn: ReadonlySet<string>, html: string): string {
     return html
         .replace(/href="#([^"]+)" data-sp-place="([^"]*)"/g, (all, id: string, key: string) =>
             set.bySlug.get(id)?.kind === 'map' && drawn.has(id) ? `href="#${id}--m-${encodeURIComponent(key)}" data-sp-place="${key}"` : all)
@@ -1741,48 +1832,59 @@ function zipLinks(set: PageSet, own: string, drawn: ReadonlySet<string>, html: s
             const i = id.indexOf('--');
             const slug = i > 0 ? id.slice(0, i) : id;
             if (!drawn.has(slug) || slug === own) return all;
-            return `href="${zipFileOf(set, slug)}${slug === id ? '' : `#${id}`}"`;
+            return `href="${root}${pageSetPath(set, slug)}${slug === id ? '' : `#${id}`}"`;
         });
 }
 
 /** One file of the set: the shared styles and scripts by reference, the bar, the page. */
 function zipPageShell(r: Render, page: SetPage, body: string): string {
     const lang = r.set.options.lang;
+    const files = `${r.root ?? ''}${pageSetFolders(r.set).files}`;
     // A whole tree's file keeps its bar without the script: the choice of a line works as a plain `<details>` (§2.3).
     const zipCls = r.set.spec.kind === 'tree' ? ' sp-zip' : '';
     return `<!doctype html><html lang="${esc(lang)}" class="no-js${zipCls}"><head>`
         + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
         + `<meta name="generator" content="Strom"><title>${esc(page.title)}</title>`
-        + `<link rel="stylesheet" href="styl.css"></head><body><script>document.documentElement.className='js${zipCls}'</script>`
+        + `<link rel="stylesheet" href="${files}/styl.css"></head><body><script>document.documentElement.className='js${zipCls}'</script>`
         + barHtml(r, page) + `<main class="pp-file sp-file">${body}</main>`
         + `<script type="application/json" id="sp-strings">${jsonForScript(searchStrings(r))}</script>`
-        + `<script src="hledani.js"></script><script src="skript.js"></script></body></html>`;
+        + `<script src="${files}/hledani.js"></script><script src="${files}/skript.js"></script></body></html>`;
 }
 
 /**
- * The set of files (§6.4), a page at a time: `index.html` (the introduction
- * and the contents), `{slug}.html` per page, the shared `styl.css` and
- * `skript.js`, the images as files in `obrazky/` and the search index as
- * `hledani.js` (`window.__spIndex`: a page opened from a folder over file://
- * cannot fetch a JSON file). Works offline from the unpacked folder and
- * as it is on a web server.
+ * The set of files (§6.4, 1102 §7.5), a page at a time: `index.html` (the
+ * introduction and the contents) at the top, every other page in its folder
+ * (pageSetPath), the images in the images' folder, the shared `styl.css`,
+ * `skript.js` and the search index `hledani.js` (`window.__spIndex`: a page
+ * opened from a folder over file:// cannot fetch a JSON file) in the files'
+ * folder. Links are relative: it works offline from the unpacked folder and
+ * as it is on a web server. With `emit` every file goes there as soon as it is
+ * written (the zip's stream) and the result is empty; else the files in order.
  */
 export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOptions & {
     pause?: () => Promise<void>;
     progress?: (done: number, total: number) => void;
+    emit?: (entry: ZipEntry) => void | Promise<void>;
 } = {}): Promise<ZipEntry[]> {
     const r = makeRender(set, 'file', opts);
     r.zip = true;
     const pages = pageSetRenderedPages(set);
     const drawn = new Set(pages.map(p => p.slug));
     const out: ZipEntry[] = [];
+    const emit = async (e: ZipEntry): Promise<void> => { if (opts.emit) await opts.emit(e); else out.push(e); };
+    const folders = pageSetFolders(set);
     const results = `<div class="sp-results" id="sp-results" aria-live="polite" hidden></div>`;
-    const foot = `<p class="sp-print-foot">${esc(r.S.familyPages.printFoot(zipFileOf(set, set.introSlug)))}</p>`;
-    for (const p of pages) {
+    const foot = `<p class="sp-print-foot">${esc(r.S.familyPages.printFoot('index.html'))}</p>`;
+    let done = 0;
+    // The introduction first: an unpacker lists index.html at the top.
+    const ordered = [...pages.filter(p => p.slug === set.introSlug), ...pages.filter(p => p.slug !== set.introSlug)];
+    for (const p of ordered) {
+        const path = pageSetPath(set, p.slug);
+        r.root = rootOf(path);
         const toc = p.slug === set.introSlug ? fileTocHtml(r, pages) : '';
         const html = zipPageShell(r, p, `${toc}${results}${sectionHtml(r, p)}${foot}`);
-        out.push({ path: zipFileOf(set, p.slug), data: zipLinks(set, p.slug, drawn, html) });
-        opts.progress?.(out.length, pages.length);
+        await emit({ path, data: zipLinks(set, p.slug, r.root, drawn, html) });
+        opts.progress?.(++done, pages.length);
         if (opts.pause) await opts.pause();
     }
     // Last: every image of every page is in the registry by now.
@@ -1790,20 +1892,16 @@ export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOpti
     for (const e of set.images.entries()) {
         const img = dataUrlBytes(e.src);
         if (!img) continue;
-        const path = `obrazky/img-${e.n}.${IMAGE_EXT[img.mime] ?? 'bin'}`;
+        const path = `${folders.images}/img-${e.n}.${IMAGE_EXT[img.mime] ?? 'bin'}`;
         files.set(e.n, path);
-        out.push({ path, data: img.bytes });
+        await emit({ path, data: img.bytes });
     }
+    // The styles live in the files' folder: an image is one folder up.
     const css = `${personPageFileCss(opts.fontCss ?? '')}${FAMILY_PAGES_CSS}\n`
-        + set.images.css(n => files.get(n) ?? '');
-    out.unshift(
-        { path: 'styl.css', data: css },
-        { path: 'skript.js', data: [PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, PLACES_MAP_SCRIPT, fanZoomInlineScript(), PAGE_SET_SCRIPT].join(';\n') },
-        { path: 'hledani.js', data: `window.__spIndex=${jsonForScript(set.searchIndex)};\n` },
-    );
-    // index.html first: an unpacker lists it at the top.
-    const home = out.findIndex(e => e.path === 'index.html');
-    if (home > 0) out.unshift(...out.splice(home, 1));
+        + set.images.css(n => files.has(n) ? `../${files.get(n)}` : '');
+    await emit({ path: `${folders.files}/styl.css`, data: css });
+    await emit({ path: `${folders.files}/skript.js`, data: [PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, PLACES_MAP_SCRIPT, fanZoomInlineScript(), PAGE_SET_SCRIPT].join(';\n') });
+    await emit({ path: `${folders.files}/hledani.js`, data: `window.__spIndex=${jsonForScript(set.searchIndex)};\n` });
     return out;
 }
 

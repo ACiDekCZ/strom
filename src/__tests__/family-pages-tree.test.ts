@@ -217,10 +217,12 @@ describe('the choice of a line (§2.3)', () => {
         const index = String(files.find(f => f.path === 'index.html')!.data);
         expect(index).toContain('<html lang="cs" class="no-js sp-zip">');
         expect(index).toContain("document.documentElement.className='js sp-zip'");
-        const rodFile = `${set.rodSlug.get(set.rodIds[0])}.html`;
+        const rodFile = `rody/${set.rodSlug.get(set.rodIds[0])}.html`;
         expect(index).toContain(`<a class="sp-rodpick-a" href="${rodFile}">`);
-        expect(index).toContain(`href="${set.otherSlug}.html"`);
+        expect(index).toContain(`href="rody/${set.otherSlug}.html"`);
         const rod = String(files.find(f => f.path === rodFile)!.data);
+        // From a page in a folder the choice leads one folder up and back (1102 §7.5).
+        expect(rod).toContain(`href="../rody/${set.otherSlug}.html"`);
         expect(rod).toMatch(/<li class="sp-rodpick-rod is-cur" data-rod="[^"]+" data-q="[^"]+" aria-current="true">/);
         // A lineages' set keeps its bar for the script only.
         const lines = buildPageSet(treePagesFixture().data, { kind: 'rods', rods: set.rodIds.slice(0, 2) }, { lang: 'cs', now: TP_NOW });

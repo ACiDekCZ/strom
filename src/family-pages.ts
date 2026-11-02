@@ -55,6 +55,17 @@ export interface SetPage {
      * line; none for the introduction, the indexes and the map.
      */
     under?: RodId | 'other';
+    /** An index split by letters (1102 §7.4): the letter's key ('' the names without a surname). */
+    letter?: string;
+}
+
+/** One letter of an index split by letters (1102 §7.4). */
+export interface PageSetIndexLetter {
+    /** The letter as indexLetter gives it ('' the names without a surname). */
+    key: string;
+    slug: string;
+    /** Rows under the letter. */
+    rows: number;
 }
 
 /** One person of the search index (§0.7); a protected person: `s` '', `n` and `k` from the protected name only. */
@@ -92,6 +103,11 @@ export interface PageSetOptions {
     groups?: Partial<PageSetGroups>;
     /** A timeline page for every line with a page (1102 §5, default false: the dialog's "Timelines", the window on). */
     timelines?: boolean;
+    /**
+     * No page of their own for people with only a name and years (1102 §7.3): a
+     * row on the parents' family page and in the index, without a link. Default false.
+     */
+    minimal?: boolean;
     /** The research's history (the timelines' history layer); none: no layer. */
     history?: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     now?: Date;
@@ -120,7 +136,7 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines'>> & { now: Date; groups: PageSetGroups };
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines' | 'minimal'>> & { now: Date; groups: PageSetGroups };
     /** The research's history for the timelines (null: none). */
     history: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     selection: Selection;
@@ -138,6 +154,13 @@ export interface PageSet {
     rodTimelineSlug: Map<RodId, string>;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
+    /** The indexes split by letters (1102 §7.4), their letters in order; [] for an index on one page. */
+    indexLetters: Record<PageSetIndexKind, PageSetIndexLetter[]>;
+    /**
+     * The people with only a name and years (1102 §7.3) among those who may have a
+     * page: without a page under `options.minimal`, else the pages the option saves.
+     */
+    minimalIds: Set<PersonId>;
     mapSlug: string;
     /** The introduction's slug: the hub, the single lineage or the branch. */
     introSlug: string;
@@ -167,6 +190,68 @@ export const PAGE_SET_INDEX_SLUGS: Record<PageSetIndexKind, string> = {
 };
 export const PAGE_SET_MAP_SLUG = 'mapa-obci';
 export const PAGE_SET_OTHER_SLUG = 'dalsi-rodiny';
+
+/** Above this many rows an index of people, families or places is a page per letter (1102 §7.4); surnames stay one page. */
+export const PAGE_SET_INDEX_LETTER_ROWS = 500;
+/** From this many pages the dialog offers (and turns on) the people without a page of their own (1102 §7.3). */
+export const PAGE_SET_MINIMAL_FROM_PAGES = 1000;
+
+/**
+ * A person with only a name and years (1102 §7.3): no event but a birth or a
+ * death without a place, no story, portrait, attachment, note or source of
+ * their own. Read on the protected tree.
+ */
+export function isMinimalPerson(p: Person): boolean {
+    if (p.birthPlace?.trim() || p.deathPlace?.trim() || p.birthAddress?.trim() || p.deathAddress?.trim()) return false;
+    if ((p.events ?? []).length) return false;
+    if (p.story?.text?.trim() || p.photo || (p.attachments ?? []).length || p.notes?.trim()) return false;
+    return personSourceIds(p).length === 0;
+}
+
+/**
+ * The letter an index groups a name under (§3.5): Czech "Ch" is a letter of its own
+ * (after H); a letter the language does not tell from its base letter goes
+ * with it (Á with A in Czech, Ä with A in German), one that it does stays
+ * apart (Č, Ř, Š in Czech).
+ */
+export function indexLetter(text: string, lang: Language): string {
+    const t = text.trim();
+    if (!t) return '';
+    if (lang === 'cs' && /^ch/i.test(t)) return 'Ch';
+    const ch = Array.from(t)[0].toLocaleUpperCase(lang);
+    const base = ch.normalize('NFD').replace(/\p{M}/gu, '');
+    return base && base !== ch && new Intl.Collator(lang, { sensitivity: 'base' }).compare(ch, base) === 0 ? base : ch;
+}
+
+/** A person's letter in the index of people: the shown surname's. */
+export function personIndexLetter(p: Person, lang: Language): string {
+    return indexLetter(shownNameParts(p).surname.trim(), lang);
+}
+
+/** A person's sort key in the index of people: those without a surname last. */
+export function personIndexSort(p: Person): string {
+    return `${shownNameParts(p).surname.trim() ? '0' : '1'} ${surnameFirst(p)}`;
+}
+
+/** A family's sort key and letter in the index of families: the husband's surname first. */
+export function familyIndexSort(tree: StromData, u: Partnership): string {
+    return partnersOf(tree, u).map(p => surnameFirst(p)).join(' ');
+}
+
+export function familyIndexLetter(tree: StromData, u: Partnership, lang: Language): string {
+    const first = partnersOf(tree, u)[0];
+    return first ? indexLetter(shownNameParts(first).surname.trim() || shownNameOrEmpty(first), lang) : '';
+}
+
+/** A letter's part of a slug: ASCII, "ch" for Ch, a letter with a mark apart from its base ("c-hacek"), the names without a surname "bez-prijmeni". */
+function letterSlug(key: string): string {
+    if (!key) return 'bez-prijmeni';
+    const a = asciiSlug(key) || 'x';
+    if (a === key.toLowerCase()) return a;
+    const mark = key.normalize('NFD').replace(/^\P{M}+/u, '').charAt(0);
+    const MARKS: Record<string, string> = { '\u030C': 'hacek', '\u0301': 'carka', '\u030A': 'krouzek', '\u0308': 'prehlaska', '\u0300': 'gravis', '\u0302': 'strisky', '\u0328': 'ocasek' };
+    return `${a}-${MARKS[mark] ?? 'x'}`;
+}
 
 /**
  * A slug not used yet: `base`, else `base-2`, `base-3`… (§0.6); the result
@@ -355,7 +440,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const options: PageSet['options'] = {
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
-        sources, stories, groups, timelines: opts.timelines ?? false, now: opts.now ?? new Date(),
+        sources, stories, groups, timelines: opts.timelines ?? false, minimal: opts.minimal ?? false, now: opts.now ?? new Date(),
     };
     // Ancestors without a depth: the dialog's default (§4.1).
     if (spec.kind === 'ancestors' && spec.generations == null) spec = { ...spec, generations: PAGE_SET_ANCESTOR_GENERATIONS };
@@ -468,7 +553,11 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
 
     // The people: members and married-in spouses, the protected left out.
     const spouses = new Set(sel.spouseIds);
-    const withPage = sel.personIds.filter(id => !!realPerson(tree, id) && !isProtectedPerson(prot, id));
+    const mayHavePage = sel.personIds.filter(id => !!realPerson(tree, id) && !isProtectedPerson(prot, id));
+    // People with only a name and years (1102 §7.3); the person a branch or a pedigree starts from keeps the page.
+    const start = 'person' in spec ? spec.person : null;
+    const minimalIds = new Set(mayHavePage.filter(id => id !== start && isMinimalPerson(tree.persons[id]!)));
+    const withPage = options.minimal ? mayHavePage.filter(id => !minimalIds.has(id)) : mayHavePage;
     if (whole) {
         for (const id of withPage) {
             const c = rodOfPersonForCrumbs(index, id);
@@ -547,10 +636,25 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     // The indexes and the map.
     const indexSlug = {} as Record<PageSetIndexKind, string>;
     const startCrumb: PageCrumb = whole ? introCrumb : { slug: intro.slug, label: F.start };
+    const indexLetters: Record<PageSetIndexKind, PageSetIndexLetter[]> = { persons: [], families: [], surnames: [], places: [] };
+    const letterKeys = indexLetterKeys({ protectedTree: prot, selection: sel, personSlug, familySlug, options });
     for (const k of ['persons', 'families', 'surnames', 'places'] as const) {
-        const slug = uniqueSlug(PAGE_SET_INDEX_SLUGS[k], used);
-        indexSlug[k] = slug;
-        pages.push({ slug, kind: 'index', id: k, title: F.indexTitle[k], crumbs: [startCrumb, { slug, label: F.indexTitle[k] }] });
+        const keys = k === 'surnames' ? null : letterKeys[k];
+        if (!keys) {
+            const slug = uniqueSlug(PAGE_SET_INDEX_SLUGS[k], used);
+            indexSlug[k] = slug;
+            pages.push({ slug, kind: 'index', id: k, title: F.indexTitle[k], crumbs: [startCrumb, { slug, label: F.indexTitle[k] }] });
+            continue;
+        }
+        // A page per letter (1102 §7.4): the index's link leads to the first letter.
+        for (const [key, rows] of keys) {
+            const slug = uniqueSlug(`${PAGE_SET_INDEX_SLUGS[k]}-${letterSlug(key)}`, used);
+            const label = key || S.book.noSurname;
+            const title = k === 'persons' ? F.idxLetter(label) : `${F.indexTitle[k]} · ${label}`;
+            indexLetters[k].push({ key, slug, rows });
+            pages.push({ slug, kind: 'index', id: k, letter: key, title, crumbs: [startCrumb, { slug, label: title }] });
+        }
+        indexSlug[k] = indexLetters[k][0].slug;
     }
     let mapSlug = '';
     if (options.map) {
@@ -566,11 +670,43 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
 
     const out: PageSet = {
         spec, options, history: opts.history ?? null, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
-        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, indexSlug, mapSlug,
+        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, indexSlug, indexLetters, minimalIds, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);
     return out;
+}
+
+/**
+ * The letters of the indexes of people, families and places with more than
+ * PAGE_SET_INDEX_LETTER_ROWS rows (1102 §7.4), in the index's order, each with
+ * its count of rows; null for an index on one page.
+ */
+function indexLetterKeys(set: Pick<PageSet, 'protectedTree' | 'selection' | 'personSlug' | 'familySlug' | 'options'>): Record<'persons' | 'families' | 'places', [string, number][] | null> {
+    const tree = set.protectedTree.tree;
+    const lang = set.options.lang;
+    const count = (rows: { key: string; sort: string }[]): [string, number][] | null => {
+        if (rows.length <= PAGE_SET_INDEX_LETTER_ROWS) return null;
+        rows.sort((a, b) => a.sort.localeCompare(b.sort, lang));
+        const out = new Map<string, number>();
+        for (const r of rows) out.set(r.key, (out.get(r.key) ?? 0) + 1);
+        return [...out.entries()];
+    };
+    const people = pageSetSearchPeople(set).map(id => {
+        const p = tree.persons[id]!;
+        return { key: personIndexLetter(p, lang), sort: personIndexSort(p) };
+    });
+    const fams = set.selection.familyIds.filter(fid => set.familySlug.has(fid) && tree.partnerships[fid]).map(fid => {
+        const u = tree.partnerships[fid];
+        return { key: familyIndexLetter(tree, u, lang), sort: familyIndexSort(tree, u) };
+    });
+    const places = pageSetPlaces(set).map(p => ({ key: indexLetter(p.name, lang), sort: p.name }));
+    return { persons: count(people), families: count(fams), places: count(places) };
+}
+
+/** The index page a row of a split index stands on (1102 §7.4); the index's page when it is one. */
+export function indexPageOf(set: Pick<PageSet, 'indexSlug' | 'indexLetters'>, kind: PageSetIndexKind, key: string): string {
+    return set.indexLetters[kind].find(l => l.key === key)?.slug ?? set.indexSlug[kind];
 }
 
 /** The people of the search index, in its order: `set.searchIndex[i]` is `pageSetSearchPeople(set)[i]`. */
@@ -697,6 +833,10 @@ export function sizeVerdict(bytes: number): PageSetSizeVerdict {
 
 /** Text per page as the person page and the book's blocks write it (measured on sample trees, rounded up). */
 const SHELL_BYTES = 110_000;          // styles, scripts, the bar
+const ZIP_PAGE_BYTES = 5_600;         // a file of a set: its head, the bar (1102 §7.5)
+const PICK_ROW_BYTES = 340;           // a line in the choice of a line, repeated in the files of a set
+/** From this many lines a set of files keeps the whole choice of a line to the introduction and the lines' pages (1102 §7.5). */
+export const ZIP_PICK_LINES = 30;
 const PERSON_PAGE_BYTES = 24_000;
 const FAMILY_PAGE_BYTES = 9_000;
 const ROD_PAGE_BYTES = 8_000;
@@ -754,7 +894,21 @@ export interface PageSetSize {
     pages: number;
     persons: number;
     images: number;
+    /** The same in MB (1102 §7.1). */
+    mb: number;
+    textMb: number;
+    /** How long saving takes on the device (1102 §7.1). */
+    seconds: number;
+    /** The set of files (1102 §7.5): every file carries its head and bar, so a little more than the single file. */
+    zipBytes: number;
 }
+
+/** The device the save runs on (1102 §7.1): a phone is a coarse pointer up to 1024 px. */
+export type PageSetDevice = 'desktop' | 'phone';
+
+/** Milliseconds per page and per reduced image (1102 §7.1, measured on a desktop; a phone about six times slower). */
+export const PAGE_SET_MS_PER_PAGE: Record<PageSetDevice, number> = { desktop: 3.6, phone: 21.6 };
+export const PAGE_SET_MS_PER_IMAGE: Record<PageSetDevice, number> = { desktop: 25, phone: 150 };
 
 /**
  * The file's size without building it (§6.3): the text by page (constants
@@ -763,7 +917,7 @@ export interface PageSetSize {
  * it, else every image the pages show, reduced as the choice says.
  * `opts` overrides the set's image choices (the dialog's alternatives).
  */
-export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; photos?: ImageChoice } = {}): PageSetSize {
+export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; photos?: ImageChoice; device?: PageSetDevice } = {}): PageSetSize {
     const clips = opts.clips ?? set.options.clips;
     const photos = opts.photos ?? set.options.photos;
     let text = SHELL_BYTES + set.searchIndex.length * SEARCH_ENTRY_BYTES;
@@ -778,7 +932,12 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
                 text += ROD_PAGE_BYTES + people * ROD_ROW_BYTES;
                 break;
             }
-            case 'index': text += set.selection.personIds.length * INDEX_ROW_BYTES; break;
+            case 'index': {
+                // A page of a split index carries its letter's rows (1102 §7.4).
+                const letter = page.letter !== undefined ? set.indexLetters[page.id as PageSetIndexKind]?.find(l => l.key === page.letter) : undefined;
+                text += (letter ? letter.rows : set.selection.personIds.length) * INDEX_ROW_BYTES;
+                break;
+            }
             case 'map': text += MAP_PAGE_BYTES; break;
             case 'rodTimeline': {
                 const rod = page.id ? set.protectedTree.lineages.rods.get(page.id as RodId) : undefined;
@@ -791,16 +950,31 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
     const list = pageSetImages(set);
     let img = 0;
     let count = 0;
+    let reduced = 0;
+    for (const i of list) {
+        const choice = i.kind === 'clip' ? clips : photos;
+        if (choice === 'small') reduced++;
+        const b = imageBytes(i, choice);
+        if (b > 0) { img += b; count++; }
+    }
     if (same && set.images.count > 0) {
         img = set.images.length;
         count = set.images.count;
-    } else {
-        for (const i of list) {
-            const b = imageBytes(i, i.kind === 'clip' ? clips : photos);
-            if (b > 0) { img += b; count++; }
-        }
     }
-    return { bytes: text + img, textBytes: text, imageBytes: img, pages: set.pages.length, persons: set.personSlug.size, images: count };
+    const device = opts.device ?? 'desktop';
+    const pages = set.pages.length;
+    const seconds = (pages * PAGE_SET_MS_PER_PAGE[device] + reduced * PAGE_SET_MS_PER_IMAGE[device]) / 1000;
+    // The set of files: every file its head and bar, the whole tree's files their choice of a line (1102 §7.5).
+    let zipText = text + pages * ZIP_PAGE_BYTES;
+    if (set.spec.kind === 'tree') {
+        const items = set.rodIds.length + 2;
+        const full = set.rodIds.length > ZIP_PICK_LINES ? set.pages.filter(p => p.kind === 'tree' || p.kind === 'rod' || p.kind === 'other').length : pages;
+        zipText += (full * items + (pages - full) * 3) * PICK_ROW_BYTES;
+    }
+    return {
+        bytes: text + img, textBytes: text, imageBytes: img, pages, persons: set.personSlug.size, images: count,
+        mb: (text + img) / 1e6, textMb: text / 1e6, seconds, zipBytes: zipText + img,
+    };
 }
 
 /** A place of the set's people (§3.5 the index of places): who has a dated record there, and when. */
@@ -823,7 +997,7 @@ export interface SetPlaceRow {
  * for both partners; only dated records (a span on the axis). Most people
  * first, then the earlier start, then the name — as "Where the line lived".
  */
-export function pageSetPlaces(set: PageSet): SetPlaceRow[] {
+export function pageSetPlaces(set: Pick<PageSet, 'protectedTree' | 'selection' | 'personSlug' | 'options'>): SetPlaceRow[] {
     const tree = set.protectedTree.tree;
     const shown = (id: PersonId | undefined | null): boolean => !!id && set.personSlug.has(id);
     const acc = new Map<string, { names: Map<string, number>; keys: Map<string, number>; from: number; to: number; ids: Set<PersonId> }>();
@@ -875,4 +1049,47 @@ export function pageSetPlaces(set: PageSet): SetPlaceRow[] {
             personIds: [...a.ids].sort((x, y) => born(x) - born(y) || nameOf(tree, x).localeCompare(nameOf(tree, y), lang)),
         }))
         .sort((x, y) => y.personIds.length - x.personIds.length || x.from - y.from || x.name.localeCompare(y.name, lang));
+}
+
+// ─── The set of files' folders (1102 §7.5) ─────────────────────────────────
+
+export interface PageSetFolders {
+    rods: string;
+    families: string;
+    persons: string;
+    timelines: string;
+    index: string;
+    images: string;
+    files: string;
+}
+
+/** The folders of a set of files, in the file's language. */
+export const PAGE_SET_FOLDERS: Record<Language, PageSetFolders> = {
+    cs: { rods: 'rody', families: 'rodiny', persons: 'osoby', timelines: 'casove-osy', index: 'rejstrik', images: 'obrazky', files: '_soubory' },
+    en: { rods: 'lines', families: 'families', persons: 'people', timelines: 'timelines', index: 'index', images: 'images', files: '_files' },
+    de: { rods: 'stammlinien', families: 'familien', persons: 'personen', timelines: 'zeitleisten', index: 'register', images: 'bilder', files: '_dateien' },
+};
+
+export function pageSetFolders(set: Pick<PageSet, 'options'>): PageSetFolders {
+    return PAGE_SET_FOLDERS[set.options.lang] ?? PAGE_SET_FOLDERS.en;
+}
+
+/**
+ * A page's file in the set of files (1102 §7.5), ASCII and lower case: the
+ * introduction `index.html`; the lines and the "Other families" in the lines'
+ * folder, the families, the people, the timelines (by the line's slug) and the
+ * indexes with the map (without the "rejstrik-" prefix) each in their own.
+ */
+export function pageSetPath(set: Pick<PageSet, 'introSlug' | 'bySlug' | 'rodSlug' | 'options'>, slug: string): string {
+    if (slug === set.introSlug) return 'index.html';
+    const f = pageSetFolders(set);
+    const page = set.bySlug.get(slug);
+    switch (page?.kind) {
+        case 'family': return `${f.families}/${slug}.html`;
+        case 'person': return `${f.persons}/${slug}.html`;
+        case 'rodTimeline': return `${f.timelines}/${(page.id && set.rodSlug.get(page.id as RodId)) || slug}.html`;
+        case 'index': return `${f.index}/${slug.replace(/^rejstrik-/, '')}.html`;
+        case 'map': return `${f.index}/${slug}.html`;
+        default: return `${f.rods}/${slug}.html`;
+    }
 }

@@ -575,13 +575,13 @@ test.describe('family pages file: the set of files (§6.4)', () => {
         await expect(page.locator('section.sp-page')).toBeVisible();
         await expect(page).toHaveTitle('Rody Fíšek, Řepík a Kvapil');
         // A lineage, then a person in it: their own files.
-        await page.locator(`a.sp-card[href="${rodFisek}.html"]`).click();
-        await expect(page).toHaveURL(new RegExp(`/${rodFisek}\\.html$`));
+        await page.locator(`a.sp-card[href="rody/${rodFisek}.html"]`).click();
+        await expect(page).toHaveURL(new RegExp(`/rody/${rodFisek}\\.html$`));
         await expect(page.locator(`section#${rodFisek}`)).toBeVisible();
-        const link = page.locator(`.sp-row-main a.pp-link[href="${josef}.html"]`).first();
+        const link = page.locator(`.sp-row-main a.pp-link[href="../osoby/${josef}.html"]`).first();
         await link.scrollIntoViewIfNeeded();
         await link.click();
-        await expect(page).toHaveURL(new RegExp(`/${josef}\\.html$`));
+        await expect(page).toHaveURL(new RegExp(`/osoby/${josef}\\.html$`));
         await expect(page.locator(`section#${josef}`)).toBeVisible();
         await expect(page.locator(`#${josef} h1`)).toContainText('Josef');
         // The portrait: an image file from obrazky/.
@@ -589,7 +589,7 @@ test.describe('family pages file: the set of files (§6.4)', () => {
         expect(await photo.evaluate(e => getComputedStyle(e).backgroundImage)).toMatch(/obrazky\/img-\d+\.jpg/);
         expect(await photo.evaluate(e => e.getBoundingClientRect().width)).toBeGreaterThan(20);
         // An anchor inside the page.
-        await page.goto(`${pathToFileURL(join(out, `${josef}.html`)).href}#${josef}--pp-sec-family`);
+        await page.goto(`${pathToFileURL(join(out, 'osoby', `${josef}.html`)).href}#${josef}--pp-sec-family`);
         await expect(page.locator(`[id="${josef}--pp-sec-family"]`)).toBeInViewport();
         // The search reads the index from hledani.js (no fetch over file://); a result opens the person's file.
         await page.goto(home);
@@ -598,12 +598,15 @@ test.describe('family pages file: the set of files (§6.4)', () => {
         await expect(res).toBeVisible();
         await expect(res.locator('.sp-res-n').first()).toHaveText(/Josef Fíšek/);
         await expect(res.locator('.sp-res-row a', { hasText: 'Josef Fíšek' }).first()).toHaveAttribute('href', /\.html$/);
-        await res.locator(`a[href="${josef}.html"]`).click();
-        await expect(page).toHaveURL(new RegExp(`/${josef}\\.html$`));
+        await res.locator(`a[href="osoby/${josef}.html"]`).click();
+        await expect(page).toHaveURL(new RegExp(`/osoby/${josef}\\.html$`));
+        // From a page in a folder the search leads one folder up and back.
+        await page.locator('.sp-q').fill('fisek jose');
+        await expect(page.locator(`#sp-results a[href="../osoby/${josef}.html"]`).first()).toBeVisible();
         // A place of the lineage's header: the map's file with the place selected.
-        await page.goto(pathToFileURL(join(out, `${rodFisek}.html`)).href);
+        await page.goto(pathToFileURL(join(out, 'rody', `${rodFisek}.html`)).href);
         await page.locator(`#${rodFisek} a.sp-place`, { hasText: 'Kvasín' }).click();
-        await expect(page).toHaveURL(new RegExp(`/${set.mapSlug}\\.html#${set.mapSlug}--m-kvasin$`));
+        await expect(page).toHaveURL(new RegExp(`/rejstrik/${set.mapSlug}\\.html#${set.mapSlug}--m-kvasin$`));
         await expect(page.locator('li.pp-map-row[data-pp-map-place="kvasin"]')).toHaveClass(/is-sel/);
         expect(errors).toEqual([]);
     });
