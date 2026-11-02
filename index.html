@@ -305,6 +305,16 @@
             --code-token: #a9d1b6;    /* the tree's token in that line */
             --code-border: #2b2822;
             --warning-text: #7f5500;  /* warning text on paper / warning-soft (≥4.5:1) */
+            /* place identification (spec 034): the research's own colour, the map's "check" point, warning aliases */
+            --research: #3d4a7a;      /* research state/origin text and line (≥4.5:1 on --research-soft) */
+            --research-soft: #e9ebf3;
+            --research-line: #c9cfe3; /* dashed border of a queued place */
+            --map-check: #c27a12;     /* map point of a place to check */
+            --warn-soft: var(--warning-soft);
+            --warn-text: var(--warning-text);
+            --warn-line: #e8d7ae;
+            --text-muted: var(--text-light);
+            --sub: #fcfaf5;           /* sub-rows (houses, variants) */
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
             --on-signal-warn: #ffffff;
             --ev-stripe: #8fae98;     /* card status stripes: evidence */
@@ -474,6 +484,12 @@
             --code-token: #a9d1b6;
             --code-border: #3e3a30;
             --warning-text: #e8c47c;
+            --research: #b9c3ea;
+            --research-soft: #30334a;
+            --research-line: #4b5278;
+            --map-check: #e09a2e;
+            --warn-line: #6b5a32;
+            --sub: #2f2d27;
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
             --ev-stripe: #6f9a7c;
@@ -5111,6 +5127,25 @@
             background: var(--primary-soft); color: var(--primary-dark); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere;
         }
         .place-nearest { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        /* Place identification (spec 034): the state badge and the origin badge, anywhere a place is shown. */
+        .place-state, .place-origin {
+            display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; box-sizing: border-box;
+            padding: 2px 8px; border: 1px solid transparent; border-radius: 6px;
+            font-size: 12.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; vertical-align: baseline;
+        }
+        .place-state.is-small, .place-origin.is-small { padding: 1px 6px; font-size: 11.5px; gap: 4px; }
+        .place-state[data-state="none"] { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+        .place-state[data-state="queued"] { background: var(--research-soft); color: var(--research); border: 1px dashed var(--research-line); }
+        .place-state[data-state="running"] { background: var(--research-soft); color: var(--research); border-color: var(--research); }
+        .place-state[data-state="confirm"] { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-line); }
+        .place-state[data-state="undet"] { background: var(--surface); color: var(--text); border: 1px dashed var(--text-faint); }
+        .place-state[data-state="check"] { background: var(--warn-soft); color: var(--warn-text); border: 1.5px solid var(--warn-text); }
+        .place-state[data-state="verified"] { background: var(--primary-soft); color: var(--primary-dark); border-color: var(--primary); }
+        .place-state[data-state="town"] { background: var(--primary-soft); color: var(--primary-dark); }
+        .place-origin[data-origin="research"] { background: var(--research-soft); color: var(--research); }
+        .place-origin[data-origin="hand"] { background: var(--surface-2); color: var(--text); }
+        .place-origin[data-origin="map"] { background: var(--primary-soft); color: var(--primary-dark); }
+        .place-origin[data-origin="other"] { background: var(--surface-2); color: var(--text); }
         .place-pin-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
         .place-hint { font-size: 13px; color: var(--text-light); }
         .places-modal button.place-find {

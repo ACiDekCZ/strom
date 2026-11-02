@@ -6,7 +6,7 @@
 import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
-import { MapKind, MAP_KINDS, isMapKind } from './places.js';
+import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
 
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
@@ -264,6 +264,16 @@ class SettingsManagerClass {
 
     setHistoryPlacesSort(sort: 'persons' | 'alpha'): void {
         this.settings.historyPlacesSort = sort;
+        this.save();
+    }
+
+    /** Places dialog: the order of the places (default by state; an old 'unplaced' is the state order). */
+    getPlacesSort(): PlacesSort {
+        return readPlacesSort(this.settings.placesSort);
+    }
+
+    setPlacesSort(sort: PlacesSort): void {
+        this.settings.placesSort = sort;
         this.save();
     }
 

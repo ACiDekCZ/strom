@@ -116,6 +116,7 @@ import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
+import { placesResearchMethods } from './places-research-ui.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
@@ -785,6 +786,10 @@ Object.assign(UIClass.prototype, mapMethods);
 type PlacesManagerMethods = typeof placesManagerMethods;
 export interface UIClass extends PlacesManagerMethods {}
 Object.assign(UIClass.prototype, placesManagerMethods);
+
+type PlacesResearchMethods = typeof placesResearchMethods;
+export interface UIClass extends PlacesResearchMethods {}
+Object.assign(UIClass.prototype, placesResearchMethods);
 
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}

@@ -221,28 +221,42 @@ export function sortPlacesByName<T extends { key: string; usage: PlaceUsage }>(r
         || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
-/** The Places dialog's sort choices: by name (default), most people first, places without coordinates first. */
-export type PlacesSort = 'name' | 'people' | 'unplaced';
+/** The Places dialog's sort choices: by state (default), by name, most people first. */
+export type PlacesSort = 'state' | 'name' | 'people';
+
+/** The sort the Places dialog opens with. */
+export const DEFAULT_PLACES_SORT: PlacesSort = 'state';
 
 export function isPlacesSort(v: unknown): v is PlacesSort {
-    return v === 'name' || v === 'people' || v === 'unplaced';
+    return v === 'state' || v === 'name' || v === 'people';
+}
+
+/** A stored or chosen sort: the old "places without coordinates first" is the state order now; anything unknown the default. */
+export function readPlacesSort(v: unknown): PlacesSort {
+    if (v === 'unplaced') return 'state';
+    return isPlacesSort(v) ? v : DEFAULT_PLACES_SORT;
 }
 
 /**
  * The Places dialog's order for a sort choice. Every choice ends in the name
  * order of sortPlacesByName, so equal places keep reading like an index:
  *   - 'people': most people connected first (then most uses in the tree),
- *   - 'unplaced': the places without coordinates first.
+ *   - 'state': by `stateRank` (place-identity's placeStateRank: check,
+ *     confirm, not identified, no location, being looked up, queued, placed);
+ *     without it the places without coordinates first.
  */
 export function sortPlacesForManager<T extends { key: string; usage: PlaceUsage; geo?: unknown }>(
-    rows: readonly T[], sort: PlacesSort, lang: string,
+    rows: readonly T[], sort: PlacesSort, lang: string, stateRank?: (row: T) => number,
 ): T[] {
     const byName = sortPlacesByName(rows, lang);
     // Array.prototype.sort is stable: the name order stays within each tie.
     if (sort === 'people') {
         return byName.sort((a, b) => b.usage.personIds.length - a.usage.personIds.length || b.usage.count - a.usage.count);
     }
-    if (sort === 'unplaced') return byName.sort((a, b) => Number(!!a.geo) - Number(!!b.geo));
+    if (sort === 'state') {
+        const rank = stateRank ?? ((r: T) => r.geo ? 1 : 0);
+        return byName.sort((a, b) => rank(a) - rank(b));
+    }
     return byName;
 }
 

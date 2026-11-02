@@ -1543,6 +1543,7 @@ export interface AppSettings {
     historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources
     historyStripClosed?: boolean;  // default: false - the card's "history not searched yet" line was closed (spec 020 K1.6)
     historyPlacesSort?: 'persons' | 'alpha';  // default: 'persons' - History of places → Places: all places by people or alphabetically
+    placesSort?: 'state' | 'name' | 'people';  // default: 'state' - Places dialog order (a stored 'unplaced' reads as 'state')
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */

@@ -26,7 +26,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesForManager, placeFilterText, placeMatchesFilter,
-    isPlacesSort, knownStreets, townOfPlace, placeTownGroups, townHousePlaces, splitPlaceHouses, countPlaceUses,
+    readPlacesSort, knownStreets, townOfPlace, placeTownGroups, townHousePlaces, splitPlaceHouses, countPlaceUses,
     houseKey, TownGroup, TownHousePlace, TOWN_POINT_PREFIX,
 } from '../places.js';
 import { foldText, KnownStreets } from '../streets.js';
@@ -192,7 +192,7 @@ export const placesManagerMethods = uiModule({
                 title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}
             <select class="places-sort" id="places-sort" aria-label="${this.escapeHtml(m.sortLabel)}" title="${this.escapeHtml(m.sortLabel)}">
                 ${([['name', m.sortName], ['people', m.sortPeople], ['unplaced', m.sortUnplaced]] as const)
-                    .map(([v, label]) => `<option value="${v}"${this.placesSort === v ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
+                    .map(([v, label]) => `<option value="${v}"${this.placesSort === readPlacesSort(v) ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
             </select>`;
         modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
         const input = bar.querySelector('#places-filter') as HTMLInputElement;
@@ -224,8 +224,8 @@ export const placesManagerMethods = uiModule({
 
         const sortSelect = bar.querySelector('#places-sort') as HTMLSelectElement;
         sortSelect.onchange = () => {
-            if (!isPlacesSort(sortSelect.value)) return;
-            this.placesSort = sortSelect.value;
+            // The old "without location first" option is the state order (place-identity), step B replaces the select.
+            this.placesSort = readPlacesSort(sortSelect.value);
             this.applyPlacesSort();
         };
 

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
-    sortPlacesByName, sortPlacesForManager, isPlacesSort, placeFilterText, placeMatchesFilter,
+    sortPlacesByName, sortPlacesForManager, isPlacesSort, readPlacesSort, DEFAULT_PLACES_SORT, placeFilterText, placeMatchesFilter,
     MapKind, countPlaceUses, compareHouses, houseKey, groupTownPoints, MappedPlaceInput, TownPoint,
     splitPlaceHouses, placeTownGroups, townHousePlaces, townOfPlace } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId, Partnership, PlaceGeo } from '../types.js';
@@ -170,12 +170,21 @@ describe('the Places dialog: order and search', () => {
         const rows = [at('Hlinsko', 2, 2, pin), at('Chmelník', 3, 3), at('Čapkov', 2, 5), at('Cetkovice', 2, 2, pin), at('Ivančice', 1, 1)];
         expect(names(sortPlacesForManager(rows, 'people', 'cs')))
             .toEqual(['Chmelník', 'Čapkov', 'Cetkovice', 'Hlinsko', 'Ivančice']);
-        expect(names(sortPlacesForManager(rows, 'unplaced', 'cs')))
+        expect(names(sortPlacesForManager(rows, 'state', 'cs')))
             .toEqual(['Čapkov', 'Chmelník', 'Ivančice', 'Cetkovice', 'Hlinsko']);
+        // With the identity's rank: lower first, the name order inside.
+        const rank = (r: { usage: { display: string } }) => r.usage.display === 'Hlinsko' ? 0 : 3;
+        expect(names(sortPlacesForManager(rows, 'state', 'cs', rank)))
+            .toEqual(['Hlinsko', 'Cetkovice', 'Čapkov', 'Chmelník', 'Ivančice']);
         expect(names(sortPlacesForManager(rows, 'name', 'cs')))
             .toEqual(['Cetkovice', 'Čapkov', 'Hlinsko', 'Chmelník', 'Ivančice']);
         expect(isPlacesSort('people')).toBe(true);
         expect(isPlacesSort('alpha')).toBe(false);
+        expect(isPlacesSort('unplaced')).toBe(false);
+        expect(readPlacesSort('unplaced')).toBe('state');
+        expect(readPlacesSort('people')).toBe('people');
+        expect(readPlacesSort(undefined)).toBe(DEFAULT_PLACES_SORT);
+        expect(DEFAULT_PLACES_SORT).toBe('state');
     });
 
     it('finds a place without diacritics, by any of its spellings and by its other names', () => {
