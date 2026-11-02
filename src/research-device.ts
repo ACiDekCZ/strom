@@ -103,6 +103,11 @@ export function noteResearchWaiting(
             id: w.id, what: w.what, at: w.at, ...(w.person ? { person: w.person } : {}),
             // An archive's question keeps what answers it there, and its terms.
             ...(w.kind === 'permission' && w.host ? { kind: w.kind, host: w.host, on: w.on } : {}),
+            // A question about a place keeps what it asks (read with or without the research's groups).
+            ...(w.kind === 'place' && w.place ? {
+                kind: w.kind, place: w.place, forms: w.forms, question: w.question,
+                candidates: w.candidates, current: w.current, by: w.by, change: w.change,
+            } : {}),
             ...(groups ? {
                 ...(w.kind && w.kind !== 'permission' ? { kind: w.kind } : {}), ...(w.partner ? { partner: w.partner } : {}),
                 section: w.section, group: w.group, phase: w.phase, sentAt: w.sentAt, order: w.order, priority: w.priority,

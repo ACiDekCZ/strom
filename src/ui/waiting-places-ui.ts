@@ -48,6 +48,8 @@ const ANSWERED_HIDE_MS = 30_000;
 const MAP_W = 300;
 const MAP_H = 260;
 const MAP_MAX_ZOOM = 13;
+/** How long the research's status is waited for after an answer (not followed live). */
+const STATUS_TIMEOUT_MS = 4000;
 /** "Keep all" names the places up to this many. */
 const KEEP_NAMES = 3;
 
@@ -70,6 +72,8 @@ const view = {
     busy: false,
     /** Questions whose map is shown (a phone held sideways). */
     mapOpen: new Set<string>(),
+    /** The question the window was opened at (its card stays marked through redraws). */
+    focus: '',
 };
 
 export interface WaitingPlacesAccess {
@@ -134,6 +138,7 @@ export const waitingPlacesMethods = uiModule({
             view.preview = null;
             view.mapOpen = new Set();
         }
+        view.focus = focus ?? '';
         existing?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
         const overlay = document.createElement('div');
@@ -160,7 +165,6 @@ export const waitingPlacesMethods = uiModule({
         this.renderWaitingPlaces();
         const card = focus ? overlay.querySelector<HTMLElement>(`.waiting-place[data-place="${CSS.escape(focus)}"]`) : null;
         if (card) {
-            card.classList.add('is-focus');
             card.scrollIntoView({ block: 'start' });
             card.querySelector<HTMLElement>('button:not([disabled])')?.focus();
         } else {
@@ -174,6 +178,7 @@ export const waitingPlacesMethods = uiModule({
         document.getElementById(MODAL_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
         view.preview = null;
+        view.focus = '';
     },
 
     /** Escape: a bulk preview closes first, then the window. */
@@ -338,7 +343,7 @@ export const waitingPlacesMethods = uiModule({
         const data = DataManager.getData();
         const facts = placeQuestionFacts(data, w.forms ?? []);
         const card = document.createElement('article');
-        card.className = 'waiting-place';
+        card.className = w.place === view.focus ? 'waiting-place is-focus' : 'waiting-place';
         card.dataset.place = w.place;
         card.dataset.question = w.question;
         const ts = Date.parse(w.at);
@@ -559,6 +564,8 @@ export const waitingPlacesMethods = uiModule({
         }
         view.answered.set(w.place, Date.now() + ANSWERED_HIDE_MS);
         view.selected.delete(w.place);
+        // The place as the research has it now: Places and the person card show it at once.
+        if (res.kind === 'one' && res.place) this.applyPlaceReply(res.place);
         if (view.preview) view.preview.places = view.preview.places.filter(p => p !== w.place);
         const undo = res.kind === 'one' && res.undo && access.canUndo ? res.undo : '';
         this.showToast(this.waitingAnswerText(w, take), TOAST_MS, undo ? {
@@ -639,11 +646,16 @@ export const waitingPlacesMethods = uiModule({
     async refreshWaitingPlacesStatus(): Promise<void> {
         const ctx = this.placesResearchContext();
         if (ctx.base && ctx.researchId) {
-            try {
-                const status = await fetchStatus(`${ctx.base}/status?poll=1`);
-                const s = liveSession();
-                if (status && s && !s.ended && s.researchId === ctx.researchId) this.onLiveStatus(s, status);
-            } catch { /* not answering: what is known stays */ }
+            const s = liveSession();
+            if (s && !s.ended && s.researchId === ctx.researchId) {
+                try {
+                    const status = await fetchStatus(`${ctx.base}/status?poll=1`);
+                    if (status && !s.ended) this.onLiveStatus(s, status);
+                } catch { /* not answering: what is known stays */ }
+            } else {
+                // Not followed live: the remembered list is what the research says now.
+                await this.askResearchBridge(ctx.researchId, STATUS_TIMEOUT_MS);
+            }
         }
         // A question the research no longer lists is no longer hidden here.
         const listed = new Set((this.researchWaiting()?.items ?? []).filter(isPlaceQuestion).map(w => w.place));

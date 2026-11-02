@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     sanitizeBridgePlaces, sanitizeBridgePlace, placesReadReply, fetchBridgePlaces,
     placesIdentifyBody, placesIdentifyReply, postPlacesIdentify, placesAnswerBody, placesAnswerReply, postPlacesAnswer,
-    placesUndoReply, postPlacesUndo, placesWriteRefusal, placesResearchAccess, canResearchPlaces, placeCheckFlag,
+    placesUndoReply, postPlacesUndo, placesWriteRefusal, withBridgePlace, placesResearchAccess, canResearchPlaces, placeCheckFlag,
     PLACES_IDENTIFY_FEATURE, PLACES_ANSWER_FEATURE, PLACES_UNDO_FEATURE, PLACES_BRIDGE_LIMITS,
 } from '../places-bridge.js';
 import { researchSchemeUrl } from '../research-link.js';
@@ -174,6 +174,30 @@ describe('places bridge: answer and undo', () => {
             .toMatchObject({ ok: true, kind: 'bulk', done: ['L1', 'L2'], skipped: [{ place: 'L3', why: 'changed' }], undo: 'u-18' });
         const changed = placesAnswerReply(409, { code: 'places.changed', place: { id: 'L0012', name: 'Horní Lhota', state: 'queued' } }, { place: 'L0012', take: 'c1' }, ALL);
         expect(changed).toMatchObject({ ok: false, code: 'changed', place: { id: 'L0012', state: 'queued' } });
+    });
+
+    it('takes an answer\'s place into the places read: its record, its texts pointing to it', () => {
+        const read = sanitizeBridgePlaces({
+            rev: 'p1',
+            places: { L0012: { name: 'H. Lhota', state: 'proposed', forms: ['H. Lhota'], waiting: 'L0012' }, L0001: { name: 'Lhota', state: 'unlocated', unlocated: 'x', forms: ['Lhota'] } },
+            forms: { 'Hor. Lhota': { state: 'queued' } },
+        })!;
+        const one = placesAnswerReply(200, {
+            ok: true, undo: 'u-1',
+            place: { id: 'L0012', name: 'Horní Lhota', state: 'identified', by: 'research', coords: { lat: 49.6, lon: 15.2 }, forms: ['H. Lhota', 'Hor. Lhota'] },
+        }, { place: 'L0012', take: 'c1' }, ALL);
+        if (!one.ok || one.kind !== 'one' || !one.place) throw new Error('no place');
+        const now = withBridgePlace(read, one.place);
+        expect(now.places.L0012).toMatchObject({ state: 'identified', coords: { lat: 49.6, lon: 15.2 } });
+        expect(now.places.L0012.names[0].name).toBe('Horní Lhota');
+        expect(now.places.L0001).toBe(read.places.L0001);
+        expect(now.forms['Hor. Lhota']).toEqual({ place: 'L0012' });
+        expect(now.formsByKey[placeKey('Hor. Lhota')]).toEqual({ place: 'L0012' });
+        expect(now.formsByKey[placeKey('H. Lhota')]).toEqual({ place: 'L0012' });
+        expect(now.rev).toBe('p1');
+        // What was read stays as it was.
+        expect(read.places.L0012.state).toBe('proposed');
+        expect(read.forms['Hor. Lhota']).toEqual({ state: 'queued' });
     });
 
     it('types undo replies', () => {

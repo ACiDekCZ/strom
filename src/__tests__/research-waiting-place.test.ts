@@ -4,8 +4,9 @@
  * Fictional places only.
  */
 
-import { describe, it, expect } from 'vitest';
-import { researchSchemeUrl, sanitizeWaiting } from '../research-link.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { researchSchemeUrl, sanitizeWaiting, WAITING_GROUPS_FEATURE } from '../research-link.js';
+import { noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import { waitingSection } from '../research-waiting.js';
 
 const TREE = '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10';
@@ -56,6 +57,32 @@ describe('the waiting item of a place', () => {
         expect(sanitizeWaiting([propose({ question: 'where' })])[0].kind).toBeUndefined();
         expect(sanitizeWaiting([propose({ candidates: [] })])[0].kind).toBeUndefined();
         expect(sanitizeWaiting([propose({ candidates: [] })], true)[0].kind).toBe('other');
+    });
+});
+
+describe('the remembered list', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('keeps a place question whole, with or without the research\'s groups', () => {
+        const store = new Map<string, string>();
+        vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } });
+        const conflict = propose({ id: 'L0020', place: 'L0020', question: 'conflict', current: { lat: 49.7, lon: 15.3, label: 'Lhotov' }, by: 'person' });
+        const form = propose({
+            id: 'L0030', place: 'L0030', question: 'form', candidates: undefined,
+            change: { from: { place: 'Lhota 16' }, to: { place: 'Lhota', house: '16' }, facts: 1 },
+        });
+        for (const groups of [false, true]) {
+            const items = sanitizeWaiting([propose(), conflict, form], groups);
+            noteResearchWaiting(TREE, items, groups ? { features: [WAITING_GROUPS_FEATURE] } : {});
+            const stored = storedResearchWaiting(TREE)!.items;
+            expect(stored.map(w => [w.kind, w.place, w.question])).toEqual([
+                ['place', 'L0012', 'propose'], ['place', 'L0020', 'conflict'], ['place', 'L0030', 'form'],
+            ]);
+            expect(stored[0].candidates).toEqual(items[0].candidates);
+            expect(stored[0].forms).toEqual(['H. Lhota', 'Horní Lhota']);
+            expect(stored[1]).toMatchObject({ current: { lat: 49.7, lon: 15.3, label: 'Lhotov' }, by: 'person' });
+            expect(stored[2].change).toEqual({ from: { place: 'Lhota 16' }, to: { place: 'Lhota', house: '16' }, facts: 1 });
+        }
     });
 });
 

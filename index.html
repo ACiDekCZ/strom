@@ -5418,6 +5418,8 @@
             .place-hand-map { height: 150px; }
         }
         /* Awaiting action · Places (spec 034 §9): the group's head with its bulk steps, one card per question. */
+        /* The toasts of an answer (with Undo) stand over the window, not under its overlay. */
+        body:has(#waiting-places-modal) .toast:not([data-kind="materials"]) { z-index: 250; }
         .waiting-places-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
         .waiting-places-empty { margin: 8px 0; color: var(--text-light); }
         .waiting-places-head { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -5521,7 +5523,8 @@
             .waiting-places-modal .waiting-places-bulk button,
             .waiting-places-modal .waiting-places-preview-buttons button,
             .waiting-places-modal button.waiting-place-pick { min-height: 44px; }
-            .waiting-places-modal button.waiting-places-area { min-height: 36px; }
+            .waiting-places-modal button.waiting-places-area { min-height: 44px; }
+            .waiting-places-modal button.waiting-place-maptoggle { min-height: 44px; }
         }
         @media (max-width: 1024px) and (min-width: 641px) {
             .waiting-place-body { grid-template-columns: minmax(0, 1fr) 240px; }

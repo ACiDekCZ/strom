@@ -17,8 +17,8 @@ import {
     placeOriginBadge, formatPlaceDate, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
 } from '../place-identity.js';
 import {
-    fetchBridgePlaces, postPlacesIdentify, placeCheckFlag, PLACES_IDENTIFY_FEATURE,
-    type BridgePlaces, type PlacesIdentifyBody, type PlacesIdentifyOk, type PlacesWriteRefusal, type PlaceCheckFlag,
+    fetchBridgePlaces, postPlacesIdentify, placeCheckFlag, withBridgePlace, PLACES_IDENTIFY_FEATURE,
+    type BridgePlace, type BridgePlaces, type PlacesIdentifyBody, type PlacesIdentifyOk, type PlacesWriteRefusal, type PlaceCheckFlag,
 } from '../places-bridge.js';
 import { checkPlacesCached } from '../place-check.js';
 import { placeGeoHash } from '../place-records.js';
@@ -147,6 +147,22 @@ export const placesIdentifyMethods = uiModule({
         if (document.getElementById('places-modal')) {
             const after = JSON.stringify([...this.computePlaceIdentities(placesView.usages.keys())]);
             if (after !== before || JSON.stringify(this.placesLivePayload()?.counts) !== prevCounts) this.redrawPlacesKeepingSearch();
+        }
+        this.placesLiveChanged();
+    },
+
+    /**
+     * A place as a write's reply has it (an answer in "Awaiting action"): in
+     * the research's places at once, so Places and the person card show it
+     * before the next read (the map's points come from the tree's data).
+     */
+    applyPlaceReply(place: BridgePlace): void {
+        const ctx = this.placesResearchContext();
+        if (!ctx.researchId || placesView.live?.researchId !== ctx.researchId) return;
+        placesView.live = { researchId: ctx.researchId, payload: withBridgePlace(placesView.live.payload, place) };
+        if (document.getElementById('places-modal')) {
+            this.computePlaceIdentities(placesView.usages.keys());
+            this.redrawPlacesKeepingSearch();
         }
         this.placesLiveChanged();
     },

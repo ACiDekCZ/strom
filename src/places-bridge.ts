@@ -253,6 +253,23 @@ export function sanitizeBridgePlaces(raw: unknown, rev?: string): BridgePlaces |
     return out;
 }
 
+/**
+ * The places as read, with one place as a write's reply has it (an answer in
+ * "Awaiting action" returns the place in the shape of `GET /places`): its
+ * record replaced, each of its texts pointing to it. The next read replaces
+ * it all again.
+ */
+export function withBridgePlace(payload: BridgePlaces, place: BridgePlace): BridgePlaces {
+    const forms = { ...payload.forms };
+    const formsByKey = { ...payload.formsByKey };
+    for (const t of place.forms) {
+        forms[t] = { place: place.id };
+        const k = placeKey(t);
+        if (k) formsByKey[k] = { place: place.id };
+    }
+    return { ...payload, places: { ...payload.places, [place.id]: place }, forms, formsByKey };
+}
+
 /** A reply cut off: over the byte limit. */
 const TOO_BIG = '\u0000too-big';
 
