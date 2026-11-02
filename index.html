@@ -8448,6 +8448,36 @@
         }
         .offline-indicator::before { content: '⚡'; }
 
+        /* 1102 §7.2: the family pages saved in the background — "Pages 62 %" with a small bar, then "Pages are ready" */
+        .pages-bg-chip {
+            display: inline-flex; align-items: center; gap: 8px; flex: none; height: 32px; padding: 0 12px;
+            border: none; border-radius: 16px; background: var(--primary-soft); color: var(--primary);
+            font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+            font-variant-numeric: tabular-nums;
+        }
+        .pages-bg-chip[hidden] { display: none; }
+        .pages-bg-bar { position: relative; flex: none; width: 40px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+        .pages-bg-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 3px; background: var(--primary); transition: width .2s; }
+        .pages-bg-chip.is-paused .pages-bg-fill { background: var(--text-faint); }
+        .pages-bg-chip.is-done .pages-bg-bar { display: none; }
+        .pages-bg-s { display: none; }
+        .pages-bg-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .pages-bg-chip:hover { box-shadow: inset 0 0 0 1px var(--primary); }
+        }
+        @media (pointer: coarse) {
+            .pages-bg-chip { position: relative; }
+            .pages-bg-chip::before { content: ''; position: absolute; inset: -6px 0; }
+        }
+        /* Phone and sideways: the bar and the percentage only, beside the magnifier; gone while the search holds the bar */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .pages-bg-chip { height: 36px; padding: 0 10px; margin: 0 2px; gap: 6px; }
+            .pages-bg-bar { width: 28px; }
+            .pages-bg-t { display: none; }
+            .pages-bg-s { display: inline; }
+            body.search-open .pages-bg-chip, body.search-active .pages-bg-chip, body.search-filters-open .pages-bg-chip { display: none; }
+        }
+
         /* File System Access: controls hidden unless the browser supports it.
            !important so it wins over .menu-option's own display at equal specificity. */
         .fsa-only { display: none !important; }
@@ -17111,7 +17141,8 @@
         #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons { justify-content: flex-end; flex-wrap: wrap; }
         #book-modal .book-dlg[data-out="pages"] .book-dlg-foot .buttons .primary { flex: none; }
         #book-modal .book-dlg[data-phase="progress"] .book-dlg-foot .buttons,
-        #book-modal .book-dlg[data-phase="result"] .book-dlg-foot .buttons { display: none; }
+        #book-modal .book-dlg[data-phase="result"] .book-dlg-foot .buttons,
+        #book-modal .book-dlg[data-phase="zipFail"] .book-dlg-foot .buttons { display: none; }
         #book-modal .fp-open[hidden], #book-modal .fp-l-phone { display: none; }
         #book-modal .book-kind.is-disabled { cursor: default; border-style: dashed; background: none; }
         #book-modal .book-kind.is-disabled .book-kind-t { color: var(--text-faint); }
@@ -17150,7 +17181,14 @@
         #book-modal .fp-file { font-size: 12.5px; color: var(--text-light); font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
         #book-modal .fp-file:empty { display: none; }
         #book-modal .fp-big { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--warning); border-radius: 10px; background: var(--surface); font-size: 13.5px; line-height: 1.45; }
-        #book-modal .fp-big[hidden], #book-modal .fp-offer[hidden] { display: none; }
+        #book-modal .fp-big[hidden], #book-modal .fp-offer[hidden], #book-modal .fp-offers[hidden] { display: none; }
+        /* 1102 §7.1, §7.3: the time saving takes; no pages for people with only a name and year (from 1000 pages) */
+        #book-modal .fp-est-time { font-size: 12.5px; color: var(--text-light); line-height: 1.45; }
+        #book-modal .fp-est-time:empty { display: none; }
+        #book-modal .fp-min { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-light); cursor: pointer; }
+        #book-modal .fp-min[hidden] { display: none; }
+        #book-modal .fp-min input { flex: none; margin: 2px 0 0; accent-color: var(--primary); }
+        #book-modal .fp-min-n { white-space: nowrap; font-variant-numeric: tabular-nums; }
         #book-modal .fp-big-t { font-weight: 600; color: var(--warning-text); }
         #book-modal .fp-big-d { color: var(--text-light); }
         #book-modal .fp-offers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
@@ -17168,7 +17206,13 @@
         #book-modal .fp-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
         #book-modal .fp-bar-fill { display: block; width: 0; height: 100%; border-radius: 4px; background: var(--primary); transition: width .2s; }
         #book-modal .fp-prog-step, #book-modal .fp-res-n { color: var(--text-light); line-height: 1.45; }
-        #book-modal .fp-prog-cancel { align-self: flex-end; }
+        /* 1102 §7.2: the step and the time left; paused; Cancel · Continue in background; the set that did not fit (7c) */
+        #book-modal .fp-prog-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; min-width: 0; }
+        #book-modal .fp-prog-left { color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        #book-modal .fp-prog-note { font-size: 13px; color: var(--text-light); line-height: 1.45; }
+        #book-modal .fp-prog-note[hidden] { display: none; }
+        #book-modal .fp-prog-b { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+        #book-modal .fp-fail-t { color: var(--warning-text); }
         #book-modal .fp-res-f { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
         #book-modal .fp-res-b { display: flex; flex-wrap: wrap; gap: 8px; }
         #book-modal .fp-res-b [hidden] { display: none; }
@@ -17205,7 +17249,11 @@
             #book-modal .fp-file { display: none; }
             #book-modal .fp-res-b { flex-direction: column; }
             #book-modal .fp-res-b button { min-height: 48px; }
-            #book-modal .fp-prog-cancel { align-self: stretch; min-height: 44px; }
+            #book-modal .fp-prog-b button { flex: 1 1 0; min-height: 44px; }
+        }
+        @media (pointer: coarse) {
+            #book-modal .fp-min { min-height: 44px; align-items: center; }
+            #book-modal .fp-min input { margin: 0; width: 20px; height: 20px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             #book-modal .book-dlg-head { flex-wrap: wrap; row-gap: 4px; }
@@ -21118,6 +21166,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- A build of the family pages in the background (1102 §7.2): its progress, then "ready"; opens the dialog -->
+        <button type="button" id="pages-bg-chip" class="pages-bg-chip" hidden onclick="window.Strom.UI.openPagesFromChip()"><span class="pages-bg-bar" aria-hidden="true"><span class="pages-bg-fill"></span></span><span class="pages-bg-t" aria-hidden="true"></span><span class="pages-bg-s" aria-hidden="true"></span></button>
 
         <!-- Family / Descendants view tabs (desktop) — pushed to the right -->
         <div class="view-mode-segment desktop-only" id="view-mode-segment">

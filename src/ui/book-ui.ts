@@ -36,9 +36,12 @@ import {
 import { BookPresetState, choosePreset, initialPresetState, presetValuesChanged } from '../book-preset.js';
 import { ImageChoice } from '../image-registry.js';
 import {
-    PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName, pageSetImages, pageSetPrivacyWarning, sizeVerdict,
+    PAGE_SET_MINIMAL_FROM_PAGES, PAGE_SET_SPLIT_BYTES, PageSet, PageSetOptions, PageSetSize, buildPageSet, estimatePageSetSize, pageSetFileName,
+    pageSetImages, pageSetPrivacyWarning, sizeVerdict,
 } from '../family-pages.js';
-import { PagesCancelled, PagesFile, PagesJob, buildPagesFile, canSharePagesFile, downloadPagesFile, sharePagesFile } from './family-pages-ui.js';
+import {
+    PagesCancelled, PagesFile, PagesJob, PagesZipFailed, buildPagesFile, canSharePagesFile, pagesLineIds, savePagesFile, sharePagesFile, snapshotData,
+} from './family-pages-ui.js';
 import { pageSetZipName } from '../family-pages-html.js';
 import { LineageIndex, Rod, RodId, ancestorCount, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
 import { MultiPersonPicker } from '../person-picker.js';
@@ -59,7 +62,7 @@ type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' |
  * The pages' footer (026 §6.5, §6.6): the options with the estimate; the
  * file being built (its progress only after ~1 s); the file ready to save.
  */
-type Phase = 'options' | 'building' | 'progress' | 'result';
+type Phase = 'options' | 'building' | 'progress' | 'result' | 'zipFail';
 
 /** Chosen people are a selection of the pages only (1102 §4.1). */
 const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'persons'];
@@ -77,6 +80,17 @@ const SEL_CHIPS = 6;
 const ESTIMATE_DEBOUNCE_MS = 150;
 /** The build's progress shows only after this long (§6.5). */
 const PROGRESS_AFTER_MS = 1000;
+/** The time left is reckoned from the speed of the last this many pages (1102 §7.2). */
+const RATE_PAGES = 50;
+/** On a phone a large set is faster on a computer (1102 §7.1). */
+const PHONE_SLOW_PAGES = 2000;
+/** Over this much text a single file is impossible even without images (1102 §7.1). */
+const TEXT_OVER_MB = PAGE_SET_SPLIT_BYTES / 1e6;
+
+/** The device saving takes its time on (1102 §7.1): a coarse pointer up to 1024 px is a phone. */
+function phoneDevice(): boolean {
+    try { return window.matchMedia('(pointer: coarse) and (max-width: 1024px)').matches; } catch { return false; }
+}
 
 /** The pages' estimate (§6.3): the set as chosen, its size and the alternatives' sizes. */
 interface PagesEstimate {
@@ -90,6 +104,11 @@ interface PagesEstimate {
     clips: number;
     photos: number;
     name: string;
+    /** People with only a name and year without pages (1102 §7.3): the option is shown from 1000 pages, applied, and the pages it saves. */
+    minimal: boolean;
+    minimalShown: boolean;
+    minimalSave: number;
+    phone: boolean;
 }
 
 interface DialogState {
@@ -132,6 +151,14 @@ interface DialogState {
     file: PagesFile | null;
     /** The set of files chosen over 15 MB (§6.3, §6.4); over 50 MB it is the only way. */
     zip: boolean;
+    /** No pages for people with only a name and year: chosen in the dialog (not remembered), null = on from 1000 pages (1102 §7.3). */
+    minimal: boolean | null;
+    /** The build waits while the app is hidden (1102 §7.2). */
+    paused: boolean;
+    /** The pages done by time, for the time left (the last 50 pages). */
+    rate: { t: number; done: number }[];
+    /** What the build was started with: the lines of a set too large to write are saved from it (§7.5). */
+    started: { sel: BookSelectionSpec; opts: PageSetOptions; data: StromData } | null;
 }
 
 /** Whether "Save file" makes the set of files: chosen over 15 MB, always over 50 MB (§6.3). */
@@ -141,6 +168,8 @@ function savesZip(s: DialogState): boolean {
 }
 
 let st: DialogState | null = null;
+/** The build going on with the dialog closed ("Continue in background", 1102 §7.2); its chip in the toolbar. */
+let running: DialogState | null = null;
 let closePicker: (() => void) | null = null;
 let selPicker: MultiPersonPicker | null = null;
 
@@ -583,15 +612,25 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
         else open.innerHTML = `<span class="fp-l-wide">${esc(F.saveFile)}</span><span class="fp-l-phone">${esc(F.saveShare)}</span>`;
     }
     setText(modal, '.fp-open', F.openWin);
-    const view = s.phase === 'progress' ? 'progress' : s.phase === 'result' ? 'result' : 'options';
+    const view = s.phase === 'progress' ? 'progress' : s.phase === 'result' ? 'result' : s.phase === 'zipFail' ? 'zipFail' : 'options';
     if (foot.dataset.view !== view) {
         foot.dataset.view = view;
-        foot.innerHTML = view === 'progress' ? progressHtml() : view === 'result' ? resultHtml() : estimateHtml();
+        foot.innerHTML = view === 'progress' ? progressHtml() : view === 'result' ? resultHtml() : view === 'zipFail' ? zipFailHtml() : estimateHtml();
     }
     if (view === 'progress') { syncProgress(s, foot); return; }
+    if (view === 'zipFail') {
+        const n = s.started ? pagesLineIds(s.started.data, s.started.sel, s.started.opts).length : 0;
+        setText(foot, '.fp-fail-n', n ? F.byRodsNote(n) : '');
+        const by = foot.querySelector<HTMLElement>('.fp-byrods');
+        if (by) by.hidden = n === 0;
+        return;
+    }
     if (view === 'result') {
         const file = s.file;
-        setText(foot, '.fp-res-f', file ? F.resFile(file.name, mbText(file.bytes, true)) : '');
+        const set = file?.type === 'application/zip';
+        setText(foot, '.fp-res-t', set ? F.setReady : F.resTitle);
+        setText(foot, '.fp-res-f', file ? (set ? F.setFile(file.name, mbText(file.bytes, true), file.pages) : F.resFile(file.name, mbText(file.bytes, true))) : '');
+        setText(foot, '.fp-res-n', set ? `${F.openIndex} ${F.uploadAsIs}` : F.resNote);
         const share = foot.querySelector<HTMLElement>('.fp-res-share');
         if (share) share.hidden = !canSharePagesFile();
         return;
@@ -609,15 +648,30 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
         : s.kind === 'persons' ? (s.selIds.length === 1 ? F.selOne : F.selNone) : strings.book.dlg.noPerson;
     setText(foot, '.fp-est-t', !ready ? notReady : zip ? F.estZip : F.estFile);
     setText(foot, '.fp-est-d', ready && est ? F.estDetail(est.size.pages, est.size.persons, est.size.images) : '');
-    // The set of files is reckoned as the one file: an upper bound (§6.3, §9.4).
-    setText(foot, '.fp-est-s', ready && est ? (zip ? F.estAtMost : F.estSize)(mbText(est.size.bytes)) : '');
+    // The set of files: the single file plus every file's head and bar, an upper bound (§6.3, §9.4, 1102 §7.5).
+    setText(foot, '.fp-est-s', ready && est ? (zip ? F.estAtMost(mbText(est.size.zipBytes)) : F.estSize(mbText(est.size.bytes))) : '');
     setText(foot, '.fp-file', ready && est ? (zip ? pageSetZipName(est.set) : est.name) : '');
+    // The time saving takes on this device, and on a phone over 2000 pages that a computer is faster (1102 §7.1).
+    const slow = !!est && est.phone && est.size.pages > PHONE_SLOW_PAGES;
+    setText(foot, '.fp-est-time', ready && est ? F.estTime(F.dur(est.size.seconds), est.phone) + (slow ? ` ${F.fasterDesktop}` : '') : '');
+    // Pages for people with only a name and year: from 1000 pages, with the pages it saves (§7.3).
+    const min = foot.querySelector<HTMLElement>('.fp-min');
+    if (min) {
+        min.hidden = !ready || !est || !est.minimalShown;
+        const box = min.querySelector<HTMLInputElement>('input');
+        // The choice at once, not the last estimate's (it follows a moment later).
+        if (box && est) box.checked = est.minimalShown && (s.minimal ?? true);
+        setText(min, '.fp-min-n', est ? F.minimalSave(est.minimalSave) : '');
+    }
     const big = foot.querySelector<HTMLElement>('.fp-big')!;
     big.hidden = !ready || !est || verdict === 'ok';
     if (ready && est && verdict !== 'ok') {
         const mb = mbText(est.size.bytes);
+        // The text alone over 50 MB: no single file even without images, so no offers (§7.1).
+        const textOver = verdict === 'set' && est.size.textMb > TEXT_OVER_MB;
+        big.querySelector<HTMLElement>('.fp-offers')!.hidden = textOver;
         setText(big, '.fp-big-t', verdict === 'set' ? F.splitT(mb) : F.tooBig(F.estSize(mb)));
-        setText(big, '.fp-big-d', verdict === 'set' ? F.splitD : F.bigNote);
+        setText(big, '.fp-big-d', textOver ? F.textOver : verdict === 'set' ? F.splitD : F.bigNote);
         const offer = (key: string, bytes: number | null, text: (size: string) => string): void => {
             const b = big.querySelector<HTMLButtonElement>(`[data-offer="${key}"]`)!;
             b.hidden = bytes === null;
@@ -639,6 +693,8 @@ function estimateHtml(): string {
         + `<button type="button" class="fp-offer" data-offer="small"></button>`
         + `<button type="button" class="fp-offer" data-offer="noclips"></button>`
         + `<button type="button" class="fp-offer" data-offer="zip" aria-pressed="false"></button></div></div>`
+        + `<p class="fp-est-time"></p>`
+        + `<label class="fp-min" hidden><input type="checkbox" name="fp-min"><span><span class="fp-min-t">${esc(strings.familyPages.minimalPages)}</span> <span class="fp-min-n"></span></span></label>`
         + `<p class="fp-file"></p>`;
 }
 
@@ -646,22 +702,55 @@ function progressHtml(): string {
     const F = strings.familyPages;
     return `<div class="fp-prog" role="status"><div class="fp-prog-h"><span class="fp-prog-t">${esc(F.progTitle)}</span><span class="fp-prog-n"></span></div>`
         + `<div class="fp-bar" role="progressbar" aria-valuemin="0" aria-label="${esc(F.progTitle)}"><span class="fp-bar-fill"></span></div>`
-        + `<p class="fp-prog-step"></p><button type="button" class="secondary fp-prog-cancel">${esc(strings.buttons.cancel)}</button></div>`;
+        + `<div class="fp-prog-line"><span class="fp-prog-step"></span><span class="fp-prog-left"></span></div>`
+        + `<p class="fp-prog-note" hidden></p>`
+        + `<div class="fp-prog-b"><button type="button" class="secondary fp-prog-cancel">${esc(strings.buttons.cancel)}</button>`
+        + `<button type="button" class="secondary fp-prog-bg"><span class="fp-l-wide">${esc(F.background)}</span><span class="fp-l-phone">${esc(F.backgroundShort)}</span></button></div></div>`;
+}
+
+/** The set of files could not be written (1102 §7.5, 7c): saved by its lines instead, or closed. */
+function zipFailHtml(): string {
+    const F = strings.familyPages;
+    return `<div class="fp-res fp-fail" role="alert"><p class="fp-res-t fp-fail-t">${esc(F.zipFail)}</p><p class="fp-res-n fp-fail-n"></p>`
+        + `<div class="fp-res-b"><button type="button" class="primary fp-byrods">${esc(F.byRods)}</button>`
+        + `<button type="button" class="secondary fp-fail-close">${esc(strings.buttons.close)}</button></div></div>`;
 }
 
 function resultHtml(): string {
     const F = strings.familyPages;
-    return `<div class="fp-res" role="status"><p class="fp-res-t">${esc(F.resTitle)}</p><p class="fp-res-f"></p><p class="fp-res-n">${esc(F.resNote)}</p>`
+    return `<div class="fp-res" role="status"><p class="fp-res-t"></p><p class="fp-res-f"></p><p class="fp-res-n"></p>`
         + `<div class="fp-res-b"><button type="button" class="primary fp-res-save">${esc(F.resSave)}</button>`
         + `<button type="button" class="secondary fp-res-share" hidden>${esc(F.resShare)}</button>`
         + `<button type="button" class="secondary fp-res-open">${esc(F.openWin)}</button></div></div>`;
+}
+
+/** The time left (1102 §7.2): by the speed of the last 50 pages, the estimate's until then. */
+function remainingSeconds(s: DialogState): number | null {
+    const { done, total } = s.prog;
+    if (!total || done >= total) return null;
+    const r = s.rate;
+    if (r.length >= 2 && r[r.length - 1].done > r[0].done) {
+        const a = r[0], b = r[r.length - 1];
+        return (total - done) * (b.t - a.t) / (b.done - a.done) / 1000;
+    }
+    return s.est ? s.est.size.seconds * (1 - done / total) : null;
 }
 
 function syncProgress(s: DialogState, foot: HTMLElement): void {
     const F = strings.familyPages;
     const { done, total, text } = s.prog;
     setText(foot, '.fp-prog-n', total ? F.progCount(done, total) : '');
-    setText(foot, '.fp-prog-step', text);
+    setText(foot, '.fp-prog-t', s.paused ? F.paused : F.progTitle);
+    setText(foot, '.fp-prog-step', s.paused ? '' : text);
+    const left = remainingSeconds(s);
+    setText(foot, '.fp-prog-left', !s.paused && left !== null ? F.remaining(F.dur(left)) : '');
+    // Paused: what happens to it; on a phone, before it does (7b, 7f).
+    const note = foot.querySelector<HTMLElement>('.fp-prog-note');
+    if (note) {
+        const t = s.paused ? F.pausedNote : phoneDevice() ? F.pausedHint : '';
+        note.hidden = !t;
+        if (note.textContent !== t) note.textContent = t;
+    }
     const bar = foot.querySelector<HTMLElement>('.fp-bar');
     const fill = foot.querySelector<HTMLElement>('.fp-bar-fill');
     if (bar && fill) {
@@ -678,6 +767,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
     return {
         lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
         map: p.include.map, groups: { ...p.groups }, timelines: p.include.timelines, history: s.history,
+        minimal: s.est?.minimal ?? false,
     };
 }
 
@@ -685,8 +775,17 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
 function computeEstimate(s: DialogState): PagesEstimate | null {
     const sel = selectionOf(s);
     if (!selectionReady(sel)) return null;
-    const set = buildPageSet(s.data, sel, pageSetOptionsOf(s), { treeName: s.treeName });
-    const size = estimatePageSetSize(set);
+    const base = pageSetOptionsOf(s);
+    // People with only a name and year: the option from 1000 pages (counted with their pages), on there unless unticked (§7.3).
+    const want = s.minimal ?? true;
+    let set = buildPageSet(s.data, sel, { ...base, minimal: want }, { treeName: s.treeName });
+    const all = set.pages.length + (want ? set.minimalIds.size : 0);
+    const minimalShown = all >= PAGE_SET_MINIMAL_FROM_PAGES && set.minimalIds.size > 0;
+    const minimal = minimalShown && want;
+    if (minimal !== want) set = buildPageSet(s.data, sel, { ...base, minimal }, { treeName: s.treeName });
+    const phone = phoneDevice();
+    const device = phone ? 'phone' as const : 'desktop' as const;
+    const size = estimatePageSetSize(set, { device });
     const imgs = pageSetImages(set);
     const clips = imgs.filter(i => i.kind === 'clip').length;
     const photos = imgs.length - clips;
@@ -699,6 +798,7 @@ function computeEstimate(s: DialogState): PagesEstimate | null {
         noClips: p.clips !== 'none' && clips > 0 ? estimatePageSetSize(set, { clips: 'none' }).bytes : null,
         warn: pageSetPrivacyWarning(set),
         name: pageSetFileName(set),
+        minimal, minimalShown, minimalSave: set.minimalIds.size, phone,
     };
 }
 
@@ -757,6 +857,32 @@ function changed(s: DialogState): void {
     if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
     if (s.output === 'pages') scheduleEstimate(s);
     sync(s);
+}
+
+/**
+ * The toolbar's chip of a build in the background (1102 §7.2): "Pages 62 %"
+ * with a small bar, then "Pages are ready"; hidden without one.
+ */
+function syncPagesChip(): void {
+    const chip = document.getElementById('pages-bg-chip');
+    if (!chip) return;
+    const s = running;
+    chip.hidden = !s;
+    if (!s) return;
+    const F = strings.familyPages;
+    const done = s.phase === 'result' || s.phase === 'zipFail';
+    const pct = s.prog.total ? Math.min(100, Math.round(s.prog.done / s.prog.total * 100)) : 0;
+    chip.classList.toggle('is-done', done);
+    chip.classList.toggle('is-paused', s.paused);
+    const label = done ? F.bgDone : F.bgChip(pct);
+    const t = chip.querySelector<HTMLElement>('.pages-bg-t');
+    if (t && t.textContent !== label) t.textContent = label;
+    const short = chip.querySelector<HTMLElement>('.pages-bg-s');
+    const shortLabel = done ? F.bgDoneShort : F.bgPct(pct);
+    if (short && short.textContent !== shortLabel) short.textContent = shortLabel;
+    chip.setAttribute('aria-label', s.paused && !done ? `${label} · ${F.paused}` : label);
+    const fill = chip.querySelector<HTMLElement>('.pages-bg-fill');
+    if (fill) fill.style.width = `${done ? 100 : pct}%`;
 }
 
 export const bookUiMethods = uiModule({
@@ -873,7 +999,17 @@ export const bookUiMethods = uiModule({
             prog: { done: 0, total: 0, text: '' },
             file: null,
             zip: false,
+            minimal: null,
+            paused: false,
+            rate: [],
+            started: null,
         };
+        this.presentBookDialog(st);
+    },
+
+    /** Show the dialog for a state: a new one, or the build brought back from the background (1102 §7.2). */
+    presentBookDialog(s: DialogState): void {
+        st = s;
 
         const overlay = document.getElementById('book-modal');
         const modal = overlay?.querySelector<HTMLElement>('.book-dlg');
@@ -893,14 +1029,14 @@ export const bookUiMethods = uiModule({
         }
         const foot = modal.querySelector<HTMLElement>('.fp-foot');
         if (foot) { foot.innerHTML = ''; delete foot.dataset.view; }
-        renderOptions(st);
+        renderOptions(s);
         setText(modal, '.book-open-hint', strings.book.dlg.openHint);
         if (!modal.dataset.wired) {
             modal.dataset.wired = '1';
             this.wireBookDialog(modal);
         }
-        if (st.output === 'pages') scheduleEstimate(st, true);
-        else sync(st);
+        if (s.output === 'pages' && s.phase === 'options') scheduleEstimate(s, true);
+        else sync(s);
 
         // Own the dialog stack (as the poster does): the first Escape closes
         // the book, and no parent dialog can reopen on top of it.
@@ -971,6 +1107,9 @@ export const bookUiMethods = uiModule({
                 return;
             }
             if (t.closest('.fp-prog-cancel')) { this.cancelPagesBuild(); return; }
+            if (t.closest('.fp-prog-bg')) { this.pagesToBackground(); return; }
+            if (t.closest('.fp-byrods')) { void this.savePagesByLines(); return; }
+            if (t.closest('.fp-fail-close')) { this.closeBookDialog(); return; }
             if (t.closest('.fp-res-save')) { this.savePagesResult(); return; }
             if (t.closest('.fp-res-share')) { this.sharePagesResult(); return; }
             if (t.closest('.fp-res-open')) { this.openFamilyPagesFromDialog(); return; }
@@ -1037,6 +1176,7 @@ export const bookUiMethods = uiModule({
         modal.addEventListener('change', (e) => {
             const t = e.target as HTMLInputElement;
             if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; }); return; }
+            if (t.name === 'fp-min') { update(s => { s.minimal = t.checked; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
             if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }
             if (t.name === 'fp-grp') {
@@ -1113,11 +1253,16 @@ export const bookUiMethods = uiModule({
     },
 
     closeBookDialog(): void {
+        // A file being built is dropped: nothing is saved.
+        if (st?.job) st.job.cancelled = true;
+        this.hideBookDialog();
+    },
+
+    /** The dialog away: its state dropped, a build left to run only when it went to the background. */
+    hideBookDialog(): void {
         closePicker?.();
         selPicker?.destroy();
         selPicker = null;
-        // A file being built is dropped: nothing is saved.
-        if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
         document.getElementById('book-modal')?.classList.remove('active');
         if (this.isPersonPageOpen()) this.dialogStack = this.dialogStack.filter(id => id !== 'book-modal');
@@ -1129,38 +1274,106 @@ export const bookUiMethods = uiModule({
     async buildPagesFromDialog(): Promise<void> {
         const s = st;
         if (!s || s.output !== 'pages' || s.phase !== 'options') return;
+        // One build at a time (1102 §7.2).
+        if (running && running !== s) { this.showAlert(strings.familyPages.running, 'info'); return; }
         const sel = selectionOf(s);
         if (!selectionReady(sel)) return;
         if (s.estTimer !== null) scheduleEstimate(s, true);
         if (!s.est) return;
         const zip = savesZip(s);
         saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
-        const job: PagesJob = { cancelled: false };
+        // A copy of the tree as it is now: it may be browsed and edited meanwhile (7b).
+        s.started = { sel, opts: pageSetOptionsOf(s), data: snapshotData(s.data) };
+        await this.runPagesBuild(s, s.started.sel, s.started.opts, zip);
+    },
+
+    /**
+     * Build the file of a state, with its progress, its pause while the app is
+     * hidden and its result, in the dialog or in the background (1102 §7.2).
+     */
+    async runPagesBuild(s: DialogState, sel: BookSelectionSpec, opts: PageSetOptions, zip: boolean): Promise<void> {
+        const job: PagesJob = { cancelled: false, paused: false };
         s.job = job;
         s.phase = 'building';
+        s.paused = false;
+        s.rate = [];
         s.prog = { done: 0, total: 0, text: '' };
         sync(s);
+        const alive = (): boolean => (st === s || running === s) && s.job === job;
         const timer = window.setTimeout(() => {
-            if (st === s && s.job === job && s.phase === 'building') { s.phase = 'progress'; sync(s); }
+            if (alive() && s.phase === 'building') { s.phase = 'progress'; this.syncPagesBuild(s); }
         }, PROGRESS_AFTER_MS);
+        const onVisibility = (): void => {
+            if (!alive()) return;
+            job.paused = s.paused = document.visibilityState === 'hidden';
+            s.rate = [];
+            this.syncPagesBuild(s);
+        };
+        document.addEventListener('visibilitychange', onVisibility);
         try {
-            const file = await buildPagesFile(s.data, sel, pageSetOptionsOf(s), job, (done, total, text) => {
+            const data = s.started?.data ?? s.data;
+            const file = await buildPagesFile(data, sel, opts, job, (done, total, text) => {
                 s.prog = { done, total, text };
-                const foot = document.querySelector<HTMLElement>('#book-modal .fp-foot');
-                if (st === s && s.job === job && s.phase === 'progress' && foot) syncProgress(s, foot);
+                if (total) {
+                    s.rate.push({ t: performance.now(), done });
+                    while (s.rate.length > 2 && s.rate[s.rate.length - 1].done - s.rate[0].done > RATE_PAGES) s.rate.shift();
+                }
+                if (alive() && s.phase === 'progress') this.syncPagesBuild(s, true);
             }, zip);
-            if (st !== s || s.job !== job) return;
+            if (!alive()) return;
             s.file = file;
             s.phase = 'result';
         } catch (e) {
-            if (st !== s || s.job !== job) return;
-            s.phase = 'options';
-            if (!(e instanceof PagesCancelled)) this.showAlert(strings.familyPages.buildFailed, 'warning');
+            if (!alive()) return;
+            s.phase = e instanceof PagesZipFailed ? 'zipFail' : 'options';
+            if (!(e instanceof PagesCancelled) && !(e instanceof PagesZipFailed)) this.showAlert(strings.familyPages.buildFailed, 'warning');
         } finally {
             clearTimeout(timer);
+            document.removeEventListener('visibilitychange', onVisibility);
             if (s.job === job) s.job = null;
+            s.paused = false;
+        }
+        if (running === s) {
+            // Done in the background: the chip says so and opens the result; a failure opens the dialog at once.
+            if (s.phase === 'options') { running = null; syncPagesChip(); return; }
+            if (s.phase === 'zipFail') { this.openPagesFromChip(); return; }
+            syncPagesChip();
+            return;
         }
         sync(s);
+        if (s.phase === 'result') document.querySelector<HTMLElement>('#book-modal .fp-res-save')?.focus();
+        if (s.phase === 'zipFail') document.querySelector<HTMLElement>('#book-modal .fp-byrods:not([hidden]), #book-modal .fp-fail-close')?.focus();
+    },
+
+    /** The build's progress where it is shown: the dialog's footer, or the toolbar's chip. */
+    syncPagesBuild(s: DialogState, progressOnly = false): void {
+        if (running === s) { syncPagesChip(); return; }
+        if (st !== s) return;
+        const foot = document.querySelector<HTMLElement>('#book-modal .fp-foot');
+        if (progressOnly && foot?.dataset.view === 'progress') syncProgress(s, foot);
+        else sync(s);
+    },
+
+    /** "Continue in background": the dialog closes, the build goes on with its chip in the toolbar (1102 §7.2). */
+    pagesToBackground(): void {
+        const s = st;
+        if (!s?.job) return;
+        running = s;
+        this.hideBookDialog();
+        syncPagesChip();
+        document.getElementById('pages-bg-chip')?.focus();
+    },
+
+    /** The toolbar's chip: the dialog again with the progress, the result or the failure. */
+    openPagesFromChip(): void {
+        const s = running;
+        if (!s) return;
+        if (st && st !== s) this.closeBookDialog();
+        running = null;
+        syncPagesChip();
+        this.closeMobileMenu?.();
+        document.getElementById('export-modal')?.classList.remove('active');
+        this.presentBookDialog(s);
         if (s.phase === 'result') document.querySelector<HTMLElement>('#book-modal .fp-res-save')?.focus();
     },
 
@@ -1170,21 +1383,61 @@ export const bookUiMethods = uiModule({
         if (!s?.job) return;
         s.job.cancelled = true;
         s.job = null;
+        s.paused = false;
         s.phase = 'options';
         sync(s);
         document.querySelector<HTMLElement>('#book-modal #book-open')?.focus();
     },
 
-    /** The result's Save: a download, as the person page and the book save. */
+    /**
+     * "Save by lines" (1102 §7.5, 7c): a set of files for every line of the
+     * selection, each with its own index.html, built and saved one after another.
+     */
+    async savePagesByLines(): Promise<void> {
+        const s = st;
+        const started = s?.started;
+        if (!s || !started || s.job) return;
+        const lines = pagesLineIds(started.data, started.sel, started.opts);
+        if (!lines.length) return;
+        const job: PagesJob = { cancelled: false, paused: false };
+        s.job = job;
+        s.phase = 'progress';
+        s.rate = [];
+        s.prog = { done: 0, total: lines.length, text: '' };
+        sync(s);
+        const onVisibility = (): void => { job.paused = s.paused = document.visibilityState === 'hidden'; this.syncPagesBuild(s); };
+        document.addEventListener('visibilitychange', onVisibility);
+        let failed = false;
+        try {
+            for (let i = 0; i < lines.length; i++) {
+                const file = await buildPagesFile(started.data, { kind: 'rods', rods: [lines[i]] }, started.opts, job, (_d, _t, text) => {
+                    s.prog = { done: i, total: lines.length, text };
+                    if (st === s && s.job === job) this.syncPagesBuild(s, true);
+                }, true);
+                await savePagesFile(file);
+            }
+        } catch (e) {
+            failed = !(e instanceof PagesCancelled);
+        } finally {
+            document.removeEventListener('visibilitychange', onVisibility);
+            if (s.job === job) s.job = null;
+            s.paused = false;
+        }
+        if (st !== s || job.cancelled) return;
+        s.phase = 'options';
+        sync(s);
+        if (failed) this.showAlert(strings.familyPages.buildFailed, 'warning');
+    },
+
+    /** The result's Save: a download (a large set of files to the file the save picker chooses, §7.5). */
     savePagesResult(): void {
         const file = st?.file;
         if (!file) return;
-        try {
-            downloadPagesFile(file);
-            this.showToast(strings.familyPages.saved(file.name));
-        } catch {
+        savePagesFile(file).then((saved) => {
+            if (saved) this.showToast(strings.familyPages.saved(file.name));
+        }, () => {
             this.showAlert(strings.familyPages.saveFailed, 'warning');
-        }
+        });
     },
 
     /** The result's Share…: Web Share with the file, where the device shares files. */

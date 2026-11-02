@@ -186,7 +186,7 @@ test.describe('family pages: the dialog', () => {
         await injectPhoto(page, 60_000_000);
         await openDialog(page, 'pages');
         await dialog.locator('[data-photos="full"]').click();
-        await expect(dialog.locator('.fp-big-t')).toHaveText(/^One file would have 6\d MB; it is saved as a set of files\.$/);
+        await expect(dialog.locator('.fp-big-t')).toHaveText(/^One file would have about 6\d MB; it is saved as a set of files\.$/);
         await expect(dialog.locator('.fp-est-t')).toHaveText('Set of files (.zip)');
         await expect(dialog.locator('.fp-file')).toHaveText('Brandvold.zip');
         await expect(dialog.locator('.fp-est-s')).toHaveText(/^at most about 6\d MB$/);
@@ -206,7 +206,9 @@ test.describe('family pages: the dialog', () => {
         await dialog.locator('#book-open').click();
         const res = dialog.locator('.fp-res');
         await expect(res).toBeVisible();
-        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold\.zip · \d+\.\d MB$/);
+        await expect(res.locator('.fp-res-t')).toHaveText('The set of pages is ready');
+        await expect(res.locator('.fp-res-f')).toHaveText(/^Brandvold\.zip · \d+\.\d MB · \d+ pages$/);
+        await expect(res.locator('.fp-res-n')).toContainText('The folder can be uploaded to a website as it is.');
         const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
         expect(download.suggestedFilename()).toBe('Brandvold.zip');
         const dir = mkdtempSync(join(tmpdir(), 'strom-pages-zip-'));
@@ -215,7 +217,12 @@ test.describe('family pages: the dialog', () => {
         expect(execFileSync('unzip', ['-t', saved]).toString()).toMatch(/No errors detected/);
         const list = execFileSync('unzip', ['-Z1', saved]).toString().trim().split('\n');
         expect(list[0]).toBe('index.html');
-        expect(list).toEqual(expect.arrayContaining(['styl.css', 'skript.js', 'hledani.js', expect.stringMatching(/^obrazky\/img-\d+\.jpg$/)]));
+        // 1102 §7.5: the folders in the app's language, only index.html at the top.
+        expect(list).toEqual(expect.arrayContaining(['_files/styl.css', '_files/skript.js', '_files/hledani.js', expect.stringMatching(/^images\/img-\d+\.jpg$/)]));
+        expect(list.filter(p => !p.includes('/'))).toEqual(['index.html']);
+        for (const p of list) expect(p).toMatch(/^[a-z0-9_./-]+$/);
+        expect(list.some(p => p.startsWith('people/'))).toBe(true);
+        expect(list.some(p => p.startsWith('lines/'))).toBe(true);
         execFileSync('unzip', ['-q', saved, '-d', join(dir, 'out')]);
         const file = await context.newPage();
         await file.goto(pathToFileURL(join(dir, 'out', 'index.html')).href);

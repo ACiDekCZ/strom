@@ -23,8 +23,8 @@ import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
-import { PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
-import { buildZip } from '../zip.js';
+import { PAGE_SET_SPLIT_BYTES, PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
+import { ZipWriter } from '../zip.js';
 import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
@@ -258,15 +258,27 @@ export class PagesCancelled extends Error {
     constructor() { super('cancelled'); this.name = 'PagesCancelled'; }
 }
 
-export interface PagesJob { cancelled: boolean }
+/** The set of files could not be written (§7.5): too large for the memory of the device, as a rule. */
+export class PagesZipFailed extends Error {
+    constructor(cause: unknown) { super(cause instanceof Error ? cause.message : String(cause)); this.name = 'PagesZipFailed'; }
+}
+
+/**
+ * A build in progress: `cancelled` stops it (nothing is saved), `paused` holds
+ * it between two pages until it is false again (§7.2: the app in the
+ * background of a phone).
+ */
+export interface PagesJob { cancelled: boolean; paused?: boolean }
 
 export interface PagesFile {
-    /** One .html file, or the set of files (§6.4) as a .zip. */
-    data: string | Uint8Array<ArrayBuffer>;
+    /** One .html file, or the set of files (§6.4) as a .zip (a Blob of its parts, §7.5). */
+    data: string | Blob;
     type: 'text/html' | 'application/zip';
     name: string;
     bytes: number;
     title: string;
+    /** The pages of the set. */
+    pages: number;
 }
 
 /** An idle moment of the app (the window stays usable between pages); a short timeout without requestIdleCallback. */
@@ -276,6 +288,14 @@ function idle(): Promise<void> {
         if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(() => resolve(), { timeout: 50 });
         else setTimeout(resolve, 0);
     });
+}
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/** A test hook: ms to wait after every page, so a test sees the progress (unset in use). */
+function testDelay(): number {
+    const v = (window as Window & { __stromPagesDelay?: number }).__stromPagesDelay;
+    return typeof v === 'number' && v > 0 ? v : 0;
 }
 
 function stepOf(page: SetPage | undefined): string {
@@ -291,9 +311,10 @@ function stepOf(page: SetPage | undefined): string {
 
 /**
  * Build the file a page at a time: the set, the reduced images, the pages,
- * the file (with `zip` the set of files, §6.4). `onStep(done, total, text)`
- * reports the pages done (0 / 0 while preparing and reducing images).
- * Throws PagesCancelled once `job.cancelled`.
+ * the file (with `zip` the set of files, §6.4, written into a Blob's parts an
+ * entry at a time, §7.5). `onStep(done, total, text)` reports the pages done
+ * (0 / 0 while preparing and reducing images). Throws PagesCancelled once
+ * `job.cancelled`, PagesZipFailed when the set of files cannot be written.
  */
 export async function buildPagesFile(
     data: StromData, spec: BookSelectionSpec, opts: PageSetOptions, job: PagesJob,
@@ -301,6 +322,14 @@ export async function buildPagesFile(
 ): Promise<PagesFile> {
     const F = strings.familyPages;
     const check = (): void => { if (job.cancelled) throw new PagesCancelled(); };
+    const hold = async (): Promise<void> => {
+        await idle();
+        check();
+        const delay = testDelay();
+        if (delay) await sleep(delay);
+        while (job.paused && !job.cancelled) await sleep(200);
+        check();
+    };
     onStep(0, 0, F.step.prepare);
     await idle();
     check();
@@ -313,7 +342,7 @@ export async function buildPagesFile(
             const img = want[i];
             const out = await shrinkImage(img.dataUrl, img.kind === 'clip' ? SHRINK_CLIP_PX : SHRINK_PHOTO_PX, SHRINK_QUALITY);
             if (out) small.set(img.dataUrl, out);
-            check();
+            await hold();
         }
         onStep(0, 0, F.step.images(want.length, want.length));
         set = buildPageSet(data, spec, opts, { treeName: treeName(), replaceImage: (u) => small.get(u) ?? null });
@@ -322,23 +351,81 @@ export async function buildPagesFile(
     onStep(0, pages.length, stepOf(pages[0]));
     const build = {
         fontCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
-        pause: async () => { await idle(); check(); },
+        pause: hold,
         progress: (done: number, total: number) => onStep(done, total, done < total ? stepOf(pages[done]) : F.step.write),
     };
     const title = set.bySlug.get(set.introSlug)?.title ?? '';
     if (zip) {
-        const bytes = buildZip(await buildPageSetFilesAsync(set, build), set.options.now);
-        check();
-        return { data: bytes, type: 'application/zip', name: pageSetZipName(set), bytes: bytes.length, title };
+        const parts: BlobPart[] = [];
+        let writer: ZipWriter;
+        let blob: Blob;
+        try {
+            writer = new ZipWriter(p => { parts.push(p); }, set.options.now);
+            await buildPageSetFilesAsync(set, { ...build, emit: (e) => writer.add(e.path, e.data) });
+            check();
+            writer.finish();
+            blob = new Blob(parts, { type: 'application/zip' });
+        } catch (e) {
+            if (e instanceof PagesCancelled) throw e;
+            throw new PagesZipFailed(e);
+        }
+        return { data: blob, type: 'application/zip', name: pageSetZipName(set), bytes: blob.size, title, pages: pages.length };
     }
     const html = await buildPageSetHtmlAsync(set, build);
     check();
-    return { data: html, type: 'text/html', name: pageSetFileName(set), bytes: new Blob([html]).size, title };
+    return { data: html, type: 'text/html', name: pageSetFileName(set), bytes: new Blob([html]).size, title, pages: pages.length };
 }
 
-/** Save by a download (as the person page and the book do). */
+/**
+ * A copy of the tree for a build that may run while the tree is edited
+ * (1102 §7.2): objects and arrays copied, strings (photos as data URLs among
+ * them) shared, as they never change in place.
+ */
+export function snapshotData(data: StromData): StromData {
+    const copy = (v: unknown): unknown => {
+        if (Array.isArray(v)) return v.map(copy);
+        if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+            const out: Record<string, unknown> = {};
+            for (const k in v as Record<string, unknown>) out[k] = copy((v as Record<string, unknown>)[k]);
+            return out;
+        }
+        return v;
+    };
+    return copy(data) as StromData;
+}
+
+/** The lines of a selection's set (§7.5: a set too large to write is saved by its lines). */
+export function pagesLineIds(data: StromData, spec: BookSelectionSpec, opts: PageSetOptions): RodId[] {
+    return [...buildPageSet(data, spec, opts, { treeName: treeName() }).rodIds];
+}
+
+type SavePicker = (o: { suggestedName: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<{
+    createWritable(): Promise<WritableStream<Uint8Array>>;
+}>;
+
+/**
+ * Save by a download (as the person page and the book do). A large set of
+ * files goes to the file the save picker chooses as a stream where the
+ * browser has one (§7.5), so the archive is not copied once more in memory.
+ */
+export async function savePagesFile(file: PagesFile): Promise<boolean> {
+    const picker = (window as Window & { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+    if (file.data instanceof Blob && file.bytes > PAGE_SET_SPLIT_BYTES && typeof picker === 'function') {
+        try {
+            const handle = await picker({ suggestedName: file.name, types: [{ description: file.name, accept: { 'application/zip': ['.zip'] } }] });
+            await file.data.stream().pipeTo(await handle.createWritable());
+            return true;
+        } catch (e) {
+            if ((e as Error)?.name === 'AbortError') return false;
+        }
+    }
+    downloadPagesFile(file);
+    return true;
+}
+
+/** Save by a download. */
 export function downloadPagesFile(file: PagesFile): void {
-    const blob = new Blob([file.data], { type: file.type === 'text/html' ? 'text/html;charset=utf-8' : file.type });
+    const blob = file.data instanceof Blob ? file.data : new Blob([file.data], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
