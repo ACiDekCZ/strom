@@ -212,6 +212,22 @@ describe('the indexes (§3.5)', () => {
         expect(win).toContain('data-sp-open="page:rejstrik-obce" data-sp-place="capkov"');
     });
 
+    it('places: the spellings of one research place are one row', () => {
+        const { data } = familyPagesFixture();
+        const before = pageSetPlaces(rodsSet(data)).find(r => r.name === 'Čapkov')!;
+        let n = 0;
+        for (const p of Object.values(data.persons)) if (p.birthPlace === 'Čapkov' && n++ % 2 === 0) p.birthPlace = 'Capkow';
+        expect(n).toBeGreaterThan(1);
+        expect(pageSetPlaces(rodsSet(data)).some(r => r.name === 'Capkow')).toBe(true);
+        data.placeRecords = { L0001: { id: 'L0001', names: [{ name: 'Čapkov' }] } };
+        data.placeRefs = { capkov: 'L0001', capkow: 'L0001' };
+        const rows = pageSetPlaces(rodsSet(data));
+        const row = rows.find(r => r.name === 'Čapkov')!;
+        expect(row).toMatchObject({ key: 'capkov', alsoKeys: ['capkow'], from: before.from, to: before.to });
+        expect(new Set(row.personIds)).toEqual(new Set(before.personIds));
+        expect(rows.some(r => r.name === 'Capkow')).toBe(false);
+    });
+
     it('in English: the same indexes, no Czech letter rule', () => {
         setLanguage('en');
         const set = rodsSet(chFixture().data, 'en');

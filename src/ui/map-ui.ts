@@ -26,6 +26,7 @@ import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
+import { mapSpellingPlaces } from '../place-groups.js';
 import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
@@ -84,9 +85,8 @@ export const mapMethods = uiModule({
             this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
 
         const mapped: MappedPlace[] = [];
-        for (const [key, usage] of collectPlaces(data, filter, this.mapKinds())) {
-            const geo = data.places?.[key];
-            if (geo) mapped.push({ key, usage, geo });
+        for (const p of this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places) {
+            if (p.geo) mapped.push({ key: p.key, usage: p.usage, geo: p.geo });
         }
         return mapped.sort((a, b) => b.usage.count - a.usage.count || a.usage.display.localeCompare(b.usage.display));
     },
@@ -96,10 +96,26 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        return [...collectPlaces(data, filter, this.mapKinds())]
-            .filter(([key]) => !data.places?.[key])
-            .map(([key, usage]) => ({ key, usage }))
+        return this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places
+            .filter(p => !p.geo)
+            .map(({ key, usage }) => ({ key, usage }))
             .sort((a, b) => b.usage.count - a.usage.count);
+    },
+
+    /**
+     * The places in scope with each place's spellings as one (§4, a research
+     * record or the other names written down by Unify): one point, one entry
+     * of the missing. `keyOf` maps a joined spelling to its point.
+     */
+    mapSpellings(places: ReadonlyMap<string, PlaceUsage>): { places: { key: string; usage: PlaceUsage; geo?: PlaceGeo }[]; keyOf: Map<string, string> } {
+        const data = DataManager.getData();
+        const entries = [...places].map(([key, usage]) => ({ key, usage, geo: data.places?.[key] }));
+        return mapSpellingPlaces(data, entries, knownStreets(data));
+    },
+
+    /** The map point a place is drawn as: a spelling of a place joined to it (§4), else the place itself. */
+    mapPointKeyOf(key: string): string {
+        return this.mapSpellings(collectPlaces(DataManager.getData())).keyOf.get(key) ?? key;
     },
 
     /** The kinds of places the map shows (chips above it), kept on this device. */
@@ -824,6 +840,7 @@ export const mapMethods = uiModule({
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         if (!popup) return;
         const points = this.mapPoints();
+        key = points.some(p => p.key === key) ? key : this.mapPointKeyOf(key);
         const point = points.find(p => p.key === key)
             ?? points.find(p => p.type === 'town' && p.placeKeys.includes(key));
         if (!point) return;
@@ -963,6 +980,7 @@ export const mapMethods = uiModule({
      * not cover switches the map to the whole tree.
      */
     showPlaceOnMap(key: string): void {
+        key = this.mapPointKeyOf(key);
         const geo = DataManager.getData().places?.[key];
         if (!geo) return;
         if (!this.mapPlaces().some(p => p.key === key)) this.mapScope = 'tree';

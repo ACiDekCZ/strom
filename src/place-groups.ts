@@ -288,24 +288,36 @@ export function mergePlaceUsages(display: string, usages: readonly PlaceUsage[])
 }
 
 /**
- * The map's places with each place's spellings drawn as one point (§4): a
- * spelling joins its group's own place when that place is on the map, its
- * usage added; a spelling with its own location while the group's own place
- * has none stands for the group. `keyOf` tells for every spelling which
- * point it is now.
+ * The map's places with each place's spellings drawn as one point (§4). The
+ * point of a group is its own place when that is on the map (`located`), else
+ * its first spelling that is; every other spelling joins it, its usage added
+ * (a spelling without a location too). A group with nothing on the map stays
+ * as it is. `keyOf` tells for every joined spelling which point it is now.
  */
 export function mergeSpellingPlaces<T extends { key: string; usage: PlaceUsage }>(
     places: readonly T[], targets: ReadonlyMap<string, string>, heads: ReadonlyMap<string, string>,
+    located: (p: T) => boolean = () => true,
 ): { places: T[]; keyOf: Map<string, string> } {
     const keyOf = new Map<string, string>();
     if (!targets.size) return { places: [...places], keyOf };
     const byKey = new Map(places.map(p => [p.key, p]));
+    // Each group's point: its own place on the map, else its first spelling on the map.
+    const pointOf = new Map<string, string>();
+    for (const p of places) {
+        const own = targets.get(p.key);
+        if (!own || pointOf.has(own)) continue;
+        const ownPlace = byKey.get(own);
+        if (ownPlace && located(ownPlace)) pointOf.set(own, own);
+        else if (located(p)) pointOf.set(own, p.key);
+    }
+    for (const own of new Set(targets.values())) {
+        const ownPlace = byKey.get(own);
+        if (!pointOf.has(own) && ownPlace && located(ownPlace)) pointOf.set(own, own);
+    }
     const parts = new Map<string, T[]>();
     for (const p of places) {
-        const target = targets.get(p.key) ?? p.key;
-        // The group's own place is not on the map: the first spelling that is stands for it.
-        const point = byKey.has(target) ? target : (keyOf.get(target) ?? p.key);
-        if (!byKey.has(target) && !keyOf.has(target)) keyOf.set(target, point);
+        const own = targets.get(p.key) ?? p.key;
+        const point = pointOf.get(own) ?? p.key;
         const list = parts.get(point) ?? [];
         list.push(p);
         parts.set(point, list);
@@ -316,8 +328,23 @@ export function mergeSpellingPlaces<T extends { key: string; usage: PlaceUsage }
         const list = parts.get(p.key);
         if (!list) continue;
         if (list.length === 1) { out.push(p); continue; }
-        const display = heads.get(p.key) ?? p.usage.display;
+        const display = heads.get(targets.get(p.key) ?? p.key) ?? p.usage.display;
         out.push({ ...p, usage: mergePlaceUsages(display, list.map(x => x.usage)) });
     }
     return { places: out, keyOf };
+}
+
+/**
+ * The map's places merged by their groups (§4): the tree's records and its
+ * other names; `entries` are the places in scope with their locations.
+ */
+export function mapSpellingPlaces<T extends { key: string; usage: PlaceUsage; geo?: unknown }>(
+    data: StromData, entries: readonly T[], known?: KnownStreets,
+): { places: T[]; keyOf: Map<string, string> } {
+    if (!data.placeRefs && !data.placeAliases) return { places: [...entries], keyOf: new Map() };
+    const groups = placeVariantGroups(new Map(entries.map(e => [e.key, e.usage])), { data, aliases: placeAliasMap(data), ...(known ? { known } : {}) });
+    const targets = placeSpellingTargets(groups);
+    for (const g of groups) if (g.members.some(m => targets.has(m.key))) targets.set(g.ownKey, g.ownKey);
+    const heads = new Map(groups.map(g => [g.ownKey, g.head]));
+    return mergeSpellingPlaces(entries, targets, heads, e => !!e.geo);
 }

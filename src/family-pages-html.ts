@@ -151,7 +151,7 @@ function makeRender(set: PageSet, mode: 'file' | 'app', opts: PageSetHtmlOptions
         const slug = drawnSlug(r, set.indexSlug.places);
         if (!slug) return null;
         if (mode === 'app') return pageSetAppTarget(set.bySlug.get(slug)!);
-        const i = placeRows(r).findIndex(p => p.key === key);
+        const i = placeRows(r).findIndex(p => p.key === key || !!p.alsoKeys?.includes(key));
         return `#${i < 0 ? slug : placeAnchor(slug, i)}`;
     };
     return r;

@@ -118,9 +118,10 @@ describe('one map point per place', () => {
         expect(out.map(p => p.key)).toEqual([k('Horní Lhota'), k('Jinov')]);
         expect(out[0]!.usage).toMatchObject({ display: 'Horní Lhota', count: 15, personIds: ['a', 'b'] });
         expect(keyOf.get(k('H. Lhota'))).toBe(k('Horní Lhota'));
-        // The group's own place not on the map: the spelling that is stands for it.
-        const { places: only, keyOf: k2 } = mergeSpellingPlaces(mapped.filter(p => p.key !== k('Horní Lhota')), targets, heads);
+        // The group's own place not on the map: the spelling that is stands for it, the own place joins it.
+        const { places: only, keyOf: k2 } = mergeSpellingPlaces(mapped, targets, heads, p => p.key !== k('Horní Lhota'));
         expect(only.map(p => p.key)).toEqual([k('H. Lhota'), k('Jinov')]);
+        expect(only[0]!.usage).toMatchObject({ display: 'Horní Lhota', count: 15 });
         expect(k2.get(k('Horní Lhota'))).toBe(k('H. Lhota'));
     });
 });

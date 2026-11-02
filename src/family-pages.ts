@@ -15,6 +15,7 @@ import { Partnership, PartnershipId, Person, PersonId, StromData, personSourceId
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
 import { yearOf } from './dates.js';
+import { placeAliasMap, variantGroupKey } from './place-groups.js';
 import { placeKey } from './places.js';
 import { shownNameOrEmpty, shownNameParts } from './person-name.js';
 import { feminineForm } from './surnames.js';
@@ -671,6 +672,8 @@ export interface SetPlaceRow {
     to: number;
     /** The people with a record there, by birth. */
     personIds: PersonId[];
+    /** placeKeys of the place's other spellings joined to it (§4 of spec 034: a research record, Unify's other names). */
+    alsoKeys?: string[];
 }
 
 /**
@@ -682,14 +685,18 @@ export interface SetPlaceRow {
 export function pageSetPlaces(set: PageSet): SetPlaceRow[] {
     const tree = set.protectedTree.tree;
     const shown = (id: PersonId | undefined | null): boolean => !!id && set.personSlug.has(id);
-    const acc = new Map<string, { names: Map<string, number>; from: number; to: number; ids: Set<PersonId> }>();
+    const acc = new Map<string, { names: Map<string, number>; keys: Map<string, number>; from: number; to: number; ids: Set<PersonId> }>();
+    // A place's spellings are one row (§4 of spec 034): by its research record or Unify's other names.
+    const ctx = { data: tree, aliases: placeAliasMap(tree) };
     const note = (place: string | undefined, date: string | undefined, who: PersonId): void => {
         const name = place?.trim();
         const year = yearOf(date);
         if (!name || year === null) return;
-        const key = placeKey(name) || name.toLowerCase();
+        const own = placeKey(name) || name.toLowerCase();
+        const key = variantGroupKey(own, ctx) ?? own;
         let a = acc.get(key);
-        if (!a) { a = { names: new Map(), from: year, to: year, ids: new Set() }; acc.set(key, a); }
+        if (!a) { a = { names: new Map(), keys: new Map(), from: year, to: year, ids: new Set() }; acc.set(key, a); }
+        a.keys.set(own, (a.keys.get(own) ?? 0) + 1);
         a.names.set(name, (a.names.get(name) ?? 0) + 1);
         a.from = Math.min(a.from, year);
         a.to = Math.max(a.to, year);
@@ -713,9 +720,16 @@ export function pageSetPlaces(set: PageSet): SetPlaceRow[] {
     const born = (id: PersonId): number => yearOf(tree.persons[id]?.birthDate) ?? 9999;
     const lang = set.options.lang;
     return [...acc.entries()]
-        .map(([key, a]) => ({
-            key,
-            name: [...a.names.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], lang))[0][0],
+        .map(([group, a]) => {
+            const name = tree.placeRecords?.[group]?.names[0]?.name
+                ?? [...a.names.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], lang))[0][0];
+            const keys = [...a.keys.entries()].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).map(e => e[0]);
+            const key = keys.includes(placeKey(name)) ? placeKey(name) : keys[0]!;
+            return { key, name, keys: keys.filter(k => k !== key), a };
+        })
+        .map(({ key, name, keys, a }) => ({
+            key, name,
+            ...(keys.length ? { alsoKeys: keys } : {}),
             from: a.from, to: a.to,
             personIds: [...a.ids].sort((x, y) => born(x) - born(y) || nameOf(tree, x).localeCompare(nameOf(tree, y), lang)),
         }))
