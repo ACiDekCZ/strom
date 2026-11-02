@@ -254,7 +254,7 @@ export const researchOthersMethods = uiModule({
         return `<div class="tree-switcher-blocked" data-research-blocked${this.researchMarksBlocked() ? '' : ' hidden'}>`
             + `<span class="tree-switcher-blocked-text">${esc(o.blockedSwitcher)}</span> `
             + `<button type="button" class="link-button tree-switcher-blocked-link" role="menuitem" `
-            + `onclick="event.stopPropagation(); window.Strom.UI.showOtherResearchAllowHow()">${esc(o.blockedHow)} ↗</button></div>`;
+            + `onclick="event.stopPropagation(); window.Strom.UI.showOtherResearchAllowHow()">${esc(o.blockedHow)}</button></div>`;
     },
 
     /** The phone sheet's row: the marks on a second line (not running: how it reconnects). */
@@ -270,7 +270,7 @@ export const researchOthersMethods = uiModule({
         return { extra, title: m.sr };
     },
 
-    /** "How to allow ↗" under the switcher: today's hint on the browser's permission. */
+    /** "How to allow" under the switcher: the app's dialog with today's hint on the browser's permission (stays in the app: no mark). */
     showOtherResearchAllowHow(): void {
         document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
         void this.showResearchConnectFailed(new TypeError('blocked')).then(retry => {

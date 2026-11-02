@@ -11,10 +11,11 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { Person, PersonId } from '../types.js';
 import { strings } from '../strings.js';
-import { researchPersonRef } from '../research-link.js';
+import { researchPersonRef, type ResearchActionMark } from '../research-link.js';
 import {
     MaterialItem, MaterialFile, MaterialBatch, MaterialActionId, MaterialError, MaterialResult, AssignRequest, AssignAnswer, HideRequest, HideAnswer,
     HiddenReason, assignMaterial, hideMaterial, fetchMaterial, saveMaterialList, mergeAssignIntoCache, mergeIntoCache,
@@ -36,7 +37,8 @@ interface MaterialDialog {
     body: HTMLElement;
     foot: HTMLElement;
     /** The research's refusal inside the dialog (null: hide it). */
-    error(text: string | null, action?: { label: string; run: () => void }): void;
+    /** A refusal's sentence; its action carries the mark of the research link it launches (none: stays here). */
+    error(text: string | null, action?: { label: string; run: () => void; mark?: ResearchActionMark }): void;
     /** The confirm button busy while the research answers. */
     busy(on: boolean): void;
     close(): void;
@@ -131,7 +133,7 @@ function materialDialog(opts: { title: string; sub?: string; modifier?: string; 
             err.hidden = !text;
             if (!text) return;
             err.appendChild(h('span', '', text));
-            if (action) err.appendChild(button(action.label, '', action.run));
+            if (action) err.appendChild(setResearchActionLabel(button(action.label, '', action.run), action.label, action.mark ?? 'none'));
         },
         busy(on) {
             box.setAttribute('aria-busy', String(on));
@@ -245,7 +247,7 @@ export const materialActionsMethods = uiModule({
         const seal = err.held ? this.researchSealAction(err.held)[0] : undefined;
         const action = act === 'reload' ? { label: m.reload, run: () => void this.reloadMaterialList() }
             : act === 'retry' ? { label: m.retry, run: retry }
-            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } : undefined;
+            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action), ...researchMarkFlags(this.researchSyncActionMark(seal.action)) } : undefined;
         this.showToast(materialErrorText(err, mc.agent), TOAST_MS, { closable: true, kind: 'materials', ...(action ? { action } : {}) });
     },
 
@@ -257,7 +259,7 @@ export const materialActionsMethods = uiModule({
         dialog.error(materialErrorText(err, mc.agent), act === 'reload'
             ? { label: m.reload, run: () => { dialog.close(); void this.reloadMaterialList(); } }
             : act === 'retry' ? { label: m.retry, run: retry }
-            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action) } : undefined);
+            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action), mark: this.researchSyncActionMark(seal.action) } : undefined);
     },
 
     /** The whole list again from the research (after it said a person or a file is gone). */

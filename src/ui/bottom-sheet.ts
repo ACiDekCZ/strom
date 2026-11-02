@@ -779,7 +779,7 @@ export const bottomSheetMethods = uiModule({
                 act.className = st.action.asLink ? 'research-sync-link' : 'primary btn-sm research-sync-btn';
                 act.setAttribute('role', 'menuitem');
                 act.setAttribute('aria-describedby', 'research-sheet-state-text');
-                if (st.action.research) setResearchOpenLabel(act, st.action.label, { size: 16 });
+                if (st.action.research) setResearchOpenLabel(act, st.action.label, { size: 16, ai: st.action.ai });
                 else act.textContent = st.action.label;
                 act.addEventListener('click', () => {
                     this.hideBottomSheet();

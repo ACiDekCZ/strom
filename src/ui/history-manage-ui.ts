@@ -9,7 +9,7 @@
  * `.hm-detail-body` to the detail's own drawing.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, type ResearchNoteLink } from './research-open-mark.js';
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -28,7 +28,7 @@ import {
 import {
     postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, postHistoryAlignUndo, type HistoryWriteRefusal, type HistorySkipBody,
 } from '../history-bridge.js';
-import { HISTORY_ALIGN_FEATURE } from '../research-link.js';
+import { HISTORY_ALIGN_FEATURE, researchLinkMark } from '../research-link.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { mapUndoBody } from './history-map-ui.js';
@@ -37,7 +37,7 @@ import { uiModule } from './module.js';
 /** Rows drawn at once per group; "Show n more rows" adds as many again. */
 const PAGE = 200;
 
-type RowNote = { text: string; tone: 'info' | 'error'; link?: { label: string; run: () => void; research?: boolean } };
+type RowNote = { text: string; tone: 'info' | 'error'; link?: ResearchNoteLink };
 
 interface ManageView {
     tab: ManageTab;
@@ -256,7 +256,7 @@ export const historyManageMethods = uiModule({
             : '';
         const head = manageHeader(d.payload, d.env);
         const link = head.link === 'enable'
-            ? ` <button type="button" class="link hm-state-link" data-hm="enable">${researchOpenLabel(h.enableSearch, { size: 12 })}</button>` : '';
+            ? ` <button type="button" class="link hm-state-link" data-hm="enable">${researchActionLabel(h.enableSearch, researchLinkMark('experiment', { experimentDo: 'on' }), { size: 12 })}</button>` : '';
         const extra = (head.pace ? `<p class="hm-state-pace">${esc(head.pace)}</p>` : '')
             + `<p class="hm-state-summary">${esc(head.summary)}</p>`;
         // K8.5: the history of regions and of places apart — off through the bridge, on only by the research's link.
@@ -264,7 +264,7 @@ export const historyManageMethods = uiModule({
             ? `<ul class="hm-switches">${head.switches.map(sw => `<li class="hm-switch${sw.on ? ' is-on' : ''}" data-switch="${sw.key}">`
                 + `<span class="hm-switch-text">${esc(sw.text)}</span>`
                 + (sw.action === 'off' ? ` <button type="button" class="link hm-state-link" data-hm="switchOff" data-key="${sw.key}">${esc(h.switchOff)}</button>`
-                    : sw.action === 'linkOn' ? ` <button type="button" class="link hm-state-link" data-hm="switchOn" data-key="${sw.key}">${researchOpenLabel(h.switchOnLink, { size: 12 })}</button>` : '')
+                    : sw.action === 'linkOn' ? ` <button type="button" class="link hm-state-link" data-hm="switchOn" data-key="${sw.key}">${researchActionLabel(h.switchOnLink, researchLinkMark('experiment', { experimentDo: 'on' }), { size: 12 })}</button>` : '')
                 + '</li>').join('')}</ul>`
             : '';
         stateEl.innerHTML = `<p class="hm-state-text">${esc(head.text)}${link}</p>`
@@ -555,7 +555,7 @@ export const historyManageMethods = uiModule({
 
     historyManageNote(key: string, note: RowNote): string {
         return `<p class="hm-row-note is-${note.tone}" data-note="${esc(key)}" role="status">${esc(note.text)}`
-            + (note.link ? ` <button type="button" class="link" data-hm="noteLink" data-key="${esc(key)}">${note.link.research ? researchOpenLabel(note.link.label, { size: 12 }) : esc(note.link.label)}</button>` : '')
+            + (note.link ? ` <button type="button" class="link" data-hm="noteLink" data-key="${esc(key)}">${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}</button>` : '')
             + '</p>';
     },
 

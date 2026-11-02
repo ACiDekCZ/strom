@@ -18,7 +18,7 @@
  * restoreHistoryItem(), toggleLifelineHistory(), historyEnableSearch().
  */
 
-import { researchActionLabel, researchLinkFlags } from './research-open-mark.js';
+import { researchActionLabel, researchLinkFlags, type ResearchNoteLink } from './research-open-mark.js';
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
@@ -781,16 +781,17 @@ export const historyMethods = uiModule({
      * history): the sentence and the link switching the search on. With
      * `experiments.split` it names the switch that is off (`which`) and its link.
      */
-    historyOffNote(r: { link?: string }, which: 'regions' | 'places'): { text: string; link?: { label: string; run: () => void; research?: boolean } } {
+    historyOffNote(r: { link?: string }, which: 'regions' | 'places'): { text: string; link?: ResearchNoteLink } {
         const h = strings.history;
         const ctx = this.historyManageContext();
         const can = !!r.link || !!ctx?.canLinkOn;
         const split = !!ctx?.split;
         const run = () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyLaunchExperiment('on', split ? which : 'history'));
-        if (!split) return { text: h.manageOff, ...(can ? { link: { label: h.enableSearch, run, research: true } } : {}) };
+        const mark = r.link ? researchUrlMark(r.link) ?? 'terminal' : researchLinkMark('experiment', { experimentDo: 'on' });
+        if (!split) return { text: h.manageOff, ...(can ? { link: { label: h.enableSearch, run, mark } } : {}) };
         return {
             text: h.switchOffNote(which === 'regions' ? h.switchRegions : h.switchPlaces),
-            ...(can ? { link: { label: h.switchOnLink, run, research: true } } : {}),
+            ...(can ? { link: { label: h.switchOnLink, run, mark } } : {}),
         };
     },
 

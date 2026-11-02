@@ -13,12 +13,12 @@
  * opens in a new tab on the user's click.
  */
 
-import { setResearchOpenLabel } from './research-open-mark.js';
+import { setResearchActionLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
-import { researchSiteUrl } from '../research-link.js';
+import { researchSiteUrl, researchLinkMark } from '../research-link.js';
 import {
     ResearchPromoContext,
     isPromoAvailable,
@@ -358,7 +358,7 @@ export const researchPromoMethods = uiModule({
         closeBtn.type = 'button';
         closeBtn.dataset.dismiss = '';
         // Adopting the tree opens the research (its mark); the site opens on the web (↗).
-        const openBtn = adoptTreeId ? setResearchOpenLabel(el('button', 'primary'), s.adoptStart) : externalButton('primary', s.openSite);
+        const openBtn = adoptTreeId ? setResearchActionLabel(el('button', 'primary'), s.adoptStart, researchLinkMark('new')) : externalButton('primary', s.openSite);
         openBtn.type = 'button';
         if (adoptTreeId) {
             openBtn.id = 'research-adopt-start';

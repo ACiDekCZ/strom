@@ -6,7 +6,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { researchActionLabel } from './research-open-mark.js';
+import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -431,7 +431,7 @@ export const attachmentsMethods = uiModule({
         const canStart = this.researchLinkAvailable('open') || this.researchLinkAvailable('live');
         this.showToast(strings.media.originalOnlyNeedsResearch(letters), 10000, {
             closable: true,
-            ...(canStart ? { action: { label: strings.sync.pillStart, run: () => this.researchSyncAction('startResearch'), research: true } } : {}),
+            ...(canStart ? { action: { label: strings.sync.pillStart, run: () => this.researchSyncAction('startResearch'), ...researchMarkFlags(this.researchSyncActionMark('startResearch')) } } : {}),
         });
         return true;
     },

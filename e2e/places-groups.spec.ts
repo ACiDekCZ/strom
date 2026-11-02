@@ -207,7 +207,9 @@ test('a research on this computer: Fix the entry in the research instead of Unif
     await openGroup(page);
     const r = sub(page, 'H. Lhota');
     await expect(r.locator('.place-unify-open')).toHaveCount(0);
-    await expect(r.locator('.place-resfix')).toHaveText('Fix the entry in the research ↗');
+    // The research's terminal: its mark, no ↗ (that is for the web in a new window).
+    await expect(r.locator('.place-resfix')).toHaveText('Fix the entry in the research, opens in the research');
+    await expect(r.locator('.place-resfix .research-open-mark')).toHaveCount(1);
     await r.locator('.place-resfix').click();
     await expect.poll(() => links(page)).toEqual([expect.stringMatching(/^strom-research:\/\/fixes\?/)]);
 });

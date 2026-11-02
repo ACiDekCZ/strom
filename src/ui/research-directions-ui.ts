@@ -9,12 +9,12 @@
  * already has such a direction. Bridge text is set as text, never HTML.
  */
 
-import { setResearchOpenLabel } from './research-open-mark.js';
+import { setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
 import { Person, PersonId } from '../types.js';
-import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo } from '../research-link.js';
+import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
@@ -439,7 +439,7 @@ export const researchDirectionsMethods = uiModule({
         // Right on the row: End for an empty direction, Restart for a paused / ended one (in the research).
         if (canDo && (isEmpty(d) || d.state !== 'active')) {
             const what: ResearchDirectionDo = d.state === 'active' ? 'done' : 'resume';
-            const btn = setResearchOpenLabel(el('button', 'link-button research-direction__do'), what === 'done' ? L.dirEnd : L.dirResume);
+            const btn = setResearchActionLabel(el('button', 'link-button research-direction__do'), what === 'done' ? L.dirEnd : L.dirResume, researchLinkMark('direction'));
             btn.type = 'button';
             btn.dataset.do = what;
             btn.onclick = () => this.runDirection(d.id, what);
@@ -525,7 +525,7 @@ export const researchDirectionsMethods = uiModule({
         // Nothing that leads to an agent in an archive or while the research waits for one.
         const work = this.activeResearchNoAgent() ? null : this.activeResearchLink('chat', { research: d.id });
         if (work) {
-            const btn = setResearchOpenLabel(el('button', 'link-button'), L.dirWork, { ai: true });
+            const btn = setResearchActionLabel(el('button', 'link-button'), L.dirWork, researchLinkMark('chat'));
             btn.type = 'button';
             btn.dataset.do = 'work';
             btn.onclick = () => this.launchResearchLink(work, 'agent');
@@ -577,7 +577,7 @@ export const researchDirectionsMethods = uiModule({
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;
             item.dataset.do = what;
-            item.append(setResearchOpenLabel(el('span', 'research-direction-menu__label'), label), el('span', 'research-direction-menu__hint', hint));
+            item.append(setResearchActionLabel(el('span', 'research-direction-menu__label'), label, researchLinkMark('direction')), el('span', 'research-direction-menu__hint', hint));
             item.onclick = () => this.runDirection(d.id, what);
             item.onkeydown = (e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runDirection(d.id, what); }

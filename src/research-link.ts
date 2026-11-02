@@ -77,11 +77,14 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     chat: 'agent', history: 'agent', places: 'agent',
 };
 
-/** What a link asks of the research besides its action (the `do=` of a task, a conflict, an experiment). */
+/** What a link asks of the research besides its action (the `do=` of a task, a conflict, an experiment, a fix). */
 export interface ResearchLinkMarkParams {
     taskDo?: string;
     conflictDo?: string;
     experimentDo?: string;
+    fixDo?: string;
+    /** `fixes`: the fix's own word that its agent reads again and costs (`paid` in the bridge's list; not in the link). */
+    fixPaid?: boolean;
 }
 
 /** The mark of an action of the research, by its link (see `ResearchActionMark`). */
@@ -90,6 +93,8 @@ export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMark
     if (action === 'task' && p.taskDo === 'chat') return 'agent';
     if (action === 'conflict' && p.conflictDo === 'agent') return 'agent';
     if (action === 'experiment' && p.experimentDo === 'off') return 'none';
+    // A fix whose agent reads again (paid) starts its work in the terminal on a yes; its undo does not.
+    if (action === 'fixes' && p.fixPaid && p.fixDo !== 'undo') return 'agent';
     return RESEARCH_LINK_MARKS[action];
 }
 
@@ -102,7 +107,7 @@ export function researchUrlMark(url: string): ResearchActionMark | null {
     if (!m || !(RESEARCH_LINK_ACTIONS as readonly string[]).includes(m[1])) return null;
     const action = m[1] as ResearchLinkAction;
     const what = new URLSearchParams(m[2] ?? '').get('do') ?? undefined;
-    return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what });
+    return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what });
 }
 
 /** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */

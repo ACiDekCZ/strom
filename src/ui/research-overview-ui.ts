@@ -13,14 +13,14 @@
  * missing. Bridge text is set as text, never HTML. Only while following.
  */
 
-import { researchOpenSrText, setResearchOpenLabel } from './research-open-mark.js';
+import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount } from '../research-link.js';
+import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
@@ -373,7 +373,7 @@ export const researchOverviewMethods = uiModule({
             const url = this.activeResearchLink('sessions');
             let sub: HTMLElement;
             if (url) {
-                sub = setResearchOpenLabel(el('button', 'link-button research-overview__cell-sub'), L.sessions(s.spend.sessions));
+                sub = setResearchActionLabel(el('button', 'link-button research-overview__cell-sub'), L.sessions(s.spend.sessions), researchLinkMark('sessions'));
                 (sub as HTMLButtonElement).type = 'button';
                 sub.onclick = () => this.launchResearchLink(url);
             } else {
@@ -555,7 +555,7 @@ export const researchOverviewMethods = uiModule({
         const task = mode === 'sheet' ? null : waitingGroupChatTask(g.items);
         const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
         if (url) {
-            const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-groupchat'), L.waitingActions.chat, { ai: true, sr: false });
+            const btn = setResearchActionLabel(el('button', 'live-waiting-answer research-overview__waiting-groupchat'), L.waitingActions.chat, researchLinkMark('task', { taskDo: 'chat' }), { sr: false });
             btn.type = 'button';
             btn.dataset.task = task!;
             btn.setAttribute('aria-label', `${L.waitingActions.chat} · ${name}${researchOpenSrText(true)}`);
@@ -739,7 +739,7 @@ export const researchOverviewMethods = uiModule({
                 if (!links) continue;
                 const url = this.activeResearchLink('task', { task, taskDo: waitingActionDo(action) });
                 if (!url) continue;
-                const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), L.waitingActions[action], { ai: action === 'chat' });
+                const btn = setResearchActionLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), L.waitingActions[action], researchLinkMark('task', { taskDo: waitingActionDo(action) }));
                 btn.type = 'button';
                 btn.dataset.action = action;
                 if (action === 'chat' && waitingChatLeads(w)) btn.classList.add('is-primary');
@@ -753,7 +753,7 @@ export const researchOverviewMethods = uiModule({
             appendUnsent();
         }
         if (mode === 'sheet' || !this.canAnswerResearchWaiting(w)) return false;
-        const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), strings.research.answer);
+        const btn = setResearchActionLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), strings.research.answer, researchLinkMark('task'));
         btn.type = 'button';
         btn.dataset.action = 'answer';
         btn.onclick = () => this.answerResearchTask(w);
@@ -808,7 +808,7 @@ export const researchOverviewMethods = uiModule({
             // Finish and stop (in the research): the agent writes up what it found and closes the session.
             const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
             if (finish) {
-                const btn = setResearchOpenLabel(el('button', 'link-button research-overview__finish'), L.finishSession);
+                const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
                 btn.type = 'button';
                 btn.title = L.finishHint;
                 btn.onclick = () => this.launchResearchLink(finish);
@@ -867,7 +867,7 @@ export const researchOverviewMethods = uiModule({
         for (const w of g.workers) {
             const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
             if (!finish) continue;
-            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__finish'), L.finishSession);
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
             btn.type = 'button';
             btn.title = L.finishHint;
             btn.onclick = () => this.launchResearchLink(finish);
@@ -997,7 +997,7 @@ export const researchOverviewMethods = uiModule({
         if (older <= 0) return;
         const open = mode === 'sheet' ? null : this.activeResearchLink('open');
         if (open) {
-            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__older'), strings.live.olderInResearch);
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__older'), strings.live.olderInResearch, researchLinkMark('open'));
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(open);
             host.appendChild(btn);
@@ -1061,7 +1061,7 @@ export const researchOverviewMethods = uiModule({
         // The research runs on the computer: a phone gets no (research) into it.
         const open = mode === 'sheet' ? null : this.activeResearchLink('open');
         if (open) {
-            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__open'), strings.research.openResearch);
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__open'), strings.research.openResearch, researchLinkMark('open'));
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(open);
             foot.appendChild(btn);

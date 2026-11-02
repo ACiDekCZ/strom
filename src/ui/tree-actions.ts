@@ -12,6 +12,7 @@
  */
 
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
+import { researchLinkMark } from '../research-link.js';
 import { TreeId, LAST_FOCUSED } from '../types.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -199,7 +200,10 @@ export const treeActionsMethods = uiModule({
                 ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [] },
             { key: 'research', header: g.research, rows: editable ? [
                 ...(by.researchSend && tree.research && researchRunsHere()
-                    ? [{ key: 'researchSend', label: strings.research.sendMenu, editOnly: true, run: () => void this.researchSendTree(id) }] : []),
+                    // Through the bridge with no mark; without it, the send link opens the research's terminal.
+                    ? [{ key: 'researchSend', label: strings.research.sendMenu, editOnly: true,
+                        research: !this.researchSyncCapable(tree.research.id) && this.researchLinkAvailable('send') && researchLinkMark('send') !== 'none',
+                        run: () => void this.researchSendTree(id) }] : []),
                 ...this.treeResearchRow(id, isActive),
             ] : [] },
             { key: 'settings', header: g.settings, rows: editable ? [
@@ -255,7 +259,7 @@ export const treeActionsMethods = uiModule({
                 ? [{ key: 'researchInfo', label: strings.research.menuItem, run: () => this.showResearchInfoDialog() }] : [];
         }
         if (this.researchAdoptAvailable(tree)) {
-            return [{ key: 'researchAdopt', label: strings.research.adoptTree, editOnly: true, research: true, run: () => this.treeActionStartResearch(id) }];
+            return [{ key: 'researchAdopt', label: strings.research.adoptTree, editOnly: true, research: researchLinkMark('new') !== 'none', run: () => this.treeActionStartResearch(id) }];
         }
         if (!isActive || !this.researchMenuItemVisible()) return [];
         if (this.researchInstallPending()) {

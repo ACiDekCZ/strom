@@ -15,7 +15,7 @@ import { researchSchemeUrl, researchLinkMark, researchUrlMark } from '../researc
 import { announcedResearchScheme } from '../research-device.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { regionName } from '../history-manage.js';
-import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
 
@@ -233,7 +233,7 @@ export const historyAlignMethods = uiModule({
             const kinds = HISTORY_KINDS.filter(k => pv.shared.kinds[k]).map(kindName);
             html += block('is-shared', '⇄', h.alignSharedHead, '',
                 `<p class="hal-note">${esc(h.alignShared(pv.shared.n, joinAnd(getCurrentLanguage(), kinds)))} `
-                + `<button type="button" class="link" data-hal="shared">${researchOpenLabel(h.alignSharedLink, { size: 12 })}</button></p>`);
+                + `<button type="button" class="link" data-hal="shared">${researchActionLabel(h.alignSharedLink, researchLinkMark('history-align'), { size: 12 })}</button></p>`);
         }
         return html;
     },

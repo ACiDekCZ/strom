@@ -10,7 +10,7 @@
  * readings (`read.recent`) and the number of readers chosen (`read.readers`).
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -18,7 +18,7 @@ import { PersonId } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets } from '../originals.js';
-import { parseLiveBridge, researchSchemeUrl, LiveStatus } from '../research-link.js';
+import { parseLiveBridge, researchSchemeUrl, researchLinkMark, LiveStatus, type ResearchActionMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
@@ -368,7 +368,7 @@ export const readDocumentMethods = uiModule({
      * dot; done and not opened: "Document read"; not ready: inactive with the
      * reason and a separate "Open research" (its mark).
      */
-    readMenuEntry(): { label: string; sub: string; ai: boolean; disabled: boolean; dot: boolean; link?: { label: string; method: string } } | null {
+    readMenuEntry(): { label: string; sub: string; ai: boolean; disabled: boolean; dot: boolean; link?: { label: string; method: string; mark: ResearchActionMark } } | null {
         const accepts = this.readDocumentAccepts();
         if (!accepts) return null;
         const t = strings.read;
@@ -384,7 +384,7 @@ export const readDocumentMethods = uiModule({
         if (unopened) return { label: t.menuUnreadable, sub: t.menuUnreadableSub, ai: false, disabled: false, dot: false };
         if (!accepts.ready) {
             return { label: t.menu, sub: t.menuNotNow(whyReason(accepts)), ai: true, disabled: true, dot: false,
-                link: { label: t.openResearch, method: 'researchActionOpen' } };
+                link: { label: t.openResearch, method: 'researchActionOpen', mark: researchLinkMark('open') } };
         }
         return { label: t.menu, sub: t.menuSub, ai: true, disabled: false, dot: false };
     },
@@ -1649,9 +1649,14 @@ export const readDocumentMethods = uiModule({
         const s = st!;
         const t = strings.read;
         const kind = s.error?.kind ?? 'failed';
-        // Opening or updating the research carries its mark.
+        // Opening or updating the research carries the mark of its link (the update's help dialog: none).
+        const marks: Record<string, ResearchActionMark> = {
+            'open-research': researchLinkMark('open'),
+            'update-research': this.researchLinkAvailable('update') ? researchLinkMark('update') : 'none',
+            seal: researchLinkMark('seal'),
+        };
         const btn = (act: string, label: string, primary = false): string =>
-            `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${act === 'open-research' || act === 'update-research' || act === 'seal' ? researchOpenLabel(label) : esc(label)}</button>`;
+            `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${researchActionLabel(label, marks[act] ?? 'none')}</button>`;
         const close = btn('close', t.close, kind === 'limit' || kind === 'cancelled');
         // A reading started in the research is not read again from here.
         const own = this.readLiveOf(s.readId)?.from !== 'research';

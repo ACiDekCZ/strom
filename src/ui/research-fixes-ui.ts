@@ -8,7 +8,7 @@
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
-import { parseLiveBridge, type LiveStatus } from '../research-link.js';
+import { parseLiveBridge, researchLinkMark, type LiveStatus } from '../research-link.js';
 import { storedResearchBridge } from '../research-device.js';
 import {
     FIXES_LIST_FEATURE, FIXES_TOWNS_FEATURE, STREET_PLACES_FIX, availableFixCount, fetchResearchFixes, fixRows, fixText, fixesEmpty,
@@ -17,7 +17,7 @@ import {
 import { formatLiveClock } from '../live-time.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { onComputer } from './research-ui.js';
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
 
@@ -244,9 +244,9 @@ export const researchFixesMethods = uiModule({
             : f.stateDeclined(date);
         const label = action === 'undo' ? f.undo : f.open;
         // A fix that reads images again with the agent costs: the AI label before the mark (not for an undo).
-        const ai = fix.paid && action === 'open';
+        const mark = researchLinkMark('fixes', { fixPaid: !!fix.paid, ...(action === 'undo' ? { fixDo: 'undo' } : {}) });
         const button = action
-            ? `<button type="button" class="secondary research-fix-action" data-fix="${esc(fix.id)}" data-fix-act="${action}">${researchOpenLabel(label, { ai })}</button>`
+            ? `<button type="button" class="secondary research-fix-action" data-fix="${esc(fix.id)}" data-fix-act="${action}">${researchActionLabel(label, mark)}</button>`
             : '';
         return `<li class="research-fix" data-fix="${esc(fix.id)}" data-view="${view}">`
             + '<div class="research-fix-main">'

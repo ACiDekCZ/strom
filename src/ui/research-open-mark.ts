@@ -93,8 +93,34 @@ export function researchActionLabel(label: string, mark: ResearchActionMark, opt
     return o ? researchOpenLabel(label, o) : esc(researchLabelText(label));
 }
 
+/** The same for an element built in the DOM: its text replaced by the label with the mark of its group. */
+export function setResearchActionLabel<T extends HTMLElement>(el: T, label: string, mark: ResearchActionMark, opts: Omit<ResearchOpenMarkOptions, 'ai'> = {}): T {
+    el.innerHTML = researchActionLabel(label, mark, opts);
+    return el;
+}
+
+/** The mark alone of an action's group (beside a label drawn by itself): nothing, the terminal, or AI and the terminal. */
+export function researchActionMark(mark: ResearchActionMark, opts: Omit<ResearchOpenMarkOptions, 'ai'> = {}): string {
+    const o = researchMarkOptions(mark, opts);
+    return o ? researchOpenMark(o) : '';
+}
+
+/**
+ * The flags of a generic control (a toast's action, a choice, a menu or sheet row) by an action's
+ * group: `research` draws the terminal mark, `ai` the AI badge before it.
+ */
+export function researchMarkFlags(mark: ResearchActionMark): { research: boolean; ai: boolean } {
+    return { research: mark !== 'none', ai: mark === 'agent' };
+}
+
 /** A toast's or a sheet's action that launches a ready link: its flags by the link's group (a link not known: the terminal). */
 export function researchLinkFlags(url: string): { research: boolean; ai: boolean } {
-    const mark = researchUrlMark(url) ?? 'terminal';
-    return { research: mark !== 'none', ai: mark === 'agent' };
+    return researchMarkFlags(researchUrlMark(url) ?? 'terminal');
+}
+
+/** A note's link (a refused write, a switched-off search): its label, what it runs, and the group of the link it launches. */
+export interface ResearchNoteLink {
+    label: string;
+    run: () => void;
+    mark?: ResearchActionMark;
 }

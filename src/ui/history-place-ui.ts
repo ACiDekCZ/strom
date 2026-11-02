@@ -9,7 +9,7 @@
  * says `history.place.direct` takes it over the bridge (200: first in line).
  */
 
-import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchMarkFlags, type ResearchNoteLink } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { manageCan, manageSwitchOn } from '../history-manage.js';
 import { historyPlaceOfferable, historyWaiting, pickHistoryText } from '../history.js';
@@ -32,7 +32,7 @@ interface PlaceFindState {
     link: string;
     busy: boolean;
     /** A refusal's sentence, with its link. */
-    note: { text: string; link?: { label: string; run: () => void; research?: boolean } } | null;
+    note: { text: string; link?: ResearchNoteLink } | null;
     /** Focus goes back here on close. */
     opener: HTMLElement | null;
 }
@@ -106,7 +106,7 @@ export const historyPlaceMethods = uiModule({
         const terminal = !st.direct || !!st.link;
         const note = st.note
             ? `<p class="hpf-note" role="status">${esc(st.note.text)}`
-                + (st.note.link ? ` <button type="button" class="link hpf-note-link" data-hpf="noteLink">${st.note.link.research ? researchOpenLabel(st.note.link.label, { size: 12 }) : esc(st.note.link.label)}</button>` : '')
+                + (st.note.link ? ` <button type="button" class="link hpf-note-link" data-hpf="noteLink">${researchActionLabel(st.note.link.label, st.note.link.mark ?? 'none', { size: 12 })}</button>` : '')
                 + '</p>'
             : '';
         modal.innerHTML = '<div class="modal-header hpf-header">'
@@ -225,7 +225,7 @@ export const historyPlaceMethods = uiModule({
             return;
         }
         const note = this.historyPlaceRefusalNote(r);
-        this.showToast(note?.text ?? '', 6000, note?.link ? { action: { label: note.link.label, run: note.link.run } } : {});
+        this.showToast(note?.text ?? '', 6000, note?.link ? { action: { label: note.link.label, run: note.link.run, ...researchMarkFlags(note.link.mark ?? 'none') } } : {});
         if (r.code === 'gone' || r.code === 'done') void this.readBridgeHistory(d.rid);
     },
 });

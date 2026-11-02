@@ -736,7 +736,7 @@ export const treeManagementMethods = uiModule({
         this.hideBottomSheet();
         const o = strings.otherResearch;
         const blocked = this.otherResearchEnabled() ? {
-            id: 'tree-sheet-research-blocked', text: o.blockedSwitcher, link: `${o.blockedHow} ↗`,
+            id: 'tree-sheet-research-blocked', text: o.blockedSwitcher, link: o.blockedHow,
             run: () => this.showOtherResearchAllowHow(), hidden: !this.researchMarksBlocked(),
         } : undefined;
         this.presentMenuSheet(strings.treeManager.switcherTitle, [

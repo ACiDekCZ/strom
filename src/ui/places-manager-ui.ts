@@ -33,6 +33,8 @@ import { foldText, KnownStreets } from '../streets.js';
 import { stampedGeo } from '../place-find.js';
 import { fixText, STREET_PLACES_FIX } from '../research-fixes.js';
 import { onComputer } from './research-ui.js';
+import { researchActionLabel } from './research-open-mark.js';
+import { researchLinkMark } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
 import {
     placeStateBadge, placeStateMatches, placeStateRank, placeStateSummary, type PlaceIdentity,
@@ -483,7 +485,9 @@ export const placesManagerMethods = uiModule({
         let act = '';
         if (action === 'unify') act = `<button type="button" class="place-unify-open place-act is-strong">${esc(d.unify(v.head))}</button>`;
         else if (action === 'resFix' && this.activeResearchLink('fixes')) {
-            act = `<button type="button" class="place-resfix place-act is-research">${esc(d.resFix)} <span aria-hidden="true">↗</span></button>`;
+            // The research's terminal at its tree fixes: the terminal mark (AI too for a fix its agent reads again), never ↗.
+            const mark = researchLinkMark('fixes', { fixPaid: !!this.streetPlacesFixNow().fix?.paid });
+            act = `<button type="button" class="place-resfix place-act is-research">${researchActionLabel(d.resFix, mark)}</button>`;
         }
         const ref = main ? `data-own="${esc(p.key)}"` : `data-key="${esc(p.key)}"`;
         return `
@@ -604,7 +608,7 @@ export const placesManagerMethods = uiModule({
             foldText(t.key) === folded || foldText(t.town) === folded || t.places.some(p => keySet.has(placeKey(p))));
         const link = url && named
             ? `<span class="place-research-link-line">
-                   <button type="button" class="place-research-link">${this.escapeHtml(m.researchLink)} <span aria-hidden="true">↗</span></button>
+                   <button type="button" class="place-research-link">${researchActionLabel(m.researchLink, researchLinkMark('fixes', { fixPaid: !!fix?.paid }))}</button>
                    ${fix && fix.count > 0 ? `<span class="place-research-count">${this.escapeHtml(m.researchCount(fix.count))}</span>` : ''}
                </span>`
             : '';

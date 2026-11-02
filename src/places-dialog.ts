@@ -99,7 +99,7 @@ export function selectionCounts(ids: Iterable<PlaceIdentity>): { look: number; c
 
 /**
  * What a spelling's row offers: "Unify as <head>…" in the tree, or with the
- * research here "Fix the entry in the research ↗" (the research owns its
+ * research here "Fix the entry in the research" with the terminal mark (the research owns its
  * entries). The main form and a house with a location of its own: nothing.
  */
 export function variantRowAction(tag: PlaceMemberTag, same: boolean, canResearch: boolean): 'unify' | 'resFix' | null {

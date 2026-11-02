@@ -9,7 +9,7 @@
  * hypotheses: a conflict is amber and two sides, a hypothesis a ghost.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -18,6 +18,7 @@ import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles,
+    researchLinkMark,
 } from '../research-link.js';
 import { storedResearchBridge, researchAutoState } from '../research-device.js';
 import { diffValues } from '../research-changes.js';
@@ -197,7 +198,7 @@ export const conflictDecideMethods = uiModule({
             notice = `
                 <div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${n.action ? `
-                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${n.action === 'decide' ? researchOpenLabel(label) : esc(label)}</button>` : ''}
+                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${researchActionLabel(label, n.action === 'decide' ? researchLinkMark('conflict', { conflictDo: 'decide' }) : 'none')}</button>` : ''}
                 </div>`;
         }
 
@@ -228,7 +229,7 @@ export const conflictDecideMethods = uiModule({
                         ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busy)}`
                         : esc(which === 'user' ? k.keep : k.take)}</button>`;
                 } else if (view.choices === 'links') {
-                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchOpenLabel(which === 'user' ? k.keepLink : k.takeLink)}</button>`;
+                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(which === 'user' ? k.keepLink : k.takeLink, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
                 }
                 const note = view.notes && view.choices !== 'none'
                     ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
@@ -267,9 +268,9 @@ export const conflictDecideMethods = uiModule({
         const toAgent = view.agent;
         const links = view.researchLinks || toAgent ? `
             <div class="person-research-conflict-actions prc-links">${view.researchLinks ? `
-                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${researchOpenLabel(r.decide)}</button>` : ''}${toAgent ? `
+                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>` : ''}${toAgent ? `
                 <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent" data-focus="link-agent"
-                    aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchOpenLabel(r.leaveToAgent, { ai: true, sr: false })}</button>` : ''}
+                    aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchActionLabel(r.leaveToAgent, researchLinkMark('conflict', { conflictDo: 'agent' }), { sr: false })}</button>` : ''}
             </div>` : '';
 
         return `

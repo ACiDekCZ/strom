@@ -20,7 +20,7 @@
  * keeps every old path unchanged.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -39,6 +39,7 @@ import {
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
+    researchLinkMark, researchUrlMark, type ResearchActionMark,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
@@ -78,13 +79,26 @@ const NO_IDS = 'no-ids';
 /** A button of the research state block: the action researchSyncAction runs, its label, a link look. */
 export interface ResearchSyncBlockAction { action: string; label: string; asLink?: boolean }
 
-/** The state block's actions that open the research (they carry its mark). */
-export const RESEARCH_OPENING_SYNC_ACTIONS: readonly string[] = ['sealTakeOver', 'startResearch', 'startAndSend', 'openResearch', 'decideInResearch'];
+/** The state block's actions that open the research, by the link each launches in `researchSyncAction` (their mark). */
+const SYNC_ACTION_MARKS: Readonly<Record<string, ResearchActionMark>> = {
+    sealTakeOver: researchLinkMark('seal'),
+    // researchStartUrl: the research's `open` (or `live`, see syncActionMark).
+    startResearch: researchLinkMark('open'),
+    // sendTreeToResearch: the `send` link.
+    startAndSend: researchLinkMark('send'),
+    openResearch: researchLinkMark('open'),
+    // researchDecideUrl: one conflict to decide.
+    decideInResearch: researchLinkMark('conflict', { conflictDo: 'decide' }),
+};
 
-/** A state block action's label as HTML: the research's mark at one that opens it. */
-export function syncActionLabelHtml(action: string, label: string): string {
-    return RESEARCH_OPENING_SYNC_ACTIONS.includes(action) ? researchOpenLabel(label) : esc(label);
+/** The mark of a state block action (none for what stays in the app); "Start research" by the link it would launch. */
+export function syncActionMark(action: string, startUrl?: string | null): ResearchActionMark {
+    if (action === 'startResearch' && startUrl) return researchUrlMark(startUrl) ?? SYNC_ACTION_MARKS.startResearch;
+    return SYNC_ACTION_MARKS[action] ?? 'none';
 }
+
+/** The state block's actions that open the research (they carry its mark). */
+export const RESEARCH_OPENING_SYNC_ACTIONS: readonly string[] = Object.keys(SYNC_ACTION_MARKS).filter(a => SYNC_ACTION_MARKS[a] !== 'none');
 /** The research state block's content (the menu draws it in full, the More sheet as one line). */
 export interface ResearchSyncBlock {
     kind: string;
@@ -800,6 +814,16 @@ export const researchSyncMethods = uiModule({
         const said = held.said || own;
         const sub = joinSaid(said, ahead ? h.keptAhead : h.kept);
         return { title, pill, sub, toast: held.said ? sub : joinSaid(title, sub) };
+    },
+
+    /** A state block action's mark ("Start research" by the link it launches now). */
+    researchSyncActionMark(action: string): ResearchActionMark {
+        return syncActionMark(action, action === 'startResearch' ? this.researchStartUrl() : null);
+    },
+
+    /** A state block action's label as HTML: the mark of the link it launches. */
+    researchSyncActionLabel(action: string, label: string): string {
+        return researchActionLabel(label, this.researchSyncActionMark(action));
     },
 
     /** "Take over on this computer": the research's own way of taking the seal over (`strom-research://seal`). */
@@ -1921,7 +1945,7 @@ export const researchSyncMethods = uiModule({
         } else if (!opts.auto) {
             const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
             this.showToast(s.sentToast(reply.changes), 6000, open
-                ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open), research: true } } : {});
+                ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open), ...researchLinkFlags(open) } } : {});
         }
         // Written, but some changes it could not write and skipped (1.12): said in this app's words
         // (the research's `why` is its own text — shown once it sends a code to say it here).
@@ -2090,7 +2114,7 @@ export const researchSyncMethods = uiModule({
         const seal = this.researchSealAction(held)[0];
         this.showToast(text.toast, Infinity, {
             closable: true,
-            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } } : {}),
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), ...researchMarkFlags(this.researchSyncActionMark(seal.action)) } } : {}),
         });
     },
 
@@ -2098,7 +2122,7 @@ export const researchSyncMethods = uiModule({
     async showResearchWriteHeld(held: ResearchWriteHeld): Promise<void> {
         const text = this.researchWriteHeldText(held, false);
         const seal = this.researchSealAction(held)[0];
-        const pick = await this.showChoice(text.sub, text.title, seal ? [{ id: 'seal', label: seal.label, research: true }] : [], undefined,
+        const pick = await this.showChoice(text.sub, text.title, seal ? [{ id: 'seal', label: seal.label, research: this.researchSyncActionMark(seal.action) !== 'none' }] : [], undefined,
             { cancelLabel: strings.buttons.close });
         if (pick === 'seal' && seal) this.researchSyncAction(seal.action);
     },
@@ -2823,9 +2847,9 @@ export const researchSyncMethods = uiModule({
             // The short label is spoken whole ("Send changes"): it starts the same, so voice control finds it.
             const named = label !== a.label && !busy ? ` aria-label="${esc(a.label)}"` : '';
             return a.asLink
-                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${syncActionLabelHtml(a.action, label)}</button>`
+                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${this.researchSyncActionLabel(a.action, label)}</button>`
                 : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${busy ? ' disabled aria-busy="true"' : ''}`
-                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : syncActionLabelHtml(a.action, label)}</button>`;
+                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : this.researchSyncActionLabel(a.action, label)}</button>`;
         };
         const note = b.note ? ` title="${esc(b.note)}" aria-description="${esc(b.note)}"` : '';
         return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
@@ -3197,7 +3221,7 @@ export const researchSyncMethods = uiModule({
             // round: the pill named by the state, its text hidden, had the button in its middle).
             set('is-warn', `<span class="research-sync-pill-mark" title="${esc(tip)}" aria-hidden="true">!</span>`
                 + `<span class="research-sync-pill-label" title="${esc(tip)}">${esc(w.text)}</span>`
-                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${syncActionLabelHtml(w.action, w.button)}</button>`);
+                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${this.researchSyncActionLabel(w.action, w.button)}</button>`);
             pill.onclick = (e) => {
                 if (!(e.target as Element | null)?.closest('button')) this.openResearchSyncMenu();
             };
@@ -3213,7 +3237,7 @@ export const researchSyncMethods = uiModule({
             set('is-warn is-media', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
                 + `<span class="research-sync-pill-label" onclick="${call('showOriginalsQueue')}">${esc(strings.mediaQueue.pill)}</span>`
                 + `<button type="button" class="research-sync-pill-send" data-action="${action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${action}'`)}">`
-                + `${canStart ? syncActionLabelHtml(action, s.pillStart) : esc(strings.mediaQueue.show)}</button>`, strings.mediaQueue.pill);
+                + `${canStart ? this.researchSyncActionLabel(action, s.pillStart) : esc(strings.mediaQueue.show)}</button>`, strings.mediaQueue.pill);
             pill.setAttribute('aria-live', 'polite');
             return;
         }

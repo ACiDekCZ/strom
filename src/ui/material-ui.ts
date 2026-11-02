@@ -11,7 +11,6 @@
  * running. Only on a computer, only for a research that takes originals.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { PersonId, MediaOriginal } from '../types.js';
@@ -183,7 +182,7 @@ export const materialMethods = uiModule({
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.cancel)}</button>
-                    <button type="button" class="primary material-go" data-act="${primary.act}"${picked.length === 0 && primary.act === 'send' ? ' disabled' : ''}>${busy ? esc(m.sendingK(0, picked.length)) : primary.act === 'start' ? researchOpenLabel(primary.label) : esc(primary.label)}</button>
+                    <button type="button" class="primary material-go" data-act="${primary.act}"${picked.length === 0 && primary.act === 'send' ? ' disabled' : ''}>${busy ? esc(m.sendingK(0, picked.length)) : primary.act === 'start' ? this.researchSyncActionLabel('startResearch', primary.label) : esc(primary.label)}</button>
                 </div>
             </div>`;
         const input = overlay.querySelector<HTMLInputElement>('#material-input');

@@ -15,7 +15,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
@@ -451,7 +451,7 @@ export const materialsMethods = uiModule({
         lastBridgeKey = `${ctx.caps.list}|${ctx.caps.assign}|${ctx.caps.bridgeUp}`;
 
         // The state above the rows: no REFN, not running (with the time), nothing remembered.
-        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-act="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
+        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-act="start">${this.researchSyncActionLabel('startResearch', strings.sync.startResearch)}</button>` : '';
         let state = 'live';
         let note = '';
         if (!refn) {
@@ -644,7 +644,7 @@ export const materialsMethods = uiModule({
         const ctx = this.materialsContext();
         if (!file || !ctx) return;
         const m = strings.materials;
-        const startAction = this.researchStartUrl() ? { action: { label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), research: true } } : {};
+        const startAction = this.researchStartUrl() ? { action: { label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), ...researchMarkFlags(this.researchSyncActionMark('startResearch')) } } : {};
         const mime = (file.mime ?? '').toLowerCase();
         if (!ctx.caps.bridgeUp || !ctx.base) {
             // Not running: a remembered preview of an image, else it opens once the research runs.

@@ -7,7 +7,6 @@
  * visible) the bridge is asked every 2 s; nothing is asked once it is closed.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { parseLiveBridge, withAppVersion } from '../research-link.js';
 import { storedResearchBridge } from '../research-device.js';
@@ -457,7 +456,7 @@ export const phoneMethods = uiModule({
                 <div class="buttons phone-footer"><span class="phone-foot-note"></span>${close}</div>`;
         }
         const start = this.researchStartUrl()
-            ? `<button type="button" class="primary" data-act="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
+            ? `<button type="button" class="primary" data-act="start">${this.researchSyncActionLabel('startResearch', strings.sync.startResearch)}</button>` : '';
         return `
                 <div class="modal-content phone-content" data-view="down">
                     <div class="phone-body"><div class="phone-state">

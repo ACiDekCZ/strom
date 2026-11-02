@@ -5,7 +5,8 @@
  * tree's setting in Settings → Tree (research trees only).
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
+import { researchLinkMark } from '../research-link.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -491,18 +492,18 @@ export const researchEdgeUiMethods = uiModule({
         if (ref && !this.activeResearchNoAgent()) {
             const decide = next === 'decide';
             if (this.researchLinkAvailable('chat')) {
-                actions.push(`<button type="button" class="${decide ? 'primary' : 'secondary'} rep-action" data-do="chat">${researchOpenLabel(decide ? re.decideInChat : re.chat, { ai: true })}</button>`);
+                actions.push(`<button type="button" class="${decide ? 'primary' : 'secondary'} rep-action" data-do="chat">${researchActionLabel(decide ? re.decideInChat : re.chat, researchLinkMark('chat'))}</button>`);
             }
             if (this.researchLinkAvailable('review')) {
-                actions.push(`<button type="button" class="secondary rep-action" data-do="review">${researchOpenLabel(re.review)}</button>`);
+                actions.push(`<button type="button" class="secondary rep-action" data-do="review">${researchActionLabel(re.review, researchLinkMark('review'))}</button>`);
             }
             const pausedOrDone = edge.scope === 'paused' || (next === 'held' && edge.tasks.some(t => t.held === 'paused' || t.held === 'done'));
             if (pausedOrDone && edge.research && this.researchLinkAvailable('direction')) {
-                actions.push(`<button type="button" class="secondary rep-action" data-do="resume">${researchOpenLabel(re.resume)}</button>`);
+                actions.push(`<button type="button" class="secondary rep-action" data-do="resume">${researchActionLabel(re.resume, researchLinkMark('direction', {}))}</button>`);
             }
             const waitingTask = edge.tasks.find(t => t.stat === 'waiting') ?? (next === 'waiting' ? edge.tasks[0] : undefined);
             if (waitingTask && this.researchLinkAvailable('task')) {
-                actions.push(`<button type="button" class="secondary rep-action" data-do="task" data-task="${esc(waitingTask.id)}">${researchOpenLabel(re.answer)}</button>`);
+                actions.push(`<button type="button" class="secondary rep-action" data-do="task" data-task="${esc(waitingTask.id)}">${researchActionLabel(re.answer, researchLinkMark('task'))}</button>`);
             }
         }
         if (actions.length > 0) parts.push(`<div class="rep-actions">${actions.join('')}</div>`);

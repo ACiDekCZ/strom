@@ -7,7 +7,7 @@
  * computer whose research announced them.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
@@ -16,7 +16,7 @@ import { isOpenHypothesis, loadViewLinks } from '../view-links.js';
 import { researchHypothesisNote, researchHypothesisState } from '../research-hypotheses.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
-import { researchConflictRef } from '../research-link.js';
+import { researchConflictRef, researchLinkMark } from '../research-link.js';
 import { canDecideInApp } from '../research-decide.js';
 import { ConflictScope } from '../research-conflict-card.js';
 import { uiModule } from './module.js';
@@ -203,9 +203,9 @@ export const personResearchMethods = uiModule({
                     <p class="person-research-sources-only">${esc(strings.conflict.sourcesOnly)}</p>
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
-                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchOpenLabel(r.decide)}</button>${toAgent ? `
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>${toAgent ? `
                         <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent"
-                            aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchOpenLabel(r.leaveToAgent, { ai: true, sr: false })}</button>` : ''}
+                            aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchActionLabel(r.leaveToAgent, researchLinkMark('conflict', { conflictDo: 'agent' }), { sr: false })}</button>` : ''}
                     </div>` : ''}
                 </div>`;
         }).join('');

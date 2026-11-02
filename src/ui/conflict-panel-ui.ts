@@ -11,11 +11,11 @@
  * the value the research's version brings.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
-import { researchConflictRef, ResearchConflictTake } from '../research-link.js';
+import { researchConflictRef, ResearchConflictTake, researchLinkMark } from '../research-link.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { conflictValueHtml, researchConflictTitle, researchValueText } from './person-research-ui.js';
@@ -211,7 +211,7 @@ export const conflictPanelMethods = uiModule({
             const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'decide' ? strings.research.decide : '';
             notice = `<div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${label ? `
-                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${n.action === 'decide' ? researchOpenLabel(label) : esc(label)}</button>` : ''}
+                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${researchActionLabel(label, n.action === 'decide' ? researchLinkMark('conflict', { conflictDo: 'decide' }) : 'none')}</button>` : ''}
                 </div>`;
         }
 
@@ -234,7 +234,7 @@ export const conflictPanelMethods = uiModule({
                     ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busyTag)}` : esc(which === 'user' ? k.keepShort : k.takeShort)}</button>`;
             } else if (view.choices === 'links') {
                 choice = `<button type="button" class="prc-panel-choice" data-take="${which}" data-focus="choice-${which}"
-                    aria-label="${esc(`${which === 'user' ? k.keepLink : k.takeLink}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchOpenLabel(which === 'user' ? k.keepShort : k.takeShort, { sr: false })}</button>`;
+                    aria-label="${esc(`${which === 'user' ? k.keepLink : k.takeLink}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(which === 'user' ? k.keepShort : k.takeShort, researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
             }
             const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
             return `

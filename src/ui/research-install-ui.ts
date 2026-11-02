@@ -13,12 +13,12 @@
  * token and is known only when the research opens the page with it.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeId } from '../types.js';
-import { newAdoptToken, researchNewUrl } from '../research-link.js';
+import { newAdoptToken, researchNewUrl, researchLinkMark } from '../research-link.js';
 import { isPromoAvailable } from '../research-promo.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
@@ -366,7 +366,7 @@ export const researchInstallMethods = uiModule({
                 </details>` : ''}
                 <p class="install-have-row">
                     <span class="install-have-lead">${esc(s.haveLead)}</span>
-                    <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="have">${researchActionLabel(this.researchHaveItLabel(), researchLinkMark('new'))}</button>
                     <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                 </p>
             </div>
@@ -826,7 +826,7 @@ export const researchInstallMethods = uiModule({
                     <h3 class="install-wait-title">${esc(s.expiredTitle)}</h3>
                     <p>${esc(s.expiredText)}</p>
                     <p class="install-wait-links">
-                        <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
+                        <button type="button" class="link-button" data-act="have">${researchActionLabel(this.researchHaveItLabel(), researchLinkMark('new'))}</button>
                         <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                     </p>
                 </div>
@@ -844,7 +844,7 @@ export const researchInstallMethods = uiModule({
                 ${isChromium() ? `<p class="install-note">${esc(s.waitLna)}</p>` : ''}
                 <p class="install-wait-links">
                     <button type="button" class="link-button" data-act="again">${esc(s.showAgain)}</button>
-                    <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="have">${researchActionLabel(this.researchHaveItLabel(), researchLinkMark('new'))}</button>
                     <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                 </p>
             </div>

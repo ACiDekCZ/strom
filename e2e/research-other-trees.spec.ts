@@ -250,7 +250,7 @@ test.describe('other research trees', () => {
         const blocked = dropdown.locator('[data-research-blocked]');
         await expect(blocked).toBeVisible();
         await expect(blocked).toContainText('Research status not visible: the browser has not allowed access to programs on this computer.');
-        await expect(blocked.locator('button')).toHaveText('How to allow ↗');
+        await expect(blocked.locator('button')).toHaveText('How to allow');
         await expect(dropdown.locator('.tree-item-badges')).toHaveCount(0);
         await expect(dropdown.locator('.rs-mark--off')).toHaveCount(0);
         // Above "Manage trees…".
@@ -258,7 +258,7 @@ test.describe('other research trees', () => {
         expect(order.indexOf('tree-switcher-blocked')).toBe(order.indexOf('tree-switcher-divider') - 1);
         await page.locator('.tree-switcher-btn').click();
         await expect(page.locator('.tree-switcher-btn .tree-switcher-dot')).toHaveCount(0);
-        // "How to allow ↗": today's hint on the browser's permission.
+        // "How to allow": today's hint on the browser's permission.
         await page.locator('.tree-switcher-btn').click();
         await blocked.locator('button').click();
         await expect(page.locator('#research-connect-failed')).toBeVisible();

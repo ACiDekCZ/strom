@@ -17,7 +17,7 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { TreeId, StromData, Person } from '../types.js';
 import { TreeManager } from '../tree-manager.js';
-import { LiveStatus, SyncPersonConflict, ResearchSendRecord } from '../research-link.js';
+import { LiveStatus, SyncPersonConflict, ResearchSendRecord, researchLinkMark } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { ResearchRemovedAsk, researchAutoState, patchResearchAutoState } from '../research-device.js';
 import { conflictTakeovers, removedAskOpen, withoutAskedConflicts } from '../research-sync.js';
@@ -108,8 +108,10 @@ export const researchRemovedMethods = uiModule({
         const take = (side: 'user' | 'research') => this.activeResearchLink('conflict', { conflict: a.id, conflictDo: 'decide', take: side });
         const viaLink = this.researchLinkAvailable('conflict') && !!take('user');
         const message = [back ? p.backAsk : p.removeAsk, sides, viaLink ? k.linkNote : k.remote].join('\n\n');
+        // Either side is decided in the research's terminal: the mark of its link.
+        const research = researchLinkMark('conflict', { conflictDo: 'decide' }) !== 'none';
         const choices = viaLink
-            ? [{ id: 'user', label: back ? p.backTake : p.removeTake, research: true }, { id: 'research', label: back ? p.backKeep : p.removeKeep, research: true }]
+            ? [{ id: 'user', label: back ? p.backTake : p.removeTake, research }, { id: 'research', label: back ? p.backKeep : p.removeKeep, research }]
             : [];
         const pick = await this.showChoice(message, back ? p.backTitle : p.removeTitle, choices, undefined,
             { subtitle: a.name || a.person, cancelLabel: viaLink ? k.later : p.close });

@@ -10,6 +10,7 @@ import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
 } from '../research-link.js';
 import { researchActionLabel, researchLinkFlags } from '../ui/research-open-mark.js';
+import { syncActionMark } from '../ui/research-sync-ui.js';
 import { strings, setLanguage, type Language } from '../strings.js';
 
 const TREE = '0b9e1c2a-4f3d-4c5e-8a7b-1d2e3f4a5b6c';
@@ -39,6 +40,20 @@ describe('the map of research actions to their marks', () => {
         expect(researchLinkMark('conflict', { conflictDo: 'decide' })).toBe('terminal');
         expect(researchLinkMark('experiment', { experimentDo: 'on' })).toBe('terminal');
         expect(researchLinkMark('experiment', { experimentDo: 'off' })).toBe('none');
+        // A fix whose agent reads again (paid) starts its work on a yes; a fix without it and any undo only ask.
+        expect(researchLinkMark('fixes')).toBe('terminal');
+        expect(researchLinkMark('fixes', { fixPaid: true })).toBe('agent');
+        expect(researchLinkMark('fixes', { fixPaid: true, fixDo: 'undo' })).toBe('terminal');
+    });
+
+    it('marks the state block\'s actions by the link they launch', () => {
+        expect(syncActionMark('openResearch')).toBe('terminal');
+        expect(syncActionMark('sealTakeOver')).toBe('terminal');
+        expect(syncActionMark('decideInResearch')).toBe('terminal');
+        expect(syncActionMark('loadVersion')).toBe('none');
+        // "Start the research" by its link now: the research's terminal, or only the app followed live.
+        expect(syncActionMark('startResearch', researchSchemeUrl('open', { tree: TREE }))).toBe('terminal');
+        expect(syncActionMark('startResearch', researchSchemeUrl('live', { tree: TREE }))).toBe('none');
     });
 
     it('reads the mark of a ready link from its action and do=', () => {

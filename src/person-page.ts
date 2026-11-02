@@ -20,6 +20,7 @@ import {
 } from './history.js';
 import { placeKey, type MapKind } from './places.js';
 import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
+import { researchLinkMark, type ResearchActionMark } from './research-link.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
 import { getStringsForLang, getCurrentLanguage, setLanguage, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
@@ -970,12 +971,15 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
     if (!page.groups.research) return out;
     const person = page.tree.persons[page.personId];
     if (!person) return out;
-    // A link into the research: its mark at the end (12 px, its meaning on the title and the spoken name).
-    const act = (kind: 'research:open' | 'research:find', arg: string | undefined, label: string) =>
+    // A link into the research: the mark of the link it launches (RESEARCH_LINK_MARKS) at the end
+    // (12 px, its meaning on the title and the spoken name). A conflict is decided there, anything else reviewed.
+    const act = (kind: 'research:open' | 'research:find', arg: string | undefined, label: string, mark: ResearchActionMark) =>
         c && c.app && !page.readOnly
             ? ` <button type="button" class="pp-act" data-pp-action="${kind}"${arg ? ` data-pp-arg="${esc(arg)}"` : ''}`
-                + ` aria-label="${esc(`${label}, ${S.research.opensInResearchSr}`)}">${esc(label)}`
-                + `<span class="pp-open-mark" title="${esc(S.research.opensInResearchTitle)}" aria-hidden="true">${researchOpenSvg(12)}</span></button>`
+                + (mark === 'none' ? `>${esc(label)}`
+                    : ` aria-label="${esc(`${label}, ${S.research.opensInResearchSr}`)}">${esc(label)}`
+                        + `<span class="pp-open-mark" title="${esc(S.research.opensInResearchTitle)}" aria-hidden="true">${researchOpenSvg(12)}</span>`)
+                + '</button>'
             : '';
     for (const k of person.research?.conflicts ?? []) {
         if (k.status !== 'open') continue;
@@ -987,7 +991,7 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
             return titles.length ? esc(P.accordingTo('\u0000', titles.join(', '))).replace('\u0000', value) : value;
         });
         const title = stripResearchIds(k.title || factLabel(S, k.fact)).text;
-        out.conflicts.push(`<strong>${esc(title)}:</strong> ${values.join(', ')}${act('research:open', k.id, P.openResearch)}`);
+        out.conflicts.push(`<strong>${esc(title)}:</strong> ${values.join(', ')}${act('research:open', k.id, P.openResearch, researchLinkMark('conflict', { conflictDo: 'decide' }))}`);
     }
     for (const item of page.history) {
         if (!item.tip) continue;
@@ -999,12 +1003,12 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
     if (page.storyDraft) out.pending.push(esc(P.storyDraft));
     const edge = person.research?.edge;
     if (edge && edge.scope !== 'done' && edge.missing in P.edgeMissing) {
-        out.pending.push(`${esc(P.edgeMissing[edge.missing as keyof PP['edgeMissing']])}${act('research:find', undefined, P.findSource)}`);
+        out.pending.push(`${esc(P.edgeMissing[edge.missing as keyof PP['edgeMissing']])}${act('research:find', undefined, P.findSource, researchLinkMark('review'))}`);
     }
     for (const h of person.research?.hypotheses ?? []) {
         if (h.status && h.status !== 'open') continue;
         const note = h.note ? ` — ${esc(stripResearchIds(h.note).text)}` : '';
-        out.hypotheses.push(`<strong>${esc(stripResearchIds(h.title).text)}</strong>${note}${h.id ? act('research:open', h.id, P.openResearch) : ''}`);
+        out.hypotheses.push(`<strong>${esc(stripResearchIds(h.title).text)}</strong>${note}${h.id ? act('research:open', h.id, P.openResearch, researchLinkMark('review')) : ''}`);
     }
     const facts = personFacts(page, S);
     for (const f of facts) if (f.status) out.certainty.push(`<strong>${esc(f.label)}:</strong> ${esc(S.factStatus[f.status])}`);

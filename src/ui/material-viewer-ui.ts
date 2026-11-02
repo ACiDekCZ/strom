@@ -283,7 +283,7 @@ export const materialViewerMethods = uiModule({
             ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
         const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink), research: researchLinkMark('media') !== 'none' }] : [];
         const startUrl = this.researchStartUrl();
-        const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), primary: true, research: true }] : [];
+        const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), primary: true, research: this.researchSyncActionMark('startResearch') !== 'none' }] : [];
         const fallback = () => slots.card(viewerCard(letters, m.openSystemText(ext), openSystem));
 
         // Only in the tree: its own copy.

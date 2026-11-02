@@ -20,7 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
-import { researchOpenMark, setResearchOpenLabel } from './research-open-mark.js';
+import { setResearchActionLabel, researchActionMark } from './research-open-mark.js';
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -39,6 +39,7 @@ import {
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    researchLinkMark, researchUrlMark,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
@@ -1856,7 +1857,7 @@ export const researchUiMethods = uiModule({
         const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
         const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
             aside: { id: 'update', label: u.overwrite },
-            ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start), research: true } } : {}),
+            ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start), research: researchLinkMark('open') !== 'none' } } : {}),
         });
         return pick as 'update' | 'copy' | null;
     },
@@ -2010,6 +2011,8 @@ export const researchUiMethods = uiModule({
         const r = strings.research;
         if (kind === 'version') this.awaitResearchVersion();
         else if (kind === 'agent') this.showToast(r.openingAgentHint, 8000, { title: r.openingAgent });
+        // A link the research takes without its terminal (no mark): no word of a terminal window.
+        else if (researchUrlMark(url) === 'none') this.showToast(r.openingQuietHint, 8000, { title: r.opening });
         else this.showToast(r.openingHint, 8000, { title: r.opening });
     },
 
@@ -2992,7 +2995,7 @@ export const researchUiMethods = uiModule({
                 answer.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
                 li.appendChild(answer);
             } else if (answerable && this.canAnswerResearchWaiting(w)) {
-                const answer = setResearchOpenLabel(el('button', 'live-waiting-answer'), r.answer);
+                const answer = setResearchActionLabel(el('button', 'live-waiting-answer'), r.answer, researchLinkMark('task'));
                 answer.type = 'button';
                 answer.onclick = () => this.answerResearchTask(w);
                 li.appendChild(answer);
@@ -3343,7 +3346,7 @@ export const researchUiMethods = uiModule({
         strip.appendChild(el('span', 'live-panel-update-text', r.updateAvailable(version)));
         const url = this.activeResearchLink('update');
         if (url) {
-            const btn = setResearchOpenLabel(el('button', 'link-button live-panel-update-link'), r.updateResearch);
+            const btn = setResearchActionLabel(el('button', 'link-button live-panel-update-link'), r.updateResearch, researchLinkMark('update'));
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(url);
             strip.appendChild(btn);
@@ -3444,7 +3447,7 @@ export const researchUiMethods = uiModule({
             appendQueueNote(text, q);
             li.appendChild(text);
             if (canTask) {
-                const wake = setResearchOpenLabel(el('button', 'link-button live-queue-wake'), r.wake);
+                const wake = setResearchActionLabel(el('button', 'link-button live-queue-wake'), r.wake, researchLinkMark('task', { taskDo: 'wake' }));
                 wake.type = 'button';
                 wake.onclick = () => this.runLiveTask(q.id, 'wake');
                 li.appendChild(wake);
@@ -3454,7 +3457,7 @@ export const researchUiMethods = uiModule({
         const open = this.activeResearchLink('open');
         if (hidden > 0 && open) {
             const li = el('li', 'live-queue-row live-queue-row--more');
-            const more = setResearchOpenLabel(el('button', 'link-button live-queue-rest'), r.queueMore(hidden));
+            const more = setResearchActionLabel(el('button', 'link-button live-queue-rest'), r.queueMore(hidden), researchLinkMark('open'));
             more.type = 'button';
             more.onclick = () => this.launchResearchLink(open);
             li.appendChild(more);
@@ -3481,7 +3484,7 @@ export const researchUiMethods = uiModule({
         menu.setAttribute('role', 'menu');
         menu.setAttribute('aria-label', r.taskMenu);
         for (const [what, label] of [['park', r.park], ['drop', r.drop]] as const) {
-            const item = setResearchOpenLabel(el('div', 'context-menu-item'), label);
+            const item = setResearchActionLabel(el('div', 'context-menu-item'), label, researchLinkMark('task', { taskDo: what }));
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;
             item.dataset.action = what;
@@ -3549,7 +3552,7 @@ export const researchUiMethods = uiModule({
         const url = this.activeResearchLink('sessions');
         if (url) {
             const btn = el('button', 'live-panel-spend-link');
-            btn.innerHTML = researchOpenMark({ sr: false });
+            btn.innerHTML = researchActionMark(researchLinkMark('sessions'), { sr: false });
             btn.type = 'button';
             btn.setAttribute('aria-label', r.spendOpenSr);
             btn.title = r.spendOpenSr;
@@ -3652,7 +3655,7 @@ export const researchUiMethods = uiModule({
                 foot.appendChild(follow);
             }
             if (open) {
-                const btn = setResearchOpenLabel(el('button', 'primary live-panel-open'), r.openResearch);
+                const btn = setResearchActionLabel(el('button', 'primary live-panel-open'), r.openResearch, researchLinkMark('open'));
                 btn.type = 'button';
                 btn.onclick = () => this.launchResearchLink(open);
                 foot.appendChild(btn);

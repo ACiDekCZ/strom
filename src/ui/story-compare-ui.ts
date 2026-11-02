@@ -9,14 +9,14 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PartnershipId, Story } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { storyProseHtml } from '../story-text.js';
 import { storyCompareHtml, wireStoryCompare, STORY_COMPARE_CSS } from '../story-compare.js';
-import { ResearchStoryDo, LiveWaiting } from '../research-link.js';
+import { ResearchStoryDo, LiveWaiting, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { shownName } from '../person-name.js';
@@ -225,11 +225,11 @@ export const storyCompareMethods = uiModule({
         } else if (choice && urls.final) {
             foot.classList.add('story-compare-foot--note');
             foot.innerHTML = `<div class="story-compare-msg">${esc(L.sentAgain(label(choice)))}</div>`
-                + `<button type="button" class="link-button" data-compare-again>${researchOpenLabel(L.openAgain)}</button>${close}`;
+                + `<button type="button" class="link-button" data-compare-again>${researchActionLabel(L.openAgain, researchLinkMark('story'))}</button>${close}`;
         } else if (urls.final && urls.keep) {
             foot.innerHTML = `${close}<span class="story-compare-gap"></span>`
-                + `<button type="button" class="secondary" data-compare-do="keep">${researchOpenLabel(L.keepOld)}</button>`
-                + `<button type="button" class="primary" data-compare-do="final">${researchOpenLabel(L.takeNew)}</button>`;
+                + `<button type="button" class="secondary" data-compare-do="keep">${researchActionLabel(L.keepOld, researchLinkMark('story'))}</button>`
+                + `<button type="button" class="primary" data-compare-do="final">${researchActionLabel(L.takeNew, researchLinkMark('story'))}</button>`;
         } else {
             foot.classList.add('story-compare-foot--note');
             foot.innerHTML = `<div class="story-compare-msg">${esc(L.decideOnDesktop)}</div>${close}`;

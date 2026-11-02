@@ -8,7 +8,7 @@
  * (Research menu, the person menu's "Research ›" …). Nothing changes in the app's data.
  */
 
-import { researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -26,6 +26,7 @@ import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
     readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, sanitizeLiveStatus, statusAgentless,
+    researchLinkMark,
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -470,7 +471,7 @@ export const researchAdoptMethods = uiModule({
                 </div>
                 <div class="buttons">
                     ${hasPeople
-                        ? `${open ? `<button type="button" class="link-button" data-act="open">${researchOpenLabel(s.openResearch)}</button>` : ''}
+                        ? `${open ? `<button type="button" class="link-button" data-act="open">${researchActionLabel(s.openResearch, researchLinkMark('open'))}</button>` : ''}
                            <button type="button" class="primary" data-act="done" data-dismiss>${esc(s.done)}</button>`
                         : `<button type="button" class="secondary" data-act="gedcom">${esc(s.openGedcom)}</button>
                            <button type="button" class="primary" data-act="first" data-dismiss>${esc(s.addFirst)}</button>`}

@@ -27,7 +27,7 @@ import {
 } from '../history.js';
 import { getHistoryAlign, postHistoryKinds, type HistoryKindsBody, type HistoryKindsRefusal } from '../history-bridge.js';
 import { historyKindSvg } from '../history-symbols.js';
-import { researchActionLabel, researchOpenLabel } from './research-open-mark.js';
+import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
 
@@ -282,7 +282,7 @@ export const historyKindsMethods = uiModule({
             if (p.originWait.has(o)) originNotes.push(`<p>${esc(h.originWait(name))}</p>`);
             else if (p.originOff.has(o) && split && !split[o]) {
                 originNotes.push(`<p>${esc(h.originOff(name))} <button type="button" class="link" data-hk-action="on-${o}"`
-                    + ` onclick="window.Strom.UI.historyOriginSearchClick('${o}')">${researchOpenLabel(h.switchOnLink, { size: 12 })}</button></p>`);
+                    + ` onclick="window.Strom.UI.historyOriginSearchClick('${o}')">${researchActionLabel(h.switchOnLink, researchLinkMark('experiment', { experimentDo: 'on' }), { size: 12 })}</button></p>`);
             }
         }
         if (up && originNotes.length) html += `<div class="history-origin-note ${ADDED}" id="history-origin-note">${originNotes.join('')}</div>`;
@@ -345,7 +345,7 @@ export const historyKindsMethods = uiModule({
                     + (n ? `<span class="history-align-badge">${esc(h.alignBadge(n))}</span>` : '') + '</button>';
             } else {
                 html += `<div class="history-align-none" id="history-align-none">${esc(h.alignNoFeature)} <button type="button" class="link" data-hk-action="open-research"`
-                    + ` onclick="window.Strom.UI.historyKindsOpenResearch()">${researchOpenLabel(h.openResearch, { size: 12 })}</button></div>`;
+                    + ` onclick="window.Strom.UI.historyKindsOpenResearch()">${researchActionLabel(h.openResearch, researchLinkMark('open'), { size: 12 })}</button></div>`;
             }
         }
         return html + '</div>';

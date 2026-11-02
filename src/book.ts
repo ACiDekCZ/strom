@@ -16,6 +16,7 @@ import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { getStringsForLang } from './strings.js';
 import { researchOpenSvg } from './history-symbols.js';
+import { researchLinkMark } from './research-link.js';
 import { proseHtml } from './story-text.js';
 import { storyCompareHtml } from './story-compare.js';
 import { shownName } from './person-name.js';
@@ -213,7 +214,9 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
     if (!parts.media) tree = stripMedia(tree);
 
     // Research controls (compare a new version, approve a draft): on the screen only, never in a saved file.
-    const openMark = `<span class="book-open-mark" title="${esc(S.research.opensInResearchTitle)}">${researchOpenSvg(12)}</span>`;
+    // Both are the research's story links (keep, final, approve): the mark of their group (RESEARCH_LINK_MARKS).
+    const openMark = researchLinkMark('story') !== 'none'
+        ? `<span class="book-open-mark" title="${esc(S.research.opensInResearchTitle)}">${researchOpenSvg(12)}</span>` : '';
     const compareDialogs: string[] = [];
     const prose = (text: string, title?: string): string => proseHtml(text, { ...(title ? { title } : {}), headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
     const plainName = (p?: Person): string => p ? shownName(p) : '?';

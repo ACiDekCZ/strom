@@ -372,7 +372,8 @@ test('a research tree: no split, the link to the research\'s fix only on the tow
     await expect(modal(page).locator('.place-split-all, .place-split-one')).toHaveCount(0);
     const strip = group(page).locator('.place-group-strip');
     await expect(strip.locator('.place-research-note')).toContainText('This tree is linked to a research.');
-    await expect(strip.locator('.place-research-link')).toHaveText('Fix in the research (Tree fixes) ↗');
+    await expect(strip.locator('.place-research-link')).toHaveText('Fix in the research (Tree fixes), opens in the research');
+    await expect(strip.locator('.place-research-link .research-open-mark')).toHaveCount(1);
     await expect(strip.locator('.place-research-count')).toHaveText('the research reports 3 places');
     // Kopřivná is not among the research's towns: no link on its row.
     await expect(row(page, key('Kopřivná čp. 7')).locator('.place-research-link')).toHaveCount(0);

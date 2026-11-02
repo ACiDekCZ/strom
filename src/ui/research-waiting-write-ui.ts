@@ -11,6 +11,7 @@
  * asked soon. Bridge text is set as text, never HTML.
  */
 
+import { researchMarkFlags } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
@@ -73,7 +74,7 @@ export const researchWaitingWriteMethods = uiModule({
         const seal = result.held ? this.researchSealAction(result.held)[0] : undefined;
         this.showToast(refusedText(result), seal ? 12000 : 6000, {
             kind: 'waiting-failed',
-            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } } : {}),
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), ...researchMarkFlags(this.researchSyncActionMark(seal.action)) } } : {}),
         });
     },
 
