@@ -5,8 +5,10 @@
  * her husband's line; a daughter's marriage to both lines, as "born into the
  * X line" in the husband's and "→ X line" in hers), deaths of the members
  * and of those who married in, moves (a change of the town between dated
- * records with a place) and emigration (an emigration or immigration record,
- * or a move between two located places in different countries). The history
+ * records with a place) and emigration (an emigration record, whose place is
+ * the place left, with an immigration record that follows it as the
+ * destination; an immigration record, whose place is the place reached; or a
+ * move between two located places in different countries). The history
  * layer adds the events of the line's places within the line's period: of a
  * place of the line or of its whole region; an event of the kind "other" only
  * with a place of the line.
@@ -54,7 +56,7 @@ export interface RodTimelineEvent {
     /** A marriage: the partner and the union. */
     partnerId?: PersonId;
     partnershipId?: PartnershipId;
-    /** Birth, death, marriage: where; a move or emigration: where to. */
+    /** Birth, death, marriage: where; a move or emigration: where to (none: an emigration record without a known destination). */
     place?: string;
     /** A move or emigration: where from (none when not known). */
     from?: string;
@@ -134,7 +136,11 @@ function townKey(place: string): string {
     return placeKey(townOfPlace(place)?.town ?? place) || placeKey(place);
 }
 
-interface Point { sort: number; year: number; place: string; emig?: boolean }
+/** A place a person was at; `emig`: an emigration record ('out', the place left) or an immigration record ('in', the place reached). */
+interface Point { sort: number; year: number; place: string; emig?: 'out' | 'in' }
+
+/** An immigration record at most this many years after an emigration record is its destination. */
+const EMIG_ARRIVAL_YEARS = 5;
 
 /** The timeline of one line; null for a line the tree does not have. */
 export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
@@ -176,7 +182,7 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
     // Where a person lived: the birth, the own events with a place, the births of the children.
     const points = (p: Person): Point[] => {
         const out: Point[] = [];
-        const add = (date: string | undefined, place: string | undefined, emig = false): void => {
+        const add = (date: string | undefined, place: string | undefined, emig?: Point['emig']): void => {
             const y = yearOf(date);
             const at = place?.trim();
             if (y === null || !at) return;
@@ -184,7 +190,8 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
         };
         add(p.birthDate, p.birthPlace);
         for (const ev of p.events ?? []) {
-            if (ev.type === 'emigration' || ev.type === 'immigration') add(ev.date, ev.place, true);
+            if (ev.type === 'emigration') add(ev.date, ev.place, 'out');
+            else if (ev.type === 'immigration') add(ev.date, ev.place, 'in');
             else if (!NOT_RESIDENCE.has(ev.type)) add(ev.date, ev.place);
         }
         for (const uid of p.partnerships) {
@@ -207,15 +214,33 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
     const moves = (id: PersonId, p: Person, fromYear: number | null, birthRod?: RodTimelineEvent['rod']): void => {
         let prev: Point | null = null;
         let last: Point | null = null;
-        for (const pt of points(p)) {
+        const pts = points(p);
+        // Immigration records already shown as the destination of an emigration record.
+        const arrivals = new Set<Point>();
+        for (const [i, pt] of pts.entries()) {
             const before = fromYear !== null && pt.year < fromYear;
             if (pt.emig) {
-                const was = before ? last : prev;
-                const key = `${id}|${pt.year}|${townKey(pt.place)}`;
-                if (!seenEmig.has(key)) {
+                const key = `${id}|${pt.year}|${pt.emig}|${townKey(pt.place)}`;
+                if (!arrivals.has(pt) && !seenEmig.has(key)) {
                     seenEmig.add(key);
-                    const from = was && townKey(was.place) !== townKey(pt.place) ? { from: was.place } : {};
-                    events.push({ kind: 'emigration', year: pt.year, sort: pt.sort, personId: id, place: pt.place, ...from, ...(before && birthRod ? { rod: birthRod } : {}) });
+                    const tag = before && birthRod ? { rod: birthRod } : {};
+                    if (pt.emig === 'out') {
+                        // The record's place is where the person left from; the destination is an
+                        // immigration record that follows (before another emigration record).
+                        let to: Point | undefined;
+                        for (const q of pts.slice(i + 1)) {
+                            if (q.emig === 'out' || q.year - pt.year > EMIG_ARRIVAL_YEARS) break;
+                            if (q.emig === 'in') { to = q; break; }
+                        }
+                        if (to) arrivals.add(to);
+                        const dest = to && townKey(to.place) !== townKey(pt.place) ? { place: to.place } : {};
+                        events.push({ kind: 'emigration', year: pt.year, sort: pt.sort, personId: id, from: pt.place, ...dest, ...tag });
+                    } else {
+                        // An immigration record's place is where the person arrived.
+                        const was = before ? last : prev;
+                        const from = was && townKey(was.place) !== townKey(pt.place) ? { from: was.place } : {};
+                        events.push({ kind: 'emigration', year: pt.year, sort: pt.sort, personId: id, place: pt.place, ...from, ...tag });
+                    }
                 }
             } else if (!before && prev && townKey(prev.place) !== townKey(pt.place)) {
                 // One row for a couple moving together (the member's, who comes first).

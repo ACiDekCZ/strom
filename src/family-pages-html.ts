@@ -1553,7 +1553,8 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
             parts.push(rodLinkHtml(r, e.rod.id, esc(e.rod.rel === 'birth' ? F.birthRod(label) : F.toRod(label))));
         }
     } else if (e.kind === 'move' || e.kind === 'emigration') {
-        parts.push(e.from ? `${esc(e.from)} → ${esc(e.place ?? '')}` : `→ ${esc(e.place ?? '')}`);
+        // An emigration record without a known destination has only the place left.
+        parts.push(e.from && e.place ? `${esc(e.from)} → ${esc(e.place)}` : e.from ? esc(F.tlLeft(e.from)) : `→ ${esc(e.place ?? '')}`);
     } else {
         const t = [e.place ? esc(e.place) : '', e.kind === 'death' && e.age !== undefined ? esc(r.S.history.age(String(e.age))) : ''].filter(Boolean).join(', ');
         if (t) parts.push(t);

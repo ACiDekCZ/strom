@@ -86,6 +86,27 @@ describe('the events of a line (§5.2)', () => {
         const there = thornbury.events.find(e => e.kind === 'emigration')!;
         expect(there.personId).toBe(F.ids.anna);
         expect(there.rod?.rel).toBe('birth');
+        // The immigration record is the destination of the emigration record, not a row of its own.
+        expect(lhotak.events.filter(e => e.kind === 'emigration' && e.personId === F.ids.anna)).toHaveLength(1);
+    });
+
+    it('an emigration record\'s place is the place left; an immigration record\'s the place reached', () => {
+        const data: StromData = structuredClone(F.data);
+        const P = data.persons;
+        // Anna leaves Dolní Lhota with no record of where she went; Jiří arrives in Ashford with no record of leaving.
+        P[F.ids.anna] = { ...P[F.ids.anna], events: [{ id: 'x1', type: 'emigration', date: '1888', place: 'Dolní Lhota' }] };
+        P[F.ids.jiri] = { ...P[F.ids.jiri], events: [{ id: 'x2', type: 'immigration', date: '1985', place: 'Ashford' }] };
+        const set = tlSet({ privacy: 'full' }, data);
+        const tl = timelineOf(set, F.ids.vaclav);
+        const em = tl.events.filter(e => e.kind === 'emigration').map(e => [e.year, e.personId, e.from, e.place]);
+        expect(em).toEqual([
+            [1888, F.ids.anna, 'Dolní Lhota', undefined],
+            [1985, F.ids.jiri, 'Lopuchov', 'Ashford'],
+        ]);
+        const html = renderPage(set, slugOf(set, F.ids.vaclav));
+        expect(html).toContain('odkud: Dolní Lhota');
+        expect(html).not.toContain('→ Dolní Lhota');
+        expect(html).toContain('Lopuchov → Ashford');
     });
 
     it('generations as rows; at most six places', () => {

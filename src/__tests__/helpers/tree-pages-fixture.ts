@@ -231,7 +231,8 @@ export function ancestorsFixture(): AncestorsFixture {
 
 /**
  * The tree of `treePagesFixture` with what a line's timeline shows (1102 §5):
- * Anna Lhotáková emigrates to Ashford (1888, a record) and dies there,
+ * Anna Lhotáková emigrates from Lopuchov to Ashford (1888, an emigration and
+ * an immigration record) and dies there,
  * Václav Lhoták moves to Smrkov (1879), Rosálie Rebarborová lived in Kvasín
  * before her wedding (1860, not a move of the line) and moves to Zálesí
  * (1870), Jiří Lhoták lives in Ashford from 1985 (located places in two
@@ -242,7 +243,7 @@ export function timelineFixture(): TreePagesFixture & { history: HistoryPayload 
     const f = treePagesFixture();
     const P = f.data.persons;
     const ev = (id: string, type: LifeEvent['type'], date: string, place: string): LifeEvent => ({ id, type, date, place });
-    P[f.ids.anna] = { ...P[f.ids.anna], deathPlace: 'Ashford', events: [ev('tl-e1', 'emigration', '1888', 'Ashford')] };
+    P[f.ids.anna] = { ...P[f.ids.anna], deathPlace: 'Ashford', events: [ev('tl-e1', 'emigration', '1888', 'Lopuchov'), ev('tl-e6', 'immigration', '1888', 'Ashford')] };
     P[f.ids.vaclav] = { ...P[f.ids.vaclav], events: [ev('tl-e2', 'residence', '1879', 'Smrkov čp. 7')] };
     P[f.ids.rosalie] = { ...P[f.ids.rosalie], events: [ev('tl-e3', 'residence', '1860', 'Kvasín'), ev('tl-e4', 'residence', '1870', 'Zálesí')] };
     P[f.ids.jiri] = { ...P[f.ids.jiri], events: [ev('tl-e5', 'residence', '1985', 'Ashford')] };
