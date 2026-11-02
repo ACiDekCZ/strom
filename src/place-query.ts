@@ -45,7 +45,6 @@ export const PLACE_ABBREVIATIONS: Readonly<Record<'cs' | 'de', Readonly<Record<s
 export const PLACE_PHRASES: readonly { from: RegExp; to: string }[] = [
     { from: /(^|\s)u\s+Č\.\s*Lípy(?=$|[\s,])/u, to: '$1u České Lípy' },
     { from: /(^|\s)u\s+Č\.\s*Budějovic(?=$|[\s,])/u, to: '$1u Českých Budějovic' },
-    { from: /(^|\s)u\s+Č\.\s*Krumlova(?=$|[\s,])/u, to: '$1u Českého Krumlova' },
 ];
 
 /** The text without diacritics on Latin letters ("Łotów" → "Lotow"); other scripts stay as they are. */
