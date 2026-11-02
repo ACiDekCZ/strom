@@ -6,7 +6,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 ## 3.21.0
 
-*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+*Wydano 3 listopada 2026.*
 
 - **Polski**: aplikacja mówi po polsku: *Ustawienia → Język → Polski*, w przeglądarce ustawionej na polski sama. Daty, liczba mnoga i określenia pokrewieństwa idą za polszczyzną, tak samo zapisane strony, księga rodu i ta lista zmian.
 - **Strony drzewa**: strony rodów obejmują też całe drzewo. *Strony całego drzewa* zaczynają się od wstępu do drzewa z liczbami, głównymi miejscowościami i rodami jako kartami oraz na osi czasu, z częściami *Inne rodziny* (małe rody) i *Małżeństwa między rodami* oraz wyborem rodu na pasku. *Księga i strony* tworzy też strony *Wybrane osoby* i strony przodków osoby z liczbą pokoleń, a każdy ród może mieć swoją oś czasu według stuleci. Duże drzewo zapisuje się jako zestaw plików w folderach z indeksem podzielonym według liter, a zapis przyciskiem *Kontynuuj w tle* przechodzi w tło z postępem na pasku narzędzi. Oś czasu rodu oznacza rodzaje wydarzeń ich symbolami (* ⚭ † →); indeksy i księga rodu umieszczają nazwiska z nieczytelnym miejscem transkrypcji w grupie *Niepewny odczyt*; dzieci małżeństwa na stronie rodu znów czytają się jako jeden wiersz, a *Mapa miejscowości* pokazuje, ile miejscowości obejmuje skupisko.

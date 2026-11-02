@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 ## 3.21.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 3 November 2026.*
 
 - **Polish**: the app speaks Polish: *Settings → Language → Polski*, chosen by itself in a browser set to Polish. Dates, plurals and kinship terms follow Polish, and so do saved pages, the family book and this list of changes.
 - **Tree pages**: the family pages cover the whole tree too. *Pages for the whole tree* start with the tree's introduction, its counts, main places and the family lines as cards and on a time axis, with *Other families* (the small lines), *Marriages between lines* and a choice of the line in the bar. *Book and pages* also makes pages of *Selected people* and of a person's ancestors with the number of generations, and each line can have its timeline by century. A large tree is saved as a set of files in folders with an index split by letters, and the save can *Continue in background* with its progress in the toolbar. A line's timeline marks its kinds of events with their symbols (* ⚭ † →); the indexes and the family book put surnames with an unreadable place of a transcription under *Uncertain reading*; a marriage's children on a line page read as one row again, and the *Map of places* shows how many places a cluster holds.

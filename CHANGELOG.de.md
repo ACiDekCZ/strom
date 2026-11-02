@@ -4,7 +4,7 @@
 
 ## 3.21.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 3. November 2026.*
 
 - **Polnisch**: Die App spricht Polnisch: *Einstellungen → Sprache → Polski*, in einem auf Polnisch eingestellten Browser von selbst. Daten, Pluralformen und Verwandtschaftsbezeichnungen folgen dem Polnischen, ebenso gespeicherte Seiten, das Familienbuch und diese Änderungsliste.
 - **Seiten des Stammbaums**: Die Familienseiten umfassen auch den ganzen Stammbaum. *Seiten für den ganzen Stammbaum* beginnen mit der Übersicht des Stammbaums, seinen Zahlen, den wichtigsten Orten und den Stammlinien als Karten und auf einer Zeitachse, mit *Weitere Familien* (die kleinen Stammlinien), *Ehen zwischen den Stammlinien* und einer Auswahl der Stammlinie in der Leiste. *Buch und Seiten* erstellt auch Seiten für *Ausgewählte Personen* und für die Vorfahren einer Person mit der Zahl der Generationen, und jede Stammlinie kann ihre Zeitleiste haben, jahrhundertweise gegliedert. Ein großer Stammbaum wird als Satz von Dateien in Ordnern mit einem nach Buchstaben geteilten Register gespeichert, und das Speichern kann *Im Hintergrund fortsetzen*, mit dem Fortschritt in der Werkzeugleiste. Die Zeitleiste einer Stammlinie kennzeichnet die Arten von Ereignissen mit ihren Symbolen (* ⚭ † →); die Register und das Familienbuch stellen Nachnamen mit einer unlesbaren Stelle der Abschrift unter *Unsichere Lesung*; die Kinder einer Ehe auf einer Stammlinienseite lesen sich wieder als eine Zeile, und die *Ortskarte* zeigt, wie viele Orte ein Cluster enthält.

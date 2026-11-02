@@ -4,7 +4,7 @@
 
 ## 3.21.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 3. listopadu 2026.*
 
 - **Polština**: aplikace mluví polsky: *Nastavení → Jazyk → Polski*, v prohlížeči nastaveném na polštinu sama. Data, množná čísla a příbuzenské vztahy se řídí polštinou, stejně jako uložené stránky, kniha rodu a tento přehled změn.
 - **Stránky stromu**: stránky rodu zahrnou i celý strom. *Stránky celého stromu* začínají úvodem stromu s počty, hlavními místy a rody jako kartami i na časové ose, s oddíly *Další rodiny* (malé rody) a *Sňatky mezi rody* a s výběrem rodu v liště. *Kniha a stránky* vytvoří i stránky *Vybrané osoby* a stránky předků osoby s počtem generací a každý rod může mít svou časovou osu po stoletích. Velký strom se uloží jako sada souborů ve složkách s rejstříkem rozděleným po písmenech a ukládání může *Pokračovat na pozadí* s průběhem v liště nástrojů. Časová osa rodu značí druhy událostí jejich symboly (* ⚭ † →); rejstříky a kniha rodu dávají příjmení s nečitelným místem přepisu pod *Nejisté čtení*; děti sňatku na stránce rodu se čtou zase jako jeden řádek a *Mapa obcí* ukazuje, kolik míst shluk obsahuje.
