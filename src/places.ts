@@ -401,6 +401,11 @@ function houseOrder(text: string): HouseOrder {
     };
 }
 
+/** Is a house text a street ("Lhotákova 23", "Lhotákova") rather than a number with or without its marker ("16", "čp. 4")? */
+export function houseIsStreet(text: string): boolean {
+    return houseOrder(text).cls !== 0;
+}
+
 /**
  * The same house however it is written: "16", "čp. 16", "Haus Nr. 16" and
  * "House No. 16" are one house; "Kopřivná 12" and "kopřivná 12" too.

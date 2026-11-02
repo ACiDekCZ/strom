@@ -1163,6 +1163,13 @@ export interface StromData {
     placeRecords?: Record<string, PlaceRecord>;
     /** Which research place record each place of the facts is, keyed by placeKey(). */
     placeRefs?: Record<string, string>;
+    /**
+     * Other names of a place written down by "Unify" (spec 034 §4): the old
+     * spellings of the facts that now name the place, keyed by the placeKey()
+     * of the place they were unified into. The search of the Places dialog
+     * finds the place under them and a fact written so again joins the place.
+     */
+    placeAliases?: Record<string, string[]>;
 
     /**
      * Surnames that mean the same family, written down once for the whole tree:

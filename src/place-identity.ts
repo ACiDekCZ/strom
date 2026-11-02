@@ -17,6 +17,7 @@ import type { CheckFinding } from './place-check.js';
 import type { LiveWaiting } from './research-link.js';
 import { originOfBy, type BridgePlace, type BridgePlaces, type BridgePlaceState } from './places-bridge.js';
 import { sameCoords } from './place-records.js';
+import { variantGroupKey } from './place-groups.js';
 import { placeKey, sortPlacesByName, townOfPlace, TOWN_POINT_PREFIX, type PlaceUsage } from './places.js';
 import type { KnownStreets } from './streets.js';
 import { formatFlexDate } from './dates.js';
@@ -208,14 +209,13 @@ export interface IdentityKeyContext {
  * and houses), else its own key.
  */
 export function identityKey(key: string, ctx: IdentityKeyContext): string {
-    const rec = ctx.live?.formsByKey[key]?.place ?? ctx.data.placeRefs?.[key];
-    if (rec && (ctx.live?.places[rec] || ctx.data.placeRecords?.[rec])) return rec;
-    const alias = ctx.aliases?.get(key);
-    if (alias && alias !== key) return alias;
+    const group = variantGroupKey(key, ctx);
+    if (group) return group;
     const town = townOfPlace(key, ctx.known);
     if (town) {
         const t = placeKey(town.town);
-        if (t) return TOWN_POINT_PREFIX + t;
+        // A house of a town that is one with other spellings belongs to that place (§4).
+        if (t) return variantGroupKey(t, ctx) ?? TOWN_POINT_PREFIX + t;
     }
     return key;
 }

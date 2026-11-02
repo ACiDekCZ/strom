@@ -331,6 +331,8 @@ export function carryOverTreeDecisions(next: StromData, previous: StromData | nu
         if (next.surnameRejections && next.surnameRejections.length === 0) delete next.surnameRejections;
         return next;
     }
+    // The other names of places are the tree's own (Unify); the research does not carry them.
+    if (previous.placeAliases && !next.placeAliases) next.placeAliases = structuredClone(previous.placeAliases);
     if (previous.qualityDismissed?.length && !next.qualityDismissed?.length) {
         next.qualityDismissed = previous.qualityDismissed.map(d => ({ ...d, persons: [...d.persons] }));
     }

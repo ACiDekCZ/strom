@@ -24,6 +24,7 @@ import {
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
 import { mergePlaceRecords } from '../place-records.js';
+import { mergePlaceAliases } from '../place-groups.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
 import {
     MergeState,
@@ -236,6 +237,11 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             const merged = mergePlaceRecords(mergedData, state.incomingData);
             if (merged.placeRecords) mergedData.placeRecords = structuredClone(merged.placeRecords);
             if (merged.placeRefs) mergedData.placeRefs = merged.placeRefs;
+        }
+        // Other names of places: union.
+        if (state.incomingData.placeAliases) {
+            const aliases = mergePlaceAliases(mergedData, state.incomingData);
+            if (aliases) mergedData.placeAliases = structuredClone(aliases);
         }
         // Surname groups: addSurnameGroup merges overlapping groups transitively,
         // so both trees' equivalences end up in one consistent registry.

@@ -65,6 +65,7 @@ import { fingerprintLike } from './research-link.js';
 import { restoreViewLinks } from './view-links.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
+import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
 
 /** Extended updates for Partnership */
 
@@ -244,6 +245,9 @@ export function migrateData(data: unknown): StromData {
         const placeRefs = sanitizePlaceRefs(d.placeRefs, placeRecords);
         if (placeRefs) result.placeRefs = placeRefs;
     }
+    // Other names of places written down by "Unify" (spec 034 §4).
+    const placeAliases = sanitizePlaceAliases(d.placeAliases);
+    if (placeAliases) result.placeAliases = placeAliases;
 
     if (Array.isArray(d.surnameVariants) && d.surnameVariants.length > 0) {
         result.surnameVariants = d.surnameVariants as StromData['surnameVariants'];
@@ -1749,6 +1753,36 @@ class DataManagerClass {
             this.data.places = places;
         }
         this.commitMutation(strings.undo.renamePlace(target));
+        return changed;
+    }
+
+    /**
+     * "Unify as <head>" (spec 034 §4): every fact written as the place `key`
+     * gets the place `head`, and the old spellings are written down as other
+     * names of the place (placeAliases), so the search still finds them and a
+     * fact written so again joins the place. One undo step. Returns the facts
+     * changed.
+     */
+    unifyPlaceTo(key: string, head: string): number {
+        const target = head.trim();
+        const newKey = placeKey(target);
+        if (!target || newKey === key) return 0;
+        const spellings = [...(collectPlaces(this.data).get(key)?.variants.keys() ?? [])];
+        const { data: renamed, changed } = renamePlace(this.data, key, target);
+        if (changed === 0) return 0;
+        this.beginMutation();
+        this.data = renamed;
+        const geo = this.data.places?.[key];
+        if (geo) {
+            const places = { ...this.data.places };
+            delete places[key];
+            if (!places[newKey]) places[newKey] = geo;
+            this.data.places = places;
+        }
+        let aliases = this.data.placeAliases;
+        for (const sp of spellings) aliases = addPlaceAlias(aliases, newKey, sp);
+        if (aliases) this.data.placeAliases = aliases;
+        this.commitMutation(strings.undo.unifyPlace(target));
         return changed;
     }
 

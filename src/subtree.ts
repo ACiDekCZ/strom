@@ -15,6 +15,7 @@ import { placeKey } from './places.js';
 import { dismissalsWithin } from './quality-dismiss.js';
 import { cleanLineageOverrides } from './lineage.js';
 import { placeRecordsFor } from './place-records.js';
+import { placeAliasesFor } from './place-groups.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -121,6 +122,11 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         const picked = placeRecordsFor(data, collectSubtreePlaceKeys(result));
         if (picked.placeRecords) result.placeRecords = structuredClone(picked.placeRecords);
         if (picked.placeRefs) result.placeRefs = picked.placeRefs;
+    }
+    // Other names of the places the kept persons use.
+    if (data.placeAliases) {
+        const aliases = placeAliasesFor(data, collectSubtreePlaceKeys(result));
+        if (aliases) result.placeAliases = structuredClone(aliases);
     }
     if (data.surnameVariants && data.surnameVariants.length > 0) {
         result.surnameVariants = structuredClone(data.surnameVariants);

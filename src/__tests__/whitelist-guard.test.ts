@@ -104,6 +104,7 @@ function fullTree(): Required<StromData> {
             },
         },
         placeRefs: { kolin: 'L0012' },
+        placeAliases: { kolin: ['Kolin a. E.'] },
         surnameVariants: [['Fíšek', 'Fyšek', 'Fischek']],
         surnameRejections: [{ forms: ['Lhoták', 'Lhota'], id: 'sg_lhotak_lhota', at: '2026-10-20T10:00:00.000Z' }],
         qualityDismissed: [{ kind: 'possibleDuplicate', persons: [ALICE, BOB].sort(), at: '2026-10-21T09:00:00.000Z', sync: 'sent' }],
