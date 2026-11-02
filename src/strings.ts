@@ -2451,6 +2451,13 @@ const stringsEN = {
         noAnswer: 'The research did not answer. Start it and try again.',
         updateAvailable: (v: string) => `New Strom Research ${v}`,
         updateResearch: 'Update',
+        updateBusy: (sessions: number, runs: number) => sessions > 0 && runs > 0
+            ? `${nEn(sessions, 'session', 'sessions')} and ${nEn(runs, 'run', 'runs')} are working – the update does not interrupt them.`
+            : sessions > 1 ? `${sessions} sessions are running – the update does not interrupt them.`
+            : sessions === 1 ? 'A session is running – the update does not interrupt it.'
+            : runs > 1 ? `${runs} runs are working – the update does not interrupt them.`
+            : 'A run is working – the update does not interrupt it.',
+        updateBusyHint: 'What runs now finishes on the current version; the next one runs on the new version.',
         undoSend: 'Undo last send',
         sentAt: (t: string) => `sent ${t}`,
         settings: 'Research settings',
@@ -2530,6 +2537,13 @@ const stringsEN = {
         wake: 'Resume',
         parkedPrefix: 'Parked:',
         queueMore: (n: number) => `and ${n} more in the research`,
+        queueOffLast: 'Waits until the directions\' work is done · helps no direction',
+        queueOffNever: 'Not taken · work outside the directions is switched off',
+        queueHelps: {
+            question: 'Helps the direction: a question of the direction',
+            joins: 'Helps the direction: connects people to the tree',
+            agent: 'Helps the direction, as the agent says',
+        },
         spend: (s: number, a: string) => `Agent this month: ${nEn(s, 'session', 'sessions')} · ${a}`,
         spendOpenSr: 'Sessions in the research',
         knows: 'What the research knows',
@@ -9165,6 +9179,13 @@ const stringsCZ: StringsType = {
         noAnswer: 'Výzkum neodpověděl. Pomůže ho spustit a zkusit to znovu.',
         updateAvailable: (v: string) => `Nová verze Strom Research ${v}`,
         updateResearch: 'Aktualizovat',
+        updateBusy: (sessions: number, runs: number) => sessions > 0 && runs > 0
+            ? `Běží ${nCs(sessions, 'sezení', 'sezení', 'sezení')} a ${nCs(runs, 'běh', 'běhy', 'běhů')} – aktualizace je nepřeruší.`
+            : sessions > 1 ? `Běží ${sessions} sezení – aktualizace je nepřeruší.`
+            : sessions === 1 ? 'Běží sezení – aktualizace ho nepřeruší.'
+            : runs > 1 ? `Běží ${nCs(runs, 'běh', 'běhy', 'běhů')} – aktualizace je nepřeruší.`
+            : 'Běží běh výzkumu – aktualizace ho nepřeruší.',
+        updateBusyHint: 'Co teď běží, doběhne na současné verzi; další už poběží na nové.',
         undoSend: 'Vrátit poslední poslání',
         sentAt: (t: string) => `poslané ${t}`,
         settings: 'Nastavení výzkumu',
@@ -9243,6 +9264,13 @@ const stringsCZ: StringsType = {
         wake: 'Vrátit',
         parkedPrefix: 'Odloženo:',
         queueMore: (n: number) => `a dalších ${n} ve výzkumu`,
+        queueOffLast: 'Čeká až po liniích · nepomáhá žádné linii',
+        queueOffNever: 'Nebere se · práce mimo linie je vypnutá',
+        queueHelps: {
+            question: 'Pomáhá linii: otázka linie',
+            joins: 'Pomáhá linii: připojuje lidi ke stromu',
+            agent: 'Pomáhá linii, jak uvádí agent',
+        },
         spend: (s: number, a: string) => `Agent tento měsíc: ${nCs(s, 'sezení', 'sezení', 'sezení')} · ${a}`,
         spendOpenSr: 'Sezení ve výzkumu',
         knows: 'Co ví výzkum',
@@ -15813,6 +15841,13 @@ const stringsDE: StringsType = {
         noAnswer: 'Die Forschung hat nicht geantwortet. Die Forschung starten und erneut versuchen.',
         updateAvailable: (v: string) => `Neue Version Strom Research ${v}`,
         updateResearch: 'Aktualisieren',
+        updateBusy: (sessions: number, runs: number) => sessions > 0 && runs > 0
+            ? `${sessions} ${sessions === 1 ? 'Sitzung' : 'Sitzungen'} und ${runs} ${runs === 1 ? 'Lauf' : 'Läufe'} sind im Gang – die Aktualisierung unterbricht sie nicht.`
+            : sessions > 1 ? `${sessions} Sitzungen laufen – die Aktualisierung unterbricht sie nicht.`
+            : sessions === 1 ? 'Eine Sitzung läuft – die Aktualisierung unterbricht sie nicht.'
+            : runs > 1 ? `${runs} Läufe sind im Gang – die Aktualisierung unterbricht sie nicht.`
+            : 'Ein Lauf ist im Gang – die Aktualisierung unterbricht ihn nicht.',
+        updateBusyHint: 'Was jetzt läuft, endet mit der aktuellen Version; das Nächste läuft schon mit der neuen.',
         undoSend: 'Letztes Senden zurücknehmen',
         sentAt: (t: string) => `gesendet ${t}`,
         settings: 'Forschungseinstellungen',
@@ -15891,6 +15926,13 @@ const stringsDE: StringsType = {
         wake: 'Fortsetzen',
         parkedPrefix: 'Zurückgestellt:',
         queueMore: (n: number) => `und ${n} weitere in der Forschung`,
+        queueOffLast: 'Wartet, bis die Arbeit der Richtungen getan ist · hilft keiner Richtung',
+        queueOffNever: 'Wird nicht übernommen · Arbeit außerhalb der Richtungen ist ausgeschaltet',
+        queueHelps: {
+            question: 'Hilft der Richtung: eine Frage der Richtung',
+            joins: 'Hilft der Richtung: verbindet Personen mit dem Baum',
+            agent: 'Hilft der Richtung, wie der Agent angibt',
+        },
         spend: (s: number, a: string) => `Agent diesen Monat: ${nDe(s, 'Sitzung', 'Sitzungen')} · ${a}`,
         spendOpenSr: 'Sitzungen in der Forschung',
         knows: 'Was die Forschung weiß',

@@ -1075,6 +1075,93 @@ describe('bridge status: queue, update, spend, last intake', () => {
     });
 });
 
+describe('bridge status: work outside the lines (tasks.offLine, 036)', () => {
+    const queue = [
+        { id: 'T0201', text: 'Matriky Lhota', state: 'next', offLine: 'last' },
+        { id: 'T0202', text: 'Sčítání Lhota 1880', state: 'next', offLine: 'never' },
+        { id: 'T0203', text: 'Lhoták Jan, otec?', state: 'next', research: 'G0002', helps: 'question' },
+        { id: 'T0204', text: 'Připojit Lhotákovy', state: 'parked', research: 'G0002', helps: 'joins' },
+        { id: 'T0205', text: 'Pozemková kniha', state: 'next', research: 'G0003', helps: 'agent' },
+    ];
+
+    it('reads offLine and helps from a bridge that says it', () => {
+        const s = sanitizeLiveStatus({ tree: UUID, features: ['tasks.offLine'], queue })!;
+        expect(s.queue).toEqual([
+            { id: 'T0201', text: 'Matriky Lhota', state: 'next', offLine: 'last' },
+            { id: 'T0202', text: 'Sčítání Lhota 1880', state: 'next', offLine: 'never' },
+            { id: 'T0203', text: 'Lhoták Jan, otec?', state: 'next', research: 'G0002', helps: 'question' },
+            { id: 'T0204', text: 'Připojit Lhotákovy', state: 'parked', research: 'G0002', helps: 'joins' },
+            { id: 'T0205', text: 'Pozemková kniha', state: 'next', research: 'G0003', helps: 'agent' },
+        ]);
+    });
+
+    it('without the feature the queue is as before', () => {
+        for (const features of [undefined, [], ['status.recent']]) {
+            const s = sanitizeLiveStatus({ tree: UUID, ...(features ? { features } : {}), queue })!;
+            for (const q of s.queue) {
+                expect(q).not.toHaveProperty('offLine');
+                expect(q).not.toHaveProperty('helps');
+            }
+            expect(s.queue).toHaveLength(5);
+        }
+    });
+
+    it('drops values it does not know, keeping the task', () => {
+        const s = sanitizeLiveStatus({
+            tree: UUID, features: ['tasks.offLine'],
+            queue: [
+                { id: 'T0301', text: 'a', state: 'next', offLine: 'first', helps: 'friends' },
+                { id: 'T0302', text: 'b', state: 'next', offLine: true, helps: 1 },
+                { id: 'T0303', text: 'c', state: 'next', offLine: 'LAST', helps: ['question'] },
+                { id: 'T0304', text: 'd', state: 'next', offLine: '<b>last</b>', helps: 'question ' },
+            ],
+        })!;
+        expect(s.queue).toEqual([
+            { id: 'T0301', text: 'a', state: 'next' },
+            { id: 'T0302', text: 'b', state: 'next' },
+            { id: 'T0303', text: 'c', state: 'next' },
+            { id: 'T0304', text: 'd', state: 'next' },
+        ]);
+    });
+});
+
+describe('bridge status: sessions and runs at work (status.busy, 037)', () => {
+    const status = (extra: Record<string, unknown>) => sanitizeLiveStatus({ tree: UUID, head: 'abc', ...extra })!;
+
+    it('reads the counts from a bridge that says them', () => {
+        expect(status({ features: ['status.busy'], busy: { sessions: 1, runs: 2 } }).busy).toEqual({ sessions: 1, runs: 2 });
+        expect(status({ features: ['status.busy'], busy: { sessions: 0, runs: 0 } }).busy).toEqual({ sessions: 0, runs: 0 });
+        // A missing or wrong count is 0 while the other one is said.
+        expect(status({ features: ['status.busy'], busy: { sessions: 2 } }).busy).toEqual({ sessions: 2, runs: 0 });
+        expect(status({ features: ['status.busy'], busy: { sessions: 'x', runs: 1.7 } }).busy).toEqual({ sessions: 0, runs: 1 });
+    });
+
+    it('without the feature (an older research) or without the field (an archive): absent', () => {
+        expect(status({ busy: { sessions: 1, runs: 0 } })).not.toHaveProperty('busy');
+        expect(status({ features: ['status.recent'], busy: { sessions: 1, runs: 0 } })).not.toHaveProperty('busy');
+        expect(status({ features: ['status.busy'] })).not.toHaveProperty('busy');
+    });
+
+    it('a busy that says nothing usable: absent', () => {
+        for (const busy of [null, 3, 'busy', [1, 2], {}, { sessions: -1, runs: 'two' }, { sessions: NaN, runs: Infinity }]) {
+            expect(status({ features: ['status.busy'], busy })).not.toHaveProperty('busy');
+        }
+    });
+
+    it('the sentence names what works, in each language', () => {
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const r = getStringsForLang(lang).research;
+            const texts = [r.updateBusy(1, 0), r.updateBusy(3, 0), r.updateBusy(0, 1), r.updateBusy(0, 2), r.updateBusy(1, 2), r.updateBusyHint];
+            for (const t of texts) {
+                expect(t.length).toBeGreaterThan(10);
+            }
+            expect(new Set(texts).size).toBe(texts.length);
+            expect(r.updateBusy(3, 0)).toContain('3');
+            expect(r.updateBusy(1, 2)).toContain('2');
+        }
+    });
+});
+
 describe('bridge status: the scan readers in the spend (spend.readers)', () => {
     const spend = { month: '2026-10', sessions: 14, amount: 63.4, readers: 41.2, currency: 'USD' };
     const status = (extra: Record<string, unknown>) => sanitizeLiveStatus({ tree: UUID, head: 'abc', ...extra })!;

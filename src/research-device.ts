@@ -9,7 +9,7 @@
  */
 
 import {
-    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake,
+    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
     ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
 } from './research-link.js';
@@ -82,6 +82,8 @@ export interface StoredResearchWaiting {
     at: number;
     /** A newer Strom Research was out. */
     update: { version: string } | null;
+    /** Sessions and runs working in it then (`busy`; absent: not said). */
+    busy?: LiveBusy;
     /** The last send it took in. */
     lastIntake: LiveIntake | null;
 }
@@ -95,7 +97,7 @@ export interface StoredResearchWaiting {
 export function noteResearchWaiting(
     researchId: string,
     items: readonly LiveWaiting[],
-    extra: { update?: { version: string } | null; lastIntake?: LiveIntake | null; features?: readonly string[] | null } = {}
+    extra: { update?: { version: string } | null; busy?: LiveBusy; lastIntake?: LiveIntake | null; features?: readonly string[] | null } = {}
 ): void {
     try {
         const groups = !!extra.features?.includes(WAITING_GROUPS_FEATURE);
@@ -119,6 +121,7 @@ export function noteResearchWaiting(
             ...(groups ? { groups: true } : {}),
             at: new Date().toISOString(),
             ...(extra.update ? { update: extra.update } : {}),
+            ...(extra.busy ? { busy: extra.busy } : {}),
             ...(extra.lastIntake ? { lastIntake: extra.lastIntake } : {}),
         }));
     } catch { /* no storage: the count just is not remembered */ }
@@ -140,13 +143,14 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     try {
         const raw = localStorage.getItem(WAITING_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { items?: unknown; groups?: unknown; at?: unknown; update?: unknown; lastIntake?: unknown };
+        const parsed = JSON.parse(raw) as { items?: unknown; groups?: unknown; at?: unknown; update?: unknown; busy?: unknown; lastIntake?: unknown };
         const at = typeof parsed.at === 'string' ? Date.parse(parsed.at) : NaN;
         if (!Number.isFinite(at) || now - at > WAITING_MAX_AGE_MS) return null;
         return {
             items: sanitizeWaiting(parsed.items, parsed.groups === true),
             at,
             update: sanitizeUpdate(parsed.update),
+            ...(sanitizeBusy(parsed.busy) ? { busy: sanitizeBusy(parsed.busy)! } : {}),
             lastIntake: sanitizeIntake(parsed.lastIntake),
         };
     } catch {

@@ -293,7 +293,7 @@ export const researchOverviewMethods = uiModule({
         // Which tree is followed now (after a switch), first.
         appendFollowNote(body, s);
         this.appendOverviewSummary(body, s, mode);
-        if (s.update) this.appendUpdateStrip(body, s.update.version);
+        if (s.update) this.appendUpdateStrip(body, s.update.version, s.busy);
 
         const fold = (key: string) => ({
             id: `ov-sec-${key}`,

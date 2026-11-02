@@ -38,7 +38,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
@@ -136,6 +136,8 @@ export interface LiveSession {
     queue: LiveQueueItem[];
     queueMore: number;
     update: { version: string } | null;
+    /** Sessions and runs working now (its last status's `busy`; absent: not said). */
+    busy?: LiveBusy;
     spend: LiveSpend | null;
     lastIntake: LiveIntake | null;
     /** The research's directions (empty: an older research). */
@@ -296,6 +298,25 @@ export function liveSection(host: HTMLElement, o: {
  * research's language (a newer research; an empty text shows nothing), else
  * its `what` lines put into words here.
  */
+/** The sentence that a session or run at work is not interrupted by an update ('' = nothing at work, or not said). */
+export function updateBusyText(busy: LiveBusy | undefined): string {
+    return busy && (busy.sessions > 0 || busy.runs > 0) ? strings.research.updateBusy(busy.sessions, busy.runs) : '';
+}
+
+/** Why a queued task waits at the end (off the lines), or why it goes with its line (`helps`); '' = neither said. */
+export function queueNoteText(q: LiveQueueItem): string {
+    const r = strings.research;
+    if (q.offLine === 'never') return r.queueOffNever;
+    if (q.offLine === 'last') return r.queueOffLast;
+    return q.helps ? r.queueHelps[q.helps] : '';
+}
+
+/** The note under a queued task's text (a quiet second line). */
+function appendQueueNote(text: HTMLElement, q: LiveQueueItem): void {
+    const note = queueNoteText(q);
+    if (note) text.appendChild(el('span', 'live-queue-note', note));
+}
+
 function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: string) => string | null): LiveChangeItem[] {
     const base = { at: e.at, task: e.task, head: e.head, ...(e.research ? { research: e.research } : {}) };
     const ids = (refs: string[]): PersonId[] => (data && refs.length > 0 ? personsByRefs(data, refs) : []);
@@ -648,6 +669,8 @@ export interface ResearchWaitingState {
     live: boolean;
     /** A newer Strom Research is out, as its bridge says now (a live session, or an answer within the last half minute). */
     update: { version: string } | null;
+    /** Sessions and runs working in it now, as its bridge says with the update (absent: not said). */
+    busy?: LiveBusy;
     /** The last send the research took in. */
     lastIntake: LiveIntake | null;
 }
@@ -2062,7 +2085,7 @@ export const researchUiMethods = uiModule({
         const treeId = DataManager.getCurrentTreeId();
         if (live && !live.ended && live.treeId === treeId) {
             // An archive (or a research waiting for its agent) has no tasks for the user, live or not.
-            return { items: this.activeResearchAgentless() ? [] : live.waiting, at: Date.now(), live: true, update: live.update, lastIntake: live.lastIntake };
+            return { items: this.activeResearchAgentless() ? [] : live.waiting, at: Date.now(), live: true, update: live.update, ...(live.busy ? { busy: live.busy } : {}), lastIntake: live.lastIntake };
         }
         const researchId = this.activeResearchId();
         const stored = researchId ? storedResearchWaiting(researchId) : null;
@@ -2072,8 +2095,10 @@ export const researchUiMethods = uiModule({
         const none = this.activeResearchAgentless() || (!!researchId && this.researchBridgeKnownDown(researchId));
         // A newer version only as the bridge says it now: one remembered from an earlier answer may be
         // the very version installed since (the research updated, or not running, or not asked in this page yet).
-        const update = !!researchId && this.researchBridgeFresh(researchId) ? stored.update : null;
-        return { ...stored, items: none ? [] : stored.items, update, live: false };
+        const fresh = !!researchId && this.researchBridgeFresh(researchId);
+        const { busy, ...rest } = stored;
+        // What works there now, likewise only as the bridge says it now.
+        return { ...rest, items: none ? [] : stored.items, update: fresh ? stored.update : null, ...(fresh && busy ? { busy } : {}), live: false };
     },
 
     /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */
@@ -2437,6 +2462,7 @@ export const researchUiMethods = uiModule({
                 queue: status.queue,
                 queueMore: status.queueMore,
                 update: status.update,
+                ...(status.busy ? { busy: status.busy } : {}),
                 spend: status.spend,
                 lastIntake: status.lastIntake,
                 researches: status.researches,
@@ -2656,6 +2682,7 @@ export const researchUiMethods = uiModule({
         s.queueMore = status.queueMore;
         s.researches = status.researches;
         s.update = status.update;
+        s.busy = status.busy;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
         // The latest status decides: without its count (an older research, a bridge just started) the history counts.
@@ -3188,7 +3215,7 @@ export const researchUiMethods = uiModule({
         panel.appendChild(head);
         // Which tree is followed now (after a switch): under the head, above "Elsewhere".
         if (!panel.hidden) appendFollowNote(panel, s);
-        if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version);
+        if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version, s.busy);
         // Under the head: a document being read (spec 013), then the other trees where an agent works or something waits (spec 011).
         if (!collapsed && !s.ended) this.appendReadStrip(panel);
         if (!collapsed && !s.ended) this.appendResearchElsewhere(panel, 'panel');
@@ -3308,7 +3335,7 @@ export const researchUiMethods = uiModule({
         if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
     },
 
-    appendUpdateStrip(panel: HTMLElement, version: string): void {
+    appendUpdateStrip(panel: HTMLElement, version: string, busy?: LiveBusy): void {
         const r = strings.research;
         const strip = el('div', 'live-panel-update');
         strip.appendChild(el('span', 'live-panel-update-text', r.updateAvailable(version)));
@@ -3318,6 +3345,13 @@ export const researchUiMethods = uiModule({
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(url);
             strip.appendChild(btn);
+        }
+        // A session or run at work: the update does not interrupt it (it finishes on the current version).
+        const working = updateBusyText(busy);
+        if (working) {
+            const note = el('span', 'live-panel-update-busy', working);
+            note.title = r.updateBusyHint;
+            strip.appendChild(note);
         }
         panel.appendChild(strip);
     },
@@ -3386,6 +3420,7 @@ export const researchUiMethods = uiModule({
             if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
+            appendQueueNote(text, q);
             li.appendChild(text);
             if (canTask) {
                 const more = el('button', 'live-queue-more', '⋯');
@@ -3403,7 +3438,9 @@ export const researchUiMethods = uiModule({
         });
         for (const q of shownParked) {
             const li = el('li', 'live-queue-row live-queue-row--parked');
-            li.appendChild(el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`));
+            const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
+            appendQueueNote(text, q);
+            li.appendChild(text);
             if (canTask) {
                 const wake = setResearchOpenLabel(el('button', 'link-button live-queue-wake'), r.wake);
                 wake.type = 'button';

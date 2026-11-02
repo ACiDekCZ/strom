@@ -283,6 +283,65 @@ test.describe('live panel: up next, update, spend', () => {
         expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0101&do=park`]);
     });
 
+    test('036: work outside the lines says why it waits at the end, a task that helps a line why it goes with it', async ({ page }) => {
+        await follow(page, {
+            features: ['tasks.offLine'],
+            queue: [
+                { id: 'T0201', text: 'Lhoták Jan, otec?', state: 'next', research: 'G0002', helps: 'question' },
+                { id: 'T0202', text: 'Matriky Lhota 1850–1860', state: 'next', offLine: 'last' },
+                { id: 'T0203', text: 'Sčítání Lhota 1880', state: 'next', offLine: 'never' },
+                { id: 'T0204', text: 'Připojit Lhotákovy', state: 'parked', research: 'G0002', helps: 'joins' },
+            ],
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-queue-row .live-queue-note')).toHaveText([
+            'Helps the direction: a question of the direction',
+            'Waits until the directions\' work is done · helps no direction',
+            'Not taken · work outside the directions is switched off',
+            'Helps the direction: connects people to the tree',
+        ]);
+        // The overview's queue says the same.
+        await panel.locator('.live-panel-expand').click();
+        const overview = page.locator('#research-overview');
+        await expect(overview).toBeVisible();
+        await expect(overview.locator('.live-queue-row', { hasText: 'Matriky Lhota' }).locator('.live-queue-note'))
+            .toHaveText('Waits until the directions\' work is done · helps no direction');
+        await expect(overview.locator('.live-queue-note')).toHaveCount(4);
+    });
+
+    test('036: without the feature the same fields add no note', async ({ page }) => {
+        await follow(page, {
+            queue: [
+                { id: 'T0202', text: 'Matriky Lhota 1850–1860', state: 'next', offLine: 'last' },
+                { id: 'T0201', text: 'Lhoták Jan, otec?', state: 'next', research: 'G0002', helps: 'question' },
+            ],
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-queue-text')).toHaveText(['Matriky Lhota 1850–1860', 'Lhoták Jan, otec?']);
+        await expect(panel.locator('.live-queue-note')).toHaveCount(0);
+    });
+
+    test('037: a session at work: the update strip and the menu row say the update does not interrupt it', async ({ page }) => {
+        await follow(page, { update: { version: '1.7.0' }, features: ['status.busy'], busy: { sessions: 1, runs: 0 } });
+        const panel = page.locator('#live-panel');
+        const busy = panel.locator('.live-panel-update .live-panel-update-busy');
+        await expect(busy).toHaveText('A session is running – the update does not interrupt it.');
+        await expect(busy).toHaveAttribute('title', 'What runs now finishes on the current version; the next one runs on the new version.');
+        await openResearchMenu(page, { expandMore: true });
+        const update = page.locator('#research-item-update');
+        await expect(update.locator('.research-item-val')).toHaveText('1.7.0');
+        await expect(update.locator('.research-item-sub')).toHaveText('A session is running – the update does not interrupt it.');
+    });
+
+    test('037: nothing at work: the update strip and the menu row as before', async ({ page }) => {
+        await follow(page, { update: { version: '1.7.0' }, features: ['status.busy'], busy: { sessions: 0, runs: 0 } });
+        await expect(page.locator('#live-panel .live-panel-update')).toContainText('New Strom Research 1.7.0');
+        await expect(page.locator('#live-panel .live-panel-update-busy')).toHaveCount(0);
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-item-update .research-item-val')).toHaveText('1.7.0');
+        await expect(page.locator('#research-item-update .research-item-sub')).toHaveCount(0);
+    });
+
     test('without the fields: no queue, no update strip, no spend; the idle panel has no queue', async ({ page }) => {
         await follow(page, {});
         const panel = page.locator('#live-panel');

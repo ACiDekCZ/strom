@@ -18,7 +18,7 @@ import {
     ResearchToolAction, researchPersonRef,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { onComputer } from './research-ui.js';
+import { onComputer, updateBusyText } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -412,9 +412,11 @@ export const researchActionsMethods = uiModule({
             if (known?.update) {
                 const version = known.update.version;
                 moreAttention = r.updateAvailable(version);
+                // A session or run at work: the update does not interrupt it (a quiet second line).
+                const working = updateBusyText(known.busy);
                 more.push(this.researchLinkAvailable('update')
-                    ? { id: 'research-item-update', label: r.updateRow, val: version, method: 'researchActionUpdate', ext: true, attn: true }
-                    : { id: 'research-item-update', label: r.updateRow, sub: r.updateAvailable(version), method: 'researchActionUpdate', disabled: true, attn: true });
+                    ? { id: 'research-item-update', label: r.updateRow, val: version, method: 'researchActionUpdate', ext: true, attn: true, ...(working ? { sub: working } : {}) }
+                    : { id: 'research-item-update', label: r.updateRow, sub: working ? `${r.updateAvailable(version)}. ${working}` : r.updateAvailable(version), method: 'researchActionUpdate', disabled: true, attn: true });
             }
             // Then (symbols of history, round 2, 6b): materials, the phone, the tree fixes, the research tools.
             // An archive has no agent: its materials are what it takes, first.

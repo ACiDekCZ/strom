@@ -93,6 +93,30 @@ describe('the update notice of the research menu', () => {
         expect(u.researchWaiting()?.lastIntake).toEqual(INTAKE);
     });
 
+    it('037: what works there now comes with the update, from a bridge that says it, and only as now', async () => {
+        const u = ui();
+        answer = () => new Response(JSON.stringify({
+            tree: { id: TREE, name: 'Lhotákovi' }, head: '3f2a9c1e5b7d', links: ['open', 'update'], lastIntake: INTAKE,
+            update: { version: '1.12.2' }, features: ['status.busy'], busy: { sessions: 1, runs: 2 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+        expect(await u.askResearchBridge(TREE, 500)).not.toBeNull();
+        expect(u.researchWaiting()?.busy).toEqual({ sessions: 1, runs: 2 });
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now + 60_000);
+        expect(u.researchWaiting()?.busy).toBeUndefined();
+    });
+
+    it('037: without the feature nothing of busy is kept', async () => {
+        const u = ui();
+        answer = () => new Response(JSON.stringify({
+            tree: { id: TREE, name: 'Lhotákovi' }, head: '3f2a9c1e5b7d', links: ['open', 'update'],
+            update: { version: '1.12.2' }, busy: { sessions: 1, runs: 0 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+        expect(await u.askResearchBridge(TREE, 500)).not.toBeNull();
+        expect(u.researchWaiting()?.update).toEqual({ version: '1.12.2' });
+        expect(u.researchWaiting()).not.toHaveProperty('busy');
+    });
+
     it('the bridge answers without one (the research already updated): the remembered one goes', async () => {
         const u = ui();
         answer = status(null);

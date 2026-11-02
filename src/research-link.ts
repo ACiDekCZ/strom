@@ -1516,6 +1516,8 @@ export interface LiveStatus {
     historyPlaceEstimate?: { minutes: [number, number]; usd?: [number, number] };
     /** `stories.history` (with `stories.history` in `features`): the research may use the history of places in stories. */
     storiesHistory?: boolean;
+    /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
+    busy?: LiveBusy;
 }
 
 /** How often the research looks for history (`/status.experiments.historyPace`). */
@@ -1888,6 +1890,27 @@ export interface LiveQueueItem {
     person?: string;
     /** The research direction of the task ("G0002"; a newer research). */
     research?: string;
+    /**
+     * Off the research's lines and helping none (`tasks.offLine` in `features`): `last` = taken only after the
+     * lines' work; `never` = not taken (work outside the lines is set off in the research). Absent: it does not apply.
+     */
+    offLine?: 'last' | 'never';
+    /**
+     * Off the lines by its people but helping the line in `research` (`tasks.offLine` in `features`): it serves a
+     * question of the line (`question`), connects people to the tree (`joins`), or the agent said how (`agent`).
+     */
+    helps?: 'question' | 'joins' | 'agent';
+}
+
+/** `/status.features`: queue items say when work outside the lines comes (`offLine`) and how a task helps a line (`helps`). */
+export const TASKS_OFF_LINE_FEATURE = 'tasks.offLine';
+/** `/status.features`: the status says how many sessions and runs work now (`busy`). */
+export const STATUS_BUSY_FEATURE = 'status.busy';
+
+/** What works in the research now (`/status.busy`). */
+export interface LiveBusy {
+    sessions: number;
+    runs: number;
 }
 
 /** The agent's sessions and cost this month. */
@@ -2124,7 +2147,7 @@ export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
 const MAX_QUEUE = 20;
 
 /** The `queue` list of the status. Untrusted input: bad items are dropped. */
-export function sanitizeQueue(value: unknown): LiveQueueItem[] {
+export function sanitizeQueue(value: unknown, offLine = false): LiveQueueItem[] {
     if (!Array.isArray(value)) return [];
     const out: LiveQueueItem[] = [];
     for (const item of value) {
@@ -2136,9 +2159,23 @@ export function sanitizeQueue(value: unknown): LiveQueueItem[] {
         const state = r.state === 'parked' ? 'parked' : r.state === 'next' ? 'next' : null;
         const person = researchPersonRef(r.person);
         const research = researchDirectionRef(r.research);
-        if (state) out.push({ id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}) });
+        // When work outside the lines comes, and how a task helps a line: only from a research that says so.
+        const off = offLine && (r.offLine === 'last' || r.offLine === 'never') ? r.offLine : null;
+        const helps = offLine && (r.helps === 'question' || r.helps === 'joins' || r.helps === 'agent') ? r.helps : null;
+        if (state) out.push({
+            id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
+            ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
+        });
     }
     return out;
+}
+
+/** `busy: { sessions, runs }` (counts; a missing one is 0), or null when neither is a count. */
+export function sanitizeBusy(value: unknown): LiveBusy | null {
+    const r = asRecord(value);
+    const sessions = asCount(r?.sessions);
+    const runs = asCount(r?.runs);
+    return sessions === null && runs === null ? null : { sessions: sessions ?? 0, runs: runs ?? 0 };
 }
 
 const DIRECTION_KINDS: readonly string[] = ['ancestors', 'descendants', 'person', 'question'];
@@ -2333,7 +2370,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working),
         waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE)),
         links: sanitizeResearchLinks(r.links),
-        queue: sanitizeQueue(r.queue),
+        queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE)),
         queueMore: asCount(r.queueMore) ?? 0,
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
@@ -2356,6 +2393,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
         ...experimentsSaid(r, features),
         ...qualitySaid(r, features),
+        ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
     };
 }
 
