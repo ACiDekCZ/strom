@@ -2484,6 +2484,8 @@ export const researchSyncMethods = uiModule({
         this.materialsBridgeChanged();
         // The spelling suggestions of the research (spec 021 §4): the dialog's state follows the bridge.
         this.surnameSuggestBridgeChanged();
+        // Kinds of history in Settings (spec 035 §5): the Search column follows the bridge, up or gone.
+        this.historyKindsBridgeChanged();
     },
 
     /**

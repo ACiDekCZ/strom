@@ -425,7 +425,52 @@ export interface FakeHistory {
     /** Events deleted from here (kept for `do: "restore"`); an event deleted by the research's agent: `retracted`. */
     removed?: Map<string, { event: Record<string, unknown>; places: string[] }>;
     retracted?: string[];
+    /**
+     * spec 035 (`history.kinds`): the kinds searched (`/status.experiments.kinds`), whether the tree has
+     * its own choice (`kindsOwn`) and the computer's default (`kindsDefault`). A test "confirms in the
+     * terminal" by changing it (and polling).
+     */
+    kinds?: { kinds: string[]; own: boolean; def: string[] };
+    /** Every `POST /history/kinds` body. */
+    kindsWrites?: Record<string, unknown>[];
+    /** `POST /history/kinds` answers this instead (503 / 500 / …). */
+    kindsReply?: { status: number; body: unknown };
+    /** spec 035 (`history.align`): the alignment's preview, its writes and its undo. */
+    align?: FakeAlign;
 }
+
+/** The fake research's alignment (`GET /history/align`, `POST /history/align`, `/history/align/undo`). */
+export interface FakeAlign {
+    /** Regions and places a kind added would be searched in (filtered by the kinds added). */
+    backfill: { region?: string; place?: string; label: string; kinds: string[] }[];
+    /** Sessions per region or place to search (default 1). */
+    sessionsEach?: number;
+    /** The `kinds` of every `GET /history/align` ('' = without). */
+    reads: string[];
+    /** Every `POST /history/align` body; every undo body. */
+    posts: Record<string, unknown>[];
+    undos: Record<string, unknown>[];
+    /** Answers instead (preview, alignment, undo). */
+    previewReply?: { status: number; body: unknown };
+    reply?: { status: number; body: unknown };
+    undoReply?: { status: number; body: unknown };
+    /** Undo ids taken back already. */
+    undone?: string[];
+}
+
+export function fakeAlign(init: Partial<FakeAlign> = {}): FakeAlign {
+    return {
+        backfill: [
+            { region: 'cz-capkov', label: 'Čapkovsko', kinds: ['law', 'economy', 'war', 'epidemic', 'census', 'state', 'emigration', 'disaster', 'other'] },
+            { place: 'L0001', label: 'Čapkov', kinds: ['law', 'economy'] },
+        ],
+        reads: [], posts: [], undos: [],
+        ...init,
+    };
+}
+
+/** All kinds of events, in their order (spec 035). */
+export const FAKE_KINDS = ['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster', 'other'];
 
 /** The manager's write routes of the fake bridge (`POST /history/<route>`, `/stories`). */
 export type FakeHistoryWrite = 'first' | 'skip' | 'delete' | 'map' | 'place' | 'stories';
@@ -606,10 +651,156 @@ export function fakeHistoryDetail(opts: { many?: boolean } = {}, init: Partial<F
 }
 
 /** The answer to `/history*`, `/experiments` and `/stories` (null: not one of them; 404 when not said in `features`). */
+/** The value of history.kinds as the research writes it in a link: `all`, `none` or the kinds. */
+function kindsValue(kinds: string[]): string {
+    const list = FAKE_KINDS.filter(k => kinds.includes(k));
+    return !list.length ? 'none' : list.length === FAKE_KINDS.length ? 'all' : list.join(',');
+}
+
+/** A value of `?kinds=` (`all`, `none`, a list, `all,-x`) as a list of kinds, or null. */
+function kindsOfValue(v: string): string[] | null {
+    if (v === 'all') return [...FAKE_KINDS];
+    if (v === 'none') return [];
+    const parts = v.split(',');
+    if (parts[0] === 'all') return FAKE_KINDS.filter(k => !parts.slice(1).includes(`-${k}`));
+    return parts.every(k => FAKE_KINDS.includes(k)) ? FAKE_KINDS.filter(k => parts.includes(k)) : null;
+}
+
+/** spec 035: `/history/kinds`, `/history/align` (preview and alignment) and its undo, as the research answers them. */
+function serveHistoryKinds(b: FakeBridge, h: FakeHistory, method: string, url: URL, rest: string, body: Record<string, unknown>,
+    bump: () => void): { status: number; body: unknown } {
+    const features = b.features ?? [];
+    const unknown = { status: 404, body: { error: 'unknown' } };
+    const refuse = (status: number, code: string, error: string, extra: Record<string, unknown> = {}) =>
+        ({ status, body: { error, code, text: error, ...extra } });
+    const k = (h.kinds ??= { kinds: [...FAKE_KINDS], own: false, def: [...FAKE_KINDS] });
+    const events = h.payload.events as Record<string, unknown>[];
+    const hidden = h.payload.hidden;
+    const byAlign = (e: Record<string, unknown>) => hidden.some(x => x.event === e.id && x.by === 'align');
+    const hiddenTree = (e: Record<string, unknown>) => hidden.some(x => x.event === e.id && (x.tree === true || x.by === 'align'));
+    const preview = (want: string[]) => {
+        const count = (list: Record<string, unknown>[]) => {
+            const kinds: Record<string, number> = {};
+            for (const e of list) kinds[e.kind as string] = (kinds[e.kind as string] ?? 0) + 1;
+            return { n: list.length, kinds };
+        };
+        const toHide = events.filter(e => !want.includes(e.kind as string) && !hiddenTree(e));
+        const added = want.filter(x => !k.kinds.includes(x));
+        const backfill = (h.align?.backfill ?? [])
+            .map(x => ({ ...x, kinds: x.kinds.filter(y => added.includes(y)) }))
+            .filter(x => x.kinds.length);
+        const out = {
+            kinds: want,
+            hide: { general: count(toHide.filter(e => e.scope !== 'local')), local: count(toHide.filter(e => e.scope === 'local')) },
+            show: count(events.filter(e => want.includes(e.kind as string) && byAlign(e))),
+            backfill,
+            sessions: backfill.length * (h.align?.sessionsEach ?? 1),
+            pace: h.pace ?? 'sometimes',
+            busy: [],
+            shared: { n: 0, kinds: {} },
+        };
+        // The plan: a print of what the alignment would do now.
+        let hash = 0;
+        for (const c of JSON.stringify(out) + h.rev) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+        return { ...out, plan: (hash.toString(16).padStart(8, '0') + '00000000').slice(0, 16) };
+    };
+    if (rest === '/history/kinds') {
+        if (method !== 'POST' || !features.includes('history.kinds')) return unknown;
+        (h.kindsWrites ??= []).push(body);
+        if (h.kindsReply) return h.kindsReply;
+        const scope = body.scope ?? 'tree';
+        if (scope !== 'tree' && scope !== 'default') return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
+        const link = (q: string) => `strom-research://history-kinds?tree=${UUID}&${q}`;
+        if (body.inherit === true) {
+            if (scope !== 'tree' || 'kinds' in body) return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
+            const added = k.def.filter(x => !k.kinds.includes(x));
+            if (added.length) {
+                return refuse(403, 'history.kinds.link', 'Adding kinds is confirmed in the research terminal.', { link: link('scope=tree&inherit=1'), added });
+            }
+            k.own = false;
+            k.kinds = [...k.def];
+        } else {
+            const want = Array.isArray(body.kinds) ? body.kinds as string[] : null;
+            if (!want || want.some(x => !FAKE_KINDS.includes(x))) return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
+            const now = scope === 'default' ? k.def : k.own ? k.kinds : k.def;
+            const added = FAKE_KINDS.filter(x => want.includes(x) && !now.includes(x));
+            if (added.length) {
+                return refuse(403, 'history.kinds.link', 'Adding kinds is confirmed in the research terminal.',
+                    { link: link(`scope=${scope}&kinds=${kindsValue(want)}`), added });
+            }
+            if (scope === 'default') {
+                k.def = FAKE_KINDS.filter(x => want.includes(x));
+                if (!k.own) k.kinds = [...k.def];
+            } else {
+                k.own = true;
+                k.kinds = FAKE_KINDS.filter(x => want.includes(x));
+            }
+        }
+        bump();
+        const suggested = events.some(e => !k.kinds.includes(e.kind as string) && !hiddenTree(e));
+        return { status: 200, body: { experiments: { kinds: k.kinds, kindsOwn: k.own, kindsDefault: k.def }, alignSuggested: suggested, ...commitWrite(b) } };
+    }
+    if (!features.includes('history.align') || !h.align) return unknown;
+    const a = h.align;
+    if (rest === '/history/align') {
+        if (method === 'GET') {
+            const q = url.searchParams.get('kinds');
+            a.reads.push(q ?? '');
+            if (a.previewReply) return a.previewReply;
+            const want = q === null ? k.kinds : kindsOfValue(q);
+            if (!want) return refuse(400, 'history.kinds.body', 'The request is not one the research reads.');
+            return { status: 200, body: preview(want) };
+        }
+        if (method !== 'POST') return unknown;
+        a.posts.push(body);
+        if (a.reply) return a.reply;
+        if (typeof body.plan !== 'string' || (body.hide !== true && body.backfill !== true)) {
+            return refuse(400, 'history.align.body', 'The request is not one the research reads.');
+        }
+        const now = preview(k.kinds);
+        if (body.plan !== now.plan) return refuse(409, 'history.align.changed', 'Something changed meanwhile.', { preview: now });
+        const link = `strom-research://history-align?tree=${UUID}`;
+        const backfill = body.backfill === true && now.backfill.length
+            ? { code: 'history.align.link', said: 'Searching is confirmed in the research terminal.', text: 'Searching is confirmed in the research terminal.',
+                link, n: now.backfill.length, sessions: now.sessions, pace: now.pace } : undefined;
+        let hiddenN = 0;
+        let shown = 0;
+        const undo = `20261102125010-${(a.posts.length).toString(16).padStart(6, '0')}`;
+        if (body.hide === true) {
+            for (const e of events) {
+                if (!k.kinds.includes(e.kind as string) && !hiddenTree(e)) {
+                    hidden.push({ event: e.id, tree: true, by: 'align', align: undo, at: new Date().toISOString() });
+                    hiddenN++;
+                }
+            }
+            const before = hidden.length;
+            h.payload.hidden = hidden.filter(x => !(x.by === 'align' && k.kinds.includes(events.find(e => e.id === x.event)?.kind as string)));
+            shown = before - h.payload.hidden.length;
+        }
+        if (!hiddenN && !shown && backfill) {
+            return refuse(403, 'history.align.link', 'Searching is confirmed in the research terminal.', { link, backfill });
+        }
+        if (hiddenN || shown) bump();
+        return { status: 200, body: { done: { hidden: hiddenN, shown, tasks: 0 }, ...(hiddenN || shown ? { undo } : {}),
+            ...(backfill ? { backfill } : {}), ...commitWrite(b) } };
+    }
+    if (method !== 'POST') return unknown;
+    a.undos.push(body);
+    if (a.undoReply) return a.undoReply;
+    if (typeof body.undo !== 'string') return refuse(400, 'history.align.body', 'The request is not one the research reads.');
+    if (a.undone?.includes(body.undo)) return refuse(409, 'history.align.undone', 'This alignment is undone already.');
+    const mine = h.payload.hidden.filter(x => x.align === body.undo);
+    if (!mine.length) return refuse(404, 'history.align.undo', 'No such alignment.');
+    h.payload.hidden = h.payload.hidden.filter(x => x.align !== body.undo);
+    (a.undone ??= []).push(body.undo);
+    bump();
+    return { status: 200, body: { undone: { shown: mine.length, hidden: 0 }, ...commitWrite(b) } };
+}
+
 function serveHistory(b: FakeBridge, method: string, url: URL, postData: string | null): { status: number; body: unknown } | null {
     const h = b.history;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
-    if (!h || !/^\/(history|history\/(hide|first|skip|delete|map|place)|experiments|stories)$/.test(rest)) return null;
+    if (!h || !/^\/(history|history\/(hide|first|skip|delete|map|place|kinds|align|align\/undo)|experiments|stories)$/.test(rest)) return null;
     const features = b.features ?? [];
     let body: Record<string, unknown> = {};
     try { body = JSON.parse(postData ?? '{}'); } catch { /* keep empty */ }
@@ -623,6 +814,9 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
         h.payload.state.rev = h.rev;
     };
     const regions = h.payload.regions;
+    if (rest === '/history/kinds' || rest === '/history/align' || rest === '/history/align/undo') {
+        return serveHistoryKinds(b, h, method, url, rest, body, bump);
+    }
     if (rest === '/history') {
         if (method !== 'GET' || !features.includes('history.events')) return unknown;
         h.reads++;
@@ -1443,6 +1637,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                     experiments: {
                         history: b.history.searching, ...(b.history.split ? { ...b.history.split } : {}),
                         ...(b.history.pace ? { historyPace: b.history.pace } : {}),
+                        ...(b.history.kinds ? { kinds: b.history.kinds.kinds, kindsOwn: b.history.kinds.own, kindsDefault: b.history.kinds.def } : {}),
                     },
                     ...(b.history.stories !== undefined ? { stories: { history: b.history.searching && b.history.stories } } : {}),
                 } : {}),

@@ -22,6 +22,27 @@ import { getStringsForLang, type Language } from './strings.js';
 export const HISTORY_KINDS = ['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster', 'other'] as const;
 export type HistoryKind = typeof HISTORY_KINDS[number];
 
+/** A kind of event, or null. */
+export function isHistoryKind(v: unknown): v is HistoryKind {
+    return typeof v === 'string' && (HISTORY_KINDS as readonly string[]).includes(v);
+}
+
+/**
+ * A list of kinds as the research says it (`/status.experiments.kinds`, spec 035):
+ * unknown kinds dropped, each once, in the order of HISTORY_KINDS; null when it is not a list.
+ */
+export function parseHistoryKindList(v: unknown): HistoryKind[] | null {
+    if (!Array.isArray(v)) return null;
+    const said = new Set(v.filter(isHistoryKind));
+    return HISTORY_KINDS.filter(k => said.has(k));
+}
+
+/** A task searching the kinds added to the search (spec 035, `kindsFill` of a region or a place in `GET /history`). */
+export interface HistoryKindsFill {
+    kinds: HistoryKind[];
+    state: 'queued' | 'running';
+}
+
 /** Texts by language code ("cs", "en", "de", or another valid code). */
 export type HistoryText = Record<string, string>;
 
@@ -110,6 +131,8 @@ export interface HistoryPlace {
     history?: HistoryPlaceHistory;
     /** R6: when its own history was searched (ISO). */
     at?: string;
+    /** spec 035: a task searching kinds added to the search. */
+    kindsFill?: HistoryKindsFill;
 }
 
 export type HistoryRegionState = 'queued' | 'running' | 'done' | 'waiting' | 'covered' | 'skipped' | 'none';
@@ -140,6 +163,8 @@ export interface HistoryRegion {
     order?: number;
     /** Asked to go first (`/history/first`). */
     first?: boolean;
+    /** spec 035: a task searching kinds added to the search. */
+    kindsFill?: HistoryKindsFill;
 }
 
 /** An event the user deleted on this computer (R4 `deleted`): what the row needs to be restored. */
@@ -176,6 +201,10 @@ export interface HistoryHidden {
     /** Everything of the region hidden in this tree (R2). */
     region?: string;
     at?: string;
+    /** spec 035: hidden by aligning the events with the kinds searched (not by a person). */
+    by?: 'align';
+    /** spec 035: the alignment's undo id (the whole group is shown again by it). */
+    align?: string;
 }
 
 export type HistorySearch = 'none' | 'running' | 'done' | 'waiting';
@@ -453,7 +482,16 @@ function parsePlace(v: unknown, known: Set<string>): HistoryPlace | null {
     if (typeof v.history === 'string' && (PLACE_HISTORY as readonly string[]).includes(v.history)) out.history = v.history as HistoryPlaceHistory;
     const at = isoTime(v.at);
     if (at) out.at = at;
+    const fill = parseKindsFill(v.kindsFill);
+    if (fill) out.kindsFill = fill;
     return out;
+}
+
+/** `kindsFill` of a region or a place, or undefined (no kinds, or another state). */
+export function parseKindsFill(v: unknown): HistoryKindsFill | undefined {
+    if (!isObj(v) || (v.state !== 'queued' && v.state !== 'running')) return undefined;
+    const kinds = parseHistoryKindList(v.kinds);
+    return kinds?.length ? { kinds, state: v.state } : undefined;
 }
 
 const PLACE_HISTORY = ['none', 'first', 'running', 'done', 'empty', 'waiting'] as const;
@@ -490,6 +528,8 @@ function parseRegion(id: string, v: unknown): HistoryRegion | null {
     const order = count(v.order);
     if (order !== undefined && order >= 1) out.order = order;
     if (v.first === true) out.first = true;
+    const fill = parseKindsFill(v.kindsFill);
+    if (fill) out.kindsFill = fill;
     return out;
 }
 
@@ -565,12 +605,127 @@ function parseHidden(v: unknown): HistoryHidden | null {
         out = { event };
         if (place) out.place = place;
         else if (person) out.person = person;
-        else if (v.tree === true) out.tree = true;
+        // spec 035: an alignment hides in the whole tree (also when it does not say `tree`).
+        else if (v.tree === true || v.by === 'align') out.tree = true;
         else return null;
     }
     const at = str(v.at, 40);
     if (at) out.at = at;
+    if (v.by === 'align') {
+        out.by = 'align';
+        if (typeof v.align === 'string' && HISTORY_ALIGN_UNDO_RE.test(v.align)) out.align = v.align;
+    }
     return out;
+}
+
+// ─── Alignment with the kinds searched (spec 035) ─────────────────────────
+
+/** An alignment's preview mark (`plan`: 16 hex characters). */
+export const HISTORY_ALIGN_PLAN_RE = /^[0-9a-f]{16}$/;
+/** An alignment's undo id ("20261102125010-a1b2c3"). */
+export const HISTORY_ALIGN_UNDO_RE = /^[A-Za-z0-9-]{1,64}$/;
+
+/** How often the research looks for history (same values as `/status.experiments.historyPace`). */
+export type HistoryAlignPace = 'sometimes' | 'rare' | 'idle';
+
+/** A count of events, by kind. */
+export interface HistoryAlignCount {
+    n: number;
+    kinds: Partial<Record<HistoryKind, number>>;
+}
+
+/** A region or a place whose added kinds would be searched (`label` in the research's language). */
+export interface HistoryAlignBackfill {
+    region?: string;
+    place?: string;
+    label: string;
+    kinds: HistoryKind[];
+    years?: string[];
+}
+
+/** `GET /history/align[?kinds=…]`: what aligning the events with the kinds searched would do. */
+export interface HistoryAlignPreview {
+    /** The kinds the preview is for. */
+    kinds: HistoryKind[];
+    /** The preview's mark, sent back with the alignment. */
+    plan: string;
+    hide: { general: HistoryAlignCount; local: HistoryAlignCount };
+    show: HistoryAlignCount;
+    backfill: HistoryAlignBackfill[];
+    /** Estimated agent sessions for the whole search of the added kinds. */
+    sessions: number;
+    pace?: HistoryAlignPace;
+    /** Sessions and runs at work now. */
+    busy: { id: string; label: string }[];
+    /** Events of shared catalogues no research on the computer searches (information only). */
+    shared: HistoryAlignCount;
+}
+
+function alignCount(v: unknown): HistoryAlignCount {
+    const o = isObj(v) ? v : {};
+    const kinds: Partial<Record<HistoryKind, number>> = {};
+    if (isObj(o.kinds)) {
+        for (const k of HISTORY_KINDS) {
+            const n = count(o.kinds[k]);
+            if (n) kinds[k] = n;
+        }
+    }
+    const sum = Object.values(kinds).reduce((a, b) => a + (b ?? 0), 0);
+    return { n: count(o.n) ?? sum, kinds };
+}
+
+/** Validate an alignment preview; null without a valid `plan` (or not an object). */
+export function parseHistoryAlignPreview(v: unknown): HistoryAlignPreview | null {
+    if (!isObj(v) || typeof v.plan !== 'string' || !HISTORY_ALIGN_PLAN_RE.test(v.plan)) return null;
+    const hide = isObj(v.hide) ? v.hide : {};
+    const backfill: HistoryAlignBackfill[] = [];
+    if (Array.isArray(v.backfill)) {
+        for (const b of v.backfill) {
+            if (backfill.length >= 500 || !isObj(b)) continue;
+            const kinds = parseHistoryKindList(b.kinds) ?? [];
+            const region = str(b.region, 64);
+            const place = str(b.place, 16);
+            const item: HistoryAlignBackfill = { label: str(b.label, HISTORY_LIMITS.title) ?? '', kinds };
+            if (region && HISTORY_REGION_RE.test(region)) item.region = region;
+            else if (place && HISTORY_PLACE_ID_RE.test(place)) item.place = place;
+            else continue;
+            if (Array.isArray(b.years)) {
+                const years = b.years.map(y => str(y, 40)).filter((y): y is string => !!y).slice(0, 20);
+                if (years.length) item.years = years;
+            }
+            backfill.push(item);
+        }
+    }
+    const busy = (Array.isArray(v.busy) ? v.busy : [])
+        .filter(isObj)
+        .map(b => ({ id: str(b.id, 64) ?? '', label: str(b.label, 200) ?? '' }))
+        .filter(b => b.id || b.label)
+        .slice(0, 20);
+    const out: HistoryAlignPreview = {
+        kinds: parseHistoryKindList(v.kinds) ?? [],
+        plan: v.plan,
+        hide: { general: alignCount(hide.general), local: alignCount(hide.local) },
+        show: alignCount(v.show),
+        backfill,
+        sessions: count(v.sessions) ?? 0,
+        busy,
+        shared: alignCount(v.shared),
+    };
+    if (v.pace === 'sometimes' || v.pace === 'rare' || v.pace === 'idle') out.pace = v.pace;
+    return out;
+}
+
+/** How many events an alignment would hide (regional and local findings together). */
+export function alignHideCount(p: HistoryAlignPreview): number {
+    return p.hide.general.n + p.hide.local.n;
+}
+
+/** How many regions and places an alignment would search the added kinds in. */
+export function alignBackfillCounts(p: HistoryAlignPreview): { regions: number; places: number } {
+    return {
+        regions: p.backfill.filter(b => b.region).length,
+        places: p.backfill.filter(b => b.place).length,
+    };
 }
 
 /**

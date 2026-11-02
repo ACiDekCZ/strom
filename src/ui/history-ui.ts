@@ -108,14 +108,14 @@ function lang(): Language {
 }
 
 /** The open tree's research id (lower case), or null (none, or a view of a shared file). */
-function activeResearchId(): string | null {
+export function activeResearchId(): string | null {
     if (DataManager.isViewMode()) return null;
     const treeId = DataManager.getCurrentTreeId();
     const id = treeId ? TreeManager.getTreeMetadata(treeId)?.research?.id : undefined;
     return id ? id.toLowerCase() : null;
 }
 
-function bridgeBase(researchId: string): string | null {
+export function bridgeBase(researchId: string): string | null {
     return parseLiveBridge(storedResearchBridge(researchId)?.base)?.base ?? null;
 }
 
@@ -227,6 +227,7 @@ export const historyMethods = uiModule({
     noteHistoryStatus(researchId: string, status: LiveStatus): void {
         const rid = researchId.toLowerCase();
         lastFeatures.set(rid, status.features ?? []);
+        this.noteHistoryKindsStatus(rid, status);
         const since = offDone.get(rid);
         if (since !== undefined && status.experiments) {
             if (!status.experiments.history || Date.now() - since > OFF_SETTLE_MS) offDone.delete(rid);
@@ -576,6 +577,14 @@ export const historyMethods = uiModule({
         };
     },
 
+    /** A search of origin asked on again: its switch-off just done no longer stands over the status. */
+    historyForgetOffDone(researchId: string, which: 'regions' | 'places'): void {
+        const rid = researchId.toLowerCase();
+        const off = offDoneSwitch.get(rid);
+        off?.delete(which);
+        if (off && !off.size) offDoneSwitch.delete(rid);
+    },
+
     /**
      * `experiments.split` (the bridge running): the history of regions and of
      * places each on or off, a switch-off from here applied; null without it
@@ -644,7 +653,10 @@ export const historyMethods = uiModule({
 
     /** The layer's toggle, status row and "History of places ›" (`fresh`: Settings just opened). */
     renderHistorySettings(fresh = false): void {
-        if (fresh) offError = null;
+        if (fresh) {
+            offError = null;
+            this.historyKindsFresh();
+        }
         const toggle = document.getElementById('history-setting-toggle') as HTMLInputElement | null;
         const row = document.getElementById('history-setting-status');
         const link = document.getElementById('history-manage-link');
@@ -735,6 +747,8 @@ export const historyMethods = uiModule({
         }
         const note = document.getElementById('history-kinds-note');
         if (note) note.hidden = !locked;
+        // spec 035: the Search column, the kinds searched and the alignment (history-kinds-ui.ts).
+        this.renderHistorySearch();
     },
 
     /** A sub-option's click (§6): the last one on and all while the main option is off stay as they are. */
@@ -803,15 +817,16 @@ export const historyMethods = uiModule({
      * `experiments.split` the history of regions or of places alone): through
      * the bridge at once when it says `experiments.off`, else its link. A
      * refusal of one switch (the manager) is a toast; of both, Settings' row.
+     * `quiet`: no toast when it went (Settings' Search column says it in its own sentence).
      */
-    async historyDisableSearch(which: ExperimentSwitch = 'history'): Promise<void> {
+    async historyDisableSearch(which: ExperimentSwitch = 'history', opts: { quiet?: boolean } = {}): Promise<boolean> {
         const rid = activeResearchId();
-        if (!rid) return;
+        if (!rid) return false;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
         const base = bridgeBase(rid);
         if (!status || !base || !(status.features ?? []).includes(EXPERIMENTS_OFF_FEATURE)) {
             if (this.historyCanLinkOn(rid)) this.historyLaunchExperiment('off', which);
-            return;
+            return false;
         }
         const h = strings.history;
         const before = this.researchHeadNow(rid);
@@ -826,8 +841,10 @@ export const historyMethods = uiModule({
                 offDoneSwitch.set(rid, m);
             }
             if (r.head) this.researchTakeOwnWriteHead(rid, before, r.head, r.parent);
-            this.showToast(which === 'history' ? h.toastSearchOff
-                : h.toastSwitchOff(which === 'regions' ? h.switchRegions : h.switchPlaces), 4000);
+            if (!opts.quiet) {
+                this.showToast(which === 'history' ? h.toastSearchOff
+                    : h.toastSwitchOff(which === 'regions' ? h.switchRegions : h.switchPlaces), 4000);
+            }
         } else {
             const text = r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed);
             if (which === 'history') offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
@@ -838,11 +855,13 @@ export const historyMethods = uiModule({
         }
         this.renderHistorySettingsIfOpen();
         this.historyChanged();
+        return r.ok;
     },
 
     /** Test hook: forget the page's history state (a new page). */
     resetHistoryLayerState(): void {
         cache.clear(); queues.clear(); inFlight.clear(); loadedRev.clear(); readHere.clear();
         reading.clear(); readAgain.clear(); flushing.clear(); offDone.clear(); offDoneSwitch.clear(); offError = null;
+        this.resetHistoryKindsState();
     },
 });

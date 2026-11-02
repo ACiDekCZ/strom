@@ -14,6 +14,7 @@ import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.
 import { keepPlaceOrigins, placesWithoutMeta, isPlaceRecordId, cleanCoords } from './place-records.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
+import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -44,6 +45,7 @@ export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
     'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
+    'history-kinds', 'history-align',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -176,6 +178,27 @@ export interface ResearchLinkParams {
     fixDo?: 'undo';
     /** `places`: run the queue of places to identify (with `place`: that one place); the research asks in its terminal. */
     placesDo?: 'run';
+    /**
+     * `history-kinds` (spec 035): the kinds of events to search — a list of kinds, `all`, `none`
+     * or `all` without some (`all,-law`) — or `inherit` (the research's own value dropped).
+     */
+    kinds?: string;
+    /** `history-kinds`: whose value — this research's (`tree`) or the default of the computer's researches. */
+    kindsScope?: 'tree' | 'default';
+    /** `history-kinds`: drop this research's own value (only with `kindsScope: 'tree'`, without `kinds`). */
+    inherit?: boolean;
+}
+
+/** A value of `history.kinds` for the `history-kinds` link: `all`, `none`, kinds, or `all` without kinds — else null. */
+export function historyKindsLinkValue(v: string): string | null {
+    if (v === 'all' || v === 'none') return v;
+    const parts = v.split(',');
+    if (!parts.length || parts.length > HISTORY_KINDS.length + 1 || new Set(parts).size !== parts.length) return null;
+    if (parts[0] === 'all') {
+        const rest = parts.slice(1);
+        return rest.length && rest.every(x => x.startsWith('-') && isHistoryKind(x.slice(1))) ? v : null;
+    }
+    return parts.every(isHistoryKind) ? v : null;
 }
 
 /**
@@ -284,6 +307,16 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
             return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
         }
+        case 'history-kinds': {
+            // spec 035: a fixed scope and kinds from the fixed list (or inherit) — nothing else.
+            if (p.kindsScope !== 'tree' && p.kindsScope !== 'default') return null;
+            if (p.inherit) return p.kindsScope === 'tree' && p.kinds === undefined ? `${base}&scope=tree&inherit=1` : null;
+            const kinds = typeof p.kinds === 'string' ? historyKindsLinkValue(p.kinds) : null;
+            return kinds ? `${base}&scope=${p.kindsScope}&kinds=${kinds}` : null;
+        }
+        case 'history-align':
+            // spec 035: the research's terminal shows the preview and asks; `prune` stays the terminal's own option.
+            return base;
         case 'places': {
             // spec 034: the fixed `do=run`, and one place only by its record id — never a place name.
             if (p.placesDo !== 'run') return null;
@@ -1505,7 +1538,14 @@ export interface LiveStatus {
      * `experiments` (with `experiments` in `features`): `history` = the research looks for events of the time for this tree;
      * with `experiments.split` also each search alone: `regions` (history of regions) and `places` (history of places).
      */
-    experiments?: { history: boolean; regions?: boolean; places?: boolean };
+    experiments?: {
+        history: boolean; regions?: boolean; places?: boolean;
+        /**
+         * spec 035 (with `history.kinds` in `features`): the kinds of events searched for this tree (in kind order),
+         * whether the research has its own value (else the computer's default applies) and that default.
+         */
+        kinds?: HistoryKind[]; kindsOwn?: boolean; kindsDefault?: HistoryKind[];
+    };
     /** `history.rev` (with `history.events` in `features`): a print of what `GET /history` returns; read it again when it changes. */
     historyRev?: string;
     /** `quality.rev` (with `quality.read` in `features`): a print of what `GET /quality` returns (spec 021 §D). */
@@ -1572,6 +1612,13 @@ export const HISTORY_MAP_FEATURE = 'history.map';
 export const HISTORY_PLACE_FEATURE = 'history.place';
 /** `/status.features` (R6, P4): the bridge starts a place's own history itself (no terminal). */
 export const HISTORY_PLACE_DIRECT_FEATURE = 'history.place.direct';
+/**
+ * `/status.features` (spec 035): the kinds of events searched (`experiments.kinds`, `kindsOwn`, `kindsDefault`)
+ * and `POST /history/kinds` (taking kinds away at once; adding them is the terminal's `history-kinds` link).
+ */
+export const HISTORY_KINDS_FEATURE = 'history.kinds';
+/** `/status.features` (spec 035): `GET /history/align` (preview), `POST /history/align` (hide / show again) and its undo. */
+export const HISTORY_ALIGN_FEATURE = 'history.align';
 /** `/status.features` (R7): `/status.stories.history` and `POST /stories {history}`. */
 export const STORIES_HISTORY_FEATURE = 'stories.history';
 
@@ -2418,11 +2465,23 @@ function experimentsSaid(r: Record<string, unknown>, features: string[] | null):
         ...(ex && typeof ex.history === 'boolean' ? { experiments: {
             history: ex.history,
             ...(split && typeof ex.regions === 'boolean' && typeof ex.places === 'boolean' ? { regions: ex.regions, places: ex.places } : {}),
+            ...(features?.includes(HISTORY_KINDS_FEATURE) ? kindsSaid(ex) : {}),
         } } : {}),
         ...(rev ? { historyRev: rev } : {}),
         ...(pace === 'sometimes' || pace === 'rare' || pace === 'idle' ? { historyPace: pace } : {}),
         ...(estimate ? { historyPlaceEstimate: estimate } : {}),
         ...(stories && typeof stories.history === 'boolean' ? { storiesHistory: stories.history } : {}),
+    };
+}
+
+/** spec 035: `experiments.kinds`, `kindsOwn`, `kindsDefault` — each only when valid (unknown kinds dropped). */
+function kindsSaid(ex: Record<string, unknown>): { kinds?: HistoryKind[]; kindsOwn?: boolean; kindsDefault?: HistoryKind[] } {
+    const kinds = parseHistoryKindList(ex.kinds);
+    const def = parseHistoryKindList(ex.kindsDefault);
+    return {
+        ...(kinds ? { kinds } : {}),
+        ...(typeof ex.kindsOwn === 'boolean' ? { kindsOwn: ex.kindsOwn } : {}),
+        ...(def ? { kindsDefault: def } : {}),
     };
 }
 

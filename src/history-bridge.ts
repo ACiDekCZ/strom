@@ -15,8 +15,10 @@
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import {
-    HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryDeleted, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
-    type HistoryDeleted, type HistoryHidden, type HistoryHideOp, type HistoryPayload, type HistoryPlaceRegion,
+    HISTORY_ALIGN_PLAN_RE, HISTORY_ALIGN_UNDO_RE, HISTORY_KINDS, HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE,
+    parseHistoryAlignPreview, parseHistoryDeleted, parseHistoryKindList, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
+    type HistoryAlignPace, type HistoryAlignPreview, type HistoryDeleted, type HistoryHidden, type HistoryHideOp, type HistoryKind,
+    type HistoryPayload, type HistoryPlaceRegion,
 } from './history.js';
 
 /** How long a read of the events may take (a large tree: up to 8 MB). */
@@ -531,4 +533,247 @@ export async function postBridgeStories(base: string, history: boolean, features
     check?: LinkCheck): Promise<HistoryWriteResult> {
     const res = await postWrite(base, '/stories', { history });
     return res ? storiesReply(res.status, res.body, features, check) : NETWORK;
+}
+
+// ==================== KINDS OF EVENTS (spec 035) ====================
+
+/** Whose value `POST /history/kinds` writes: this research's own (`tree`) or the default of the computer's researches. */
+export type HistoryKindsScope = 'tree' | 'default';
+
+/** The body of `POST /history/kinds`: the kinds to search, or drop the research's own value (`inherit`). */
+export type HistoryKindsBody =
+    | { kinds: HistoryKind[]; scope: HistoryKindsScope }
+    | { scope: 'tree'; inherit: true };
+
+/** The kinds searched as the research says them after a write. */
+export interface HistoryKindsState {
+    kinds: HistoryKind[];
+    kindsOwn: boolean;
+    kindsDefault: HistoryKind[];
+}
+
+/**
+ * Why a write of the kinds or of an alignment did not go:
+ * - `link`: 403 `*.link` — the research's terminal decides (`link`; adding kinds, searching the added ones);
+ * - `changed`: 409 history.align.changed — the preview changed (`preview`: as it is now);
+ * - `invalid`: 400 (the app's fault); `gone` / `undone`: 404 history.align.undo / 409 history.align.undone;
+ * - `archive`: 409 history.archive; `busy`: 503 research.busy; `held`: sealed elsewhere / not downloaded / disk full;
+ * - `failed`: 500 history.kinds.failed / history.align.failed; `network`: no answer; `unknown`: anything else.
+ */
+export type HistoryKindsError = 'link' | 'changed' | 'invalid' | 'gone' | 'undone' | 'archive' | 'busy' | 'held' | 'failed' | 'network' | 'unknown';
+
+export interface HistoryKindsRefusal {
+    ok: false;
+    code: HistoryKindsError;
+    status: number;
+    /** The bridge's own sentence ('' none). */
+    reason: string;
+    bridgeCode: string;
+    /** `link`: the link to offer — the research's own only when it is one the app would build. */
+    link?: string;
+    /** `link` of `POST /history/kinds`: the kinds the change would add. */
+    added?: HistoryKind[];
+    /** `changed`: the preview as it is now. */
+    preview?: HistoryAlignPreview;
+    held?: ResearchWriteHeld;
+}
+
+const KINDS_NETWORK: HistoryKindsRefusal = { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+
+/** The value of `history.kinds` for a list of kinds (`all`, `none` or the kinds). */
+export function historyKindsValue(kinds: readonly HistoryKind[]): string {
+    const set = new Set(kinds);
+    const list = HISTORY_KINDS.filter(k => set.has(k));
+    if (!list.length) return 'none';
+    return list.length === HISTORY_KINDS.length ? 'all' : list.join(',');
+}
+
+/** The `history-kinds` link the app would build for a body. */
+export function historyKindsLink(body: HistoryKindsBody, tree: string, scheme?: string): string | null {
+    return 'inherit' in body
+        ? researchSchemeUrl('history-kinds', { tree, kindsScope: 'tree', inherit: true }, scheme)
+        : researchSchemeUrl('history-kinds', { tree, kindsScope: body.scope, kinds: historyKindsValue(body.kinds) }, scheme);
+}
+
+/**
+ * The research's `history-kinds` link when it is one the app would build for this tree (its value may
+ * be written in another shape, `all,-law`): rebuilt from its fixed parts and compared; else null.
+ */
+function saidKindsLink(said: string, tree: string, scheme?: string): string | null {
+    const m = /^[a-z0-9-]+:\/\/history-kinds\?(.*)$/.exec(said);
+    if (!m) return null;
+    const q = new URLSearchParams(m[1]);
+    const scope = q.get('scope');
+    if (q.get('tree') !== tree || (scope !== 'tree' && scope !== 'default')) return null;
+    const built = q.get('inherit') === '1'
+        ? researchSchemeUrl('history-kinds', { tree, kindsScope: scope, inherit: true }, scheme)
+        : researchSchemeUrl('history-kinds', { tree, kindsScope: scope, kinds: q.get('kinds') ?? '' }, scheme);
+    return built === said ? said : null;
+}
+
+function kindsRefusal(status: number, body: unknown, features: readonly string[] | null | undefined,
+    link?: { said: (s: string) => string | null; own: string | null }): HistoryKindsRefusal {
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    const r = asRecord(body) ?? {};
+    const out = (c: HistoryKindsError, extra: Partial<HistoryKindsRefusal> = {}): HistoryKindsRefusal =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    if (status === 403 && (code === 'history.kinds.link' || code === 'history.align.link')) {
+        const said = typeof r.link === 'string' ? r.link : '';
+        const url = (said && link?.said(said)) || link?.own || '';
+        const added = parseHistoryKindList(r.added);
+        return out('link', { ...(url ? { link: url } : {}), ...(added?.length ? { added } : {}) });
+    }
+    if (status === 409 && code === 'history.align.changed') {
+        const preview = parseHistoryAlignPreview(r.preview);
+        return out('changed', preview ? { preview } : {});
+    }
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 404 && code === 'history.align.undo') return out('gone');
+    if (status === 409 && code === 'history.align.undone') return out('undone');
+    if (status === 409 && code === 'history.archive') return out('archive');
+    if (status === 503 || code === 'research.busy') return out('busy');
+    if (status === 500 && (code === 'history.kinds.failed' || code === 'history.align.failed')) return out('failed');
+    if (status >= 500) return out('failed');
+    return out('unknown');
+}
+
+export type HistoryKindsResult =
+    | { ok: true; head: string; parent: string; state?: HistoryKindsState; alignSuggested: boolean }
+    | HistoryKindsRefusal;
+
+/** The reply to `POST /history/kinds`, typed (`check`: the tree and scheme the links are checked for). */
+export function historyKindsReply(status: number, body: unknown, features: readonly string[] | null | undefined,
+    sent: HistoryKindsBody, check: { tree: string; scheme?: string }): HistoryKindsResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ...KINDS_NETWORK, code: 'unknown', status };
+        const ex = asRecord(r.experiments);
+        const kinds = ex ? parseHistoryKindList(ex.kinds) : null;
+        const def = ex ? parseHistoryKindList(ex.kindsDefault) : null;
+        const state = kinds && def && typeof ex?.kindsOwn === 'boolean' ? { kinds, kindsOwn: ex.kindsOwn, kindsDefault: def } : undefined;
+        return { ok: true, ...headsOf(r), ...(state ? { state } : {}), alignSuggested: r.alignSuggested === true };
+    }
+    return kindsRefusal(status, body, features, {
+        said: s => saidKindsLink(s, check.tree, check.scheme),
+        own: historyKindsLink(sent, check.tree, check.scheme),
+    });
+}
+
+/**
+ * Change the kinds of events searched. Taking kinds away is written at once;
+ * a change that adds one (also `inherit` that would add) is refused with the
+ * research terminal's `history-kinds` link (`code: 'link'`) — nothing written.
+ */
+export async function postHistoryKinds(base: string, body: HistoryKindsBody, features: readonly string[] | null | undefined,
+    check: { tree: string; scheme?: string }): Promise<HistoryKindsResult> {
+    const send = 'inherit' in body
+        ? { scope: 'tree', inherit: true }
+        : { kinds: HISTORY_KINDS.filter(k => body.kinds.includes(k)), scope: body.scope };
+    const res = await postWrite(base, '/history/kinds', send);
+    return res ? historyKindsReply(res.status, res.body, features, body, check) : KINDS_NETWORK;
+}
+
+export type HistoryAlignPreviewResult =
+    | { ok: true; preview: HistoryAlignPreview }
+    | { ok: false; code: 'invalid' | 'archive' | 'busy' | 'network' | 'unknown'; status: number; reason: string };
+
+/** The reply to `GET /history/align`, typed. */
+export function historyAlignPreviewReply(status: number, body: unknown): HistoryAlignPreviewResult {
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    if (status >= 200 && status < 300) {
+        const preview = parseHistoryAlignPreview(body);
+        return preview ? { ok: true, preview } : { ok: false, code: 'unknown', status, reason };
+    }
+    if (status === 400) return { ok: false, code: 'invalid', status, reason };
+    if (status === 409 && code === 'history.archive') return { ok: false, code: 'archive', status, reason };
+    if (status === 503 || code === 'research.busy') return { ok: false, code: 'busy', status, reason };
+    return { ok: false, code: 'unknown', status, reason };
+}
+
+/** What aligning the events with the kinds searched would do (`kinds`: as if these were searched; nothing is set). */
+export async function getHistoryAlign(base: string, kinds?: readonly HistoryKind[], opts: { timeoutMs?: number } = {}): Promise<HistoryAlignPreviewResult> {
+    const q = kinds ? `?kinds=${historyKindsValue(kinds)}` : '';
+    const res = await request(`${base}/history/align${q}`, { method: 'GET' }, opts.timeoutMs ?? HISTORY_WRITE_TIMEOUT_MS);
+    if (!res) return { ok: false, code: 'network', status: 0, reason: '' };
+    return historyAlignPreviewReply(res.status, jsonOf(res.text));
+}
+
+/** The research's offer to search the added kinds in its terminal (in a 200 of `POST /history/align`). */
+export interface HistoryAlignBackfillLink {
+    link: string;
+    /** Regions and places to search. */
+    n?: number;
+    sessions?: number;
+    pace?: HistoryAlignPace;
+}
+
+export type HistoryAlignResult =
+    | { ok: true; head: string; parent: string; done: { hidden: number; shown: number }; undo?: string; backfill?: HistoryAlignBackfillLink }
+    | HistoryKindsRefusal;
+
+const countOf = (v: unknown): number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 1e9 ? v : 0;
+
+/** The reply to `POST /history/align`, typed. */
+export function historyAlignReply(status: number, body: unknown, features: readonly string[] | null | undefined,
+    check: { tree: string; scheme?: string }): HistoryAlignResult {
+    const own = researchSchemeUrl('history-align', { tree: check.tree }, check.scheme);
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ...KINDS_NETWORK, code: 'unknown', status };
+        const done = asRecord(r.done) ?? {};
+        const out: Extract<HistoryAlignResult, { ok: true }> = {
+            ok: true, ...headsOf(r), done: { hidden: countOf(done.hidden), shown: countOf(done.shown) },
+        };
+        if (typeof r.undo === 'string' && HISTORY_ALIGN_UNDO_RE.test(r.undo)) out.undo = r.undo;
+        const b = asRecord(r.backfill);
+        if (b && own) {
+            // Only the app's own link (the research's may add `prune`, which stays the terminal's own option).
+            out.backfill = { link: own };
+            if (countOf(b.n)) out.backfill.n = countOf(b.n);
+            if (countOf(b.sessions)) out.backfill.sessions = countOf(b.sessions);
+            if (b.pace === 'sometimes' || b.pace === 'rare' || b.pace === 'idle') out.backfill.pace = b.pace;
+        }
+        return out;
+    }
+    return kindsRefusal(status, body, features, { said: s => (s === own ? s : null), own });
+}
+
+/**
+ * Align the events with the kinds searched: hide the events of kinds not searched and
+ * show again those of kinds searched again (`hide`), and with `backfill` get the
+ * research terminal's link to search the added kinds (the bridge starts no task).
+ */
+export async function postHistoryAlign(base: string, plan: string, opts: { hide?: boolean; backfill?: boolean },
+    features: readonly string[] | null | undefined, check: { tree: string; scheme?: string }): Promise<HistoryAlignResult> {
+    if (!HISTORY_ALIGN_PLAN_RE.test(plan) || (!opts.hide && !opts.backfill)) return { ...KINDS_NETWORK, code: 'invalid' };
+    const res = await postWrite(base, '/history/align', {
+        plan, ...(opts.hide ? { hide: true } : {}), ...(opts.backfill ? { backfill: true } : {}),
+    });
+    return res ? historyAlignReply(res.status, res.body, features, check) : KINDS_NETWORK;
+}
+
+export type HistoryAlignUndoResult =
+    | { ok: true; head: string; parent: string; undone: { shown: number; hidden: number } }
+    | HistoryKindsRefusal;
+
+/** The reply to `POST /history/align/undo`, typed. */
+export function historyAlignUndoReply(status: number, body: unknown, features: readonly string[] | null | undefined): HistoryAlignUndoResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ...KINDS_NETWORK, code: 'unknown', status };
+        const undone = asRecord(r.undone) ?? {};
+        return { ok: true, ...headsOf(r), undone: { shown: countOf(undone.shown), hidden: countOf(undone.hidden) } };
+    }
+    return kindsRefusal(status, body, features);
+}
+
+/** Take an alignment back as a whole (its hidings and showings; tasks stay). */
+export async function postHistoryAlignUndo(base: string, undo: string, features: readonly string[] | null | undefined): Promise<HistoryAlignUndoResult> {
+    if (!HISTORY_ALIGN_UNDO_RE.test(undo)) return { ...KINDS_NETWORK, code: 'invalid' };
+    const res = await postWrite(base, '/history/align/undo', { undo });
+    return res ? historyAlignUndoReply(res.status, res.body, features) : KINDS_NETWORK;
 }
