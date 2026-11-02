@@ -428,6 +428,8 @@ export interface PlaceBadgeOptions {
     small?: boolean;
     /** Add the origin badge after the state (verified, check, town); placed shows its origin alone. */
     origin?: boolean;
+    /** Another class on the state badge (the Places dialog's hooks). */
+    className?: string;
 }
 
 /** The origin badge: `<span class="place-origin" data-origin=…>`. */
@@ -443,7 +445,7 @@ export function placeOriginBadge(origin: PlaceOrigin, lang: Language, at?: strin
  */
 export function placeStateBadge(id: PlaceIdentity, lang: Language, opts: PlaceBadgeOptions = {}): string {
     if (id.state === 'placed') return placeOriginBadge(id.origin ?? 'map', lang, id.at, opts);
-    const cls = opts.small ? 'place-state is-small' : 'place-state';
+    const cls = ['place-state', opts.small ? 'is-small' : '', opts.className ?? ''].filter(Boolean).join(' ');
     const title = id.state === 'running' ? ` title="${esc(getStringsForLang(lang).places.state.runningTitle)}"` : '';
     const badge = `<span class="${cls}" data-state="${id.state}"${title}><span aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(placeStateText(id, lang, opts.small))}</span>`;
     const withOrigin = opts.origin && id.origin && (id.state === 'verified' || id.state === 'check' || id.state === 'town');
