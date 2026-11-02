@@ -91,6 +91,7 @@ function cleanName(raw: unknown): PlaceRecordName | undefined {
         const to = cleanYear(r.to);
         if (from) out.from = from;
         if (to) out.to = to;
+        if (r.kind === 'form' || r.kind === 'alt') out.kind = r.kind;
     }
     return out;
 }

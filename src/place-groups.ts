@@ -19,8 +19,12 @@ import { houseIsStreet, placeKey, townOfPlace, TOWN_GROUP_MIN, type PlaceUsage }
 import type { KnownStreets } from './streets.js';
 import { PLACE_TEXT_LIMITS } from './place-records.js';
 
-/** What a group's member is to its place. */
-export type PlaceMemberTag = 'main' | 'var' | 'old' | 'street' | 'house';
+/**
+ * What a group's member is to its place: its main form, another spelling of
+ * the facts, an old name (with its years), another name (another language,
+ * no years that end it), a street, a house.
+ */
+export type PlaceMemberTag = 'main' | 'var' | 'old' | 'alt' | 'street' | 'house';
 
 export interface PlaceGroupContext {
     data: StromData;
@@ -33,8 +37,10 @@ export interface PlaceGroupContext {
 export interface PlaceVariantMember {
     key: string;
     tag: PlaceMemberTag;
-    /** An old name's years ("1838–1845"), from the record's names. */
+    /** An old or other name's years ("1838–1845"), from the record's names. */
     period?: string;
+    /** An old or other name's language ("de"), from the record's names. */
+    lang?: string;
     /**
      * The member is a way of writing the place itself (its record or other
      * names say so): on the map as the place. A house joined by its town
@@ -62,7 +68,7 @@ export interface PlaceVariantGroup {
     persons: number;
 }
 
-const TAG_ORDER: Record<PlaceMemberTag, number> = { main: 0, var: 1, old: 2, street: 3, house: 4 };
+const TAG_ORDER: Record<PlaceMemberTag, number> = { main: 0, var: 1, old: 2, alt: 3, street: 4, house: 5 };
 const MAX_ALIASES = 50;
 
 // ==================== OTHER NAMES (the local store) ====================
@@ -186,6 +192,19 @@ function names(ctx: PlaceGroupContext, groupKey: string): readonly PlaceRecordNa
     return ctx.live?.places[groupKey]?.names ?? ctx.data.placeRecords?.[groupKey]?.names ?? [];
 }
 
+/**
+ * What a record's other name is to the place (research 1.25 says it in
+ * `kind`): a spelling of the facts → another spelling; another name that
+ * ended (it has a "to" year) → an old name; another name still in use
+ * (another language) → another name. Without `kind` (an older research) an
+ * old name, as before.
+ */
+export function recordNameTag(n: PlaceRecordName): 'var' | 'old' | 'alt' {
+    if (n.kind === 'form') return 'var';
+    if (n.kind === 'alt') return n.to !== undefined ? 'old' : 'alt';
+    return 'old';
+}
+
 function periodText(n: PlaceRecordName): string | undefined {
     if (n.from && n.to) return `${n.from}–${n.to}`;
     if (n.from) return `${n.from}–`;
@@ -237,11 +256,15 @@ export function placeVariantGroups(places: ReadonlyMap<string, PlaceUsage>, ctx:
                 members.push({ key: m.key, tag: houseIsStreet(m.house) ? 'street' : 'house', same: false });
                 continue;
             }
-            const old = recNames.slice(1).find(n => placeKey(n.name) === m.key);
+            // A spelling and another name written alike: the other name says more.
+            const named = recNames.slice(1).filter(n => placeKey(n.name) === m.key);
+            const old = named.find(n => n.kind !== 'form') ?? named[0];
             const town = old ? null : townOfPlace(m.usage.display, ctx.known);
-            if (old) {
+            if (old && recordNameTag(old) === 'var') {
+                members.push({ key: m.key, tag: 'var', same: true });
+            } else if (old) {
                 const period = periodText(old);
-                members.push({ key: m.key, tag: 'old', ...(period ? { period } : {}), same: true });
+                members.push({ key: m.key, tag: recordNameTag(old), ...(period ? { period } : {}), ...(old.lang ? { lang: old.lang } : {}), same: true });
             } else if (town && !town.bare && placeKey(town.town) !== m.key) {
                 members.push({ key: m.key, tag: houseIsStreet(town.house) ? 'street' : 'house', same: true });
             } else {
@@ -259,7 +282,7 @@ export function placeVariantGroups(places: ReadonlyMap<string, PlaceUsage>, ctx:
         }
         out.push({
             key: groupKey, head, ownKey: own.key, members,
-            spellings: 1 + members.filter(m => m.tag === 'var' || m.tag === 'old').length,
+            spellings: 1 + members.filter(m => m.tag === 'var' || m.tag === 'old' || m.tag === 'alt').length,
             houses: members.filter(m => m.tag === 'house' || m.tag === 'street').length,
             facts, persons: people.size,
         });

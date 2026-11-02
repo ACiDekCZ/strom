@@ -294,6 +294,17 @@ export function checkFindingText(f: CheckFinding, lang: Language): string {
     }
 }
 
+/** A language as the UI language names it ("de" → "German"): a code through Intl, anything else as written. */
+export function languageName(code: string | undefined, lang: Language): string {
+    const c = code?.trim() ?? '';
+    if (!c) return '';
+    try {
+        return new Intl.DisplayNames([lang], { type: 'language' }).of(c) ?? c;
+    } catch {
+        return c;
+    }
+}
+
 /** A country as the UI language names it: a two-letter code through Intl, anything else as written. */
 export function countryName(country: string | undefined, lang: Language): string {
     const c = country?.trim() ?? '';

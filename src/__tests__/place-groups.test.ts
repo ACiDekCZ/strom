@@ -44,7 +44,7 @@ describe('placeVariantGroups', () => {
         expect(g).toMatchObject({ key: 'L0012', head: 'Horní Lhota', ownKey: k('Horní Lhota'), facts: 19, persons: 6 });
         expect(g.members).toEqual([
             { key: k('H. Lhota'), tag: 'var', same: true },
-            { key: k('Ober-Lhota'), tag: 'old', period: '1838–1845', same: true },
+            { key: k('Ober-Lhota'), tag: 'old', period: '1838–1845', lang: 'de', same: true },
             { key: k('Horní Lhota, Lhotákova 23'), tag: 'street', same: false },
             { key: k('Horní Lhota 16'), tag: 'house', same: false },
         ]);

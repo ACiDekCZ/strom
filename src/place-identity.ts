@@ -113,7 +113,9 @@ export function placeIdentity(key: string, ctx: PlaceIdentityContext): PlaceIden
             const d = rec.jurisdictions?.find(j => j.kind === 'district' && !j.to);
             if (d) out.today.district = d.name;
         }
-        if (rec.names.length > 1) out.former = rec.names.slice(1);
+        // The other names, not the spellings of the facts (research 1.25 `kind: form`): "formerly Lhotau", never "formerly Lhota Dolní".
+        const former = rec.names.slice(1).filter(n => n.kind !== 'form');
+        if (former.length) out.former = former;
         if (rec.why) out.why = rec.why;
         if (rec.source) out.source = rec.source;
         if (live.checkWhy) out.checkWhy = live.checkWhy;

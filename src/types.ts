@@ -1094,7 +1094,16 @@ export interface PlaceRecordName {
     lang?: string;
     from?: number;
     to?: number;
+    /**
+     * What the name is to the place (research 1.25): `form` a way the facts
+     * write it, `alt` another name (another language, an old name). Absent:
+     * not said (an older research) — read as an old name, as before.
+     */
+    kind?: PlaceRecordNameKind;
 }
+
+/** Kinds of a place record's other names: a spelling of the facts or another name. */
+export type PlaceRecordNameKind = 'form' | 'alt';
 
 /** Kinds of jurisdictions a research place record names (parish, civil district…). */
 export type PlaceJurisdictionKind = 'parish' | 'civil' | 'diocese' | 'manor' | 'district' | 'county' | 'state' | 'other';

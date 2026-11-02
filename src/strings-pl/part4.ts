@@ -397,6 +397,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             tagMain: 'forma główna',
             tagVar: 'inny zapis',
             tagOld: 'dawna nazwa',
+            tagAlt: 'inna nazwa',
             tagStreet: 'ulica',
             tagHouse: 'dom',
             groupMeta: (v: number, h: number) => [v ? nPl(v, 'zapis', 'zapisy', 'zapisów') : '', h ? nPl(h, 'dom', 'domy', 'domów') : ''].filter(Boolean).join(' · '),

@@ -40,7 +40,7 @@ import {
     placeStateBadge, placeStateMatches, placeStateRank, placeStateSummary, type PlaceIdentity,
 } from '../place-identity.js';
 import {
-    checkFindingText, formatYearSpan, hasWhyHere, placeFormerLine, placeLocationLabel, placeRowActions, placeYearSpans,
+    checkFindingText, formatYearSpan, hasWhyHere, languageName, placeFormerLine, placeLocationLabel, placeRowActions, placeYearSpans,
     townGroupsBesideVariants, variantGroupView, variantRowAction, type PlaceRowAction,
 } from '../places-dialog.js';
 import {
@@ -462,10 +462,10 @@ export const placesManagerMethods = uiModule({
             </div>`;
     },
 
-    /** A member's tag: main form, other spelling, old name, street, house. */
+    /** A member's tag: main form, other spelling, old name, other name, street, house. */
     placeTagHtml(tag: PlaceMemberTag): string {
         const d = strings.places.dialog;
-        const text = { main: d.tagMain, var: d.tagVar, old: d.tagOld, street: d.tagStreet, house: d.tagHouse }[tag];
+        const text = { main: d.tagMain, var: d.tagVar, old: d.tagOld, alt: d.tagAlt, street: d.tagStreet, house: d.tagHouse }[tag];
         return `<span class="place-tag" data-tag="${tag}">${this.escapeHtml(text)}</span>`;
     },
 
@@ -476,11 +476,11 @@ export const placesManagerMethods = uiModule({
      * the head's own place once more, as its main form (no checkbox: the
      * head's stands for it).
      */
-    renderVariantRow(p: ManagerPlace, mem: PlaceVariantMember | { key: string; tag: PlaceMemberTag; same: true; period?: string }, v: PlaceVariantGroup, main: boolean): string {
+    renderVariantRow(p: ManagerPlace, mem: PlaceVariantMember | { key: string; tag: PlaceMemberTag; same: true; period?: string; lang?: string }, v: PlaceVariantGroup, main: boolean): string {
         const d = strings.places.dialog;
         const esc = (t: string): string => this.escapeHtml(t);
-        const meta = [d.facts(p.usage.count), mem.period].filter(Boolean).join(' · ');
-        const written = mem.tag === 'main' || mem.tag === 'old' ? '' : [...p.usage.variants.keys()].join(', ');
+        const meta = [d.facts(p.usage.count), languageName(mem.lang, getCurrentLanguage()), mem.period].filter(Boolean).join(' · ');
+        const written = mem.tag === 'main' || mem.tag === 'old' || mem.tag === 'alt' ? '' : [...p.usage.variants.keys()].join(', ');
         const action = variantRowAction(mem.tag, mem.same, managerCanResearch);
         let act = '';
         if (action === 'unify') act = `<button type="button" class="place-unify-open place-act is-strong">${esc(d.unify(v.head))}</button>`;

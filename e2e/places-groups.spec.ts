@@ -91,7 +91,7 @@ test.describe('a tree with a research record of a place', () => {
         // The frame of a spelling has no actions of its own.
         await expect(sub(page, 'H. Lhota').locator('.place-pin button')).toHaveCount(0);
         await expect(sub(page, 'Ober-Lhota').locator('.place-tag')).toHaveText('old name');
-        await expect(sub(page, 'Ober-Lhota').locator('.place-count')).toHaveText('1 fact · 1838–1845');
+        await expect(sub(page, 'Ober-Lhota').locator('.place-count')).toHaveText('1 fact · German · 1838–1845');
         // The house keeps its own state.
         const house = sub(page, 'Horní Lhota čp. 5');
         await expect(house.locator('.place-tag')).toHaveText('house');
@@ -104,6 +104,26 @@ test.describe('a tree with a research record of a place', () => {
         }
         // The summary counts places, not spellings: Horní Lhota, its house, Lhota, Lhotov, Lhoták.
         await expect(modal(page).locator('.places-total')).toHaveText('5 places');
+    });
+
+    test('the research says what each name is: a spelling, an old name, another name', async ({ page }) => {
+        await page.evaluate(() => {
+            const S = window.Strom;
+            const data = S.DataManager.getData() as unknown as { placeRecords: Record<string, { names: unknown[] }> };
+            data.placeRecords.L0012!.names = [
+                { name: 'Horní Lhota' },
+                { name: 'H. Lhota', kind: 'form' },
+                { name: 'Ober-Lhota', lang: 'de', kind: 'alt' },
+            ];
+            S.UI.showPlacesManager(undefined, undefined, 'tree');
+        });
+        await openGroup(page);
+        // A spelling of the facts written in the record: another spelling, not an old name.
+        await expect(sub(page, 'H. Lhota').locator('.place-tag')).toHaveText('other spelling');
+        // Another name with no years that end it: another name, with its language.
+        await expect(sub(page, 'Ober-Lhota').locator('.place-tag')).toHaveText('other name');
+        await expect(sub(page, 'Ober-Lhota').locator('.place-count')).toHaveText('1 fact · German');
+        await expect(sub(page, 'Ober-Lhota').locator('.place-written')).toHaveCount(0);
     });
 
     test('the search finds the group by its old name', async ({ page }) => {

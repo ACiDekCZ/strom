@@ -1578,7 +1578,7 @@ function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
 /** A Strom Research place record being read (`0 @L0012@ _STROM_PLACE`), as raw values for sanitizePlaceRecord. */
 interface OpenPlaceRecord {
     id: string;
-    names: { name: string; lang?: string; from?: number; to?: number }[];
+    names: { name: string; lang?: string; from?: number; to?: number; kind?: string }[];
     lat?: number;
     lon?: number;
     jurisdictions: { kind: string; name: string; from?: number; to?: number }[];
@@ -1645,6 +1645,7 @@ function readPlaceRecordLine(rec: OpenPlaceRecord, level: number, tag: string, v
     if (rec.sub === 'NAME' && lastName) {
         if (tag === 'LANG') lastName.lang = value.toLowerCase();
         else if (tag === 'DATE') Object.assign(lastName, placeRecordSpan(value));
+        else if (tag === 'TYPE') lastName.kind = value.trim().toLowerCase();
     } else if (rec.sub === '_STROM_JUR' && lastJur && tag === 'DATE') {
         Object.assign(lastJur, placeRecordSpan(value));
     } else if (rec.sub === 'MAP' && (tag === 'LATI' || tag === 'LONG')) {
