@@ -149,7 +149,10 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-prow { font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .sp-go { align-self: flex-start; min-height: 36px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 8px; border: 1px solid var(--sp-frame); background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--primary); text-decoration: none; cursor: pointer; }
 .sp-mar { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-start; }
-.sp-clip { flex: 0 1 300px; display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; cursor: zoom-in; min-width: 0; }
+.sp-clipbox { flex: 0 1 300px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sp-clip { display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; cursor: zoom-in; min-width: 0; }
+button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inherit; text-align: start; }
+.sp-clip-scan { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; }
 .sp-clip-img { width: 100%; aspect-ratio: var(--pp-ar, 5 / 2); border-radius: 6px; border: 1px solid var(--border); background-size: contain; object-fit: contain; }
 .sp-clip-cap { font-size: 12.5px; color: var(--text-light); }
 .sp-res, .sp-src { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
@@ -199,7 +202,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
   .sp-facts dd { margin-bottom: 6px; }
   .sp-fam-page { gap: 24px; }
   .sp-partner { padding: 14px 14px; }
-  .sp-clip { flex-basis: 100%; }
+  .sp-clipbox { flex-basis: 100%; }
 }
 /* A phone held sideways: the phone's margins, partners' cards beside each other (8c). */
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -211,6 +214,7 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
   .sp-crumbs a, .sp-crumbs [aria-current], .sp-crumb-back { min-height: 44px; }
   .sp-btn, .sp-kids > summary, .sp-go, .sp-famcard { min-height: 44px; }
   .sp-toc-row a { display: inline-block; padding: 10px 0; }
+  .sp-clip-scan a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 /* The file's bar (§3.1): the name, the search, Index and Map of places; on a phone the magnifier and Menu. */
 .sp-fbar { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); }

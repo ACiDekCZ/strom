@@ -631,6 +631,22 @@ test.describe('family pages: the entries on a phone', () => {
     });
 });
 
+/** A 1×1 JPEG: the marriage register's excerpt. */
+const CLIP_IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+
+/** The fixture with the wedding of Karl and Ester (bu8) cited from a marriage register with an excerpt and its scan's page. */
+function marriageExcerpt(): ReturnType<typeof rodsTree> {
+    const tree = rodsTree() as ReturnType<typeof rodsTree> & { sources?: Record<string, unknown> };
+    tree.sources = {
+        'src-marr': {
+            id: 'src-marr', title: 'Marriage register Ekeby 1950–1960', reference: 'fol. 4',
+            excerpts: [{ id: 'x1', dataUrl: CLIP_IMG, width: 1, height: 1, sizeBytes: 300, pageUrl: 'https://archive.example/ekeby/4' }],
+        },
+    };
+    (tree.partnerships as Record<string, Record<string, unknown>>).bu8.sourceIds = ['src-marr'];
+    return tree;
+}
+
 /** The fixture with a second marriage of Karl (b14): Vera Lindqvist, no children. */
 function twoMarriages(): ReturnType<typeof rodsTree> {
     const tree = rodsTree();
@@ -699,6 +715,25 @@ test.describe('family pages: the families in the app', () => {
         await expect(win).toHaveCount(0);
         menu = await openCardRodMenu(page, 'b16');
         await expect(menu.locator('[data-rod-act="family"], [data-rod-act="families"]')).toHaveCount(0);
+    });
+
+    test('the marriage\'s excerpt: a click enlarges it in the app\'s image viewer, Escape returns to it; its scan in the archive under it', async ({ page }) => {
+        await setup(page, marriageExcerpt());
+        await page.evaluate(() => window.Strom.UI.showPersonPage('b14' as never));
+        const win = page.locator('#person-page-modal');
+        await win.locator('.pp-body .sp-famcard[data-sp-open="family:bu8"]').click();
+        await expect(win.locator('#pp-title')).toHaveText('Karl Brandvold and Ester Fagerholm');
+        const clip = win.locator('.pp-body .sp-marriage .sp-clip');
+        await expect(clip).toHaveAttribute('aria-label', 'Enlarge: Marriage register Ekeby 1950–1960, fol. 4');
+        await expect(win.locator('.pp-body .sp-marriage .sp-clip-scan a')).toHaveText('Scan in the archive ↗');
+        await expect(win.locator('.pp-body .sp-marriage .sp-clip-scan a')).toHaveAttribute('href', 'https://archive.example/ekeby/4');
+        await clip.click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await expect(page.locator('#attachment-overlay-img')).toHaveAttribute('src', /^data:image\/jpeg/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
+        await expect(clip).toBeFocused();
+        await expect(win).toBeVisible();
     });
 
     test('the person page\'s window: a card Family page at the own family and at the parents\'; it opens the family, Back the person', async ({ page }) => {

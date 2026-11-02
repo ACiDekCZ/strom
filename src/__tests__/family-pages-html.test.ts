@@ -264,14 +264,35 @@ describe('a family\'s page (§2.2)', () => {
         expect(html).not.toMatch(/href="#rodina-/);
     });
 
-    it('in the window: the links are buttons, the excerpt an image, no zoom of the file', () => {
+    it('in the window: the links are buttons, the excerpt an image enlarged by the app\'s viewer, no zoom of the file', () => {
         const { data, unions } = familyPagesFixture();
         const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
         const page = pageSetSectionHtml(set, set.familySlug.get(unions.f9)!);
         expect(page).toContain(`data-sp-open="family:${unions.f10}"`);
-        expect(page).toContain('<img class="sp-clip-img"');
+        expect(page).toMatch(/<button type="button" class="sp-clip" data-pp-zoom aria-label="Zvětšit: Oddací matrika Čapkov 1840–1860, fol\. 12"><img class="sp-clip-img"/);
         expect(page).not.toContain('pp-lb');
         expect(page).not.toMatch(/href="#/);
+    });
+
+    it('the excerpt\'s scan in the archive under it, as on the person page: its own page, else the source\'s', () => {
+        const { data, unions } = familyPagesFixture();
+        const src = data.sources!['s-marr1846'];
+        const pageOf = (mode: 'file' | 'app') => {
+            const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+            const slug = set.familySlug.get(unions.f9)!;
+            return mode === 'app' ? pageSetSectionHtml(set, slug) : section(buildPageSetHtml(set), slug);
+        };
+        expect(pageOf('app')).not.toContain('sp-clip-scan');
+        src.url = 'https://archiv.example/matrika/12';
+        for (const mode of ['app', 'file'] as const) {
+            expect(pageOf(mode)).toContain('<p class="sp-clip-scan"><a href="https://archiv.example/matrika/12" rel="noopener noreferrer" target="_blank">Stránka v archivu ↗</a></p>');
+        }
+        src.excerpts![0].pageUrl = 'https://archiv.example/matrika/12?scan=3';
+        expect(pageOf('app')).toContain('<a href="https://archiv.example/matrika/12?scan=3" rel="noopener noreferrer" target="_blank">Sken v archivu ↗</a>');
+        // Not a web address: no link.
+        src.excerpts![0].pageUrl = 'javascript:alert(1)';
+        src.url = undefined;
+        expect(pageOf('file')).not.toContain('sp-clip-scan');
     });
 });
 

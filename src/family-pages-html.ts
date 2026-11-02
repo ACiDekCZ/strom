@@ -41,6 +41,7 @@ import {
 import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { fanZoomInlineScript } from './fan-zoom.js';
 import { ZipEntry, dataUrlBytes } from './zip.js';
+import { safeHttpUrl } from './validation.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -432,7 +433,7 @@ function otherMarriagesHtml(r: Render, ctx: BookCtx, u: Partnership, ps: readonl
  * a marriage register among them before the rest), then the first excerpt
  * of the union's other sources (its events'); none: no block.
  */
-function marriageClip(r: Render, u: Partnership): { src: string; caption: string } | null {
+function marriageClip(r: Render, u: Partnership): { src: string; caption: string; scan: string } | null {
     const sources = r.set.protectedTree.tree.sources ?? {};
     const own = u.sourceIds ?? [];
     // A marriage register by its title, at a word's start ("Soupis poddaných" is not one).
@@ -443,7 +444,13 @@ function marriageClip(r: Render, u: Partnership): { src: string; caption: string
         const s = sources[sid];
         for (const e of s?.excerpts ?? []) {
             const src = shownExcerpt(e);
-            if (src) return { src, caption: [s.title?.trim(), s.reference?.trim()].filter(Boolean).join(', ') };
+            if (!src) continue;
+            // Its scan in the archive, as under the person page's excerpt: its own page, else the source's.
+            const P = r.S.personPage.sources;
+            const page = safeHttpUrl(e.pageUrl);
+            const href = page ?? safeHttpUrl(s.url);
+            const scan = href ? `<a href="${esc(href)}" rel="noopener noreferrer" target="_blank">${esc(page ? P.archiveScan : P.archivePage)} ↗</a>` : '';
+            return { src, caption: [s.title?.trim(), s.reference?.trim()].filter(Boolean).join(', '), scan };
         }
     }
     return null;
@@ -480,8 +487,11 @@ function marriageHtml(r: Render, ctx: BookCtx, u: Partnership, slug: string): st
                     + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc(clip.caption)}</span></div></div>`;
             }
         } else {
-            clipHtml = `<div class="sp-clip"><img class="sp-clip-img" src="${esc(clip.src)}" alt="${esc(clip.caption || P.clip)}" loading="lazy">${cap}</div>`;
+            // The window: the app's image viewer, as the person page's excerpts (src/ui/person-page-ui.ts).
+            clipHtml = `<button type="button" class="sp-clip" data-pp-zoom aria-label="${esc(`${r.S.personPage.zoom}: ${clip.caption || P.clip}`)}">`
+                + `<img class="sp-clip-img" src="${esc(clip.src)}" alt="${esc(clip.caption || P.clip)}" loading="lazy">${cap}</button>`;
         }
+        if (clipHtml) clipHtml = `<div class="sp-clipbox">${clipHtml}${clip.scan ? `<p class="sp-clip-scan">${clip.scan}</p>` : ''}</div>`;
     }
     if (!facts.length && !clipHtml) return '';
     return `<section class="sp-block sp-marriage" id="${esc(slug)}--sp-marriage"><h2 class="sp-h2">${esc(P.marriage)}</h2>`
