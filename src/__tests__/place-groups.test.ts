@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { PersonId, StromData, PlaceRecord } from '../types.js';
 import {
     placeVariantGroups, placeAliasMap, addPlaceAlias, sanitizePlaceAliases, mergePlaceAliases, placeAliasesFor,
-    placeSpellingTargets, mergeSpellingPlaces, variantGroupKey,
+    placeSpellingTargets, mergeSpellingPlaces, variantGroupKey, placeSearchNames,
 } from '../place-groups.js';
 import { placeKey, type PlaceUsage } from '../places.js';
 
@@ -130,5 +130,13 @@ describe('one map point per place', () => {
         expect(only.map(p => p.key)).toEqual([k('H. Lhota'), k('Jinov')]);
         expect(only[0]!.usage).toMatchObject({ display: 'Horní Lhota', count: 15 });
         expect(k2.get(k('Horní Lhota'))).toBe(k('H. Lhota'));
+    });
+});
+
+describe('placeSearchNames', () => {
+    it('finds a place by its record’s names and by the other names Unify wrote down', () => {
+        const data = tree({ [k('Horní Lhota')]: 'L0012' }, { [k('Horní Lhota')]: ['H. Lhota'] });
+        expect(placeSearchNames(k('Horní Lhota'), { data })).toEqual(['Horní Lhota', 'Ober-Lhota', 'H. Lhota']);
+        expect(placeSearchNames(k('Jinov'), { data })).toEqual([]);
     });
 });

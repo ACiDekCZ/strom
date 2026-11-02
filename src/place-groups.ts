@@ -157,6 +157,19 @@ export function placeRecordOf(key: string, ctx: Pick<PlaceGroupContext, 'data' |
 }
 
 /**
+ * The other names the Places dialog's search finds a place by (§4): its
+ * record's names (today's and the old ones) and the other names "Unify"
+ * wrote down for it. The history of places adds its own (`also`) in the dialog.
+ */
+export function placeSearchNames(key: string, ctx: Pick<PlaceGroupContext, 'data' | 'live'>): string[] {
+    const out: string[] = [];
+    const rec = placeRecordOf(key, ctx);
+    if (rec) for (const n of rec.names) out.push(n.name);
+    for (const n of ctx.data.placeAliases?.[key] ?? []) out.push(n);
+    return out;
+}
+
+/**
  * What says a place is one with other spellings: its record's id, else the
  * place a rename unites it with (that place's record, when it has one).
  * Null for a place nothing says that of.

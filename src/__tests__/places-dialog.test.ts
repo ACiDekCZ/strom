@@ -4,8 +4,10 @@ import type { PlaceIdentity, PlaceStateSummary } from '../place-identity.js';
 import {
     placeRowActions, canLookUp, canCheck, hasWhyHere, groupCheckState, selectionCounts, placeContextLine,
     placeYearSpans, formatYearSpan, checkFindingText, countryName, formerNameText, placeLocationLabel,
-    placeFormerLine, placeWhyRows,
+    placeFormerLine, placeWhyRows, variantRowAction, townGroupsBesideVariants, variantGroupView,
+    type VariantGroupFilterInput, type VariantMemberFilter,
 } from '../places-dialog.js';
+import type { PlaceVariantGroup } from '../place-groups.js';
 import { placeKey } from '../places.js';
 
 const id = (state: PlaceIdentity['state'], extra: Partial<PlaceIdentity> = {}): PlaceIdentity =>
@@ -182,5 +184,68 @@ describe('placeWhyRows', () => {
         }), undefined, 'en');
         expect(rows.map(r => r.kind)).toEqual(['why', 'decide', 'source']);
         expect(rows[2].url).toBeUndefined();
+    });
+});
+
+describe('groups of spellings (§4)', () => {
+    it('offers Unify in the tree, the research’s fix with the research here, nothing on the main form or a house', () => {
+        expect(variantRowAction('var', true, false)).toBe('unify');
+        expect(variantRowAction('old', true, false)).toBe('unify');
+        expect(variantRowAction('street', true, true)).toBe('resFix');
+        expect(variantRowAction('main', true, false)).toBeNull();
+        expect(variantRowAction('house', false, false)).toBeNull();
+    });
+
+    it('drops the town groups whose town or houses are in a group of spellings', () => {
+        const variant: PlaceVariantGroup = {
+            key: 'L0012', head: 'Horní Lhota', ownKey: 'horni lhota', spellings: 1, houses: 1, facts: 5, persons: 4,
+            members: [{ key: 'h lhota', tag: 'var', same: true }, { key: 'horni lhota 16', tag: 'house', same: false }],
+        };
+        const towns = [
+            { townKey: 'horni lhota', members: [{ key: 'horni lhota 16' }, { key: 'horni lhota 17' }] },
+            { townKey: 'jinov', ownKey: 'jinov', members: [{ key: 'jinov 1' }, { key: 'jinov 2' }] },
+        ];
+        expect(townGroupsBesideVariants(towns, [variant]).map(t => t.townKey)).toEqual(['jinov']);
+        expect(townGroupsBesideVariants(towns, [])).toHaveLength(2);
+    });
+
+    const member = (o: Partial<VariantMemberFilter> = {}): VariantMemberFilter =>
+        ({ same: true, main: false, textMatch: false, statePass: true, ...o });
+    const input = (o: Partial<VariantGroupFilterInput> = {}): VariantGroupFilterInput => ({
+        query: false, chip: false, expanded: false, showAll: false, first: 8,
+        groupMatch: true, headStatePass: true,
+        members: [member({ main: true }), member(), member({ same: false })],
+        ...o,
+    });
+
+    it('shows the group as it is without a search, opened when opened', () => {
+        expect(variantGroupView(input())).toMatchObject({ hidden: false, open: false, head: true, members: [false, false, false], found: 3 });
+        expect(variantGroupView(input({ expanded: true })).members).toEqual([true, true, true]);
+    });
+
+    it('opens the group on the spelling a search finds there', () => {
+        const v = variantGroupView(input({
+            query: true,
+            members: [member({ main: true }), member({ textMatch: true }), member({ same: false })],
+        }));
+        expect(v).toMatchObject({ hidden: false, open: true, head: true, members: [false, true, false], found: 2 });
+    });
+
+    it('shows the group as it is when only the head\'s names hold the query', () => {
+        const v = variantGroupView(input({ query: true, members: [member({ main: true, textMatch: true }), member(), member({ same: false })] }));
+        expect(v).toMatchObject({ hidden: false, open: false, head: true, members: [false, false, false], found: 3 });
+    });
+
+    it('hides the group the search does not find', () => {
+        expect(variantGroupView(input({ query: true, groupMatch: false })).hidden).toBe(true);
+    });
+
+    it('a chip passes the head and the houses by their own states, never a spelling', () => {
+        const v = variantGroupView(input({ chip: true, headStatePass: false, members: [member({ main: true }), member(), member({ same: false })] }));
+        expect(v).toMatchObject({ hidden: false, open: true, members: [false, false, true], found: 1 });
+        const none = variantGroupView(input({ chip: true, headStatePass: false, members: [member({ main: true }), member(), member({ same: false, statePass: false })] }));
+        expect(none.hidden).toBe(true);
+        const head = variantGroupView(input({ chip: true, members: [member({ main: true }), member(), member({ same: false, statePass: false })] }));
+        expect(head).toMatchObject({ hidden: false, open: false, head: true, found: 1 });
     });
 });

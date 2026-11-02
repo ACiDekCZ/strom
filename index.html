@@ -5348,10 +5348,34 @@
         .place-group-members > .place-row-sub:last-of-type { border-bottom: 0; }
         .place-group-more { padding: 8px 16px 10px 42px; border-top: 1px solid var(--divider); }
         .places-modal button.place-show-all { font-size: 13px; color: var(--primary-dark); font-weight: 500; }
+        /* A place with its spellings (spec 034 §4): tags, "written in facts", "On the map as …" and Unify's preview. */
+        .place-tag {
+            display: inline-block; max-width: 100%; box-sizing: border-box; padding: 1px 7px; border-radius: 5px;
+            background: var(--surface-2); color: var(--text-light); font-size: 11.5px; font-weight: 600; line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+        .places-modal .place-written { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .place-state[data-state="same"] { background: var(--primary-soft); color: var(--primary-dark); }
+        .place-pin.place-pin-same { background: none; padding: 2px 0; }
+        .places-modal button.place-act.is-strong { color: var(--primary-dark); font-weight: 500; }
+        .places-modal button.place-act.is-research { color: var(--research); font-weight: 600; text-decoration: none; }
+        .place-select-gap { display: none; flex: none; width: 24px; }
+        .places-modal.is-selecting .place-select-gap { display: block; }
+        .place-unify-card {
+            padding: 12px 14px; border-radius: 10px; border: 1px solid var(--warn-line); background: var(--warn-soft);
+            min-width: 0; overflow-wrap: anywhere;
+        }
+        .place-unify-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .places-modal .place-unify-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 14px; }
+        .place-unify-from { color: var(--text-light); overflow-wrap: anywhere; min-width: 0; }
+        .place-unify-line .place-arrow { color: var(--warn-text); }
+        .place-unify-line strong { overflow-wrap: anywhere; min-width: 0; }
         @media (hover: hover) {
             .places-modal button.place-candidate:hover { background: var(--surface-2); }
             .places-modal button.place-act:hover, .places-modal button.place-link-btn:hover,
             .places-modal button.place-show-all:hover { text-decoration: underline; color: var(--text); }
+            .places-modal button.place-act.is-research:hover { color: var(--research); }
+            .places-modal button.place-act.is-strong:hover { color: var(--primary-dark); }
             .places-modal button.place-find:hover { background: var(--primary-soft); }
             .places-modal button.places-chip:hover, .places-modal button.places-select-btn:hover,
             .places-modal button.places-more-btn:hover, .places-modal button.places-more-item:not(:disabled):hover { background: var(--surface-2); }
@@ -5424,6 +5448,8 @@
             .places-modal button.place-keep, .places-modal .places-selbar button, .places-modal button.places-bulk-go,
             .places-modal button.places-bulk-cancel { min-height: 44px; }
             .places-modal button.place-select { width: 44px; height: 44px; margin: -10px -6px -10px -12px; }
+            .place-select-gap { width: 26px; }
+            .places-modal button.place-unify-open, .places-modal button.place-resfix { min-height: 44px; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */

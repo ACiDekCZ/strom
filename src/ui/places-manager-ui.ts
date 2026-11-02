@@ -41,8 +41,11 @@ import {
 } from '../place-identity.js';
 import {
     checkFindingText, formatYearSpan, hasWhyHere, placeFormerLine, placeLocationLabel, placeRowActions, placeYearSpans,
-    type PlaceRowAction,
+    townGroupsBesideVariants, variantGroupView, variantRowAction, type PlaceRowAction,
 } from '../places-dialog.js';
+import {
+    placeAliasMap, placeSearchNames, placeVariantGroups, type PlaceMemberTag, type PlaceVariantGroup, type PlaceVariantMember,
+} from '../place-groups.js';
 import { placesView, resetPlacesView } from './places-identify-ui.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -55,10 +58,20 @@ interface ManagerPlace {
     geo?: PlaceGeo;
 }
 
+/**
+ * A group of the dialog: a town with its houses (031), or one place with its
+ * spellings, old names, streets and houses (§4, `variant`; its townKey is
+ * VARIANT_PREFIX + the group's key, its town the place's name).
+ */
+type DialogGroup = TownGroup & { variant?: PlaceVariantGroup };
+
+/** The townKey of a group of spellings (never a placeKey: those have no colon). */
+const VARIANT_PREFIX = 'v:';
+
 /** The dialog's places by key, as last drawn (what its search looks in). */
 let managerPlaces = new Map<string, PlaceUsage>();
-/** The dialog's town groups by townKey, as last drawn. */
-let managerGroups = new Map<string, TownGroup>();
+/** The dialog's groups by townKey, as last drawn. */
+let managerGroups = new Map<string, DialogGroup>();
 /** Groups opened (▾), and groups showing all their houses — kept over a redraw, cleared on a fresh open. */
 let expandedTowns = new Set<string>();
 let allShownTowns = new Set<string>();
@@ -143,7 +156,7 @@ export const placesManagerMethods = uiModule({
         const data = DataManager.getData();
         managerPlaces = new Map(places.map(p => [p.key, p.usage]));
         managerKnown = knownStreets(data);
-        managerGroups = new Map(placeTownGroups(data, managerPlaces).map(g => [g.townKey, g]));
+        managerGroups = this.placesDialogGroups(managerPlaces);
         // A fresh open starts with the whole list; a redraw (a rename, a pin) keeps the search.
         if (!opts.keepFilter) {
             this.placesFilter = { query: '', state: opts.unplaced ? 'none' : 'all' };
@@ -158,7 +171,8 @@ export const placesManagerMethods = uiModule({
         const research = this.placesResearchContext();
         managerCanResearch = research.canResearch;
         if (!managerCanResearch) resetPlacesView();
-        const summary = placeStateSummary(this.computePlaceIdentities(managerPlaces.keys()).values());
+        this.computePlaceIdentities(managerPlaces.keys());
+        const summary = placeStateSummary(this.placesCountedIds());
         // A chip with nothing left to show (the last place looked up) lets the whole list back.
         if (this.placesFilter.state !== 'all' && !summary[this.placesFilter.state]) this.placesFilter.state = 'all';
         const f = this.placesFilter;
@@ -260,7 +274,8 @@ export const placesManagerMethods = uiModule({
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
-        overlay.querySelectorAll<HTMLElement>('.place-row[data-key]').forEach(row => this.bindPlaceRow(row));
+        overlay.querySelectorAll<HTMLElement>('.place-row[data-key]:not(.place-row-same)').forEach(row => this.bindPlaceRow(row));
+        overlay.querySelectorAll<HTMLElement>('.place-row-same').forEach(row => this.bindVariantRow(row));
         overlay.querySelectorAll<HTMLElement>('.place-group').forEach(group => this.bindPlaceGroup(group));
         this.bindPlacesSelection(modal);
         // History lines and the search texts last: they end in applyPlacesFilter.
@@ -279,6 +294,36 @@ export const placesManagerMethods = uiModule({
             this.closeDialogById(parentDialogId);
         }
         this.pushDialog('places-modal');
+    },
+
+    /**
+     * The dialog's groups: one per place with its spellings (§4: the
+     * research's record, the other names Unify wrote down), and the towns with
+     * their houses (031) that are not in one of those. A tree with neither
+     * records nor other names keeps the town groups alone, as before.
+     */
+    placesDialogGroups(places: ReadonlyMap<string, PlaceUsage>): Map<string, DialogGroup> {
+        const data = DataManager.getData();
+        const live = this.placesLivePayload();
+        const geos = data.places ?? {};
+        const variants = placeVariantGroups(places, { data, live, aliases: placeAliasMap(data), known: managerKnown });
+        placesView.same = new Set(variants.flatMap(g => g.members.filter(m => m.same).map(m => m.key)));
+        const out = new Map<string, DialogGroup>();
+        for (const v of variants) {
+            out.set(VARIANT_PREFIX + v.key, {
+                townKey: VARIANT_PREFIX + v.key,
+                town: v.head,
+                ownKey: v.ownKey,
+                members: v.members.map(mem => ({ key: mem.key, display: places.get(mem.key)?.display ?? mem.key, town: v.head, house: '', bare: false })),
+                houseCount: v.houses,
+                personCount: v.persons,
+                unplacedCount: v.members.filter(mem => !mem.same && !geos[mem.key]).length,
+                hasBare: false,
+                variant: v,
+            });
+        }
+        for (const g of townGroupsBesideVariants(placeTownGroups(data, places), variants)) out.set(g.townKey, g);
+        return out;
     },
 
     /** The list: places outside a town group as rows, each town group as its head, strip and houses. */
@@ -308,10 +353,10 @@ export const placesManagerMethods = uiModule({
      * a group, and each group as one item by its sums (its town's name, all its
      * people, unplaced when a house is). Inside a group the order is natural.
      */
-    sortedManagerItems(places: readonly ManagerPlace[]): (ManagerPlace | { key: string; usage: PlaceUsage; geo?: unknown; group: TownGroup })[] {
+    sortedManagerItems(places: readonly ManagerPlace[]): (ManagerPlace | { key: string; usage: PlaceUsage; geo?: unknown; group: DialogGroup })[] {
         const geos = DataManager.getData().places ?? {};
         const grouped = new Set<string>();
-        const items: (ManagerPlace | { key: string; usage: PlaceUsage; geo?: unknown; group: TownGroup })[] = [];
+        const items: (ManagerPlace | { key: string; usage: PlaceUsage; geo?: unknown; group: DialogGroup })[] = [];
         for (const g of managerGroups.values()) {
             for (const mem of g.members) grouped.add(mem.key);
             if (g.ownKey) grouped.add(g.ownKey);
@@ -330,14 +375,15 @@ export const placesManagerMethods = uiModule({
             const id = k ? placesView.ids.get(k) : undefined;
             return id ? placeStateRank(id) : Number.MAX_SAFE_INTEGER;
         };
-        // A group stands where its most pressing place does.
+        // A group stands where its most pressing place does (a spelling is on the map as its place: not counted).
         const rank = (item: (typeof items)[number]): number => 'group' in item
-            ? Math.min(rankOf(item.group.ownKey), ...item.group.members.map(mem => rankOf(mem.key)))
+            ? Math.min(rankOf(item.group.ownKey), ...item.group.members.filter(mem => !placesView.same.has(mem.key)).map(mem => rankOf(mem.key)))
             : rankOf(item.key);
         return sortPlacesForManager(items, this.placesSort, getCurrentLanguage(), rank);
     },
 
-    renderPlaceGroup(g: TownGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
+    renderPlaceGroup(g: DialogGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
+        if (g.variant) return this.renderVariantGroup(g, g.variant, byKey);
         const m = strings.map;
         const own = g.ownKey ? byKey.get(g.ownKey) : undefined;
         const meta = `${m.houseNumbers(g.houseCount)} · ${m.usedBy(g.personCount)}`;
@@ -364,6 +410,140 @@ export const placesManagerMethods = uiModule({
                     </div>
                 </div>
             </div>`;
+    },
+
+    /**
+     * A place with its spellings (§4): the head is the place's own row under
+     * its name today ("3 spellings · 1 house · 18 facts · 12 people"); opened,
+     * the main form, the other spellings, old names and streets (on the map
+     * as the place, no state of their own) and the houses with their own.
+     */
+    renderVariantGroup(g: DialogGroup, v: PlaceVariantGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
+        const own = byKey.get(v.ownKey);
+        if (!own) return '';
+        const d = strings.places.dialog;
+        const meta = [d.groupMeta(v.spellings, v.houses), d.facts(v.facts), strings.map.usedBy(v.persons)].filter(Boolean).join(' · ');
+        const head = this.renderPlaceRow(own, { group: g, meta, title: v.head });
+        const ownTag: PlaceMemberTag = placeKey(own.usage.display) === placeKey(v.head) ? 'main' : 'var';
+        const main = this.renderVariantRow(own, { key: own.key, tag: ownTag, same: true }, v, true);
+        const members = v.members.map(mem => {
+            const p = byKey.get(mem.key);
+            if (!p) return '';
+            return mem.same ? this.renderVariantRow(p, mem, v, false) : this.renderPlaceRow(p, { sub: true, tag: mem.tag });
+        }).join('');
+        return `
+            <div class="place-group is-variant" data-town="${this.escapeHtml(g.townKey)}">
+                ${head}
+                <div class="place-group-members">
+                    ${main}${members}
+                    <div class="place-group-more" hidden>
+                        <button type="button" class="place-show-all">${this.escapeHtml(strings.map.showAllN(v.members.length + 1))}</button>
+                    </div>
+                </div>
+            </div>`;
+    },
+
+    /** A member's tag: main form, other spelling, old name, street, house. */
+    placeTagHtml(tag: PlaceMemberTag): string {
+        const d = strings.places.dialog;
+        const text = { main: d.tagMain, var: d.tagVar, old: d.tagOld, street: d.tagStreet, house: d.tagHouse }[tag];
+        return `<span class="place-tag" data-tag="${tag}">${this.escapeHtml(text)}</span>`;
+    },
+
+    /**
+     * A way of writing the place (§4): its tag, its facts (an old name's
+     * years), how the facts write it, "On the map as <head>" in its frame
+     * without actions, and Unify (the tree) or Fix in the research. `main`:
+     * the head's own place once more, as its main form (no checkbox: the
+     * head's stands for it).
+     */
+    renderVariantRow(p: ManagerPlace, mem: PlaceVariantMember | { key: string; tag: PlaceMemberTag; same: true; period?: string }, v: PlaceVariantGroup, main: boolean): string {
+        const d = strings.places.dialog;
+        const esc = (t: string): string => this.escapeHtml(t);
+        const meta = [d.facts(p.usage.count), mem.period].filter(Boolean).join(' · ');
+        const written = mem.tag === 'main' || mem.tag === 'old' ? '' : [...p.usage.variants.keys()].join(', ');
+        const action = variantRowAction(mem.tag, mem.same, managerCanResearch);
+        let act = '';
+        if (action === 'unify') act = `<button type="button" class="place-unify-open place-act is-strong">${esc(d.unify(v.head))}</button>`;
+        else if (action === 'resFix' && this.activeResearchLink('fixes')) {
+            act = `<button type="button" class="place-resfix place-act is-research">${esc(d.resFix)} <span aria-hidden="true">↗</span></button>`;
+        }
+        const ref = main ? `data-own="${esc(p.key)}"` : `data-key="${esc(p.key)}"`;
+        return `
+            <div class="place-row place-row-sub place-row-same${main ? ' place-row-main' : ''}" ${ref} data-state="same" data-tag="${mem.tag}">
+                <div class="place-line">
+                ${main ? '<span class="place-select-gap" aria-hidden="true"></span>' : this.placeSelectHtml(p.usage.display)}
+                <div class="place-grid">
+                    <div class="place-main">
+                        <div class="place-head">
+                            <span class="place-title">${esc(p.usage.display)}</span>
+                            ${this.placeTagHtml(mem.tag)}
+                            <span class="place-count">${esc(meta)}</span>
+                        </div>
+                        ${written ? `<p class="place-written">${esc(d.inFacts(written))}</p>` : ''}
+                        ${act ? `<div class="place-acts">${act}</div>` : ''}
+                    </div>
+                    <div class="place-pin place-pin-same" data-state="same">
+                        <div class="place-pin-state"><span class="place-state" data-state="same"><span aria-hidden="true">⌖</span> ${esc(d.sameAs(v.head))}</span></div>
+                    </div>
+                </div>
+                </div>
+                <div class="place-unify-card" hidden></div>
+            </div>`;
+    },
+
+    /** A spelling's row: Unify opens its preview; Fix in the research opens the research's tree fixes. */
+    bindVariantRow(row: HTMLElement): void {
+        const key = row.dataset.key ?? row.dataset.own ?? '';
+        const group = row.closest<HTMLElement>('.place-group');
+        const head = managerGroups.get(group?.dataset.town ?? '')?.variant?.head ?? '';
+        const unify = row.querySelector<HTMLButtonElement>('.place-unify-open');
+        if (unify) unify.onclick = () => this.openPlaceUnify(row, key, head);
+        const fix = row.querySelector<HTMLButtonElement>('.place-resfix');
+        if (fix) fix.onclick = () => {
+            const url = this.activeResearchLink('fixes');
+            if (url) this.launchResearchLink(url);
+        };
+    },
+
+    /**
+     * "Unify as <head>…": what the rewrite touches (as Rename counts it), the
+     * spelling → the place's name, that the source's transcript stays and the
+     * spelling is kept as another name of the place, then Unify N facts.
+     */
+    openPlaceUnify(row: HTMLElement, key: string, head: string): void {
+        const usage = managerPlaces.get(key);
+        const card = row.querySelector<HTMLElement>(':scope > .place-unify-card');
+        const open = row.querySelector<HTMLButtonElement>('.place-unify-open');
+        if (!usage || !card || !head) return;
+        if (!card.hidden) { card.hidden = true; card.innerHTML = ''; return; }
+        const d = strings.places.dialog;
+        const esc = (t: string): string => this.escapeHtml(t);
+        const { uses, persons } = countPlaceUses(DataManager.getData(), key);
+        card.hidden = false;
+        card.innerHTML = `
+            <div class="place-unify-preview" role="group">
+                <p class="place-card-head">${esc(d.unCount(uses, persons))}</p>
+                <p class="place-unify-line"><span class="place-unify-from">${esc(usage.display)}</span><span class="place-arrow" aria-hidden="true">→</span><strong>${esc(head)}</strong></p>
+                <p class="place-card-note">${esc(d.srcStays(usage.display))}</p>
+                <div class="place-card-buttons">
+                    <button type="button" class="place-unify-go primary"${uses ? '' : ' disabled'}>${esc(d.unGo(uses))}</button>
+                    <button type="button" class="place-unify-cancel secondary">${esc(strings.buttons.cancel)}</button>
+                </div>
+            </div>`;
+        (card.querySelector('.place-unify-cancel') as HTMLButtonElement).onclick = () => {
+            card.hidden = true;
+            card.innerHTML = '';
+            open?.focus();
+        };
+        const go = card.querySelector('.place-unify-go') as HTMLButtonElement;
+        go.onclick = () => {
+            const n = DataManager.unifyPlaceTo(key, head);
+            if (n === 0) return;
+            this.showToast(d.unified(n, head));
+            this.refreshPlacesManager();
+        };
+        go.focus();
     },
 
     /** The group's ▸/▾, named by its town. */
@@ -490,7 +670,7 @@ export const placesManagerMethods = uiModule({
             </div>`;
     },
 
-    renderPlaceRow(p: ManagerPlace, opts: { sub?: boolean; group?: TownGroup; meta?: string } = {}): string {
+    renderPlaceRow(p: ManagerPlace, opts: { sub?: boolean; group?: TownGroup; meta?: string; title?: string; tag?: PlaceMemberTag } = {}): string {
         const m = strings.map;
         const geo = p.geo;
         const id: PlaceIdentity = placesView.ids.get(p.key)
@@ -526,7 +706,8 @@ export const placesManagerMethods = uiModule({
                     <div class="place-main">
                         <div class="place-head">
                             ${g ? this.placeCaretHtml(g.town) : ''}
-                            <span class="place-title">${this.escapeHtml(p.usage.display)}</span>
+                            <span class="place-title">${this.escapeHtml(opts.title ?? p.usage.display)}</span>
+                            ${opts.tag ? this.placeTagHtml(opts.tag) : ''}
                             <span class="place-count">${this.escapeHtml(meta)}</span>
                             ${g?.unplacedCount ? `<span class="place-unplaced-tag">${this.escapeHtml(m.unplacedN(g.unplacedCount))}</span>` : ''}
                         </div>
@@ -587,7 +768,8 @@ export const placesManagerMethods = uiModule({
         for (const b of own<HTMLButtonElement>('.place-answer')) b.onclick = () => { this.closePlacesManager(); this.showResearchWaiting(); };
         for (const b of own<HTMLButtonElement>('.place-keep')) b.onclick = () => this.keepPlaceLocation(key);
         for (const b of own<HTMLButtonElement>('.place-why-toggle')) b.onclick = () => this.togglePlaceWhy(row, key);
-        (row.querySelector('.place-rename-open') as HTMLButtonElement).onclick = () => this.openPlaceRename(row, key);
+        const rename = row.querySelector<HTMLButtonElement>('.place-rename-open');
+        if (rename) rename.onclick = () => this.openPlaceRename(row, key);
         const split = row.querySelector('.place-split-one') as HTMLButtonElement | null;
         if (split) split.onclick = () => this.openPlaceSplitOne(row, key);
         const research = row.querySelector('.place-research-link') as HTMLButtonElement | null;
@@ -614,7 +796,8 @@ export const placesManagerMethods = uiModule({
     },
 
     bindPlaceStrip(group: HTMLElement): void {
-        const strip = group.querySelector('.place-group-strip') as HTMLElement;
+        const strip = group.querySelector<HTMLElement>('.place-group-strip');
+        if (!strip) return;
         const splitAll = strip.querySelector('.place-split-all') as HTMLButtonElement | null;
         if (splitAll) splitAll.onclick = () => this.startGroupSplit(group);
         const research = strip.querySelector('.place-research-link') as HTMLButtonElement | null;
@@ -818,21 +1001,35 @@ export const placesManagerMethods = uiModule({
         row?.scrollIntoView({ block: 'center' });
     },
 
-    /** What each row's search looks in: its names in the tree and, with a history of places, its other names. */
+    /**
+     * What each row's search looks in: its names in the tree, its record's
+     * names (today's and old ones), the other names Unify wrote down and,
+     * with a history of places, its names there (§4). A group of spellings
+     * is found by any of its rows.
+     */
     refreshPlacesFilterText(): void {
         const modal = document.getElementById('places-modal');
         if (!modal) return;
-        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key]')];
-        const aliases = this.placesHistoryAliases(rows.map(r => r.dataset.key ?? ''));
+        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key], .place-row-main[data-own]')];
+        const keyOf = (r: HTMLElement): string => r.dataset.key ?? r.dataset.own ?? '';
+        const aliases = this.placesHistoryAliases(rows.map(keyOf));
+        const ctx = { data: DataManager.getData(), live: this.placesLivePayload() };
         for (const row of rows) {
-            const key = row.dataset.key ?? '';
+            const key = keyOf(row);
             const usage = managerPlaces.get(key);
-            row.dataset.search = usage ? placeFilterText(key, usage, aliases.get(key)) : placeKey(key);
+            // A spelling's row is found by its own text; the record's names find the group's head.
+            const spelling = row.classList.contains('place-row-same') && !row.classList.contains('place-row-main');
+            const names = spelling ? [] : placeSearchNames(key, ctx);
+            row.dataset.search = usage
+                ? placeFilterText(key, usage, [...(aliases.get(key) ?? []), ...names])
+                : placeKey(key);
         }
         for (const group of modal.querySelectorAll<HTMLElement>('.place-group')) {
             const g = managerGroups.get(group.dataset.town ?? '');
             const head = group.querySelector<HTMLElement>('.place-group-head');
-            group.dataset.search = [head?.dataset.search ?? '', placeKey(g?.town ?? ''), g?.townKey ?? ''].filter(Boolean).join(' | ');
+            const members = g?.variant ? [...group.querySelectorAll<HTMLElement>('.place-row-sub')].map(r => r.dataset.search ?? '') : [];
+            group.dataset.search = [head?.dataset.search ?? '', placeKey(g?.town ?? ''), g?.variant ? '' : g?.townKey ?? '', ...members]
+                .filter(Boolean).join(' | ');
         }
         this.applyPlacesFilter();
     },
@@ -885,12 +1082,34 @@ export const placesManagerMethods = uiModule({
             const more = group.querySelector<HTMLElement>('.place-group-more')!;
             const headMatch = placeMatchesFilter(group.dataset.search ?? '', f.query);
             let open: boolean;
-            if (f.state === 'all' && headMatch) {
+            if (managerGroups.get(townKey)?.variant) {
+                // A place with its spellings (§4): the group passes when its head or a member does.
+                const chip = f.state !== 'all';
+                const view = variantGroupView({
+                    query: !!f.query.trim(), chip,
+                    expanded: expandedTowns.has(townKey), showAll: allShownTowns.has(townKey), first: GROUP_FIRST,
+                    groupMatch: headMatch,
+                    headStatePass: !chip || (!!head && statePass(head)),
+                    members: members.map(row => ({
+                        same: row.classList.contains('place-row-same'),
+                        main: row.classList.contains('place-row-main'),
+                        textMatch: placeMatchesFilter(row.dataset.search ?? '', f.query),
+                        statePass: !chip || statePass(row),
+                    })),
+                });
+                members.forEach((row, i) => { row.hidden = !view.members[i]; });
+                more.hidden = !view.more;
+                group.hidden = view.hidden;
+                if (head) head.hidden = !view.head || view.hidden;
+                open = view.open;
+                found += view.found;
+            } else if (f.state === 'all' && headMatch) {
                 open = expandedTowns.has(townKey);
                 const showAll = allShownTowns.has(townKey);
                 members.forEach((row, i) => { row.hidden = !open || (!showAll && i >= GROUP_FIRST); });
                 more.hidden = !open || showAll || members.length <= GROUP_FIRST;
                 group.hidden = false;
+                if (head) head.hidden = false;
                 found += (head ? 1 : 0) + members.length;
             } else {
                 const shown = members.filter(row => statePass(row)
@@ -902,8 +1121,8 @@ export const placesManagerMethods = uiModule({
                 group.hidden = shown.length === 0 && !headPass;
                 open = shown.length > 0;
                 found += shown.length + (headPass ? 1 : 0);
+                if (head) head.hidden = group.hidden;
             }
-            if (head) head.hidden = group.hidden;
             group.classList.toggle('is-open', open);
             const caret = group.querySelector<HTMLElement>('.place-caret');
             if (caret) {

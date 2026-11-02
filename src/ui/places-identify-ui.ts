@@ -44,6 +44,8 @@ export const placesView = {
     ids: new Map<string, PlaceIdentity>(),
     /** The places of the dialog (placeKey → usage), as last drawn. */
     usages: new Map<string, PlaceUsage>(),
+    /** Spellings of a place shown in its group (§4): on the map as the place, not counted as places of their own. */
+    same: new Set<string>(),
     /** The research's last `/places`, for the tree it was read for. */
     live: null as { researchId: string; payload: BridgePlaces } | null,
     /** Queued by this page and not yet in a newer `/places`. */
@@ -73,6 +75,11 @@ function formsOf(keys: Iterable<string>): string[] {
 }
 
 export const placesIdentifyMethods = uiModule({
+    /** The identities the summary, the context line and the previews count: one per place, its spellings not again. */
+    placesCountedIds(): PlaceIdentity[] {
+        return [...placesView.ids].filter(([k]) => !placesView.same.has(k)).map(([, id]) => id);
+    },
+
     /** Every place of the dialog with its state now: the tree, the app's check, the research's live state. */
     computePlaceIdentities(keys: Iterable<string>): Map<string, PlaceIdentity> {
         const data = DataManager.getData();
@@ -134,7 +141,7 @@ export const placesIdentifyMethods = uiModule({
                 <span class="places-chip-icon" aria-hidden="true">${CHIP_GLYPHS[c]}</span>${this.escapeHtml(d.chip[c])}
                 <span class="places-chip-n">${summary[c]}</span>
             </button>`).join('');
-        const counts = bulkCounts(placesView.ids.values(), this.placesLivePayload());
+        const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
         const acts = ctx.canResearch ? `
             <button type="button" class="places-select-btn" aria-pressed="${placesView.selecting}">${this.escapeHtml(placesView.selecting ? d.selectDone : d.select)}</button>
             <button type="button" class="places-more-btn" aria-haspopup="menu" aria-expanded="${placesView.menu}"
@@ -172,10 +179,10 @@ export const placesIdentifyMethods = uiModule({
         const d = strings.places.dialog;
         const r = strings.places.research;
         const ctx = this.placesResearchContext();
-        const queued = [...placesView.ids.values()].filter(id => id.state === 'queued').length;
+        const queued = this.placesCountedIds().filter(id => id.state === 'queued').length;
         const kind = placeContextLine({ access: ctx.access, filter: this.placesFilter.state, summary, queued });
         if (!kind) return '';
-        const counts = bulkCounts(placesView.ids.values(), this.placesLivePayload());
+        const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
         const line = (icon: string, tone: string, text: string, act?: { label: string; cls: string; title?: string }): string => `
             <div class="places-context" data-context="${kind}">
                 <span class="places-context-icon" data-tone="${tone}" aria-hidden="true">${icon}</span>
@@ -200,7 +207,7 @@ export const placesIdentifyMethods = uiModule({
         const kind = placesView.bulk;
         if (!kind || !this.placesResearchContext().canResearch) return '';
         const d = strings.places.dialog;
-        const ids = [...placesView.ids.values()];
+        const ids = this.placesCountedIds();
         const lines: { icon: string; tone: string; text: string }[] = [];
         let head: string;
         let go: string;
@@ -242,7 +249,7 @@ export const placesIdentifyMethods = uiModule({
         const modal = document.getElementById('places-modal');
         const top = modal?.querySelector<HTMLElement>('.places-top');
         if (!modal || !top) return;
-        const summary = placeStateSummary(placesView.ids.values());
+        const summary = placeStateSummary(this.placesCountedIds());
         for (const chip of top.querySelectorAll<HTMLElement>('.places-chip')) {
             chip.setAttribute('aria-pressed', String(chip.dataset.filter === this.placesFilter.state));
         }

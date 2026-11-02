@@ -10,6 +10,7 @@ import type { PlaceGeo, PlaceRecordName, StromData } from './types.js';
 import type { CheckFinding } from './place-check.js';
 import type { PlaceIdentity, PlaceOrigin, PlaceStateFilter, PlaceStateSummary } from './place-identity.js';
 import type { PlacesResearchAccess } from './places-bridge.js';
+import type { PlaceMemberTag, PlaceVariantGroup } from './place-groups.js';
 import { forEachPlaceFact, placeKey } from './places.js';
 import { yearOf } from './dates.js';
 import { getStringsForLang, type Language } from './strings.js';
@@ -91,6 +92,105 @@ export function selectionCounts(ids: Iterable<PlaceIdentity>): { look: number; c
         if (canCheck(id)) check++;
     }
     return { look, check, total };
+}
+
+// ==================== GROUPS OF SPELLINGS (§4) ====================
+
+/**
+ * What a spelling's row offers: "Unify as <head>…" in the tree, or with the
+ * research here "Fix the entry in the research ↗" (the research owns its
+ * entries). The main form and a house with a location of its own: nothing.
+ */
+export function variantRowAction(tag: PlaceMemberTag, same: boolean, canResearch: boolean): 'unify' | 'resFix' | null {
+    if (tag === 'main' || !same) return null;
+    return canResearch ? 'resFix' : 'unify';
+}
+
+/**
+ * The town groups (031) that still stand beside the groups of spellings: a
+ * town whose place (or one of whose houses) is in a group of spellings goes
+ * into that group whole, so its own group is not drawn.
+ */
+export function townGroupsBesideVariants<T extends { townKey: string; ownKey?: string; members: readonly { key: string }[] }>(
+    towns: readonly T[], variants: readonly PlaceVariantGroup[],
+): T[] {
+    if (!variants.length) return [...towns];
+    const taken = new Set<string>();
+    for (const g of variants) {
+        taken.add(g.ownKey);
+        for (const m of g.members) taken.add(m.key);
+    }
+    return towns.filter(t => !taken.has(t.townKey) && !(t.ownKey && taken.has(t.ownKey)) && !t.members.some(m => taken.has(m.key)));
+}
+
+/** A member row of a group of spellings, as the dialog's search and state chip see it. */
+export interface VariantMemberFilter {
+    /** A way of writing the place itself (on the map as the head): no state of its own. */
+    same: boolean;
+    /** The main form's row (the head's own place once more). */
+    main: boolean;
+    /** The query is in the row's own names. */
+    textMatch: boolean;
+    /** The chip lets the row's state through (true without a chip). */
+    statePass: boolean;
+}
+
+export interface VariantGroupFilterInput {
+    /** A query is typed. */
+    query: boolean;
+    /** A state chip is on. */
+    chip: boolean;
+    expanded: boolean;
+    showAll: boolean;
+    /** Members shown in an opened group before "Show all". */
+    first: number;
+    /** The query is in the group's names (the head, its record, every member). */
+    groupMatch: boolean;
+    /** The chip lets the head's state through (true without a chip). */
+    headStatePass: boolean;
+    members: readonly VariantMemberFilter[];
+}
+
+export interface VariantGroupFilterView {
+    hidden: boolean;
+    open: boolean;
+    head: boolean;
+    /** Each member row shown. */
+    members: boolean[];
+    /** "Show all N" shown. */
+    more: boolean;
+    /** Places counted as found (the main form's row is the head's place, not counted twice). */
+    found: number;
+}
+
+/**
+ * Which rows of a group of spellings the search and the state chip let
+ * through (§4): the group passes when its head or one of its members does.
+ * Without a chip a query only the head's names hold (its record's names,
+ * Unify's other names) shows the group as it is (opened or closed); a query
+ * a member's own text holds opens the group on those members. A chip passes the head and the members by their own
+ * states; the spellings have no state of their own (they are on the map as
+ * the head), so a chip never shows them.
+ */
+export function variantGroupView(o: VariantGroupFilterInput): VariantGroupFilterView {
+    const memberHit = o.query && o.members.some(m => !m.main && m.textMatch);
+    if (!o.chip && o.groupMatch && (!o.query || !memberHit)) {
+        const open = o.expanded;
+        return {
+            hidden: false, open, head: true,
+            members: o.members.map((_, i) => open && (o.showAll || i < o.first)),
+            more: open && !o.showAll && o.members.length > o.first,
+            found: 1 + o.members.filter(m => !m.main).length,
+        };
+    }
+    const members = o.members.map(m => {
+        if (m.main) return false;
+        if (m.same) return !o.chip && o.query && m.textMatch;
+        return m.statePass && (!o.query || m.textMatch || (o.chip && o.groupMatch));
+    });
+    const head = o.headStatePass && (!o.query || o.groupMatch);
+    const shown = members.filter(Boolean).length;
+    return { hidden: shown === 0 && !head, open: shown > 0, head: shown > 0 || head, members, more: false, found: shown + (head ? 1 : 0) };
 }
 
 // ==================== CONTEXT LINE ====================
