@@ -310,6 +310,7 @@
             --research-soft: #e9ebf3;
             --research-line: #c9cfe3; /* dashed border of a queued place */
             --map-check: #c27a12;     /* map point of a place to check */
+            --map-check-ring: #fff;   /* the ring of its "!" mark */
             --warn-soft: var(--warning-soft);
             --warn-text: var(--warning-text);
             --warn-line: #e8d7ae;
@@ -488,6 +489,7 @@
             --research-soft: #30334a;
             --research-line: #4b5278;
             --map-check: #e09a2e;
+            --map-check-ring: var(--surface);
             --warn-line: #6b5a32;
             --sub: #2f2d27;
             --signal-warn: #d19a3a;
@@ -5997,6 +5999,9 @@
             line-height: 1.4;
         }
         .pm-lifeline-place { color: var(--text-light, #5c5546); }
+        /* A place without a location (spec 034 §8): its state as a small badge after it; both open the place menu. */
+        .pm-lifeline-place .pm-place-badge { margin-left: 2px; vertical-align: 1px; cursor: pointer; white-space: nowrap; }
+        .pm-lifeline-place .pm-place-badge.is-small { font-size: 11px; padding: 0 6px; }
         /* A range of the history layer (round 4 §2.8): the start, "–end" on the line under it; the column stays narrow. */
         .pm-lifeline-year .pp-yr { display: inline-flex; flex-direction: column; align-items: flex-start; white-space: nowrap; }
         .pm-lifeline-year .pp-yr b { font-weight: inherit; }
@@ -6320,6 +6325,36 @@
         .pm-lifeline-legend-kind > .hist-kind { flex: none; display: flex; color: var(--hist-text); }
         .pm-lifeline-legend-foot { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; line-height: 1.45; color: var(--text-faint); }
 
+        /* The place menu of a place without a location (spec 034 §8): a 300 px
+           popover by the place; a bottom sheet on a phone with 48 px rows. */
+        .pm-lifeline-hmenu.place-menu { width: 300px; padding: 6px; }
+        .place-menu-head {
+            display: flex; flex-direction: column; gap: 3px; padding: 4px 10px 8px; margin-bottom: 4px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .place-menu-name { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .place-menu-state { font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; text-wrap: pretty; }
+        .place-menu-state[data-state="confirm"] { color: var(--warn-text); }
+        .place-menu-state[data-state="queued"], .place-menu-state[data-state="running"] { color: var(--research); }
+        button.place-menu-item {
+            display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; min-height: 0; margin: 0;
+            padding: 9px 10px; border: none; border-radius: var(--r-sm); background: none; color: var(--text);
+            font: inherit; font-size: 13.5px; line-height: 1.35; text-align: left; cursor: pointer; overflow-wrap: anywhere;
+        }
+        button.place-menu-item.is-primary { font-weight: 600; }
+        button.place-menu-item:focus-visible, button.place-menu-item:focus { outline: none; background: var(--hover-bg); }
+        @media (hover: hover) { button.place-menu-item:hover { background: var(--hover-bg); } }
+        .place-menu-diamond { color: var(--research); }
+        .place-menu-note { margin: 4px 0 0; padding: 8px 10px 4px; border-top: 1px solid var(--divider); font-size: 12px; line-height: 1.45; color: var(--text-faint); text-wrap: pretty; }
+        .place-menu-sheet .place-menu-head { padding: 2px 16px 10px; }
+        .place-menu-sheet .place-menu-name { font-size: 15px; }
+        .place-menu-sheet .place-menu-state { font-size: 13px; }
+        .place-menu-sheet button.place-menu-item { min-height: 48px; padding: 10px 16px; font-size: 15px; }
+        .place-menu-sheet .place-menu-note { padding: 10px 16px 6px; font-size: 13px; }
+        @media (pointer: coarse) { button.place-menu-item { min-height: 44px; } }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .pm-lifeline-hmenu.place-menu { max-height: calc(100vh - 16px); overflow-y: auto; }
+        }
         /* The same as a bottom sheet (≤ 640 px): the head wraps, rows ≥ 56 px, "Cancel" last. */
         .pm-lifeline-hsheet-head {
             padding: 2px 16px 8px; font-size: 13px; line-height: 1.4; color: var(--text-faint);
@@ -8547,6 +8582,29 @@
             pointer-events: auto;
             cursor: pointer;
         }
+        /* A place to check (spec 034 §7): an ochre "!" on the dot's top right,
+           above a town's "⌂ N" tag (which hangs at the dot's right middle). */
+        .map-marker-check {
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            z-index: 2;
+            display: grid;
+            place-items: center;
+            width: 17px;
+            height: 17px;
+            box-sizing: border-box;
+            border: 2px solid var(--map-check-ring);
+            border-radius: 50%;
+            background: var(--map-check);
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 800;
+            line-height: 1;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .map-marker-town .map-marker-check { top: -14px; }
         /* Fresh: something happened here within the last ten years of the slider.
            An accent ring outside the white border, driven purely by state. */
         .map-marker-fresh .map-marker-dot {
@@ -8848,6 +8906,11 @@
         }
         .map-status-text { font-size: 13px; color: var(--text-color, #222); }
         .map-status button { padding: 5px 10px; font-size: 13px; }
+        .map-status button.map-status-research { background: var(--research); border-color: var(--research); color: var(--research-soft); }
+        @media (hover: hover) { .map-status button.map-status-research:hover { filter: brightness(1.1); } }
+        .map-status button.map-status-confirm { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-soft); }
+        /* A phone's sheet covers the bottom: the bar steps aside while it is open. */
+        .map-sheet-open .map-status { visibility: hidden; }
         .map-attribution {
             position: absolute;
             right: 4px;
@@ -8989,6 +9052,50 @@
             cursor: pointer;
         }
         @media (hover: hover) { .map-popup-foot .map-popup-fix:hover { background: none; color: var(--primary); } }
+        /* What the research adds to the bubble (spec 034 §7). */
+        .map-popup-origin { margin-top: 2px; }
+        .map-popup-former { font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
+        .map-popup-research {
+            flex: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .map-popup-why { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        .map-popup-why p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; }
+        .map-popup button.map-popup-whymore {
+            width: auto; min-height: 0; margin: 0; padding: 0; border: none; background: none;
+            color: var(--primary-dark); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        .map-popup-check {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 9px 10px;
+            border: 1px solid var(--warn-line);
+            border-radius: 8px;
+            background: var(--warn-soft);
+            color: var(--warn-text);
+        }
+        .map-popup-check-why { display: flex; gap: 7px; margin: 0; font-size: 12.5px; line-height: 1.45; text-wrap: pretty; }
+        .map-popup-check-mark {
+            flex: none; display: grid; place-items: center; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%;
+            background: var(--map-check); color: #fff; font-size: 10px; font-weight: 800;
+        }
+        .map-popup-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        .map-popup-actions button { padding: 5px 10px; font-size: 12.5px; }
+        .map-popup-actions button.map-popup-checkres, .map-popup-actions button.map-popup-look {
+            color: var(--research); border-color: var(--research-line); background: var(--research-soft);
+            max-width: 100%; text-align: left; overflow-wrap: anywhere;
+        }
+        .map-popup-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-faint); text-wrap: pretty; }
+        .map-popup-check .map-popup-note { color: var(--warn-text); }
+        .map-popup--sheet .map-popup-actions button, .map-popup--sheet button.map-popup-whymore { min-height: 44px; }
+        .map-popup-house-head { min-width: 0; text-align: right; }
+        .map-popup-house-head .map-popup-house-no { display: block; }
+        .map-popup-house-bytown { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text-faint); }
         /* Phone: a sheet along the bottom (the point moves up above it). */
         .map-popup.map-popup--sheet {
             left: 0;
@@ -9072,6 +9179,8 @@
             .map-popup-close { min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0; }
             .map-popup-person, .map-popup-more { min-height: 36px; }
             .map-popup-house-no { padding-top: 9px; }
+            .map-popup-actions button { min-height: 44px; padding: 8px 14px; font-size: 14px; }
+            .map-popup button.map-popup-whymore { min-height: 44px; }
         }
 
         /* ---- Fan view (src/ui/fan-view.ts, spec 029 §9.5) ----

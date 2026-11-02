@@ -1067,6 +1067,8 @@ export const personModalMethods = uiModule({
             if (head) head.setAttribute('aria-expanded', 'true');
         }
 
+        // The places' states (§8) before the rows are drawn.
+        this.prepareLifelinePlaces(points.map(pt => pt.place));
         // A couple's event opens its editor (over this dialog) unless the tree is locked.
         const editable = !DataManager.isTreeLocked();
         const layer = historyView?.chipOn && historyView.history ? this.lifelineHistoryLayer(historyView.history) : null;
@@ -1107,7 +1109,7 @@ export const personModalMethods = uiModule({
         }
         // A name or a place inside a row is its own link (T17); it must not
         // also open the row's couple event.
-        const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link');
+        const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link, .pm-place-badge');
         body.querySelectorAll<HTMLElement>('.pm-lifeline-row.is-link').forEach(row => {
             const open = () => this.showEditCoupleEventModal(
                 row.dataset.partnershipId as PartnershipId, row.dataset.eventId ?? '');
@@ -1121,7 +1123,15 @@ export const personModalMethods = uiModule({
             btn.addEventListener('click', (e: MouseEvent) => {
                 e.stopPropagation();
                 if (btn.dataset.personId) this.openLifelinePerson(btn.dataset.personId as PersonId);
-                else if (btn.dataset.place !== undefined) this.openLifelinePlace(btn.dataset.place);
+                else if (btn.dataset.place !== undefined) this.openLifelinePlace(btn.dataset.place, btn);
+            });
+        });
+        // The state badge of a place without a location opens the same menu as its name.
+        body.querySelectorAll<HTMLElement>('.pm-lifeline-place .pm-place-badge').forEach(badge => {
+            badge.addEventListener('click', (e: MouseEvent) => {
+                e.stopPropagation();
+                const btn = badge.closest('.pm-lifeline-place')?.querySelector<HTMLButtonElement>('.pm-lifeline-link.is-place');
+                if (btn?.dataset.place !== undefined) this.openLifelinePlace(btn.dataset.place, btn);
             });
         });
     },
@@ -1141,14 +1151,15 @@ export const personModalMethods = uiModule({
 
     /**
      * A place in the life timeline (T17): the map on that place when it has
-     * coordinates, otherwise the places manager on its row.
+     * coordinates (a spelling: its place's point), otherwise the place menu
+     * by the place (§8; `anchor`), or the places manager on its row.
      */
-    openLifelinePlace(place: string): void {
-        const key = placeKey(place);
-        const hasGeo = !!DataManager.getData().places?.[key];
+    openLifelinePlace(place: string, anchor?: HTMLElement): void {
+        const info = this.lifelinePlace(place);
+        if (!info.hasGeo && anchor) { this.openPlaceMenu(place, anchor); return; }
         this.leavePersonModalThen(() => {
-            if (hasGeo) this.showPlaceOnMap(key);
-            else this.showPlacesManager(key, undefined, 'tree');
+            if (info.hasGeo) this.showPlaceOnMap(info.key);
+            else this.showPlacesManager(info.key, undefined, 'tree');
         });
     },
 
@@ -1180,17 +1191,19 @@ export const personModalMethods = uiModule({
     },
 
     /**
-     * The "· place" of a life-timeline row: a link to the map, or to the
-     * places manager while the place has no coordinates (not in a locked
-     * tree, where that manager cannot change anything).
+     * The "· place" of a life-timeline row: a link to the map, or — while
+     * the place has no coordinates — to its menu, with the place's state as
+     * a small badge (§8). In a locked tree, where nothing can change, a place
+     * without coordinates stays plain text.
      */
     lifelinePlaceHtml(place: string | undefined): string {
         if (!place) return '';
         const esc = this.escapeHtml(place);
-        const hasGeo = !!DataManager.getData().places?.[placeKey(place)];
-        const inner = hasGeo || !DataManager.isTreeLocked()
-            ? `<button type="button" class="pm-lifeline-link is-place" data-place="${esc}">${esc}</button>` : esc;
-        return ` <span class="pm-lifeline-place">· ${inner}</span>`;
+        const hasGeo = this.lifelinePlace(place).hasGeo;
+        if (!hasGeo && DataManager.isTreeLocked()) return ` <span class="pm-lifeline-place">· ${esc}</span>`;
+        const badge = hasGeo ? '' : this.lifelinePlaceBadge(place);
+        const menu = badge ? ' aria-haspopup="menu" aria-expanded="false"' : '';
+        return ` <span class="pm-lifeline-place">· <button type="button" class="pm-lifeline-link is-place" data-place="${esc}"${menu}>${esc}</button>${badge ? ` ${badge}` : ''}</span>`;
     },
 
     /** The head's chip (T15): the children's events on or off, for this card only (K4.5). */

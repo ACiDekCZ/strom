@@ -77,9 +77,9 @@ test.describe('T15: divorce and the children\'s events in the life timeline', ()
         await expect(chip).toHaveAttribute('aria-checked', 'true');
         const child = page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent');
         await expect(child.locator('.pm-lifeline-desc')).toHaveText([
-            'Marie Vlková: marriage · Praha',
-            'Václav Vlk: death · Bystřice',
-            'Václav Vlk: burial · Bystřice',
+            'Marie Vlková: marriage · Praha ○ no location',
+            'Václav Vlk: death · Bystřice ○ no location',
+            'Václav Vlk: burial · Bystřice ○ no location',
             'Marie Vlková: divorce',
         ]);
         const own = await rows(page).first().evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
@@ -327,10 +327,12 @@ test.describe('T17: names and places in the life timeline are links', () => {
         await expect(page.locator('#event-editor-modal')).not.toHaveClass(/active/);
     });
 
-    test('a place without coordinates opens the places manager on its row', async ({ page }) => {
+    test('a place without coordinates opens the places manager on its row from its menu', async ({ page }) => {
         await setup(page);
         await openCard(page, 'Jan');
+        // Its menu (spec 034 §8): Find on the map opens its row with the search.
         await link(page, 'Bystřice').click();
+        await page.locator('.place-menu [data-action="find"]').click();
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
         const row = page.locator('#places-modal .place-row[data-key="bystrice"]');
         await expect(row).toBeVisible();
@@ -369,6 +371,7 @@ test.describe('N9: the places manager opened from the life timeline shows the pl
             await setupMany(page, width, height);
             await openCard(page, 'Jan');
             await link(page, 'Zlín').click();
+            await page.locator('.place-menu [data-action="find"]').click();
             const modal = page.locator('#places-modal');
             const row = modal.locator('.place-row[data-key="zlin"]');
             await expect(row.locator('.place-search')).toBeVisible();

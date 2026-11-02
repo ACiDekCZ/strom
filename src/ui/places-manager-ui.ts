@@ -136,6 +136,9 @@ function otherUnplacedOfTown(town: string, exceptKey: string): string[] {
     return out;
 }
 
+/** What opens at a place the dialog is opened on (the map's bubble, the person card). */
+export type PlaceFocus = 'search' | 'why' | 'row';
+
 export const placesManagerMethods = uiModule({
     placesForManager(scope: MapScope): ManagerPlace[] {
         const data = DataManager.getData();
@@ -153,12 +156,13 @@ export const placesManagerMethods = uiModule({
      * @param scope which places to list, when the caller knows better
      * @param opts.keepFilter a redraw: keep the search, the state chip, the selection and the opened groups
      * @param opts.unplaced open with the "No location" chip on
+     * @param opts.focus what opens at `focusKey`: its search (default), its "Why here", or just the row
      *
      * Opened from the map it follows the map's scope; opened from anywhere else
      * "this view" would mean nothing, so it covers the whole tree.
      */
     showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope,
-        opts: { keepFilter?: boolean; unplaced?: boolean } = {}): void {
+        opts: { keepFilter?: boolean; unplaced?: boolean; focus?: PlaceFocus } = {}): void {
         this.placesManagerScope = scope ?? (parentDialogId ? 'tree' : this.mapScope);
         this.placesManagerParent = parentDialogId ?? null;
         const places = this.placesForManager(this.placesManagerScope);
@@ -295,7 +299,7 @@ export const placesManagerMethods = uiModule({
         this.refreshPlacesHistoryRows();
         this.showPendingOffer();
 
-        if (focusKey) this.focusPlaceInManager(focusKey);
+        if (focusKey) this.focusPlaceInManager(focusKey, opts.focus);
         // The research's live states (a fresh open; a redraw has them already).
         if (!opts.keepFilter) void this.refreshPlacesLive();
 
@@ -973,8 +977,8 @@ export const placesManagerMethods = uiModule({
         input.select();
     },
 
-    /** Open the dialog at a place: its row (search open), or a town's group opened. */
-    focusPlaceInManager(focusKey: string): void {
+    /** Open the dialog at a place: its row (search open, "Why here" open, or as it is), or a town's group opened. */
+    focusPlaceInManager(focusKey: string, mode: PlaceFocus = 'search'): void {
         const modal = document.getElementById('places-modal');
         if (!modal) return;
         const townKey = focusKey.startsWith(TOWN_POINT_PREFIX) ? focusKey.slice(TOWN_POINT_PREFIX.length) : focusKey;
@@ -1008,10 +1012,14 @@ export const placesManagerMethods = uiModule({
             resetFilter();
             this.applyPlacesFilter();
         }
-        // Open its search first (it focuses the query), then bring the
-        // whole, now taller row into view.
-        (row?.querySelector(':scope > .place-line .place-change') as HTMLButtonElement | null)?.click();
+        // Open its search (it focuses the query) or its "Why here" first,
+        // then bring the whole, now taller row into view.
+        const own = (sel: string): HTMLButtonElement | null => row?.querySelector<HTMLButtonElement>(`:scope > .place-line ${sel}`) ?? null;
+        const why = own('.place-why-toggle');
+        if (mode === 'search') own('.place-change')?.click();
+        else if (mode === 'why' && why && why.getAttribute('aria-expanded') !== 'true') why.click();
         row?.scrollIntoView({ block: 'center' });
+        if (mode !== 'search') (why ?? own('button'))?.focus({ preventScroll: true });
     },
 
     /**

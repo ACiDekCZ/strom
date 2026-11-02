@@ -18,7 +18,11 @@ import { stampedGeo } from '../place-find.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { placeOriginBadge, type PlaceIdentity } from '../place-identity.js';
+import { checkFindingText, placeFormerLine, placeLocationLabel } from '../places-dialog.js';
+import { mapBarState, mapBubbleResearch, type MapBarAction } from '../place-actions.js';
+import { placeGeoHash } from '../place-records.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, placeKey, PlaceUsage, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
@@ -64,6 +68,17 @@ let kindsMenuOpen = false;
 let kindTipTimer: number | null = null;
 /** Escape and the click outside the menu of kinds are listened to once, for every map canvas. */
 let mapKeysBound = false;
+
+/** Per tree: the places the map's own lookup asked for and did not find (this page's life). */
+const geocodeMissed = new Map<string, Set<string>>();
+/** How old the research's places may be when the map opens before it reads them again. */
+const LIVE_MAX_AGE_MS = 15000;
+
+/** The first sentence of a text (the bubble's one line of "Why here"). */
+function firstSentence(text: string): string {
+    const m = /^.*?[.!?](?=\s|$)/s.exec(text.trim());
+    return (m ? m[0] : text).trim();
+}
 
 /** A drawn map point: a place or a town with its houses. */
 interface MapMarkerInfo {
@@ -194,6 +209,21 @@ export const mapMethods = uiModule({
         this.drawMapTiles(container);
         this.drawMapMarkers(container, places);
         this.renderMapStatus(places);
+        // The states the research knows (check marks, to confirm) come with its places.
+        void this.refreshPlacesLive(LIVE_MAX_AGE_MS);
+    },
+
+    /** The research's places changed: the open map redraws its marks, bar and bubble. */
+    refreshMapPlaceStates(): void {
+        if (document.querySelector('#map-container .map-canvas')) this.refreshMapContent();
+    },
+
+    /** The bar's actions after the map's own lookup. */
+    mapBarAction(action: MapBarAction): void {
+        if (action === 'geocode') { void this.startGeocoding(); return; }
+        if (action === 'confirm') { this.showResearchWaiting(); return; }
+        this.showPlacesManager(undefined, undefined, undefined, { unplaced: action === 'research' });
+        if (action === 'research' && document.getElementById('places-modal')) this.openPlacesBulk('look');
     },
 
     /**
@@ -462,15 +492,39 @@ export const mapMethods = uiModule({
         }
 
         // The Places button stays even when everything is placed: a pin can be
-        // in the wrong country, and that needs a way back.
+        // in the wrong country, and that needs a way back. After the map's own
+        // lookup the places it did not find go on to the research (§7).
+        const treeId = DataManager.getCurrentTreeId();
+        const missed = (treeId && geocodeMissed.get(treeId)) || new Set<string>();
+        const research = this.placesResearchContext();
+        const input = {
+            shown: places.length, missing: missing.length, missingTried: missing.filter(p => missed.has(p.key)).length,
+            access: research.access, confirm: 0,
+        };
+        // "N to confirm" counts only after the lookup, with a research.
+        if (input.missing > 0 && input.missingTried >= input.missing && research.access !== 'none') {
+            const ids = this.placeIdentitiesNow([...places.map(p => p.key), ...missing.map(p => p.key)]);
+            input.confirm = [...ids.values()].filter(id => id.state === 'confirm').length;
+        }
+        const bar = mapBarState(input);
+        const confirm = input.confirm;
+        const actions = bar.actions;
+        const om = strings.places.onMap;
+        const text = bar.after ? om.notFound(places.length, missing.length)
+            : missing.length > 0 ? strings.map.missing(places.length, missing.length) : strings.map.allPlaced(places.length);
+        const button = (a: MapBarAction): string => {
+            const go = `onclick="window.Strom.UI.mapBarAction('${a}')"`;
+            switch (a) {
+                case 'geocode': return `<button type="button" ${go}>${strings.map.lookUp(missing.length)}</button>`;
+                case 'research': return `<button type="button" class="map-status-research" ${go} title="${this.escapeHtml(om.lookResearchTitle)}"><span aria-hidden="true">◆</span> ${this.escapeHtml(om.lookResearch(missing.length))}</button>`;
+                case 'confirm': return `<button type="button" class="secondary map-status-confirm" ${go} title="${this.escapeHtml(om.confirmTitle)}"><span aria-hidden="true">?</span> ${this.escapeHtml(om.confirm(confirm))}</button>`;
+                case 'places': return `<button type="button" class="secondary" ${go}>${strings.map.managePlaces}</button>`;
+            }
+        };
         box.innerHTML = `
-            <span class="map-status-text">${missing.length > 0
-                ? strings.map.missing(places.length, missing.length)
-                : strings.map.allPlaced(places.length)}${pathNote}</span>
-            ${missing.length > 0
-                ? `<button type="button" onclick="window.Strom.UI.startGeocoding()">${strings.map.lookUp(missing.length)}</button>`
-                : ''}
-            <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
+            <span class="map-status-text">${this.escapeHtml(text)}${pathNote}</span>
+            ${actions.map(button).join('')}`;
+        box.classList.toggle('is-after', bar.after);
         box.style.display = 'flex';
     },
 
@@ -523,10 +577,15 @@ export const mapMethods = uiModule({
 
         const { width, height } = this.mapViewportSize(container);
 
-        layer.innerHTML = this.mapPoints(places).map(p => {
+        const points = this.mapPoints(places);
+        const ids = this.placeIdentitiesNow(points.map(p => this.mapMarkerInfo(p).key));
+        const lang = getCurrentLanguage();
+        layer.innerHTML = points.map(p => {
             const info = this.mapMarkerInfo(p);
             const persons = p.type === 'town' ? p.personCount : p.usage.personIds.length;
-            return this.mapMarkerHtml(info, persons, false, width, height);
+            const id = ids.get(info.key);
+            const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
+            return this.mapMarkerHtml(info, persons, false, width, height, check);
         }).join('');
     },
 
@@ -542,8 +601,17 @@ export const mapMethods = uiModule({
             : { key: p.key, geo: p.geo, display: p.usage.display, houses: 0 };
     },
 
-    /** One marker: the dot with its people, a town's "⌂ N" tag, the name under it. */
-    mapMarkerHtml(info: MapMarkerInfo, persons: number, fresh: boolean, width: number, height: number): string {
+    /** Why a place has the Check mark, in one line. */
+    mapCheckReason(id: PlaceIdentity, lang: ReturnType<typeof getCurrentLanguage>): string {
+        const first = id.checks?.[0];
+        return first ? checkFindingText(first, lang) : id.checkWhy ?? strings.places.state.check;
+    },
+
+    /**
+     * One marker: the dot with its people, a town's "⌂ N" tag, the name under
+     * it; `check`: the Check mark ("!" on the dot's top right) with its reason.
+     */
+    mapMarkerHtml(info: MapMarkerInfo, persons: number, fresh: boolean, width: number, height: number, check?: string): string {
         const at = pointInViewport(info.geo, this.mapCenter!, this.mapZoom, width, height);
         // Skip what is far off-screen; keeps big trees light while panning.
         if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
@@ -551,6 +619,7 @@ export const mapMethods = uiModule({
             <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}${info.houses > 0 ? ' map-marker-town' : ''}" data-key="${this.escapeHtml(info.key)}"
                     style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
                 <span class="map-marker-dot">${persons}</span>
+                ${check !== undefined ? `<span class="map-marker-check" role="img" aria-label="${this.escapeHtml(strings.places.onMap.checkMark(check))}" title="${this.escapeHtml(strings.places.onMap.checkMark(check))}">!</span>` : ''}
                 ${info.houses >= 2 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.houses}</span>` : ''}
                 <span class="map-marker-label">${this.escapeHtml(info.display)}</span>
             </button>`;
@@ -857,7 +926,16 @@ export const mapMethods = uiModule({
             ? ` · ${m.kindsOnly(MAP_KINDS.filter(k => on.has(k)).map(k => m.kinds[k]))}` : '';
         const name = point.type === 'town' ? point.town : point.usage.display;
         const geo = point.geo;
-        const label = [geo.label, geo.byTown ? m.byTownShort(geo.byTown) : ''].filter(Boolean).join(' · ');
+        // The place's identity (spec 034 §7): who placed it, its name today, its former names.
+        const lang = getCurrentLanguage();
+        const idKey = point.type === 'town' ? point.ownKey : point.key;
+        const id = idKey ? this.placeIdentitiesNow([idKey]).get(idKey) : undefined;
+        const located = id && id.located ? id : undefined;
+        const where = located ? placeLocationLabel(located, geo, lang) : geo.label;
+        const label = [where, geo.byTown ? m.byTownShort(geo.byTown) : ''].filter(Boolean).join(' · ');
+        const former = located ? placeFormerLine(located, name, lang) : '';
+        const origin = located?.origin
+            ? placeOriginBadge(located.origin, lang, located.origin === 'research' ? located.at : undefined, { small: true }) : '';
         const big = point.type === 'town' && point.houseCount > TOWN_BIG;
         const summary = point.type === 'town'
             ? m.townSummary(point.houseCount, point.personCount) + only
@@ -870,7 +948,9 @@ export const mapMethods = uiModule({
                     <strong>${this.escapeHtml(name)}</strong>
                     <button type="button" class="map-popup-close" aria-label="${strings.buttons.close}">×</button>
                 </div>
+                ${origin ? `<div class="map-popup-origin">${origin}</div>` : ''}
                 ${label ? `<div class="map-popup-label">${this.escapeHtml(label)}</div>` : ''}
+                ${former ? `<div class="map-popup-former">${this.escapeHtml(former)}</div>` : ''}
                 ${summary ? `<div class="map-popup-summary">${this.escapeHtml(summary)}</div>` : ''}
                 ${big ? `
                 <label class="map-popup-search">
@@ -881,6 +961,7 @@ export const mapMethods = uiModule({
                     <span class="map-popup-search-count" aria-live="polite"></span>
                 </label>` : ''}
             </div>
+            ${this.mapPopupResearchHtml(point, located)}
             <div class="map-popup-body${point.type === 'town' ? ' map-popup-houses' : ''}">
                 ${point.type === 'town' ? '' : `<div class="map-popup-people">${this.mapPopupPeople(
                     point.usage.personIds.map(id => [id, point.usage.kinds.get(id) ?? new Set<MapKind>()] as const), Infinity, '')}</div>`}
@@ -897,10 +978,77 @@ export const mapMethods = uiModule({
             });
         }
         popup.style.display = 'flex';
-        // A phone: a sheet along the bottom, and the point moves up above it.
+        // A phone: a sheet along the bottom, and the point moves up above it; the bar steps aside meanwhile.
         const sheet = window.matchMedia(MQ_MOBILE).matches;
         popup.classList.toggle('map-popup--sheet', sheet);
+        document.getElementById('map-container')?.classList.toggle('map-sheet-open', sheet);
         if (sheet && opts.pan !== false) this.panMapAboveSheet(geo);
+    },
+
+    /**
+     * What the research adds to a bubble (§7): the one line of why the
+     * research put it here with "Why here ›", the Check block with Keep /
+     * Change / ◆ Check, ◆ Check for a place the map found, ◆ Look up for
+     * the houses located by the town. ◆ only with the research here; a phone
+     * says where it goes instead.
+     */
+    mapPopupResearchHtml(point: MapPoint, id: PlaceIdentity | undefined): string {
+        const om = strings.places.onMap;
+        const d = strings.places.dialog;
+        const r = strings.places.research;
+        const access = this.placesResearchContext().access;
+        const esc = (t: string): string => this.escapeHtml(t);
+        const key = esc(id ? (point.type === 'town' ? point.ownKey ?? point.key : point.key) : point.key);
+        const note = (text: string): string => `<p class="map-popup-note">${esc(text)}</p>`;
+        const diamond = (cls: string, label: string, data = ''): string =>
+            `<button type="button" class="${cls}" data-key="${key}"${data}><span aria-hidden="true">◆</span> ${esc(label)}</button>`;
+        const parts: string[] = [];
+        if (id) {
+            const b = mapBubbleResearch(id, access);
+            if (b.whyHere && !b.check) {
+                const why = id.why ? firstSentence(id.why) : '';
+                parts.push(`<div class="map-popup-why">${why ? `<p>${esc(why)}</p>` : ''}<button type="button" class="map-popup-whymore" data-key="${key}">${esc(om.whyHere)}</button></div>`);
+            }
+            if (b.check) {
+                const reason = this.mapCheckReason(id, getCurrentLanguage());
+                parts.push(`<div class="map-popup-check" role="group" aria-label="${esc(strings.places.state.check)}">
+                    <p class="map-popup-check-why"><span class="map-popup-check-mark" aria-hidden="true">!</span> ${esc(reason)}</p>
+                    <div class="map-popup-actions">
+                        <button type="button" class="map-popup-keep" data-key="${key}">${esc(d.keep)}</button>
+                        <button type="button" class="secondary map-popup-change" data-key="${key}">${esc(d.change)}</button>
+                        ${b.checkResearch ? diamond('secondary map-popup-checkres', r.check) : ''}
+                    </div>
+                    ${b.note ? note(om.phoneCheck) : ''}
+                </div>`);
+            } else if (b.checkResearch) {
+                parts.push(`<div class="map-popup-actions">${diamond('secondary map-popup-checkres', r.check)}</div>`);
+            } else if (b.note) {
+                parts.push(note(om.phoneCheck));
+            }
+        }
+        if (point.type === 'town' && access !== 'none') {
+            const houses = point.houses.flatMap(h => h.placeKeys.filter(k => k !== point.ownKey));
+            if (houses.length) {
+                if (access === 'ok') {
+                    const all = collectPlaces(DataManager.getData());
+                    const names = houses.slice(0, 3).map(k => all.get(k)?.display ?? k).join(', ')
+                        + (houses.length > 3 ? ` +${houses.length - 3}` : '');
+                    parts.push(`<div class="map-popup-actions">${diamond('secondary map-popup-look', om.lookHouses(names), ` data-keys="${esc(JSON.stringify(houses))}"`)}</div>`);
+                } else {
+                    parts.push(note(strings.places.menu.note));
+                }
+            }
+        }
+        return parts.length ? `<div class="map-popup-research">${parts.join('')}</div>` : '';
+    },
+
+    /** "Keep" in the bubble: the location stays, the mark goes (undoable); the map keeps its frame. */
+    keepPlaceOnMap(key: string): void {
+        const geo = DataManager.getData().places?.[key];
+        if (!geo) return;
+        DataManager.setPlaceGeos(new Map([[key, { ...geo, keptAt: placeGeoHash(geo) }]]), strings.places.dialog.kept);
+        this.showToast(strings.places.dialog.kept);
+        this.refreshMapContent();
     },
 
     /** The bubble of a town point ('town:…'): its houses, each with its people. */
@@ -925,7 +1073,7 @@ export const mapMethods = uiModule({
         if (count) count.textContent = q ? m.houseHits(houses.length) : '';
         const rows = houses.map(h => `
             <div class="map-popup-house">
-                <span class="map-popup-house-no">${this.escapeHtml(h.house)}</span>
+                <div class="map-popup-house-head"><span class="map-popup-house-no">${this.escapeHtml(h.house)}</span><span class="map-popup-house-bytown">${this.escapeHtml(strings.places.onMap.byTown)}</span></div>
                 <div class="map-popup-people">${this.mapPopupPeople([...h.persons], big ? 3 : Infinity, h.key)}</div>
             </div>`).join('');
         const none = q && houses.length === 0 ? `<p class="map-popup-none">${this.escapeHtml(m.houseSearchNone)}</p>` : '';
@@ -1022,7 +1170,19 @@ export const mapMethods = uiModule({
                 return;
             }
             const fix = target.closest('.map-popup-fix') as HTMLElement | null;
-            if (fix) this.showPlacesManager(fix.dataset.key);
+            if (fix) { this.showPlacesManager(fix.dataset.key); return; }
+            const act = target.closest<HTMLElement>('.map-popup-keep, .map-popup-change, .map-popup-checkres, .map-popup-whymore, .map-popup-look');
+            const key = act?.dataset.key;
+            if (!act || key === undefined) return;
+            if (act.classList.contains('map-popup-keep')) this.keepPlaceOnMap(key);
+            else if (act.classList.contains('map-popup-change')) this.showPlacesManager(key);
+            else if (act.classList.contains('map-popup-whymore')) this.showPlacesManager(key, undefined, undefined, { focus: 'why' });
+            else if (act.classList.contains('map-popup-checkres')) void this.queuePlaces([key], true);
+            else {
+                let keys: string[] = [];
+                try { keys = JSON.parse(act.dataset.keys ?? '[]') as string[]; } catch { /* none */ }
+                void this.queuePlaces(keys, false);
+            }
         });
         // A click on the map itself (not a drag) closes the bubble.
         let downAt: { x: number; y: number } | null = null;
@@ -1040,6 +1200,7 @@ export const mapMethods = uiModule({
 
     closeMapPopup(): void {
         openPoint = null;
+        document.getElementById('map-container')?.classList.remove('map-sheet-open');
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         if (popup) popup.style.display = 'none';
     },
@@ -1266,6 +1427,15 @@ export const mapMethods = uiModule({
             if (key && geo) found.set(key, stampedGeo(geo, 'map'));
         }
         if (found.size > 0) DataManager.setPlaceGeos(found);
+        if (treeId) {
+            const missed = geocodeMissed.get(treeId) ?? new Set<string>();
+            for (const [name, geo] of results) {
+                const key = keyOfName.get(name);
+                if (key && !geo) missed.add(key);
+                else if (key) missed.delete(key);
+            }
+            geocodeMissed.set(treeId, missed);
+        }
 
         const notFound = results.size - found.size;
         const byTown = [...found.values()].filter(g => g.byTown).length;

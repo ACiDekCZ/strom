@@ -11,7 +11,7 @@
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import type { PlaceUsage } from '../places.js';
+import { collectPlaces, type PlaceUsage } from '../places.js';
 import {
     placeIdentities, placeStateSummary, placeSummaryChips, bulkCounts, bulkLookPreview, bulkCheckPreview,
     placeOriginBadge, formatPlaceDate, type PlaceIdentity, type PlaceStateFilter, type PlaceStateSummary,
@@ -74,14 +74,19 @@ function formsOf(keys: Iterable<string>): string[] {
     return [...out];
 }
 
+/** The read of the research's places under way (one at a time). */
+let liveLoading: Promise<boolean> | null = null;
+/** When the research's places were last read (for the map and the person card, which read them on opening). */
+let liveReadAt: { researchId: string; at: number } | null = null;
+
 export const placesIdentifyMethods = uiModule({
     /** The identities the summary, the context line and the previews count: one per place, its spellings not again. */
     placesCountedIds(): PlaceIdentity[] {
         return [...placesView.ids].filter(([k]) => !placesView.same.has(k)).map(([, id]) => id);
     },
 
-    /** Every place of the dialog with its state now: the tree, the app's check, the research's live state. */
-    computePlaceIdentities(keys: Iterable<string>): Map<string, PlaceIdentity> {
+    /** Places with their state now (the tree, the app's check, the research's live state), not stored. */
+    placeIdentitiesNow(keys: Iterable<string>): Map<string, PlaceIdentity> {
         const data = DataManager.getData();
         const ctx = this.placesResearchContext();
         const live = ctx.researchId && placesView.live?.researchId === ctx.researchId ? placesView.live.payload : null;
@@ -91,27 +96,65 @@ export const placesIdentifyMethods = uiModule({
             const id = ids.get(k);
             if (id && id.state !== 'queued' && id.state !== 'running') ids.set(k, { ...id, state: 'queued' });
         }
+        return ids;
+    },
+
+    /** Every place of the dialog with its state now, kept for the dialog's redraws. */
+    computePlaceIdentities(keys: Iterable<string>): Map<string, PlaceIdentity> {
+        const ids = this.placeIdentitiesNow(keys);
         placesView.ids = ids;
         return ids;
     },
 
     /**
-     * Read the research's places when its bridge here announces them, and
-     * redraw the open dialog when they changed. Without a bridge the
-     * dialog keeps what the tree knows.
+     * Read the research's places when its bridge here announces them (also
+     * with the dialog closed: the map and the person card show the states).
+     * One read at a time, none when the last one is younger than `maxAgeMs`;
+     * true when what the research says changed.
      */
-    async refreshPlacesLive(): Promise<void> {
+    loadPlacesLive(maxAgeMs = 0): Promise<boolean> {
+        if (liveLoading) return liveLoading;
         const ctx = this.placesResearchContext();
-        if (!ctx.researchId || !ctx.base || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return;
-        const prev = placesView.live?.researchId === ctx.researchId ? placesView.live.payload : null;
-        const res = await fetchBridgePlaces(ctx.base, { rev: prev?.rev });
-        if (!res.ok || !document.getElementById('places-modal')) return;
+        const { researchId, base } = ctx;
+        if (!researchId || !base || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return Promise.resolve(false);
+        if (maxAgeMs > 0 && liveReadAt && liveReadAt.researchId === researchId && Date.now() - liveReadAt.at < maxAgeMs) {
+            return Promise.resolve(false);
+        }
+        liveLoading = (async () => {
+            const prev = placesView.live?.researchId === researchId ? placesView.live.payload : null;
+            const res = await fetchBridgePlaces(base, { rev: prev?.rev });
+            if (!res.ok) return false;
+            liveReadAt = { researchId, at: Date.now() };
+            const hadLocal = placesView.queuedLocal.size > 0;
+            placesView.live = { researchId, payload: res.payload };
+            placesView.queuedLocal = new Set();
+            return hadLocal || JSON.stringify(prev) !== JSON.stringify(res.payload);
+        })().finally(() => { liveLoading = null; });
+        return liveLoading;
+    },
+
+    /**
+     * Read the research's places and redraw what shows them: the open
+     * dialog when a place's state, record or counts changed (an open search
+     * stays otherwise), the open map and person card. Without a bridge
+     * everything keeps what the tree knows.
+     */
+    async refreshPlacesLive(maxAgeMs = 0): Promise<void> {
         const before = JSON.stringify([...placesView.ids]);
-        placesView.live = { researchId: ctx.researchId, payload: res.payload };
-        placesView.queuedLocal = new Set();
-        // Redraw only when a place's state, record or counts changed (an open search stays otherwise).
-        const after = JSON.stringify([...this.computePlaceIdentities(placesView.usages.keys())]);
-        if (after !== before || JSON.stringify(prev?.counts) !== JSON.stringify(res.payload.counts)) this.redrawPlacesKeepingSearch();
+        const prevCounts = JSON.stringify(this.placesLivePayload()?.counts);
+        const changed = await this.loadPlacesLive(maxAgeMs);
+        if (!changed) return;
+        if (document.getElementById('places-modal')) {
+            const after = JSON.stringify([...this.computePlaceIdentities(placesView.usages.keys())]);
+            if (after !== before || JSON.stringify(this.placesLivePayload()?.counts) !== prevCounts) this.redrawPlacesKeepingSearch();
+        }
+        this.placesLiveChanged();
+    },
+
+    /** The research's places changed: the map and an open person card show the new states. */
+    placesLiveChanged(): void {
+        this.refreshMapPlaceStates();
+        this.refreshPersonPlaceStates();
     },
 
     /** Redraw the open dialog; a row with its search open opens it again. */
@@ -354,6 +397,7 @@ export const placesIdentifyMethods = uiModule({
 
     /** ◆ Look up / ◆ Check for these places (a row, or the selection). */
     async queuePlaces(keys: readonly string[], check: boolean): Promise<boolean> {
+        if (!document.getElementById('places-modal')) this.preparePlacesOutside(keys);
         const take = keys.filter(k => { const id = placesView.ids.get(k); return !!id && (check ? canCheck(id) : canLookUp(id)); });
         const forms = formsOf(take);
         if (!forms.length) return false;
@@ -361,6 +405,22 @@ export const placesIdentifyMethods = uiModule({
             ? { do: 'queue', forms, check: true, ...this.placeCheckFlags(take) }
             : { do: 'queue', forms };
         return this.sendPlacesIdentify(body, take, check);
+    },
+
+    /**
+     * A ◆ step from the map or the person card: the places' texts and states
+     * from the whole tree, as the dialog would have them.
+     */
+    preparePlacesOutside(keys: readonly string[]): void {
+        const all = collectPlaces(DataManager.getData());
+        placesView.usages = new Map(keys.flatMap(k => { const u = all.get(k); return u ? [[k, u] as const] : []; }));
+        this.computePlaceIdentities(placesView.usages.keys());
+    },
+
+    /** "Remove from the queue" from outside the dialog: every text of the place. */
+    async unqueuePlace(key: string): Promise<void> {
+        const forms = [...(collectPlaces(DataManager.getData()).get(key)?.variants.keys() ?? [])];
+        await this.unqueuePlaceForms(forms, [key]);
     },
 
     /**
@@ -385,6 +445,7 @@ export const placesIdentifyMethods = uiModule({
         const sub = this.placesSkippedText(res);
         if (placesView.selecting) this.setPlacesSelecting(false);
         this.redrawPlacesKeepingSearch();
+        this.placesLiveChanged();
         if (main) {
             this.showToast(sub || main, TOAST_MS, {
                 ...(sub ? { title: main } : {}),
@@ -441,6 +502,7 @@ export const placesIdentifyMethods = uiModule({
         this.showToast(strings.places.research.unqueued, TOAST_MS);
         await this.refreshPlacesLive();
         this.redrawPlacesKeepingSearch();
+        this.placesLiveChanged();
     },
 
     /** "Keep" on a check mark: the location stays and the mark goes until the location changes (undoable). */
