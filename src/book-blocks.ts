@@ -15,7 +15,8 @@ import { getStringsForLang } from './strings.js';
 import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty } from './person-name.js';
-import { feminineForm, czechRulesApply } from './surnames.js';
+import { feminineForm, czechRulesApply, isGapOnlyName } from './surnames.js';
+import { INDEX_UNCERTAIN, TRANSCRIPTION_GAP, indexLetter, orderIndexKeys } from './family-pages.js';
 import { safeHttpUrl } from './validation.js';
 import { proseHtml, coupleStoryYears } from './story-text.js';
 import { marriedInto, placeSpans, Rod, RodId, rodGenerations, rodNameForms, rodPlaceSpans, sortByBirth } from './lineage.js';
@@ -789,7 +790,12 @@ export function sourcesHtml(ctx: BookCtx): string {
 /** The index of people (§5.10): birth surnames, married-name cross-references, chapters (own family bold). */
 export function indexHtml(ctx: BookCtx): string {
     const B = T(ctx).book;
-    const sortKey = (s: string): string => s.replace(/\[\?\]/g, '').replace(/\s+/g, ' ').trim();
+    // The letters as the tree pages' index has them (1102): Czech "Ch" its own, a surname starting with an
+    // unreadable place of a transcription ("[?]o[?]ral") under INDEX_UNCERTAIN after the letters, one of
+    // unreadable places only ("[?]") without a surname; sorting leaves the unreadable places out.
+    const sortKey = (s: string): string => s.replace(TRANSCRIPTION_GAP, '').replace(/\s+/g, ' ').trim();
+    const letterOf = (surname: string): string => (isGapOnlyName(surname) ? '' : indexLetter(surname, ctx.lang));
+    const rank = (letter: string): string => (!letter ? '2' : letter === INDEX_UNCERTAIN ? '1' : '0');
     const entries: { key: string; letter: string; html: string }[] = [];
     for (const id of ctx.model.personIds) {
         const p = person(ctx, id);
@@ -808,26 +814,29 @@ export function indexHtml(ctx: BookCtx): string {
         const text = pages
             ? `${link(ctx, { person: id }, esc(name))}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`
             : `${esc(name)}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`;
-        const letter = last ? sortKey(last).charAt(0).toLocaleUpperCase(ctx.lang) : '';
+        const letter = letterOf(last);
         entries.push({
-            key: `${last ? '0' : '1'} ${sortKey(last)} ${sortKey(first)}`, letter,
+            key: `${rank(letter)} ${sortKey(last)} ${sortKey(first)}`, letter,
             html: refs
                 ? `<div class="book-index-row"><span class="book-index-name">${text}</span><span class="book-index-dots"></span><span class="book-index-refs">${refs}</span></div>`
                 : `<div class="book-index-row"><span class="book-index-name">${text}</span></div>`,
         });
-        if (married && married !== last && last) {
+        // A married surname of unreadable places only is no name to look up.
+        if (married && married !== last && last && !isGapOnlyName(married)) {
             const see = [married, first].filter(Boolean).join(' ');
-            entries.push({ key: `0 ${sortKey(married)} ${sortKey(first)}`, letter: sortKey(married).charAt(0).toLocaleUpperCase(ctx.lang), html: `<div class="book-index-row book-index-see">${esc(B.indexSee(see, name))}</div>` });
+            const seeLetter = letterOf(married);
+            entries.push({ key: `${rank(seeLetter)} ${sortKey(married)} ${sortKey(first)}`, letter: seeLetter, html: `<div class="book-index-row book-index-see">${esc(B.indexSee(see, name))}</div>` });
         }
     }
     entries.sort((a, b) => a.key.localeCompare(b.key, ctx.lang));
-    let prev: string | null = null;
-    const out: string[] = [];
+    // One group per letter (in the order of the sorted names), then the uncertain readings, then no surname.
+    const groups = new Map<string, string[]>();
     for (const e of entries) {
-        const letter = e.letter || B.noSurname;
-        if (letter !== prev) { out.push(`<div class="book-index-letter">${esc(letter)}</div>`); prev = letter; }
-        out.push(e.html);
+        const g = groups.get(e.letter);
+        if (g) g.push(e.html); else groups.set(e.letter, [e.html]);
     }
+    const label = (k: string): string => (k === INDEX_UNCERTAIN ? T(ctx).familyPages.idxUncertain : k || B.noSurname);
+    const out = orderIndexKeys(groups.keys()).map(k => `<div class="book-index-letter">${esc(label(k))}</div>${groups.get(k)!.join('')}`);
     // A page of a set has its own heading.
     if (ctx.mode !== 'book') return `<div class="book-index">${out.join('')}</div>`;
     return `<h2>${esc(B.index)}</h2><div class="book-index">${out.join('')}</div>`;

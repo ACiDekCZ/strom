@@ -211,7 +211,7 @@ export function isMinimalPerson(p: Person): boolean {
 }
 
 /** An unreadable place of a transcription: "[?]", "[...]", "[nečitelné]" (1102). */
-const TRANSCRIPTION_GAP = /\[[^\]]*\]/gu;
+export const TRANSCRIPTION_GAP = /\[[^\]]*\]/gu;
 
 /** The index key of the names that start with an unreadable place ("[?]a[?]har"): after the letters, before those without a surname (1102). */
 export const INDEX_UNCERTAIN = '?';
