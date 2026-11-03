@@ -16136,8 +16136,9 @@
             .research-overview__waiting-groupactions { margin-top: 4px; }
         }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
-        .research-overview__now-row { display: flex; align-items: center; gap: 8px; }
-        .research-overview__now-text { flex: 1; min-width: 0; }
+        /* The agent's text keeps a readable width; its actions go under it when both do not fit (long de labels). */
+        .research-overview__now-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+        .research-overview__now-text { flex: 1 1 12em; min-width: 0; }
         .research-overview__now .live-time { display: block; color: var(--text-faint); font-size: 12px; }
         /* Working lines (two or more at work, spec 011): a row per line, one can be selected. */
         /* The heading keeps its whole title; "All directions" goes to a row under it when both do not fit. */
@@ -16610,7 +16611,8 @@
             .research-direction-end:not(.is-sheet) { max-height: calc(100vh - 16px); overflow-y: auto; }
         }
         .research-direction-menu .context-menu-divider { margin: 4px 0; }
-        .toast[data-kind="direction"] { max-width: 440px; }
+        /* The computer's cap only: :where() keeps it below the phone / tablet / sideways widths further down. */
+        .toast:where([data-kind="direction"]) { max-width: 440px; }
         /* A task's direction, while two or more run: grey words, no colour. */
         .research-overview__dir { color: var(--text-light); font-size: 12px; font-weight: 400; }
         .research-overview__queue-filters { margin: 4px 0 8px; }
@@ -16743,6 +16745,8 @@
         .research-offline__wait-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         .research-offline__elsewhere { margin: 6px 0 0; font-size: 12.5px; }
         .research-offline__wait-actions .is-held { opacity: .45; cursor: not-allowed; }
+        /* A long direction name (with "(paused)") wraps inside its button instead of running past the panel. */
+        .research-offline__wait-actions .live-waiting-answer { max-width: 100%; }
         .research-offline__held { margin: 6px 0 0; font-size: 12.5px; }
         @media (hover: hover) {
             .research-offline__seg:not(.is-on):not([aria-disabled="true"]):hover,

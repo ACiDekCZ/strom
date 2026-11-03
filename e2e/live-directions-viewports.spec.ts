@@ -165,6 +165,35 @@ test.describe('directions on every screen', () => {
         expect(b.writes.filter(w => w.method === 'POST' && w.path.startsWith('waiting/'))).toEqual([]);
     });
 
+    test('1024 de, the 400 px overlay: the agent at work keeps its text beside long actions, a long answer wraps in its button', async ({ page }) => {
+        // The growing branch hangs on Bohuslava, near her long-named direction, paused and the only one she is in:
+        // its main answer names it with "(paused)".
+        const dirs = DIRECTIONS.map(d => d.id === 'G0006' ? { ...d, state: 'paused', working: false } : d);
+        const offLine = { ...OFF_LINE, branches: [{ ...BRANCHES[0], via: { person: 'P0060', rel: 'sibling' }, nearest: 'G0006' }] };
+        await followManaged(page, {
+            size: { width: 1024, height: 900 }, researches: dirs, working: [MANAGED_AGENT], ged: GED_WIDE,
+            caps: OFF_CAPS, features: FEATURES, offLine, queue: QUEUE, waiting: [{ ...GROWING, research: 'G0006' }],
+        });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openOverview(page);
+        await expect(overview(page)).not.toHaveClass(/research-overview--docked/);
+        // Now: "agent — task · direction" was squeezed to a letter's width by "Show in tree" and "Finish and stop".
+        const now = overview(page).locator('.research-overview__now-row').first();
+        await expect(now.locator('.research-overview__finish')).toBeVisible();
+        const text = (await now.locator('.research-overview__now-text').boundingBox())!;
+        expect(text.width).toBeGreaterThan(150);
+        // Awaiting action: every answer inside the item's width.
+        const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0031"]');
+        await item.locator('.research-overview__waiting-row').click();
+        const actions = item.locator('.research-offline__wait-actions');
+        await expect(actions.locator('button').first()).toContainText('(pausiert)');
+        const right = (await actions.boundingBox())!;
+        for (const btn of await actions.locator('button').all()) {
+            const r = (await btn.boundingBox())!;
+            expect(r.x + r.width, await btn.textContent() ?? '').toBeLessThanOrEqual(right.x + right.width + 1);
+        }
+    });
+
     test.describe('by touch', () => {
         test.use({ hasTouch: true });
 
@@ -316,6 +345,25 @@ test.describe('directions on every screen', () => {
         await expect(form).toBeVisible();
         const f = (await form.boundingBox())!;
         expect([Math.round(f.x), Math.round(f.y), Math.round(f.width), Math.round(f.height)]).toEqual([0, 0, 390, 844]);
+    });
+
+    test('390 an Undo the research refuses: the long alert toast keeps the phone\'s 16 px gutters', async ({ page }) => {
+        const b = await follow(page, { width: 390, height: 844 });
+        await openSheet(page);
+        const row = directionRow(page, 'G0006');
+        await row.locator('.research-direction__head').click();
+        await row.locator('[data-do="pause"]').click();
+        await expect.poll(() => directionWrites(b).length).toBe(1);
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast.locator('.toast-action')).toBeVisible();
+        b.replies.push({ status: 409, body: { error: 'directions.state', text: 'The direction has an unfinished write in the research.' } });
+        await toast.locator('.toast-action').click();
+        await expect(toast).toHaveAttribute('role', 'alert');
+        // The direction toast's 440 px cap once outranked the phone's width: a long sentence ran past both edges.
+        await expect.poll(async () => {
+            const r = (await toast.boundingBox())!;
+            return [Math.round(r.x) >= 16, Math.round(r.x + r.width) <= 390 - 16];
+        }).toEqual([true, true]);
     });
 
     test('360 and the de / pl lengths: names wrap, nothing wider than the screen (panel, branches, queue, Awaiting, settings)', async ({ page }) => {
