@@ -16702,8 +16702,38 @@
         .research-offline__branch.is-never .research-offline__person,
         .research-offline__branch.is-never .research-offline__meta { color: var(--text-light); }
         .research-offline__never { border-top-color: var(--divider); }
-        .research-offline__reset, .research-offline__remove, .research-offline__tasks { font-size: 12.5px; padding: 0; min-height: 0; align-self: flex-start; }
-        .research-offline__tasks { font-size: 13px; }
+        .link-button.research-offline__reset, .link-button.research-offline__remove { font-size: 12.5px; padding: 0; min-height: 0; align-self: flex-start; }
+        /* The whole head of a branch unfolds it (§9.1a); a branch not researched does not unfold. */
+        .research-offline__top { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .research-offline__top.is-toggle { cursor: pointer; }
+        .research-offline__never-note { font-size: 12px; color: var(--text-faint); }
+        /* A branch's tasks under it: its first three in the queue's order, their number in the queue. */
+        .research-offline__queue { display: flex; flex-direction: column; margin-top: 8px; min-width: 0; }
+        .research-offline__queue-head { font-size: 12px; color: var(--text-light); padding-bottom: 4px; }
+        .research-offline__tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .research-offline__task {
+            display: grid; grid-template-columns: 22px minmax(0, 1fr) 26px; column-gap: 8px; align-items: start;
+            padding: 6px 0; border-top: 1px solid var(--divider);
+        }
+        .research-offline__task-num {
+            margin-top: 2px; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; text-align: right;
+        }
+        .research-offline__task-num.agent-mark { justify-self: end; margin-top: 5px; }
+        .research-offline__task-text { min-width: 0; font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+        .research-offline__task.is-parked .research-offline__task-text { color: var(--text-faint); }
+        .research-offline__task-why { display: block; margin-top: 1px; font-size: 12px; color: var(--text-light); }
+        .research-offline__task .live-queue-problem { display: block; }
+        .research-offline__queue-empty {
+            margin: 0; padding: 8px 0 2px 30px; border-top: 1px solid var(--divider); font-size: 13px; color: var(--text-light);
+            text-wrap: pretty;
+        }
+        .link-button.research-offline__all { align-self: flex-start; margin-left: 30px; padding: 0; min-height: 22px; font-size: 13px; }
+        .research-offline__helps-box { display: flex; flex-direction: column; min-width: 0; }
+        .research-offline__helps-box > .research-offline__queue { padding-left: 16px; }
+        .link-button.research-offline__helps-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; min-height: 0; font-size: 12.5px; }
+        .research-offline__helps-toggle .live-section__chevron { font-size: 10px; color: var(--text-faint); text-decoration: none; }
+        .research-offline__sep { color: var(--text-light); }
+        .research-offline__helps-part { display: inline-flex; align-items: center; gap: 6px; }
         .research-offline__more { width: 28px; height: 28px; }
         .research-offline__choices { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
         .research-offline__taken { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
@@ -16724,7 +16754,7 @@
         }
         .research-offline__add:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-offline__helps {
-            display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12.5px; color: var(--text-light);
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; font-size: 12.5px; color: var(--text-light);
         }
         .research-offline__helps .research-direction__problem { flex-basis: 100%; }
         .research-offline-pick { min-width: 240px; max-width: min(290px, calc(100vw - 16px)); padding: 4px; }
@@ -16756,7 +16786,10 @@
         @media (pointer: coarse) {
             .research-offline__seg { height: 44px; }
             .research-offline__add, .research-offline__toggle, .research-offline__never { min-height: 44px; }
-            .research-offline__mode, .research-offline__tasks, .research-offline__reset, .research-offline__remove { min-height: 44px; display: inline-flex; align-items: center; }
+            .research-offline__mode, .link-button.research-offline__reset, .link-button.research-offline__remove, .link-button.research-offline__all,
+            .link-button.research-offline__helps-toggle { min-height: 44px; display: inline-flex; align-items: center; }
+            .research-offline__task { grid-template-columns: 22px minmax(0, 1fr) 44px; min-height: 44px; padding: 10px 0; }
+            .research-offline__task-more { width: 44px; height: 44px; margin: -10px 0; }
             .research-offline__more { width: 40px; height: 40px; }
             .research-offline__expand { width: 32px; height: 32px; margin: 0 -6px; }
             .research-offline__branch { grid-template-columns: minmax(0, 1fr) 40px; }
@@ -16770,6 +16803,9 @@
             .research-offline__taken { flex-direction: column; align-items: stretch; }
             .research-offline__segment { width: 100%; }
             .research-offline__add { min-height: 44px; }
+            .research-offline__task { grid-template-columns: 22px minmax(0, 1fr) 44px; min-height: 44px; padding: 10px 0; box-sizing: border-box; }
+            .research-offline__task-more { width: 44px; height: 44px; margin: -10px 0; }
+            .link-button.research-offline__all, .link-button.research-offline__helps-toggle { min-height: 44px; display: inline-flex; align-items: center; }
             .research-overview--sheet .research-offline__person { font-size: 15px; }
             .research-overview--sheet .research-offline__meta { font-size: 13px; }
         }

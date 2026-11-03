@@ -18,7 +18,7 @@ import {
     LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveSession } from './research-ui.js';
+import { LiveSession, el, liveSession, queueNoteText } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -44,6 +44,12 @@ const branchProblems = new Map<string, Problem>();
 const branchBusy = new Set<string>();
 /** The queue shows one branch's tasks (the bridge it was chosen at). */
 let queueBranch: { base: string; id: string } | null = null;
+/** The branch added to a direction whose tasks are unfolded in the direction's detail. */
+let helpsOpen: string | null = null;
+/** Where "All {n} tasks in the queue ›" was pressed: the chip's × gives the focus back there. */
+let chipFrom: { branch: string; where: 'section' | 'detail' } | null = null;
+/** Tasks of a branch shown under it (the rest is behind the link to the queue). */
+const BRANCH_TASKS_SHOWN = 3;
 /** What a refused own place says at its task (task id → the text). */
 const taskProblems = new Map<string, string>();
 /** Tasks with a write of their place on its way. */
@@ -105,6 +111,35 @@ export function queueBranchFilter(s: LiveSession | null): string | null {
 
 export function setQueueBranchFilter(s: LiveSession | null, id: string | null): void {
     queueBranch = id && s ? { base: s.bridge.base, id } : null;
+    if (!queueBranch) chipFrom = null;
+}
+
+/** A branch's tasks in the queue, as shown under the branch (§9.1a). */
+export interface BranchQueueView {
+    /** The first few of its tasks up next, each with its place in the whole queue (1-based). */
+    rows: { q: LiveQueueItem; pos: number }[];
+    /** Its tasks set aside. */
+    parked: LiveQueueItem[];
+    /** How many of its tasks are up next (the queue's tail not sent counted by the branch's own number). */
+    total: number;
+}
+
+/**
+ * The tasks of a branch in the queue's order: the place is the task's number
+ * in the queue (the same as the queue shows); a queue sent whole is counted
+ * exactly, one cut short trusts the branch's own count for the rest.
+ */
+export function branchQueueView(queue: readonly LiveQueueItem[], queueMore: number, b: OffLineBranch, shown = BRANCH_TASKS_SHOWN): BranchQueueView {
+    const mine: { q: LiveQueueItem; pos: number }[] = [];
+    let pos = 0;
+    for (const q of queue) {
+        if (q.state !== 'next') continue;
+        pos++;
+        if (q.branch === b.id) mine.push({ q, pos });
+    }
+    const parked = queue.filter(q => q.state === 'parked' && q.branch === b.id);
+    const total = queueMore > 0 ? Math.max(mine.length, b.tasks - parked.length) : mine.length;
+    return { rows: mine.slice(0, shown), parked, total };
 }
 
 /** Why a task stands where it stands, in words ('' when the research does not say). */
@@ -371,12 +406,15 @@ export const researchOffLineMethods = uiModule({
         const L = strings.live;
         const off = s.offLine!;
         // Read only: a phone without the bridge, an archive, a bridge not answering (a narrow window with it acts).
+        // Read only still unfolds a branch to its tasks, without their ⋯ and the branch's choices.
         const phone = !canWrite;
         const never = b.mode === 'never';
-        const open = !phone && !never && branchOpen === b.id;
+        const open = !never && branchOpen === b.id;
         const row = el('div', `research-offline__branch${never ? ' is-never' : ''}${open ? ' is-open' : ''}`);
         row.dataset.branch = b.id;
         const main = el('div', 'research-offline__main');
+        // The whole head (person's line, meta with the count, samples) unfolds the branch; the person link shows them in the tree.
+        const top = el('div', `research-offline__top${never ? '' : ' is-toggle'}`);
         const head = el('div', 'research-offline__line');
         const person = personByRefn(b.person);
         if (person) {
@@ -402,36 +440,46 @@ export const researchOffLineMethods = uiModule({
         tag.appendChild(el('span', undefined, word));
         head.appendChild(tag);
         if (b.grows && !never) head.appendChild(el('span', 'research-offline__grows', L.branchGrows(b.persons)));
-        if (!phone && !never) {
+        if (!never) {
             const expand = el('button', 'research-offline__expand');
             expand.type = 'button';
             expand.setAttribute('aria-expanded', String(open));
-            expand.setAttribute('aria-label', `${branchName(b.id, b.person)}: ${L.branchTakenAria}`);
+            expand.setAttribute('aria-label', `${branchName(b.id, b.person)}: ${L.branchQueue}`);
             const ch = el('span', 'live-section__chevron', open ? '▾' : '▸');
             ch.setAttribute('aria-hidden', 'true');
             expand.appendChild(ch);
-            expand.onclick = () => {
+            head.prepend(expand);
+            top.onclick = (e) => {
+                if ((e.target as HTMLElement).closest('.live-person-link')) return;
                 branchOpen = open ? null : b.id;
                 this.closeBranchPopups();
+                this.closeLiveTaskMenu();
                 this.renderResearchOverview();
+                document.querySelector<HTMLElement>(`#research-overview .research-offline__branch[data-branch="${CSS.escape(b.id)}"] .research-offline__expand`)
+                    ?.focus({ preventScroll: true });
             };
-            head.prepend(expand);
         }
-        main.appendChild(head);
+        top.appendChild(head);
+        const view = branchQueueView(s.queue, s.queueMore, b);
         const meta = el('div', 'research-direction__meta research-offline__meta');
         if (b.via) meta.appendChild(el('span', undefined, branchViaText(b)));
         const near = s.researches.find(d => d.id === b.nearest);
         if (near) meta.appendChild(el('span', undefined, `${L.dirNear(near.name)}${near.state === 'paused' ? ` ${L.dirNearPaused}` : ''}`));
-        meta.appendChild(el('span', undefined, L.dirTasks(b.tasks)));
-        main.appendChild(meta);
-        if (b.samples.length > 0) {
+        meta.appendChild(el('span', 'research-offline__count', !never && view.total === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
+        top.appendChild(meta);
+        if (b.samples.length > 0 && !open && !never) {
             const samples = el('div', 'research-offline__samples', b.samples.map(x => x.text).join(' · '));
             samples.title = b.samples.map(x => x.text).join('\n');
-            main.appendChild(samples);
+            top.appendChild(samples);
         }
+        main.appendChild(top);
+        if (never) main.appendChild(el('div', 'research-offline__never-note', L.branchNeverTasks));
         const problem = branchProblems.get(b.id);
         if (problem) main.appendChild(problemBox(problem));
-        if (open) main.appendChild(this.offLineBranchChoices(s, b, off.mode, canWrite));
+        if (open) {
+            main.appendChild(this.branchTaskList(s, b, canWrite, 'section'));
+            if (canWrite) main.appendChild(this.offLineBranchChoices(s, b, off.mode, canWrite));
+        }
         if (never && !phone && canWrite) {
             const reset = el('button', 'link-button research-offline__reset', L.branchReset);
             reset.type = 'button';
@@ -455,7 +503,7 @@ export const researchOffLineMethods = uiModule({
         return row;
     },
 
-    /** An open branch: "Taken:" Now and then · At the end · As usual, Add to the direction {nearest}, Branch tasks ›. */
+    /** An open branch's choices under its tasks: "Taken:" Now and then · At the end · As usual, Add to the direction {nearest}. */
     offLineBranchChoices(s: LiveSession, b: OffLineBranch, treeMode: OffLineMode, canWrite: boolean): HTMLElement {
         const L = strings.live;
         const box = el('div', 'research-offline__choices');
@@ -509,25 +557,114 @@ export const researchOffLineMethods = uiModule({
             };
             acts.appendChild(add);
         }
-        const tasks = el('button', 'link-button research-offline__tasks', L.branchTasks);
-        tasks.type = 'button';
-        tasks.dataset.do = 'tasks';
-        tasks.onclick = () => this.showBranchTasks(b.id);
-        acts.appendChild(tasks);
-        box.appendChild(acts);
+        if (acts.childElementCount > 0) box.appendChild(acts);
         return box;
     },
 
-    /** The queue narrowed to a branch's tasks (a chip says so; × shows all again). */
-    showBranchTasks(id: string): void {
+    /**
+     * A branch's tasks under it (§9.1a): "In the queue" over its first three
+     * tasks in the queue's order, each with its number in the queue (the arc
+     * while the agent works on it), a hand-set place said under it and the
+     * queue's ⋯ (read only: none); its tasks set aside below, muted; "All {n}
+     * tasks in the queue ›" when not all fit; a sentence when none is up next.
+     */
+    branchTaskList(s: LiveSession, b: OffLineBranch, canWrite: boolean, where: 'section' | 'detail'): HTMLElement {
+        const L = strings.live;
+        const view = branchQueueView(s.queue, s.queueMore, b);
+        const box = el('div', 'research-offline__queue');
+        box.dataset.branch = b.id;
+        const label = view.total === 0 ? L.branchQueue
+            : view.rows.length < view.total ? L.branchQueueHead(view.rows.length, view.total) : L.branchQueueAll;
+        box.appendChild(el('div', 'research-offline__queue-head', label));
+        const list = el('ul', 'research-offline__tasks');
+        const menu = canWrite && (taskOrderOffered(s) || this.researchLinkAvailable('task'));
+        for (const { q, pos } of view.rows) {
+            const li = el('li', 'research-offline__task');
+            li.dataset.task = q.id;
+            const doing = s.working.some(w => !!w.task && w.task === q.text);
+            if (doing) {
+                const arc = el('span', 'research-offline__task-num agent-mark agent-mark--spin');
+                arc.setAttribute('aria-label', L.branchQueuePos(pos));
+                li.appendChild(arc);
+            } else {
+                const num = el('span', 'research-offline__task-num', String(pos));
+                num.setAttribute('aria-label', L.branchQueuePos(pos));
+                li.appendChild(num);
+            }
+            const text = el('span', 'research-offline__task-text', q.text);
+            // Only a hand-set place: the rest of the reason repeats the branch's row.
+            if (q.own) text.appendChild(el('span', 'research-offline__task-why', q.own === 'next' ? L.qWhyManualNext : L.qWhyManualLast));
+            if (doing) text.appendChild(el('span', 'research-offline__task-why', L.taskDoing));
+            const problem = this.taskOrderProblem(q.id);
+            if (problem) {
+                const p = el('span', 'live-queue-problem', problem);
+                p.setAttribute('role', 'alert');
+                text.appendChild(p);
+            }
+            if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
+            li.appendChild(text);
+            if (menu) {
+                const more = el('button', 'live-queue-more research-offline__task-more', '⋯');
+                more.type = 'button';
+                more.setAttribute('aria-label', strings.research.taskMenu);
+                more.setAttribute('aria-haspopup', 'menu');
+                more.dataset.task = q.id;
+                more.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openLiveTaskMenu(more, q.id);
+                };
+                li.appendChild(more);
+            }
+            list.appendChild(li);
+        }
+        for (const q of view.parked) {
+            const li = el('li', 'research-offline__task is-parked');
+            li.dataset.task = q.id;
+            li.appendChild(el('span', 'research-offline__task-num'));
+            const text = el('span', 'research-offline__task-text', L.branchParked(q.text));
+            const why = queueWhyText(q, s) || queueNoteText(q);
+            if (why) text.appendChild(el('span', 'research-offline__task-why', why));
+            li.appendChild(text);
+            list.appendChild(li);
+        }
+        if (list.childElementCount > 0) box.appendChild(list);
+        if (view.total === 0) {
+            box.appendChild(el('p', 'research-offline__queue-empty', view.parked.length > 0 ? L.branchQueueOnlyParked : L.branchQueueEmpty));
+        }
+        if (view.total > view.rows.length) {
+            const all = el('button', 'link-button research-offline__all', L.branchAllTasks(view.total));
+            all.type = 'button';
+            all.dataset.do = 'all-tasks';
+            all.dataset.branch = b.id;
+            all.onclick = (e) => {
+                e.stopPropagation();
+                this.showBranchTasks(b.id, where);
+            };
+            box.appendChild(all);
+        }
+        return box;
+    },
+
+    /**
+     * The whole queue narrowed to a branch's tasks: the queue unfolded, its
+     * heading and the chip "Branch {name} {n} ×" at the top of the panel, the
+     * focus on the chip (its × brings the focus back to the link).
+     */
+    showBranchTasks(id: string, where: 'section' | 'detail' = 'section'): void {
         const s = liveSession();
         if (!s) return;
+        this.closeLiveTaskMenu();
         setQueueBranchFilter(s, id);
+        chipFrom = { branch: id, where };
         setQueueDirectionFilter('all');
         this.unfoldOverviewSection('queue');
         this.renderResearchOverview();
-        document.querySelector<HTMLElement>('#research-overview .research-offline__chip')?.focus();
-        document.querySelector('#research-overview .live-queue')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
+        if (body && heading) {
+            body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+        }
+        document.querySelector<HTMLElement>('#research-overview .research-offline__chip')?.focus({ preventScroll: true });
     },
 
     /** The chip of a narrowed queue: "Branch {name} {n} ×". */
@@ -539,9 +676,13 @@ export const researchOffLineMethods = uiModule({
         chip.title = L.branchQueueChipClear;
         chip.dataset.branch = id;
         chip.onclick = () => {
+            const from = chipFrom?.branch === id ? chipFrom : null;
             setQueueBranchFilter(s, null);
             this.renderResearchOverview();
-            document.querySelector<HTMLElement>('#research-overview .research-overview__queue-filters .research-overview__filter')?.focus();
+            // Back to the link it came from, when its branch is still unfolded; else the queue's first pill.
+            const link = from ? document.querySelector<HTMLElement>(
+                `#research-overview .research-offline__all[data-branch="${CSS.escape(id)}"]`) : null;
+            (link ?? document.querySelector<HTMLElement>('#research-overview .research-overview__queue-filters .research-overview__filter'))?.focus();
         };
         return chip;
     },
@@ -704,6 +845,7 @@ export const researchOffLineMethods = uiModule({
                 : to === 'default' ? { mode: treeMode, own: false, line: undefined } : { mode: to, own: true, line: undefined }),
         };
         s.offLine = { ...s.offLine, branches: s.offLine.branches.map(x => x.id === b.id ? next : x) };
+        if (helpsOpen === b.id && next.mode !== 'line') helpsOpen = null;
         if (next.mode === 'line' || next.mode === 'never') {
             if (branchOpen === b.id) branchOpen = null;
             if (queueBranch?.id === b.id && next.mode === 'never') queueBranch = null;
@@ -726,21 +868,52 @@ export const researchOffLineMethods = uiModule({
     appendDirectionBranches(detail: HTMLElement, s: LiveSession, d: LiveDirection, canWrite: boolean): void {
         if (!offLineShown(s)) return;
         const L = strings.live;
+        // "·" goes with the part after it: a wrapped line never ends with a dot.
+        const part = (control: HTMLElement): HTMLElement => {
+            const group = el('span', 'research-offline__helps-part');
+            const dot = el('span', 'research-offline__sep', '·');
+            dot.setAttribute('aria-hidden', 'true');
+            group.append(dot, control);
+            return group;
+        };
         for (const b of s.offLine!.branches.filter(x => x.mode === 'line' && x.line === d.id)) {
+            const wrap = el('div', 'research-offline__helps-box');
+            wrap.dataset.branch = b.id;
             const line = el('div', 'research-offline__helps');
             line.dataset.branch = b.id;
-            line.appendChild(el('span', undefined, L.dirBranchHelps(branchName(b.id, b.person), b.tasks)));
+            line.appendChild(el('span', undefined, L.dirBranchHelps(branchName(b.id, b.person))));
+            // The count unfolds the branch's tasks under the line (the same list as in the section).
+            const open = helpsOpen === b.id;
+            const toggle = el('button', 'link-button research-offline__helps-toggle');
+            toggle.type = 'button';
+            toggle.dataset.do = 'branch-tasks';
+            toggle.setAttribute('aria-expanded', String(open));
+            const ch = el('span', 'live-section__chevron', open ? '▾' : '▸');
+            ch.setAttribute('aria-hidden', 'true');
+            const view = branchQueueView(s.queue, s.queueMore, b);
+            toggle.append(ch, el('span', undefined, view.total === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
+            toggle.onclick = (e) => {
+                e.stopPropagation();
+                helpsOpen = open ? null : b.id;
+                this.closeLiveTaskMenu();
+                this.redrawDirections();
+                document.querySelector<HTMLElement>(`#research-overview .research-offline__helps[data-branch="${CSS.escape(b.id)}"] .research-offline__helps-toggle`)
+                    ?.focus({ preventScroll: true });
+            };
+            line.appendChild(part(toggle));
             if (canWrite) {
                 const remove = el('button', 'link-button research-offline__remove', L.dirBranchRemove);
                 remove.type = 'button';
                 remove.dataset.do = 'remove-branch';
                 if (!branchBusy.has(b.id)) remove.onclick = () => void this.changeBranchMode(b, 'default');
-                line.appendChild(remove);
+                line.appendChild(part(remove));
             }
             const problem = branchProblems.get(b.id);
             if (problem) line.appendChild(problemBox(problem));
+            wrap.appendChild(line);
+            if (open) wrap.appendChild(this.branchTaskList(s, b, canWrite, 'detail'));
             const actions = detail.querySelector('.research-direction__actions');
-            detail.insertBefore(line, actions);
+            detail.insertBefore(wrap, actions);
         }
     },
 

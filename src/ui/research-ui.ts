@@ -3405,7 +3405,7 @@ export const researchUiMethods = uiModule({
         // panel's selected line too (one choice), so it narrows both.
         const dirFilter = queueDirectionFilter(s);
         const multi = directions && (directionsMulti(s) || dirFilter !== 'all');
-        // The overview narrowed to one branch outside the directions ("Branch tasks ›").
+        // The overview narrowed to one branch outside the directions ("All N tasks in the queue ›").
         const branch = directions ? queueBranchFilter(s) : null;
         const inFilter = (q: LiveQueueItem): boolean => branch ? q.branch === branch
             : dirFilter === 'all' || q.research === dirFilter;

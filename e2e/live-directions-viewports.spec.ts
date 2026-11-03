@@ -236,6 +236,13 @@ test.describe('directions on every screen', () => {
             await expect(item.locator('.research-offline__elsewhere')).toHaveText('It can be answered in Strom on the computer or in the terminal.');
             // The branches: shown, no choices.
             await expect(section(page).locator('.research-offline__more')).toHaveCount(0);
+            // A branch unfolds to its tasks read only: no ⋯, no segment, no Add to the direction.
+            const alois = section(page).locator('.research-offline__branch[data-branch="B-P0031"]');
+            if (await alois.count() === 0) await section(page).locator('.research-offline__toggle').click();
+            await alois.locator('.research-offline__expand').click();
+            await expect(alois.locator('.research-offline__task-text')).toHaveText(['Sňatek Aloise Fíška, Vídeň 1894']);
+            await expect(alois.locator('.research-offline__task-num')).toHaveText(['2']);
+            await expect(alois.locator('.research-offline__task-more, .research-offline__segment, .research-offline__add')).toHaveCount(0);
             await noSideways(page, '390 phone');
             await directionRow(page, 'G0002').locator('.research-direction__head').tap();
             await expect(overview(page)).toHaveCount(0);
