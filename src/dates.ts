@@ -308,11 +308,45 @@ const PERIOD_TEXT: Record<'cs' | 'en' | 'de' | 'pl', { from: string; to: string;
 const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
+ * Polish month names by the case a preposition asks for: the nominative alone
+ * ('maj 1880'), the genitive after ok./od/do ('ok. maja 1880'), the
+ * instrumental after przed/między ('przed majem 1880'), the locative after po
+ * ('po maju 1880').
+ */
+type PlMonthCase = 'nom' | 'gen' | 'ins' | 'loc';
+const MONTH_PL: Record<PlMonthCase, string[]> = {
+    nom: ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'],
+    gen: ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'],
+    ins: ['styczniem', 'lutym', 'marcem', 'kwietniem', 'majem', 'czerwcem', 'lipcem', 'sierpniem', 'wrześniem', 'październikiem', 'listopadem', 'grudniem'],
+    loc: ['styczniu', 'lutym', 'marcu', 'kwietniu', 'maju', 'czerwcu', 'lipcu', 'sierpniu', 'wrześniu', 'październiku', 'listopadzie', 'grudniu'],
+};
+/** The case of a Polish month after a qualifier word. */
+const PL_QUALIFIER_CASE: Record<Exclude<DateQualifier, ''>, PlMonthCase> = { '~': 'gen', '<': 'ins', '>': 'loc' };
+
+/** The date itself, without qualifier words ('15. 5. 1880', 'May 1880', 'maja 1880'). */
+function flexDateCore(d: { year: number; month?: number; day?: number }, locale: 'cs' | 'en' | 'de' | 'pl', plCase: PlMonthCase): string {
+    if (d.day !== undefined && d.month !== undefined) {
+        return locale === 'cs'
+            ? `${d.day}. ${d.month}. ${d.year}`
+            : locale === 'de' || locale === 'pl'
+                ? `${d.day}.${d.month}.${d.year}`
+                : `${d.day} ${MONTH_ABBR_EN[d.month - 1]} ${d.year}`;
+    }
+    if (d.month !== undefined) {
+        return locale === 'en' ? `${MONTH_ABBR_EN[d.month - 1]} ${d.year}`
+            : locale === 'pl' ? `${MONTH_PL[plCase][d.month - 1]} ${d.year}`
+            : `${d.month}/${d.year}`;
+    }
+    return `${d.year}`;
+}
+
+/**
  * Human-readable form for tooltips/details:
  *   cs: '15. 5. 1880', '5/1880', 'kolem 1880'
  *   en: '15 May 1880', 'May 1880', 'about 1880'
  *   de: '15.5.1880', '5/1880', 'um 1880'
- *   pl: '15.05.1880', '5/1880', 'ok. 1880' (Polish writes day and month with two digits)
+ *   pl: '15.5.1880', 'maj 1880', 'ok. 1880' (no leading zeros in running
+ *       text; a month is named, in the case its preposition asks for)
  * English names the month: an all-numeric '3/4/1850' reads differently in the
  * US and in Britain. Every English form parses back through normalizeDateInput.
  */
@@ -321,40 +355,27 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de' | 'pl')
     if (!d) return value ?? '';
     const cur = getCurrentLanguage();
     const locale = lang ?? (cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : cur === 'pl' ? 'pl' : 'en');
-
-    let core: string;
-    if (d.day !== undefined && d.month !== undefined) {
-        core = locale === 'cs'
-            ? `${d.day}. ${d.month}. ${d.year}`
-            : locale === 'de'
-                ? `${d.day}.${d.month}.${d.year}`
-                : locale === 'pl'
-                ? `${String(d.day).padStart(2, '0')}.${String(d.month).padStart(2, '0')}.${d.year}`
-                : `${d.day} ${MONTH_ABBR_EN[d.month - 1]} ${d.year}`;
-    } else if (d.month !== undefined) {
-        core = locale === 'en' ? `${MONTH_ABBR_EN[d.month - 1]} ${d.year}` : `${d.month}/${d.year}`;
-    } else {
-        core = `${d.year}`;
-    }
+    const core = (c: PlMonthCase) => flexDateCore(d, locale, c);
 
     if (d.period) {
         const w = PERIOD_TEXT[locale];
-        if (!d.end) return `${d.qualifier === '<' ? w.to : w.since} ${core}`;
-        return `${w.from} ${core} ${w.to} ${formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale)}`;
+        // Polish od/do take the genitive.
+        if (!d.end) return `${d.qualifier === '<' ? w.to : w.since} ${core('gen')}`;
+        return `${w.from} ${core('gen')} ${w.to} ${flexDateCore(d.end, locale, 'gen')}`;
     }
 
     if (d.end) {
-        const endCore = formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale);
+        const endCore = flexDateCore(d.end, locale, 'ins');
         return locale === 'cs'
-            ? `mezi ${core} a ${endCore}`
+            ? `mezi ${core('ins')} a ${endCore}`
             : locale === 'de'
-                ? `zwischen ${core} und ${endCore}`
+                ? `zwischen ${core('ins')} und ${endCore}`
                 : locale === 'pl'
-                ? `między ${core} a ${endCore}`
-                : `between ${core} and ${endCore}`;
+                ? `między ${core('ins')} a ${endCore}`
+                : `between ${core('ins')} and ${endCore}`;
     }
 
-    return d.qualifier ? `${QUALIFIER_TEXT[locale][d.qualifier]} ${core}` : core;
+    return d.qualifier ? `${QUALIFIER_TEXT[locale][d.qualifier]} ${core(PL_QUALIFIER_CASE[d.qualifier])}` : core('nom');
 }
 
 /**

@@ -133,7 +133,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         // Action descriptions
         createdPerson: (name: string) => `Utworzono osobę: ${name}`,
         createdPlaceholder: (gender: string) => `Utworzono osobę zastępczą (${gender})`,
-        updatedPerson: (name: string, fields: string) => `Zaktualizowano ${name}: ${fields}`,
+        updatedPerson: (name: string, fields: string) => `Zaktualizowano osobę ${name}: ${fields}`,
         // A line of an edit: which surname the person goes by (Person.primaryName).
         primaryName: (a: string, b: string) => `Używane nazwisko: ${a} → ${b}`,
         primaryBirth: 'rodowe',
@@ -295,7 +295,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         section: 'Opowieść',
         titleField: 'Podtytuł rozdziału',
         text: 'Tekst opowieści',
-        hint: 'Spójny tekst zbudowany na faktach — w księdze rodu stoi dopiero po nich. Nie jest źródłem. Tekst między parami gwiazdek jest w księdze składany pogrubioną czcionką.',
+        hint: 'Spójny tekst zbudowany na faktach – w Księdze rodu jest umieszczany dopiero po nich. Nie jest źródłem. Tekst między parami gwiazdek jest w księdze składany pogrubioną czcionką.',
         status: 'Stan',
         statusDraft: 'Szkic',
         facts: 'Opiera się na',
@@ -348,12 +348,12 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         title: 'Eksport jako plakat',
         description: 'Eksport bieżącego widoku jako grafika wektorowa, obraz lub plakat do druku na wielu stronach.',
         printsView: 'Drukuje bieżący widok:',
-        viewFamily: (name: string, up: number, down: number) => `Rodzina — od osoby ${name} (głębokość ${up}/${down})`,
+        viewFamily: (name: string, up: number, down: number) => `Rodzina – od osoby ${name} (głębokość ${up}/${down})`,
         viewDescendants: (name: string) => `Potomkowie osoby ${name}`,
-        viewFan: (name: string, gens: number) => `Wachlarz — przodkowie osoby ${name}, pokolenia: ${gens}`,
-        viewFanTwoWay: (name: string, gens: number, desc: number) => `Wachlarz — przodkowie i potomkowie osoby ${name}, pokolenia w górę: ${gens}, w dół: ${desc}`,
-        viewTimeline: (name: string) => `Oś czasu — widok osoby ${name}`,
-        viewMapBlocked: 'Mapy nie można wydrukować jako plakatu — druk wymaga przełączenia na widok drzewa.',
+        viewFan: (name: string, gens: number) => `Wachlarz – przodkowie osoby ${name}, pokolenia: ${gens}`,
+        viewFanTwoWay: (name: string, gens: number, desc: number) => `Wachlarz – przodkowie i potomkowie osoby ${name}, pokolenia w górę: ${gens}, w dół: ${desc}`,
+        viewTimeline: (name: string) => `Oś czasu – widok osoby ${name}`,
+        viewMapBlocked: 'Mapy nie można wydrukować jako plakatu – druk wymaga przełączenia na widok drzewa.',
         svg: 'SVG (wektor)',
         svgDesc: 'Skalowalny wektor, otwiera się w przeglądarce lub w Inkscape',
         png: 'PNG (obraz)',
@@ -364,15 +364,15 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         orientation: 'Orientacja',
         portrait: 'Pionowo',
         landscape: 'Poziomo',
-        empty: 'Brak danych do eksportu — najpierw trzeba otworzyć drzewo.',
+        empty: 'Brak danych do eksportu – najpierw trzeba otworzyć drzewo.',
         pngScaledDown: 'Obraz został zmniejszony ze względu na limit rozmiaru.',
         pngError: 'Nie udało się utworzyć obrazu.',
         pageLabel: (row: number, col: number) => `wiersz ${row} · kolumna ${col}`,
         guideOption: 'Dodaj stronę początkową z instrukcją sklejania',
         guideTitle: 'Instrukcja sklejania',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
-            `${nPl(pages, 'arkusz', 'arkusze', 'arkuszy')} (${rows} × ${cols}), zakładka ${overlap} mm — skleja się według siatki poniżej.`,
-        emptySheet: 'pusty — nie jest drukowany'
+            `${nPl(pages, 'arkusz', 'arkusze', 'arkuszy')} (${rows} × ${cols}), zakładka ${overlap} mm – skleja się według siatki poniżej.`,
+        emptySheet: 'pusty – nie jest drukowany'
     },
 
     /** Other research trees' state (switcher marks, "Elsewhere" in the panel, a bridge not answering; spec 011). */

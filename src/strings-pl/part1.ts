@@ -31,7 +31,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         makeTreeFromView: 'Utwórz drzewo z bieżącego widoku',
         makeTreeFromViewDesc: 'Nowe drzewo z wyświetlonych osób, od razu w aplikacji',
         splitFamilies: 'Podziel na rodziny…',
-        splitFamiliesHint: 'Rozcina jedno połączone drzewo na osobne drzewo dla każdej rodziny — według rodów (nazwisk) albo według gałęzi.',
+        splitFamiliesHint: 'Rozcina jedno połączone drzewo na osobne drzewo dla każdej rodziny – według rodów (nazwisk) albo według gałęzi.',
         mergeViewInto: 'Scal widok z…',
         exportAll: 'Eksport…',
         forFamily: 'Dla rodziny',
@@ -67,15 +67,15 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         addFirst: 'Dodaj pierwszą osobę',
         importFromFile: 'Dane są gdzie indziej (GEDCOM z MyHeritage, Ancestry…)',
         youCard: 'ja?',
-        lockedTitle: 'Dane są zablokowane — aby kontynuować, trzeba je odblokować',
+        lockedTitle: 'Dane są zablokowane – aby kontynuować, trzeba je odblokować',
         lockedSubtitle: 'Drzewo jest zaszyfrowane. Przeglądanie i edycja są możliwe po podaniu hasła.'
     },
 
     demo: {
         tryDemo: 'Wypróbuj drzewo przykładowe',
-        tryDemoDesc: 'Zmyślona rodzina, która pokazuje, co wszystko może zawierać drzewo',
+        tryDemoDesc: 'Zmyślona rodzina, która pokazuje, wszystko, co może zawierać drzewo',
         treeName: 'Przykład: ród Bergów',
-        hint: 'Kliknięcie karty otwiera akcje. To zwykłe drzewo — można je usunąć w zarządzaniu drzewami.',
+        hint: 'Kliknięcie karty otwiera akcje. To zwykłe drzewo – można je usunąć w zarządzaniu drzewami.',
         // The made-up family's words; its names and places read the same in every language.
         data: {
             farmer: 'Gospodarz',
@@ -203,7 +203,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         morePlaces: (n: number) => `i jeszcze ${n}`,
         placePersons: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
         maleLine: 'Linia męska',
-        marriedInto: { m: (label: string) => `wżenił się w ród ${label}`, f: (label: string) => `wżeniła się w ród ${label}`, u: (label: string) => `przez małżeństwo do rodu ${label}` },
+        marriedInto: { m: (label: string) => `wżenił się do rodu ${label}`, f: (label: string) => `wżeniła się do rodu ${label}`, u: (label: string) => `przez małżeństwo do rodu ${label}` },
         spouseRod: (label: string) => `(ród ${label})`,
         fromRod: (label: string) => `z rodu ${label}`,
         chapterKicker: (n: number, gen: number) => `Rozdział ${n} · ${gen}. pokolenie`,
@@ -292,7 +292,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     // Versioned backups
     fileCopy: {
-        indicatorTitle: 'Zmiany są tylko w przeglądarce, jeszcze nie w pliku — przeglądarka może je usunąć',
+        indicatorTitle: 'Zmiany są tylko w przeglądarce, jeszcze nie w pliku – przeglądarka może je usunąć',
         indicatorShort: 'Tylko w przeglądarce',
         savedShort: 'Zapisano w pliku',
         persistentShort: 'Trwała pamięć',
@@ -302,10 +302,10 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         openBadge: 'otwarte',
         moreHint: 'Więcej – zmiany nie są zapisane',
         title: 'Gdzie są dane',
-        intro: 'Drzewa są przechowywane tylko w tej przeglądarce na tym urządzeniu — bez konta, bez serwera. Oznacza to jednak, że jedyną kopię ma przeglądarka, dopóki drzewo nie zostanie zapisane do pliku.',
+        intro: 'Drzewa są przechowywane tylko w tej przeglądarce na tym urządzeniu – bez konta, bez serwera. Oznacza to jednak, że jedyną kopię ma przeglądarka, dopóki drzewo nie zostanie zapisane do pliku.',
         statePersistent: 'Ta przeglądarka przechowuje dane trwale: sama drzew nie usunie.',
         stateNotPersistent: 'Ta pamięć nie jest trwała: przeglądarka może ją wyczyścić, na przykład gdy na urządzeniu kończy się miejsce.',
-        stateUnsupported: 'Ta przeglądarka nie informuje, czy przechowuje dane trwale — trzeba się liczyć z tym, że może je usunąć.',
+        stateUnsupported: 'Ta przeglądarka nie informuje, czy przechowuje dane trwale – trzeba się liczyć z tym, że może je usunąć.',
         statePrivate: 'To jest okno prywatne: po jego zamknięciu przeglądarka usunie drzewa.',
         noticePrivate: 'Okno prywatne: po jego zamknięciu drzewa znikną. Zachowa je zapis do pliku albo zwykłe okno przeglądarki.',
         adviceResearch: (lead: string) => `Do badania przodków lepiej nadaje się Chrome lub Edge. ${lead}`,
@@ -314,11 +314,11 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         copyChanged: 'Zmiany od tamtej pory są tylko w przeglądarce.',
         copyUpToDate: 'Od tamtej pory nic się nie zmieniło.',
         adviceInstall: 'Pomóc może instalacja Stromu jako aplikacji: przeglądarka zwykle przechowuje wtedy dane trwale. Mimo to dobrze jest od czasu do czasu zapisać drzewo do pliku.',
-        adviceInstallMenu: 'Pomóc może instalacja Stromu jako aplikacji: w Chrome lub Edge ikoną instalacji po prawej stronie paska adresu albo w menu przeglądarki → Zainstaluj Strom (Edge: Aplikacje → Zainstaluj tę witrynę jako aplikację). Zainstalowana aplikacja zwykle dostaje pamięć, którą przeglądarka przechowuje trwale. Jeśli Strom jest już zainstalowany, lepiej otwierać go stamtąd, a nie w karcie — dane przechowuje okno aplikacji. Mimo to dobrze jest od czasu do czasu zapisać drzewo do pliku.',
+        adviceInstallMenu: 'Pomóc może instalacja Stromu jako aplikacji: w Chrome lub Edge ikoną instalacji po prawej stronie paska adresu albo w menu przeglądarki → Zainstaluj Strom (Edge: Aplikacje → Zainstaluj tę witrynę jako aplikację). Zainstalowana aplikacja zwykle dostaje pamięć, którą przeglądarka przechowuje trwale. Jeśli Strom jest już zainstalowany, lepiej otwierać go stamtąd, a nie w karcie – dane przechowuje okno aplikacji. Mimo to dobrze jest od czasu do czasu zapisać drzewo do pliku.',
         adviceFirefox: 'Firefox pyta, zanim zapisze dane witryny trwale. Wystarczy na to zezwolić: ikona po lewej stronie paska adresu → uprawnienia → trwałe przechowywanie. Firefox nie potrafi zainstalować Stromu jako aplikacji; do tego trzeba otworzyć Strom w Chrome lub Edge i przenieść drzewo (tu wyeksportować, tam zaimportować). Mimo to dobrze jest od czasu do czasu zapisać drzewo do pliku.',
-        adviceMacDock: 'Pomóc może dodanie Stromu do Docka (w Safari: Plik → Dodaj do Docka). W karcie Safari dane witryny mogą zostać usunięte, gdy przez jakiś czas nie jest używana; aplikacji w Docku ta 7-dniowa reguła nie dotyczy. Ma ona jednak własną pamięć — drzewo trzeba tu wyeksportować, a w aplikacji zaimportować. Mimo to dobrze jest zapisywać je do pliku.',
-        adviceIosSafari: 'Na iPhonie i iPadzie Safari może usunąć dane witryny, gdy przez jakiś czas nie jest używana (7-dniowa reguła Apple, liczona w bardziej złożony sposób niż po prostu dni od ostatniej wizyty). Pomóc może dodanie Stromu do ekranu początkowego (Udostępnij → Do ekranu początkowego): aplikacja na ekranie początkowym standardowo tej regule nie podlega. Ma ona jednak własną pamięć — drzewo trzeba tu wyeksportować, a w aplikacji zaimportować. Mimo to dobrze jest zapisywać je do pliku (na przykład na iCloud Drive).',
-        adviceIosApp: 'iOS nie gwarantuje pamięci nawet aplikacjom na ekranie początkowym — przy braku miejsca może ją wyczyścić. Dlatego dobrze jest od czasu do czasu zapisać drzewo do pliku, najlepiej na iCloud Drive.',
+        adviceMacDock: 'Pomóc może dodanie Stromu do Docka (w Safari: Plik → Dodaj do Docka). W karcie Safari dane witryny mogą zostać usunięte, gdy przez jakiś czas nie jest używana; aplikacji w Docku ta 7-dniowa reguła nie dotyczy. Ma ona jednak własną pamięć – drzewo trzeba tu wyeksportować, a w aplikacji zaimportować. Mimo to dobrze jest zapisywać je do pliku.',
+        adviceIosSafari: 'Na iPhonie i iPadzie Safari może usunąć dane witryny, gdy przez jakiś czas nie jest używana (7-dniowa reguła Apple, liczona w bardziej złożony sposób niż po prostu dni od ostatniej wizyty). Pomóc może dodanie Stromu do ekranu początkowego (Udostępnij → Do ekranu początkowego): aplikacja na ekranie początkowym standardowo tej regule nie podlega. Ma ona jednak własną pamięć – drzewo trzeba tu wyeksportować, a w aplikacji zaimportować. Mimo to dobrze jest zapisywać je do pliku (na przykład na iCloud Drive).',
+        adviceIosApp: 'iOS nie gwarantuje pamięci nawet aplikacjom na ekranie początkowym – przy braku miejsca może ją wyczyścić. Dlatego dobrze jest od czasu do czasu zapisać drzewo do pliku, najlepiej na iCloud Drive.',
         adviceFile: 'Dobrze jest od czasu do czasu zapisać drzewo do pliku (Eksportuj), najlepiej w chmurze lub na innym dysku.',
         backupsNote: 'Kopie zapasowe w aplikacji leżą w tej samej pamięci przeglądarki: pozwalają cofnąć błąd, ale gdy przeglądarka wyczyści pamięć, znikną razem z nią. Trwałą kopią jest plik.',
         save: 'Zapisz do pliku',
@@ -336,13 +336,13 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         saveShortcut: (keys: string) => `Zapisz do pliku: ${keys}`,
         menuUnsaved: 'Tylko w przeglądarce',
         notice: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej przeglądarce, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku.`,
-        noticeInstall: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej przeglądarce, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku — i zainstalować Strom jako aplikację, aby przeglądarka przechowywała dane.`,
-        noticeInstallMenu: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej karcie przeglądarki, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku — i zainstalować Strom jako aplikację (ikona w pasku adresu lub menu przeglądarki), aby przeglądarka przechowywała dane.`,
-        noticeFirefox: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej przeglądarce, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku — i zezwolić Firefoksowi na trwałe przechowywanie (uprawnienia witryny w pasku adresu) albo używać Stromu jako aplikacji w Chrome lub Edge.`,
-        noticeMacDock: (name: string) => `Zmiany w drzewie „${name}” są tylko w Safari, które może usunąć dane witryny, gdy przez jakiś czas nie jest używana. Dobrze jest na bieżąco zapisywać drzewo do pliku — i dodać Strom do Docka (Plik → Dodaj do Docka).`,
-        noticeIosSafari: (name: string) => `Zmiany w drzewie „${name}” są tylko w Safari, które może usunąć dane witryny, gdy przez jakiś czas nie jest używana. Dobrze jest na bieżąco zapisywać drzewo do pliku — i dodać Strom do ekranu początkowego.`,
+        noticeInstall: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej przeglądarce, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku – i zainstalować Strom jako aplikację, aby przeglądarka przechowywała dane.`,
+        noticeInstallMenu: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej karcie przeglądarki, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku – i zainstalować Strom jako aplikację (ikona w pasku adresu lub menu przeglądarki), aby przeglądarka przechowywała dane.`,
+        noticeFirefox: (name: string) => `Zmiany w drzewie „${name}” są tylko w tej przeglądarce, która może je usunąć. Dobrze jest na bieżąco zapisywać drzewo do pliku – i zezwolić Firefoksowi na trwałe przechowywanie (uprawnienia witryny w pasku adresu) albo używać Stromu jako aplikacji w Chrome lub Edge.`,
+        noticeMacDock: (name: string) => `Zmiany w drzewie „${name}” są tylko w Safari, które może usunąć dane witryny, gdy przez jakiś czas nie jest używana. Dobrze jest na bieżąco zapisywać drzewo do pliku – i dodać Strom do Docka (Plik → Dodaj do Docka).`,
+        noticeIosSafari: (name: string) => `Zmiany w drzewie „${name}” są tylko w Safari, które może usunąć dane witryny, gdy przez jakiś czas nie jest używana. Dobrze jest na bieżąco zapisywać drzewo do pliku – i dodać Strom do ekranu początkowego.`,
         settingLabel: 'Przypomnienie o zapisie do pliku',
-        settingHint: 'Powiadomienie przy pierwszej zmianie, która jest tylko w pamięci przeglądarki, a ta może zostać wyczyszczona — ponownie dopiero po zapisie i kolejnej zmianie. Wskaźnik na pasku pozostaje tak czy inaczej.',
+        settingHint: 'Powiadomienie przy pierwszej zmianie, która jest tylko w pamięci przeglądarki, a ta może zostać wyczyszczona – ponownie dopiero po zapisie i kolejnej zmianie. Wskaźnik na pasku pozostaje tak czy inaczej.',
     },
     snapshots: {
         delete: 'Usuń',
@@ -355,10 +355,10 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         autoOffMessage: (count: number, size: string) => `Drzewo ma ${nPl(count, 'kopię zapasową', 'kopie zapasowe', 'kopii zapasowych')}${size ? ` (${size})` : ''}. Zachować je czy usunąć i zwolnić miejsce?`,
         autoOffKeep: 'Zachowaj kopie',
         autoOffDelete: 'Usuń kopie',
-        trimmed: (tree: string, kept: number) => `Kopie zapasowe drzewa „${tree}” zajmują dużo miejsca (skany i zdjęcia), dlatego starsze kopie automatyczne są usuwane wcześniej — zachowywanych kopii: ${kept}. Trwałą kopię można zapisać, eksportując drzewo do pliku.`,
+        trimmed: (tree: string, kept: number) => `Kopie zapasowe drzewa „${tree}” zajmują dużo miejsca (skany i zdjęcia), dlatego starsze kopie automatyczne są usuwane wcześniej – zachowywanych kopii: ${kept}. Trwałą kopię można zapisać, eksportując drzewo do pliku.`,
         trimmedFull: (kept: number) => `Pamięć przeglądarki jest prawie pełna, dlatego zachowywane są tylko najnowsze kopie zapasowe (${kept}). Miejsce zwolni eksport drzew do plików.`,
         budgetNote: (size: string) => `Kopie zapasowe tego drzewa są duże: najstarsze są usuwane, gdy tylko zajmą więcej niż ${size}; trzy najnowsze zostają zawsze.`,
-        inBrowser: 'Kopie zapasowe są przechowywane w tej przeglądarce, nie w pliku z drzewem — nie powiększają go, ale znikną po wyczyszczeniu danych przeglądarki i nie ma ich na innym komputerze. Kopię do trwałego przechowania tworzy eksport drzewa.',
+        inBrowser: 'Kopie zapasowe są przechowywane w tej przeglądarce, nie w pliku z drzewem – nie powiększają go, ale znikną po wyczyszczeniu danych przeglądarki i nie ma ich na innym komputerze. Kopię do trwałego przechowania tworzy eksport drzewa.',
         menu: 'Kopie zapasowe',
         title: 'Historia kopii zapasowych',
         empty: 'Brak kopii zapasowych',
@@ -367,10 +367,10 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         download: 'Pobierz',
         restored: 'Przywrócono kopię zapasową',
         restoredMissingImages: (n: number) => `Przywrócono kopię zapasową. Brakujące obrazy (nie były już zapisane): ${n}.`,
-        tooBig: (tree: string, size: string) => `Kopie zapasowe drzewa „${tree}” nie mieszczą się w ${size}, które daje im to urządzenie (skany i zdjęcia) — zachowywane są tylko trzy najnowsze. Na tym urządzeniu lepiej wyłączyć automatyczne kopie zapasowe drzewa i zamiast nich eksportować drzewo do pliku.`,
+        tooBig: (tree: string, size: string) => `Kopie zapasowe drzewa „${tree}” nie mieszczą się w ${size}, które daje im to urządzenie (skany i zdjęcia) – zachowywane są tylko trzy najnowsze. Na tym urządzeniu lepiej wyłączyć automatyczne kopie zapasowe drzewa i zamiast nich eksportować drzewo do pliku.`,
         tooBigAction: 'Ustawienia kopii zapasowych',
         created: 'Utworzono kopię zapasową',
-        restoreConfirm: (what: string) => `Przywrócić tę kopię zapasową? Nadpisze bieżące drzewo — bieżący stan zostanie przed przywróceniem zapisany jako kopia zapasowa.${what ? `\n\n${what}` : ''}`,
+        restoreConfirm: (what: string) => `Przywrócić tę kopię zapasową? Nadpisze bieżące drzewo – bieżący stan zostanie przed przywróceniem zapisany jako kopia zapasowa.${what ? `\n\n${what}` : ''}`,
         total: (count: number, size: string) => [nPl(count, 'kopia zapasowa', 'kopie zapasowe', 'kopii zapasowych'), size].filter(Boolean).join(' · '),
         persons: (count: number) => nPl(count, 'osoba', 'osoby', 'osób'),
         reasons: {
@@ -391,24 +391,24 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
     split: {
         postImportTitle: 'Kilka rodzin w jednym pliku',
         postImport: (count: number) =>
-            `Zaimportowany plik zawiera ${nPl(count, 'rodzinę', 'rodziny', 'rodzin')}, których nic nie łączy — nie prowadzi między nimi żaden rodzic, dziecko ani małżeństwo. Każda może być osobnym drzewem.`,
+            `Zaimportowany plik zawiera ${nPl(count, 'rodzinę', 'rodziny', 'rodzin')}, których nic nie łączy – nie prowadzi między nimi żaden rodzic, dziecko ani małżeństwo. Każda może być osobnym drzewem.`,
         menu: 'Wydziel niepołączone części…',
-        menuHint: 'Drzewa z wysp, których nic nie łączy — nie prowadzi między nimi rodzic, dziecko ani małżeństwo.',
+        menuHint: 'Drzewa z wysp, których nic nie łączy – nie prowadzi między nimi rodzic, dziecko ani małżeństwo.',
         title: 'Niepołączone części tego drzewa',
-        intro: 'W tym drzewie są rodziny, których nic nie łączy — nie prowadzi między nimi żaden rodzic, dziecko ani małżeństwo. Każda może być osobnym drzewem.',
-        single: 'Wszyscy w tym drzewie są ze sobą połączeni — jest tu jedna rodzina, więc nie ma czego dzielić.',
+        intro: 'W tym drzewie są rodziny, których nic nie łączy – nie prowadzi między nimi żaden rodzic, dziecko ani małżeństwo. Każda może być osobnym drzewem.',
+        single: 'Wszyscy w tym drzewie są ze sobą połączeni – jest tu jedna rodzina, więc nie ma czego dzielić.',
         familyName: (surname: string) => `Ród ${surname}`,
         persons: (count: number) => nPl(count, 'osoba', 'osoby', 'osób'),
         oldest: (name: string, year: number) => `najstarsza osoba: ${name} (${year})`,
         noSurname: 'bez nazwiska',
         alone: 'Bez połączeń z nikim',
         selected: (count: number) => `Wydziel ${count}`,
-        keepsOriginal: 'Pierwotne drzewo zostaje bez zmian — można je usunąć ręcznie, gdy podział będzie w porządku.',
+        keepsOriginal: 'Pierwotne drzewo zostaje bez zmian – można je usunąć ręcznie, gdy podział będzie w porządku.',
         done: (count: number) => `Utworzono ${nPl(count, 'drzewo', 'drzewa', 'drzew')}. Pierwotne pozostało nietknięte.`,
     },
     splitFamilies: {
         title: 'Podział na rodziny',
-        intro: 'Rodziny, które zawiera to drzewo. Poniżej wybiera się, co liczy się jako jedna rodzina; to samo drzewo dzieli się wtedy zawsze tak samo — wyświetlona osoba określa tylko, która rodzina jest pierwsza i skąd odczytywane są powiązania. Każda osoba trafia dokładnie do jednego drzewa.',
+        intro: 'Rodziny, które zawiera to drzewo. Poniżej wybiera się, co liczy się jako jedna rodzina; to samo drzewo dzieli się wtedy zawsze tak samo – wyświetlona osoba określa tylko, która rodzina jest pierwsza i skąd odczytywane są powiązania. Każda osoba trafia dokładnie do jednego drzewa.',
         // Two ways of cutting (SplitMode): family lines by surname vs. attached branches.
         modeLabel: 'Co jest jedną rodziną',
         modeSurname: 'Rody według nazwisk',
@@ -425,7 +425,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         perspAddPerson: 'Dodaj osobę…',
         perspCutsLabel: (n: number) => `Cięcia przy rodzeństwie (${n})`,
         perspCutHint: 'Zaznaczone = osoba z rodzeństwa zostaje w drzewie podstawowym sama, a jej rodzina będzie drzewem pobocznym. Odznaczenie zostawia rodzinę w drzewie podstawowym.',
-        oneFamilyInMode: 'W tym ujęciu całe drzewo jest jedną rodziną — nie ma czego dzielić.',
+        oneFamilyInMode: 'W tym ujęciu całe drzewo jest jedną rodziną – nie ma czego dzielić.',
         familyName: (name: string) => `Rodzina ${name}`,
         focusHere: 'Wybrana osoba',
         connectsTo: (name: string) => `połączone przez: ${name}`,
@@ -446,21 +446,21 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         },
         create: (count: number) => `Utwórz ${nPl(count, 'drzewo', 'drzewa', 'drzew')}`,
         cancel: 'Anuluj',
-        keepsOriginal: 'Pierwotne drzewo zostaje dokładnie takie, jakie jest. Nowe drzewa pozostają połączone przez wspólne osoby — niechciane można usunąć w Zarządzaniu drzewami.',
+        keepsOriginal: 'Pierwotne drzewo zostaje dokładnie takie, jakie jest. Nowe drzewa pozostają połączone przez wspólne osoby – niechciane można usunąć w Zarządzaniu drzewami.',
         done: (count: number) => `Utworzono ${nPl(count, 'drzewo', 'drzewa', 'drzew')}`,
-        tooSmall: 'To drzewo zawiera tylko jedną rodzinę — nie ma czego dzielić.',
+        tooSmall: 'To drzewo zawiera tylko jedną rodzinę – nie ma czego dzielić.',
     },
 
     advanced: {
         settingLabel: 'Pola zaawansowane',
-        settingHint: 'Pokazuje przy osobie źródła, załączniki, numer referencyjny, inne formy nazwiska i otwarte pytania. Domyślnie wyłączone — u osoby, która ma coś z tego już wypełnione, pole jest widoczne zawsze.',
+        settingHint: 'Pokazuje przy osobie źródła, załączniki, numer referencyjny, inne formy nazwiska i otwarte pytania. Domyślnie wyłączone – u osoby, która ma coś z tego już wypełnione, pole jest widoczne zawsze.',
     },
 
     surnames: {
         alsoMarried: (n: number) => `także jako nazwisko po ślubie: ${n}`,
         menu: 'Formy nazwiska…',
         title: 'Formy nazwiska',
-        intro: 'Mniej więcej do 1900 r. księgi metrykalne zapisują ród za każdym razem inaczej. Wystarczy raz określić, że formy oznaczają ten sam ród, a wyszukiwanie i scalanie znajdą je wszystkie — niezależnie od tego, jak kto został zapisany, łącznie z osobami dodanymi później.',
+        intro: 'Mniej więcej do 1900 r. księgi metrykalne zapisują ród za każdym razem inaczej. Wystarczy raz określić, że formy oznaczają ten sam ród, a wyszukiwanie i scalanie znajdą je wszystkie – niezależnie od tego, jak kto został zapisany, łącznie z osobami dodanymi później.',
         groupsTitle: 'Połączone formy',
         none: 'Na razie nic nie połączono.',
         addTitle: 'Łączenie form',
@@ -533,7 +533,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
                 `Powstanie ród ${label} od osoby ${who}: ${nPl(members, 'członek', 'członkowie', 'członków')}${spouses ? `, ${nPl(spouses, 'osoba wżeniona', 'osoby wżenione', 'osób wżenionych')}` : ''}.`,
             splitMoves: (name: string, gender: string, label: string, members: number, spouses: number) => {
                 const [his, son] = gender === 'female' ? ['jej', 'córka'] : gender === 'male' ? ['jego', 'syn'] : ['jego', 'dziecko'];
-                return `${name} i ${his} potomkowie przejdą do nowego rodu. W rodzinie rodziców ${name} pozostanie jako ${son} z odnośnikiem do nowego rodu. Ród ${label} będzie liczył ${nPl(members, 'członka', 'członków', 'członków')}${spouses ? ` i ${nPl(spouses, 'osobę wżenioną', 'osoby wżenione', 'osób wżenionych')}` : ''}.`;
+                return `${name} i ${his} potomkowie przejdą do nowego rodu. ${name} pozostanie w rodzinie rodziców jako ${son} z odnośnikiem do nowego rodu. Ród ${label} będzie liczył ${nPl(members, 'członka', 'członków', 'członków')}${spouses ? ` i ${nPl(spouses, 'osobę wżenioną', 'osoby wżenione', 'osób wżenionych')}` : ''}.`;
             },
             merge: (label: string, other: string, a: number, b: number) =>
                 `Połączenie scali rody ${label} i ${other} (${a} + ${nPl(b, 'osoba', 'osoby', 'osób')}). Ród ${other} przestanie istnieć.`,
@@ -550,9 +550,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         label: 'Ród',
         row: {
             marriedInto: (gender: string, n: number) => gender === 'female'
-                ? `· wżeniła się w ${n > 1 ? 'rody {rods}' : 'ród {rods}'}`
+                ? `· wżeniła się do ${n > 1 ? 'rodów {rods}' : 'rodu {rods}'}`
                 : gender === 'male'
-                    ? `· wżenił się w ${n > 1 ? 'rody {rods}' : 'ród {rods}'}`
+                    ? `· wżenił się do ${n > 1 ? 'rodów {rods}' : 'rodu {rods}'}`
                     : `· przez małżeństwo do ${n > 1 ? 'rodów {rods}' : 'rodu {rods}'}`,
             spouseIn: (gender: string) => gender === 'female' ? 'żona w rodzie {rod}'
                 : gender === 'male' ? 'mąż w rodzie {rod}' : 'przez małżeństwo w rodzie {rod}',
@@ -650,9 +650,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     events: {
         occupationLabel: 'Zawód / rzemiosło',
-        occupationHint: 'Tylko samo rzemiosło — „kowal”, nie „pracował w Kladnie jako kowal”. Trafia do GEDCOM jako zawód.',
+        occupationHint: 'Tylko samo rzemiosło – „kowal”, nie „pracował w Kladnie jako kowal”. Trafia do GEDCOM jako zawód.',
         religionLabel: 'Wyznanie',
-        religionHint: 'Tylko samo wyznanie — „rzymskokatolickie”, „ewangelicko-augsburskie”. Zmiana wyznania to osobne zdarzenie, z miejscem i datą, kiedy do niej doszło.',
+        religionHint: 'Tylko samo wyznanie – „rzymskokatolickie”, „ewangelicko-augsburskie”. Zmiana wyznania to osobne zdarzenie, z miejscem i datą, kiedy do niej doszło.',
         participants: 'Chrzestni i świadkowie',
         participantsHint: 'Kogo jeszcze wymienia zapis. Chrzestny, który się powtarza, bywa krewnym.',
         addParticipant: '+ Dodaj',
@@ -712,11 +712,11 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
     },
 
     factStatus: {
-        lead: 'Trop',
+        lead: 'Wskazówka',
         possible: 'Możliwe',
         probable: 'Prawdopodobne',
         proven: 'Udokumentowane',
-        title: (label: string) => `${label} — tak tę daną prowadzi badanie. Zmieni się, gdy badanie ją udokumentuje.`,
+        title: (label: string) => `${label} – tak tę daną prowadzi badanie. Zmieni się, gdy badanie ją udokumentuje.`,
     },
 
     partnerEvents: {
@@ -754,8 +754,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         bookTitle: 'Inne zdarzenia pary',
         expand: 'Rozwiń zdarzenia pary',
         collapse: 'Zwiń zdarzenia pary',
-        ageOf: (name: string) => `Wiek — ${name}`,
-        cited: (type: string, couple: string) => `${couple} — ${type}`,
+        ageOf: (name: string) => `Wiek – ${name}`,
+        cited: (type: string, couple: string) => `${couple} – ${type}`,
     },
 
     // Sources / citations
@@ -776,9 +776,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         pickTitle: 'Cytowanie źródła',
         searchPlaceholder: 'Szukaj tytułu, archiwum, sygnatury, transkrypcji…',
         createNew: 'Nowe źródło…',
-        emptyPicker: 'Brak źródeł — utwórz źródło',
+        emptyPicker: 'Brak źródeł – można utworzyć nowe',
         otherPage: 'Inna strona',
-        otherPageTitle: 'Inna strona tej samej księgi: nowe źródło z tym samym tytułem, archiwum i odnośnikiem — wystarczy uzupełnić jego stronę',
+        otherPageTitle: 'Inna strona tej samej księgi: nowe źródło z tym samym tytułem, archiwum i odnośnikiem – wystarczy uzupełnić jego stronę',
         edit: 'Edytuj',
         delete: 'Usuń',
         remove: 'Usuń cytowanie',
@@ -791,7 +791,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         unsavedMessage: 'W tym źródle są niezapisane zmiany.',
         // Records: excerpt, transcription, viewer, picker
         chipOpen: (title: string) => `Pokaż źródło: ${title}`,
-        titleHint: 'Jeden konkretny zapis — chrzest, ślub, zgon.',
+        titleHint: 'Jeden konkretny zapis – chrzest, ślub, zgon.',
         excerptLabel: 'Wycinek zapisu',
         excerptEmpty: 'Wystarczy wkleić zrzut ekranu z przeglądarki archiwum albo wgrać skan.',
         excerptPaste: 'Wklej ze schowka',
@@ -812,7 +812,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         more: 'Więcej: transkrypcja, data zapisu, wiarygodność',
         fieldTranscript: 'Transkrypcja zapisu',
         fieldRecordDate: 'Data zapisu',
-        recordDateHint: 'Kiedy sporządzono zapis — może się różnić od daty zdarzenia.',
+        recordDateHint: 'Kiedy sporządzono zapis – może się różnić od daty zdarzenia.',
         fieldQuality: 'Wiarygodność',
         quality3: 'Oryginał',
         quality2: 'Odpis / indeks',

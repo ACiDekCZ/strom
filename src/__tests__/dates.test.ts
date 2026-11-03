@@ -186,16 +186,28 @@ describe('formatFlexDate', () => {
         expect(formatFlexDate('1880-05', 'de')).toBe('5/1880');
     });
 
-    it('formats Polish: day and month with two digits, the other languages unchanged', () => {
-        expect(formatFlexDate('1890-03-12', 'pl')).toBe('12.03.1890');
-        expect(formatFlexDate('1890-11-05', 'pl')).toBe('05.11.1890');
+    it('formats Polish: no leading zeros, a month named in the case its preposition asks for; the other languages unchanged', () => {
+        expect(formatFlexDate('1890-03-12', 'pl')).toBe('12.3.1890');
+        expect(formatFlexDate('1890-11-05', 'pl')).toBe('5.11.1890');
         expect(formatFlexDate('1890-12-24', 'pl')).toBe('24.12.1890');
-        expect(formatFlexDate('~1890-03-12', 'pl')).toBe('ok. 12.03.1890');
-        expect(formatFlexDate('1890-03-12..1891-01-02', 'pl')).toBe('między 12.03.1890 a 02.01.1891');
-        expect(formatFlexDate('1890-03', 'pl')).toBe('3/1890');
+        expect(formatFlexDate('~1890-03-12', 'pl')).toBe('ok. 12.3.1890');
+        expect(formatFlexDate('1890-03-12..1891-01-02', 'pl')).toBe('między 12.3.1890 a 2.1.1891');
+        expect(formatFlexDate('1880-05', 'pl')).toBe('maj 1880');
+        expect(formatFlexDate('1890-03', 'pl')).toBe('marzec 1890');
+        expect(formatFlexDate('~1880-05', 'pl')).toBe('ok. maja 1880');
+        expect(formatFlexDate('<1880-05', 'pl')).toBe('przed majem 1880');
+        expect(formatFlexDate('>1880-02', 'pl')).toBe('po lutym 1880');
+        expect(formatFlexDate('>1880-11', 'pl')).toBe('po listopadzie 1880');
+        expect(formatFlexDate('1880-05..1881-09', 'pl')).toBe('między majem 1880 a wrześniem 1881');
+        expect(formatFlexDate('1880-05/1881-09', 'pl')).toBe('od maja 1880 do września 1881');
+        expect(formatFlexDate('1880-05/', 'pl')).toBe('od maja 1880');
+        expect(formatFlexDate('/1880-12', 'pl')).toBe('do grudnia 1880');
+        expect(formatFlexDate('~1880', 'pl')).toBe('ok. 1880');
         expect(normalizeDateInput('12.03.1890')).toBe('1890-03-12');
         expect(formatFlexDate('1890-03-12', 'de')).toBe('12.3.1890');
         expect(formatFlexDate('1890-03-12', 'cs')).toBe('12. 3. 1890');
+        expect(formatFlexDate('1880-05..1881-09', 'cs')).toBe('mezi 5/1880 a 9/1881');
+        expect(formatFlexDate('1880-05/1881-09', 'de')).toBe('von 5/1880 bis 9/1881');
     });
 
     it('passes through unparseable legacy values', () => {

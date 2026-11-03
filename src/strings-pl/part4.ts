@@ -36,7 +36,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         titleAfter: 'Tytuł po nazwisku',
         marriedSurname: 'Nazwisko po ślubie',
         showHint: 'Pokaż pomoc do pola',
-        nameVariantsHint: 'Jak zapisują je księgi metrykalne (Brzuska, Brzoska), alias albo przydomek od gospodarstwa. Kilka form oddziela się przecinkami. Wyszukiwanie i scalanie znajdą wtedy osobę pod każdą z nich. Dotyczy tylko tej osoby — formy nazwiska wspólne dla całej rodziny należą do Akcje → Drzewo → Formy nazwiska.',
+        nameVariantsHint: 'Jak zapisują je księgi metrykalne (Brzuska, Brzoska), alias albo przydomek od gospodarstwa. Kilka form oddziela się przecinkami. Wyszukiwanie i scalanie znajdą wtedy osobę pod każdą z nich. Dotyczy tylko tej osoby – formy nazwiska wspólne dla całej rodziny należą do Akcje → Drzewo → Formy nazwiska.',
         firstName: 'Imię',
         lastName: 'Nazwisko',
         gender: 'Płeć',
@@ -108,7 +108,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         familySearchHint: 'Wstępnie wypełnione wyszukiwanie zapisów (imię i nazwisko, lata, miejsce)',
         suggestedFor: 'Polecane dla',
         allPortals: 'Wszystkie czeskie archiwa regionalne',
-        disclaimer: 'Zewnętrzne strony otwierają się w nowej karcie. Polecenia opierają się na nazwach miejsc i mogą być niedokładne.',
+        disclaimer: 'Zewnętrzne strony otwierają się w nowej karcie. Propozycje opierają się na nazwach miejsc i mogą być niedokładne.',
     },
 
     // Relationship calculator
@@ -491,7 +491,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         removePin: 'Usuń',
         cleanOrphans: (count: number) => `Wyczyść osierocone miejsca (${count})`,
         cleanOrphansConfirm: (count: number) =>
-            `Usunąć zapisane współrzędne ${count} ${plPl(count, 'miejsca', 'miejsc', 'miejsc')}, ${plPl(count, 'którego', 'których', 'których')} nikt w drzewie już nie używa? Nic z tego, co jest zapisane w drzewie, się nie zmienia — znikną tylko pozostałe pinezki na mapie. Można to cofnąć.`,
+            `Usunąć zapisane współrzędne ${count} ${plPl(count, 'miejsca', 'miejsc', 'miejsc')}, ${plPl(count, 'którego', 'których', 'których')} nikt w drzewie już nie używa? Nic z tego, co jest zapisane w drzewie, się nie zmienia – znikną tylko pozostałe pinezki na mapie. Można to cofnąć.`,
         cleanOrphansDone: (count: number) => `Usunięto ${count} ${plPl(count, 'osierocone miejsce', 'osierocone miejsca', 'osieroconych miejsc')}.`,
         wrongSpot: 'Złe miejsce? Popraw',
         usedBy: (count: number) => nPl(count, 'osoba', 'osoby', 'osób'),
@@ -503,16 +503,16 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             `Wyszukiwanie miejsc… ${done}/${total} (${place})`,
         done: (found: number) => `Na mapie: ${placeCountPl(found)}.`,
         doneWithMisses: (found: number, missed: number) =>
-            `Na mapie: ${placeCountPl(found)}. Nie udało się znaleźć: ${missed} — pomoże poprawienie zapisu lub dodanie kraju.`,
+            `Na mapie: ${placeCountPl(found)}. Nie udało się znaleźć: ${missed} – pomoże poprawienie zapisu lub dodanie kraju.`,
         consentTitle: 'Odszukać współrzędne online?',
         consentBody: (count: number, service: string) =>
             `Do narysowania mapy usługa ${service} otrzyma ${count} ${plPl(count, 'nazwę miejsca', 'nazwy miejsc', 'nazw miejsc')} (na przykład „Kraków”). `
-            + 'Nic innego nie opuszcza aplikacji — żadne imiona, daty ani relacje z drzewa. '
+            + 'Nic innego nie opuszcza aplikacji – żadne imiona, daty ani relacje z drzewa. '
             + 'Współrzędne zapisują się w drzewie, więc każde miejsce jest wyszukiwane tylko raz, a mapa działa potem także offline.',
         consentConfirm: 'Odszukaj',
         settingLabel: 'Wyszukiwanie miejsc online',
         settingHint: 'Pozwala mapie wysyłać nazwy miejsc do usługi geokodowania. Odszukane już współrzędne zostają w drzewie.',
-        tilesNotice: 'Podkład mapy wczytuje się z openstreetmap.org — wczytanie zdradza temu serwerowi tylko to, jaki obszar jest oglądany, nic więcej. Dane rodziny zostają w aplikacji.',
+        tilesNotice: 'Podkład mapy wczytuje się z openstreetmap.org – wczytanie zdradza temu serwerowi tylko to, jaki obszar jest oglądany, nic więcej. Dane rodziny zostają w aplikacji.',
         tilesNoticeOk: 'Pokaż mapę',
         timeMode: 'Migracje w czasie',
         timeModeEmpty: 'Po uzupełnieniu dat (urodzenia, zgonu, wydarzeń) widać przemieszczanie się rodu w czasie.',
@@ -703,15 +703,15 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         sectionLifeline: 'Oś czasu życia',
         lifelineBorn: 'Urodzenie',
         lifelineDied: 'Zgon',
-        lifelineMarried: (name: string) => `Ślub — ${name}`,
+        lifelineMarried: (name: string) => `Ślub – ${name}`,
         lifelineMarriedUnknown: 'Ślub',
         lifelineChild: (name: string) => `Urodzenie dziecka: ${name}`,
         lifelineChildUnknown: 'Urodzenie dziecka',
         lifelineWith: (names: string) => `wraz z: ${names}`,
-        lifelinePartnerEvent: (type: string, name: string) => `${type} — ${name}`,
-        lifelineDivorced: (name: string) => `Rozwód — ${name}`,
+        lifelinePartnerEvent: (type: string, name: string) => `${type} – ${name}`,
+        lifelineDivorced: (name: string) => `Rozwód – ${name}`,
         lifelineDivorcedUnknown: 'Rozwód',
-        lifelineRelationEnded: (name: string) => `Koniec związku — ${name}`,
+        lifelineRelationEnded: (name: string) => `Koniec związku – ${name}`,
         lifelineRelationEndedUnknown: 'Koniec związku',
         lifelineChildEvents: 'Wydarzenia dzieci',
         lifelineChildEvent: (name: string, event: string) => `${name}: ${event}`,

@@ -358,9 +358,9 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
             // without a possessive ("husband of a first cousin").
             const ofRel = `of ${indefiniteEn(relDesc.en)}`;
             const term = special ?? bySex(b.gender,
-                { cs: `manžel — ${relDesc.cs}`, en: `husband ${ofRel}`, de: `Ehemann — ${relDesc.de}`, pl: `mąż — ${relDesc.pl}` },
-                { cs: `manželka — ${relDesc.cs}`, en: `wife ${ofRel}`, de: `Ehefrau — ${relDesc.de}`, pl: `żona — ${relDesc.pl}` },
-                { cs: `choť — ${relDesc.cs}`, en: `spouse ${ofRel}`, de: `Ehepartner — ${relDesc.de}`, pl: `małżonek — ${relDesc.pl}` });
+                { cs: `manžel — ${relDesc.cs}`, en: `husband ${ofRel}`, de: `Ehemann — ${relDesc.de}`, pl: `mąż – ${relDesc.pl}` },
+                { cs: `manželka — ${relDesc.cs}`, en: `wife ${ofRel}`, de: `Ehefrau — ${relDesc.de}`, pl: `żona – ${relDesc.pl}` },
+                { cs: `choť — ${relDesc.cs}`, en: `spouse ${ofRel}`, de: `Ehepartner — ${relDesc.de}`, pl: `małżonek – ${relDesc.pl}` });
             return { path: [...rel.path, bId], term, affinity: true };
         }
     }

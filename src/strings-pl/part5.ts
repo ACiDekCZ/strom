@@ -55,7 +55,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         sourcesTitle: 'Na razie brak źródeł',
         sourcesText: 'Źródło to księga metrykalna, dokument lub księga, z której pochodzi informacja. Można je potem cytować przy urodzeniu, ślubie i innych danych.',
         backupsTitle: 'Na razie brak kopii zapasowych',
-        backupsText: 'Kopia zapasowa to kopia całego drzewa, do której można wrócić. Aplikacja tworzy je także sama — na bieżąco oraz przed importem lub scalaniem.',
+        backupsText: 'Kopia zapasowa to kopia całego drzewa, do której można wrócić. Aplikacja tworzy je także sama – na bieżąco oraz przed importem lub scalaniem.',
         anniversariesTitle: 'Brak rocznic w ciągu najbliższych 30 dni',
         anniversariesText: 'Urodziny i rocznice ślubu pojawią się tutaj, gdy osoby będą miały pełne daty.',
         attachmentsTitle: 'Na razie brak załączników',
@@ -627,7 +627,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
 
     // Errors
     errors: {
-        saveFailed: 'Zapis nie powiódł się — ostatnie zmiany mogły nie zostać zapisane! Wymagane jest zwolnienie miejsca lub odblokowanie szyfrowania i ponowna edycja.',
+        saveFailed: 'Zapis nie powiódł się – ostatnie zmiany mogły nie zostać zapisane! Wymagane jest zwolnienie miejsca lub odblokowanie szyfrowania i ponowna edycja.',
         invalidJson: 'Nieprawidłowy plik JSON'
     },
 
@@ -640,7 +640,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         unlock: 'Odblokuj',
         treeOtherKey: 'To drzewo jest zaszyfrowane innym hasłem (sprzed zmiany hasła lub z importu). Po podaniu tego hasła drzewo zostanie ponownie zaszyfrowane obecnym hasłem.',
         treeRecovered: 'Drzewo jest odblokowane i ponownie zaszyfrowane obecnym hasłem.',
-        unlockToContinue: 'Najpierw wymagane jest odblokowanie zaszyfrowanych danych — nowe drzewa są zapisywane w postaci zaszyfrowanej.',
+        unlockToContinue: 'Najpierw wymagane jest odblokowanie zaszyfrowanych danych – nowe drzewa są zapisywane w postaci zaszyfrowanej.',
         otherTabSaved: 'To drzewo zapisało inne okno. Zmiany będą widoczne po ponownym wczytaniu drzewa. Do tego czasu zmiany w tym oknie nie są zapisywane.',
         otherTabNotSaved: 'Nie zapisano: w międzyczasie drzewo zapisało inne okno, a to okno ma starszą kopię. Wymagane jest ponowne wczytanie drzewa i kontynuacja w zapisanej wersji. Zmiana z tego okna nie zostanie zachowana.',
         reload: 'Wczytaj ponownie',
@@ -730,12 +730,12 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         notes: 'Notatki',
         allImported: 'Zaimportowano wszystko z pliku.',
         viewCutTooSmall: 'Najpierw wymagane jest wyświetlenie większej liczby osób (widok Rodzina lub Potomkowie), potem można utworzyć drzewo z widoku.',
-        viewCutName: (name: string) => `${name} — wycinek`,
-        externalMedia: (n: number) => `Plik odwołuje się do ${nPl(n, 'zewnętrznego pliku multimediów', 'zewnętrznych plików multimediów', 'zewnętrznych plików multimediów')} (platformy eksportują zdjęcia osobno jako folder/zip — najpierw wymagane jest jego rozpakowanie).`,
+        viewCutName: (name: string) => `${name} – wycinek`,
+        externalMedia: (n: number) => `Plik odwołuje się do ${nPl(n, 'zewnętrznego pliku multimediów', 'zewnętrznych plików multimediów', 'zewnętrznych plików multimediów')} (platformy eksportują zdjęcia osobno jako folder/zip – najpierw wymagane jest jego rozpakowanie).`,
         attachMedia: 'Podłącz pliki multimediów…',
         downloadMedia: 'Pobierz zdjęcia z internetu',
         downloading: (done: number, total: number) => `Pobieranie zdjęć… ${done}/${total}`,
-        mediaAttached: (matched: number, total: number) => `Podłączono ${matched} z ${total} wskazanych plików.`,
+        mediaAttached: (matched: number, total: number) => `Podłączono ${matched} z ${total} ${plPl(total, 'wskazanego pliku', 'wskazanych plików', 'wskazanych plików')}.`,
         mediaNoMatch: 'Żaden z wybranych plików nie odpowiada wskazanym nazwom.',
     },
 

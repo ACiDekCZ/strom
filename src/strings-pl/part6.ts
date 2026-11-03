@@ -20,7 +20,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         skip: 'Pomiń',
         unskip: 'Cofnij pominięcie',
         skipped: 'Pominięte',
-        skipTooltip: 'Ta osoba w ogóle nie zostanie przeniesiona — ani scalona, ani dodana (w odróżnieniu od „Odrzuć”, które importuje ją jako nową osobę).',
+        skipTooltip: 'Ta osoba w ogóle nie zostanie przeniesiona – ani scalona, ani dodana (w odróżnieniu od „Odrzuć”, które importuje ją jako nową osobę).',
         statsSkipped: 'Pominięte',
         skippedCount: (n: number) => `pominięto: ${n}`,
         changeMatch: 'Zmień',
@@ -34,7 +34,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         mergeViewInto: 'Scal ten widok z…',
         mergeViewDescription: 'Scal aktualnie wyświetlane osoby z:',
         mergeViewSourceLabel: 'Bieżący widok',
-        mergeViewEmpty: 'Nie ma czego scalać — bieżący widok jest pusty.',
+        mergeViewEmpty: 'Nie ma czego scalać – bieżący widok jest pusty.',
         mergeViewNoTarget: 'Nie ma innego drzewa, z którym można scalić.',
         keepExisting: 'Zachowaj istniejące',
         useImport: 'Użyj z importu',
@@ -80,8 +80,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
         // Tooltips
         highConfidenceTooltip: 'Silne dopasowanie: imiona, daty i relacje się zgadzają',
-        mediumConfidenceTooltip: 'Prawdopodobne dopasowanie: częściowe dane lub powiązanie rodzinne - wymaga weryfikacji',
-        lowConfidenceTooltip: 'Możliwe dopasowanie: ograniczona zgodność danych - konieczne staranne sprawdzenie',
+        mediumConfidenceTooltip: 'Prawdopodobne dopasowanie: częściowe dane lub powiązanie rodzinne – wymaga weryfikacji',
+        lowConfidenceTooltip: 'Możliwe dopasowanie: ograniczona zgodność danych – konieczne staranne sprawdzenie',
         newPersonTooltip: 'Zostanie dodana jako nowa osoba',
 
         // Match reasons (shown in UI)
@@ -106,9 +106,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
         // New tree name prompt
         newTreeNamePrompt: 'Nazwa scalonego drzewa:',
-        pendingGate: (n: number) => `${n} ${plPl(n, 'niepewne dopasowanie pozostało nierozstrzygnięte', 'niepewne dopasowania pozostały nierozstrzygnięte', 'niepewnych dopasowań pozostało nierozstrzygniętych')} — te osoby zostaną zaimportowane jako ODRĘBNE osoby (można je scalić także później). Kontynuować?`,
-        suggestedPrecise: 'proponowane — dokładniejsza data',
-        suggestedComplete: 'proponowane — pełniejsza wartość',
+        pendingGate: (n: number) => `${n} ${plPl(n, 'niepewne dopasowanie pozostało nierozstrzygnięte', 'niepewne dopasowania pozostały nierozstrzygnięte', 'niepewnych dopasowań pozostało nierozstrzygniętych')} – te osoby zostaną zaimportowane jako ODRĘBNE osoby (można je scalić także później). Kontynuować?`,
+        suggestedPrecise: 'proponowane – dokładniejsza data',
+        suggestedComplete: 'proponowane – pełniejsza wartość',
 
         // Photo conflict (two different photos — shown as thumbnails in the dialog)
         photoConflict: 'dwa różne zdjęcia',
@@ -125,11 +125,11 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
         // Validation around a merge (non-blocking)
         preValidationWarning: (existing: number, incoming: number) =>
-            `Istniejące drzewo ma ${nPl(existing, 'problem', 'problemy', 'problemów')}, przychodzące ${incoming} — scalenie przeniesie je dalej.`,
+            `Istniejące drzewo ma ${nPl(existing, 'problem', 'problemy', 'problemów')}, przychodzące ${incoming} – scalenie przeniesie je dalej.`,
         preValidationHint: 'Można je najpierw naprawić przez walidację.',
         newIssuesTitle: 'Scalenie wprowadziło nowe problemy',
         newIssues: (n: number) =>
-            `Scalenie wprowadziło ${nPl(n, 'nowy problem', 'nowe problemy', 'nowych problemów')} — otworzyć walidację?`,
+            `Scalenie wprowadziło ${nPl(n, 'nowy problem', 'nowe problemy', 'nowych problemów')} – otworzyć walidację?`,
 
         // Manual match dialog
         incomingPerson: 'Osoba przychodząca:',
@@ -156,7 +156,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         useOther: 'Użyj z drugiej',
         mergePartnership: 'Scal związki',
         keepBoth: 'Zachowaj oba związki',
-        noConflicts: 'Brak konfliktów - dane zostaną połączone',
+        noConflicts: 'Brak konfliktów – dane zostaną połączone',
         confirmMerge: 'Scal osoby',
         mergeComplete: 'Osoby zostały scalone',
         willBeDeleted: 'zostanie usunięta',
@@ -182,7 +182,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         app: 'Aplikacja z danymi (HTML)',
         appDesc: 'Jeden plik, który otwiera się w każdej przeglądarce, nic się nie instaluje',
         backup: 'Kopia zapasowa danych (JSON)',
-        backupDesc: 'Całe drzewo — do przywrócenia lub późniejszego importu',
+        backupDesc: 'Całe drzewo – do przywrócenia lub późniejszego importu',
         poster: 'Plakat',
         posterDesc: 'Bieżący widok jako SVG, PNG lub wielostronicowy PDF do druku',
         book: 'Księga rodu',
@@ -275,7 +275,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         validationPassed: 'Nie znaleziono problemów',
         validationErrors: 'błędy',
         validationWarnings: 'ostrzeżenia',
-        validationInfos: 'info',
+        validationInfos: 'informacje',
         // Tree validation messages
         valCycle: 'Wykryto cykl przodków',
         valSelfPartnership: 'Związek osoby z samą sobą',
@@ -314,9 +314,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         valPossibleDuplicate: 'Możliwy duplikat osoby (to samo imię i nazwisko oraz rok urodzenia)',
         valImportMerge: 'Prawdopodobnie dwie osoby scalone w jedną podczas importu pliku GEDCOM (Strom 3.8.1 i starsze). Rozwiązanie: ponowny import oryginalnego pliku GEDCOM jako nowego drzewa.',
         valPlaceSpelling: 'Jedno miejsce zapisane na kilka sposobów',
-        valRecurringGodparent: 'Powtarzający się chrzestny — często to krewny',
+        valRecurringGodparent: 'Powtarzający się chrzestny – często to krewny',
         valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
-            `${name} — przy ${events} ${plPl(events, 'zdarzeniu', 'zdarzeniach', 'zdarzeniach')} ${people} ${plPl(people, 'osoby', 'osób', 'osób')} · ${whose}`,
+            `${name} – przy ${events} ${plPl(events, 'zdarzeniu', 'zdarzeniach', 'zdarzeniach')} ${people} ${plPl(people, 'osoby', 'osób', 'osób')} · ${whose}`,
         valRecurringGodparentByName: 'dopasowanie według imienia',
         valOrphanedParticipantRef: 'Uczestnik zdarzenia odwołuje się do osoby, która już nie istnieje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
@@ -328,21 +328,21 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         summaryErrors: (e: number, w: number, l: number) => [
             e ? nPl(e, 'błąd', 'błędy', 'błędów') : '',
             w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '',
-            l ? nPl(l, 'trop', 'tropy', 'tropów') : '',
+            l ? nPl(l, 'wskazówka', 'wskazówki', 'wskazówek') : '',
         ].filter(Boolean).join(', ') + '.',
         summaryNoErrors: (w: number, l: number) => 'Bez błędów. ' + [
             w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '',
-            l ? nPl(l, 'trop', 'tropy', 'tropów') : '',
+            l ? nPl(l, 'wskazówka', 'wskazówki', 'wskazówek') : '',
         ].filter(Boolean).join(', ') + '.',
-        summaryLeadsOnly: (l: number) => `Bez problemów. ${nPl(l, 'trop', 'tropy', 'tropów')}.`,
+        summaryLeadsOnly: (l: number) => `Bez problemów. ${nPl(l, 'wskazówka', 'wskazówki', 'wskazówek')}.`,
         valProblems: 'Problemy',
-        valLeads: 'Tropy',
-        leadsIntro: 'To nie są błędy. Tropy, które mogą pomóc w poszukiwaniach.',
+        valLeads: 'Wskazówki',
+        leadsIntro: 'To nie są błędy. Wskazówki, które mogą pomóc w poszukiwaniach.',
         leadsSkipped: 'Nie są zgłaszani: proboszcz, akuszerka i chrzestny występujący tylko u rodzeństwa.',
         valGroupPossibleDuplicate: 'Możliwy duplikat osoby',
         valShowMore: (k: number, n: number) => `Pokaż kolejne ${k} (pozostało ${n})`,
         valReadOnly: 'Drzewo jest tylko do odczytu. Wyniki można przeglądać, ale nie naprawiać ani oznaczać.',
-        overviewLeads: (n: number) => nPl(n, 'trop', 'tropy', 'tropów'),
+        overviewLeads: (n: number) => nPl(n, 'wskazówka', 'wskazówki', 'wskazówek'),
         notAnError: 'To nie błąd',
         twoPeople: 'To dwie różne osoby',
         dismissedToast: 'Ten wynik nie będzie już zgłaszany.',
@@ -389,7 +389,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         defaultPersonFirstPerson: 'Pierwsza osoba',
         lifelineDefaults: 'Oś czasu na karcie osoby – domyślnie',
         lifelineDefaultsTitle: 'Oś czasu na karcie osoby',
-        lifelineDefaultsNote: 'Co oś czasu na karcie osoby tego drzewa pokazuje na początku. Pola wyboru na karcie zmieniają to tylko dla tej karty. Nic innego w aplikacji się według tego nie kieruje.',
+        lifelineDefaultsNote: 'Co oś czasu na karcie osoby tego drzewa pokazuje na początku. Pola wyboru na karcie zmieniają to tylko dla tej karty. Nie wpływa to na nic innego w aplikacji.',
         lifelineDefaultsNone: 'tylko własne zdarzenia',
         lifelineKindsNote: 'Rodzaje historii: domyślne są w Ustawieniach, wybór tutaj dotyczy tego drzewa. Jeden rodzaj pozostaje włączony.',
         defaultPersonLastFocused: 'Ostatnio wyświetlana',
@@ -428,17 +428,17 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
     // Collaboration: send to a relative
     share: {
         menuItem: '📩 Wyślij rodzinie',
-        menuDesc: 'Jeden plik e-mailem — do otwarcia, uzupełnienia i odesłania',
+        menuDesc: 'Jeden plik e-mailem – do otwarcia, uzupełnienia i odesłania',
         passwordLabel: 'Hasło (opcjonalne)',
         dialogTitle: 'Wysyłanie rodzinie',
-        dialogIntro: 'Tworzy jeden plik do wysłania e-mailem. Plik po prostu otwiera się w przeglądarce — bez instalacji i bez konta.',
+        dialogIntro: 'Tworzy jeden plik do wysłania e-mailem. Plik po prostu otwiera się w przeglądarce – bez instalacji i bez konta.',
         scopeLabel: 'Co wysłać',
         scopeWhole: 'Całe drzewo',
         scopeBranch: 'Bieżący widok (widoczna gałąź)',
         senderNameLabel: 'Podpis (wyświetlany przy otwarciu)',
         messageLabel: 'Wiadomość dołączona do pliku',
         // A sample message from the sender to a relative (not addressed to the app's user)
-        messagePlaceholder: 'Cześć! Uzupełnisz proszę, co wiesz o waszej gałęzi?',
+        messagePlaceholder: 'Cześć! Uzupełnisz, proszę, co wiesz o waszej gałęzi?',
         createFile: 'Utwórz plik do wysłania',
         welcomeTitle: (sender: string) => `${sender} przesyła drzewo rodzinne`,
         welcomeCounts: (tree: string, persons: number) => `„${tree}” · ${nPl(persons, 'osoba', 'osoby', 'osób')}`,
@@ -462,8 +462,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         changesHint: 'Wysyła tylko uzupełnienia. Plik wraca do osoby, która udostępniła drzewo.',
         packetSaved: 'Zapisano plik ze zmianami',
         noChanges: 'Od ostatniego udostępnienia nic się nie zmieniło',
-        baselineMissing: 'Brak stanu bazowego dla tych zmian — lepiej poprosić o cały plik',
-        treeNotFound: 'Brak pasującego drzewa dla tych zmian — potrzebny jest cały plik',
+        baselineMissing: 'Brak stanu bazowego dla tych zmian – lepiej poprosić o cały plik',
+        treeNotFound: 'Brak pasującego drzewa dla tych zmian – potrzebny jest cały plik',
         // Preview of an opened change file at the recipient.
         previewTitle: (sender: string) => `${sender} przesyła zmiany`,
         previewIntro: (tree: string) => tree ? `Te uzupełnienia zmienią drzewo „${tree}”.` : 'Te uzupełnienia zmienią drzewo.',
@@ -480,8 +480,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         fieldOther: 'inne dane',
         changedFields: (fields: string) => `zmieniono: ${fields}`,
         andMore: (n: number) => `+${n} więcej`,
-        applied: (added: number, updated: number) => `Przyjęto — dodano: ${added}, zaktualizowano: ${updated}`,
-        alreadyApplied: 'Te zmiany już są w drzewie — nie ma czego przyjąć.',
+        applied: (added: number, updated: number) => `Przyjęto – dodano: ${added}, zaktualizowano: ${updated}`,
+        alreadyApplied: 'Te zmiany już są w drzewie – nie ma czego przyjąć.',
     },
 
     // View Mode (embedded data)
@@ -547,8 +547,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
     // Tree Preview
     treePreview: {
-        linkCardTitle: 'Wspólna karta łącząca — ta osoba należy do sąsiedniej rodziny; jej partner i dzieci są tam.',
-        bigFamilyHint: 'Duża rodzina — podgląd zaczyna się od jej głowy; kliknięcie osoby przesuwa podgląd.',
+        linkCardTitle: 'Wspólna karta łącząca – ta osoba należy do sąsiedniej rodziny; jej partner i dzieci są tam.',
+        bigFamilyHint: 'Duża rodzina – podgląd zaczyna się od jej głowy; kliknięcie osoby przesuwa podgląd.',
         title: 'Podgląd drzewa',
         close: 'Zamknij',
         focusedOn: 'W centrum',
@@ -559,7 +559,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
     slideshow: {
         menu: 'Przelot przez drzewo (TV)',
-        menuDesc: 'Automatyczny przelot przez drzewo — do pokazywania rodzinie',
+        menuDesc: 'Automatyczny przelot przez drzewo – do pokazywania rodzinie',
         needMore: 'Przelot wymaga wcześniejszego wyświetlenia większej liczby osób.',
         runsInFamily: 'Przelot działa w widoku Rodzina',
         hint: 'Spacja = pauza · ← → = przesuw · Esc = koniec',
@@ -694,7 +694,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         dirResumeHint: 'Zadania wrócą do kolejki',
         dirFilterLabel: 'Kolejka według linii',
         finishSession: 'Dokończ i zakończ',
-        finishHint: 'Agent dopisze znalezione i zamknie sesję',
+        finishHint: 'Agent dopisze to, co znalazł, i zamknie sesję',
         followOn: 'Śledź agenta w drzewie',
         followOff: 'Przestań śledzić',
         followIdle: 'czeka, aż agent zacznie pracę nad kimś',
