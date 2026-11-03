@@ -104,6 +104,11 @@ export class DirectionOrderWriter {
         }, this.quietMs);
     }
 
+    /** A move waits for its write (not yet sent). */
+    get waiting(): boolean {
+        return this.next !== null;
+    }
+
     /** A move waits or is being written. */
     get busy(): boolean {
         return this.next !== null || this.running !== null;

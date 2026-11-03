@@ -34,7 +34,7 @@ import { clearRodSelection, rodViewDataChanged, rodViewUncovered } from './rod-v
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'ancestorGap' | 'rod';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'rod';
     label: string;
     ids: PersonId[];
     index: number;

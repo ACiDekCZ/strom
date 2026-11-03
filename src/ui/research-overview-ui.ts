@@ -35,7 +35,7 @@ import {
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
-    WorkingLine, directionGlyph, directionPersonIds, keepLineFocus, linesMulti, queueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
+    WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, linesMulti, queueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
@@ -220,6 +220,11 @@ export const researchOverviewMethods = uiModule({
 
     /** Draw (or remove) the overview. Called with every panel redraw. */
     renderResearchOverview(): void {
+        // A direction dragged: its row stays under the pointer; the redraw comes when it lands.
+        if (directionDragActive()) {
+            directionRedrawHeld();
+            return;
+        }
         queueMicrotask(keepLineFocus());
         const s = liveSession();
         const on = !!s && !s.ended && s.overview && DataManager.getCurrentTreeId() === s.treeId;
