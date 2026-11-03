@@ -105,6 +105,39 @@ describe('far: from the family’s other places', () => {
         expect(checkPlaces(tree(120)).has('lhota')).toBe(false);
     });
 
+    it('names the family by its basic (masculine) form, the women\'s form joined to it (1103)', () => {
+        // A Polish family: more facts of the women (Jaworska) than of the men; the far place is the men's.
+        const people = [
+            person('Jaworska', 'Wierzbno', '1890'), person('Jaworska', 'Wierzbno', '1895'),
+            person('Jaworska', 'Zalesie', '1900'), person('Jaworski', 'Zalesie', '1898'),
+            person('Jaworski', 'Odlegle', '1896'),
+        ];
+        const data: StromData = {
+            persons: Object.fromEntries(people.map(p => [p.id, p])), partnerships: {},
+            surnameVariants: [['Jaworski', 'Jaworsky', 'Jaworskij']],
+            places: {
+                wierzbno: { ...BASE, label: 'Wierzbno, Polska' },
+                zalesie: { ...north(5), label: 'Zalesie, Polska' },
+                odlegle: { ...north(150), label: 'Odległe, Polska' },
+            },
+        } as StromData;
+        const far = checkPlaces(data).get('odlegle')?.[0];
+        expect(far).toMatchObject({ kind: 'far', family: 'Jaworski' });
+        expect((far as { km: number }).km).toBe(Math.round(distanceKm(north(150), north(5))));
+    });
+
+    it('a Czech family is named Lhoták though the women\'s Lhotáková holds most facts', () => {
+        const people = [
+            ...['1840', '1842', '1845'].map(y => person('Lhotáková', 'Lhota', y)),
+            person('Lhoták', 'Jinov', '1841'), person('Lhotáková', 'Lhotínek', '1843'),
+        ];
+        const data: StromData = {
+            persons: Object.fromEntries(people.map(p => [p.id, p])), partnerships: {},
+            places: { lhota: { ...BASE, label: 'Lhota' }, jinov: { ...north(3), label: 'Jinov' }, lhotinek: { ...north(120), label: 'Lhotínek' } },
+        } as StromData;
+        expect(checkPlaces(data).get('lhotinek')?.[0]).toMatchObject({ kind: 'far', family: 'Lhoták' });
+    });
+
     it('the threshold: just under it nothing, just over it marked', () => {
         // The family's nearest other place (1840–1850 here) is Horní Lhota at north(2).
         expect(checkPlaces(tree(PLACE_FAR_KM + 1)).has('lhotinek')).toBe(false);

@@ -1,5 +1,5 @@
 import type { StringsType } from '../strings.js';
-import { nPl, plPl, HIT_KIND_PL } from './helpers.js';
+import { familyGenitivePl, nPl, plPl, HIT_KIND_PL } from './helpers.js';
 
 /** "5 miejsc": the place count shared by the map strings (the pack cannot read `strings` at load time). */
 const placeCountPl = (count: number): string => `${count} ${plPl(count, 'miejsce', 'miejsca', 'miejsc')}`;
@@ -380,7 +380,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             dSource: 'Źródło',
             whoHand: 'Ręcznego położenia badanie nie zmienia; pyta tylko w zakładce Czeka, gdy znajdzie sprzeczność.',
             checkFar: (km: number, family: string, a: number, b: number) =>
-                `Leży ${km} km od innych miejsc rodziny ${family} ${a === b ? `w ${a} r.` : `w latach ${a}–${b}`}.`,
+                `Leży ${km} km od innych miejsc rodziny ${familyGenitivePl(family)} ${a === b ? `w ${a} r.` : `w latach ${a}–${b}`}.`,
             checkDistrict: (expected: string, actual: string, parish: boolean, titled = false) => parish
                 ? `Zapisy podają parafię ${expected}, położenie jest w powiecie ${actual}.`
                 : titled

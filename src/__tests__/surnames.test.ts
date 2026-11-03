@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     surnameKey, surnameForms, sameSurname, addSurnameGroup, removeSurnameGroup, surnamesInTree,
-    masculineForm, feminineForm, czechRulesApply,
+    masculineForm, feminineForm, czechRulesApply, feminineFormIn, masculineFormIn, genderRulesApply,
 } from '../surnames.js';
 import { setLanguage } from '../strings.js';
 import { StromData, Person, PersonId, toPersonId } from '../types.js';
@@ -292,5 +292,57 @@ describe('the rules know where they apply (gating)', () => {
         expect(czechRulesApply(data)).toBe(false);
         data.persons[toPersonId('b')] = person('b', 'Jan', 'Fíšek');
         expect(czechRulesApply(data)).toBe(true);
+    });
+});
+
+describe('Polish adjectival surnames pair the Polish way, never the Czech one', () => {
+    // A Polish tree: Polish letters only — "ó" (Wróblewska, Mróz) is no Czech sign.
+    const polish = (): StromData => tree([['Jaworski', 'Jaworsky', 'Jaworskij']], [
+        person('a', 'Józef', 'Jaworski'), person('b', 'Zofia', 'Jaworska'), person('c', 'Ewa', 'Wróblewska'),
+        person('d', 'Jan', 'Mróz'), person('e', 'Anna', 'Kmieć'),
+    ]);
+
+    it('a tree of Polish surnames is no Czech one, though they write ó', () => {
+        expect(czechRulesApply(polish())).toBe(false);
+    });
+
+    it('Jaworski ↔ Jaworska, Nowicki ↔ Nowicka, Zawadzki ↔ Zawadzka', () => {
+        const data = polish();
+        expect(sameSurname('Jaworski', 'Jaworska', data)).toBe(true);
+        expect(sameSurname('Nowicka', 'Nowicki', data)).toBe(true);
+        expect(sameSurname('Zawadzki', 'Zawadzka', data)).toBe(true);
+        expect(feminineFormIn('Jaworski', data)).toBe('Jaworska');
+        expect(masculineFormIn('Wróblewska', data)).toBe('Wróblewski');
+        expect(feminineFormIn('Jaworska', data)).toBeNull();
+        expect(genderRulesApply('Jaworski', data)).toBe(true);
+    });
+
+    it('no Czech feminine form on a Polish tree: no Jaworskiová, Jaworsková, Krawczyková', () => {
+        const data = polish();
+        const forms = [...surnameForms('Jaworski', data), ...surnameForms('Jaworska', data), ...surnameForms('Krawczyk', data)];
+        expect(forms.filter(f => /ov[áa]$/i.test(f))).toEqual([]);
+        expect(surnameForms('Jaworska', data)).toEqual(expect.arrayContaining(['Jaworska', 'Jaworski', 'Jaworsky', 'Jaworskij']));
+        expect(surnameForms('Krawczyk', data)).toEqual(['Krawczyk']);
+        expect(feminineFormIn('Jaworsky', data)).toBeNull();
+    });
+
+    it('the men\'s -ski is Polish on a Czech tree too; the Czech names there keep their rules', () => {
+        const data = tree(undefined, [person('a', 'Jan', 'Fíšek'), person('b', 'Józef', 'Jaworski')]);
+        expect(czechRulesApply(data)).toBe(true);
+        expect(feminineForm('Jaworski')).toBe('Jaworska');
+        expect(sameSurname('Jaworski', 'Jaworska', data)).toBe(true);
+        expect(surnameForms('Jaworski', data)).not.toContain('Jaworskiová');
+        expect(sameSurname('Fíšek', 'Fíšková', data)).toBe(true);
+        // An ASCII export of a Czech name ending -ska (Liska of Liška) keeps the Czech rules on a Czech tree.
+        expect(feminineFormIn('Liska', data)).toBe('Lisková');
+        expect(masculineFormIn('Liska', data)).toBeNull();
+        // The Czech -ský/-ská stay Czech.
+        expect(feminineForm('Brodský')).toBe('Brodská');
+        expect(masculineForm('Brodská')).toBe('Brodský');
+    });
+
+    it('too short a stem is no Polish adjective', () => {
+        expect(feminineForm('Wski')).not.toBe('Wska');
+        expect(masculineFormIn('Ska', tree())).toBeNull();
     });
 });

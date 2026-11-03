@@ -329,6 +329,21 @@ describe('the forms and lineages the edit dialogs list', () => {
         expect(r.feminine).toEqual([]);
     });
 
+    it('a Polish line: Jaworska pairs with Jaworski, no Czech -ová forms (1103)', () => {
+        const data = tree({
+            a: { first: 'Wacław', last: 'Jaworski', sex: 'male', born: '1865' },
+            b: { first: 'Józef', last: 'Jaworski', sex: 'male', born: '1898', parents: ['a'] },
+            c: { first: 'Stefania', last: 'Jaworska', sex: 'female', born: '1900', parents: ['a'] },
+            d: { first: 'Ewa', last: 'Wróblewska', sex: 'female', born: '1870' },
+        }, [], { surnameVariants: [['Jaworski', 'Jaworsky', 'Jaworskij']] });
+        const idx = buildLineages(data);
+        const r = rodNameForms(rodOfPerson(idx, 'b'), data);
+        expect(r.forms[0]).toBe('Jaworski');
+        expect(r.forms).not.toContain('Jaworska');
+        expect(r.feminine).toEqual(['Jaworska']);
+        expect([...r.forms, ...r.feminine].filter(f => /ov[áa]$/i.test(f))).toEqual([]);
+    });
+
     it('a spelling group names the lineages it concerns, largest first', () => {
         const data = pstrosek({ surnameVariants: [['Pštrosek', 'Pštrossek'], ['Ořechovec', 'Orechovec']] });
         const idx = buildLineages(data);

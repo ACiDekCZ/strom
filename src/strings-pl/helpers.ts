@@ -32,6 +32,17 @@ export const nPl = (n: number, one: string, few: string, many: string): string =
 /** A count with Polish digit grouping ("1 284"). */
 export const numPl = (n: number): string => n.toLocaleString('pl-PL');
 
+/**
+ * A family's surname after "rodziny" (genitive plural): the adjectival ones
+ * decline (Jaworski, Jaworska → Jaworskich; Nowicki → Nowickich); any other
+ * stays as written (rodziny Nowak), which Polish allows.
+ */
+export function familyGenitivePl(surname: string): string {
+    const m = /^(.*\p{L}.*(?:sk|ck|dzk))([ia])$/iu.exec(surname.trim());
+    if (!m || m[1].length < 4) return surname;
+    return m[1] + (m[2] === m[2].toUpperCase() ? 'ICH' : 'ich');
+}
+
 /** Polish list join: "a, b i c". */
 export function joinAndPl(parts: string[]): string {
     const items = parts.filter(Boolean);

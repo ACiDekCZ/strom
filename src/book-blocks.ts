@@ -15,7 +15,7 @@ import { getStringsForLang } from './strings.js';
 import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty } from './person-name.js';
-import { feminineForm, czechRulesApply, isGapOnlyName } from './surnames.js';
+import { feminineFormIn, isGapOnlyName } from './surnames.js';
 import { INDEX_UNCERTAIN, TRANSCRIPTION_GAP, indexLetter, orderIndexKeys } from './family-pages.js';
 import { safeHttpUrl } from './validation.js';
 import { proseHtml, coupleStoryYears } from './story-text.js';
@@ -361,12 +361,11 @@ export function rodOverviewHtml(rod: Rod, ctx: BookCtx, page: { title?: string }
     if (rodShown(ctx, rod.founderId)) {
         const forms = rod.forms.length ? rod.forms : [rod.surname];
         let text = esc(forms.join(', '));
-        if (czechRulesApply(ctx.model.index.data)) {
-            // A female form some member carries is named once, among the female forms.
-            const fem = [...new Set(forms.map(f => feminineForm(f)).filter((f): f is string => !!f))];
-            const own = forms.filter(f => !fem.includes(f));
-            if (fem.length && own.length) text = `${esc(own.join(', '))}; ${esc(B.femaleForms(fem.join(', ')))}`;
-        }
+        // A female form some member carries is named once, among the female forms (where the rules apply, genderRulesApply).
+        const data = ctx.model.index.data;
+        const fem = [...new Set(forms.map(f => feminineFormIn(f, data)).filter((f): f is string => !!f))];
+        const own = forms.filter(f => !fem.includes(f));
+        if (fem.length && own.length) text = `${esc(own.join(', '))}; ${esc(B.femaleForms(fem.join(', ')))}`;
         rows.push([B.nameForms, text]);
     }
     rows.push([B.inRod, esc(B.inRodValue(rod.realMemberCount, rod.realSpouseCount, rod.generations, rod.familyIds.length))]);

@@ -448,12 +448,12 @@ export const sourcesMethods = uiModule({
                 const ev = DataManager.getPerson(ref.personId)?.events?.find(e => e.id === ref.eventId);
                 if (!ev) return '';
                 const year = yearOf(ev.date);
-                return `${personName(ref.personId)} — ${eventTypeLabel(ev)}${year !== null ? ` (${year})` : ''}`;
+                return strings.sources.citedFact(personName(ref.personId), `${eventTypeLabel(ev)}${year !== null ? ` (${year})` : ''}`);
             }
             if (ref.fact) {
                 const p = DataManager.getPerson(ref.personId);
                 const year = yearOf(ref.fact === 'birth' ? p?.birthDate : p?.deathDate);
-                return `${personName(ref.personId)} — ${strings.events.types[ref.fact]}${year !== null ? ` (${year})` : ''}`;
+                return strings.sources.citedFact(personName(ref.personId), `${strings.events.types[ref.fact]}${year !== null ? ` (${year})` : ''}`);
             }
             return personName(ref.personId);
         }).filter(Boolean);

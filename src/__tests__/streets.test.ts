@@ -72,6 +72,12 @@ describe('the research\'s shared street cases', () => {
         }
     });
 
+    it('a Polish house marker is a marker: "nr domu 12" is house 12, never "nr domu nr domu 12" (1103)', () => {
+        for (const place of ['Wierzbno Dolne, nr domu 12', 'Wierzbno Dolne nr domu 12', 'Wierzbno Dolne, numer domu 12', 'Wierzbno Dolne, dom nr 12', 'Wierzbno Dolne, nr. domu 12']) {
+            expect(splitStreet(place), place).toMatchObject({ town: 'Wierzbno Dolne', house: '12' });
+        }
+    });
+
     it('streetOfHouse and numbersOnly read a house', () => {
         expect(streetOfHouse('Dlouhá 88'.normalize('NFD'))).toBe('dlouha');
         expect(streetOfHouse('č. p. 13')).toBe('');

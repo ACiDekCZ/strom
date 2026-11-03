@@ -54,7 +54,7 @@
 
 import { LineageOverrides, Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
 import {
-    addSurnameGroup, czechRulesApply, feminineForm, isGapOnlyName, removeSurnameForm, sameSurname, surnameKey, withSurnameRules,
+    addSurnameGroup, feminineFormIn, isGapOnlyName, removeSurnameForm, sameSurname, surnameKey, withSurnameRules,
 } from './surnames.js';
 import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
@@ -1128,13 +1128,13 @@ export function formCarrier(index: LineageIndex, rod: Rod, form: string): Person
 /**
  * The name forms a lineage's edit dialog lists (spec 1031 §2.1): the main
  * form first, then the other spellings — those members carry and those the
- * name's group in the tree holds. On a tree where the Czech rules apply, a
+ * name's group in the tree holds. Where the rules apply (genderRulesApply:
+ * the Czech ones on a Czech tree, the Polish -ski/-ska anywhere), a
  * feminine form of a listed one is not listed: it pairs by itself, and
  * `feminine` names those pairs for the sentence under the forms.
  */
 export function rodNameForms(rod: Rod, data: StromData): { forms: string[]; feminine: string[] } {
     return withSurnameRules(data, () => {
-        const rules = czechRulesApply(data);
         const forms: string[] = [];
         const add = (f: string): void => {
             const t = f.trim();
@@ -1145,16 +1145,14 @@ export function rodNameForms(rod: Rod, data: StromData): { forms: string[]; femi
         const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === surnameKey(rod.surname)));
         [...rod.forms, ...(group ?? []), ...rod.otherForms].forEach(add);
         const isFeminineOf = (f: string, of: string): boolean => {
-            const fem = feminineForm(of);
+            const fem = feminineFormIn(of, data);
             return !!fem && surnameKey(fem) === surnameKey(f);
         };
-        const kept = rules ? forms.filter((f, i) => i === 0 || !forms.some(o => o !== f && isFeminineOf(f, o))) : forms;
+        const kept = forms.filter((f, i) => i === 0 || !forms.some(o => o !== f && isFeminineOf(f, o)));
         const feminine: string[] = [];
-        if (rules) {
-            for (const f of kept) {
-                const fem = feminineForm(f);
-                if (fem && !feminine.some(o => surnameKey(o) === surnameKey(fem))) feminine.push(fem);
-            }
+        for (const f of kept) {
+            const fem = feminineFormIn(f, data);
+            if (fem && !feminine.some(o => surnameKey(o) === surnameKey(fem))) feminine.push(fem);
         }
         return { forms: kept, feminine };
     });

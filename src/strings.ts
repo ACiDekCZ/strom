@@ -965,6 +965,8 @@ const stringsEN = {
 
     // Sources / citations
     sources: {
+        /** A person's fact a source is cited for: "Zofia Jaworska — Baptism (1931)". */
+        citedFact: (person: string, fact: string) => `${person} — ${fact}`,
         menu: 'Sources',
         title: 'Sources',
         add: 'Add source',
@@ -7945,11 +7947,12 @@ const stringsCZ: StringsType = {
         expand: 'Rozbalit události páru',
         collapse: 'Sbalit události páru',
         ageOf: (name: string) => `Věk — ${name}`,
-        cited: (type: string, couple: string) => `${couple} — ${type}`,
+        cited: (type: string, couple: string) => `${couple} – ${type}`,
     },
 
     // Sources / citations
     sources: {
+        citedFact: (person: string, fact: string) => `${person} – ${fact}`,
         menu: 'Prameny',
         title: 'Prameny',
         add: 'Přidat pramen',
@@ -14850,11 +14853,12 @@ const stringsDE: StringsType = {
         expand: 'Ereignisse des Paares zeigen',
         collapse: 'Ereignisse des Paares ausblenden',
         ageOf: (name: string) => `Alter — ${name}`,
-        cited: (type: string, couple: string) => `${couple} — ${type}`,
+        cited: (type: string, couple: string) => `${couple} – ${type}`,
     },
 
     // Sources / citations
     sources: {
+        citedFact: (person: string, fact: string) => `${person} – ${fact}`,
         menu: 'Quellen',
         title: 'Quellen',
         add: 'Quelle hinzufügen',

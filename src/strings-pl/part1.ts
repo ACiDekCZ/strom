@@ -760,6 +760,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     // Sources / citations
     sources: {
+        citedFact: (person: string, fact: string) => `${person} – ${fact}`,
         menu: 'Źródła',
         title: 'Źródła',
         add: 'Dodaj źródło',

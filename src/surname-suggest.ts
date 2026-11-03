@@ -13,7 +13,7 @@
 
 import { cleanText } from './research-link.js';
 import { surnameRejectionKey } from './quality-dismiss.js';
-import { addSurnameGroup, czechRulesApply, masculineForm, sameSurname, surnameKey, surnamesInTree } from './surnames.js';
+import { addSurnameGroup, masculineFormIn, sameSurname, surnameKey, surnamesInTree, withSurnameRules } from './surnames.js';
 import type { StromData, SurnameRejection } from './types.js';
 
 /** The bridge answers `GET /surnames`: the button "Suggest from the research". */
@@ -248,23 +248,26 @@ const formCounts = new WeakMap<object, Map<string, number>>();
 
 /**
  * How many people of the tree carry this very form as their surname (a
- * woman's form counted with the man's, where the Czech rules apply);
+ * woman's form counted with the man's, where the rules apply, genderRulesApply);
  * diacritics count here, unlike in search, so Lhoták and Lhotak each show
  * their own people.
  */
 export function peopleWithForm(form: string, data: StromData): number {
     let counts = formCounts.get(data.persons);
     if (!counts) {
-        counts = new Map();
-        const rules = czechRulesApply(data);
-        for (const p of Object.values(data.persons)) {
-            const name = p.lastName?.trim();
-            if (!name || p.isPlaceholder) continue;
-            const keys = new Set([exact(name)]);
-            const male = rules ? masculineForm(name) : null;
-            if (male) keys.add(exact(male));
-            for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-        }
+        const into = new Map<string, number>();
+        counts = into;
+        // One pass over the tree: whether the Czech rules apply is asked once (withSurnameRules).
+        withSurnameRules(data, () => {
+            for (const p of Object.values(data.persons)) {
+                const name = p.lastName?.trim();
+                if (!name || p.isPlaceholder) continue;
+                const keys = new Set([exact(name)]);
+                const male = masculineFormIn(name, data);
+                if (male) keys.add(exact(male));
+                for (const k of keys) into.set(k, (into.get(k) ?? 0) + 1);
+            }
+        });
         formCounts.set(data.persons, counts);
     }
     return counts.get(exact(form)) ?? 0;

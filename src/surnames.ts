@@ -24,8 +24,65 @@ import { getCurrentLanguage } from './strings.js';
  * runs in Czech, or the surnames themselves carry Czech letters. Groups the
  * user entered (surnameVariants) are facts, not rules, and always apply.
  * Same gating idea as isCzechRelevant in archives.ts.
+ * No "ó": Polish writes it too (Wróblewska, Mróz), and a Polish tree is no Czech one.
  */
-const CZECH_LETTERS = /[áéíýčďěňřšťůžúóľĺŕäô]/i;
+const CZECH_LETTERS = /[áéíýčďěňřšťůžúľĺŕäô]/i;
+
+/**
+ * A Polish adjectival surname: -ski/-cki/-dzki for men, -ska/-cka/-dzka for
+ * women (Jaworski ↔ Jaworska). The men's form is Polish wherever it stands
+ * (no Czech surname ends so), so the Czech rules never make it Jaworskiová.
+ * The women's form is Polish outside a Czech tree; inside one an ASCII export
+ * of a Czech name (Liska of Liška) ends the same way and keeps the Czech
+ * rules. With i/a only: the Czech -ský/-ská carry their accent and stay Czech.
+ */
+const POLISH_ADJECTIVAL = /^(.*\p{L}.*(?:sk|ck|dzk))([ia])$/iu;
+
+/** The Polish pair of a surname, or null where it is no Polish adjectival one. */
+function polishPair(surname: string): { masculine: string; feminine: string; isFeminine: boolean } | null {
+    const name = surname.trim();
+    const m = POLISH_ADJECTIVAL.exec(name);
+    if (!m || m[1].length < 4) return null;
+    const upper = m[2] === m[2].toUpperCase();
+    return {
+        masculine: m[1] + (upper ? 'I' : 'i'),
+        feminine: m[1] + (upper ? 'A' : 'a'),
+        isFeminine: m[2].toLowerCase() === 'a',
+    };
+}
+
+/** A Polish adjectival surname (Jaworski, Nowicka): its own pair, never the Czech rules. */
+export function isPolishAdjectival(surname: string): boolean {
+    return polishPair(surname) !== null;
+}
+
+/**
+ * Do the masculine/feminine rules apply to this surname in this tree? A
+ * Polish adjectival one always; any other where the Czech rules apply to the
+ * tree (czechRulesApply).
+ */
+export function genderRulesApply(surname: string, data: StromData): boolean {
+    return isPolishAdjectival(surname) || czechRulesApply(data);
+}
+
+/** The forms the rules give a surname in this tree: the masculine ones it could come from, and its feminine form. */
+function ruleForms(surname: string, data: StromData): { masculine: string[]; feminine: string | null } {
+    const pl = polishPair(surname);
+    if (pl && !pl.isFeminine) return { masculine: [], feminine: pl.feminine };
+    if (czechRulesApply(data)) return { masculine: masculineCandidates(surname), feminine: feminineForm(surname) };
+    if (pl) return { masculine: [pl.masculine], feminine: null };
+    return { masculine: [], feminine: null };
+}
+
+/** The feminine form of a surname as the rules of this tree give it (Jaworski → Jaworska, Novák → Nováková), else null. */
+export function feminineFormIn(surname: string, data: StromData): string | null {
+    return ruleForms(surname, data).feminine;
+}
+
+/** The masculine form of a feminine surname as the rules of this tree give it (Jaworska → Jaworski, Brodská → Brodský), else null. */
+export function masculineFormIn(surname: string, data: StromData): string | null {
+    return ruleForms(surname, data).masculine[0] ?? null;
+}
 
 const czechRelevanceCache = new WeakMap<StromData, { personCount: number; relevant: boolean }>();
 
@@ -136,6 +193,9 @@ export function feminineForm(surname: string): string | null {
     const name = surname.trim();
     const t = name.toLowerCase();   // endings, not casing (NOVÁK → NOVÁKová)
     if (!name || /ov[áa]$/.test(t)) return null;   // already feminine (incl. ASCII)
+    // Polish men's form: Jaworski → Jaworska (never Jaworskiová).
+    const pl = polishPair(name);
+    if (pl && !pl.isFeminine) return pl.feminine;
     // No ending to decline: an unreadable place of a transcription ("[?]", "Nov[?]") or no letter at the end.
     if (!/\p{L}$/u.test(name)) return null;
 
@@ -177,11 +237,10 @@ export function surnameForms(surname: string, data: StromData): string[] {
     if (!key) return [];
 
     // Both genders: a woman's surname carries the men's form and vice versa, so
-    // searching either reaches the whole family. Rule-generated forms only on
-    // Czech-relevant trees; the user's own groups always count.
-    const rules = czechRulesApply(data);
-    const other = rules ? feminineForm(surname) : null;
-    const seeds = [surname, ...(rules ? masculineCandidates(surname) : []), ...(other ? [other] : [])];
+    // searching either reaches the whole family. Rule-generated forms only where
+    // the rules apply (genderRulesApply); the user's own groups always count.
+    const rule = ruleForms(surname, data);
+    const seeds = [surname, ...rule.masculine, ...(rule.feminine ? [rule.feminine] : [])];
     const out: string[] = [];
     const add = (n: string): void => {
         if (n && !out.some(o => surnameKey(o) === surnameKey(n))) out.push(n);
@@ -208,18 +267,16 @@ export function sameSurname(a: string, b: string, data: StromData): boolean {
     if (ka === kb) return true;
 
     // Fíšek and Fíšková are one family; nobody should have to say so — but only
-    // where the Czech rules apply at all (see czechRulesApply above).
-    const rules = czechRulesApply(data);
-    if (rules) {
-        if (masculineCandidates(a).some(m => surnameKey(m) === kb)) return true;
-        if (masculineCandidates(b).some(m => surnameKey(m) === ka)) return true;
-        if (surnameKey(feminineForm(a) ?? '') === kb) return true;
-        if (surnameKey(feminineForm(b) ?? '') === ka) return true;
-    }
+    // where the rules apply at all (see genderRulesApply above).
+    const formsOf = (s: string): string[] => {
+        const rule = ruleForms(s, data);
+        return [s, ...rule.masculine, rule.feminine ?? ''].map(surnameKey).filter(Boolean);
+    };
+    const formsA = formsOf(a);
+    const formsB = formsOf(b);
+    if (formsA.includes(kb) || formsB.includes(ka)) return true;
 
     // …and the two could be a grouped spelling of each other's masculine form.
-    const formsA = rules ? [a, ...masculineCandidates(a), feminineForm(a) ?? ''].map(surnameKey) : [ka];
-    const formsB = rules ? [b, ...masculineCandidates(b), feminineForm(b) ?? ''].map(surnameKey) : [kb];
     return (data.surnameVariants ?? []).some(g => {
         const keys = g.map(surnameKey);
         return formsA.some(x => keys.includes(x)) && formsB.some(y => keys.includes(y));
