@@ -101,12 +101,22 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
         const d = find(edit[1]);
         if (!d) return { status: 404, body: { error: 'directions.none' } };
         for (const k of ['name', 'question', 'reason'] as const) if (typeof body[k] === 'string') d[k] = body[k];
+        const limits = body.limits as Record<string, number | null> | undefined;
+        if (limits) {
+            const now = { ...(d.limits as Record<string, number> | undefined) };
+            for (const [k, v] of Object.entries(limits)) {
+                if (v === null) delete now[k];
+                else now[k] = v;
+            }
+            d.limits = now;
+        }
         return { status: 200, body: { direction: d } };
     }
     if (path === 'directions') {
         const id = `G${String(b.researches.length + 10).padStart(4, '0')}`;
         const d = { id, name: (body.name as string) || `Předci: ${body.person}`, state: 'active', direction: body.direction, focus: body.person,
-            order: b.researches.filter(x => x.state !== 'done').length + 1, tasks: 0, waiting: 0, working: false, since: new Date().toISOString() };
+            order: b.researches.filter(x => x.state !== 'done').length + 1, tasks: 0, waiting: 0, working: false, since: new Date().toISOString(),
+            ...(body.limits ? { limits: body.limits } : {}), ...(typeof body.question === 'string' ? { question: body.question } : {}) };
         b.researches.push(d);
         return { status: 200, body: { direction: d } };
     }
@@ -125,6 +135,8 @@ export async function followManaged(page: Page, opts: {
     size?: { width: number; height: number };
     /** Reconnect every 250 ms (a test of the bridge going away). */
     fastReconnect?: boolean;
+    /** `/status.features` (absent: none sent). */
+    features?: string[];
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
@@ -149,6 +161,7 @@ export async function followManaged(page: Page, opts: {
         links: ALL_LINKS,
         researches: b.researches,
         ...(b.caps ? { caps: b.caps } : {}),
+        ...(opts.features ? { features: opts.features } : {}),
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
         if (b.down) return route.abort('connectionrefused');

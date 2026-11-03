@@ -2505,6 +2505,7 @@ export const researchUiMethods = uiModule({
             this.refreshActionMenuBadges();
             this.connectLiveEvents(live);
             void this.fetchLiveLog(live);
+            this.refreshDirectionPeople(live, live.head);
         });
     },
 
@@ -2701,6 +2702,7 @@ export const researchUiMethods = uiModule({
         if (status.head && status.head !== s.head) {
             this.enqueueLive(s, () => this.onLiveChange(s, { head: status.head, what: [], at: '' }));
         }
+        this.refreshDirectionPeople(s, status.head || s.head);
         this.renderLivePanel();
     },
 

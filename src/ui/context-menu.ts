@@ -77,6 +77,12 @@ export interface PersonMenuAction {
      * stays empty).
      */
     kind?: 'place' | 'placeOpen' | 'focus' | 'jump';
+    /**
+     * A research direction the person is in (spec 038 §5.1): its kind's
+     * glyph before the name, the name drawn as a link ('' = the "and {n}
+     * more" row: the glyph's column empty).
+     */
+    glyph?: string;
 }
 
 /** The person menu with the rows of the view links: a ghost's block on top, the rest right after "Focus". */
@@ -98,7 +104,8 @@ function withViewLinkRows(items: PersonMenuAction[], vl: { head: PersonMenuActio
  */
 export function submenuRow(action: string, label: string, items: PersonMenuAction[]): PersonMenuAction[] {
     if (items.length === 0) return [];
-    if (items.length === 1) return [{ ...items[0], divider: false, header: undefined }];
+    // One row alone comes up a level, unless it needs its heading ("In direction").
+    if (items.length === 1 && items[0].glyph === undefined) return [{ ...items[0], divider: false, header: undefined }];
     const tag = items.find(i => i.action === 'research-knows')?.tag;
     return [{ action, label, submenu: items, tag, ariaLabel: tag ? `${label}, ${tag}` : undefined }];
 }
@@ -154,6 +161,10 @@ export function menuItemBody(a: PersonMenuAction): string {
     const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
     // The kind column (§2): an empty span, its mark drawn by the style (index.html .menu-item-kind)
     const kind = a.kind ? `<span class="menu-item-kind" data-kind="${a.kind}" aria-hidden="true"></span>` : '';
+    if (a.glyph !== undefined) {
+        const cls = a.glyph ? 'menu-item-label menu-item-line' : 'menu-item-label menu-item-line-more';
+        return `<span class="menu-item-glyph" aria-hidden="true">${e(a.glyph)}</span><span class="${cls}">${label}</span>${tail}`;
+    }
     return tail || a.note || kind ? `${kind}<span class="menu-item-label">${label}</span>${tail}` : label;
 }
 
@@ -230,9 +241,15 @@ export const contextMenuMethods = uiModule({
             material.push({ action: 'research-read', label: strings.read.menuPerson, note: strings.read.menuSub, badge: 'ai' });
         }
         const head = [...(knows ? [knows] : []), ...material];
-        const research = submenuRow('research', strings.research.personSection, [
+        // The directions the person is in, first, a line under them (spec 038 §5.1 a).
+        const inLine = this.personInLineItems(personId);
+        const rest = [
             ...head,
             ...researchActions.map((a, i) => (i === 0 && head.length ? { ...a, divider: true } : a)),
+        ];
+        const research = submenuRow('research', strings.research.personSection, [
+            ...inLine,
+            ...rest.map((a, i) => (i === 0 && inLine.length ? { ...a, divider: true } : a)),
         ]);
 
         // Linked in the view only: never a change of the data, so offered in every variant.
@@ -420,6 +437,10 @@ export const contextMenuMethods = uiModule({
     runPersonMenuAction(personId: PersonId, action: string): void {
         if (action.startsWith('view-link-')) {
             this.runViewLinkMenuAction(personId, action);
+            return;
+        }
+        if (action.startsWith('research-in-line')) {
+            this.runPersonInLine(action);
             return;
         }
         if (action === LINE_JUMP_PARENTS_ACTION || action === LINE_JUMP_CHILDREN_ACTION) {

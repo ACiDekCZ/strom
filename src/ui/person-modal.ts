@@ -352,6 +352,8 @@ export const personModalMethods = uiModule({
         this.bindLivePersonModalName();
         this.updatePersonModalName();
         this.updatePersonModalRod(person);
+        // Spec 038 §5.1 b: the directions the person is in, under the lineage row.
+        this.renderPersonInLine(person && DataManager.getPerson(person.id) ? person.id : null);
     },
 
     /**

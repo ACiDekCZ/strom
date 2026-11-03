@@ -6302,6 +6302,15 @@
             font-size: 13px; line-height: 1.45; color: var(--text);
         }
         .pm-rod[hidden] { display: none; }
+        /* "In direction" (spec 038 §5.1 b): the directions as links, the kind before each, "in progress" after a running one. */
+        .pm-in-line-list { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .modal .pm-in-line .pm-in-line-link {
+            display: inline; padding: 0; margin: 0; min-height: 0; border: 0; background: none; box-shadow: none;
+            font: inherit; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left;
+        }
+        .pm-in-line-glyph { display: inline-block; width: 1.1em; text-decoration: none; color: var(--text-light); }
+        .pm-in-line-working { font-size: 12px; font-weight: 600; color: var(--primary-dark); }
+        .pm-in-line-more { color: var(--text-light); }
         .pm-rod-label { flex: none; color: var(--text-light); }
         .pm-rod-value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
         .pm-rod-join { color: var(--text-light); }
@@ -16285,6 +16294,14 @@
         .menu-item-state { flex: none; font-size: 12px; font-weight: 600; color: var(--primary-dark); }
         :is(.context-menu-item, .bottom-sheet-item):has(.menu-item-state) .menu-item-label { color: var(--text-light); }
         .menu-item-note { display: block; font-size: 12px; color: var(--text-light); margin-top: 1px; }
+        /* "In direction" on top of Research › (spec 038 §5.1 a): a quiet label, each direction with its kind and its name as a link. */
+        :is(.menu-section-header, .bottom-sheet-section):has(+ :is(.context-menu-item, .bottom-sheet-item) .menu-item-glyph) {
+            font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-light);
+        }
+        .menu-item-glyph { flex: none; width: 18px; text-align: center; font-size: 14px; color: var(--text-light); }
+        .menu-item-line { text-decoration: underline; text-underline-offset: 2px; color: var(--primary); }
+        .menu-item-line-more { color: var(--text-light); }
+        :is(.context-menu-item, .bottom-sheet-item):has(.menu-item-line) .menu-item-label.menu-item-line { color: var(--primary); }
 
         /* Research overview → Directions (two or more): kind, name, person and counts, ⋯. */
         .research-directions__list { display: flex; flex-direction: column; }
@@ -16416,6 +16433,135 @@
         .research-direction__problem.is-warn { background: var(--dir-warn-bg); color: var(--dir-warn-text); border: 1px solid var(--dir-warn-line); }
         .research-direction__problem.is-danger { background: var(--danger-soft); color: var(--text); }
         .research-direction__retry { font-size: 12.5px; padding: 0; }
+
+        /* The direction form (spec 038 §2, §3.1): over the Overview, also over its phone sheet. */
+        #direction-form-modal { z-index: 1100; }
+        .modal.modal--md.direction-form { width: 520px; max-width: min(520px, 94vw); }
+        .direction-form__fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+        .direction-form.is-sending .direction-form__fields { opacity: .6; }
+        .direction-form__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .direction-form__field[hidden], .direction-form [hidden] { display: none !important; }
+        .direction-form .direction-form__label { font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
+        .direction-form__label-note { font-weight: 400; color: var(--text-light); }
+        .direction-form .direction-form__input { height: 38px; padding: 8px 10px; font-size: 14px; }
+        .direction-form textarea.direction-form__input { height: auto; min-height: 58px; }
+        .direction-form__hint { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .direction-form__hint.is-warn { color: var(--dir-warn-text); }
+        .direction-form__error { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--dir-warn-text); }
+        .direction-form .direction-form__input[aria-invalid="true"] { border-color: var(--dir-warn-line); }
+        /* Person: chosen, cannot change (edit), or the search with its list. */
+        .direction-form__chosen {
+            display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+        }
+        .direction-form__chosen.is-locked { background: var(--surface-2); }
+        .direction-form__who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+        .direction-form__who-name { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .direction-form__who-years, .direction-form__who-locked { font-size: 12px; color: var(--text-light); }
+        .direction-form__change { font-size: 13px; padding: 0; }
+        .direction-form__picks {
+            margin-top: 4px; max-height: 232px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface);
+        }
+        .direction-form__picks:empty { display: none; }
+        .direction-form__pick-head {
+            padding: 6px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-light);
+        }
+        .direction-form .direction-form__pick {
+            display: flex; flex-direction: column; align-items: stretch; justify-content: center; width: 100%; min-height: 38px;
+            padding: 4px 10px; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--text);
+            text-align: left; font: inherit; font-size: 14px; cursor: pointer;
+        }
+        .direction-form__pick-top { display: flex; align-items: baseline; gap: 8px; }
+        .direction-form__pick-years { font-size: 12px; color: var(--text-light); }
+        .direction-form__pick-note { font-size: 12px; color: var(--text-light); }
+        .direction-form .direction-form__pick[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .direction-form .direction-form__pick:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) {
+            .direction-form .direction-form__pick:not([aria-disabled="true"]):hover { background: var(--surface-2); }
+        }
+        /* Kind: a segment (34 px; touch 44; a phone the full width). */
+        .direction-form__kinds {
+            display: inline-flex; align-self: flex-start; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+        }
+        .direction-form .direction-form__kind {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; min-height: 0; padding: 0 14px;
+            margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text);
+            font: inherit; font-size: 13.5px; font-weight: 400; cursor: pointer;
+        }
+        .direction-form .direction-form__kind + .direction-form__kind { border-left: 1px solid var(--border); }
+        .direction-form .direction-form__kind.is-on { background: var(--primary-soft); font-weight: 600; }
+        .direction-form .direction-form__kind[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .direction-form .direction-form__kind:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .direction-form__kind-glyph { font-weight: 600; }
+        @media (hover: hover) {
+            .direction-form .direction-form__kind:not(.is-on):not([aria-disabled="true"]):hover { background: var(--surface-2); }
+        }
+        /* A direction there already. */
+        .direction-form__dup {
+            padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.45;
+            background: var(--dir-warn-bg); color: var(--dir-warn-text); border: 1px solid var(--dir-warn-line);
+        }
+        .direction-form__dup-sub { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+        .direction-form__show { font-size: 13px; padding: 0; }
+        /* Limit…: a disclosure, its summary when folded. */
+        .direction-form .direction-form__disclosure {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 24px; height: auto; padding: 0; margin: 0;
+            border: 0; background: none; box-shadow: none; color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer;
+        }
+        .direction-form__chev { width: 10px; color: var(--text-light); }
+        .direction-form__limit-sum { color: var(--text-light); font-size: 12.5px; }
+        .direction-form__limits-body { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+        .direction-form__limit-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .direction-form__limit { display: flex; flex-direction: column; gap: 4px; }
+        .direction-form .direction-form__select { width: 170px; }
+        .direction-form .direction-form__year { width: 130px; }
+        .direction-form__free { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .direction-form__free-icon {
+            flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--text-light);
+            font-size: 11px; line-height: 14px; text-align: center; font-style: italic; margin-top: 1px;
+        }
+        .direction-form__problem {
+            margin-top: 12px; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
+        }
+        .direction-form__problem.is-warn { background: var(--dir-warn-bg); color: var(--dir-warn-text); border: 1px solid var(--dir-warn-line); }
+        .direction-form__problem.is-danger { background: var(--danger-soft); color: var(--text); }
+        .direction-form__retry { font-size: 13px; padding: 0; }
+        .direction-form .direction-form__primary { display: inline-flex; align-items: center; gap: 8px; }
+        .direction-form .direction-form__primary.is-off { opacity: .45; cursor: default; }
+        .direction-form__spinner {
+            width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
+            animation: direction-form-spin .8s linear infinite;
+        }
+        @keyframes direction-form-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .direction-form__spinner { animation: none; } }
+        /* A direction just created: lit for 2 s (fading only with motion allowed). */
+        .research-direction--managed.is-new { background: var(--line-selected-bg); }
+        @media (prefers-reduced-motion: no-preference) { .research-direction--managed { transition: background-color .6s ease-out; } }
+        @media (pointer: coarse) {
+            .direction-form .direction-form__kind { height: 44px; }
+            .direction-form .direction-form__pick { min-height: 48px; }
+            .direction-form .direction-form__disclosure { min-height: 44px; }
+        }
+        /* Phone: a full page; fields 44 px with 16 px text (no zoom on focus), × 44 px, the kinds the full width. */
+        @media (max-width: 640px) {
+            #direction-form-modal { align-items: stretch; }
+            .modal.modal--md.direction-form { width: 100%; max-width: 100vw; height: 100%; max-height: 100%; border-radius: 0; }
+            .direction-form .direction-form__input, .direction-form .direction-form__select { height: 44px; font-size: 16px; }
+            .direction-form textarea.direction-form__input { height: auto; }
+            .direction-form .direction-form__select, .direction-form .direction-form__year { width: 100%; }
+            .direction-form__limit { flex: 1 1 140px; }
+            .direction-form__kinds { display: flex; align-self: stretch; }
+            .direction-form .direction-form__kind { flex: 1; height: 44px; padding: 0 8px; }
+            .direction-form .close-btn { width: 44px; height: 44px; }
+            .direction-form .buttons button { min-height: 48px; }
+            .direction-form .direction-form__disclosure { min-height: 44px; }
+        }
+        /* A phone held sideways: the dialog fills the height, the body scrolls. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal.modal--md.direction-form { max-height: 100%; }
+            .direction-form__picks { max-height: 150px; }
+        }
         .research-direction.is-drag-source { opacity: .45; background: var(--dir-drag-bg); outline: 1px dashed var(--border); outline-offset: -1px; }
         .research-directions__drop {
             position: absolute; left: 0; right: 0; height: 2px; background: var(--dir-drop); pointer-events: none; z-index: 1;
@@ -21868,6 +22014,7 @@
                     <div class="pm-name" id="pm-name"></div>
                     <div class="pm-context" id="modal-title"></div>
                     <div class="pm-rod" id="pm-rod" hidden></div>
+                    <div class="pm-rod pm-in-line" id="pm-in-line" hidden></div>
                 </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeModal()">&times;</button>
             </div>

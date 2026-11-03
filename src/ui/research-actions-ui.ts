@@ -1012,7 +1012,12 @@ export const researchActionsMethods = uiModule({
             badge: mark === 'agent' ? 'ai' : undefined,
             ariaLabel: [label, note, mark === 'agent' ? r.aiBadge : '', mark !== 'none' ? r.opensInResearchSr : ''].filter(Boolean).join(', '),
         });
-        if (this.researchLinkAvailable('research')) {
+        // A research that manages its directions through the bridge: the app's form, no mark (spec 038 §2.9).
+        const managed = this.managesDirections();
+        if (managed) {
+            items.push({ action: 'research-ancestors', label: r.findAncestors });
+            items.push({ action: 'research-descendants', label: r.findDescendants });
+        } else if (this.researchLinkAvailable('research')) {
             // A new direction: the research's terminal asks and writes its tasks; nothing is paid on the click.
             items.push({ action: 'research-ancestors', label: r.findAncestors, ...marked(r.findAncestors, researchLinkMark('research')) });
             items.push({ action: 'research-descendants', label: r.findDescendants, ...marked(r.findDescendants, researchLinkMark('research')) });
@@ -1023,6 +1028,10 @@ export const researchActionsMethods = uiModule({
             if (!d) continue;
             if (d.state === 'active') {
                 items[i] = { ...items[i], external: false, badge: undefined, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
+            } else if (managed) {
+                // Restarting it through the bridge: no mark.
+                const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
+                items[i] = { ...items[i], note, ariaLabel: `${items[i].label}, ${note}` };
             } else if (this.researchLinkAvailable('direction')) {
                 // Restarting it: the research's terminal asks (its tasks wait for the next session).
                 const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
@@ -1043,12 +1052,19 @@ export const researchActionsMethods = uiModule({
             this.openResearchDirection(direction.id);
             return;
         }
-        if (direction && this.researchLinkAvailable('direction')) {
+        const managed = this.managesDirections();
+        if (direction && managed) {
+            void this.changeDirectionState(direction, 'resume');
+            return;
+        }
+        if (direction && !managed && this.researchLinkAvailable('direction')) {
             this.runDirection(direction.id, 'resume');
             return;
         }
         if (action === 'research-review') {
             this.showResearchReviewDialog(personId);
+        } else if (managed && (action === 'research-ancestors' || action === 'research-descendants')) {
+            this.openDirectionForm({ mode: 'new', person, kind: action === 'research-ancestors' ? 'ancestors' : 'descendants' });
         } else if (action === 'research-ancestors' || action === 'research-descendants') {
             const direction = action === 'research-ancestors' ? 'ancestors' : 'descendants';
             const url = this.activeResearchLink('research', { person, direction });

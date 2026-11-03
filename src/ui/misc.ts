@@ -978,6 +978,10 @@ export const miscMethods = uiModule({
                         this.closePersonPage();
                         return;
                     }
+                    if (currentDialog === 'direction-form-modal') {
+                        this.closeDirectionForm();
+                        return;
+                    }
                     if (currentDialog === 'research-review-modal') {
                         this.closeResearchReviewDialog();
                         return;

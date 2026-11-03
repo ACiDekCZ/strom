@@ -235,6 +235,18 @@ let redrawAfterDrag = false;
 /** The end confirmation's cleanup (null: none open). */
 let endPopoverCleanup: (() => void) | null = null;
 
+/** Directions just created from the form: lit for 2 s (§2.7). */
+const freshDirections = new Set<string>();
+
+/** Light a direction just created for 2 s (its row, when the overview shows it). */
+export function markFreshDirection(id: string): void {
+    freshDirections.add(id);
+    setTimeout(() => {
+        freshDirections.delete(id);
+        document.querySelector(`#research-overview .research-direction[data-direction="${CSS.escape(id)}"]`)?.classList.remove('is-new');
+    }, 2000);
+}
+
 /** A row is dragged: the overview waits with its redraw (research-overview-ui). */
 export function directionDragActive(): boolean {
     return dragging !== null;
@@ -684,7 +696,7 @@ export const researchDirectionsMethods = uiModule({
         const phone = mode === 'sheet';
         const open = !phone && expanded === d.id;
         const paused = d.state === 'paused';
-        const row = el('div', `research-direction research-direction--managed${paused ? ' is-paused' : ''}${open ? ' is-open' : ''}`);
+        const row = el('div', `research-direction research-direction--managed${paused ? ' is-paused' : ''}${open ? ' is-open' : ''}${freshDirections.has(d.id) ? ' is-new' : ''}`);
         row.dataset.direction = d.id;
         row.dataset.order = String(n);
 
