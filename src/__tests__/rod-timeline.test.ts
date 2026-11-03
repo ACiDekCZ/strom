@@ -208,6 +208,8 @@ describe('the page in the set (§5.1)', () => {
         expect(count(html, /class="sp-tl-lab sp-tl-lab--pl/g)).toBeGreaterThan(0);
         expect(count(html, /class="sp-tl-r sp-tl-r--pl/g)).toBe(count(html, /class="sp-tl-lab sp-tl-lab--pl/g));
         expect(count(html, /<span class="sp-tl-pln">/g)).toBe(count(html, /class="sp-tl-lab sp-tl-lab--pl/g));
+        // A bar of one year says the year once ("Zálesí · 1870", not "1870–1870").
+        expect(html).not.toMatch(/title="[^"]* · (\d{4})–\1"/);
     });
 
     it('the saved file: links by anchor, every century open without scripts, the controls\' script inside', () => {

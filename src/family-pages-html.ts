@@ -1518,6 +1518,11 @@ function mapPageHtml(r: Render, page: SetPage): string {
 
 // ─── The timeline of a line (1102 §5) ────────────────────────────────────────
 
+/** A span of years for a bar's title: one year alone when it starts and ends in it. */
+function yearSpan(from: number, to: number): string {
+    return from === to ? String(from) : `${from}–${to}`;
+}
+
 /** A bar or band of the overview, placed on the whole axis (the script moves it on a zoom). */
 function tlBarHtml(cls: string, from: number, to: number, a: number, b: number, title: string): string {
     const span = b - a;
@@ -1614,12 +1619,12 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const rows: string[] = [];
     for (const g of tl.generations) {
         labels.push(`<span class="sp-tl-lab sp-tl-lab--gen">${roman(g.gen)}<span class="sp-tl-lab-n"> · ${g.count}</span></span>`);
-        rows.push(`<span class="sp-tl-r">${tlBarHtml('sp-tl-bar sp-tl-bar--gen', g.from, g.to, a, b, `${roman(g.gen)} · ${g.from}–${g.to}`)}</span>`);
+        rows.push(`<span class="sp-tl-r">${tlBarHtml('sp-tl-bar sp-tl-bar--gen', g.from, g.to, a, b, `${roman(g.gen)} · ${yearSpan(g.from, g.to)}`)}</span>`);
     }
     tl.places.forEach((p, i) => {
         const first = i === 0 ? ' sp-tl-first' : '';
         labels.push(`<span class="sp-tl-lab sp-tl-lab--pl${first}" title="${esc(p.name)}"><span class="sp-tl-pln">${esc(p.name)}</span></span>`);
-        rows.push(`<span class="sp-tl-r sp-tl-r--pl${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${p.from}–${p.to}`)}</span>`);
+        rows.push(`<span class="sp-tl-r sp-tl-r--pl${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${yearSpan(p.from, p.to)}`)}</span>`);
     });
     const bands = hist.map(e => {
         const h = e.history!;
