@@ -138,7 +138,8 @@ test.describe('working lines in the live panel', () => {
         await expect(line(page, 'G0001').locator('.live-line__glyph')).toHaveText('↑');
         await expect(line(page, 'G0002').locator('.live-line__glyph')).toHaveText('↓');
         await expect(line(page, 'G0001').locator('.live-line__task')).toHaveText('Křest Josefa Nováka 1842');
-        await expect(line(page, 'G0001').locator('.live-line__meta')).toHaveText(/^Josef Novák · since \d{1,2}:\d{2}( [AP]M)? · 9 min$/);
+        // Started 9 min ago: in the first minutes after midnight the start was yesterday and carries its date.
+        await expect(line(page, 'G0001').locator('.live-line__meta')).toHaveText(/^Josef Novák · since (\d{1,2}\/\d{1,2} )?\d{1,2}:\d{2}( [AP]M)? · 9 min$/);
         // The agent is in the row's tooltip; none is selected.
         await expect(line(page, 'G0001')).toHaveAttribute('title', 'agent-matriky');
         await expect(line(page, 'G0001')).toHaveAttribute('aria-pressed', 'false');
