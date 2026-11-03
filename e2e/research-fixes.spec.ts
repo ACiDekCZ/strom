@@ -112,7 +112,8 @@ test.describe('tree fixes of the research', () => {
         });
         for (const id of ['surname-split', 'street-places']) {
             const state = row(page, id).locator('.research-fix-state');
-            expect(await state.evaluate(el => getComputedStyle(el).color)).toBe(faint);
+            // Polled: the dialog may draw its rows again when the list comes, and a detached row has no colour.
+            await expect.poll(() => state.evaluate(el => el.isConnected ? getComputedStyle(el).color : '')).toBe(faint);
             await expect(row(page, id).locator('.research-fix-action')).toHaveAttribute('data-fix-act', 'open');
             await expect(row(page, id).getByRole('button', { name: 'Open in the research, opens in the research' })).toBeVisible();
         }
