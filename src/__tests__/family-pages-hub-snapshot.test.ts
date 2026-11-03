@@ -47,5 +47,6 @@ describe('the hub of several lineages is unchanged', () => {
         const two = buildPageSet(data, { kind: 'rods', rods: ids.slice(0, 2) }, { lang: 'cs', now: FP_NOW });
         out['cs-two-app'] = digest('hub-cs-two-app', pageSetSectionHtml(two, two.introSlug));
         expect(out).toMatchSnapshot();
-    });
+        // Ten sets built: under 1 s alone, but over the runner's 5 s default with other suites running.
+    }, 30_000);
 });
