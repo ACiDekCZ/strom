@@ -38,7 +38,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -145,6 +145,8 @@ export interface LiveSession {
     researches: LiveDirection[];
     /** What the bridge does with the directions (its last status's `caps`; absent: an older research). */
     caps?: ResearchCaps;
+    /** Work outside the directions by branches (its last status's `offLine`; absent: not said). */
+    offLine?: LiveOffLine;
     /** Sections the panel folded by itself for lack of room (not remembered). */
     autoCollapsed: Set<LiveSectionKey>;
     /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
@@ -2474,6 +2476,7 @@ export const researchUiMethods = uiModule({
                 lastIntake: status.lastIntake,
                 researches: status.researches,
                 ...(status.caps ? { caps: status.caps } : {}),
+                ...(status.offLine ? { offLine: status.offLine } : {}),
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
                 waitingView: newWaitingView(),
@@ -2691,6 +2694,7 @@ export const researchUiMethods = uiModule({
         s.queueMore = status.queueMore;
         s.researches = status.researches;
         s.caps = status.caps;
+        s.offLine = status.offLine;
         s.update = status.update;
         s.busy = status.busy;
         s.spend = status.spend;

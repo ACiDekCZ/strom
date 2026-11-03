@@ -16,8 +16,9 @@
  */
 
 import {
-    LiveDirection, LiveDirectionKind, DirectionLimits, cleanText, isResearchHead, researchDirectionRef, researchPersonRef,
-    sanitizeDirections, withAppVersion,
+    LiveDirection, LiveDirectionKind, DirectionLimits, LiveOffLine, LiveQueueItem, OffLineBranch, OffLineMode, OFF_LINE_MODES,
+    cleanText, isResearchHead, researchBranchRef, researchDirectionRef, researchPersonRef, researchTaskRef,
+    sanitizeDirections, sanitizeOffLine, sanitizeOffLineBranch, sanitizeQueue, withAppVersion,
 } from './research-link.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 
@@ -190,7 +191,7 @@ export interface DirectionCreateBody {
 
 /** A branch's key ("B-P0031"), or null. */
 export function offLineBranchRef(id: unknown): string | null {
-    return typeof id === 'string' && /^B-P\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+    return researchBranchRef(id);
 }
 
 /** Create a direction; it comes last in the order. 409 `directions.exists`: `existing` says which is there. */
@@ -266,6 +267,87 @@ export function writeDirectionOrder(base: string, ids: readonly string[]): Promi
     if (order.length === 0) return Promise.resolve(notSent());
     const list = (v: unknown): string[] => Array.isArray(v) ? v.map(researchDirectionRef).filter((x): x is string => !!x) : [];
     return researchBridgeWrite(base, 'POST', 'directions/order', { order }, r => ({ order: list(r.order), ignored: list(r.ignored) }));
+}
+
+// ==================== WORK OUTSIDE THE DIRECTIONS ====================
+
+/** A branch's choice: how it is taken, added to a direction, or back to the tree's default. */
+export type BranchModeWrite = OffLineMode | 'default' | { line: string };
+
+/**
+ * Set how a branch outside the directions is taken (`POST /offline/<B…>`), for
+ * its tasks today and the new ones. `{ line }` adds it to that direction.
+ * 404 `offline.none`: the branch is gone (done, or in a direction already).
+ */
+export function setBranchMode(base: string, branch: string, mode: BranchModeWrite):
+    Promise<BridgeWriteResult<{ branch: OffLineBranch | null }>> {
+    const ref = researchBranchRef(branch);
+    if (!ref || ref !== branch) return Promise.resolve(notSent());
+    let body: { mode: string; line?: string };
+    if (typeof mode === 'object') {
+        const line = researchDirectionRef(mode.line);
+        if (!line) return Promise.resolve(notSent());
+        body = { mode: 'line', line };
+    } else if (mode === 'default' || (OFF_LINE_MODES as readonly string[]).includes(mode)) {
+        body = { mode };
+    } else {
+        return Promise.resolve(notSent());
+    }
+    return researchBridgeWrite(base, 'POST', `offline/${ref}`, body, r => ({ branch: sanitizeOffLineBranch(r.branch) }));
+}
+
+/** The tree's choice for work outside the directions (`POST /offline`): how it is taken, and the growing branches' question. */
+export function setOffLineTree(base: string, body: { mode?: OffLineMode | 'default'; suggest?: boolean }):
+    Promise<BridgeWriteResult<{ offLine: LiveOffLine | null }>> {
+    const mode = body.mode === 'default' || (body.mode && (OFF_LINE_MODES as readonly string[]).includes(body.mode)) ? body.mode : undefined;
+    const suggest = typeof body.suggest === 'boolean' ? body.suggest : undefined;
+    if (mode === undefined && suggest === undefined) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', 'offline', { ...(mode ? { mode } : {}), ...(suggest !== undefined ? { suggest } : {}) },
+        r => ({ offLine: sanitizeOffLine(r.offLine) }));
+}
+
+/** A task's own place in the queue. */
+export type TaskOrderDo = 'next' | 'last' | 'default';
+
+/** Set a task's own place (`POST /queue/<T…>`): next once, after everything, or back. 409 `queue.doing`: the agent works on it. */
+export function setTaskOrder(base: string, task: string, what: TaskOrderDo): Promise<BridgeWriteResult<{ task: LiveQueueItem | null }>> {
+    const ref = researchTaskRef(task);
+    if (!ref || ref !== task || !['next', 'last', 'default'].includes(what)) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', `queue/${ref}`, { do: what }, r => ({ task: sanitizeQueue([r.task], true, true)[0] ?? null }));
+}
+
+/** The answer to a growing branch in Awaiting action: add it to a direction, leave it as it is, or do not research it. */
+export type BranchWaitingDo = 'line' | 'keep' | 'never';
+
+/** Answer a growing branch (`POST /waiting/W-B-…`); `line` adds it to `line` (or the nearest direction). 404 `waiting.none`: answered already. */
+export function answerBranchWaiting(base: string, id: string, what: BranchWaitingDo, line?: string):
+    Promise<BridgeWriteResult<{ answer: string }>> {
+    const ok = typeof id === 'string' && /^W-B-P\d{1,7}(-\d{1,7})?$/.test(id);
+    const to = line === undefined ? undefined : researchDirectionRef(line);
+    if (!ok || !['line', 'keep', 'never'].includes(what) || (line !== undefined && !to)) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', `waiting/${id}`, { do: what, ...(what === 'line' && to ? { line: to } : {}) },
+        r => ({ answer: typeof r.answer === 'string' ? r.answer.slice(0, 20) : what }));
+}
+
+/** A task of a branch (`GET /offline/<B…>`). */
+export interface BranchTask { id: string; text: string; person?: string; own?: 'next' | 'last' }
+
+/** All tasks of a branch, the ones not taken too (`GET /offline/<B…>`). */
+export function fetchBranchTasks(base: string, branch: string): Promise<BridgeWriteResult<{ branch: OffLineBranch | null; tasks: BranchTask[] }>> {
+    const ref = researchBranchRef(branch);
+    if (!ref) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'GET', `offline/${ref}`, undefined, r => {
+        const tasks: BranchTask[] = [];
+        for (const raw of Array.isArray(r.tasks) ? r.tasks.slice(0, 500) : []) {
+            const t = asRecord(raw);
+            const id = researchTaskRef(t?.id);
+            const text = cleanText(t?.text);
+            if (!t || !id || !text) continue;
+            const person = researchPersonRef(t.person);
+            tasks.push({ id, text, ...(person ? { person } : {}), ...(t.own === 'next' || t.own === 'last' ? { own: t.own } : {}) });
+        }
+        return { branch: sanitizeOffLineBranch(r.branch), tasks };
+    });
 }
 
 // ==================== WHO IS IN WHICH DIRECTION ====================

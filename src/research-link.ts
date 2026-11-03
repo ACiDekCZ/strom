@@ -173,6 +173,11 @@ export function researchDirectionRef(id: unknown): string | null {
     return typeof id === 'string' && /^G\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
+/** A branch outside the directions ("B-P0031", named after its person), or null. */
+export function researchBranchRef(id: unknown): string | null {
+    return typeof id === 'string' && /^B-P\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
 /** A conflict's id in the research ("X0007"), or null. */
 export function researchConflictRef(id: unknown): string | null {
     return typeof id === 'string' && /^X\d{1,7}$/.test(id.trim()) ? id.trim() : null;
@@ -1442,7 +1447,14 @@ export interface LiveWaiting {
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission' | 'place' | WaitingTaskKind;
+    kind?: 'story' | 'permission' | 'place' | 'branch' | WaitingTaskKind;
+    /**
+     * 'branch' (`offLine.branches`): a branch outside the directions grew; the research asks once what to do with it.
+     * The branch, its tasks and people (the line it is near is `research`).
+     */
+    branch?: string;
+    tasks?: number;
+    persons?: number;
     /**
      * 'place' (spec 034 §9, `places.answer`): the research asks where a place
      * is. Its record id (the item's id is the same "L…"), the texts of the
@@ -1524,7 +1536,7 @@ export const WAITING_ACTIONS = ['answer', 'file', 'note', 'folder', 'sent', 'cha
 export type WaitingAction = typeof WAITING_ACTIONS[number];
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
-    story: 'decide', permission: 'decide', place: 'decide', takeover: 'decide', check: 'decide',
+    story: 'decide', permission: 'decide', place: 'decide', branch: 'decide', takeover: 'decide', check: 'decide',
     images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
 };
 
@@ -1680,6 +1692,8 @@ export interface LiveStatus {
     busy?: LiveBusy;
     /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
     caps?: ResearchCaps;
+    /** `offLine` (with `offLine.branches` in `features`): work outside the directions by branches; absent: not said. */
+    offLine?: LiveOffLine;
 }
 
 /** How often the research looks for history (`/status.experiments.historyPace`). */
@@ -2061,14 +2075,72 @@ export interface LiveQueueItem {
     research?: string;
     /**
      * Off the research's lines and helping none (`tasks.offLine` in `features`): `last` = taken only after the
-     * lines' work; `never` = not taken (work outside the lines is set off in the research). Absent: it does not apply.
+     * lines' work; `never` = not taken (work outside the lines is set off in the research); `occasional` (with
+     * `offLine.branches`) = now and then among the lines' work. Absent: it does not apply.
      */
-    offLine?: 'last' | 'never';
+    offLine?: 'last' | 'never' | 'occasional';
     /**
      * Off the lines by its people but helping the line in `research` (`tasks.offLine` in `features`): it serves a
      * question of the line (`question`), connects people to the tree (`joins`), or the agent said how (`agent`).
      */
     helps?: 'question' | 'joins' | 'agent';
+    /** The branch outside the directions the task belongs to ("B-P0031"; `offLine.branches`). */
+    branch?: string;
+    /** Its own place set by hand (`queue.own`): next once, or after everything else. */
+    own?: 'next' | 'last';
+    /** Why it stands where it stands (`offLine.branches`); absent for tasks about nobody. */
+    why?: QueueWhy;
+}
+
+/** How work outside the directions is taken (the tree's choice, and a branch's own). */
+export type OffLineMode = 'occasional' | 'last' | 'normal' | 'never';
+export const OFF_LINE_MODES: readonly OffLineMode[] = ['occasional', 'last', 'normal', 'never'];
+/** How a task helps a direction (`queue[].why.by`). */
+export type QueueHelpsBy = 'question' | 'joins' | 'agent' | 'partner' | 'branch';
+/** Why a task stands where it stands in the queue (`queue[].why`). */
+export type QueueWhy =
+    | { kind: 'own'; do: 'next' | 'last' }
+    | { kind: 'line'; research: string }
+    | { kind: 'helps'; research: string; by: QueueHelpsBy }
+    | { kind: 'off'; mode: Exclude<OffLineMode, 'never'>; branch?: string }
+    | { kind: 'paused'; research: string };
+
+/** How a branch hangs on a direction: through whom and how they are related. */
+export type BranchRel = 'sibling' | 'partner' | 'child' | 'parent' | 'other';
+/** A branch outside the directions (`/status.offLine.branches[]`). */
+export interface OffLineBranch {
+    id: string;
+    /** The branch's person (REFN), the nearest to a direction. */
+    person: string;
+    via?: { person: string; rel: BranchRel };
+    /** The nearest direction ("G0003"); absent: none near. */
+    nearest?: string;
+    tasks: number;
+    persons: number;
+    /** 2–3 of its tasks, in the queue's order. */
+    samples: { id: string; text: string }[];
+    /** How it is taken now; 'line' = added to the direction `line` (its tasks help it). */
+    mode: OffLineMode | 'line';
+    line?: string;
+    /** Its own choice (not the tree's default). */
+    own: boolean;
+    /** It grew past the research's threshold. */
+    grows?: boolean;
+}
+/** `/status.offLine`: the tree's choice for work outside the directions, and its branches. */
+export interface LiveOffLine {
+    mode: OffLineMode;
+    /** The tree's choice was set by a person (not the default). */
+    own: boolean;
+    /** With 'occasional': about 1 task outside per `share` tasks of the directions. */
+    share: number;
+    /** Ask in Awaiting action about growing branches. */
+    suggest: boolean;
+    tasks: number;
+    queued: number;
+    /** Tasks with their own place set by hand. */
+    ownTasks: number;
+    branches: OffLineBranch[];
 }
 
 /** `/status.features`: queue items say when work outside the lines comes (`offLine`) and how a task helps a line (`helps`). */
@@ -2290,7 +2362,7 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
-export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
+export function sanitizeWaiting(value: unknown, groups = false, branches = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
     for (const item of value.slice(0, MAX_WAITING)) {
@@ -2310,14 +2382,17 @@ export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
         const task: WaitingTaskKind | null = !groups || story || host || r.kind === 'story' || r.kind === 'permission' ? null
             : TASK_KINDS.includes(r.kind as WaitingTaskKind) ? r.kind as WaitingTaskKind : 'other';
         const placeQ = !story && !host && r.kind === 'place' ? waitingPlaceFields(r) : null;
-        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : task ?? undefined;
+        // A growing branch (`offLine.branches`): it names the branch; without a valid one it is just a line.
+        const branch = branches && r.kind === 'branch' ? researchBranchRef(r.branch) : null;
+        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : task ?? undefined;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),
-            ...(task && !placeQ ? { kind: task } : {}),
+            ...(task && !placeQ && !branch ? { kind: task } : {}),
             ...(placeQ ?? {}),
+            ...(branch ? { kind: 'branch' as const, branch, tasks: asCount(r.tasks) ?? 0, persons: asCount(r.persons ?? r.newPersons) ?? 0 } : {}),
             ...(groups ? waitingGroupFields(r, kind) : {}),
         });
     }
@@ -2328,7 +2403,7 @@ export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
 const MAX_QUEUE = 20;
 
 /** The `queue` list of the status. Untrusted input: bad items are dropped. */
-export function sanitizeQueue(value: unknown, offLine = false): LiveQueueItem[] {
+export function sanitizeQueue(value: unknown, offLine = false, branches = false): LiveQueueItem[] {
     if (!Array.isArray(value)) return [];
     const out: LiveQueueItem[] = [];
     for (const item of value) {
@@ -2341,14 +2416,98 @@ export function sanitizeQueue(value: unknown, offLine = false): LiveQueueItem[] 
         const person = researchPersonRef(r.person);
         const research = researchDirectionRef(r.research);
         // When work outside the lines comes, and how a task helps a line: only from a research that says so.
-        const off = offLine && (r.offLine === 'last' || r.offLine === 'never') ? r.offLine : null;
+        const off = offLine && (r.offLine === 'last' || r.offLine === 'never' || (branches && r.offLine === 'occasional')) ? r.offLine : null;
         const helps = offLine && (r.helps === 'question' || r.helps === 'joins' || r.helps === 'agent') ? r.helps : null;
+        // The branch, the own place and the reason: only from a research with branches outside the directions.
+        const branch = branches ? researchBranchRef(r.branch) : null;
+        const own = branches && (r.own === 'next' || r.own === 'last') ? r.own : null;
+        const why = branches ? sanitizeQueueWhy(r.why) : null;
         if (state) out.push({
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
+            ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}),
         });
     }
     return out;
+}
+
+const HELPS_BY: readonly string[] = ['question', 'joins', 'agent', 'partner', 'branch'];
+
+/** `queue[].why`: one of its five shapes, or null (unknown kind, a field missing or wrong). */
+export function sanitizeQueueWhy(value: unknown): QueueWhy | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const research = researchDirectionRef(r.research);
+    switch (r.kind) {
+        case 'own': return r.do === 'next' || r.do === 'last' ? { kind: 'own', do: r.do } : null;
+        case 'line': return research ? { kind: 'line', research } : null;
+        case 'paused': return research ? { kind: 'paused', research } : null;
+        case 'helps':
+            return research && typeof r.by === 'string' && HELPS_BY.includes(r.by) ? { kind: 'helps', research, by: r.by as QueueHelpsBy } : null;
+        case 'off': {
+            if (r.mode !== 'occasional' && r.mode !== 'last' && r.mode !== 'normal') return null;
+            const branch = researchBranchRef(r.branch);
+            return { kind: 'off', mode: r.mode, ...(branch ? { branch } : {}) };
+        }
+        default: return null;
+    }
+}
+
+const BRANCH_RELS: readonly string[] = ['sibling', 'partner', 'child', 'parent', 'other'];
+/** Most branches taken from the status. */
+const MAX_BRANCHES = 100;
+
+/** One branch of `/status.offLine.branches`, or null when its id, person or mode is wrong. */
+export function sanitizeOffLineBranch(value: unknown): OffLineBranch | null {
+    const r = asRecord(value);
+    const id = researchBranchRef(r?.id);
+    const person = researchPersonRef(r?.person);
+    const mode = typeof r?.mode === 'string' && ((OFF_LINE_MODES as readonly string[]).includes(r.mode) || r.mode === 'line')
+        ? r.mode as OffLineBranch['mode'] : null;
+    if (!r || !id || !person || !mode) return null;
+    const line = researchDirectionRef(r.line);
+    // A branch added to a direction names it; without one it is read as the tree's default.
+    if (mode === 'line' && !line) return null;
+    const via = asRecord(r.via);
+    const viaPerson = via ? researchPersonRef(via.person) : null;
+    const nearest = researchDirectionRef(r.nearest);
+    const samples: { id: string; text: string }[] = [];
+    for (const raw of Array.isArray(r.samples) ? r.samples.slice(0, 5) : []) {
+        const sr = asRecord(raw);
+        const sid = researchTaskRef(sr?.id);
+        const text = cleanText(sr?.text);
+        if (sid && text && samples.length < 3) samples.push({ id: sid, text });
+    }
+    return {
+        id, person,
+        ...(via && viaPerson ? { via: { person: viaPerson, rel: typeof via.rel === 'string' && BRANCH_RELS.includes(via.rel) ? via.rel as BranchRel : 'other' } } : {}),
+        ...(nearest ? { nearest } : {}),
+        tasks: asCount(r.tasks) ?? 0,
+        persons: asCount(r.persons ?? r.newPersons) ?? 0,
+        samples,
+        mode,
+        ...(mode === 'line' && line ? { line } : {}),
+        own: r.own === true,
+        ...(r.grows === true ? { grows: true } : {}),
+    };
+}
+
+/** `/status.offLine` (and the `offLine` of a `POST /offline` answer, without branches). Null when its mode is wrong. */
+export function sanitizeOffLine(value: unknown): LiveOffLine | null {
+    const r = asRecord(value);
+    const mode = typeof r?.mode === 'string' && (OFF_LINE_MODES as readonly string[]).includes(r.mode) ? r.mode as OffLineMode : null;
+    if (!r || !mode) return null;
+    const share = asCount(r.share);
+    const seen = new Set<string>();
+    const branches: OffLineBranch[] = [];
+    for (const raw of Array.isArray(r.branches) ? r.branches.slice(0, MAX_BRANCHES) : []) {
+        const b = sanitizeOffLineBranch(raw);
+        if (b && !seen.has(b.id)) { seen.add(b.id); branches.push(b); }
+    }
+    return {
+        mode, own: r.own === true, share: share && share >= 2 ? share : 10, suggest: r.suggest !== false,
+        tasks: asCount(r.tasks) ?? 0, queued: asCount(r.queued) ?? 0, ownTasks: asCount(r.ownTasks) ?? 0, branches,
+    };
 }
 
 /** `busy: { sessions, runs }` (counts; a missing one is 0), or null when neither is a count. */
@@ -2616,9 +2775,9 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         persons: asCount(r.persons),
         families: asCount(r.families),
         working: sanitizeWorking(r.working),
-        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE)),
+        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
         links: sanitizeResearchLinks(r.links),
-        queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE)),
+        queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
         queueMore: asCount(r.queueMore) ?? 0,
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
@@ -2643,6 +2802,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...qualitySaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
+        ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
     };
 }
 
