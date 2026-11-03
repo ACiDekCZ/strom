@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.22.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Forschungsrichtungen**: Das Panel *Richtungen* in der Übersicht der Forschung verwaltet die Richtungen ohne Terminal. *+ Neue Richtung* nimmt eine Person, eine Art (*Vorfahren*, *Nachkommen* oder *Frage*), eine optionale Frage, einen Namen und Grenzen für Generationen und Jahre; *Bearbeiten* ändert sie, und eine schon vorhandene Richtung wird mit *Anzeigen* oder *Trotzdem anlegen* angeboten. Das Anlegen kostet nichts; der Agent beginnt damit beim nächsten Forschungslauf.
+- **Reihenfolge der Arbeit**: Die Reihenfolge der Richtungen ist die Reihenfolge, in der die Forschung an ihnen arbeitet, geändert durch Ziehen, mit den Pfeilen oder *An den Anfang*. *Pausieren* und *Neu starten* haben *Rückgängig*, *Beenden…* fragt zuerst und nimmt einen optionalen Grund; beendete Richtungen sind am Ende zusammengeklappt. Jede Richtung zeigt, woran gerade gearbeitet wird, ihre Grenzen und was sie in den letzten Tagen gefunden hat.
+- **Richtungen einer Person**: *Vorfahren suchen* und *Nachkommen suchen* im Personenmenü öffnen das Formular für diese Person, und eine Person in einer Richtung hat eine Zeile *In der Richtung* im Menü *Forschung* und im Personendetail.
+- **Arbeit außerhalb der Richtungen**: Das Panel zeigt die Aufgaben außerhalb der Richtungen nach Zweigen, jeden mit der nächsten Person und Richtung, einigen Beispielen und der Art, wie er übernommen wird: *Ab und zu*, *Am Ende*, *Wie üblich* oder *Nicht erforschen*, mit *Rückgängig*. Ein Zweig lässt sich einer Richtung hinzufügen oder beginnt eine neue. Jede Aufgabe der Warteschlange sagt, warum sie an ihrer Stelle steht, und *Als Nächstes* oder *Ans Ende* verschiebt sie. Ein wachsender Zweig fragt einmal in *Wartet auf Bearbeitung*, was mit ihm geschehen soll.
+- **Forschung für diesen Stammbaum**: *Arbeit außerhalb der Richtungen* legt fest, wie diese Aufgaben standardmäßig übernommen werden (*Ab und zu*: etwa eine auf zehn Aufgaben der Richtungen) und ob die Forschung für wachsende Zweige Richtungen vorschlägt; Zweige und Aufgaben mit eigener Wahl kehren mit *Auf Standard zurücksetzen* zurück.
+- **Jeder Bildschirm**: In einem schmalen Fenster öffnen sich die Richtungen als Blatt mit allen Aktionen; die App auf dem Telefon zeigt sie nur zum Lesen, und ein Tippen zeigt die Richtung im Stammbaum. Ist die Forschung beschäftigt oder läuft sie nicht, geht nichts still verloren: Eine Änderung sagt, dass sie nicht gespeichert wurde, und lässt sich erneut versuchen. Eine Forschung älter als 1.26.0 behält die Aktionen in ihrem Terminal, mit einem Satz zur Version, die Richtungen aus der App steuert.
+
 ## 3.21.2
 
 *Veröffentlicht am 3. November 2026.*

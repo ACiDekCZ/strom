@@ -2,6 +2,17 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.22.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Research directions**: the *Directions* panel of the research overview manages the directions without the terminal. *+ New direction* takes a person, a kind (*Ancestors*, *Descendants* or *Question*), an optional question, a name and limits of generations and years; *Edit* changes them, and a direction that already exists is offered with *Show it* or *Create anyway*. Creating a direction costs nothing; the agent starts on it in the next research run.
+- **Order of work**: the order of the directions is the order in which the research works on them, changed by dragging, with the arrows or *Move to the top*. *Pause* and *Restart* come with *Undo*, *End…* asks first and takes an optional reason; ended directions are folded at the end. Each direction shows what is being done now, its limits and what it found in the last days.
+- **Directions of a person**: *Find ancestors* and *Find descendants* in the person menu open the form for that person, and a person in a direction has an *In direction* row in the *Research* menu and in the person detail.
+- **Work outside the directions**: the panel lists the tasks outside the directions by branches, each with its nearest person and direction, a few examples and how it is taken: *Now and then*, *At the end*, *As usual* or *Do not research*, with *Undo*. A branch can be added to a direction or start a new one. Each task of the queue says why it stands where it stands, and *Do next* or *To the end* moves it. A growing branch asks once in *Awaiting action* what to do with it.
+- **Research for this tree**: *Work outside the directions* sets how these tasks are taken by default (*Now and then*: about one per ten tasks of the directions) and whether the research suggests directions for growing branches; branches and tasks with their own choice go back with *Reset to default*.
+- **Every screen**: in a narrow window the directions open as a sheet with all their actions; the app on a phone shows them read-only, and a tap shows the direction in the tree. When the research is busy or not running, nothing is lost silently: a change says it was not saved and can be tried again. A research older than 1.26.0 keeps the actions in its terminal, with a sentence naming the version that manages directions from the app.
+
 ## 3.21.2
 
 *Released 3 November 2026.*

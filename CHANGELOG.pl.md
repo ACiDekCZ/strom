@@ -4,6 +4,17 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.22.0
+
+*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+
+- **Linie badania**: panel *Linie* w przeglądzie badania zarządza liniami bez terminala. *+ Nowa linia* ma osobę, rodzaj (*Przodkowie*, *Potomkowie* lub *Pytanie*), nieobowiązkowe pytanie, nazwę i limity pokoleń i lat; *Edytuj* je zmienia, a linię, która już istnieje, proponuje z *Pokaż ją* lub *Załóż mimo to*. Założenie linii nic nie kosztuje; agent zacznie nad nią pracę przy następnym przebiegu badania.
+- **Kolejność pracy**: kolejność linii to kolejność, w jakiej badanie nad nimi pracuje, zmieniana przeciąganiem, strzałkami lub *Przenieś na początek*. *Wstrzymaj* i *Uruchom ponownie* mają *Cofnij*, *Zakończ…* najpierw pyta i przyjmuje nieobowiązkowy powód; zakończone linie są zwinięte na końcu. Przy każdej linii widać, co się w niej teraz robi, jej limity i co znalazła w ostatnich dniach.
+- **Linie osoby**: *Szukaj przodków* i *Szukaj potomków* w menu osoby otwierają formularz dla tej osoby, a osoba w linii ma wiersz *W linii* w menu *Badanie* i w szczegółach osoby.
+- **Praca poza liniami**: panel pokazuje zadania poza liniami według gałęzi, każdą z najbliższą osobą i linią, kilkoma przykładami i tym, jak jest podejmowana: *Od czasu do czasu*, *Na końcu*, *Normalnie* lub *Nie badaj*, z *Cofnij*. Gałąź można dodać do linii albo założyć z niej nową. Każde zadanie w kolejce mówi, dlaczego stoi tam, gdzie stoi, a *Zrób jako następne* lub *Na koniec* je przesuwa. Rosnąca gałąź raz pyta w *Czeka na decyzję*, co z nią zrobić.
+- **Badanie dla tego drzewa**: *Praca poza liniami* ustala, jak te zadania są domyślnie podejmowane (*Od czasu do czasu*: mniej więcej jedno na dziesięć zadań linii), i czy badanie proponuje linie dla rosnących gałęzi; gałęzie i zadania z własnym wyborem wracają przez *Przywróć domyślne*.
+- **Każdy ekran**: w wąskim oknie linie otwierają się jako panel ze wszystkimi akcjami; aplikacja w telefonie pokazuje je tylko do odczytu, a dotknięcie pokazuje linię w drzewie. Gdy badanie jest zajęte lub nie działa, nic nie ginie po cichu: zmiana mówi, że nie została zapisana, i można spróbować ponownie. Badanie starsze niż 1.26.0 zostawia akcje w swoim terminalu, ze zdaniem o wersji, która zarządza liniami z aplikacji.
+
 ## 3.21.2
 
 *Wydano 3 listopada 2026.*
