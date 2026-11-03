@@ -263,7 +263,7 @@ export const researchOffLineMethods = uiModule({
         const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
         chevron.setAttribute('aria-hidden', 'true');
         toggle.append(chevron, el('span', 'research-offline__title', L.dirOutside),
-            el('span', 'research-offline__sum', `· ${L.dirOutSum(off.queued || off.tasks, taken.length)} ·`));
+            el('span', 'research-offline__sum', `· ${L.dirOutSum(off.queued || off.tasks, taken.length)}`));
         if (working.length > 0) {
             // Worked on now: the arc, as at a direction.
             const arc = el('span', 'agent-mark agent-mark--spin');
@@ -708,6 +708,8 @@ export const researchOffLineMethods = uiModule({
     openOffLineSettings(): void {
         const s = liveSession();
         if (!s) return;
+        // The overview as a full-screen sheet stays above every dialog: it goes first.
+        if (document.querySelector('#research-overview.research-overview--sheet')) this.closeResearchOverview();
         void this.showResearchTreeSettings(s.treeId).then(() => {
             const group = document.getElementById('research-offline-host');
             group?.scrollIntoView({ block: 'start' });

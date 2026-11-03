@@ -63,7 +63,7 @@ test.describe('work outside the directions through the bridge', () => {
         await openOverview(page);
         const toggle = outToggle(page);
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await expect(toggle).toHaveText('▸Outside the directions· 21 tasks in 2 branches ·');
+        await expect(toggle).toHaveText('▸Outside the directions· 21 tasks in 2 branches');
         await expect(section(page).locator('.research-offline__mode')).toHaveText('now and then');
         // Below the order of work, above Ended.
         const order = await section(page).locator('.research-directions__list > *').evaluateAll(els => els.map(e =>

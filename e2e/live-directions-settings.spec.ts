@@ -150,6 +150,20 @@ test.describe('work outside the directions in Research for this tree', () => {
         expect(reset.height).toBeGreaterThanOrEqual(44);
     });
 
+    test('from the overview as a sheet: the sheet goes, the dialog is on top', async ({ page }) => {
+        await follow(page, { size: { width: 390, height: 844 } });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await overview(page).locator('.research-offline__mode').click();
+        await expect(group(page)).toBeVisible();
+        await expect(overview(page)).toHaveCount(0);
+        const onTop = await page.evaluate(() => {
+            const at = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+            return !!at?.closest('#research-tree-settings-modal');
+        });
+        expect(onTop).toBe(true);
+    });
+
     test('an older research and one without branches: no group', async ({ page }) => {
         await follow(page, { caps: CAPS });
         await page.evaluate(() => window.Strom.UI.showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()!));

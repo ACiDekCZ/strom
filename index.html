@@ -6304,11 +6304,14 @@
         .pm-rod[hidden] { display: none; }
         /* "In direction" (spec 038 §5.1 b): the directions as links, the kind before each, "in progress" after a running one. */
         .pm-in-line-list { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        /* A long name wraps under itself, the kind stays before it. */
         .modal .pm-in-line .pm-in-line-link {
-            display: inline; padding: 0; margin: 0; min-height: 0; border: 0; background: none; box-shadow: none;
-            font: inherit; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left;
+            display: inline-flex; align-items: baseline; max-width: 100%; vertical-align: baseline;
+            padding: 0; margin: 0; min-height: 0; border: 0; background: none; box-shadow: none;
+            font: inherit; color: var(--primary); text-decoration: none; cursor: pointer; text-align: left;
         }
-        .pm-in-line-glyph { display: inline-block; width: 1.1em; text-decoration: none; color: var(--text-light); }
+        .pm-in-line-name { min-width: 0; text-decoration: underline; text-underline-offset: 2px; }
+        .pm-in-line-glyph { flex: none; display: inline-block; width: 1.1em; text-decoration: none; color: var(--text-light); }
         .pm-in-line-working { font-size: 12px; font-weight: 600; color: var(--primary-dark); }
         .pm-in-line-more { color: var(--text-light); }
         .pm-rod-label { flex: none; color: var(--text-light); }
@@ -16333,7 +16336,8 @@
             display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px;
             font-size: 12px; color: var(--text-light);
         }
-        .research-direction__meta > * + *::before { content: '· '; color: var(--text-light); }
+        /* The dot keeps the same room on both sides (a space at the start of a flex item is lost). */
+        .research-direction__meta > * + *::before { content: '·'; margin-right: 6px; color: var(--text-light); }
         .research-direction__meta .live-person-link { font-size: 12px; }
         .research-direction__waiting { color: var(--warning-text); }
         .research-direction__do { font-size: 13px; }
@@ -16423,7 +16427,7 @@
         .research-direction__limit { color: var(--text-faint); }
         .research-direction__found { font-size: 13px; color: var(--text); display: flex; flex-wrap: wrap; column-gap: 6px; }
         .research-direction__found-parts { display: inline-flex; flex-wrap: wrap; column-gap: 6px; }
-        .research-direction__found-parts > * + *::before { content: '· '; color: var(--text-light); }
+        .research-direction__found-parts > * + *::before { content: '·'; margin-right: 6px; color: var(--text-light); }
         .research-direction__found .live-person-link { font-size: 13px; }
         .research-direction__actions { align-items: center; gap: 8px 14px; }
         .research-direction__problem {
@@ -16652,6 +16656,8 @@
                 display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .research-overview--sheet .research-direction__meta > * { display: inline; }
+            /* One line, no flex gap: the dot keeps its room on the left too. */
+            .research-overview--sheet .research-direction:not(.is-open) .research-direction__meta > * + *::before { margin-left: 6px; }
             .research-overview--sheet .research-direction__moves { flex-direction: row; }
         }
 
@@ -16662,6 +16668,8 @@
         .research-offline__head .research-offline__toggle { width: auto; flex: 0 1 auto; flex-wrap: wrap; border-top: 0; }
         .research-offline__title { color: var(--text); font-weight: 500; }
         .research-offline__mode { font-size: 13px; padding: 0; min-height: 0; }
+        /* The dot before the tree's choice goes with it to the next line. */
+        .research-offline__mode::before { content: '·'; display: inline-block; margin-right: 6px; color: var(--text-light); text-decoration: none; }
         .research-offline__working { padding: 0 0 6px 16px; }
         .research-offline__branches { display: flex; flex-direction: column; padding-left: 16px; }
         .research-offline__branch {
@@ -16770,6 +16778,7 @@
             .research-offline__line { flex-wrap: nowrap; }
             .research-offline__person { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
             .research-offline__meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .research-offline__meta > * + *::before { margin-left: 6px; }
             .research-offline__seg { height: 36px; }
         }
 
