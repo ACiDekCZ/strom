@@ -28,6 +28,7 @@ import { LiveSession, el, liveSession } from './research-ui.js';
 import { directionGlyph, directionRefusedText, markFreshDirection } from './research-directions-ui.js';
 import { readRecent } from './tree-overview.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { researchLinkFlags } from './research-open-mark.js';
 import { uiModule } from './module.js';
 
 const DIALOG_ID = 'direction-form-modal';
@@ -892,7 +893,7 @@ export const directionFormMethods = uiModule({
         const work = made && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: made.id }) : null;
         this.showToast(L.dirToastCreated, 8000, {
             kind: 'direction',
-            ...(work ? { action: { label: L.dirWork, research: true, ai: true, run: () => this.launchResearchLink(work, 'agent') } } : {}),
+            ...(work ? { action: { label: L.dirWork, run: () => this.launchResearchLink(work, 'agent'), ...researchLinkFlags(work) } } : {}),
         });
         this.liveStatusSoon(s);
     },
