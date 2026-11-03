@@ -66,7 +66,7 @@ function found(): FormCandidate[] {
         hit('H. Lhota', north(118), 'Hornolhotská, Jinov, Česko', 'road', false),
         hit('Horní Lhota', north(120), 'Horní Lhota, okres Lhotín, Česko', 'village', true, { name: 'Horní Lhota', district: 'okres Lhotín', country: 'Česko' }),
         hit('Horní Lhota', north(-1), 'Horní Lhota, okres Lhotov, Česko', 'village', true, { name: 'Horní Lhota', district: 'okres Lhotov', country: 'Česko' }),
-        hit('Horní Lhota', north(30), 'Horní Lhota, Jinov, okres Jinov, Česko', 'suburb', true),
+        hit('Horní Lhota', north(33), 'Horní Lhota, Jinov, okres Jinov, Česko', 'suburb', true),
         hit('Hořejší Lhota', north(10), 'Hořejší Lhota, okres Jinov, Česko', 'village', true),
         hit('H. Lhota', north(1), 'Lhotská, Lhota, okres Jinov, Česko', 'road', false),
     ];

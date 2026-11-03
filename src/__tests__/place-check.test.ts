@@ -73,6 +73,31 @@ describe('far: from the family’s other places', () => {
         expect(found.get('chicago')?.[0]).toMatchObject({ kind: 'far', family: 'Horák' });
     });
 
+    it('a village 56 km from home is not far though a branch overseas pulls the family’s median there', () => {
+        // Home, a village 56 km away (under PLACE_FAR_KM) and the emigrated branch in Chicago, most facts there.
+        const chicago = { lat: 41.88, lon: -87.63 };
+        const people = [
+            ...['1890', '1896'].map(y => person('Horák', 'Lhota', y)),
+            ...['1892', '1898'].map(y => person('Horák', 'Lhotínek', y)),
+            ...['1894', '1900', '1902', '1904', '1906', '1910'].map(y => person('Horák', 'Chicago', y)),
+        ];
+        const data: StromData = {
+            persons: Object.fromEntries(people.map(p => [p.id, p])), partnerships: {},
+            places: {
+                lhota: { ...BASE, label: 'Lhota, okres Jinov, Česko' },
+                lhotinek: { ...north(56), label: 'Lhotínek, okres Jinov, Česko' },
+                chicago: { ...chicago, label: 'Chicago, Illinois, USA' },
+            },
+        } as StromData;
+        const found = checkPlaces(data);
+        expect(found.get('lhotinek')?.find(f => f.kind === 'far')).toBeUndefined();
+        expect(found.get('lhota')?.find(f => f.kind === 'far')).toBeUndefined();
+        // Chicago is far from each of the family's other places; the distance is to the nearest.
+        const chi = found.get('chicago')?.find(f => f.kind === 'far') as { km: number } | undefined;
+        expect(chi).toBeDefined();
+        expect(chi!.km).toBe(Math.round(Math.min(distanceKm(chicago, BASE), distanceKm(chicago, north(56)))));
+    });
+
     it('marks a place beyond PLACE_FAR_KM with the family and its years', () => {
         const found = checkPlaces(tree(120)).get('lhotinek');
         expect(found?.[0]).toMatchObject({ kind: 'far', family: 'Lhoták', years: [1840, 1850] });
@@ -81,9 +106,9 @@ describe('far: from the family’s other places', () => {
     });
 
     it('the threshold: just under it nothing, just over it marked', () => {
-        // The median of the family's other places (1840–1850 here) lies at north(-1).
-        expect(checkPlaces(tree(PLACE_FAR_KM - 2)).has('lhotinek')).toBe(false);
-        expect(checkPlaces(tree(PLACE_FAR_KM + 2)).get('lhotinek')?.[0].kind).toBe('far');
+        // The family's nearest other place (1840–1850 here) is Horní Lhota at north(2).
+        expect(checkPlaces(tree(PLACE_FAR_KM + 1)).has('lhotinek')).toBe(false);
+        expect(checkPlaces(tree(PLACE_FAR_KM + 3)).get('lhotinek')?.[0].kind).toBe('far');
     });
 
     it('facts more than 20 years apart do not count', () => {
@@ -189,7 +214,7 @@ describe('checkCandidate, nearOthers, distance', () => {
     it('nearOthers: within PLACE_NEAR_KM of the family’s places, else of the tree’s', () => {
         const t = tree(2);
         expect(nearOthers(t, 'lhotinek', north(PLACE_NEAR_KM - 3))).toBe(true);
-        expect(nearOthers(t, 'lhotinek', north(PLACE_NEAR_KM + 3))).toBe(false);
+        expect(nearOthers(t, 'lhotinek', north(PLACE_NEAR_KM + 8))).toBe(false);
         expect(nearOthers(t, 'nowhere', north(1))).toBe(true);
         expect(nearOthers({ persons: {}, partnerships: {} }, 'x', BASE)).toBe(false);
     });

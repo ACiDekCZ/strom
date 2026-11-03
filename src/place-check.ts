@@ -1,9 +1,9 @@
 /**
  * The free check of locations (spec 034 §5): a location that does not fit
  * the tree gets the mark "Check". Offline, deterministic, from the tree alone:
- *   - far: the place lies more than PLACE_FAR_KM from the median of the
- *     family's other places within ±PLACE_YEARS of the facts there, and
- *     none of those places lies within PLACE_NEAR_KM of it;
+ *   - far: the place lies more than PLACE_FAR_KM from each of the family's
+ *     other places within ±PLACE_YEARS of the facts there (the distance
+ *     reported is to the nearest of them);
  *   - district: the research's record names a parish/district the location's
  *     label does not;
  *   - label: the geocoder's label names a street, a part of a town or another
@@ -117,7 +117,7 @@ function recordOf(data: StromData, key: string): PlaceRecord | undefined {
     return id ? data.placeRecords?.[id] : undefined;
 }
 
-/** The family context of a place: the median of the family's other places around the facts here. */
+/** The family context of a place: the family's other places around the facts here (and their median). */
 interface FamilyContext {
     family: string;
     median: { lat: number; lon: number };
@@ -253,10 +253,10 @@ function findingsFor(
     const out: CheckFinding[] = [];
     let far: { km: number; ctx: FamilyContext } | undefined;
     for (const ctx of familyContexts(key, facts, places)) {
-        // Another place of the family lies near: not alone out there. The median of a family whose branch
-        // emigrated lies with the branch, and would make the home village "far" (7557 km from Chicago).
-        if (ctx.points.some(p => distanceKm(geo, p) <= PLACE_NEAR_KM)) continue;
-        const km = distanceKm(geo, ctx.median);
+        // The distance to the family's nearest other place, not to their median: the median of a family
+        // whose branch emigrated lies with the branch, and would make the home village "far" (7712 km from
+        // Chicago) though another place of the family lies 56 km away.
+        const km = Math.min(...ctx.points.map(p => distanceKm(geo, p)));
         if (km > PLACE_FAR_KM && (!far || km > far.km)) far = { km, ctx };
     }
     if (far) out.push({ kind: 'far', km: Math.round(far.km), family: familyName(far.ctx.family, facts), years: far.ctx.years });
@@ -390,13 +390,15 @@ export function checkCandidate(
 }
 
 /**
- * Is a location near the tree's other places (≤ PLACE_NEAR_KM from their
- * median): the family's places around the facts of this place, else all the
- * tree's other located places. False when there is nothing to compare with.
+ * Is a location near the tree's other places (≤ PLACE_NEAR_KM from one of
+ * the family's places around the facts of this place or from their median),
+ * else from the median of all the tree's other located places. False when there is nothing to compare with.
  */
 export function nearOthers(data: StromData, key: string, at: { lat: number; lon: number }): boolean {
     const places = data.places ?? {};
     const ctx = familyContexts(key, checkFacts(data), places);
+    // A family's place near counts as well: the median of a family with a branch overseas lies overseas.
+    if (ctx.some(c => c.points.some(p => distanceKm(at, p) <= PLACE_NEAR_KM))) return true;
     const medians = ctx.length
         ? ctx.map(c => c.median)
         : (() => {
