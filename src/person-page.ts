@@ -539,8 +539,9 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         }
     }
 
-    // The sources the person, the person's events and marriages cite.
-    const rows = personSourceRows({ ...full, persons: { ...full.persons, [id]: person } }, id, S);
+    // The sources the person, the person's events and marriages cite, and those the
+    // person's and the couples' stories rest on (a chronicle no event cites).
+    const rows = personSourceRows({ ...full, persons: { ...full.persons, [id]: person } }, id, S, { stories: true });
     if (groups.sources || groups.excerpts || groups.research) {
         for (const row of rows) {
             const s: Source = structuredClone(row.source);
@@ -2389,7 +2390,7 @@ export function personBookClipsHtml(page: PersonPageData, opts: PersonPageOption
     if (!c || shielded(c, c.person.id) || !c.page.groups.excerpts) return '';
     const { P } = c;
     const figs: string[] = [];
-    for (const row of personSourceRows(page.tree, page.personId, c.S)) {
+    for (const row of personSourceRows(page.tree, page.personId, c.S, { stories: true })) {
         const s = page.tree.sources?.[row.source.id];
         if (!s?.excerpts?.length) continue;
         const ev = excerptEvent(c, s.id);
@@ -3115,7 +3116,7 @@ export function prefixPageIds(html: string, prefix: string, keep: ReadonlySet<st
 function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): string {
     const c = makeCtx(page, opts);
     if (!c) return '<article class="pp"></article>';
-    const rows = personSourceRows(page.tree, page.personId, c.S).filter(r => page.tree.sources?.[r.source.id]);
+    const rows = personSourceRows(page.tree, page.personId, c.S, { stories: true }).filter(r => page.tree.sources?.[r.source.id]);
     const items = researchItems(page, page.lang, c);
     const differs = page.groups.research ? { birth: items.differsBirth, death: items.differsDeath } : null;
     const footer = footerHtml(c);

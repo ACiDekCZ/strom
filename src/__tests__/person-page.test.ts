@@ -153,6 +153,31 @@ describe('sections', () => {
         expect(body(fiskTree())).not.toContain('pp-story-src');
     });
 
+    it('a source only a story rests on (no event cites it): its block, its bare code named, in the Sources section and its count', () => {
+        const d = fiskTree();
+        d.sources!['s9'].refn = 'S0077';
+        d.sources!['s8'] = { id: 's8', title: 'Kronika obce Čapkov', url: 'https://example.org/kronika' };
+        d.persons['jan' as PersonId].story = { status: 'final', text: 'Obec vyhořela roku 1868 [S0077].', sources: ['s9'] };
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.', sources: ['s8'] };
+        const html = body(d);
+        expect(html).toContain('Obec vyhořela roku 1868 (Nepoužitý pramen ze Lhoty).');
+        expect(html).toContain('<div class="pp-story-src"><p class="pp-story-src-h">Opírá se o prameny</p><ul class="pp-story-src-list"><li>Nepoužitý pramen ze Lhoty</li></ul></div>');
+        expect(html).toContain('<li><a href="https://example.org/kronika" rel="noopener noreferrer" target="_blank">Kronika obce Čapkov ↗</a></li>');
+        // The Sources section lists them with what they support, and counts them.
+        const sec = html.slice(html.indexOf('id="pp-sec-sources"'));
+        expect(sec).toContain('<span class="pp-count">5</span>');
+        expect(sec).toMatch(/pp-src-s9[\s\S]*Nepoužitý pramen ze Lhoty<\/span><span class="pp-src-sup">Dokládá: Vyprávění<\/span>/);
+        expect(sec).toMatch(/Kronika obce Čapkov<\/span><span class="pp-src-sup">Dokládá: Vyprávění manželství<\/span>/);
+        // Marie's page: the couple's chapter has its source too.
+        expect(body(d, { personId: 'marie' as PersonId })).toContain('Kronika obce Čapkov ↗</a></li>');
+        // Without the Sources group: no block and no section; the code still reads as the title.
+        const off = body(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false } });
+        expect(off).not.toContain('pp-story-src');
+        expect(off).toContain('Obec vyhořela roku 1868 (Nepoužitý pramen ze Lhoty).');
+        // The Sources dialog of the person menu still lists the cited sources only.
+        expect(personSourceRows(d, 'jan' as PersonId, getStringsForLang('cs')).map(r => r.source.id)).toEqual(['s1', 's2', 's3']);
+    });
+
     it('a couple’s story follows the person’s own, on both partners’ pages; alone it still makes the section', () => {
         const d = fiskTree();
         d.partnerships['u1' as PartnershipId].story = { status: 'draft', text: 'Jan a Marie hospodařili na čísle 12. [S0042]' };

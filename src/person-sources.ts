@@ -25,6 +25,8 @@ export interface PersonSourceCite {
     year: number | null;
     /** Tooltip telling two marriages apart. */
     title?: string;
+    /** Cited by a story (Story.sources), not by a fact: listed after the facts. */
+    story?: true;
 }
 
 /** One source and everything it supports for the person. */
@@ -49,9 +51,12 @@ export function coupleEventLabelIn(ev: Pick<CoupleEvent, 'type' | 'customLabel'>
  * The person's citations merged per source: person, events, marriages. Each
  * source is one row whose labels say what it supports; rows are ordered by
  * the earliest year they document (else the record date), so the list reads
- * like a life; undated ones last, then by title.
+ * like a life; undated ones last, then by title. `stories`: the sources the
+ * person's own story and the person's couples' stories rest on count too
+ * (the person page and the family book, where those stories are told).
  */
-export function personSourceRows(data: StromData, personId: PersonId, S: Strings = appStrings): PersonSourceRow[] {
+export function personSourceRows(data: StromData, personId: PersonId, S: Strings = appStrings,
+    opts: { stories?: boolean } = {}): PersonSourceRow[] {
     const catalog = data.sources ?? {};
     const person = data.persons[personId];
     if (!person) return [];
@@ -98,13 +103,25 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
             });
         }
     }
+    if (opts.stories) {
+        // A story's sources (its facts' and its background's, e.g. a chronicle no event cites).
+        const told = (st: { text?: string; sources?: string[] } | undefined) => (st?.text?.trim() ? st.sources : undefined);
+        add(told(person.story), { label: S.personPage.sec.story, ctx: { personId }, year: null, story: true });
+        for (const u of Object.values(data.partnerships)) {
+            if (u.person1Id !== personId && u.person2Id !== personId) continue;
+            add(told(u.story), {
+                label: S.personPage.story.titleCouple, ctx: { partnershipId: u.id }, year: null, story: true,
+                title: S.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
+            });
+        }
+    }
     const byYear = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
     const list = [...rows.values()];
     for (const row of list) {
-        // Collected person → events → marriages: the first is what a click opens.
-        const own = row.cites.filter(c => 'personId' in c.ctx && !c.ctx.eventId && !c.ctx.fact);
-        const rest = row.cites.filter(c => !own.includes(c)).sort((a, b) => byYear(a.year, b.year));
-        row.cites = [...own, ...rest];
+        // Collected person → events → marriages → stories: the first is what a click opens.
+        const own = row.cites.filter(c => !c.story && 'personId' in c.ctx && !c.ctx.eventId && !c.ctx.fact);
+        const rest = row.cites.filter(c => !own.includes(c) && !c.story).sort((a, b) => byYear(a.year, b.year));
+        row.cites = [...own, ...rest, ...row.cites.filter(c => c.story)];
     }
     const rowYear = (r: PersonSourceRow): number | null => {
         const years = r.cites.map(c => c.year).filter((y): y is number => y !== null);
