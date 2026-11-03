@@ -66,6 +66,7 @@ import { clearRodSelection, getSelectedRod, setRodSelection } from './rod-view.j
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
+import { bindDeceasedAutoTick } from './deceased-autotick.js';
 
 /**
  * Delete person sits in the footer, except on a phone (T24): there the footer
@@ -169,6 +170,7 @@ export const personModalMethods = uiModule({
         if (questionClear) questionClear.value = '';
         const addDeceased = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (addDeceased) addDeceased.checked = false;
+        bindDeceasedAutoTick('input-is-deceased', ['input-deathdate', 'input-deathplace']);
         const occupationClear = document.getElementById('input-occupation') as HTMLInputElement | null;
         if (occupationClear) { occupationClear.value = ''; occupationClear.readOnly = false; }
         const residenceClear = document.getElementById('input-residence') as HTMLInputElement | null;
@@ -911,6 +913,7 @@ export const personModalMethods = uiModule({
             deceasedInput.checked = !isLivingPerson(
                 person, new Date().getFullYear(), inferBirthUpperBounds(DataManager.getData()));
         }
+        bindDeceasedAutoTick('input-is-deceased', ['input-deathdate', 'input-deathplace']);
 
         this.fillStoryFields(person);
 

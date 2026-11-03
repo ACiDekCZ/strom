@@ -11,6 +11,8 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Nazwiska**: polskie nazwisko łączy się w pary po polsku, *Jaworski* z *Jaworska*, i w polskim drzewie nigdy nie dostaje czeskiej formy na *-ová*; litera *ó* (*Wróblewska*, *Mróz*) nie czyni już drzewa czeskim.
 - **Miejsca**: kontrola miejsc nazywa ród jego podstawową formą, po polsku odmienioną (*rodziny Jaworskich*), a adres z *nr domu* jest odczytywany jako numer domu.
 - **Źródła**: myślnik w cytowanej danej (*osoba – dana (rok)*) zależy od języka.
+- **Dodawanie osób**: formularz nowego rodzica, dziecka, partnera lub rodzeństwa ma w *Więcej informacji* pole *Nie żyje*, tak jak formularz osoby; wpisana data lub miejsce zgonu zaznacza je samo, tam i w formularzu osoby, a osoba dodana jako zmarła nie jest traktowana jako żyjąca (prywatność eksportu, † na karcie).
+- **Import GEDCOM**: podsumowanie mówi, że osoby o nieznanej płci zostały wczytane, w osobnym wierszu, już nie obok *Pominięte rekordy*, gdzie wyglądały na pominięte.
 
 ## 3.21.1
 

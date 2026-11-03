@@ -1930,6 +1930,8 @@ class DataManagerClass {
             deathDate: personData.deathDate,
             deathPlace: personData.deathPlace
         };
+        // Known to have died without a date (the "Deceased" box while adding).
+        if (personData.isDeceased && !personData.deathDate) person.isDeceased = true;
         // The titles of the name and the surname after marriage; an empty one
         // means none, a placeholder has none.
         for (const key of ['titleBefore', 'titleAfter', 'marriedSurname'] as const) {

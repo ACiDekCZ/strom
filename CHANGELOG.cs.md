@@ -9,6 +9,8 @@
 - **Příjmení**: polské příjmení se páruje po polsku, *Jaworski* s *Jaworska*, a v polském stromu nikdy nedostane českou podobu na *-ová*; písmeno *ó* (*Wróblewska*, *Mróz*) už ze stromu nedělá český.
 - **Místa**: kontrola míst jmenuje rod jeho základní podobou, v polštině skloňovanou (*rodziny Jaworskich*), a adresa s *nr domu* se čte jako číslo domu.
 - **Prameny**: pomlčka v citovaném údaji (*osoba – údaj (rok)*) se řídí jazykem.
+- **Přidání osoby**: formulář nového rodiče, dítěte, partnera či sourozence má pod *Více informací* zaškrtávátko *Zemřel/a* jako formulář osoby; zapsané datum nebo místo úmrtí ho zaškrtne samo, tam i ve formuláři osoby, a osoba přidaná jako zemřelá se nebere jako žijící (soukromí exportů, † na kartě).
+- **Import GEDCOM**: souhrn říká, že osoby s neznámým pohlavím byly načteny, na vlastním řádku, už ne vedle *Přeskočené záznamy*, kde se četly jako vynechané.
 
 ## 3.21.1
 

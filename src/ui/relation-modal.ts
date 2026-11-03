@@ -24,6 +24,7 @@ import {
 } from '../types.js';
 import { strings } from '../strings.js';
 import { normalizeDateInput } from '../dates.js';
+import { bindDeceasedAutoTick } from './deceased-autotick.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -200,6 +201,9 @@ export const relationModalMethods = uiModule({
         (document.getElementById('rel-birthplace') as HTMLInputElement).value = '';
         (document.getElementById('rel-deathdate') as HTMLInputElement).value = '';
         (document.getElementById('rel-deathplace') as HTMLInputElement).value = '';
+        const relDeceased = document.getElementById('rel-is-deceased') as HTMLInputElement | null;
+        if (relDeceased) relDeceased.checked = false;
+        bindDeceasedAutoTick('rel-is-deceased', ['rel-deathdate', 'rel-deathplace']);
         // Refresh flex-date styling (clear any stale .invalid/.has-value from a
         // previous open) now that the values were reset programmatically.
         this.setupDateInputs();
@@ -439,6 +443,8 @@ export const relationModalMethods = uiModule({
             const birthPlace = (document.getElementById('rel-birthplace') as HTMLInputElement)?.value.trim() || undefined;
             const deathDate = deathDateRaw || undefined;
             const deathPlace = (document.getElementById('rel-deathplace') as HTMLInputElement)?.value.trim() || undefined;
+            // Ticked = known to have died (a death date says so by itself).
+            const isDeceased = (document.getElementById('rel-is-deceased') as HTMLInputElement | null)?.checked && !deathDate;
 
             // Begin batch before person creation to suppress individual audit logs
             AuditLogManager.beginBatch();
@@ -447,7 +453,8 @@ export const relationModalMethods = uiModule({
 
             const isPlaceholder = !firstName && !lastName;
             const newPerson = DataManager.createPerson(
-                { firstName: isPlaceholder ? '?' : firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace },
+                { firstName: isPlaceholder ? '?' : firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace,
+                    ...(isDeceased ? { isDeceased: true } : {}) },
                 isPlaceholder
             );
             newPersonId = newPerson.id;

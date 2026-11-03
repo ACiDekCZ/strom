@@ -1256,6 +1256,8 @@ export interface NewPersonData {
     birthPlace?: string;
     deathDate?: string;
     deathPlace?: string;
+    /** Known to have died (the "Deceased" box); kept only without a death date, which says so by itself. */
+    isDeceased?: boolean;
     /** The titles of the name ("Ing.", "ml."), set with the person so its first undo step names them. */
     titleBefore?: string;
     titleAfter?: string;

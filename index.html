@@ -12479,6 +12479,8 @@
             margin: -4px 0 10px;
             overflow-wrap: anywhere;
         }
+        .gedcom-stat-line { display: block; }
+        .gedcom-stat-line + .gedcom-stat-line { margin-top: 2px; }
         /* Tiles share a row evenly but never get narrower than the longest word
            of their label (min-content): one-word labels such as "Partnerschaften"
            or "Nepodporováno" stay whole in every language, a tile that does not
@@ -22365,6 +22367,12 @@
                             <label for="rel-deathplace" data-i18n="labels.deathPlace"></label>
                             <input type="text" id="rel-deathplace" autocomplete="off">
                         </div>
+                    </div>
+                    <div class="form-group" id="rel-deceased-group">
+                        <label class="settings-checkbox">
+                            <input type="checkbox" id="rel-is-deceased">
+                            <span data-i18n="labels.deceased"></span>
+                        </label>
                     </div>
                 </div>
             </div>

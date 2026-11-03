@@ -4269,7 +4269,7 @@ const stringsEN = {
         insertToTreeDesc: 'Load converted data into current tree',
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
-        unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex`,
+        unknownSex: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} of unknown sex imported`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'child was' : 'children were'} recorded in more than one family `
             + `(e.g. adopted); shown with the birth family, the rest noted on the person`,
@@ -11203,7 +11203,7 @@ const stringsCZ: StringsType = {
         insertToTreeDesc: 'Načíst převedená data do aktuálního stromu',
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
-        unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} s neznámým pohlavím`,
+        unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba načtena', 'osoby načteny', 'osob načteno')} s neznámým pohlavím`,
         otherFamilyLinks: (n: number) =>
             `${n} ${plural('cs', n, 'dítě je zapsáno', 'děti jsou zapsány', 'dětí je zapsáno')} ve více rodinách `
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
@@ -18090,7 +18090,7 @@ const stringsDE: StringsType = {
         insertToTreeDesc: 'Umgewandelte Daten in den aktuellen Stammbaum laden',
         parseError: 'GEDCOM-Datei konnte nicht gelesen werden',
         skippedTags: 'Übersprungene Einträge',
-        unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht`,
+        unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht importiert`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'Kind wurde' : 'Kinder wurden'} in mehr als einer Familie erfasst `
             + `(z. B. adoptiert); mit der Geburtsfamilie angezeigt, der Rest bei der Person vermerkt`,

@@ -9,6 +9,8 @@
 - **Nachnamen**: ein polnischer Nachname bildet seine Paare auf Polnisch, *Jaworski* mit *Jaworska*, und bekommt in einem polnischen Stammbaum nie eine tschechische Form auf *-ová*; ein *ó* (*Wróblewska*, *Mróz*) macht einen Stammbaum nicht mehr tschechisch.
 - **Orte**: die Ortsprüfung nennt eine Familie mit ihrer Grundform, auf Polnisch dekliniert (*rodziny Jaworskich*), und eine Adresse mit *nr domu* wird als Hausnummer gelesen.
 - **Quellen**: der Gedankenstrich in einer zitierten Angabe (*Person – Angabe (Jahr)*) richtet sich nach der Sprache.
+- **Personen hinzufügen**: das Formular für ein neues Elternteil, Kind, einen Partner oder ein Geschwister hat unter *Weitere Infos* das Kästchen *Verstorben* wie das Personenformular; ein eingetragenes Sterbedatum oder ein Sterbeort setzt das Häkchen selbst, dort und im Personenformular, und eine als verstorben hinzugefügte Person gilt nicht als lebend (Datenschutz beim Export, das † auf der Karte).
+- **GEDCOM-Import**: die Zusammenfassung sagt, dass Personen mit unbekanntem Geschlecht importiert wurden, in einer eigenen Zeile, nicht mehr neben *Übersprungene Einträge*, wo sie wie übersprungen wirkten.
 
 ## 3.21.1
 

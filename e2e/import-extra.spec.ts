@@ -267,6 +267,43 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     expect(trees.find(t => t.id === originalId)!.names).toEqual(['Jan']);
 });
 
+test('GEDCOM result: people of unknown sex are said to be imported, on a line of their own, not among the skipped records', async ({ page }, testInfo) => {
+    await openApp(page);
+    const ged = [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME /Novak/', '1 BIRT', '2 DATE 1912', '1 DEAT', '2 DATE 1912', '1 FAMC @F1@',
+        '0 @I3@ INDI', '1 NAME /Novak/', '1 BIRT', '2 DATE 1914', '1 FAMC @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 CHIL @I2@', '1 CHIL @I3@',
+        '0 @X1@ _TODO',
+        '0 TRLR', '',
+    ].join('\n');
+    const p = testInfo.outputPath('unknown-sex.ged');
+    writeFileSync(p, ged);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
+    await expect(lines).toHaveText(['Skipped records: _TODO ×1', '2 people of unknown sex imported']);
+    // Two lines, one under the other.
+    const [a, b] = [await lines.nth(0).boundingBox(), await lines.nth(1).boundingBox()];
+    expect(b!.y).toBeGreaterThanOrEqual(a!.y + a!.height - 1);
+
+    // Polish: the count agrees with its word, and nothing says "skipped" on that line.
+    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await page.evaluate(() => window.Strom.UI.setLanguage('pl'));
+    await page.locator('#gedcom-input').setInputFiles([]);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    await expect(result).toBeVisible();
+    await expect(lines.nth(1)).toHaveText('Wczytano 2 osoby o nieznanej płci');
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await page.locator('#gedcom-input').setInputFiles([]);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    await expect(result).toBeVisible();
+    await expect(lines.nth(1)).toHaveText('2 osoby načteny s neznámým pohlavím');
+});
+
 for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
     test(`GEDCOM result: every tile label fits its tile in cs, en and de (${viewport.width} px)`, async ({ page }, testInfo) => {
         await page.setViewportSize(viewport);

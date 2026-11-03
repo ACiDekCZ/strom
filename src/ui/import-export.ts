@@ -482,7 +482,14 @@ export const importExportMethods = uiModule({
                 // Say it out loud — silence reads as "who knows what got lost".
                 parts.push(strings.gedcom.allImported);
             }
-            detailEl.textContent = parts.join(' · ');
+            // One line each: the people of unknown sex were imported, and next to
+            // "Skipped records" on the same line they read as skipped people.
+            detailEl.replaceChildren(...parts.map(text => {
+                const line = document.createElement('span');
+                line.className = 'gedcom-stat-line';
+                line.textContent = text;
+                return line;
+            }));
             detailEl.style.display = parts.length > 0 ? '' : 'none';
         }
 
