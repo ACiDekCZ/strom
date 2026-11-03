@@ -61,6 +61,8 @@ export interface ManagedBridge {
     /** Answers for the next writes, first first (empty: the research's own answer). */
     replies: BridgeReply[];
     statusAsks: number;
+    /** The bridge does not answer (every request refused). */
+    down: boolean;
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -121,8 +123,13 @@ export async function followManaged(page: Page, opts: {
     caps?: Record<string, unknown> | null;
     working?: Record<string, unknown>[];
     size?: { width: number; height: number };
+    /** Reconnect every 250 ms (a test of the bridge going away). */
+    fastReconnect?: boolean;
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
+    if (opts.fastReconnect) {
+        await page.addInitScript(() => { (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS = 250; });
+    }
     await page.addInitScript((links) => {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
@@ -132,7 +139,7 @@ export async function followManaged(page: Page, opts: {
         researches: structuredClone(opts.researches ?? MANAGED_DIRECTIONS),
         caps: opts.caps === undefined ? CAPS : opts.caps,
         working: opts.working ?? [MANAGED_AGENT],
-        writes: [], replies: [], statusAsks: 0,
+        writes: [], replies: [], statusAsks: 0, down: false,
     };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
@@ -144,6 +151,7 @@ export async function followManaged(page: Page, opts: {
         ...(b.caps ? { caps: b.caps } : {}),
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
+        if (b.down) return route.abort('connectionrefused');
         const req = route.request();
         const path = new URL(req.url()).pathname.replace(/^\/[0-9a-f]+\//, '');
         if (path === 'status') {

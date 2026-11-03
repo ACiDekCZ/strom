@@ -165,6 +165,30 @@ test.describe('directions managed through the bridge', () => {
         await expect(sec.locator('.research-direction--managed .research-direction__num')).toHaveText(['1', '2', '3']);
     });
 
+    test('the bridge does not answer: the last state shown, its actions held, Show in tree works', async ({ page }) => {
+        const b = await followManaged(page, { fastReconnect: true });
+        await openOverview(page);
+        await directionRow(page, 'G0002').locator('.research-direction__head').click();
+        b.down = true;
+        const sec = overview(page).locator('.research-directions--managed');
+        await expect(sec.locator('.research-directions__note.is-warn'))
+            .toHaveText('The research is not running. Directions can be changed once it runs.', { timeout: 10000 });
+        await expect(managedNames(page)).toHaveText(['Předci: Jan Fíšek', 'Předci: Anna Svobodová', 'Potomci: Josef Fíšek']);
+        await expect(overview(page).locator('.research-directions__new')).toHaveAttribute('aria-disabled', 'true');
+        const more = directionRow(page, 'G0002').locator('.research-direction__more');
+        await expect(more).toHaveAttribute('aria-disabled', 'true');
+        await more.click({ force: true });
+        await expect(page.locator('#live-direction-menu')).toHaveCount(0);
+        const pause = directionRow(page, 'G0002').locator('[data-do="pause"]');
+        await expect(pause).toHaveAttribute('aria-disabled', 'true');
+        await pause.click({ force: true });
+        // No handle while nothing can be written; the numbers stay.
+        await expect(sec.locator('.research-direction__handle:not(.is-none)')).toHaveCount(0);
+        await expect(sec.locator('.research-direction--managed .research-direction__num')).toHaveText(['1', '2', '3']);
+        await expect(directionRow(page, 'G0002').locator('[data-do="show"]')).not.toHaveAttribute('aria-disabled', 'true');
+        expect(directionWrites(b)).toEqual([]);
+    });
+
     test('no directions: the empty state with + New direction, no work outside them', async ({ page }) => {
         await followManaged(page, { researches: [], working: [{ who: 'agent-scitani', since: new Date().toISOString(), task: 'Sčítání 1921', person: 'P0050' }] });
         await openOverview(page);
