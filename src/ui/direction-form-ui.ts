@@ -137,12 +137,17 @@ export const directionFormMethods = uiModule({
 
     /**
      * Read again who is in which direction when the research's head moved
-     * (`directions.people`); the person detail open shows it then.
+     * (`directions.people`); the person detail open shows it then, and a
+     * growing branch waiting is drawn again (its main button's direction).
      */
     refreshDirectionPeople(s: LiveSession, head: string): void {
         if (!s.caps?.directionsWrite || !s.features?.includes(PEOPLE_FEATURE)) return;
+        const before = directionPeopleKept(s.bridge.base);
         void fetchDirectionPeople(s.bridge.base, head).then(r => {
-            if (r.ok && liveSession() === s && !s.ended) this.renderPersonInLine();
+            if (!r.ok || liveSession() !== s || s.ended) return;
+            this.renderPersonInLine();
+            // A growing branch's main button picks its running direction by who is in which one: newly read, drawn again.
+            if (r.people !== before && s.waiting.some(w => w.kind === 'branch')) this.renderLivePanel();
         });
     },
 

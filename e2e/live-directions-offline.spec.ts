@@ -48,7 +48,15 @@ const GROWING = {
     at: ago(30), what: 'Větev Alois Fíšek roste', on: 'user',
 };
 
-const follow = (page: Page, opts: { waiting?: Record<string, unknown>[]; size?: { width: number; height: number } } = {}): Promise<ManagedBridge> =>
+/** A growing branch near the paused direction G0004 (Předci: Anna Svobodová). */
+const GROWING_PAUSED = {
+    id: 'W-B-P0040', kind: 'branch', branch: 'B-P0040', person: 'P0040', research: 'G0004', tasks: 7, persons: 3,
+    at: ago(30), what: 'Větev Bohumil Svoboda roste', on: 'user',
+};
+
+const follow = (page: Page, opts: {
+    waiting?: Record<string, unknown>[]; size?: { width: number; height: number }; people?: Record<string, string[]>;
+} = {}): Promise<ManagedBridge> =>
     followManaged(page, { caps: OFF_CAPS, features: FEATURES, offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, ...opts });
 
 const section = (page: Page) => overview(page).locator('.research-directions--managed');
@@ -300,6 +308,32 @@ test.describe('work outside the directions through the bridge', () => {
         await toast(page).locator('.toast-action').click();
         await expect.poll(() => offWrites(b).length).toBe(2);
         expect(offWrites(b)[1]).toMatchObject({ path: 'offline/B-P0031', body: { mode: 'default' } });
+    });
+
+    test('a growing branch near a paused direction: the nearest running one its person is in, the sentence says paused', async ({ page }) => {
+        // Anna Svobodová is in the paused G0004 and in the running G0001 (her son's ancestors).
+        const b = await follow(page, { waiting: [GROWING_PAUSED], people: { P0002: ['G0001'] } });
+        await openOverview(page);
+        const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0040"]');
+        await expect(item.locator('.research-overview__waiting-what'))
+            .toHaveText('suggestionBranch Bohumil Svoboda: 7 tasks outside the directions (3 new people). Near the direction Předci: Anna Svobodová (paused).');
+        await item.locator('.research-overview__waiting-row').click();
+        const acts = item.locator('.research-offline__wait-actions button');
+        await expect(acts.first()).toHaveText('Add to the direction Předci: Jan Fíšek');
+        await expect(acts.first()).toHaveClass(/is-primary/);
+        await item.locator('[data-do="line"]').click();
+        await expect.poll(() => offWrites(b).map(w => [w.path, w.body])).toEqual([['waiting/W-B-P0040', { do: 'line', line: 'G0001' }]]);
+    });
+
+    test('a growing branch whose person is in no running direction: the paused one, said so', async ({ page }) => {
+        const b = await follow(page, { waiting: [GROWING_PAUSED] });
+        await openOverview(page);
+        const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0040"]');
+        await item.locator('.research-overview__waiting-row').click();
+        const acts = item.locator('.research-offline__wait-actions button');
+        await expect(acts).toHaveText(['Add to the direction Předci: Anna Svobodová (paused)', 'Create direction', 'Leave as it is', 'Do not research']);
+        await acts.first().click();
+        await expect.poll(() => offWrites(b).map(w => [w.path, w.body])).toEqual([['waiting/W-B-P0040', { do: 'line', line: 'G0004' }]]);
     });
 
     test('a narrow window with the bridge acts as a computer: 44 px, the segment across, no sideways scroll', async ({ page }) => {

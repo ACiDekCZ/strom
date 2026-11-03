@@ -23,7 +23,8 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
-    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, setBranchMode, setOffLineTree, setTaskOrder,
+    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, directionPeopleKept, setBranchMode, setOffLineTree,
+    setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
@@ -127,10 +128,33 @@ export function queueWhyText(q: LiveQueueItem, s: LiveSession | null): string {
     }
 }
 
-/** A growing branch in Awaiting action, in the app's words ("Branch Alois Fíšek: 14 tasks outside … Near the direction …"). */
+/** A growing branch in Awaiting action, in the app's words ("Branch Alois Fíšek: 14 tasks outside … Near the direction … (paused)."). */
 export function waitBranchText(w: LiveWaiting, s: LiveSession | null): string {
+    const L = strings.live;
     const id = w.branch ?? '';
-    return strings.live.waitBranchGrows(branchName(id, w.person), w.tasks ?? 0, w.persons ?? 0, s ? directionName(s, w.research) : '');
+    const near = s && w.research ? s.researches.find(d => d.id === w.research) : undefined;
+    const name = near ? `${near.name}${near.state === 'paused' ? ` ${L.dirNearPaused}` : ''}` : '';
+    return L.waitBranchGrows(branchName(id, w.person), w.tasks ?? 0, w.persons ?? 0, name);
+}
+
+/**
+ * The direction a growing branch's main button adds it to: the one the
+ * research names near it while it runs; when that one is paused or ended,
+ * the narrowest running direction the branch hangs on through its person
+ * (`via`, else the branch's own person) by who is in which direction
+ * (`directions.people`, narrowest first); with none, the paused one itself
+ * (`paused`, its state said on the button). Null: no direction to add to.
+ */
+export function growingBranchLine(s: LiveSession, w: LiveWaiting, b: OffLineBranch | undefined): { line: LiveDirection; paused: boolean } | null {
+    const near = s.researches.find(d => d.id === (w.research ?? b?.nearest));
+    if (near?.state === 'active') return { line: near, paused: false };
+    const who = b?.via?.person ?? b?.person ?? w.person;
+    const ids = who ? directionPeopleKept(s.bridge.base)?.get(who) ?? [] : [];
+    for (const id of ids) {
+        const d = s.researches.find(x => x.id === id);
+        if (d?.state === 'active') return { line: d, paused: false };
+    }
+    return near?.state === 'paused' ? { line: near, paused: true } : null;
 }
 
 /** A task's own place is set here: a research that takes it, its bridge answering, not an archive. */
@@ -799,8 +823,10 @@ export const researchOffLineMethods = uiModule({
     },
 
     /**
-     * A growing branch's buttons: Add to the direction {line} (main), Create
-     * a direction · Leave as it is · Do not research; the hint under them.
+     * A growing branch's buttons: Add to the direction {line} (main: the
+     * nearest running one, a paused one only when no running one is near,
+     * said so), Create a direction · Leave as it is · Do not research; the
+     * hint under them.
      * A computer whose bridge does not answer now keeps the buttons held
      * (they say why, as the Directions section does); the app on a phone
      * without the bridge, an archive and an older bridge say where it is
@@ -817,7 +843,7 @@ export const researchOffLineMethods = uiModule({
             host.appendChild(el('p', 'research-overview__muted research-offline__elsewhere', L.waitBranchElsewhere));
             return;
         }
-        const line = s.researches.find(d => d.id === (w.research ?? b?.nearest));
+        const pick = growingBranchLine(s, w, b);
         const box = el('div', 'research-offline__wait-actions');
         const busy = branchBusy.has(w.id);
         const add = (label: string, cls: string, what: string, run: () => void): void => {
@@ -829,8 +855,9 @@ export const researchOffLineMethods = uiModule({
             else btn.onclick = run;
             box.appendChild(btn);
         };
-        if (line && line.state !== 'done') {
-            add(L.branchAdd(line.name), 'is-primary', 'line', () => void this.answerGrowingBranch(w, 'line', line.id));
+        if (pick) {
+            const { line, paused } = pick;
+            add(paused ? L.branchAddPaused(line.name) : L.branchAdd(line.name), 'is-primary', 'line', () => void this.answerGrowingBranch(w, 'line', line.id));
         }
         if (b) add(L.dirCreate, '', 'create', () => this.createDirectionFromBranch(b, null, w));
         add(L.waitBranchLeave, '', 'keep', () => void this.answerGrowingBranch(w, 'keep'));

@@ -812,6 +812,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         branchQueueChipClear: 'Pokaż całą kolejkę',
         branchNeverGroup: (n: number) => `Nie jest badana · ${nPl(n, 'gałąź', 'gałęzie', 'gałęzi')}`,
         branchAdd: (n: string) => `Dodaj do linii ${n}`,
+        branchAddPaused: (n: string) => `Dodaj do linii ${n} (wstrzymana)`,
         branchAddPick: 'Dodaj do linii',
         branchAddTitle: 'Dodaj do linii',
         branchNearest: 'najbliższa',

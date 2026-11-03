@@ -68,6 +68,8 @@ export interface ManagedBridge {
     /** `/status.queue` and `/status.waiting` (writes change them). */
     queue: Record<string, unknown>[];
     waiting: Record<string, unknown>[];
+    /** Who else is in which direction (`GET /directions/people`, added to each direction's person; absent: its person only). */
+    people?: Record<string, string[]>;
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -82,6 +84,7 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
             if (d.state === 'done' || typeof d.focus !== 'string') continue;
             (people[d.focus] ??= []).push(d.id as string);
         }
+        for (const [p, ids] of Object.entries(b.people ?? {})) people[p] = [...new Set([...(people[p] ?? []), ...ids])];
         return { status: 200, body: { people } };
     }
     const branches = (b.offLine?.branches ?? []) as Record<string, unknown>[];
@@ -210,6 +213,8 @@ export async function followManaged(page: Page, opts: {
     waiting?: Record<string, unknown>[];
     /** The research's tree (absent: `GED`). */
     ged?: string;
+    /** Who else is in which direction (absent: each direction's person only). */
+    people?: Record<string, string[]>;
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
@@ -228,6 +233,7 @@ export async function followManaged(page: Page, opts: {
         offLine: opts.offLine ? structuredClone(opts.offLine) : null,
         queue: structuredClone(opts.queue ?? [{ id: 'T0101', text: 'Matriky Smrkov', state: 'next', research: 'G0001' }]),
         waiting: structuredClone(opts.waiting ?? []),
+        ...(opts.people ? { people: structuredClone(opts.people) } : {}),
     };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
