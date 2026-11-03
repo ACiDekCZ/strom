@@ -6,7 +6,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 *Released 3 November 2026.*
 
-- **Surnames**: a Polish surname pairs the Polish way, *Jaworski* with *Jaworska*, and never gets a Czech *-ová* form in a Polish tree; a letter *ó* (*Wróblewska*, *Mróz*) no longer makes a tree Czech.
+- **Surnames**: in a Polish tree, with the app in Polish, English or German, a Polish surname pairs the Polish way, *Jaworski* with *Jaworska*, and never gets a Czech *-ová* form; a letter *ó* (*Wróblewska*, *Mróz*) no longer makes a tree Czech.
 - **Places**: the place check names a family by its basic form, in Polish declined (*rodziny Jaworskich*), and an address with *nr domu* is read as a house number.
 - **Sources**: the dash in a cited fact (*person — fact (year)*) follows the language.
 - **Adding people**: the form for a new parent, child, partner or sibling has the *Deceased* box under *More info*, as the person form has; a death date or place typed in ticks it, there and in the person form, and a person added as deceased is not treated as living (privacy of exports, the † on the card).

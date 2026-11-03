@@ -6,7 +6,7 @@
 
 *Vydáno 3. listopadu 2026.*
 
-- **Příjmení**: polské příjmení se páruje po polsku, *Jaworski* s *Jaworska*, a v polském stromu nikdy nedostane českou podobu na *-ová*; písmeno *ó* (*Wróblewska*, *Mróz*) už ze stromu nedělá český.
+- **Příjmení**: v polském stromu s aplikací v polštině, angličtině nebo němčině se polské příjmení páruje po polsku, *Jaworski* s *Jaworska*, a nikdy nedostane českou podobu na *-ová*; písmeno *ó* (*Wróblewska*, *Mróz*) už ze stromu nedělá český.
 - **Místa**: kontrola míst jmenuje rod jeho základní podobou, v polštině skloňovanou (*rodziny Jaworskich*), a adresa s *nr domu* se čte jako číslo domu.
 - **Prameny**: pomlčka v citovaném údaji (*osoba – údaj (rok)*) se řídí jazykem.
 - **Přidání osoby**: formulář nového rodiče, dítěte, partnera či sourozence má pod *Více informací* zaškrtávátko *Zemřel/a* jako formulář osoby; zapsané datum nebo místo úmrtí ho zaškrtne samo, tam i ve formuláři osoby, a osoba přidaná jako zemřelá se nebere jako žijící (soukromí exportů, † na kartě).
