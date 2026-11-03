@@ -8,6 +8,7 @@
 
 - **Polština**: texty opravené po revizi: vodítko je všude *Wskazówka* a doložený údaj *Udokumentowane*, tip *Podpowiedź*, citace nabídky výzkumu s ní souhlasí (*Zostaw tylko jako Archiwum Strom*, *Badanie → Więcej*), slovesa a podstatná jména se shodují s počtem i u jedné položky, data se píšou bez nul na začátku (*3.11.2026*) a měsíc s rokem slovem (*maj 1880*), pomlčky jsou polské a *Księga rodu* má velké K.
 - **Místa**: místo se označí jako daleko od své rodiny, jen když leží víc než 60 km od každého jiného místa rodiny z té doby; rodina s větví za oceánem už nedělá z vesnice blízko domova místo vzdálené tisíce kilometrů a výsledek hledání blízko některého místa rodiny se počítá jako blízký.
+- **Stránky rodu**: pruh jediného roku na časové ose rodu uvádí ve svém titulku rok jen jednou (*1870*, ne *1870–1870*), u místa i u generace.
 
 ## 3.21.0
 

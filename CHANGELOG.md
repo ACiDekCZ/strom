@@ -8,6 +8,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 - **Polish**: texts corrected after a review: a fact's lead is *Wskazówka* and a proven fact *Udokumentowane* everywhere, a tip is *Podpowiedź*, quotes of the research's menu match it (*Zostaw tylko jako Archiwum Strom*, *Badanie → Więcej*), verbs and nouns agree with the number also for one item, dates are written without leading zeros (*3.11.2026*) and a month with its year by name (*maj 1880*), dashes are Polish en dashes, and *Księga rodu* has a capital K.
 - **Places**: a place is marked as far from its family only when it lies more than 60 km from each of the family's other places of that time; a family with a branch overseas no longer makes a village near home look thousands of kilometres away, and a search result near one of the family's places counts as near.
+- **Family pages**: a bar of a single year on a line's timeline names that year once in its title (*1870*, not *1870–1870*), for a place and for a generation.
 
 ## 3.21.0
 

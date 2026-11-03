@@ -8,6 +8,7 @@
 
 - **Polnisch**: Texte nach einer Durchsicht korrigiert: ein Hinweis heißt überall *Wskazówka* und eine belegte Angabe *Udokumentowane*, ein Tipp *Podpowiedź*, Zitate des Recherche-Menüs stimmen mit ihm überein (*Zostaw tylko jako Archiwum Strom*, *Badanie → Więcej*), Verben und Substantive stimmen auch bei einem Element in der Zahl überein, Daten stehen ohne führende Nullen (*3.11.2026*) und ein Monat mit Jahr ausgeschrieben (*maj 1880*), Gedankenstriche sind polnische Halbgeviertstriche und *Księga rodu* hat ein großes K.
 - **Orte**: ein Ort gilt nur dann als weit von seiner Familie entfernt, wenn er mehr als 60 km von jedem anderen Ort der Familie aus dieser Zeit liegt; eine Familie mit einem Zweig in Übersee lässt ein Dorf nahe der Heimat nicht mehr Tausende Kilometer entfernt erscheinen, und ein Suchergebnis nahe einem Ort der Familie gilt als nah.
+- **Familienseiten**: ein Balken eines einzigen Jahres auf der Zeitleiste einer Stammlinie nennt das Jahr in seinem Titel nur einmal (*1870*, nicht *1870–1870*), für einen Ort und für eine Generation.
 
 ## 3.21.0
 
