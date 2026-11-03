@@ -389,6 +389,64 @@ test.describe('work outside the directions through the bridge', () => {
         expect(await launchedLinks(page)).toEqual([]);
     });
 
+    for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+        test(`${size.width} many directions: the branch's chip first in the queue's filters, whole in view, each task numbered by its place in the whole queue`, async ({ page }) => {
+            const off = (id: string, text: string) => ({ id, text, state: 'next', branch: 'B-P0031', why: { kind: 'off', mode: 'occasional', branch: 'B-P0031' } });
+            const queue = [
+                QUEUE[0], off('T0412', 'Sňatek Aloise Fíška, Vídeň 1894'), QUEUE[2], off('T0413', 'Křest Terezie Fíškové'),
+                { id: 'T0103', text: 'Pozemková kniha Smrkov', state: 'next', research: 'G0001', why: { kind: 'line', research: 'G0001' } },
+                off('T0414', 'Úmrtí Aloise Fíška, Vídeň'), off('T0415', 'Sčítání lidu 1900, Vídeň'),
+            ];
+            // Running directions with long names: the row of filters is wider than the panel at either width.
+            const more = ['Potomci: Bohuslava Svobodová-Lhotáková', 'Předci: Maxmilián Fíšek ze Smrkova', 'Kdo byl Václav Lhoták z Vídně?',
+                'Potomci: Terezie Fíšková ze Smrkova', 'Předci: Aloisius Fíšek-Lhoták'].map((name, i) => ({
+                id: `G00${21 + i}`, name, state: 'active', direction: 'descendants', focus: 'P0001', order: 4 + i, tasks: 0, waiting: 0,
+                working: false, since: ago(30),
+            }));
+            await followManaged(page, {
+                caps: OFF_CAPS, features: FEATURES, offLine: OFF_LINE, queue, ged: GED_OFFLINE, size,
+                researches: [...MANAGED_DIRECTIONS, ...more],
+            });
+            if (size.width < 641) {
+                await page.locator('#live-panel .live-panel-toggle').click();
+                await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+            } else {
+                await openOverview(page);
+            }
+            await outToggle(page).click();
+            const alois = branchRow(page, 'B-P0031');
+            await alois.locator('.research-offline__expand').click();
+            await expect(alois.locator('.research-offline__task-num')).toHaveText(['2', '4', '6']);
+            await alois.locator('[data-do="all-tasks"]').click();
+            const chip = overview(page).locator('.research-offline__chip');
+            await expect(chip).toBeFocused();
+            // The active narrowing first in the row, the row scrolled to its start: the whole chip in view.
+            const row = overview(page).locator('.research-overview__queue-filters');
+            await expect.poll(() => row.evaluate((r) => {
+                const first = r.firstElementChild as HTMLElement;
+                const c = r.querySelector('.research-offline__chip')!.getBoundingClientRect();
+                const box = r.getBoundingClientRect();
+                return {
+                    first: first.classList.contains('research-offline__chip'),
+                    wider: r.scrollWidth > r.clientWidth,
+                    whole: r.scrollLeft === 0 && c.left >= box.left - 0.5 && c.right <= box.right + 0.5 && c.right <= window.innerWidth,
+                };
+            })).toEqual({ first: true, wider: true, whole: true });
+            await expect(chip).toHaveText('Branch Alois Fíšek 4 ×');
+            await expect(row.locator('[role="radio"][aria-checked="true"]')).toHaveCount(0);
+            // The same numbers as under the branch: the places in the whole queue.
+            const nums = overview(page).locator('.live-queue .live-queue-row:not(.live-queue-row--parked):not(.live-queue-row--more) .live-queue-num');
+            await expect(nums).toHaveText(['2', '4', '6', '7']);
+            await expect(nums.nth(1)).toHaveAttribute('aria-label', '4 in the queue');
+            // A line's pill replaces the branch's narrowing and counts its tasks anew, as before.
+            await row.locator('[role="radio"][data-direction="G0001"]').click();
+            await expect(chip).toHaveCount(0);
+            await expect(nums).toHaveText(['1', '2']);
+            await expect(nums.first()).not.toHaveAttribute('aria-label', /.*/);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        });
+    }
+
     test('a growing branch in Awaiting action: the section open, its answers through the bridge, gone at once, Undo', async ({ page }) => {
         const b = await follow(page, { waiting: [GROWING] });
         await openOverview(page);

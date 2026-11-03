@@ -3460,16 +3460,24 @@ export const researchUiMethods = uiModule({
             } else {
                 pills.querySelectorAll('[role="radio"]').forEach(c => c.setAttribute('aria-checked', 'false'));
             }
-            pills.appendChild(chip);
+            // First in the row: the active narrowing, never scrolled out of a narrow row.
+            pills.prepend(chip);
+            pills.scrollLeft = 0;
         }
         const list = el('ul', 'live-panel-list live-queue');
         host.appendChild(list);
         const canTask = this.researchLinkAvailable('task');
         // A task's own place (Do next / To the end) is set through the bridge, no mark.
         const canOrder = taskOrderOffered(s);
+        // Narrowed to a branch: each task keeps its place in the whole queue,
+        // the same number as under the branch (a line's filter counts anew).
+        const placeOf = branch ? new Map(allNext.map((q, i) => [q.id, i + 1])) : null;
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
-            li.appendChild(el('span', 'live-queue-num', String(i + 1)));
+            const place = placeOf?.get(q.id) ?? i + 1;
+            const num = el('span', 'live-queue-num', String(place));
+            if (placeOf) num.setAttribute('aria-label', strings.live.branchQueuePos(place));
+            li.appendChild(num);
             const text = el('span', 'live-queue-text', q.text);
             // The panel, two or more lines at work: the task's line first.
             const glyph = directions ? '' : lineGlyphFor(s, q.research);
