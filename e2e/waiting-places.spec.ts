@@ -95,7 +95,7 @@ async function setGeos(page: Page): Promise<void> {
         S.DataManager.getData().places = {
             lhota: { lat: 49.6, lon: 15.4, label: 'Lhota' },
             lhotinek: { lat: 49.63, lon: 15.46, label: 'Lhotínek' },
-            lhotov: { lat: 49.57, lon: 15.36, label: 'Lhotov', origin: 'hand' },
+            lhotov: { lat: 49.57, lon: 15.36, label: 'Lhotov, Lhotov District, Czechia', origin: 'hand' },
             jinov: { lat: 50.3, lon: 16.9, label: 'Jinov' },
         };
         S.TreeRenderer.render();
@@ -105,8 +105,8 @@ async function setGeos(page: Page): Promise<void> {
 }
 
 /** The research tree, its bridge announcing `features`, its questions read. */
-async function research(page: Page, features: string[] = ALL): Promise<FakeBridge> {
-    const b = await fakeBridge(page, { features, treeGed: GED, places: fakePlaces({ reply: placesReply() }), waiting: questions() });
+async function research(page: Page, features: string[] = ALL, waiting = questions()): Promise<FakeBridge> {
+    const b = await fakeBridge(page, { features, treeGed: GED, places: fakePlaces({ reply: placesReply() }), waiting });
     await openResearch(page, { ged: GED });
     await poll(page);
     await setGeos(page);
@@ -206,9 +206,12 @@ test.describe('questions about places in Awaiting action', () => {
 
         // Lhotov placed by hand, Jinov from the research: each says who gave its location now.
         await expect(cardOf(page, 'L0020').locator('.waiting-place-cand.is-current')).toContainText('Now: Lhotov');
-        await expect(cardOf(page, 'L0020').locator('.waiting-place-cand.is-current .waiting-place-cand-where')).toHaveText('Placed by hand');
+        // Where it is now and how far from the suggestion: the geocoder's name without the place's own, else the coordinates.
+        await expect(cardOf(page, 'L0020').locator('.waiting-place-cand.is-current .waiting-place-cand-where'))
+            .toHaveText(['Lhotov District, Czechia · 48 km from the suggestion', 'Placed by hand']);
         const j = cardOf(page, 'L0021');
-        await expect(j.locator('.waiting-place-cand.is-current .waiting-place-cand-where')).toHaveText('From the research');
+        await expect(j.locator('.waiting-place-cand.is-current .waiting-place-cand-where'))
+            .toHaveText(['50.3100, 16.9100 · 125 km from the suggestion', 'From the research']);
         await expect(j.locator('.waiting-place-cand[data-cand="c1"] .waiting-place-cand-name')).toHaveText('Suggested: Jinov');
         await expect(j.locator('.waiting-place-pick')).toHaveCount(0);
         await expect(j.locator('.waiting-place-choice')).toHaveText(['Move to Jinov (Jinov District)', 'Keep', 'Don’t know']);
@@ -375,6 +378,42 @@ test.describe('questions about places in Awaiting action', () => {
         await expect(cardOf(page, 'L0012')).not.toHaveClass(/is-focus/);
     });
 });
+
+/**
+ * A conflict's small map shows its two points, not every place of the family
+ * (Jinov, 120 km off, is no dot at Lhotov's); the location now and a
+ * suggestion on the same spot stand side by side, both in the map.
+ */
+for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    test(`${size.width}: a conflict's small map is its two points, both seen, the location now never under the letter`, async ({ page }) => {
+        await page.setViewportSize(size);
+        const same = questions().map(q => q.id === 'L0021'
+            ? { ...q, candidates: [{ id: 'c1', name: 'Jinov', district: 'Jinov District', country: 'Czechia', lat: 50.31, lon: 16.91 }] } : q);
+        await research(page, ALL, same);
+        await openWin(page);
+        const pins = async (id: string) => cardOf(page, id).locator('.waiting-place-map').evaluate((map) => {
+            const box = map.getBoundingClientRect();
+            const at = [...map.querySelectorAll<HTMLElement>('.place-mini-pin')].map(p => {
+                const r = p.getBoundingClientRect();
+                return { cand: p.dataset.cand, x: r.left + r.width / 2, y: r.top + r.height / 2, inside: r.left >= box.left - 0.5 && r.right <= box.right + 0.5 && r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5 };
+            });
+            const dots = [...map.querySelectorAll<HTMLElement>('.place-mini-dot')].map(d => d.title);
+            return { at, dots, apart: at.length === 2 ? Math.hypot(at[0]!.x - at[1]!.x, at[0]!.y - at[1]!.y) : 0 };
+        });
+        const l = cardOf(page, 'L0020');
+        await l.scrollIntoViewIfNeeded();
+        await expect.poll(async () => (await pins('L0020')).at.map(p => [p.cand, p.inside])).toEqual([['now', true], ['c1', true]]);
+        const lhotov = await pins('L0020');
+        expect(lhotov.dots).not.toContain('Jinov');
+        expect(lhotov.apart).toBeGreaterThan(22);
+        const j = cardOf(page, 'L0021');
+        await j.scrollIntoViewIfNeeded();
+        await expect(j.locator('.waiting-place-now-where')).toHaveText('50.3100, 16.9100 · Less than 1 km from the suggestion');
+        await expect.poll(async () => (await pins('L0021')).at.map(p => [p.cand, p.inside])).toEqual([['now', true], ['c1', true]]);
+        expect((await pins('L0021')).apart).toBeGreaterThanOrEqual(22);
+        await noSideScroll(page);
+    });
+}
 
 /** A phone upright: the map above the candidates; sideways: behind Show on the map. Nothing wider than the screen, 44 px targets. */
 for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
