@@ -212,6 +212,12 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-basis-body { padding: 10px 14px; border-radius: 8px; background: var(--surface-2); font-size: 13.5px; }
 .pp-basis-body ul { margin: 0 0 6px; padding-left: 18px; }
 .pp-basis-note { font-style: italic; }
+/* The sources a story rests on (Story.sources): titles, a web address as a link. */
+.pp-story-src { margin-top: 12px; font-family: var(--font-sans); font-size: 13.5px; }
+.pp .pp-story-src-h { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+.pp-story-src-list { margin: 0; padding-left: 18px; }
+.pp-story-src-list li { margin: 2px 0; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .pp-story-src-list a { display: inline-flex; align-items: center; min-height: 44px; } }
 .pp-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-faint); margin-left: 4px; white-space: nowrap; }
 .pp .pp-notes-text { margin-top: 8px; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
 .pp-toggles { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -155,7 +155,7 @@ const WITNESS_RELA = 'witness';
  * the file's own words ('navrh'/'hotovo'); 'draft'/'final' are accepted too,
  * since another tool may well write the English ones.
  */
-function toStory(raw: RawStory | undefined): Story | undefined {
+function toStory(raw: RawStory | undefined, mapRefs: (refs?: string[]) => string[]): Story | undefined {
     if (!raw || !raw.text.trim()) return undefined;
     const stat = raw.stat.trim().toLowerCase();
     const status = (stat === 'navrh' || stat === 'draft') ? 'draft'
@@ -164,6 +164,8 @@ function toStory(raw: RawStory | undefined): Story | undefined {
     // rewritten, so a _DRAFT under one means nothing.
     const d = status === 'final' && raw.draft?.text.trim() ? raw.draft : undefined;
     const facts = d?.facts.filter(f => f.trim());
+    const sources = mapRefs(raw.sources);
+    const draftSources = d ? mapRefs(d.sources) : [];
     return {
         ...(raw.kind ? { kind: raw.kind } : {}),
         ...(raw.title ? { title: raw.title } : {}),
@@ -171,12 +173,14 @@ function toStory(raw: RawStory | undefined): Story | undefined {
         text: raw.text,
         ...(raw.facts.length > 0 ? { facts: raw.facts } : {}),
         ...(raw.note ? { note: raw.note } : {}),
+        ...(sources.length > 0 ? { sources } : {}),
         ...(d ? {
             draft: {
                 ...(d.title ? { title: d.title } : {}),
                 text: d.text,
                 ...(facts && facts.length > 0 ? { facts } : {}),
                 ...(d.note ? { note: d.note } : {}),
+                ...(draftSources.length > 0 ? { sources: draftSources } : {}),
                 ...(d.at.trim() ? { at: d.at.trim() } : {}),
             },
         } : {}),
@@ -823,6 +827,8 @@ interface RawStory {
     text: string;
     facts: string[];
     note: string;
+    /** `2 SOUR @S…@`: the sources the story rests on, pointers as written. */
+    sources: string[];
     /** `2 _DRAFT`: the new version waiting beside an approved story (research files only). */
     draft?: RawStoryDraft;
 }
@@ -833,11 +839,13 @@ interface RawStoryDraft {
     text: string;
     facts: string[];
     note: string;
+    /** `3 SOUR @S…@`: the sources of the new version. */
+    sources: string[];
     at: string;
 }
 
 const newStory = (): RawStory =>
-    ({ kind: '', title: '', stat: '', text: '', facts: [], note: '' });
+    ({ kind: '', title: '', stat: '', text: '', facts: [], note: '', sources: [] });
 
 /** A participant as it comes out of the file, before ids are resolved. */
 interface RawParticipant {
@@ -2571,7 +2579,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case '_DRAFT':
                             // The research's new version beside an approved
                             // story: trusted from its own files only.
-                            if (stromResearch) currentStory.draft = { title: '', text: '', facts: [], note: '', at: '' };
+                            if (stromResearch) currentStory.draft = { title: '', text: '', facts: [], note: '', sources: [], at: '' };
                             else drop(tag);
                             break;
                         case 'TYPE': currentStory.kind = value; break;
@@ -2580,6 +2588,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'TEXT': currentStory.text = value; break;
                         case 'DATA': currentStory.facts.push(value); break;
                         case 'NOTE': currentStory.note = value; break;
+                        // A source the story rests on (Strom Research 1.26): a pointer only.
+                        case 'SOUR': if (GED_POINTER.test(value.trim())) currentStory.sources.push(value.trim()); break;
                     }
                 } else if (currentStorySubTag === '_DRAFT') {
                     // 3 TITL / TEXT / DATA / NOTE / _AT, continued at level 4 —
@@ -2592,6 +2602,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             case 'TEXT': draft.text = value; break;
                             case 'DATA': draft.facts.push(value); break;
                             case 'NOTE': draft.note = value; break;
+                            case 'SOUR': if (GED_POINTER.test(value.trim())) draft.sources.push(value.trim()); break;
                             case '_AT': draft.at = value; break;
                         }
                     } else if (draft && level === 4 && tag === 'TEXT' && currentDraftSubTag === 'DATA') {
@@ -3344,7 +3355,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         rehomeParticipants(indi.birthParticipants, 'birth');
         rehomeParticipants(indi.deathParticipants, 'death');
 
-        const story = toStory(indi.story);
+        const story = toStory(indi.story, mapRefs);
         if (story) person.story = story;
 
         const research = gedcom.stromResearch ? toPersonResearch(indi.research, mapRefs, researchRefs) : undefined;
@@ -3547,7 +3558,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             .filter((p): p is EventParticipant => !!p);
         if (witnesses.length > 0) partnership.participants = witnesses;
 
-        const famStory = toStory(fam.story);
+        const famStory = toStory(fam.story, mapRefs);
         if (famStory) partnership.story = famStory;
     };
 

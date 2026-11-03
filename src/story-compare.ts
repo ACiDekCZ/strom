@@ -14,12 +14,13 @@
 import { Story, StoryDraft } from './types.js';
 import { getStringsForLang } from './strings.js';
 import { diffStoryText, diffStoryLines, StoryPara, StorySeg, StoryParaDiff } from './story-diff.js';
+import { storySourcesHtml, StorySourceShown } from './story-sources.js';
 
 type StoryStrings = ReturnType<typeof getStringsForLang>['story'];
 
 export interface StoryCompareInput {
     /** The approved story as it is now (in the person dialog: the text in the field). */
-    approved: Pick<Story, 'title' | 'text' | 'facts' | 'note'>;
+    approved: Pick<Story, 'title' | 'text' | 'facts' | 'note' | 'sources'>;
     draft: StoryDraft;
 }
 
@@ -28,6 +29,10 @@ export interface StoryCompareOptions {
     idPrefix: string;
     /** The prose of a whole version, as the reader / the book set it. */
     prose: (text: string, title?: string) => string;
+    /** The sources of a version as shown (storySourcesShown over the tree's catalog); none: not shown. */
+    sources?: (ids: readonly string[] | undefined) => StorySourceShown[];
+    /** Applied to both versions' text and facts first: the research's bare source codes named (sourceCodeNamer). */
+    name?: (text: string) => string;
 }
 
 export type StoryCompareView = 'changes' | 'new' | 'old';
@@ -47,7 +52,9 @@ function segHtml(seg: StorySeg): string {
 const paraBody = (p: StoryPara): string => p.segs.map(segHtml).join('');
 
 export function storyCompareHtml(input: StoryCompareInput, L: StoryStrings, opts: StoryCompareOptions): string {
-    const { approved, draft } = input;
+    const nm = opts.name ?? ((t: string): string => t);
+    const approved = { ...input.approved, text: nm(input.approved.text), ...(input.approved.facts ? { facts: input.approved.facts.map(nm) } : {}) };
+    const draft = { ...input.draft, text: nm(input.draft.text), ...(input.draft.facts ? { facts: input.draft.facts.map(nm) } : {}) };
     const id = opts.idPrefix;
     const ins = (html: string): string => `<ins data-sr="${esc(L.srAdded)}">${html}</ins>`;
     const del = (html: string): string => `<del data-sr="${esc(L.srRemoved)}">${html}</del>`;
@@ -100,6 +107,14 @@ export function storyCompareHtml(input: StoryCompareInput, L: StoryStrings, opts
     if (facts.added.length + facts.removed.length > 0) {
         extra.push(`<div class="sc-label">${esc(L.fieldFacts)}</div><div class="sc-value">${lines(facts.added, facts.removed)}</div>`);
     }
+    // The sources the versions rest on: the ones the new version adds or leaves out, by title.
+    const newSources = opts.sources?.(draft.sources) ?? [];
+    const oldSources = opts.sources?.(approved.sources) ?? [];
+    {
+        const oldTitles = oldSources.map(x => x.title), newTitles = newSources.map(x => x.title);
+        const added = newTitles.filter(t => !oldTitles.includes(t)), removed = oldTitles.filter(t => !newTitles.includes(t));
+        if (added.length + removed.length > 0) extra.push(`<div class="sc-label">${esc(L.sourcesHead)}</div><div class="sc-value">${lines(added, removed)}</div>`);
+    }
     // A draft without a caveat leaves the caveat as it is.
     const newNote = draft.note?.trim();
     const oldNote = approved.note?.trim() ?? '';
@@ -109,14 +124,16 @@ export function storyCompareHtml(input: StoryCompareInput, L: StoryStrings, opts
     const changes = `<div class="sc-grid">${rows.join('')}</div>${extra.length > 0 ? `<div class="sc-rule"></div><div class="sc-grid sc-grid--small">${extra.join('')}</div>` : ''}`;
 
     // ---- New version / Approved: clean prose, as the reader sets it
-    const version = (title: string | undefined, body: string, f: string[] | undefined, note: string | undefined): string => {
+    const version = (title: string | undefined, body: string, f: string[] | undefined, note: string | undefined, src: StorySourceShown[]): string => {
         const list = (f ?? []).filter(x => x.trim());
-        return `${title ? `<h3 class="sc-title">${esc(title)}</h3>` : ''}<div class="sc-prose">${opts.prose(body, title)}</div>${list.length > 0 || note
+        return `${title ? `<h3 class="sc-title">${esc(title)}</h3>` : ''}<div class="sc-prose">${opts.prose(body, title)}</div>`
+            + storySourcesHtml(src, L.sourcesHead, { cls: 'sc-src' })
+            + `${list.length > 0 || note
             ? `<div class="sc-extra">${list.length > 0 ? `<div class="sc-label">${esc(L.fieldFacts)}</div><ul>${list.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${note ? `<p class="sc-note">${esc(note)}</p>` : ''}</div>`
             : ''}`;
     };
-    const newPanel = version(newTitle || approved.title, draft.text, draft.facts, draft.note ?? approved.note);
-    const oldPanel = `<div class="sc-approved"><span class="sc-tag sc-tag--ok">${esc(L.approvedTag)}</span><span>${esc(L.approvedNote)}</span></div>${version(approved.title, approved.text, approved.facts, approved.note)}`;
+    const newPanel = version(newTitle || approved.title, draft.text, draft.facts, draft.note ?? approved.note, newSources);
+    const oldPanel = `<div class="sc-approved"><span class="sc-tag sc-tag--ok">${esc(L.approvedTag)}</span><span>${esc(L.approvedNote)}</span></div>${version(approved.title, approved.text, approved.facts, approved.note, oldSources)}`;
 
     // ---- The switch: the legend in Changes, or how much changed in a long text
     const tab = (view: StoryCompareView, label: string): string =>
@@ -232,6 +249,12 @@ export const STORY_COMPARE_CSS = `
 .sc-extra { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--sc-rule); font-size: 13px; line-height: 1.5; color: var(--sc-muted); }
 .sc-extra ul { margin: 6px 0 8px; padding-left: 18px; }
 .sc-note { margin: 0; font-style: italic; }
+.sc-src { margin: 12px 0 0; font-size: 13px; }
+.sc-src-h { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sc-muted); }
+.sc-src-list { margin: 0; padding-left: 18px; }
+.sc-src-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.sc-src-list a { color: var(--primary, #8a5a2b); }
+@media (pointer: coarse) { .sc-src-list a { display: inline-flex; align-items: center; min-height: 44px; } }
 .sc-approved { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12px; color: var(--sc-muted); }
 @media (max-width: 640px) {
     .sc-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }

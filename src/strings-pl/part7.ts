@@ -327,6 +327,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         fieldTitle: 'Tytuł',
         fieldText: 'Tekst',
         fieldFacts: 'Opiera się na',
+        // The sources a story rests on (Story.sources), under its text.
+        sourcesHead: 'Opiera się na źródłach',
         fieldNote: 'Zastrzeżenie',
         noTitle: 'bez tytułu',
         approvedTag: 'Zatwierdzono',

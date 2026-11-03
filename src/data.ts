@@ -3,6 +3,7 @@
  * Handles persons, partnerships, and relationships with type safety
  */
 
+import { rewriteStorySources, storySourceIds } from './story-sources.js';
 import { normalizeSingleParents, looseSingleParents, isPurePlaceholder, fillPlaceholder, tidyPlaceholders } from './single-parent.js';
 import {
     Person,
@@ -2332,6 +2333,7 @@ class DataManagerClass {
             for (const att of person.attachments ?? []) {
                 if (att.sourceId === sourceId) delete att.sourceId;
             }
+            rewriteStorySources(person.story, ids => ids.filter(id => id !== sourceId));
         }
         for (const partnership of Object.values(this.data.partnerships)) {
             for (const holder of [partnership, ...(partnership.events ?? [])]) {
@@ -2339,6 +2341,7 @@ class DataManagerClass {
                 holder.sourceIds = holder.sourceIds.filter(id => id !== sourceId);
                 if (holder.sourceIds.length === 0) delete holder.sourceIds;
             }
+            rewriteStorySources(partnership.story, ids => ids.filter(id => id !== sourceId));
         }
         this.commitMutation(strings.undo.removeSource(src.title));
         AuditLogManager.log(this.currentTreeId, 'source.remove', strings.auditLog.removedSource(src.title));
@@ -2382,10 +2385,12 @@ class DataManagerClass {
         for (const person of Object.values(this.data.persons)) {
             for (const field of PERSON_CITATION_FIELDS) add(person[field]);
             for (const ev of person.events ?? []) add(ev.sourceIds);
+            add(storySourceIds(person.story));
         }
         for (const partnership of Object.values(this.data.partnerships)) {
             add(partnership.sourceIds);
             for (const ev of partnership.events ?? []) add(ev.sourceIds);
+            add(storySourceIds(partnership.story));
         }
         return counts;
     }
@@ -2397,12 +2402,14 @@ class DataManagerClass {
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) count++;
             }
+            if (storySourceIds(person.story).includes(sourceId)) count++;
         }
         for (const partnership of Object.values(this.data.partnerships)) {
             if (partnership.sourceIds?.includes(sourceId)) count++;
             for (const ev of partnership.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) count++;
             }
+            if (storySourceIds(partnership.story).includes(sourceId)) count++;
         }
         return count;
     }

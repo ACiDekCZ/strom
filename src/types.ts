@@ -784,6 +784,12 @@ export interface Story {
     /** The author's caveat, kept verbatim ("not a source, proves nothing"). */
     note?: string;
     /**
+     * The sources the story rests on (ids into StromData.sources): the
+     * sources of its facts and of its background, as Strom Research names
+     * them (`2 SOUR @S…@` under _STORY). Shown as "Based on sources".
+     */
+    sources?: string[];
+    /**
      * A newer version of an APPROVED story waiting for the user (Strom Research
      * _STORY > _DRAFT). The approved text above stays the story — the book and
      * the person's panel show it — until the user takes the new version or
@@ -800,6 +806,8 @@ export interface StoryDraft {
     text: string;
     facts?: string[];
     note?: string;
+    /** The sources the new version rests on (`3 SOUR @S…@` under _DRAFT). */
+    sources?: string[];
     /** When it was written (YYYY-MM-DD as the research sends it). */
     at?: string;
 }

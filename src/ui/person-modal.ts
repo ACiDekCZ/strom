@@ -724,6 +724,7 @@ export const personModalMethods = uiModule({
             text,
             ...(existing?.facts?.length ? { facts: existing.facts } : {}),
             ...(existing?.note ? { note: existing.note } : {}),
+            ...(existing?.sources?.length ? { sources: existing.sources } : {}),
             // The research's waiting new version: its state, not the form's.
             ...(existing?.draft ? { draft: existing.draft } : {}),
         };

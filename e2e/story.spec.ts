@@ -90,3 +90,63 @@ test('a story imported from GEDCOM survives the form and the export', async ({ p
         facts: ['BIRT 5 MAY 1863 [K-04]'], note: 'Neni pramen.',
     });
 });
+
+test('the sources a story rests on: under it in the reader, a code in its text by title, kept by the form', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const ids = await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons()[0];
+        const a = dm.addSource({ title: 'Kronika Lískové', refn: 'S0003', url: 'https://obec.example.org/kronika' })!;
+        const b = dm.addSource({ title: 'Hasiči v Lískové' })!;
+        dm.updatePerson(jan.id, {
+            story: {
+                kind: 'vypraveni', title: 'Kapitola', status: 'final',
+                text: 'Roku 1905 hořelo [S0003].', sources: [a.id, b.id],
+            },
+        });
+        window.Strom.TreeRenderer.render();
+        return { jan: jan.id, a: a.id, b: b.id };
+    });
+
+    await page.evaluate(id => window.Strom.UI.showPersonStoryDialog(id), ids.jan);
+    const reader = page.locator('#person-story-modal');
+    await expect(reader).toBeVisible();
+    await expect(reader).toContainText('Roku 1905 hořelo (Kronika Lískové).');
+    await expect(reader).not.toContainText('[S0003]');
+    const block = reader.locator('.story-reader-sources');
+    await expect(block.locator('.story-reader-sources-h')).toHaveText(/Based on sources|Opírá se o prameny/);
+    const link = block.locator('a');
+    await expect(link).toHaveCount(1);
+    await expect(link).toHaveText('Kronika Lískové ↗');
+    await expect(link).toHaveAttribute('href', 'https://obec.example.org/kronika');
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(block.locator('li').nth(1)).toHaveText('Hasiči v Lískové');
+    await page.keyboard.press('Escape');
+    await expect(reader).toBeHidden();
+
+    // Editing only the text keeps the sources.
+    await cardAction(page, 'Jan', 'edit');
+    const modal = personModal(page);
+    await modal.locator('#input-story').fill('Prepsany text.');
+    await modal.locator('#btn-save').click();
+    await expect(modal).toBeHidden();
+    const sources = await page.evaluate(() => (window.Strom.DataManager.getAllPersons()[0] as { story?: { sources?: string[] } }).story?.sources);
+    expect(sources).toEqual([ids.a, ids.b]);
+});
+
+test('a story without sources has no sources block', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const id = await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons()[0];
+        dm.updatePerson(jan.id, { story: { kind: 'vypraveni', title: 'Kapitola', text: 'Jen text [S0003].' } });
+        return jan.id;
+    });
+    await page.evaluate(i => window.Strom.UI.showPersonStoryDialog(i), id);
+    const reader = page.locator('#person-story-modal');
+    await expect(reader).toContainText('Jen text');
+    await expect(reader.locator('.story-reader-sources')).toHaveCount(0);
+});

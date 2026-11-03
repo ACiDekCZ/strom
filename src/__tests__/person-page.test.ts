@@ -130,6 +130,29 @@ describe('sections', () => {
         expect(body(fiskTree())).not.toContain('pp-draft-tag">');
     });
 
+    it('the sources a story rests on under its prose (a couple’s too); a bare code reads as the title; only with the Sources group', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].story!.sources = ['s1', 's3', 'gone'];
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.', sources: ['s2'] };
+        const html = body(d);
+        const own = html.indexOf('<div class="pp-story-src">');
+        expect(own).toBeGreaterThan(html.indexOf('Jan se narodil v Čapkově'));
+        expect(html.slice(own)).toMatch(/^<div class="pp-story-src"><p class="pp-story-src-h">Opírá se o prameny<\/p><ul class="pp-story-src-list">/);
+        expect(html).toContain('<li><a href="https://example.org/scan" rel="noopener noreferrer" target="_blank">Matrika narozených Čapkov 1850–1870 ↗</a></li><li>Matrika zemřelých Čapkov</li></ul>');
+        expect(html).toContain('<li>Matrika oddaných Čapkov</li>');
+        // "[S0042]" is the research's code of a source the tree has: its title in the text and the facts.
+        expect(html).toContain('Jan se narodil v Čapkově. (Matrika zemřelých Čapkov)');
+        expect(html).toContain('Narozen 1860 (Matrika zemřelých Čapkov)');
+        // The print: titles without links; the English page; no Sources group: no block.
+        const print = doc(d, { mode: 'print' });
+        expect(print).toContain('<li>Matrika narozených Čapkov 1850–1870</li>');
+        expect(print).not.toContain('Čapkov 1850–1870 ↗');
+        expect(body(d, { lang: 'en' })).toContain('<p class="pp-story-src-h">Based on sources</p>');
+        expect(body(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false } })).not.toContain('pp-story-src');
+        // No sources: no block.
+        expect(body(fiskTree())).not.toContain('pp-story-src');
+    });
+
     it('a couple’s story follows the person’s own, on both partners’ pages; alone it still makes the section', () => {
         const d = fiskTree();
         d.partnerships['u1' as PartnershipId].story = { status: 'draft', text: 'Jan a Marie hospodařili na čísle 12. [S0042]' };

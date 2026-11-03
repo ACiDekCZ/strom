@@ -446,13 +446,18 @@ function pushStatus(lines: string[], status: FactStatus | undefined): void {
  * evidence and must not be mistaken for a NOTE on the record. Programs that do
  * not know the tag skip the whole block, which is exactly the right outcome.
  */
-function pushStory(lines: string[], level: number, story: Story): void {
+function pushStory(lines: string[], level: number, story: Story, sourceRef: (id: string) => string | undefined): void {
     lines.push(`${level} _STORY`);
     lines.push(`${level + 1} TYPE ${escapeGedcomText(story.kind || 'vypraveni')}`);
     if (story.title) pushLongValue(lines, level + 1, 'TITL', story.title);
     if (story.status) lines.push(`${level + 1} STAT ${story.status === 'final' ? 'hotovo' : 'navrh'}`);
     pushLongValue(lines, level + 1, 'TEXT', story.text);
     for (const fact of story.facts ?? []) pushLongValue(lines, level + 1, 'DATA', fact);
+    // The sources the story rests on, as Strom Research writes them: a pointer each.
+    for (const id of new Set(story.sources ?? [])) {
+        const ref = sourceRef(id);
+        if (ref) lines.push(`${level + 1} SOUR ${ref}`);
+    }
     if (story.note) pushLongValue(lines, level + 1, 'NOTE', story.note);
 }
 
@@ -738,7 +743,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Note
         if (person.story) {
-            pushStory(lines, 1, person.story);
+            pushStory(lines, 1, person.story, id => sourceIdMap.get(id));
         }
 
         if (person.notes) {
@@ -1042,7 +1047,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (stat) lines.push(`1 _STAT ${stat}`);
 
         if (partnership.story) {
-            pushStory(lines, 1, partnership.story);
+            pushStory(lines, 1, partnership.story, id => sourceIdMap.get(id));
         }
 
         // Note

@@ -279,6 +279,22 @@ describe('the text', () => {
         expect(buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, ENV)).not.toContain('class="book-notes');
     });
 
+    it('a story\'s sources under it, numbered as the list at the end; a bare code reads as the title; none without the Sources part', () => {
+        const d = ostruznik();
+        d.sources!['s4'].refn = 'S0004';
+        d.partnerships['u2' as PartnershipId].story = { status: 'final', text: 'Svatba byla v zimě [S0004].', sources: ['s4', 's3'] };
+        const html = buildFamilyBook(d, { lang: 'cs', privacy: 'full' }, ENV);
+        expect(html).toContain('Svatba byla v zimě (Nikým necitovaný pramen).');
+        const block = html.slice(html.indexOf('<div class="book-story-src">'));
+        expect(block).toMatch(/^<div class="book-story-src"><p class="book-story-src-h">Opírá se o prameny<\/p><ul class="book-story-src-list"><li>Nikým necitovaný pramen<sup class="book-p">P(\d+)<\/sup><\/li><li><a href="https:\/\/example\.org\/scan\/lhota\/1880\/page-0012" rel="noopener noreferrer" target="_blank">Matrika narozených Lhota 1880 ↗<\/a><sup class="book-p">P\d+<\/sup><\/li><\/ul><\/div>/);
+        // The source only the story cites is in the list at the end under its number.
+        const n = /Nikým necitovaný pramen<sup class="book-p">P(\d+)/.exec(block)![1];
+        expect(html).toContain(`<span class="book-pn">P${n}</span>Nikým necitovaný pramen`);
+        const off = buildFamilyBook(d, { lang: 'cs', privacy: 'full', parts: { ...defaultBookOptions('cs').parts, sources: false } }, ENV);
+        expect(off).not.toContain('<div class="book-story-src">');
+        expect(off).toContain('Svatba byla v zimě (Nikým necitovaný pramen).');
+    });
+
     it('escapes the text before it renders emphasis', () => {
         const d = ostruznik();
         d.persons['v' as PersonId].story = { status: 'final', text: '<script>alert(1)</script> a **tučně**' };

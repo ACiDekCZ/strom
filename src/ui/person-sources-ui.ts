@@ -17,6 +17,7 @@ import { personInitials } from '../initials.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
+import { sourceCodeNamer, storySourcesShown, storySourcesHtml } from '../story-sources.js';
 import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
 import { shownName } from '../person-name.js';
 
@@ -254,12 +255,18 @@ export const personSourcesMethods = uiModule({
         const waiting = own ? storyWithDraft({ personId }) : null;
         const nvBanner = (story: Story, attrs: string): string =>
             `<div class="story-nv-banner"><span>${esc(s.nvReader(draftDate(story)))}</span><button type="button" class="story-nv-compare" ${attrs}>${esc(s.compare)}</button></div>`;
+        // The research's bare source codes ("[S0164]") read as the sources' titles.
+        const catalog = DataManager.getData().sources;
+        const named = sourceCodeNamer(catalog);
         const extraHtml = (story: Story): string => {
             const facts = (story.facts ?? []).filter(f => f.trim());
-            if (!facts.length && !story.note) return '';
+            // The sources the story rests on: titles, a web address as a link.
+            const sources = storySourcesHtml(storySourcesShown(catalog, story.sources), s.sourcesHead, { cls: 'story-reader-sources' });
+            if (!facts.length && !story.note && !sources) return '';
             return `<div class="story-reader-extra">
                 ${facts.length > 0 ? `<div class="menu-section-header">${esc(s.facts)}</div>
-                    <ul class="story-reader-facts">${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+                    <ul class="story-reader-facts">${facts.map(f => `<li>${esc(named(f))}</li>`).join('')}</ul>` : ''}
+                ${sources}
                 ${story.note ? `<p class="story-reader-note">${esc(story.note)}</p>` : ''}
             </div>`;
         };
@@ -284,7 +291,7 @@ export const personSourcesMethods = uiModule({
             ownHtml = `<section class="story-reader-own story-reader-ch" id="person-story-ch-own">
                     ${headText || actions ? `<div class="story-ch-head"><div class="story-ch-headtext">${headText}</div>${actions ? `<div class="story-ch-actions">${actions}</div>` : ''}</div>` : ''}
                     ${waiting ? nvBanner(waiting, 'id="person-story-compare"') : ''}
-                    <div class="story-reader-text">${storyProseHtml(own.text, { title: own.title })}</div>
+                    <div class="story-reader-text">${storyProseHtml(named(own.text), { title: own.title })}</div>
                     ${extraHtml(own)}
                 </section>`;
         }
@@ -317,7 +324,7 @@ export const personSourcesMethods = uiModule({
                         ${coupleApprove ? `<div class="story-ch-actions">${approveBtn(`data-approve-partnership="${esc(u.id)}"`)}</div>` : ''}
                     </div>
                     ${nv ? nvBanner(nv, `data-partnership-id="${esc(u.id)}"`) : ''}
-                    <div class="story-reader-text">${storyProseHtml(st.text, { title: st.title })}</div>
+                    <div class="story-reader-text">${storyProseHtml(named(st.text), { title: st.title })}</div>
                     ${extraHtml(st)}
                 </section>`;
         }).join('');

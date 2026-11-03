@@ -5795,6 +5795,8 @@ const stringsEN = {
         fieldTitle: 'Title',
         fieldText: 'Text',
         fieldFacts: 'Based on',
+        // The sources a story rests on (Story.sources), under its text.
+        sourcesHead: 'Based on sources',
         fieldNote: 'Caveat',
         noTitle: 'no title',
         approvedTag: 'Approved',
@@ -12905,6 +12907,8 @@ const stringsCZ: StringsType = {
         fieldTitle: 'Nadpis',
         fieldText: 'Text',
         fieldFacts: 'Opírá se o',
+        // The sources a story rests on (Story.sources), under its text.
+        sourcesHead: 'Opírá se o prameny',
         fieldNote: 'Výhrada',
         noTitle: 'bez nadpisu',
         approvedTag: 'Schváleno',
@@ -19924,6 +19928,8 @@ const stringsDE: StringsType = {
         fieldTitle: 'Titel',
         fieldText: 'Text',
         fieldFacts: 'Gestützt auf',
+        // The sources a story rests on (Story.sources), under its text.
+        sourcesHead: 'Stützt sich auf Quellen',
         fieldNote: 'Vorbehalt',
         noTitle: 'ohne Titel',
         approvedTag: 'Freigegeben',

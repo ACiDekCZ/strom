@@ -20109,6 +20109,18 @@
         .story-reader-facts { margin: 0 0 10px; padding-left: 18px; }
         .story-reader-facts li { margin: 2px 0; }
         .story-reader-note { margin: 0; font-style: italic; }
+        /* The sources a story rests on (Story.sources): titles, a web address as a link. */
+        .story-reader-sources { margin: 0 0 10px; }
+        .story-reader-sources-h {
+            margin: 0; padding: 0 0 6px; font-size: 10px; font-weight: 700;
+            letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint);
+        }
+        .story-reader-sources-list { margin: 0; padding-left: 18px; }
+        .story-reader-sources-list li { margin: 2px 0; overflow-wrap: anywhere; }
+        .story-reader-sources-list a { color: var(--primary); }
+        @media (pointer: coarse) {
+            .story-reader-sources-list a { display: inline-flex; align-items: center; min-height: 44px; }
+        }
         /* A couple's story (Partnership.story), one per marriage, under the person's own. */
         .story-reader-body > .story-reader-couple:not(:first-child) {
             margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider);

@@ -8,6 +8,7 @@
  * still renders.
  */
 
+import { rewriteStorySources, storySourceIds } from './story-sources.js';
 import { StromData, Person, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
@@ -119,10 +120,12 @@ export function stripSources(data: StromData): StromData {
         delete person.research;
         for (const ev of person.events ?? []) delete ev.sourceIds;
         for (const att of person.attachments ?? []) delete att.sourceId;
+        rewriteStorySources(person.story, () => []);
     }
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.sourceIds;
         for (const ev of partnership.events ?? []) delete ev.sourceIds;
+        rewriteStorySources(partnership.story, () => []);
     }
     return copy;
 }
@@ -398,10 +401,12 @@ export function applyLivingPrivacy(
             delete person.deathSourceIds;
             delete person.attachments;
             for (const ev of person.events ?? []) delete ev.sourceIds;
+            rewriteStorySources(person.story, () => []);
         }
         for (const partnership of Object.values(copy.partnerships)) {
             delete partnership.sourceIds;
             for (const ev of partnership.events ?? []) delete ev.sourceIds;
+            rewriteStorySources(partnership.story, () => []);
         }
     }
 
@@ -466,10 +471,12 @@ export function applyLivingPrivacy(
             cite(p.deathSourceIds);
             for (const ev of p.events ?? []) cite(ev.sourceIds);
             for (const a of p.attachments ?? []) if (a.sourceId) cited.add(a.sourceId);
+            cite(storySourceIds(p.story));
         }
         for (const u of Object.values(copy.partnerships)) {
             cite(u.sourceIds);
             for (const ev of u.events ?? []) cite(ev.sourceIds);
+            cite(storySourceIds(u.story));
         }
         for (const id of Object.keys(copy.sources)) if (!cited.has(id)) delete copy.sources[id];
     }

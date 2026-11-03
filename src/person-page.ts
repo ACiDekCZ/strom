@@ -27,6 +27,7 @@ import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from '
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
+import { nameSourceCodes, sourceCodeNamer, storySourcesShown, storySourcesHtml } from './story-sources.js';
 import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead, partnershipsInOrder, partnershipSortKey } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
@@ -1727,7 +1728,10 @@ function draftTag(c: Ctx, st: Story): string {
 /** What the story rests on (facts, the author's note), folded under the prose. */
 function storyBasisHtml(c: Ctx, st: Story, key: string, id: string): string {
     const { P, page } = c;
-    const facts = (st.facts ?? []).map(f => stripResearchIds(f)).filter(f => f.text.trim());
+    // A bare source code reads as the source's title; the researchers' section still lists the code.
+    const named = sourceCodeNamer(c.tree.sources);
+    const facts = (st.facts ?? []).map(f => ({ text: stripResearchIds(named(f)).text, ids: stripResearchIds(f).ids }))
+        .filter(f => f.text.trim());
     const note = st.note?.trim() ? stripResearchIds(st.note).text : '';
     if (!facts.length && !note) return '';
     const showIds = page.groups.research;
@@ -1741,6 +1745,17 @@ function storyBasisHtml(c: Ctx, st: Story, key: string, id: string): string {
         body: `<div class="pp-basis-body">${items ? `<ul>${items}</ul>` : ''}`
             + (note ? `<p class="pp-basis-note">${esc(P.authorNote)}: ${esc(note)}</p>` : '') + `</div>`,
     });
+}
+
+/**
+ * The sources the story rests on (Story.sources), under its prose: titles,
+ * a web address as a link (print: the title alone). Only with the page's
+ * Sources group, as every other source of the page.
+ */
+function storySourcesBlock(c: Ctx, st: Story): string {
+    if (!c.page.groups.sources) return '';
+    return storySourcesHtml(storySourcesShown(c.tree.sources, st.sources), c.S.story.sourcesHead,
+        { cls: 'pp-story-src', link: c.opts.mode !== 'print' });
 }
 
 // ── Couple's chapters (spec 027 §5–§6) ──
@@ -1823,7 +1838,8 @@ export function coupleChapterData(tree: StromData, person: Person, u: Partnershi
     const pid = u.person1Id === person.id ? u.person2Id : u.person1Id;
     const partner = pid ? tree.persons[pid] : undefined;
     const real = partner && !partner.isPlaceholder ? partner : undefined;
-    const stripped = stripResearchIds(st.text);
+    // A bare source code reads as the source's title; the researchers' section still gets the code.
+    const stripped = { text: stripResearchIds(nameSourceCodes(st.text, tree.sources)).text, ids: stripResearchIds(st.text).ids };
     const title = st.title?.trim() ? stripResearchIds(st.title).text.trim() : '';
     const short = (p: Person) => p.firstName?.trim() || shownNameOrEmpty(p);
     return {
@@ -1918,14 +1934,16 @@ function storyHtml(c: Ctx): string {
     let head = `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}</h2>`;
     let body = '';
     if (own) {
-        const stripped = stripResearchIds(own.text);
-        stripped.ids.forEach(id => c.ids.add(id));
+        stripResearchIds(own.text).ids.forEach(id => c.ids.add(id));
+        // A bare source code reads as the source's title.
+        const stripped = stripResearchIds(nameSourceCodes(own.text, c.tree.sources));
         const title = own.title?.trim() ? stripResearchIds(own.title).text : '';
         const tag = draftTag(c, own);
         head = title
             ? `<p class="pp-kicker">${esc(P.sec.story)}${tag}</p><h2 class="pp-story-title">${esc(title)}</h2>`
             : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
         body += `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 3 })}</div>`
+            + storySourcesBlock(c, own)
             + storyBasisHtml(c, own, 'basis', 'pp-basis');
         // Continued reading (§6.1): the own story leads on to the marriages' chapters.
         if (chapters.length) {
@@ -1944,7 +1962,7 @@ function storyHtml(c: Ctx): string {
             // Every chapter on the page counts (round 2): the tone from two.
             tint: (own ? 1 : 0) + chapters.length >= 2,
             partnerHtml: ch.partnerId ? personLink(c, esc(ch.partnerName), ch.partnerId) : '',
-            basisHtml: storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
+            basisHtml: storySourcesBlock(c, u.story!) + storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
         });
     }
     return section('story', P.sec.story, body, head);

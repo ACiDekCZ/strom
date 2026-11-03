@@ -3,6 +3,7 @@
  * Executes the merge operation based on user decisions
  */
 
+import { rewriteStorySources } from '../story-sources.js';
 import {
     PersonId,
     PartnershipId,
@@ -689,12 +690,14 @@ function remapSourceReferences(data: StromData, remap: Map<string, string>): voi
         for (const att of person.attachments ?? []) {
             if (att.sourceId && remap.has(att.sourceId)) att.sourceId = remap.get(att.sourceId);
         }
+        rewriteStorySources(person.story, ids => ids.map(id => remap.get(id) ?? id));
     }
     for (const partnership of Object.values(data.partnerships)) {
         if (partnership.sourceIds) partnership.sourceIds = fix(partnership.sourceIds);
         for (const ev of partnership.events ?? []) {
             if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
         }
+        rewriteStorySources(partnership.story, ids => ids.map(id => remap.get(id) ?? id));
     }
 }
 

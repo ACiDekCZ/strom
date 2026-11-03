@@ -19,6 +19,7 @@ import { feminineFormIn, isGapOnlyName } from './surnames.js';
 import { INDEX_UNCERTAIN, TRANSCRIPTION_GAP, indexLetter, orderIndexKeys } from './family-pages.js';
 import { safeHttpUrl } from './validation.js';
 import { proseHtml, coupleStoryYears } from './story-text.js';
+import { nameSourceCodes, storySourcesShown, storySourcesHtml } from './story-sources.js';
 import { marriedInto, placeSpans, Rod, RodId, rodGenerations, rodNameForms, rodPlaceSpans, sortByBirth } from './lineage.js';
 import { placeKey } from './places.js';
 import {
@@ -591,12 +592,18 @@ export function personBookHtml(id: PersonId, ctx: BookCtx, opts: { chapter: numb
 // ─── A family (§5.4) ────────────────────────────────────────────────────────
 
 function storyBlock(ctx: BookCtx, story: Story, who: string, owner: { person: Person } | { couple: Partnership }): string {
-    const body = proseHtml(story.text, { title: story.title, headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
+    // A bare source code ("[S0164]") reads as the source's title.
+    const body = proseHtml(nameSourceCodes(story.text, ctx.tree.sources), { title: story.title, headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
     if (!body) return '';
+    // The sources the story rests on, with their numbers of the book's list (only with the Sources part).
+    const sources = ctx.parts.sources
+        ? storySourcesHtml(storySourcesShown(ctx.tree.sources, story.sources), T(ctx).story.sourcesHead,
+            { cls: 'book-story-src', after: id => ctx.sources.cite(id) })
+        : '';
     const banner = ctx.extras?.banner?.(story, owner) ?? '';
     const title = story.title ? ` <span class="book-story-title">${esc(story.title)}</span>` : '';
     const approve = story.status === 'draft' && 'person' in owner ? ctx.extras?.approve?.(owner.person) ?? '' : '';
-    return `<div class="book-story">${banner}<h4>${who}${title}</h4>${body}${approve}</div>`;
+    return `<div class="book-story">${banner}<h4>${who}${title}</h4>${body}${sources}${approve}</div>`;
 }
 
 function coupleEventsHtml(ctx: BookCtx, u: Partnership): string {
