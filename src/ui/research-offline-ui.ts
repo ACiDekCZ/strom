@@ -72,6 +72,20 @@ export function branchName(id: string, person?: string): string {
     return p ? shownName(p) : person ?? branchPersonRef(id);
 }
 
+/**
+ * How a branch's person is related ("brother: Marie Fíšková"): the relation
+ * by the person's sex where the tree knows it (neutral without it), the
+ * related person's name as it is (not declined).
+ */
+export function branchViaText(b: OffLineBranch): string {
+    if (!b.via) return '';
+    const L = strings.live;
+    const sex = personByRefn(b.person)?.gender;
+    const words = sex === 'male' ? L.branchRelMale : sex === 'female' ? L.branchRelFemale : L.branchRel;
+    const via = personByRefn(b.via.person);
+    return L.branchVia(words[b.via.rel] ?? words.other, via ? shownName(via) : b.via.person);
+}
+
 /** A direction's name ('' when the research does not list it). */
 function directionName(s: LiveSession, id: string | undefined): string {
     return id ? s.researches.find(d => d.id === id)?.name ?? '' : '';
@@ -226,6 +240,13 @@ interface OffLineSettingsSource {
     base: string | null;
     up: boolean;
     live: LiveSession | null;
+    /** The directions (a branch added to one names it). */
+    researches: readonly LiveDirection[];
+}
+
+/** A branch with a choice of its own (added to a direction too): the tree's choice does not apply to it. */
+function ownChoice(b: OffLineBranch | undefined): boolean {
+    return !!b && (b.own || b.mode === 'line');
 }
 
 /** A write's refusal: a busy research or no answer can be tried again. */
@@ -374,10 +395,7 @@ export const researchOffLineMethods = uiModule({
         }
         main.appendChild(head);
         const meta = el('div', 'research-direction__meta research-offline__meta');
-        if (b.via) {
-            const via = personByRefn(b.via.person);
-            meta.appendChild(el('span', undefined, L.branchVia(L.branchRel[b.via.rel] ?? L.branchRel.other, via ? shownName(via) : b.via.person)));
-        }
+        if (b.via) meta.appendChild(el('span', undefined, branchViaText(b)));
         const near = s.researches.find(d => d.id === b.nearest);
         if (near) meta.appendChild(el('span', undefined, `${L.dirNear(near.name)}${near.state === 'paused' ? ` ${L.dirNearPaused}` : ''}`));
         meta.appendChild(el('span', undefined, L.dirTasks(b.tasks)));
@@ -618,10 +636,8 @@ export const researchOffLineMethods = uiModule({
      * ancestors), and the branch (the research adds it to the new direction).
      */
     createDirectionFromBranch(b: OffLineBranch, returnFocus: HTMLElement | null, waiting?: LiveWaiting): void {
-        const L = strings.live;
         const kind = b.via?.rel === 'partner' ? 'ancestors' : 'descendants';
-        const via = b.via ? personByRefn(b.via.person) : null;
-        const note = b.via ? L.branchVia(L.branchRel[b.via.rel] ?? L.branchRel.other, via ? shownName(via) : b.via.person) : '';
+        const note = branchViaText(b);
         this.openDirectionForm({
             mode: 'new', person: b.person, kind, branch: b.id, kindFromBranch: true, ...(note ? { branchNote: note } : {}), returnFocus,
         });
@@ -808,7 +824,7 @@ export const researchOffLineMethods = uiModule({
             const btn = el('button', `live-waiting-answer research-overview__waiting-action ${cls}`, label);
             btn.type = 'button';
             btn.dataset.do = what;
-            if (held) holdForBridge(btn);
+            if (held) holdForBridge(btn, L.waitBranchDown);
             else if (busy) btn.setAttribute('aria-disabled', 'true');
             else btn.onclick = run;
             box.appendChild(btn);
@@ -820,7 +836,7 @@ export const researchOffLineMethods = uiModule({
         add(L.waitBranchLeave, '', 'keep', () => void this.answerGrowingBranch(w, 'keep'));
         add(L.branchNever, '', 'never', () => void this.answerGrowingBranch(w, 'never'));
         host.appendChild(box);
-        if (held) host.appendChild(el('p', 'research-overview__muted research-offline__held', L.dirBridgeDown));
+        if (held) host.appendChild(el('p', 'research-overview__muted research-offline__held', L.waitBranchDown));
         const problem = branchProblems.get(w.id);
         if (problem) host.appendChild(problemBox(problem));
         const taken = b && b.mode !== 'line' ? b.mode : off?.mode;
@@ -884,11 +900,11 @@ export const researchOffLineMethods = uiModule({
         const live = s && !s.ended && s.researchId.toLowerCase() === rid.toLowerCase() ? s : null;
         if (live) {
             return offLineShown(live)
-                ? { off: live.offLine!, queue: live.queue, base: live.bridge.base, up: live.lostSince === null, live } : null;
+                ? { off: live.offLine!, queue: live.queue, base: live.bridge.base, up: live.lostSince === null, live, researches: live.researches } : null;
         }
         const st = this.researchStatusOf(rid);
         if (!st?.caps?.offLineBranches || !st.offLine || st.researches.length < 2) return null;
-        return { off: st.offLine, queue: st.queue, base: bridgeBase(rid), up: this.researchBridgeUp(rid), live: null };
+        return { off: st.offLine, queue: st.queue, base: bridgeBase(rid), up: this.researchBridgeUp(rid), live: null, researches: st.researches };
     },
 
     /** The dialog opened (again): what was written in it before is forgotten. */
@@ -922,7 +938,7 @@ export const researchOffLineMethods = uiModule({
         // What the research says settles what was written here.
         if (offSet.mode !== undefined && off.mode === offSet.mode && offSet.busy === null) delete offSet.mode;
         if (offSet.suggest !== undefined && off.suggest === offSet.suggest && offSet.busy === null) delete offSet.suggest;
-        for (const id of [...offSet.reset]) if (!off.branches.find(b => b.id === id)?.own) offSet.reset.delete(id);
+        for (const id of [...offSet.reset]) if (!ownChoice(off.branches.find(b => b.id === id))) offSet.reset.delete(id);
         if (offSet.tasks && off.ownTasks !== offSet.tasks.at) offSet.tasks = null;
         const mode = offSet.mode ?? off.mode;
         const suggest = offSet.suggest ?? off.suggest;
@@ -954,8 +970,18 @@ export const researchOffLineMethods = uiModule({
             group.appendChild(card);
             if (p?.at === `mode:${m}`) group.appendChild(problemBox(p));
         }
-        const taken = off.branches.filter(b => b.mode !== 'line' && b.mode !== 'never').length;
-        group.appendChild(el('p', 'research-offline-settings__affects', L.setOutAffects(off.queued || off.tasks, taken)));
+        // What the tree's choice applies to: the branches that follow it (not those with their own choice,
+        // not researched or added to a direction); how many have their own choice after it.
+        const own = off.branches.filter(b => ownChoice(b) && !offSet.reset.has(b.id));
+        let affects: string;
+        if (off.branches.length > 0) {
+            const follow = off.branches.filter(b => !own.includes(b) && b.mode !== 'line' && b.mode !== 'never');
+            affects = L.setOutAffects(follow.reduce((n, b) => n + b.tasks, 0), follow.length);
+            if (own.length > 0) affects += ` ${L.setOutOwn(own.length)}`;
+        } else {
+            affects = L.setOutAffects(off.queued || off.tasks, 0);
+        }
+        group.appendChild(el('p', 'research-offline-settings__affects', affects));
 
         // The growing branches' question: none with never.
         const never = mode === 'never';
@@ -973,8 +999,8 @@ export const researchOffLineMethods = uiModule({
         group.appendChild(row);
         if (p?.at === 'suggest') group.appendChild(problemBox(p));
 
-        // Branches with their own choice (the ones added to a direction are shown at it), tasks with a manual place.
-        const own = off.branches.filter(b => b.own && b.mode !== 'line' && !offSet.reset.has(b.id));
+        // Branches with their own choice (one added to a direction: "– near the direction {n}", Remove from the direction),
+        // tasks with a manual place.
         const ownIds = src.queue.filter(q => q.own && !offSet.tasks?.ids.has(q.id)).map(q => q.id);
         const ownTasks = offSet.tasks ? Math.max(0, offSet.tasks.at - offSet.tasks.ids.size) : off.ownTasks;
         if (own.length > 0 || ownTasks > 0) {
@@ -983,12 +1009,14 @@ export const researchOffLineMethods = uiModule({
             for (const b of own) {
                 const line = el('div', 'research-offline-settings__row');
                 line.dataset.branch = b.id;
-                line.appendChild(el('span', 'research-offline-settings__row-text',
-                    L.setOwnRow(branchName(b.id, b.person), b.mode === 'never' ? L.offNotResearched : L.offMode[b.mode as OffLineMode])));
+                const added = b.mode === 'line';
+                const how = added ? L.dirNear(src.researches.find(d => d.id === b.line)?.name ?? b.line ?? '')
+                    : b.mode === 'never' ? L.offNotResearched : L.offMode[b.mode as OffLineMode];
+                line.appendChild(el('span', 'research-offline-settings__row-text', L.setOwnRow(branchName(b.id, b.person), how)));
                 if (can) {
-                    const reset = el('button', 'link-button research-offline-settings__reset', L.branchReset);
+                    const reset = el('button', 'link-button research-offline-settings__reset', added ? L.dirBranchRemove : L.branchReset);
                     reset.type = 'button';
-                    reset.dataset.do = 'reset-branch';
+                    reset.dataset.do = added ? 'remove-branch' : 'reset-branch';
                     reset.dataset.key = `branch:${b.id}`;
                     reset.addEventListener('click', () => void this.resetOffLineSettingsBranch(b.id));
                     line.appendChild(reset);

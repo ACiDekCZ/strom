@@ -63,6 +63,9 @@ test.describe('directions managed through the bridge', () => {
         await expect(directionRow(page, 'G0001').locator('.research-direction__chip')).toHaveText(/^paused/);
         // Its running task finishes, no further one is taken.
         await expect(directionRow(page, 'G0001').locator('.research-direction__meta')).toHaveText(/^finishing: křest Marie Fíškové, Smrkov 1871/);
+        // A paused row shows no limits (they stay in Edit).
+        await expect(directionRow(page, 'G0001').locator('.research-direction__limit')).toHaveCount(0);
+        await expect(directionRow(page, 'G0001').locator('.research-direction__meta')).not.toContainText('generations');
         expect(await launchedLinks(page)).toEqual([]);
         const toast = page.locator('.toast[data-kind="direction"]');
         await expect(toast).toContainText('Paused');
@@ -132,6 +135,42 @@ test.describe('directions managed through the bridge', () => {
         await directionRow(page, 'G0001').locator('.research-direction__more').click();
         await expect(page.locator('#live-direction-menu [data-do="down"]')).toHaveCount(0);
         await expect(page.locator('#live-direction-menu [data-do="up"]')).toHaveCount(1);
+        await page.keyboard.press('Escape');
+        // The second: up and down, not to the top (that is Move up); the first: neither up nor to the top.
+        await directionRow(page, 'G0004').locator('.research-direction__more').click();
+        await expect(page.locator('#live-direction-menu [data-do="up"], #live-direction-menu [data-do="down"], #live-direction-menu [data-do="top"]'))
+            .toHaveText(['Move up', 'Move down']);
+        await page.keyboard.press('Escape');
+        await directionRow(page, 'G0002').locator('.research-direction__more').click();
+        await expect(page.locator('#live-direction-menu [data-do="up"], #live-direction-menu [data-do="down"], #live-direction-menu [data-do="top"]'))
+            .toHaveText(['Move down']);
+    });
+
+    test('a refusal at the row in the research\'s words without Try again; an Undo that fails says so in an alert toast', async ({ page }) => {
+        const b = await followManaged(page);
+        await openOverview(page);
+        b.replies.push({ status: 500, body: {} });
+        await directionRow(page, 'G0002').locator('.research-direction__head').click();
+        await directionRow(page, 'G0002').locator('[data-do="pause"]').click();
+        const box = directionRow(page, 'G0002').locator('.research-direction__problem');
+        await expect(box).toHaveText('The change to the direction was not saved.');
+        await expect(box.locator('[data-do="retry"]')).toHaveCount(0);
+        b.replies.push({ status: 409, body: { error: 'directions.state', text: 'Linie má rozdělaný zápis.' } });
+        await directionRow(page, 'G0002').locator('[data-do="pause"]').click();
+        await expect(box).toHaveText('The change to the direction was not saved: “Linie má rozdělaný zápis.”');
+        await expect(box.locator('[data-do="retry"]')).toHaveCount(0);
+
+        // Paused, then its Undo refused: an alert toast with the research's sentence, no action; the change stays.
+        await directionRow(page, 'G0002').locator('[data-do="pause"]').click();
+        await expect(directionRow(page, 'G0002').locator('.research-direction__chip')).toHaveText(/^paused/);
+        b.replies.push({ status: 409, body: { error: 'directions.state', text: 'Linie má rozdělaný zápis.' } });
+        await page.locator('.toast[data-kind="direction"] .toast-action').click();
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast).toHaveText('Undo failed, the change stays. · “Linie má rozdělaný zápis.”');
+        await expect(toast).toHaveAttribute('role', 'alert');
+        await expect(toast.locator('.toast-action')).toHaveCount(0);
+        await expect(directionRow(page, 'G0002').locator('.research-direction__chip')).toHaveText(/^paused/);
+        await expect(directionRow(page, 'G0002').locator('.research-direction__problem')).toHaveCount(0);
     });
 
     test('a busy research: tried once more after 3 s, then a box with Try again at the row', async ({ page }) => {
@@ -194,6 +233,8 @@ test.describe('directions managed through the bridge', () => {
         await openOverview(page);
         const empty = overview(page).locator('.research-directions__empty');
         await expect(empty).toContainText('No directions.');
+        // No count in the title with no directions.
+        await expect(overview(page).locator('.live-section__title', { hasText: /^Directions/ })).toHaveText('Directions');
         await expect(empty.locator('[data-do="new"]')).toHaveText('+ New direction');
         await expect(overview(page).locator('.research-direction--outside')).toHaveCount(0);
     });

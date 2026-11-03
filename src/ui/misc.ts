@@ -66,6 +66,8 @@ interface ToastOptions {
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
+    /** Said as an alert (`role="alert"`): something asked for did not happen. */
+    alert?: boolean;
     /** A dialog's footer (selector) the toast stands above while it is on the screen: shown over a
      *  dialog, the toast must not cover the dialog's action buttons. */
     clearOf?: string;
@@ -1632,7 +1634,7 @@ export const miscMethods = uiModule({
 
         const toast = document.createElement('div');
         toast.className = opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
-        toast.setAttribute('role', 'status');
+        toast.setAttribute('role', opts.alert ? 'alert' : 'status');
         if (opts.kind) toast.dataset.kind = opts.kind;
         if (opts.notice) toast.dataset.notice = '';
         if (opts.spinner) {

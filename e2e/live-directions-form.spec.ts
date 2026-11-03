@@ -43,6 +43,10 @@ test.describe('the direction form', () => {
         await expect(f.locator('.direction-form__kind')).toHaveText(['↑Ancestors', '↓Descendants', '?Question']);
         await expect(f.locator('.direction-form__kind[aria-checked="true"]')).toHaveText('↑Ancestors');
         await expect(f.locator('#direction-form-submit')).toHaveAttribute('aria-disabled', 'true');
+        // Nobody of that name: a sentence, not a group head.
+        await f.locator('#direction-form-search').fill('Zzyzx');
+        await expect(f.locator('.direction-form__pick-none')).toHaveText('No person of that name.');
+        await expect(f.locator('.direction-form__pick-head')).toHaveCount(0);
         // Search ignores the diacritics.
         await pick(page, 'fiskova', 'Marie Fíšková');
         await expect(f.locator('.direction-form__who-name')).toHaveText('Marie Fíšková');
@@ -216,6 +220,13 @@ test.describe('the direction form', () => {
             effect: { said: '2 úkoly jsou teď mimo linii.', outside: 2 } } });
         await page.keyboard.press('Enter');
         await expect(toast).toContainText('2 úkoly jsou teď mimo linii.');
+
+        // Its Undo refused: an alert toast (8 s, no action) with the research's sentence.
+        b.replies.push({ status: 409, body: { error: 'directions.state', text: 'Linie má rozdělaný zápis.' } });
+        await toast.locator('.toast-action').click();
+        await expect(toast).toHaveText('Undo failed, the change stays. · “Linie má rozdělaný zápis.”');
+        await expect(toast).toHaveAttribute('role', 'alert');
+        await expect(toast.locator('.toast-action')).toHaveCount(0);
 
         // Esc closes and focus goes back to the control it came from.
         await more.click();

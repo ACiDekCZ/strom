@@ -23,7 +23,7 @@ import {
     orderDirections, withPendingOrder, moveInOrder, dropInOrder, sameOrder, DirectionOrderWriter, DirectionMove, withBusyRetry,
     foundParts, directionUnstarted, calendarDaysAgo,
 } from '../research-directions.js';
-import { DirectionStateDo, DirectionWriteRefused, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
+import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
 
@@ -318,11 +318,11 @@ function stateBack(state: LiveDirection['state']): DirectionStateDo {
     return state === 'paused' ? 'pause' : state === 'done' ? 'done' : 'resume';
 }
 
-/** A control that cannot act while the bridge does not answer (it says why). */
-export function holdForBridge(btn: HTMLElement): void {
+/** A control that cannot act while the bridge does not answer (it says why: `why`, else the directions' sentence). */
+export function holdForBridge(btn: HTMLElement, why: string = strings.live.dirBridgeDown): void {
     btn.setAttribute('aria-disabled', 'true');
     btn.classList.add('is-held');
-    btn.title = strings.live.dirBridgeDown;
+    btn.title = why;
     btn.onclick = (e) => e.preventDefault();
 }
 
@@ -663,7 +663,9 @@ export const researchDirectionsMethods = uiModule({
             else add.onclick = () => this.openDirectionForm({ mode: 'new', returnFocus: add });
             aside = add;
         }
-        const host = liveSection(body, { ...fold, title: L.dirTitle(rows.filter(d => d.state === 'active').length), aside });
+        // No directions at all: the title without a count, above the empty state.
+        const title = rows.length === 0 ? L.dirTitleEmpty : L.dirTitle(rows.filter(d => d.state === 'active').length);
+        const host = liveSection(body, { ...fold, title, aside });
         host.classList.add('research-directions', 'research-directions--managed');
         if (view.readOnly) host.appendChild(el('p', 'research-directions__note', L.dirArchive));
         else if (view.phoneOnly) host.appendChild(el('p', 'research-directions__note', L.dirPhoneOnly));
@@ -857,7 +859,8 @@ export const researchDirectionsMethods = uiModule({
                 if (last) meta.appendChild(el('span', undefined, L.dirLastShort(last)));
             }
         }
-        for (const t of limitTexts(d)) meta.appendChild(el('span', 'research-direction__limit', t));
+        // A paused one shows no limits (they stay in Edit).
+        if (d.state !== 'paused') for (const t of limitTexts(d)) meta.appendChild(el('span', 'research-direction__limit', t));
         return meta;
     },
 
@@ -1020,7 +1023,8 @@ export const researchDirectionsMethods = uiModule({
             const moves: DirectionMenuItem[] = [];
             if (at > 0) moves.push({ do: 'up', label: L.dirMoveUp, run: () => this.moveDirection(d.id, 'up') });
             if (at >= 0 && at < order.length - 1) moves.push({ do: 'down', label: L.dirMoveDown, run: () => this.moveDirection(d.id, 'down') });
-            if (at > 0) moves.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
+            // To the top only from the third place on (from the second it is Move up).
+            if (at > 1) moves.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
             if (moves.length > 0) items.push(null, ...moves);
         }
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
@@ -1039,7 +1043,7 @@ export const researchDirectionsMethods = uiModule({
         const L = strings.live;
         const items: (DirectionMenuItem | null)[] = [];
         if (d.state !== 'done') items.push({ do: 'done', label: L.dirEndMenu, hint: L.dirEndHint, run: () => this.openDirectionEnd(anchor, d) });
-        if (this.directionsView(s).canOrder && shownOrder(s).indexOf(d.id) > 0) {
+        if (this.directionsView(s).canOrder && shownOrder(s).indexOf(d.id) > 1) {
             items.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
         }
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
@@ -1155,10 +1159,16 @@ export const researchDirectionsMethods = uiModule({
         if (liveSession() !== s || s.ended) return false;
         if (!r.ok) {
             if (r.code === 'archive') archiveSaid = s.bridge.base;
+            if (opts.undo) {
+                // Undo lives in a toast: its failure is said in one too (the change stays).
+                const said = r.code === 'held' ? r.held?.said || r.reason : r.reason;
+                this.redrawDirections();
+                this.showToast(said ? L.dirUndoFailedSaid(said) : L.dirUndoFailed, 8000, { kind: 'direction', alert: true });
+                return false;
+            }
             rowProblems.set(d.id, {
                 text: directionRefusedText(r), tone: r.code === 'busy' ? 'warn' : 'danger',
-                ...(r.code === 'busy' || r.code === 'network' || r.code === 'failed'
-                    ? { retry: () => void this.changeDirectionState(d, what, opts) } : {}),
+                ...(directionRetryHelps(r) ? { retry: () => void this.changeDirectionState(d, what, opts) } : {}),
             });
             this.redrawDirections();
             return false;
@@ -1234,12 +1244,14 @@ export const researchDirectionsMethods = uiModule({
                     rowProblems.set(moved, {
                         text: r.code === 'busy' ? strings.live.dirOrderBusy : directionRefusedText(r),
                         tone: r.code === 'busy' ? 'warn' : 'danger',
-                        retry: () => {
-                            pendingOrder = { base, order, moved };
-                            rowProblems.delete(moved);
-                            writer.move(order);
-                            this.redrawDirections();
-                        },
+                        ...(directionRetryHelps(r) ? {
+                            retry: () => {
+                                pendingOrder = { base, order, moved };
+                                rowProblems.delete(moved);
+                                writer.move(order);
+                                this.redrawDirections();
+                            },
+                        } : {}),
                     });
                 }
             }

@@ -5,7 +5,7 @@
  */
 
 import type { LiveDirection } from './research-link.js';
-import type { DirectionWriteRefused } from './research-directions-write.js';
+import { directionRetryHelps, type DirectionWriteRefused } from './research-directions-write.js';
 import { strings } from './strings.js';
 
 /** The kinds the form creates. */
@@ -96,18 +96,22 @@ export interface FormProblem {
     text: string;
     tone: 'warn' | 'danger';
     retry: boolean;
+    /** The research's own sentence ('' none): an Undo that failed says it after its own. */
+    said: string;
 }
 
 /**
  * What a refused create or edit says in the form: a busy research (amber,
  * Try again), the research's own sentence when it gave one ("The research did
  * not create the direction: “…”" for a new one), else the panel's sentence.
+ * Try again only where it can help (busy, no answer), never with a refusal.
  */
 export function formProblem(r: DirectionWriteRefused, mode: 'new' | 'edit', panelText: (r: DirectionWriteRefused) => string): FormProblem {
-    const retry = r.code === 'busy' || r.code === 'network' || r.code === 'failed';
-    if (r.code === 'busy') return { text: strings.live.dirBusy, tone: 'warn', retry };
-    if (mode === 'new' && r.reason && r.code !== 'held') return { text: strings.live.dirRefused(r.reason), tone: 'danger', retry };
-    return { text: panelText(r), tone: 'danger', retry };
+    const retry = directionRetryHelps(r);
+    const said = r.code === 'held' ? r.held?.said || r.reason : r.reason;
+    if (r.code === 'busy') return { text: strings.live.dirBusy, tone: 'warn', retry, said };
+    if (mode === 'new' && r.reason && r.code !== 'held') return { text: strings.live.dirRefused(r.reason), tone: 'danger', retry, said };
+    return { text: panelText(r), tone: 'danger', retry, said };
 }
 
 /** The limits an edit writes: only what changed, `null` = no limit any more. Null: nothing changed. */

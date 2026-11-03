@@ -79,14 +79,14 @@ test.describe('work outside the directions through the bridge', () => {
         await expect(alois.locator('.research-offline__tag')).toHaveText('now and then');
         await expect(alois.locator('.research-offline__dot')).toHaveCount(0);
         await expect(alois.locator('.research-offline__grows')).toHaveText('growing · +6 people');
-        await expect(alois.locator('.research-offline__meta')).toHaveText(/sibling of Jan Fíšek.*near the direction Předci: Jan Fíšek.*14 tasks/);
+        await expect(alois.locator('.research-offline__meta')).toHaveText(/brother of Jan Fíšek.*near the direction Předci: Jan Fíšek.*14 tasks/);
         await expect(alois.locator('.research-offline__samples')).toHaveText('Sňatek Aloise Fíška, Vídeň 1894 · Křest Terezie Fíškové');
         // Its own choice: a dot and the word, said to a reader too.
         const bohumil = branchRow(page, 'B-P0040');
         await expect(bohumil.locator('.research-offline__tag')).toHaveText('as usual');
         await expect(bohumil.locator('.research-offline__dot')).toHaveCount(1);
         await expect(bohumil.locator('.research-offline__tag')).toHaveAttribute('aria-label', 'as usual, own choice');
-        await expect(bohumil.locator('.research-offline__meta')).toHaveText(/near the direction Předci: Anna Svobodová \(paused\)/);
+        await expect(bohumil.locator('.research-offline__meta')).toHaveText(/brother of Anna Svobodová.*near the direction Předci: Anna Svobodová \(paused\)/);
         // Not researched: folded last, its row muted with Reset to default.
         const never = section(page).locator('.research-offline__never');
         await expect(never).toHaveText('▸Not researched · 1 branch');
@@ -199,6 +199,28 @@ test.describe('work outside the directions through the bridge', () => {
         await expect(box).toHaveAttribute('role', 'alert');
         await expect(branchRow(page, 'B-P0031').locator('.research-offline__tag')).toHaveText('now and then');
         await expect(toast(page)).toHaveCount(0);
+    });
+
+    test('a branch\'s relation by the person\'s sex (neutral without it), the related person\'s name as it is', async ({ page }) => {
+        const branches = [
+            { ...BRANCHES[0] },
+            { id: 'B-P0050', person: 'P0050', via: { person: 'P0012', rel: 'sibling' }, nearest: 'G0001', tasks: 2, persons: 1, samples: [], mode: 'occasional', own: false },
+            { id: 'B-P0099', person: 'P0099', via: { person: 'P0012', rel: 'child' }, nearest: 'G0001', tasks: 1, persons: 1, samples: [], mode: 'occasional', own: false },
+            { id: 'B-P0045', person: 'P0045', via: { person: 'P0050', rel: 'partner' }, nearest: 'G0002', tasks: 3, persons: 1, samples: [], mode: 'occasional', own: false },
+        ];
+        await followManaged(page, { caps: OFF_CAPS, features: FEATURES, offLine: { ...OFF_LINE, branches }, queue: QUEUE, ged: GED_OFFLINE });
+        await openOverview(page);
+        await outToggle(page).click();
+        const via = (id: string) => branchRow(page, id).locator('.research-offline__meta > span').first();
+        await expect(via('B-P0031')).toHaveText('brother of Jan Fíšek');
+        await expect(via('B-P0050')).toHaveText('sister of Jan Fíšek');
+        await expect(via('B-P0099')).toHaveText('child of Jan Fíšek');
+        await expect(via('B-P0045')).toHaveText('husband of Marie Fíšková');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        await expect(via('B-P0031')).toHaveText('bratr: Jan Fíšek');
+        await expect(via('B-P0050')).toHaveText('sestra: Jan Fíšek');
+        await expect(via('B-P0099')).toHaveText('dítě: Jan Fíšek');
+        await expect(via('B-P0045')).toHaveText('manžel: Marie Fíšková');
     });
 
     test('the queue: each task\'s reason in one line, its own place from ⋯, a branch\'s tasks behind a chip', async ({ page }) => {

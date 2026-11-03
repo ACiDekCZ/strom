@@ -153,12 +153,12 @@ test.describe('directions on every screen', () => {
         const acts = item.locator('.research-offline__wait-actions button');
         await expect(acts).toHaveCount(4);
         b.down = true;
-        await expect(item.locator('.research-offline__held')).toHaveText('The research is not running. Directions can be changed once it runs.', { timeout: 10000 });
+        await expect(item.locator('.research-offline__held')).toHaveText('The research is not running. It can be answered once it runs.', { timeout: 10000 });
         await expect(item.locator('.research-offline__elsewhere')).toHaveCount(0);
         await expect(acts).toHaveCount(4);
         for (const btn of await acts.all()) {
             await expect(btn).toHaveAttribute('aria-disabled', 'true');
-            await expect(btn).toHaveAttribute('title', 'The research is not running. Directions can be changed once it runs.');
+            await expect(btn).toHaveAttribute('title', 'The research is not running. It can be answered once it runs.');
         }
         await acts.first().dispatchEvent('click');
         await page.waitForTimeout(300);
@@ -264,24 +264,28 @@ test.describe('directions on every screen', () => {
         await expect(row.locator('.research-direction__actions .research-open-mark')).toHaveCount(0);
         await noSideways(page, '390 unfolded');
 
-        // More…: End…, Move to the top, Work on it (its agent in the terminal), above the sheet.
+        // More…: End… and Work on it (its agent in the terminal), above the sheet; the 2nd row has no Move to the top.
         await row.locator('[data-do="more"]').click();
         const menu = page.locator('#live-direction-menu');
         await expect(menu).toHaveAttribute('role', 'menu');
-        await expect(menu.locator('[role="menuitem"]')).toHaveCount(3);
-        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, 'Move to the top', /Work on this direction/]);
+        await expect(menu.locator('[role="menuitem"]')).toHaveCount(2);
+        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, /Work on this direction/]);
         await expect(menu.locator('[data-do="work"] .research-ai-badge')).toHaveCount(1);
         await expect(menu.locator('[data-do="work"] .research-open-mark')).toHaveCount(1);
         await page.keyboard.press('ArrowDown');
-        await expect(menu.locator('[data-do="top"]')).toBeFocused();
+        await expect(menu.locator('[data-do="work"]')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         await expect(row.locator('[data-do="more"]')).toBeFocused();
-        await row.locator('[data-do="more"]').click();
+        // A row in 3rd place: Move to the top.
+        const third = directionRow(page, 'G0004');
+        await third.locator('.research-direction__head').click();
+        await third.locator('[data-do="more"]').click();
+        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, 'Move to the top']);
         await menu.locator('[data-do="top"]').click();
-        await expect(names(page).first()).toHaveText('Předci: Bohuslava Lhotáková-Šť.');
         await expect.poll(() => directionWrites(b).length).toBe(1);
-        expect(directionWrites(b)[0]).toMatchObject({ path: 'directions/order', body: { order: ['G0006', 'G0001', 'G0004', 'G0002'] } });
+        expect(directionWrites(b)[0]).toMatchObject({ path: 'directions/order', body: { order: ['G0004', 'G0001', 'G0006', 'G0002'] } });
+        await directionRow(page, 'G0006').locator('.research-direction__head').click();
         await directionRow(page, 'G0006').locator('[data-do="more"]').click();
         await menu.locator('[data-do="work"]').click();
         await expect.poll(() => launchedLinks(page)).toHaveLength(1);

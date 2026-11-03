@@ -32,6 +32,8 @@ const BRANCHES = [
         samples: [{ id: 'T0420', text: 'Úmrtí Bohumila Svobody' }], mode: 'normal', own: true },
     { id: 'B-P0045', person: 'P0045', via: { person: 'P0050', rel: 'partner' }, nearest: 'G0002', tasks: 3, persons: 1,
         samples: [], mode: 'never', own: true },
+    { id: 'B-P0050', person: 'P0050', via: { person: 'P0012', rel: 'sibling' }, nearest: 'G0001', tasks: 5, persons: 2,
+        samples: [], mode: 'line', line: 'G0001', own: true },
 ];
 const OFF_LINE = { mode: 'occasional', own: false, share: 12, suggest: true, tasks: 24, queued: 21, ownTasks: 2, branches: BRANCHES };
 
@@ -70,11 +72,16 @@ test.describe('work outside the directions in Research for this tree', () => {
         await expect(radio(page, 'occasional')).toBeChecked();
         // Opened from the Overview: at the chosen card.
         await expect(radio(page, 'occasional')).toBeFocused();
-        await expect(group(page).locator('.research-offline-settings__affects')).toHaveText('Applies to 21 tasks in 2 branches.');
+        // Only the branches that follow the tree's choice; how many have their own after it.
+        await expect(group(page).locator('.research-offline-settings__affects'))
+            .toHaveText('Applies to 14 tasks in 1 branch. 3 branches have their own choice.');
         await expect(suggest(page)).toBeChecked();
         await expect(suggest(page)).toBeEnabled();
         const rows = group(page).locator('.research-offline-settings__row-text');
-        await expect(rows).toHaveText(['Bohumil Svoboda – as usual', 'Václav Lhoták – not researched', '2 tasks with a manual order']);
+        await expect(rows).toHaveText([
+            'Bohumil Svoboda – as usual', 'Václav Lhoták – not researched', 'Marie Fíšková – near the direction Předci: Jan Fíšek', '2 tasks with a manual order',
+        ]);
+        await expect(group(page).locator('.research-offline-settings__row[data-branch="B-P0050"] [data-do="remove-branch"]')).toHaveText('Remove from the direction');
         // Nothing of it has any mark: all through the bridge.
         await expect(group(page).locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
         // Below the other groups, above Done.
@@ -108,6 +115,10 @@ test.describe('work outside the directions in Research for this tree', () => {
         await group(page).locator('.research-offline-settings__row[data-branch="B-P0040"] [data-do="reset-branch"]').click();
         await expect.poll(() => offWrites(bridge).at(-1)).toEqual({ method: 'POST', path: 'offline/B-P0040', body: { mode: 'default' } });
         await expect(group(page).locator('.research-offline-settings__row[data-branch="B-P0040"]')).toHaveCount(0);
+        // A branch added to a direction: removed from it.
+        await group(page).locator('.research-offline-settings__row[data-branch="B-P0050"] [data-do="remove-branch"]').click();
+        await expect.poll(() => offWrites(bridge).at(-1)).toEqual({ method: 'POST', path: 'offline/B-P0050', body: { mode: 'default' } });
+        await expect(group(page).locator('.research-offline-settings__row[data-branch="B-P0050"]')).toHaveCount(0);
 
         // The manual places: one write per task (the bridge has no reset of all).
         const n = offWrites(bridge).length;

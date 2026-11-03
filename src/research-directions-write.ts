@@ -109,6 +109,15 @@ export function directionRefusal(status: number, body: unknown, retryAfter?: str
     return out('unknown');
 }
 
+/**
+ * Whether Try again goes with a refused direction write: a busy research
+ * (503) and a bridge that did not answer; never with a refusal the research
+ * gave (its sentence or "The change to the direction was not saved.").
+ */
+export function directionRetryHelps(r: DirectionWriteRefused): boolean {
+    return r.code === 'busy' || r.code === 'network';
+}
+
 /** A 2xx answer's `head` and `parent` (each absent or '' when not said). */
 function doneOf(body: unknown): BridgeWriteDone {
     const r = asRecord(body);

@@ -715,7 +715,9 @@ export const directionFormMethods = uiModule({
         const query = f.search.trim();
         if (query) {
             const hits = filterAndSort(query, persons, DataManager.getData()).slice(0, MAX_RESULTS);
-            head(hits.length > 0 ? L.dirPickResults : L.dirPickNone);
+            // Nobody of that name: a sentence, not a group.
+            if (hits.length === 0) picks.appendChild(el('p', 'direction-form__pick-none', L.dirPickNone));
+            else head(L.dirPickResults);
             hits.forEach(row);
             return;
         }
@@ -828,7 +830,7 @@ export const directionFormMethods = uiModule({
         }
         const view = this.directionsView(s);
         if (!view.canWrite) {
-            f.problem = { text: view.down ? L.dirBridgeDown : L.dirArchive, tone: 'danger', retry: false };
+            f.problem = { text: view.down ? L.dirBridgeDown : L.dirArchive, tone: 'danger', retry: false, said: '' };
             this.renderDirectionForm();
             return;
         }
@@ -978,8 +980,10 @@ export const directionFormMethods = uiModule({
                     action: {
                         label: L.dirUndo,
                         run: () => void this.writeDirectionEdit(next, back, true).then(res => {
-                            // The undo has no form: a refusal is said in its own toast.
-                            if (res && res !== true) this.showToast(res.text, 6000, { kind: 'direction' });
+                            // The undo has no form: a refusal is said in its own toast (the change stays).
+                            if (res && res !== true) {
+                                this.showToast(res.said ? L.dirUndoFailedSaid(res.said) : L.dirUndoFailed, 8000, { kind: 'direction', alert: true });
+                            }
                         }),
                     },
                 } : {}),
