@@ -12,6 +12,7 @@
 - **Práce mimo linie**: panel ukazuje úkoly mimo linie po větvích, každou s nejbližší osobou a linií, několika ukázkami a tím, jak se bere: *Občas*, *Na konci*, *Normálně* nebo *Nezkoumat*, se *Zpět*. Větev jde přidat k linii nebo z ní založit novou. Každý úkol ve frontě říká, proč stojí, kde stojí, a *Udělat hned* nebo *Na konec* ho posune. Rostoucí větev se jednou zeptá v *Čeká na vyřízení*, co s ní.
 - **Výzkum u tohoto stromu**: *Práce mimo linie* nastaví, jak se tyto úkoly berou ve výchozím stavu (*Občas*: zhruba jeden na deset úkolů linií), a zda výzkum navrhuje linie u rostoucích větví; větve a úkoly s vlastní volbou vrátí *Vrátit výchozí*.
 - **Každá obrazovka**: v úzkém okně se linie otevřou jako panel se všemi akcemi; aplikace v telefonu je ukáže jen ke čtení a klepnutí ukáže linii ve stromu. Když je výzkum zaneprázdněný nebo neběží, nic se neztratí potichu: změna řekne, že se neuložila, a jde zkusit znovu. Výzkum starší než 1.26.0 nechává akce ve svém terminálu, s větou o verzi, která linie z aplikace řídí.
+- **Příjmení**: v polském stromu se polské příjmení páruje po polsku, *Jaworski* s *Jaworska*, a nikdy nedostane českou podobu na *-ová* (*Nowak*, *Mróz*), nově i s aplikací v češtině; v českém stromu, který má obě, se *Jaworska* páruje s *Jaworski*.
 
 ## 3.21.2
 

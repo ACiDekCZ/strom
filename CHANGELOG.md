@@ -12,6 +12,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Work outside the directions**: the panel lists the tasks outside the directions by branches, each with its nearest person and direction, a few examples and how it is taken: *Now and then*, *At the end*, *As usual* or *Do not research*, with *Undo*. A branch can be added to a direction or start a new one. Each task of the queue says why it stands where it stands, and *Do next* or *To the end* moves it. A growing branch asks once in *Awaiting action* what to do with it.
 - **Research for this tree**: *Work outside the directions* sets how these tasks are taken by default (*Now and then*: about one per ten tasks of the directions) and whether the research suggests directions for growing branches; branches and tasks with their own choice go back with *Reset to default*.
 - **Every screen**: in a narrow window the directions open as a sheet with all their actions; the app on a phone shows them read-only, and a tap shows the direction in the tree. When the research is busy or not running, nothing is lost silently: a change says it was not saved and can be tried again. A research older than 1.26.0 keeps the actions in its terminal, with a sentence naming the version that manages directions from the app.
+- **Surnames**: in a Polish tree a Polish surname pairs the Polish way, *Jaworski* with *Jaworska*, and never gets a Czech *-ová* form (*Nowak*, *Mróz*), now also with the app in Czech; in a Czech tree that has both, *Jaworska* pairs with *Jaworski*.
 
 ## 3.21.2
 

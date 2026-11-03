@@ -341,6 +341,57 @@ describe('Polish adjectival surnames pair the Polish way, never the Czech one', 
         expect(masculineForm('Brodská')).toBe('Brodský');
     });
 
+    describe('in the Czech UI', () => {
+        beforeAll(() => setLanguage('cs'));
+        afterAll(() => setLanguage('en'));
+
+        it('a Polish tree keeps the Polish rules: no Jaworsková, Nowaková, Wróblewsková, Mrózová', () => {
+            const data = tree(undefined, [
+                person('a', 'Józef', 'Jaworski'), person('b', 'Zofia', 'Jaworska'), person('c', 'Ewa', 'Wróblewska'),
+                person('d', 'Jan', 'Mróz'), person('e', 'Piotr', 'Nowak'), person('f', 'Anna', 'Kmieć'),
+            ]);
+            expect(czechRulesApply(data)).toBe(false);
+            const forms = ['Jaworska', 'Jaworski', 'Nowak', 'Wróblewska', 'Mróz'].flatMap(n => surnameForms(n, data));
+            expect(forms.filter(f => /ov[áa]$/i.test(f))).toEqual([]);
+            expect(feminineFormIn('Jaworska', data)).toBeNull();
+            expect(masculineFormIn('Jaworska', data)).toBe('Jaworski');
+            expect(masculineFormIn('Wróblewska', data)).toBe('Wróblewski');
+            expect(feminineFormIn('Nowak', data)).toBeNull();
+            expect(sameSurname('Jaworski', 'Jaworska', data)).toBe(true);
+        });
+
+        it('a Czech tree with a Polish family: Jaworska pairs with its Jaworski, the Czech names keep their rules', () => {
+            const data = tree(undefined, [
+                person('a', 'Jan', 'Fíšek'), person('b', 'Marie', 'Nováková'), person('c', 'Josef', 'Dvořák'),
+                person('d', 'Józef', 'Jaworski'), person('e', 'Zofia', 'Jaworska'),
+            ]);
+            expect(czechRulesApply(data)).toBe(true);
+            expect(surnameForms('Jaworska', data)).not.toContain('Jaworsková');
+            expect(masculineFormIn('Jaworska', data)).toBe('Jaworski');
+            expect(sameSurname('Fíšek', 'Fíšková', data)).toBe(true);
+            // Without its men's form the ASCII -ska stays a Czech name (Liska of Liška).
+            expect(feminineFormIn('Liska', data)).toBe('Lisková');
+        });
+
+        it('an ASCII export of a Czech tree with a Polish in-law stays Czech', () => {
+            const data = tree(undefined, [
+                person('a', 'Jan', 'Hrusek'), person('b', 'Marie', 'Hruskova'), person('c', 'Anna', 'Ptackova'),
+                person('d', 'Jan', 'Kowalski'),
+            ]);
+            expect(czechRulesApply(data)).toBe(true);
+            expect(sameSurname('Hrusek', 'Hruskova', data)).toBe(true);
+        });
+    });
+
+    it('a Polish tree with one Czech in-law keeps the Polish rules in another UI language too', () => {
+        const data = tree(undefined, [
+            person('a', 'Józef', 'Jaworski'), person('b', 'Piotr', 'Nowicki'), person('c', 'Jan', 'Mróz'),
+            person('d', 'Marie', 'Nováková'),
+        ]);
+        expect(czechRulesApply(data)).toBe(false);
+        expect(surnameForms('Nowak', data)).toEqual(['Nowak']);
+    });
+
     it('too short a stem is no Polish adjective', () => {
         expect(feminineForm('Wski')).not.toBe('Wska');
         expect(masculineFormIn('Ska', tree())).toBeNull();
