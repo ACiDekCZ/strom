@@ -319,7 +319,7 @@ function stateBack(state: LiveDirection['state']): DirectionStateDo {
 }
 
 /** A control that cannot act while the bridge does not answer (it says why). */
-function holdForBridge(btn: HTMLElement): void {
+export function holdForBridge(btn: HTMLElement): void {
     btn.setAttribute('aria-disabled', 'true');
     btn.classList.add('is-held');
     btn.title = strings.live.dirBridgeDown;

@@ -26,7 +26,7 @@ import {
     BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, setBranchMode, setOffLineTree, setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
-import { activeDirections, directionRefusedText, setQueueDirectionFilter } from './research-directions-ui.js';
+import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
 
@@ -783,14 +783,19 @@ export const researchOffLineMethods = uiModule({
     /**
      * A growing branch's buttons: Add to the direction {line} (main), Create
      * a direction · Leave as it is · Do not research; the hint under them.
-     * A phone (and an older bridge) says where it is answered.
+     * A computer whose bridge does not answer now keeps the buttons held
+     * (they say why, as the Directions section does); the app on a phone
+     * without the bridge, an archive and an older bridge say where it is
+     * answered.
      */
     appendBranchWaitingActions(host: HTMLElement, w: LiveWaiting, s: LiveSession): void {
         const L = strings.live;
         const off = s.offLine;
         const b = off?.branches.find(x => x.id === w.branch);
-        const canWrite = offLineShown(s) && this.directionsView(s).canWrite;
-        if (!canWrite) {
+        const view = this.directionsView(s);
+        const held = offLineShown(s) && view.down && view.managed && !view.readOnly && !view.phoneOnly;
+        const canWrite = offLineShown(s) && view.canWrite;
+        if (!canWrite && !held) {
             host.appendChild(el('p', 'research-overview__muted research-offline__elsewhere', L.waitBranchElsewhere));
             return;
         }
@@ -801,7 +806,8 @@ export const researchOffLineMethods = uiModule({
             const btn = el('button', `live-waiting-answer research-overview__waiting-action ${cls}`, label);
             btn.type = 'button';
             btn.dataset.do = what;
-            if (busy) btn.setAttribute('aria-disabled', 'true');
+            if (held) holdForBridge(btn);
+            else if (busy) btn.setAttribute('aria-disabled', 'true');
             else btn.onclick = run;
             box.appendChild(btn);
         };
@@ -812,6 +818,7 @@ export const researchOffLineMethods = uiModule({
         add(L.waitBranchLeave, '', 'keep', () => void this.answerGrowingBranch(w, 'keep'));
         add(L.branchNever, '', 'never', () => void this.answerGrowingBranch(w, 'never'));
         host.appendChild(box);
+        if (held) host.appendChild(el('p', 'research-overview__muted research-offline__held', L.dirBridgeDown));
         const problem = branchProblems.get(w.id);
         if (problem) host.appendChild(problemBox(problem));
         const taken = b && b.mode !== 'line' ? b.mode : off?.mode;

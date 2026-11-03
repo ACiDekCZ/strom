@@ -145,6 +145,26 @@ test.describe('directions on every screen', () => {
         await noSideways(page, '1100');
     });
 
+    test('1440 a computer whose bridge stops answering: the growing branch\'s answers stay, held, and say why', async ({ page }) => {
+        const b = await follow(page, { width: 1440, height: 900 }, { fastReconnect: true, offLine: true });
+        await openOverview(page);
+        const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0031"]');
+        await item.locator('.research-overview__waiting-row').click();
+        const acts = item.locator('.research-offline__wait-actions button');
+        await expect(acts).toHaveCount(4);
+        b.down = true;
+        await expect(item.locator('.research-offline__held')).toHaveText('The research is not running. Directions can be changed once it runs.', { timeout: 10000 });
+        await expect(item.locator('.research-offline__elsewhere')).toHaveCount(0);
+        await expect(acts).toHaveCount(4);
+        for (const btn of await acts.all()) {
+            await expect(btn).toHaveAttribute('aria-disabled', 'true');
+            await expect(btn).toHaveAttribute('title', 'The research is not running. Directions can be changed once it runs.');
+        }
+        await acts.first().dispatchEvent('click');
+        await page.waitForTimeout(300);
+        expect(b.writes.filter(w => w.method === 'POST' && w.path.startsWith('waiting/'))).toEqual([]);
+    });
+
     test.describe('by touch', () => {
         test.use({ hasTouch: true });
 
