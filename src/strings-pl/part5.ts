@@ -718,6 +718,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         insertToTreeDesc: 'Wczytaj przekonwertowane dane do bieżącego drzewa',
         parseError: 'Nie udało się przetworzyć pliku GEDCOM',
         skippedTags: 'Pominięte rekordy',
+        unsupportedHint: '„Nieobsługiwane” to części pliku, których Strom nie zna i nie przeniósł; '
+            + 'lista poniżej podaje je według znaczników GEDCOM. Osoby i relacje policzone wyżej do nich nie należą.',
         unknownSex: (n: number) => `Wczytano ${nPl(n, 'osobę', 'osoby', 'osób')} o nieznanej płci`,
         otherFamilyLinks: (n: number) =>
             `${n} ${plPl(n, 'dziecko jest zapisane', 'dzieci są zapisane', 'dzieci jest zapisanych')} w kilku rodzinach `

@@ -1499,6 +1499,10 @@ export const personModalMethods = uiModule({
         // The suggestion only under the empty field, the choice of the
         // surname in use only under the filled one: never both.
         const suggestion = show && !readOnly && !filled ? this.currentMarriedSuggestion() : null;
+        // Which surname goes where (the maiden name holds the one from birth),
+        // while a woman's married surname is still empty.
+        const hint = document.getElementById('married-surname-hint');
+        if (hint) hint.hidden = !(show && !readOnly && !filled && female);
         this.refreshPrimaryNameChoice(show && filled, readOnly);
         const chip = document.getElementById('married-suggestion');
         const main = document.getElementById('married-suggestion-main');

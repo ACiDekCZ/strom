@@ -15,6 +15,8 @@
 - **Místa v Čeká na vyřízení**: malá mapa otázky ukazuje jen její body, polohu teď a návrh nebo kandidáty, už ne všechna místa rodiny přes celou Evropu; body na tomtéž místě stojí vedle sebe, takže poloha teď se nikdy neschová pod návrh. *Rozpor polohy* říká, kde poloha teď leží a jak daleko je od návrhu (*48 km od návrhu*).
 - **Prameny vyprávění**: vyprávění ukazuje pod textem prameny, o které se opírá, jako *Opírá se o prameny*, v okně *Vyprávění*, na stránce osoby (i v uloženém souboru a v tisku), v knize rodu s očíslovanými prameny a v porovnání verzí; webová adresa se otevře v novém okně a holý kód pramene v textu se čte jako jeho název. Stránka osoby takový pramen uvede i mezi svými prameny, s *Vyprávění* nebo *Vyprávění manželství* jako tím, co dokládá.
 - **Příjmení**: v polském stromu se polské příjmení páruje po polsku, *Jaworski* s *Jaworska*, a nikdy nedostane českou podobu na *-ová* (*Nowak*, *Mróz*), nově i s aplikací v češtině; v českém stromu, který má obě, se *Jaworska* páruje s *Jaworski*.
+- **Import GEDCOM**: identifikátory a razítka souboru GEDCOM 7 (*UID*, *CREA*, *EXID*) už se nepočítají mezi nepodporované a věta v souhrnu říká, co *Nepodporováno* počítá: části souboru, které Strom nezná a nepřenesl, vypsané podle značky, nikdy osoby a vztahy spočítané výše. Stav páru zapsaný jako *_RELATIONSHIP_STATUS* se čte jako *_STAT*, i polskými, německými a českými slovy, takže partneři a pár v odluce už nepřijdou jako manželé; stav, který aplikace nezná, zůstává mezi nepodporovanými.
+- **Rodné příjmení**: ve formuláři osoby ženy má pole rodného příjmení nápovědu *Příjmení z narození* a prázdné příjmení po sňatku říká, že sem patří příjmení získané sňatkem.
 
 ## 3.21.2
 

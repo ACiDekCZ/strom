@@ -1144,6 +1144,8 @@ const stringsEN = {
         primaryBirth: 'Birth',
         primaryMarried: 'Married',
         primaryHint: 'For example after a divorce, with a return to the birth surname.',
+        // Under the empty married surname of a woman: which surname goes where.
+        marriedSurnameHint: 'The maiden name above is the surname from birth; the surname taken at marriage goes here.',
     },
 
     titles: {
@@ -2839,7 +2841,7 @@ const stringsEN = {
         titleAfter: 'e.g. Jr., Ph.D.',
         firstName: 'First name',
         lastName: 'Last name',
-        maidenName: 'Maiden name',
+        maidenName: 'Surname at birth',
         refn: 'e.g. archive box 12, or an id from another program',
         question: 'e.g. does anyone know her birth date?',
         flexDateShort: 'e.g. 1880',
@@ -4272,6 +4274,9 @@ const stringsEN = {
         insertToTreeDesc: 'Load converted data into current tree',
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
+        // Above the list of skipped records: what the "Unsupported" tile counts.
+        unsupportedHint: '“Unsupported” counts the parts of the file that Strom does not know and did not carry over; '
+            + 'the list below names them by their GEDCOM tag. The people and partnerships counted above are not among them.',
         unknownSex: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} of unknown sex imported`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'child was' : 'children were'} recorded in more than one family `
@@ -8319,6 +8324,7 @@ const stringsCZ: StringsType = {
         primaryBirth: 'Rodné',
         primaryMarried: 'Po sňatku',
         primaryHint: 'Např. po rozvodu s návratem k rodnému příjmení.',
+        marriedSurnameHint: 'Rodné příjmení výše je to z narození; příjmení získané sňatkem patří sem.',
     },
 
     titles: {
@@ -9995,7 +10001,7 @@ const stringsCZ: StringsType = {
         titleAfter: 'např. ml., Ph.D.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
-        maidenName: 'Rodné příjmení',
+        maidenName: 'Příjmení z narození',
         refn: 'např. archivní karton 12 nebo id z jiného programu',
         question: 'např. neví někdo, kdy se narodila?',
         flexDateShort: 'např. 1880',
@@ -11395,6 +11401,8 @@ const stringsCZ: StringsType = {
         insertToTreeDesc: 'Načíst převedená data do aktuálního stromu',
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
+        unsupportedHint: '„Nepodporováno“ počítá části souboru, které Strom nezná a nepřenesl; '
+            + 'seznam níže je uvádí podle značek GEDCOM. Osoby a vztahy spočítané výše mezi ně nepatří.',
         unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba načtena', 'osoby načteny', 'osob načteno')} s neznámým pohlavím`,
         otherFamilyLinks: (n: number) =>
             `${n} ${plural('cs', n, 'dítě je zapsáno', 'děti jsou zapsány', 'dětí je zapsáno')} ve více rodinách `
@@ -15414,6 +15422,7 @@ const stringsDE: StringsType = {
         primaryBirth: 'Geburtsname',
         primaryMarried: 'Ehename',
         primaryHint: 'Etwa nach einer Scheidung mit Rückkehr zum Geburtsnamen.',
+        marriedSurnameHint: 'Der Geburtsname oben ist der Nachname von Geburt an; der durch die Heirat angenommene Nachname gehört hierher.',
     },
 
     titles: {
@@ -17082,7 +17091,7 @@ const stringsDE: StringsType = {
         titleAfter: 'z. B. jun., Ph.D.',
         firstName: 'Vorname',
         lastName: 'Nachname',
-        maidenName: 'Geburtsname',
+        maidenName: 'Nachname bei der Geburt',
         refn: 'z. B. Archivkasten 12 oder eine ID aus einem anderen Programm',
         question: 'z. B. Kennt jemand ihr Geburtsdatum?',
         flexDateShort: 'z. B. 1880',
@@ -18471,6 +18480,8 @@ const stringsDE: StringsType = {
         insertToTreeDesc: 'Umgewandelte Daten in den aktuellen Stammbaum laden',
         parseError: 'GEDCOM-Datei konnte nicht gelesen werden',
         skippedTags: 'Übersprungene Einträge',
+        unsupportedHint: '„Nicht unterstützt“ zählt die Teile der Datei, die Strom nicht kennt und nicht übernommen hat; '
+            + 'die Liste unten nennt sie nach ihrem GEDCOM-Tag. Die oben gezählten Personen und Partnerschaften gehören nicht dazu.',
         unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht importiert`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'Kind wurde' : 'Kinder wurden'} in mehr als einer Familie erfasst `

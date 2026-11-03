@@ -78,6 +78,45 @@ test('the field: always there for a woman with a union, behind the link for a ma
     await expect(field).toBeVisible();
 });
 
+test('which surname goes where: the maiden name field says "surname at birth", the empty married surname of a woman says the rest', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await family(page);
+    const modal = personModal(page);
+    const hint = modal.locator('#married-surname-hint');
+
+    // Marie: maiden name with its placeholder, the hint under the empty married surname.
+    await cardAction(page, 'Marie', 'edit');
+    await expect(modal.locator('#lastname-label')).toHaveText('Maiden name');
+    await expect(modal.locator('#input-lastname')).toHaveAttribute('placeholder', 'Surname at birth');
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText('The maiden name above is the surname from birth; the surname taken at marriage goes here.');
+    const fieldBox = await modal.locator('#input-married-surname').boundingBox();
+    const hintBox = await hint.boundingBox();
+    expect(hintBox!.y).toBeGreaterThanOrEqual(fieldBox!.y + fieldBox!.height - 1);
+    // Typed in, the hint has done its work.
+    await modal.locator('#input-married-surname').fill('Nováková');
+    await expect(hint).toBeHidden();
+    // Emptied again, it is back (and nothing is left to save).
+    await modal.locator('#input-married-surname').fill('');
+    await expect(hint).toBeVisible();
+    await modal.getByRole('button', { name: 'Cancel' }).click();
+    await expect(modal).toBeHidden();
+
+    // Jan (a man): the field opened from the link carries no hint.
+    await cardAction(page, 'Jan', 'edit');
+    await modal.locator('#married-surname-more').click();
+    await expect(modal.locator('#input-married-surname')).toBeVisible();
+    await expect(hint).toBeHidden();
+    await modal.getByRole('button', { name: 'Cancel' }).click();
+
+    // Polish.
+    await page.evaluate(() => window.Strom.UI.setLanguage('pl'));
+    await cardAction(page, 'Marie', 'edit');
+    await expect(modal.locator('#input-lastname')).toHaveAttribute('placeholder', 'Nazwisko z urodzenia');
+    await expect(hint).toHaveText('Nazwisko rodowe powyżej to nazwisko z urodzenia; nazwisko przyjęte po ślubie wpisuje się tutaj.');
+});
+
 test('the suggestion Novák → Nováková: "Use" fills the field, ⌘/Ctrl+Z takes it back, Save puts it on the card', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);

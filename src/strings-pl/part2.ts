@@ -97,6 +97,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         primaryBirth: 'Rodowe',
         primaryMarried: 'Po ślubie',
         primaryHint: 'Np. po rozwodzie z powrotem do nazwiska rodowego.',
+        marriedSurnameHint: 'Nazwisko rodowe powyżej to nazwisko z urodzenia; nazwisko przyjęte po ślubie wpisuje się tutaj.',
     },
 
     titles: {

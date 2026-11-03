@@ -284,9 +284,9 @@ test('GEDCOM result: people of unknown sex are said to be imported, on a line of
     const result = page.locator('#gedcom-result-modal');
     await expect(result).toBeVisible();
     const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
-    await expect(lines).toHaveText(['Skipped records: _TODO ×1', '2 people of unknown sex imported']);
+    await expect(lines).toHaveText([/^“Unsupported” counts the parts of the file/, 'Skipped records: _TODO ×1', '2 people of unknown sex imported']);
     // Two lines, one under the other.
-    const [a, b] = [await lines.nth(0).boundingBox(), await lines.nth(1).boundingBox()];
+    const [a, b] = [await lines.nth(1).boundingBox(), await lines.nth(2).boundingBox()];
     expect(b!.y).toBeGreaterThanOrEqual(a!.y + a!.height - 1);
 
     // Polish: the count agrees with its word, and nothing says "skipped" on that line.
@@ -295,13 +295,58 @@ test('GEDCOM result: people of unknown sex are said to be imported, on a line of
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
     await expect(result).toBeVisible();
-    await expect(lines.nth(1)).toHaveText('Wczytano 2 osoby o nieznanej płci');
+    await expect(lines.nth(2)).toHaveText('Wczytano 2 osoby o nieznanej płci');
     await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
     await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
     await expect(result).toBeVisible();
-    await expect(lines.nth(1)).toHaveText('2 osoby načteny s neznámým pohlavím');
+    await expect(lines.nth(2)).toHaveText('2 osoby načteny s neznámým pohlavím');
+});
+
+test('GEDCOM result: a GEDCOM 7 file\'s ids and stamps are not unsupported, and a sentence says what the unsupported count means', async ({ page }, testInfo) => {
+    await openApp(page);
+    const ged = [
+        '0 HEAD', '1 GEDC', '2 VERS 7.0',
+        '0 @I1@ INDI', '1 UID 0b5c6f5e-8a52-4f8e-9d1c-6a0f9c1e2b3a', '1 EXID KWZX-123', '2 TYPE https://example.org/person/',
+        '1 NAME Tomasz /Wierzbowski/', '1 SEX M', '1 CREA', '2 DATE 27 MAR 2022', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 UID 9a3d1b77-0c11-4c55-8a3e-3f2b6c1d4e5f', '1 NAME Halina /Kłosek/', '1 SEX F', '1 FAMS @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '2 DATE 1925', '1 _RELATIONSHIP_STATUS Separated',
+        '0 @F2@ FAM', '1 HUSB @I1@', '1 _RELATIONSHIP_STATUS Engaged', '1 MARR',
+        '0 TRLR', '',
+    ].join('\n');
+    const p = testInfo.outputPath('gedcom7.ged');
+    writeFileSync(p, ged);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    // Only the status the app does not know is unsupported; UID, CREA and EXID are bookkeeping.
+    await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('1');
+    const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
+    await expect(lines).toHaveText([
+        '“Unsupported” counts the parts of the file that Strom does not know and did not carry over; '
+            + 'the list below names them by their GEDCOM tag. The people and partnerships counted above are not among them.',
+        'Skipped records: _RELATIONSHIP_STATUS ×1',
+    ]);
+
+    // Polish, the language of the question that asked for it.
+    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await page.evaluate(() => window.Strom.UI.setLanguage('pl'));
+    await page.locator('#gedcom-input').setInputFiles([]);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    await expect(result).toBeVisible();
+    await expect(lines.first()).toHaveText(/^„Nieobsługiwane” to części pliku, których Strom nie zna i nie przeniósł/);
+});
+
+test('GEDCOM result: a file with nothing unsupported has no sentence about it', async ({ page }, testInfo) => {
+    await openApp(page);
+    const p = testInfo.outputPath('clean.ged');
+    writeFileSync(p, ['0 HEAD', '1 GEDC', '2 VERS 7.0', '0 @I1@ INDI', '1 UID 1', '1 NAME Jan /Olcha/', '1 SEX M', '0 TRLR', ''].join('\n'));
+    await page.locator('#gedcom-input').setInputFiles(p);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('0');
+    await expect(result.locator('#gedcom-stat-detail .gedcom-stat-line')).toHaveText(['Everything in the file was imported.']);
 });
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {

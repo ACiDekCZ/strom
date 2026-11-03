@@ -1065,6 +1065,11 @@ interface GedcomFamily {
     story?: RawStory;
     /** 1 _STAT: the relationship status as written (Married, Partners …). */
     stat?: string;
+    /**
+     * 1 _RELATIONSHIP_STATUS (another program's word for the same thing), kept
+     * only when statusFromStat knows its value; _STAT wins when both are there.
+     */
+    relationshipStatus?: string;
     /** The CHIL line being read (its _FREL/_MREL follow it). */
     lastChil?: string;
     /**
@@ -1458,7 +1463,7 @@ function readMarriedSurname(
 const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY', '_QUESTION', '_MARNM',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
-const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY', '_STAT']);
+const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY', '_STAT', '_RELATIONSHIP_STATUS']);
 /** Level-0 record types (handled or structural). */
 /**
  * Labels for ALTERNATIVE birth/death facts. Platforms (MyHeritage) allow several
@@ -1471,19 +1476,23 @@ const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', '
 
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN', 'NOTE', 'SNOTE']);
 
-/**
- * Pure bookkeeping tags (platform sync ids, change stamps). Ignored WITHOUT
- * counting them as unsupported — a MyHeritage export carries three of these
- * per person and the "1079 unsupported records" number needlessly scared
- * migrating users even though no user data was involved.
- */
 /** A `_STROM_IMG_OMITTED` value: the research's reason, or `other` for one this app does not know. */
 export function imageHeldReason(value: string): SourceImageHeld {
     const why = value.trim().toLowerCase();
     return why === 'scope' || why === 'limit' || why === 'later' || why === 'missing' ? why : 'other';
 }
 
-const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID']);
+/**
+ * Pure bookkeeping tags (platform sync ids, change stamps). Ignored WITHOUT
+ * counting them as unsupported — a MyHeritage export carries three of these
+ * per person and the "1079 unsupported records" number needlessly scared
+ * migrating users even though no user data was involved. GEDCOM 7 adds its
+ * own: UID (a record's lasting id), CREA (when the record was created, with
+ * DATE/TIME under it) and EXID (the record's id in another system, TYPE under
+ * it) — ids and stamps of the program that wrote the file, not of the family.
+ */
+const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID',
+    'UID', 'CREA', 'EXID']);
 
 /** Attach a DATE to the MARR/DIV it sits under — the most recent one seen. */
 function lastUnionEvent(fam: GedcomFamily, type: 'marriage' | 'divorce', date: string): void {
@@ -1546,18 +1555,36 @@ function resolveUnionStatus(fam: GedcomFamily): {
 }
 
 /**
+ * Words for a relationship status in the files of other programs (English,
+ * and the Polish, German and Czech ones a program in those languages writes).
+ * A registered or civil partnership is no marriage: partners.
+ */
+const STATUS_WORDS: Record<PartnershipStatus, readonly string[]> = {
+    married: ['married', 'marriage', 'małżeństwo', 'małżonkowie', 'żonaci', 'verheiratet', 'ehe', 'ehepaar',
+        'manželé', 'manželství', 'sezdaní'],
+    divorced: ['divorced', 'divorce', 'rozwiedzeni', 'rozwód', 'geschieden', 'scheidung', 'rozvedeni', 'rozvedení', 'rozvod'],
+    separated: ['separated', 'separation', 'w separacji', 'separacja', 'getrennt', 'getrennt lebend',
+        'odloučeni', 'odloučení', 'odluka', 'v odluce'],
+    partners: ['partners', 'partner', 'unmarried', 'unmarried couple', 'never married', 'cohabiting', 'living together',
+        'domestic partnership', 'common law', 'common-law', 'civil union', 'civil partnership', 'registered partnership',
+        'partnerzy', 'związek nieformalny', 'związek partnerski', 'konkubinat',
+        'partnerschaft', 'lebensgemeinschaft', 'lebenspartnerschaft', 'eingetragene lebenspartnerschaft',
+        'nichteheliche lebensgemeinschaft', 'unverheiratet',
+        'partneři', 'partnerství', 'registrované partnerství', 'druh a družka', 'nesezdaní'],
+};
+
+/**
  * 1 _STAT (Strom's own tag, also written by Legacy and FTM in similar words)
- * -> the relationship status, or undefined for a value it does not name.
- * MARR/DIV can only say married or divorced; partners and separated need it.
+ * or 1 _RELATIONSHIP_STATUS -> the relationship status, or undefined for a
+ * value it does not name. MARR/DIV can only say married or divorced;
+ * partners and separated need it.
  */
 function statusFromStat(value: string | undefined): PartnershipStatus | undefined {
-    const v = (value ?? '').trim().toLowerCase();
+    const v = (value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
     if (!v) return undefined;
-    if (v === 'married') return 'married';
-    if (v === 'divorced') return 'divorced';
-    if (v === 'separated') return 'separated';
-    if (['partners', 'partner', 'unmarried', 'unmarried couple', 'never married',
-        'cohabiting', 'living together', 'domestic partnership'].includes(v)) return 'partners';
+    for (const status of ['married', 'divorced', 'separated', 'partners'] as const) {
+        if (STATUS_WORDS[status].includes(v)) return status;
+    }
     return undefined;
 }
 
@@ -1568,7 +1595,7 @@ function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
     if (outcome.endDate) partnership.endDate = outcome.endDate;
     // An explicit status wins over what MARR/DIV imply: a couple of partners
     // whose start date rides on MARR (the only place for it) is not married.
-    partnership.status = statusFromStat(fam.stat) ?? outcome.status;
+    partnership.status = statusFromStat(fam.stat) ?? statusFromStat(fam.relationshipStatus) ?? outcome.status;
     if (outcome.remarriage) {
         const { divorced, married } = outcome.remarriage;
         const line = divorced
@@ -2448,6 +2475,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case '_STAT':
                             // Strom's relationship status (see resolveStatTag).
                             fam.stat = value;
+                            break;
+                        case '_RELATIONSHIP_STATUS':
+                            // The same status in another program's tag. A value
+                            // it does not know stays unsupported (MARR/DIV decide).
+                            if (statusFromStat(value)) fam.relationshipStatus = value;
+                            else drop(tag);
                             break;
                         case '_STROM_NO_COUPLE':
                             fam.noCouple = value !== 'N';
@@ -3642,7 +3675,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     for (const [gedFamId, fam] of families) {
         if (!fam.noCouple) continue;
         if (fam.unionEvents.length || fam.events.length || fam.note || fam.noteFacts.length
-            || fam.sourceRefs.length || fam.marriageParticipants.length || fam.story || fam.stat) continue;
+            || fam.sourceRefs.length || fam.marriageParticipants.length || fam.story || fam.stat || fam.relationshipStatus) continue;
         const husb = fam.husb ? personIdMap.get(fam.husb) : undefined;
         const wife = fam.wife ? personIdMap.get(fam.wife) : undefined;
         const real = {
@@ -3731,7 +3764,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // Childless, one spouse — kept only when the family says something of its own (a wedding or a
         // divorce, even undated, a status, a note, a source…): Strom writes a "?" partner's family so,
         // without a record for the "?" ("married, the spouse unknown").
-        const saysSomething = fam.unionEvents.length > 0 || fam.divorced || !!fam.stat || !!fam.marriageDate || !!fam.marriagePlace
+        const saysSomething = fam.unionEvents.length > 0 || fam.divorced || !!fam.stat || !!fam.relationshipStatus || !!fam.marriageDate || !!fam.marriagePlace
             || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0
             || fam.marriageParticipants.length > 0 || !!fam.story;
         if (ownChildren.length === 0 && !(parentId && saysSomething)) continue;

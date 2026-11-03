@@ -470,6 +470,8 @@ export const importExportMethods = uiModule({
         if (detailEl) {
             const parts: string[] = [];
             if (this.gedcomResult.stats.droppedTagSummary) {
+                // What the number means, before the list it names.
+                parts.push(strings.gedcom.unsupportedHint);
                 parts.push(`${strings.gedcom.skippedTags}: ${this.gedcomResult.stats.droppedTagSummary}`);
             }
             if (this.gedcomResult.stats.unknownSexPersons > 0) {

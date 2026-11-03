@@ -93,7 +93,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         titleAfter: 'np. mł., Ph.D.',
         firstName: 'Imię',
         lastName: 'Nazwisko',
-        maidenName: 'Nazwisko rodowe',
+        maidenName: 'Nazwisko z urodzenia',
         refn: 'np. karton archiwalny 12 lub id z innego programu',
         question: 'np. czy ktoś wie, kiedy się urodziła?',
         flexDateShort: 'np. 1880',
