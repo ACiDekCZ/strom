@@ -40,6 +40,7 @@ import {
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
+import { waitBranchText } from './research-offline-ui.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -600,7 +601,8 @@ export const researchOverviewMethods = uiModule({
         const open = view.detail === w.id;
         const li = el('li', 'research-overview__waiting-item');
         li.dataset.id = w.id;
-        if (view.fresh.has(w.id)) li.classList.add('is-fresh');
+        // A growing branch is a suggestion: lit as new while it waits.
+        if (view.fresh.has(w.id) || w.kind === 'branch') li.classList.add('is-fresh');
         if (open) li.classList.add('is-open');
         const detailId = `ov-wait-${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
         const row = el('button', 'research-overview__waiting-row');
@@ -609,8 +611,9 @@ export const researchOverviewMethods = uiModule({
         row.setAttribute('aria-controls', detailId);
         const head = el('span', 'research-overview__waiting-what');
         if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
+        else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
-        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.what);
+        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
         const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
@@ -657,6 +660,21 @@ export const researchOverviewMethods = uiModule({
             const actions = el('div', 'research-overview__waiting-actions');
             actions.appendChild(compare);
             detail.append(text, actions);
+            return detail;
+        }
+        if (w.kind === 'branch') {
+            // A growing branch: its person, then the answers through the bridge (a phone says where).
+            const person = personByRefn(w.person);
+            if (person) {
+                const meta = el('div', 'research-overview__waiting-meta');
+                const link = el('button', 'live-person-link');
+                link.innerHTML = fitNameHtml(person, fullName(person));
+                link.type = 'button';
+                link.onclick = () => this.overviewShowPerson(person.id, mode);
+                meta.appendChild(link);
+                detail.appendChild(meta);
+            }
+            this.appendBranchWaitingActions(detail, w, s);
             return detail;
         }
         const text = el('div', 'research-overview__waiting-text');

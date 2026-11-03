@@ -50,6 +50,8 @@ import {
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
+import { queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText } from './research-offline-ui.js';
+import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
@@ -316,8 +318,19 @@ export function queueNoteText(q: LiveQueueItem): string {
     return q.helps ? r.queueHelps[q.helps] : '';
 }
 
-/** The note under a queued task's text (a quiet second line). */
-function appendQueueNote(text: HTMLElement, q: LiveQueueItem): void {
+/**
+ * The note under a queued task's text (a quiet second line): why it stands
+ * where it stands (a research with branches; one line, the whole sentence
+ * in its title), else what an older research says of it.
+ */
+function appendQueueNote(text: HTMLElement, q: LiveQueueItem, s: LiveSession): void {
+    const why = queueWhyText(q, s);
+    if (why) {
+        const note = el('span', 'live-queue-note live-queue-why', why);
+        note.title = why;
+        text.appendChild(note);
+        return;
+    }
     const note = queueNoteText(q);
     if (note) text.appendChild(el('span', 'live-queue-note', note));
 }
@@ -2672,7 +2685,7 @@ export const researchUiMethods = uiModule({
         s.features = status.features;
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
-        s.waiting = this.liveWaitingShown(s, status.waiting);
+        s.waiting = this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting));
         // A task that was not there before unfolds "Waiting for you", even when folded.
         // What came already sent needs nothing from the user: it unfolds nothing (an item
         // that moves to sent keeps its id and is not new).
@@ -2990,8 +3003,9 @@ export const researchUiMethods = uiModule({
             }
             const what = text.appendChild(el('span', 'live-waiting-what'));
             // A newer research names the kind: a short label before the text.
-            if (w.section) what.appendChild(waitingKindLabel(w));
-            what.append(w.what);
+            if (w.kind === 'branch') what.appendChild(el('span', 'live-kind live-kind--decide', strings.live.waitBranchKind));
+            else if (w.section) what.appendChild(waitingKindLabel(w));
+            what.append(w.kind === 'branch' ? waitBranchText(w, liveSession()) : w.what);
             // "on" is the agent's free text; "user" only repeats the heading.
             if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
             const at = timeEl(w.at, 'ago');
@@ -3389,7 +3403,10 @@ export const researchUiMethods = uiModule({
         // panel's selected line too (one choice), so it narrows both.
         const dirFilter = queueDirectionFilter(s);
         const multi = directions && (directionsMulti(s) || dirFilter !== 'all');
-        const inFilter = (q: LiveQueueItem): boolean => dirFilter === 'all' || q.research === dirFilter;
+        // The overview narrowed to one branch outside the directions ("Branch tasks ›").
+        const branch = directions ? queueBranchFilter(s) : null;
+        const inFilter = (q: LiveQueueItem): boolean => branch ? q.branch === branch
+            : dirFilter === 'all' || q.research === dirFilter;
         const allNext = s.queue.filter(q => q.state === 'next');
         const next = allNext.filter(inFilter);
         const parked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
@@ -3422,14 +3439,32 @@ export const researchUiMethods = uiModule({
                 chip.setAttribute('role', 'radio');
                 chip.setAttribute('aria-checked', String(dirFilter === id));
                 chip.dataset.direction = id;
-                chip.onclick = () => this.setWorkingLine(id);
+                chip.onclick = () => {
+                    // A line's pill replaces a branch's narrowing.
+                    setQueueBranchFilter(s, null);
+                    this.setWorkingLine(id);
+                };
                 pills.appendChild(chip);
             }
             host.appendChild(pills);
         }
+        if (branch) {
+            // The branch's chip beside the lines' ones; × shows the whole queue again.
+            const chip = this.branchQueueChip(s, branch, allNext.filter(q => q.branch === branch).length);
+            let pills = host.querySelector<HTMLElement>('.research-overview__queue-filters');
+            if (!pills) {
+                pills = el('div', 'research-overview__filters research-overview__queue-filters');
+                host.appendChild(pills);
+            } else {
+                pills.querySelectorAll('[role="radio"]').forEach(c => c.setAttribute('aria-checked', 'false'));
+            }
+            pills.appendChild(chip);
+        }
         const list = el('ul', 'live-panel-list live-queue');
         host.appendChild(list);
         const canTask = this.researchLinkAvailable('task');
+        // A task's own place (Do next / To the end) is set through the bridge, no mark.
+        const canOrder = taskOrderOffered(s);
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
             li.appendChild(el('span', 'live-queue-num', String(i + 1)));
@@ -3439,9 +3474,16 @@ export const researchUiMethods = uiModule({
             if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
-            appendQueueNote(text, q);
+            appendQueueNote(text, q, s);
+            const problem = this.taskOrderProblem(q.id);
+            if (problem) {
+                const box = el('span', 'live-queue-problem', problem);
+                box.setAttribute('role', 'alert');
+                text.appendChild(box);
+            }
+            if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
-            if (canTask) {
+            if (canTask || canOrder) {
                 const more = el('button', 'live-queue-more', '⋯');
                 more.type = 'button';
                 more.setAttribute('aria-label', r.taskMenu);
@@ -3458,7 +3500,7 @@ export const researchUiMethods = uiModule({
         for (const q of shownParked) {
             const li = el('li', 'live-queue-row live-queue-row--parked');
             const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
-            appendQueueNote(text, q);
+            appendQueueNote(text, q, s);
             li.appendChild(text);
             if (canTask) {
                 const wake = setResearchActionLabel(el('button', 'link-button live-queue-wake'), r.wake, researchLinkMark('task', { taskDo: 'wake' }));
@@ -3497,7 +3539,37 @@ export const researchUiMethods = uiModule({
         menu.dataset.task = task;
         menu.setAttribute('role', 'menu');
         menu.setAttribute('aria-label', r.taskMenu);
-        for (const [what, label] of [['park', r.park], ['drop', r.drop]] as const) {
+        const s = liveSession();
+        const q = s?.queue.find(x => x.id === task);
+        if (s && q && taskOrderOffered(s)) {
+            const L = strings.live;
+            const own: [TaskOrderDo, string, string | undefined][] = [
+                ['next', L.taskDoNext, L.taskDoNextHint],
+                ['last', L.taskDoLast, L.taskDoLastHint],
+            ];
+            if (q.own) own.push(['default', L.taskOrderReset, undefined]);
+            for (const [what, label, hint] of own) {
+                const item = el('div', 'context-menu-item research-direction-menu__item');
+                item.setAttribute('role', 'menuitem');
+                item.tabIndex = -1;
+                item.dataset.order = what;
+                if (q.own === what) item.setAttribute('aria-current', 'true');
+                item.appendChild(el('span', 'research-direction-menu__label', label));
+                if (hint) item.appendChild(el('span', 'research-direction-menu__hint', hint));
+                const go = (): void => { void this.changeTaskOrder(task, what); };
+                item.onclick = go;
+                item.onkeydown = (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+                };
+                menu.appendChild(item);
+            }
+            if (this.researchLinkAvailable('task')) {
+                const sep = el('div', 'context-menu-divider');
+                sep.setAttribute('role', 'separator');
+                menu.appendChild(sep);
+            }
+        }
+        for (const [what, label] of (this.researchLinkAvailable('task') ? [['park', r.park], ['drop', r.drop]] as const : [])) {
             const item = setResearchActionLabel(el('div', 'context-menu-item'), label, researchLinkMark('task', { taskDo: what }));
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;

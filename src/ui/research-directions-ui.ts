@@ -667,8 +667,10 @@ export const researchDirectionsMethods = uiModule({
         host.appendChild(list);
         rows.forEach((d, i) => list.appendChild(this.managedDirectionRow(s, d, mode, i + 1, rows.length, view)));
         if (view.canOrder) this.wireDirectionDrop(list);
-        // Work outside the directions has no number and no place in the order: below them (none without directions).
-        if (outside.length > 0 && rows.length > 0) list.appendChild(this.outsideDirectionRow(outside, mode));
+        // Work outside the directions has no number and no place in the order: below them (none without directions);
+        // a research that groups it by branches shows them there, above the ended ones.
+        const branches = rows.length > 0 && this.appendOffLineSection(list, s, mode, view.canWrite, outside);
+        if (!branches && outside.length > 0 && rows.length > 0) list.appendChild(this.outsideDirectionRow(outside, mode));
         if (ended.length > 0) {
             const toggle = el('button', 'research-directions__inactive');
             toggle.type = 'button';
@@ -873,6 +875,8 @@ export const researchDirectionsMethods = uiModule({
         }
         const run = d.state === 'paused' ? s.working.find(w => w.research === d.id && !w.paused && w.task) : undefined;
         if (run) detail.appendChild(el('div', 'research-direction__last', L.dirFinishingLong(d.since ? shortDate(d.since) : '', run.task)));
+        // The branches added to it (work outside the directions that now helps it).
+        this.appendDirectionBranches(detail, s, d, view.canWrite);
 
         const actions = el('div', 'research-direction__actions');
         if (!view.readOnly && d.state !== 'done') {
