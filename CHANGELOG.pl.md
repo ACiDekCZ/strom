@@ -4,6 +4,13 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.21.1
+
+*Wydano 3 listopada 2026.*
+
+- **Polski**: teksty poprawione po przeglądzie: stan danej dawniej nazwany *Trop* to wszędzie *Wskazówka*, a dana potwierdzona dowodami – *Udokumentowane*, rada to *Podpowiedź*, cytaty menu badania są z nim zgodne (*Zostaw tylko jako Archiwum Strom*, *Badanie → Więcej*), czasowniki i rzeczowniki zgadzają się z liczbą także dla jednego elementu, daty są zapisywane bez zer na początku (*3.11.2026*), a miesiąc z rokiem słownie (*maj 1880*), myślniki są polskie, a *Księga rodu* ma wielkie K.
+- **Miejsca**: miejsce jest oznaczane jako odległe od rodziny tylko wtedy, gdy leży ponad 60 km od każdego innego miejsca rodziny z tego czasu; rodzina z gałęzią za oceanem nie sprawia już, że wieś blisko domu wydaje się odległa o tysiące kilometrów, a wynik wyszukiwania blisko jednego z miejsc rodziny liczy się jako bliski.
+
 ## 3.21.0
 
 *Wydano 3 listopada 2026.*
