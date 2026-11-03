@@ -2,6 +2,14 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.21.2
+
+*Released 3 November 2026.*
+
+- **Surnames**: a Polish surname pairs the Polish way, *Jaworski* with *Jaworska*, and never gets a Czech *-ová* form in a Polish tree; a letter *ó* (*Wróblewska*, *Mróz*) no longer makes a tree Czech.
+- **Places**: the place check names a family by its basic form, in Polish declined (*rodziny Jaworskich*), and an address with *nr domu* is read as a house number.
+- **Sources**: the dash in a cited fact (*person — fact (year)*) follows the language.
+
 ## 3.21.1
 
 *Released 3 November 2026.*

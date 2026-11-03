@@ -2,6 +2,14 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.21.2
+
+*Vydáno 3. listopadu 2026.*
+
+- **Příjmení**: polské příjmení se páruje po polsku, *Jaworski* s *Jaworska*, a v polském stromu nikdy nedostane českou podobu na *-ová*; písmeno *ó* (*Wróblewska*, *Mróz*) už ze stromu nedělá český.
+- **Místa**: kontrola míst jmenuje rod jeho základní podobou, v polštině skloňovanou (*rodziny Jaworskich*), a adresa s *nr domu* se čte jako číslo domu.
+- **Prameny**: pomlčka v citovaném údaji (*osoba – údaj (rok)*) se řídí jazykem.
+
 ## 3.21.1
 
 *Vydáno 3. listopadu 2026.*

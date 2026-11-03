@@ -2,6 +2,14 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.21.2
+
+*Veröffentlicht am 3. November 2026.*
+
+- **Nachnamen**: ein polnischer Nachname bildet seine Paare auf Polnisch, *Jaworski* mit *Jaworska*, und bekommt in einem polnischen Stammbaum nie eine tschechische Form auf *-ová*; ein *ó* (*Wróblewska*, *Mróz*) macht einen Stammbaum nicht mehr tschechisch.
+- **Orte**: die Ortsprüfung nennt eine Familie mit ihrer Grundform, auf Polnisch dekliniert (*rodziny Jaworskich*), und eine Adresse mit *nr domu* wird als Hausnummer gelesen.
+- **Quellen**: der Gedankenstrich in einer zitierten Angabe (*Person – Angabe (Jahr)*) richtet sich nach der Sprache.
+
 ## 3.21.1
 
 *Veröffentlicht am 3. November 2026.*
