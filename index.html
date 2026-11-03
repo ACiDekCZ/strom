@@ -16365,14 +16365,14 @@
             display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
         }
         .research-directions__empty-text { margin: 0; font-size: 13.5px; color: var(--text-light); }
-        .research-directions__empty-new, .research-direction__state {
+        .research-directions__empty-new, .research-direction__state, .research-direction__edit {
             min-height: 30px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border);
             background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
         }
-        .research-directions__empty-new:focus-visible, .research-direction__state:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-directions__empty-new:focus-visible, .research-direction__state:focus-visible, .research-direction__edit:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-direction__state[aria-busy="true"] { opacity: .6; cursor: progress; }
         @media (hover: hover) {
-            .research-directions__empty-new:hover, .research-direction__state:hover { background: var(--hover-bg); }
+            .research-directions__empty-new:hover, .research-direction__state:hover, .research-direction__edit:hover { background: var(--hover-bg); }
         }
         .research-directions--managed .research-directions__list { position: relative; }
         .research-direction--managed { grid-template-columns: 12px 14px 20px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 0; }
@@ -16413,7 +16413,7 @@
             .research-direction__moves { display: flex; }
             .research-direction--managed .research-direction__more { width: 40px; height: 40px; }
             .research-directions__new { min-height: 44px; }
-            .research-directions__empty-new, .research-direction__state { min-height: 44px; }
+            .research-directions__empty-new, .research-direction__state, .research-direction__edit { min-height: 44px; }
         }
         @media (max-width: 640px) {
             .research-direction__moves { display: flex; }
@@ -16559,7 +16559,8 @@
         }
         /* A phone held sideways: the dialog fills the height, the body scrolls. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .modal.modal--md.direction-form { max-height: 100%; }
+            #direction-form-modal { align-items: stretch; }
+            .modal.modal--md.direction-form { height: 100%; max-height: 100%; border-radius: 0; }
             .direction-form__picks { max-height: 150px; }
         }
         .research-direction.is-drag-source { opacity: .45; background: var(--dir-drag-bg); outline: 1px dashed var(--border); outline-offset: -1px; }
@@ -16605,9 +16606,6 @@
         }
         .research-direction-menu .context-menu-divider { margin: 4px 0; }
         .toast[data-kind="direction"] { max-width: 440px; }
-        /* Phone sheet: the handle and number stay, no ⋯ (its own way comes with the phone page). */
-        .research-overview--sheet .research-direction--managed { grid-template-columns: 12px 14px 20px minmax(0, 1fr) auto; }
-        .research-overview--sheet .research-direction--ended { grid-template-columns: 20px minmax(0, 1fr) auto; }
         /* A task's direction, while two or more run: grey words, no colour. */
         .research-overview__dir { color: var(--text-light); font-size: 12px; font-weight: 400; }
         .research-overview__queue-filters { margin: 4px 0 8px; }
@@ -16617,8 +16615,44 @@
         .research-overview--sheet .research-direction { min-height: 44px; grid-template-columns: 20px minmax(0, 1fr); }
         .research-overview--sheet .research-direction__head { font-size: 15px; min-height: 28px; }
         .research-overview--sheet .research-direction__meta { font-size: 13px; }
+        /* The sheet (spec 038 §6): number · kind · content · ▲▼, no handle and no ⋯ (More… in the unfolded row);
+           a tap unfolds the row, its buttons 44 px. */
+        .research-overview--sheet .research-direction--managed { grid-template-columns: 16px 20px minmax(0, 1fr) auto; }
+        .research-overview--sheet .research-direction--ended { grid-template-columns: 20px minmax(0, 1fr) auto; }
+        .research-overview--sheet .research-direction--managed .research-direction__num { font-size: 13px; margin-top: 4px; }
+        .research-overview--sheet .research-direction__moves { display: flex; }
+        .research-overview--sheet .research-direction__move { width: 44px; height: 44px; }
+        .research-overview--sheet .research-direction__actions > button { min-height: 44px; }
+        .research-overview--sheet .research-direction__actions > .link-button { padding: 0 4px; font-size: 14px; }
+        .research-overview--sheet .research-directions__new { min-height: 44px; font-size: 14px; }
+        .research-overview--sheet .research-directions__note { font-size: 13px; }
+        /* Menus, the toast and its Undo above the sheet (it covers the window). */
+        body:has(> .research-overview--sheet) .live-task-menu { z-index: 1050; }
+        body:has(> .research-overview--sheet) .toast { z-index: 1050; }
+        @media (pointer: coarse) {
+            .research-direction-menu .context-menu-item, .research-offline-pick .context-menu-item {
+                min-height: 44px; box-sizing: border-box; justify-content: center;
+            }
+        }
         @media (max-width: 640px) {
             .research-direction__gens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            /* 360 px: the name wraps, its chip goes under it. */
+            .research-direction__head .research-direction__name { min-width: 0; }
+            .research-direction__meta .live-person-link { overflow-wrap: anywhere; text-align: left; }
+        }
+        /* A phone held sideways: the sheet without the summary, one-line rows (name and state cut with …), ▲▼ side by side. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview--sheet .research-overview__summary { display: none; }
+            .research-overview--sheet .research-direction { padding: 4px 0; align-items: center; }
+            .research-overview--sheet .research-direction__head { flex-wrap: nowrap; max-width: 100%; min-width: 0; }
+            .research-overview--sheet .research-direction__head .research-direction__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+            .research-overview--sheet .research-direction__head .research-direction__chip { flex: none; white-space: nowrap; }
+            .research-overview--sheet .research-direction__main { align-items: stretch; }
+            .research-overview--sheet .research-direction:not(.is-open) .research-direction__meta {
+                display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .research-overview--sheet .research-direction__meta > * { display: inline; }
+            .research-overview--sheet .research-direction__moves { flex-direction: row; }
         }
 
         /* Work outside the directions (spec 038 §9): the branches under the directions, above the ended ones. */

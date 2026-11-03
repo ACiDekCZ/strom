@@ -27,6 +27,7 @@ import {
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
 } from '../research-waiting.js';
 import { formatLiveClock } from '../live-time.js';
+import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
@@ -70,8 +71,9 @@ const toggledGroups = new Set<string>();
 /** The card lit up by hovering a change row. */
 let hovered: HTMLElement | null = null;
 
+/** A phone (≤ 640 px) and a phone held sideways get the full-screen sheet. */
 function overviewMode(): Mode {
-    if (window.matchMedia?.('(max-width: 640px)').matches) return 'sheet';
+    if (window.matchMedia?.(MQ_PHONE_BAR).matches) return 'sheet';
     return window.innerWidth >= 1280 ? 'docked' : 'overlay';
 }
 

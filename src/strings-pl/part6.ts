@@ -735,6 +735,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         dirNotSavedSaid: (t: string) => `Nie zapisano: „${t}”`,
         dirOldResearch: (v: string) => `Badanie zarządza liniami z aplikacji od wersji ${v}.`,
         dirArchive: 'Archiwum: linie tylko do odczytu.',
+        dirPhoneOnly: 'Linie można zmieniać w Stromie na komputerze, na którym działa badanie.',
+        dirMoreActions: 'Więcej…',
         // The direction form (spec 038 §2, §3.1) and "In direction" (§5.1).
         dirFormNew: 'Nowa linia',
         dirFormEdit: 'Edytuj linię',

@@ -5128,6 +5128,8 @@ const stringsEN = {
         dirNotSavedSaid: (t: string) => `Not saved: “${t}”`,
         dirOldResearch: (v: string) => `The research manages directions from the app from version ${v}.`,
         dirArchive: 'Archive: directions are read-only.',
+        dirPhoneOnly: 'Directions can be changed in Strom on the computer where the research runs.',
+        dirMoreActions: 'More…',
         // The direction form (spec 038 §2, §3.1) and "In direction" (§5.1).
         dirFormNew: 'New direction',
         dirFormEdit: 'Edit direction',
@@ -12234,6 +12236,8 @@ const stringsCZ: StringsType = {
         dirNotSavedSaid: (t: string) => `Nepovedlo se uložit: „${t}“`,
         dirOldResearch: (v: string) => `Řízení linií v aplikaci umí výzkum od verze ${v}.`,
         dirArchive: 'Archiv: linie jen ke čtení.',
+        dirPhoneOnly: 'Linie jde měnit ve Stromu na počítači, kde běží výzkum.',
+        dirMoreActions: 'Další…',
         // The direction form (spec 038 §2, §3.1) and "In direction" (§5.1).
         dirFormNew: 'Nová linie',
         dirFormEdit: 'Upravit linii',
@@ -19254,6 +19258,8 @@ const stringsDE: StringsType = {
         dirNotSavedSaid: (t: string) => `Nicht gespeichert: „${t}“`,
         dirOldResearch: (v: string) => `Die Forschung steuert Richtungen aus der App ab Version ${v}.`,
         dirArchive: 'Archiv: Richtungen nur zum Lesen.',
+        dirPhoneOnly: 'Richtungen lassen sich in Strom auf dem Computer ändern, auf dem die Forschung läuft.',
+        dirMoreActions: 'Mehr…',
         // The direction form (spec 038 §2, §3.1) and "In direction" (§5.1).
         dirFormNew: 'Neue Richtung',
         dirFormEdit: 'Richtung bearbeiten',

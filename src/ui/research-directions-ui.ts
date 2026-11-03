@@ -16,6 +16,7 @@ import { formatLiveClock } from '../live-time.js';
 import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
+import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
@@ -211,6 +212,17 @@ export interface DirectionsView {
     ordered: boolean;
     /** Moves go through now. */
     canOrder: boolean;
+    /**
+     * The app on a phone without the research's bridge (touch, a phone's
+     * size, the bridge not answering): read-only, a tap shows the direction
+     * in the tree, one sentence says where directions are changed.
+     */
+    phoneOnly: boolean;
+}
+
+/** The app on a phone: a touch screen of a phone's size (upright or held sideways). */
+function onPhone(): boolean {
+    try { return !!window.matchMedia?.('(pointer: coarse)').matches && !!window.matchMedia(MQ_PHONE_BAR).matches; } catch { return false; }
 }
 
 /** "Ended" unfolded (a research that keeps the order). */
@@ -622,7 +634,8 @@ export const researchDirectionsMethods = uiModule({
         const readOnly = managed && (this.activeResearchNoAgent() || archiveSaid === s.bridge.base);
         const down = s.lostSince !== null;
         const ordered = managed && !!s.caps?.directionsOrder && !readOnly;
-        return { managed, readOnly, down, canWrite: managed && !readOnly && !down, ordered, canOrder: ordered && !down };
+        const phoneOnly = managed && !readOnly && down && onPhone();
+        return { managed, readOnly, down, canWrite: managed && !readOnly && !down, ordered, canOrder: ordered && !down, phoneOnly };
     },
 
     /**
@@ -636,12 +649,13 @@ export const researchDirectionsMethods = uiModule({
         mode: Mode, view: DirectionsView): void {
         const L = strings.live;
         const outside = outsideWork(s);
-        if (view.readOnly && s.researches.length < 2 && (s.researches.length === 0 || outside.length === 0)) return;
+        const viewOnly = view.readOnly || view.phoneOnly;
+        if (viewOnly && s.researches.length < 2 && (s.researches.length === 0 || outside.length === 0)) return;
         if (pendingOrder && pendingOrder.base !== s.bridge.base) pendingOrder = null;
         const { active: listed, inactive: ended } = orderDirections(s.researches, true);
         const rows = pendingOrder ? withPendingOrder(listed, pendingOrder.order) : listed;
         let aside: HTMLElement | undefined;
-        if (!view.readOnly) {
+        if (!viewOnly) {
             const add = el('button', 'link-button research-directions__new', L.dirNew);
             add.type = 'button';
             add.dataset.do = 'new';
@@ -652,12 +666,13 @@ export const researchDirectionsMethods = uiModule({
         const host = liveSection(body, { ...fold, title: L.dirTitle(rows.filter(d => d.state === 'active').length), aside });
         host.classList.add('research-directions', 'research-directions--managed');
         if (view.readOnly) host.appendChild(el('p', 'research-directions__note', L.dirArchive));
+        else if (view.phoneOnly) host.appendChild(el('p', 'research-directions__note', L.dirPhoneOnly));
         else if (view.down) host.appendChild(el('p', 'research-directions__note is-warn', L.dirBridgeDown));
         const orderMode = s.caps?.orderMode;
         if (orderMode && rows.length >= 2 && view.ordered) {
             host.appendChild(el('p', 'research-directions__note', orderMode === 'strict' ? L.dirOrderStrict : L.dirOrderWeight));
         }
-        if (rows.length === 0 && !view.readOnly) {
+        if (rows.length === 0 && !viewOnly) {
             const empty = el('div', 'research-directions__empty');
             empty.appendChild(el('p', 'research-directions__empty-text', L.dirEmptyNew));
             const add = el('button', 'secondary research-directions__empty-new', L.dirNew);
@@ -700,14 +715,18 @@ export const researchDirectionsMethods = uiModule({
      */
     managedDirectionRow(s: LiveSession, d: LiveDirection, mode: Mode, n: number, total: number, view: DirectionsView): HTMLElement {
         const L = strings.live;
-        const phone = mode === 'sheet';
-        const open = !phone && expanded === d.id;
+        // The sheet (a narrow window, a phone): ▲▼ instead of the handle, a tap unfolds the row with its
+        // actions, no ⋯ (More… in the unfolded row); the app on a phone without the bridge only shows.
+        const sheet = mode === 'sheet';
+        const open = !view.phoneOnly && expanded === d.id;
         const paused = d.state === 'paused';
         const row = el('div', `research-direction research-direction--managed${paused ? ' is-paused' : ''}${open ? ' is-open' : ''}${freshDirections.has(d.id) ? ' is-new' : ''}`);
         row.dataset.direction = d.id;
         row.dataset.order = String(n);
 
-        if (view.canOrder) {
+        if (sheet) {
+            // No handle column: the arrows move it.
+        } else if (view.canOrder) {
             const handle = el('button', 'research-direction__handle');
             handle.type = 'button';
             handle.dataset.direction = d.id;
@@ -748,7 +767,7 @@ export const researchDirectionsMethods = uiModule({
             head.appendChild(arc);
         }
         if (paused) head.appendChild(el('span', 'research-direction__chip', L.dirPausedChip(d.since ? shortDate(d.since) : '')));
-        if (phone) {
+        if (view.phoneOnly) {
             head.onclick = () => this.showDirectionInTree(d, mode);
         } else {
             head.setAttribute('aria-expanded', String(open));
@@ -766,7 +785,7 @@ export const researchDirectionsMethods = uiModule({
         row.appendChild(main);
 
         const side = el('div', 'research-direction__side');
-        if (view.ordered) {
+        if (view.ordered && !view.phoneOnly) {
             const order = shownOrder(s);
             const at = order.indexOf(d.id);
             const moves = el('div', 'research-direction__moves');
@@ -783,7 +802,7 @@ export const researchDirectionsMethods = uiModule({
             }
             side.appendChild(moves);
         }
-        if (!view.readOnly && !phone) side.appendChild(this.directionMoreButton(s, d, view));
+        if (!view.readOnly && !sheet) side.appendChild(this.directionMoreButton(s, d, view));
         row.appendChild(side);
         return row;
     },
@@ -896,8 +915,18 @@ export const researchDirectionsMethods = uiModule({
             } else state.onclick = () => void this.changeDirectionState(d, what);
             actions.appendChild(state);
         }
+        const sheet = mode === 'sheet';
+        // The sheet: Edit in the row (the rest of the ⋯ behind More…).
+        if (sheet && !view.readOnly && d.state !== 'done') {
+            const edit = el('button', 'secondary research-direction__edit', L.dirEdit);
+            edit.type = 'button';
+            edit.dataset.do = 'edit';
+            if (view.down) holdForBridge(edit);
+            else edit.onclick = () => this.openDirectionForm({ mode: 'edit', direction: d, returnFocus: edit });
+            actions.appendChild(edit);
+        }
         // Its agent at work: not for a paused one, never in an archive or while the research waits for its agent.
-        const work = d.state === 'active' && mode !== 'sheet' && !this.activeResearchNoAgent()
+        const work = d.state === 'active' && !sheet && !this.activeResearchNoAgent()
             ? this.activeResearchLink('chat', { research: d.id }) : null;
         if (work) {
             const btn = setResearchActionLabel(el('button', 'link-button'), L.dirWork, researchLinkMark('chat'));
@@ -913,6 +942,18 @@ export const researchDirectionsMethods = uiModule({
             btn.onclick = () => this.showDirectionInTree(d, mode);
             actions.appendChild(btn);
         }
+        if (sheet && !view.readOnly) {
+            const more = el('button', 'link-button research-direction__sheet-more', L.dirMoreActions);
+            more.type = 'button';
+            more.dataset.do = 'more';
+            more.setAttribute('aria-haspopup', 'menu');
+            if (view.down) holdForBridge(more);
+            else more.onclick = (e) => {
+                e.stopPropagation();
+                this.openSheetDirectionMenu(more, s, d);
+            };
+            actions.appendChild(more);
+        }
         if (actions.childElementCount > 0) detail.appendChild(actions);
         return detail;
     },
@@ -921,6 +962,7 @@ export const researchDirectionsMethods = uiModule({
     endedDirectionRow(d: LiveDirection, mode: Mode, view: DirectionsView): HTMLElement {
         const L = strings.live;
         const open = mode !== 'sheet' && expanded === d.id;
+        const viewOnly = view.readOnly || view.phoneOnly;
         const row = el('div', `research-direction research-direction--ended is-inactive${open ? ' is-open' : ''}`);
         row.dataset.direction = d.id;
         const icon = el('span', 'research-direction__icon', d.direction ? KIND_GLYPH[d.direction] : '');
@@ -950,7 +992,7 @@ export const researchDirectionsMethods = uiModule({
         if (problem) main.appendChild(directionProblemBox(problem));
         if (open) main.appendChild(this.directionDetail(d, mode));
         row.appendChild(main);
-        if (!view.readOnly) {
+        if (!viewOnly) {
             const again = el('button', 'link-button research-direction__do', L.dirResume);
             again.type = 'button';
             again.dataset.do = 'resume';
@@ -984,6 +1026,26 @@ export const researchDirectionsMethods = uiModule({
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
         if (work) {
             items.push(null, { do: 'work', label: L.dirWork, mark: researchLinkMark('chat'), run: () => this.launchResearchLink(work, 'agent') });
+        }
+        this.showDirectionMenu(anchor, d, items);
+    },
+
+    /**
+     * More… of an unfolded row in the sheet: what the row does not show
+     * (End…, Move to the top, Work on it with its agent in the terminal);
+     * Pause, Edit, Show in tree and ▲▼ are on the row.
+     */
+    openSheetDirectionMenu(anchor: HTMLElement, s: LiveSession, d: LiveDirection): void {
+        const L = strings.live;
+        const items: (DirectionMenuItem | null)[] = [];
+        if (d.state !== 'done') items.push({ do: 'done', label: L.dirEndMenu, hint: L.dirEndHint, run: () => this.openDirectionEnd(anchor, d) });
+        if (this.directionsView(s).canOrder && shownOrder(s).indexOf(d.id) > 0) {
+            items.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
+        }
+        const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
+        if (work) {
+            if (items.length > 0) items.push(null);
+            items.push({ do: 'work', label: L.dirWork, mark: researchLinkMark('chat'), run: () => this.launchResearchLink(work, 'agent') });
         }
         this.showDirectionMenu(anchor, d, items);
     },
@@ -1030,12 +1092,12 @@ export const researchDirectionsMethods = uiModule({
         }
         const back = (): void => {
             this.closeDirectionEnd();
-            focusDirectionControl(d.id, '.research-direction__more', anchor);
+            focusDirectionControl(d.id, focusSelector(anchor), anchor);
         };
         const end = (): void => {
             const reason = input.value.trim();
             this.closeDirectionEnd();
-            focusDirectionControl(d.id, '.research-direction__more', anchor);
+            focusDirectionControl(d.id, focusSelector(anchor), anchor);
             void this.changeDirectionState(d, 'done', { reason });
         };
         cancel.onclick = back;
