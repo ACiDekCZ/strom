@@ -1552,6 +1552,51 @@ export interface LiveDirection {
     generations?: number[];
     /** What its last session did. */
     last?: { at: string; text: string };
+    /** Its place in the order of work (1 = first; with `caps.directionsOrder`). */
+    order?: number;
+    /** How far it reaches: generations at most, only before a year (absent: no limit). */
+    limits?: DirectionLimits;
+    /** A question direction: the question. */
+    question?: string;
+    /** A review: how far it reaches. */
+    review?: { scope: ResearchReviewScope };
+    /** When it was created (ISO). */
+    created?: string;
+    /** The direction it came from ("G0001"). */
+    parent?: string;
+    /** What it found in its last days (`directions.found`; absent: nothing in them). */
+    found?: DirectionFound;
+}
+
+/** A direction's limits (each absent: no limit of that kind). */
+export interface DirectionLimits {
+    generations?: number;
+    before?: number;
+}
+
+/** What a direction found in its last `days` days: sessions, persons, sources, and (some of) those persons' REFNs. */
+export interface DirectionFound {
+    days: number;
+    sessions: number;
+    persons: number;
+    sources: number;
+    people: string[];
+}
+
+/** What the research's bridge can do with the directions (`/status.caps`, Strom Research 1.26). */
+export interface ResearchCaps {
+    /** Create, edit, set the state and the order through the bridge (`POST /directions…`). */
+    directionsWrite: boolean;
+    /** `researches[]` comes in the order of work, each with `order`; `POST /directions/order`. */
+    directionsOrder: boolean;
+    /** What the order means for the queue: more time on the top ones, or one after another (absent: not said). */
+    orderMode?: 'weight' | 'strict';
+    /** The kinds the bridge creates. */
+    directionKinds: LiveDirectionKind[];
+    /** A second direction of the same person and kind is created. */
+    duplicateDirections: boolean;
+    /** Branches outside the directions, their choices and the reason of a task's place. */
+    offLineBranches: boolean;
 }
 
 /** The bridge's /status (and the `hello` event), checked and cleaned. */
@@ -1633,6 +1678,8 @@ export interface LiveStatus {
     storiesHistory?: boolean;
     /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
     busy?: LiveBusy;
+    /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
+    caps?: ResearchCaps;
 }
 
 /** How often the research looks for history (`/status.experiments.historyPace`). */
@@ -2028,6 +2075,18 @@ export interface LiveQueueItem {
 export const TASKS_OFF_LINE_FEATURE = 'tasks.offLine';
 /** `/status.features`: the status says how many sessions and runs work now (`busy`). */
 export const STATUS_BUSY_FEATURE = 'status.busy';
+/** `/status.features`: directions are created and edited through the bridge (spec 038). */
+export const DIRECTIONS_EDIT_FEATURE = 'directions.edit';
+/** `/status.features`: the directions' order is written through the bridge. */
+export const DIRECTIONS_ORDER_FEATURE = 'directions.order';
+/** `/status.features`: a direction says what it found in its last days (`found`). */
+export const DIRECTIONS_FOUND_FEATURE = 'directions.found';
+/** `/status.features`: who is in which direction (`GET /directions/people`). */
+export const DIRECTIONS_PEOPLE_FEATURE = 'directions.people';
+/** `/status.features`: branches outside the directions (`offLine.branches`, `GET|POST /offline…`). */
+export const OFF_LINE_BRANCHES_FEATURE = 'offLine.branches';
+/** `/status.features`: a task's own place in the queue (`POST /queue/<T…>`, `queue[].why`). */
+export const QUEUE_OWN_FEATURE = 'queue.own';
 
 /** What works in the research now (`/status.busy`). */
 export interface LiveBusy {
@@ -2340,9 +2399,76 @@ export function sanitizeDirections(value: unknown): LiveDirection[] {
         const lastAt = last ? cleanText(last.at, 40) : '';
         const lastText = last ? cleanText(last.text, MAX_DIRECTION_NOTE) : '';
         if (lastText && Number.isFinite(Date.parse(lastAt))) d.last = { at: lastAt, text: lastText };
+        const order = asCount(r.order);
+        if (order !== null && order >= 1) d.order = order;
+        const limits = sanitizeDirectionLimits(r.limits);
+        if (limits) d.limits = limits;
+        const question = cleanText(r.question, MAX_TEXT);
+        if (question) d.question = question;
+        const review = asRecord(r.review);
+        if (review && typeof review.scope === 'string' && REVIEW_SCOPES.includes(review.scope)) d.review = { scope: review.scope as ResearchReviewScope };
+        const created = cleanText(r.created, 40);
+        if (Number.isFinite(Date.parse(created))) d.created = created;
+        const parent = researchDirectionRef(r.parent);
+        if (parent && parent !== id) d.parent = parent;
+        const found = sanitizeDirectionFound(r.found);
+        if (found) d.found = found;
         out.push(d);
     }
     return out;
+}
+
+/** A direction's `limits`: generations 1–99, a year 1000–2100; null when neither is valid. */
+export function sanitizeDirectionLimits(value: unknown): DirectionLimits | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const gens = asCount(r.generations);
+    const before = asCount(r.before);
+    const out: DirectionLimits = {
+        ...(gens !== null && gens >= 1 && gens <= 99 ? { generations: gens } : {}),
+        ...(before !== null && before >= 1000 && before <= 2100 ? { before } : {}),
+    };
+    return out.generations !== undefined || out.before !== undefined ? out : null;
+}
+
+/** Most persons of `found.people` taken (the bridge sends at most 50). */
+const MAX_FOUND_PEOPLE = 50;
+
+/** A direction's `found`: counts (all valid) and the persons' REFNs; null when anything is wrong or nothing was found. */
+export function sanitizeDirectionFound(value: unknown): DirectionFound | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const days = asCount(r.days);
+    const sessions = asCount(r.sessions);
+    const persons = asCount(r.persons);
+    const sources = asCount(r.sources);
+    if (days === null || days < 1 || sessions === null || persons === null || sources === null) return null;
+    if (sessions + persons + sources === 0) return null;
+    const people = Array.isArray(r.people)
+        ? [...new Set(r.people.slice(0, MAX_FOUND_PEOPLE).map(researchPersonRef).filter((x): x is string => !!x))] : [];
+    return { days, sessions, persons, sources, people };
+}
+
+const CAP_KINDS: readonly string[] = ['ancestors', 'descendants', 'question', 'person'];
+
+/**
+ * `/status.caps`: what the bridge does with the directions. Untrusted: each
+ * field read only when of its type. Null when it says nothing (an older
+ * research, an archive, one waiting for its agent).
+ */
+export function sanitizeResearchCaps(value: unknown): ResearchCaps | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const kinds = Array.isArray(r.directionKinds)
+        ? [...new Set(r.directionKinds.filter((k): k is LiveDirectionKind => typeof k === 'string' && CAP_KINDS.includes(k)))] : [];
+    return {
+        directionsWrite: r.directionsWrite === true,
+        directionsOrder: r.directionsOrder === true,
+        ...(r.orderMode === 'weight' || r.orderMode === 'strict' ? { orderMode: r.orderMode } : {}),
+        directionKinds: kinds,
+        duplicateDirections: r.duplicateDirections === true,
+        offLineBranches: r.offLineBranches === true,
+    };
 }
 
 /** `update: { version }`: a newer research, or null. */
@@ -2516,6 +2642,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...experimentsSaid(r, features),
         ...qualitySaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
+        ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
     };
 }
 

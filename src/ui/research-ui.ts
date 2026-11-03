@@ -38,7 +38,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -143,6 +143,8 @@ export interface LiveSession {
     lastIntake: LiveIntake | null;
     /** The research's directions (empty: an older research). */
     researches: LiveDirection[];
+    /** What the bridge does with the directions (its last status's `caps`; absent: an older research). */
+    caps?: ResearchCaps;
     /** Sections the panel folded by itself for lack of room (not remembered). */
     autoCollapsed: Set<LiveSectionKey>;
     /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
@@ -2471,6 +2473,7 @@ export const researchUiMethods = uiModule({
                 spend: status.spend,
                 lastIntake: status.lastIntake,
                 researches: status.researches,
+                ...(status.caps ? { caps: status.caps } : {}),
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
                 waitingView: newWaitingView(),
@@ -2686,6 +2689,7 @@ export const researchUiMethods = uiModule({
         s.queue = status.queue;
         s.queueMore = status.queueMore;
         s.researches = status.researches;
+        s.caps = status.caps;
         s.update = status.update;
         s.busy = status.busy;
         s.spend = status.spend;
