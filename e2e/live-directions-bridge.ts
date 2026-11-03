@@ -130,6 +130,8 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
             q.own = body.do;
             q.why = { kind: 'own', do: body.do };
         }
+        // The count of tasks with a manual place follows.
+        if (b.offLine) b.offLine.ownTasks = b.queue.filter(x => x.own).length;
         const { whyBefore: _w, ...sent } = q;
         return { status: 200, body: { task: sent, head: 'h1', parent: 'h1' } };
     }

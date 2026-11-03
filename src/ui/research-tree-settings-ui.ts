@@ -271,6 +271,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${originalsHtml}
                 <div class="research-images-host" id="research-images-host"></div>
                 <div class="research-stories-host" id="research-stories-host"></div>
+                ${archive || agentAway ? '' : `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>`}
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
@@ -394,9 +395,15 @@ export const researchTreeSettingsMethods = uiModule({
         stories.rid = link.id;
         delete stories.note; delete stories.want; delete stories.busy;
         this.renderResearchStoriesRow();
+        // Work outside the directions (§9.5): the same condition as the transcripts, with the research's branches.
+        this.startOffLineSettings(link.id);
         if (!storiesListening) {
             storiesListening = true;
-            onBridgeStatus((rid) => { if (rid === stories.rid) this.renderResearchStoriesRow(); });
+            onBridgeStatus((rid) => {
+                if (rid !== stories.rid) return;
+                this.renderResearchStoriesRow();
+                this.renderOffLineSettings();
+            });
         }
         const historyBtn = overlay.querySelector<HTMLButtonElement>('#research-read-history');
         if (historyBtn) void this.fillReadHistoryRow(historyBtn, treeId);

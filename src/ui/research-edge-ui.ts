@@ -6,7 +6,7 @@
  */
 
 import { researchActionLabel } from './research-open-mark.js';
-import { researchLinkMark } from '../research-link.js';
+import { LiveDirection, researchLinkMark } from '../research-link.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -20,6 +20,8 @@ import {
 import { researchCardInfoNow } from '../card-signals.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
+import { liveSession } from './research-ui.js';
+import { directionProblemText } from './research-directions-ui.js';
 
 const BUBBLE_ID = 'research-edge-bubble';
 /** The view links' chain confirmation (src/ui/view-links-ui.ts): a pinned bubble lets it have the keyboard. */
@@ -498,8 +500,11 @@ export const researchEdgeUiMethods = uiModule({
                 actions.push(`<button type="button" class="secondary rep-action" data-do="review">${researchActionLabel(re.review, researchLinkMark('review'))}</button>`);
             }
             const pausedOrDone = edge.scope === 'paused' || (next === 'held' && edge.tasks.some(t => t.held === 'paused' || t.held === 'done'));
-            if (pausedOrDone && edge.research && this.researchLinkAvailable('direction')) {
-                actions.push(`<button type="button" class="secondary rep-action" data-do="resume">${researchActionLabel(re.resume, researchLinkMark('direction', {}))}</button>`);
+            // Through the bridge of a research that manages its directions (no mark), else in its terminal.
+            const viaBridge = !!edge.research && !!this.edgeBridgeDirection(edge.research);
+            if (pausedOrDone && edge.research && (viaBridge || this.researchLinkAvailable('direction'))) {
+                actions.push(`<button type="button" class="secondary rep-action" data-do="resume">${viaBridge
+                    ? esc(re.resume) : researchActionLabel(re.resume, researchLinkMark('direction', {}))}</button>`);
             }
             const waitingTask = edge.tasks.find(t => t.stat === 'waiting') ?? (next === 'waiting' ? edge.tasks[0] : undefined);
             if (waitingTask && this.researchLinkAvailable('task')) {
@@ -543,13 +548,53 @@ export const researchEdgeUiMethods = uiModule({
                     const url = this.activeResearchLink('review', { person, scope: 'person' });
                     if (url) this.launchResearchLink(url);
                 } else if (what === 'resume' && edge?.research) {
-                    this.runDirection(edge.research, 'resume');
+                    const d = this.edgeBridgeDirection(edge.research);
+                    if (d) void this.resumeEdgeDirection(btn, d);
+                    else this.runDirection(edge.research, 'resume');
                 } else if (what === 'task' && btn.dataset.task) {
                     const url = this.activeResearchLink('task', { task: btn.dataset.task });
                     if (url) this.launchResearchLink(url);
                 }
             };
         });
+    },
+
+    /** The followed research's direction to change through its bridge (null: an older research, or one it does not list). */
+    edgeBridgeDirection(id: string): LiveDirection | null {
+        if (!this.managesDirections()) return null;
+        return liveSession()?.researches.find(d => d.id === id) ?? null;
+    },
+
+    /**
+     * Resume a paused (or ended) direction from the person's research edge
+     * through the bridge: the toast with Undo as in the Overview; a refusal
+     * said under the actions, the button there to try again.
+     */
+    async resumeEdgeDirection(btn: HTMLButtonElement, d: LiveDirection): Promise<void> {
+        const actions = btn.closest<HTMLElement>('.rep-actions');
+        actions?.parentElement?.querySelector('.rep-problem')?.remove();
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        const ok = await this.changeDirectionState(d, 'resume');
+        btn.removeAttribute('aria-busy');
+        if (!btn.isConnected) return;
+        if (ok) {
+            // Running again: nothing to resume here any more.
+            const next = actions?.querySelector<HTMLButtonElement>('.rep-action:not([data-do="resume"])');
+            btn.remove();
+            if (actions && !actions.querySelector('.rep-action')) actions.remove();
+            next?.focus({ preventScroll: true });
+            return;
+        }
+        btn.disabled = false;
+        const s = liveSession();
+        const box = document.createElement('div');
+        box.className = 'research-direction__problem is-danger rep-problem';
+        box.setAttribute('role', 'alert');
+        box.textContent = directionProblemText(d.id)
+            || (s && s.lostSince !== null ? strings.live.dirBridgeDown : strings.live.dirNotSaved);
+        actions?.after(box);
+        btn.focus({ preventScroll: true });
     },
 
     // ==================== SETTINGS → TREE ====================

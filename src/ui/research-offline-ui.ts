@@ -15,7 +15,7 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { Person } from '../types.js';
 import {
-    LiveDirection, LiveQueueItem, LiveWaiting, LiveWorker, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
+    LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveSession } from './research-ui.js';
@@ -23,8 +23,9 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
-    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, setBranchMode, setTaskOrder,
+    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, setBranchMode, setOffLineTree, setTaskOrder,
 } from '../research-directions-write.js';
+import { bridgeBase } from './history-ui.js';
 import { activeDirections, directionRefusedText, setQueueDirectionFilter } from './research-directions-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -179,6 +180,60 @@ function placeBy(anchor: HTMLElement, box: HTMLElement, alignRight: boolean): vo
     const top = below + box.offsetHeight > window.innerHeight - 8 ? Math.max(8, rect.top - box.offsetHeight - 4) : below;
     box.style.left = `${Math.round(left)}px`;
     box.style.top = `${Math.round(top)}px`;
+}
+
+// ==================== RESEARCH FOR THIS TREE: WORK OUTSIDE THE DIRECTIONS ====================
+
+/** Where the settings' group says a refusal: a card ("mode:last"), the switch ("suggest"), a branch ("branch:B-P0031") or the tasks. */
+interface SettingsProblem extends Problem { at: string }
+
+/**
+ * The group "Work outside the directions" in Research for this tree (§9.5):
+ * the research it is for, what was written here and the research has not
+ * said yet (a research not followed says it at its next status), the write
+ * on its way and a refusal. Forgotten when the dialog opens again.
+ */
+const offSet: {
+    rid: string;
+    mode?: OffLineMode;
+    suggest?: boolean;
+    /** Branches put back to the tree's default here (until the status says so). */
+    reset: Set<string>;
+    /** Tasks given back their place here, and the status's count when that was written. */
+    tasks: { ids: Set<string>; at: number } | null;
+    busy: string | null;
+    problem: SettingsProblem | null;
+    html: string;
+} = { rid: '', reset: new Set(), tasks: null, busy: null, problem: null, html: '' };
+
+const SETTINGS_HOST = '#research-tree-settings-modal #research-offline-host';
+
+function forgetOffLineSettings(rid: string): void {
+    offSet.rid = rid;
+    delete offSet.mode;
+    delete offSet.suggest;
+    offSet.reset = new Set();
+    offSet.tasks = null;
+    offSet.busy = null;
+    offSet.problem = null;
+    offSet.html = '';
+}
+
+/** The research's view of work outside the directions for the settings (followed: the live session's, else its last status). */
+interface OffLineSettingsSource {
+    off: LiveOffLine;
+    queue: readonly LiveQueueItem[];
+    base: string | null;
+    up: boolean;
+    live: LiveSession | null;
+}
+
+/** A write's refusal: a busy research or no answer can be tried again. */
+function settingsProblem(at: string, r: DirectionWriteRefused, retry: () => void): SettingsProblem {
+    return {
+        at, text: directionRefusedText(r), tone: r.code === 'busy' ? 'warn' : 'danger',
+        ...(r.code === 'busy' || r.code === 'network' || r.code === 'failed' ? { retry } : {}),
+    };
 }
 
 export const researchOffLineMethods = uiModule({
@@ -810,5 +865,302 @@ export const researchOffLineMethods = uiModule({
         this.showToast(message, 6000, { kind: 'direction', ...(undo ? { action: undo } : {}) });
         this.liveStatusSoon(s);
         return true;
+    },
+
+    // ==================== RESEARCH FOR THIS TREE: WORK OUTSIDE THE DIRECTIONS ====================
+
+    /** Where the settings' group reads work outside the directions (null: the research does not show it by branches). */
+    offLineSettingsSource(rid: string): OffLineSettingsSource | null {
+        const s = liveSession();
+        const live = s && !s.ended && s.researchId.toLowerCase() === rid.toLowerCase() ? s : null;
+        if (live) {
+            return offLineShown(live)
+                ? { off: live.offLine!, queue: live.queue, base: live.bridge.base, up: live.lostSince === null, live } : null;
+        }
+        const st = this.researchStatusOf(rid);
+        if (!st?.caps?.offLineBranches || !st.offLine || st.researches.length < 2) return null;
+        return { off: st.offLine, queue: st.queue, base: bridgeBase(rid), up: this.researchBridgeUp(rid), live: null };
+    },
+
+    /** The dialog opened (again): what was written in it before is forgotten. */
+    startOffLineSettings(rid: string): void {
+        forgetOffLineSettings(rid);
+        this.renderOffLineSettings();
+    },
+
+    /**
+     * §9.5 "Work outside the directions" in Research for this tree: the
+     * tree's choice as four cards (now and then with the research's share,
+     * at the end, as usual, never), what it applies to, the growing
+     * branches' question (not with never), the branches with their own
+     * choice and the tasks with a manual place, each with Reset to default.
+     * Written at once; a refusal under its card (the choice goes back).
+     * Drawn again only when something in it changed (focus kept).
+     */
+    renderOffLineSettings(): void {
+        const host = document.querySelector<HTMLElement>(SETTINGS_HOST);
+        if (!host) return;
+        const rid = host.dataset.research ?? '';
+        if (offSet.rid !== rid) forgetOffLineSettings(rid);
+        const src = this.offLineSettingsSource(rid);
+        if (!src) {
+            if (host.firstChild) host.replaceChildren();
+            offSet.html = '';
+            return;
+        }
+        const { off } = src;
+        const L = strings.live;
+        // What the research says settles what was written here.
+        if (offSet.mode !== undefined && off.mode === offSet.mode && offSet.busy === null) delete offSet.mode;
+        if (offSet.suggest !== undefined && off.suggest === offSet.suggest && offSet.busy === null) delete offSet.suggest;
+        for (const id of [...offSet.reset]) if (!off.branches.find(b => b.id === id)?.own) offSet.reset.delete(id);
+        if (offSet.tasks && off.ownTasks !== offSet.tasks.at) offSet.tasks = null;
+        const mode = offSet.mode ?? off.mode;
+        const suggest = offSet.suggest ?? off.suggest;
+        const can = src.up && !!src.base;
+        const p = offSet.problem;
+
+        const group = el('fieldset', 'research-transcripts research-offline-settings');
+        if (offSet.busy) group.setAttribute('aria-busy', 'true');
+        group.appendChild(el('legend', undefined, L.setOutTitle));
+        group.appendChild(el('p', 'research-offline-settings__intro', L.setOutIntro));
+        const desc: Record<OffLineMode, string> = {
+            occasional: L.setOutOcc(off.share), last: L.setOutLast, normal: L.setOutNorm, never: L.setOutNever,
+        };
+        for (const m of OFF_LINE_MODES) {
+            const card = el('label', 'research-transcripts-card research-offline-settings__card');
+            const input = el('input');
+            input.type = 'radio';
+            input.name = 'research-offline-mode';
+            input.value = m;
+            input.dataset.key = `mode:${m}`;
+            if (m === mode) input.setAttribute('checked', '');
+            if (!can) input.disabled = true;
+            input.addEventListener('change', () => { if (input.checked) void this.setOffLineSettingsMode(m); });
+            const text = el('span', 'research-transcripts-text');
+            const title = el('span', 'research-transcripts-title', L.offModeCap[m]);
+            if (m === 'occasional') title.append(' ', el('span', 'research-transcripts-default', strings.treeSettings.default));
+            text.append(title, el('span', 'research-transcripts-desc', desc[m]));
+            card.append(input, text);
+            group.appendChild(card);
+            if (p?.at === `mode:${m}`) group.appendChild(problemBox(p));
+        }
+        const taken = off.branches.filter(b => b.mode !== 'line' && b.mode !== 'never').length;
+        group.appendChild(el('p', 'research-offline-settings__affects', L.setOutAffects(off.queued || off.tasks, taken)));
+
+        // The growing branches' question: none with never.
+        const never = mode === 'never';
+        const row = el('label', 'settings-checkbox research-offline-settings__suggest');
+        const box = el('input');
+        box.type = 'checkbox';
+        box.id = 'research-offline-suggest';
+        box.dataset.key = 'suggest';
+        if (suggest && !never) box.setAttribute('checked', '');
+        if (!can || never) box.disabled = true;
+        box.addEventListener('change', () => void this.setOffLineSettingsSuggest(box.checked));
+        const boxText = el('span', 'settings-text');
+        boxText.append(el('span', 'settings-name', L.setSuggest), el('span', 'settings-desc', never ? L.setSuggestNever : L.setSuggestDesc));
+        row.append(box, boxText);
+        group.appendChild(row);
+        if (p?.at === 'suggest') group.appendChild(problemBox(p));
+
+        // Branches with their own choice (the ones added to a direction are shown at it), tasks with a manual place.
+        const own = off.branches.filter(b => b.own && b.mode !== 'line' && !offSet.reset.has(b.id));
+        const ownIds = src.queue.filter(q => q.own && !offSet.tasks?.ids.has(q.id)).map(q => q.id);
+        const ownTasks = offSet.tasks ? Math.max(0, offSet.tasks.at - offSet.tasks.ids.size) : off.ownTasks;
+        if (own.length > 0 || ownTasks > 0) {
+            const list = el('div', 'research-offline-settings__own');
+            if (own.length > 0) list.appendChild(el('div', 'research-offline-settings__own-head', L.setOwnChoice));
+            for (const b of own) {
+                const line = el('div', 'research-offline-settings__row');
+                line.dataset.branch = b.id;
+                line.appendChild(el('span', 'research-offline-settings__row-text',
+                    L.setOwnRow(branchName(b.id, b.person), b.mode === 'never' ? L.offNotResearched : L.offMode[b.mode as OffLineMode])));
+                if (can) {
+                    const reset = el('button', 'link-button research-offline-settings__reset', L.branchReset);
+                    reset.type = 'button';
+                    reset.dataset.do = 'reset-branch';
+                    reset.dataset.key = `branch:${b.id}`;
+                    reset.addEventListener('click', () => void this.resetOffLineSettingsBranch(b.id));
+                    line.appendChild(reset);
+                }
+                list.appendChild(line);
+                if (p?.at === `branch:${b.id}`) list.appendChild(problemBox(p));
+            }
+            if (ownTasks > 0) {
+                const line = el('div', 'research-offline-settings__row research-offline-settings__tasks');
+                line.dataset.tasks = ownIds.join(' ');
+                line.appendChild(el('span', 'research-offline-settings__row-text', L.setManualTasks(ownTasks)));
+                if (can && ownIds.length > 0) {
+                    const reset = el('button', 'link-button research-offline-settings__reset', L.branchReset);
+                    reset.type = 'button';
+                    reset.dataset.do = 'reset-tasks';
+                    reset.dataset.key = 'tasks';
+                    reset.addEventListener('click', () => void this.resetOffLineSettingsTasks());
+                    line.appendChild(reset);
+                }
+                list.appendChild(line);
+                if (p?.at === 'tasks') list.appendChild(problemBox(p));
+            }
+            group.appendChild(list);
+        }
+        if (!src.up) group.appendChild(el('p', 'research-stories-note research-offline-settings__down', strings.history.storiesBridgeDown));
+
+        const html = group.outerHTML;
+        if (html === offSet.html && host.firstChild) return;
+        offSet.html = html;
+        const a = document.activeElement as HTMLElement | null;
+        const key = a && host.contains(a) ? a.dataset.key ?? (a.classList.contains('research-direction__retry') ? 'retry' : '') : null;
+        host.replaceChildren(group);
+        group.querySelectorAll<HTMLButtonElement>('.research-direction__retry').forEach(b => { b.dataset.key = 'retry'; });
+        if (key !== null) {
+            const target = (key ? group.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]:not(:disabled)`) : null)
+                ?? group.querySelector<HTMLElement>('input[name="research-offline-mode"]:checked:not(:disabled)');
+            target?.focus({ preventScroll: true });
+        }
+    },
+
+    /** The tree's choice of how work outside the directions is taken (a card picked). */
+    async setOffLineSettingsMode(m: OffLineMode): Promise<void> {
+        const src = this.offLineSettingsSource(offSet.rid);
+        if (!src || offSet.busy || m === (offSet.mode ?? src.off.mode)) { this.renderOffLineSettings(); return; }
+        await this.writeOffLineSettingsTree(`mode:${m}`, { mode: m }, () => void this.setOffLineSettingsMode(m));
+    },
+
+    /** The growing branches' question on or off. */
+    async setOffLineSettingsSuggest(on: boolean): Promise<void> {
+        const src = this.offLineSettingsSource(offSet.rid);
+        if (!src || offSet.busy || on === (offSet.suggest ?? src.off.suggest)) { this.renderOffLineSettings(); return; }
+        await this.writeOffLineSettingsTree('suggest', { suggest: on }, () => void this.setOffLineSettingsSuggest(on));
+    },
+
+    /** `POST /offline` at once: shown chosen while on its way, back to what the research says when refused. */
+    async writeOffLineSettingsTree(at: string, body: { mode?: OffLineMode; suggest?: boolean }, retry: () => void): Promise<void> {
+        const rid = offSet.rid;
+        const src = this.offLineSettingsSource(rid);
+        if (!src?.base || !src.up) { this.renderOffLineSettings(); return; }
+        const base = src.base;
+        offSet.busy = at;
+        offSet.problem = null;
+        if (body.mode) offSet.mode = body.mode;
+        if (body.suggest !== undefined) offSet.suggest = body.suggest;
+        this.renderOffLineSettings();
+        const head = await this.researchHeadBeforeWrite(rid, { ask: true, base });
+        const r = await withBusyRetry(() => setOffLineTree(base, body));
+        if (offSet.rid !== rid) return;
+        offSet.busy = null;
+        if (!r.ok) {
+            if (body.mode) delete offSet.mode;
+            if (body.suggest !== undefined) delete offSet.suggest;
+            offSet.problem = settingsProblem(at, r, retry);
+            this.renderOffLineSettings();
+            return;
+        }
+        if (r.head) this.researchTakeOwnWriteHead(rid, head, r.head, r.parent);
+        const live = src.live && liveSession() === src.live && !src.live.ended ? src.live : null;
+        if (live?.offLine) {
+            const said = r.offLine;
+            const mode = said?.mode ?? body.mode ?? live.offLine.mode;
+            live.offLine = {
+                ...live.offLine,
+                mode,
+                own: said?.own ?? (body.mode ? true : live.offLine.own),
+                share: said?.share ?? live.offLine.share,
+                suggest: said?.suggest ?? body.suggest ?? live.offLine.suggest,
+                // Branches without their own choice follow the tree's.
+                branches: live.offLine.branches.map(b => b.own || b.mode === 'line' ? b : { ...b, mode }),
+            };
+            this.redrawDirections();
+            this.liveStatusSoon(live);
+        }
+        this.renderOffLineSettings();
+    },
+
+    /** A branch with its own choice back to the tree's default (`POST /offline/<B…>` `{mode: 'default'}`). */
+    async resetOffLineSettingsBranch(id: string): Promise<void> {
+        const rid = offSet.rid;
+        const src = this.offLineSettingsSource(rid);
+        if (!src?.base || !src.up || offSet.busy) { this.renderOffLineSettings(); return; }
+        const base = src.base;
+        const at = `branch:${id}`;
+        offSet.busy = at;
+        offSet.problem = null;
+        this.renderOffLineSettings();
+        const head = await this.researchHeadBeforeWrite(rid, { ask: true, base });
+        const r = await withBusyRetry(() => setBranchMode(base, id, 'default'));
+        if (offSet.rid !== rid) return;
+        offSet.busy = null;
+        // Gone meanwhile (done, or in a direction): nothing to reset.
+        const gone = !r.ok && r.code === 'none' && r.errorCode !== 'directions.none';
+        if (!r.ok && !gone) {
+            offSet.problem = settingsProblem(at, r, () => void this.resetOffLineSettingsBranch(id));
+            this.renderOffLineSettings();
+            return;
+        }
+        if (r.ok && r.head) this.researchTakeOwnWriteHead(rid, head, r.head, r.parent);
+        offSet.reset.add(id);
+        const live = src.live && liveSession() === src.live && !src.live.ended ? src.live : null;
+        if (live?.offLine) {
+            const off = live.offLine;
+            live.offLine = {
+                ...off,
+                branches: off.branches.map(b => b.id !== id ? b
+                    : r.ok && r.branch?.id === id ? r.branch : { ...b, mode: off.mode, own: false, line: undefined }),
+            };
+            this.redrawDirections();
+            this.liveStatusSoon(live);
+        }
+        this.renderOffLineSettings();
+    },
+
+    /**
+     * The tasks with a manual place back to the queue's order: the bridge
+     * resets one task at a time (`POST /queue/<T…>` `{do: 'default'}`), each
+     * in the queue as last said; one the agent works on now keeps its place
+     * (said under the row), a refusal stops the rest (Try again goes on).
+     */
+    async resetOffLineSettingsTasks(): Promise<void> {
+        const rid = offSet.rid;
+        const src = this.offLineSettingsSource(rid);
+        if (!src?.base || !src.up || offSet.busy) { this.renderOffLineSettings(); return; }
+        const base = src.base;
+        const ids = src.queue.filter(q => q.own && !offSet.tasks?.ids.has(q.id)).map(q => q.id);
+        if (ids.length === 0) return;
+        offSet.busy = 'tasks';
+        offSet.problem = null;
+        offSet.tasks ??= { ids: new Set(), at: src.off.ownTasks };
+        const done = offSet.tasks;
+        this.renderOffLineSettings();
+        let head = await this.researchHeadBeforeWrite(rid, { ask: true, base });
+        let doing = false;
+        for (const id of ids) {
+            const r = await withBusyRetry(() => setTaskOrder(base, id, 'default'));
+            if (offSet.rid !== rid) return;
+            if (!r.ok && r.errorCode === 'queue.doing') { doing = true; continue; }
+            if (!r.ok && r.code !== 'none') {
+                offSet.problem = settingsProblem('tasks', r, () => void this.resetOffLineSettingsTasks());
+                break;
+            }
+            done.ids.add(id);
+            if (r.ok && r.head) {
+                this.researchTakeOwnWriteHead(rid, head, r.head, r.parent);
+                head = r.head;
+            }
+        }
+        offSet.busy = null;
+        if (doing && !offSet.problem) offSet.problem = { at: 'tasks', text: strings.live.taskDoing, tone: 'warn' };
+        const live = src.live && liveSession() === src.live && !src.live.ended ? src.live : null;
+        if (live?.offLine && done.ids.size > 0) {
+            live.queue = live.queue.map(q => {
+                if (!done.ids.has(q.id) || !q.own) return q;
+                const { own: _own, ...rest } = q;
+                return rest.why?.kind === 'own' ? (({ why: _why, ...plain }) => plain)(rest) : rest;
+            });
+            live.offLine = { ...live.offLine, ownTasks: Math.max(0, live.offLine.ownTasks - done.ids.size) };
+            offSet.tasks = null;
+            this.renderLivePanel();
+            this.liveStatusSoon(live);
+        }
+        this.renderOffLineSettings();
     },
 });

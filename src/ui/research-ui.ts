@@ -3169,6 +3169,8 @@ export const researchUiMethods = uiModule({
         // The switcher's marks follow the live status (in place, after this redraw).
         this.refreshResearchMarks();
         this.noteResearchMarksDrawn();
+        // Research for this tree, when open: its work outside the directions follows the status.
+        this.renderOffLineSettings();
         // Following the agent in the tree reacts to every status and change (after this redraw).
         queueMicrotask(() => this.syncLiveFollow());
         const s = live;

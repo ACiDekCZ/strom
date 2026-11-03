@@ -279,6 +279,11 @@ function limitTexts(d: LiveDirection): string[] {
     return out;
 }
 
+/** What a refused write of a direction said at its row ('' none), for an action elsewhere to say it too. */
+export function directionProblemText(id: string): string {
+    return rowProblems.get(id)?.text ?? '';
+}
+
 /** What a refused direction write says at its row or in its form. */
 export function directionRefusedText(r: DirectionWriteRefused): string {
     const L = strings.live;
