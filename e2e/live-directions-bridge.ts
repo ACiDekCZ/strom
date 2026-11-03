@@ -63,6 +63,11 @@ export interface ManagedBridge {
     statusAsks: number;
     /** The bridge does not answer (every request refused). */
     down: boolean;
+    /** `/status.offLine` (null: none sent); its branches change with the writes. */
+    offLine: Record<string, unknown> | null;
+    /** `/status.queue` and `/status.waiting` (writes change them). */
+    queue: Record<string, unknown>[];
+    waiting: Record<string, unknown>[];
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -79,7 +84,65 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
         }
         return { status: 200, body: { people } };
     }
+    const branches = (b.offLine?.branches ?? []) as Record<string, unknown>[];
+    const branchGet = /^offline\/(B-P\d+)$/.exec(path);
+    if (method === 'GET' && branchGet) {
+        const br = branches.find(x => x.id === branchGet[1]);
+        if (!br) return { status: 404, body: { error: 'offline.none' } };
+        return { status: 200, body: { branch: br, tasks: b.queue.filter(q => q.branch === br.id).map(q => ({ id: q.id, text: q.text })) } };
+    }
     if (method !== 'POST') return { status: 404, body: { error: 'not.found' } };
+    // Work outside the directions (spec 038 K7): a branch's choice, the tree's, a task's own place, a growing branch's answer.
+    const setBranch = (br: Record<string, unknown>, mode: string, line?: string): void => {
+        if (mode === 'default') {
+            br.mode = (b.offLine!.mode as string) ?? 'occasional';
+            br.own = false;
+            delete br.line;
+        } else {
+            br.mode = mode;
+            br.own = true;
+            if (mode === 'line') br.line = line ?? br.nearest;
+            else delete br.line;
+        }
+    };
+    if (branchGet) {
+        const br = branches.find(x => x.id === branchGet[1]);
+        if (!br) return { status: 404, body: { error: 'offline.none' } };
+        if (body.mode === 'line' && !find(body.line as string)) return { status: 404, body: { error: 'directions.none' } };
+        setBranch(br, body.mode as string, body.line as string | undefined);
+        return { status: 200, body: { branch: br, head: 'h1', parent: 'h1' } };
+    }
+    if (path === 'offline') {
+        if (typeof body.mode === 'string') b.offLine!.mode = body.mode === 'default' ? 'occasional' : body.mode;
+        if (typeof body.suggest === 'boolean') b.offLine!.suggest = body.suggest;
+        const { branches: _drop, ...rest } = b.offLine!;
+        return { status: 200, body: { offLine: rest, head: 'h1', parent: 'h1' } };
+    }
+    const task = /^queue\/(T\d+)$/.exec(path);
+    if (task) {
+        const q = b.queue.find(x => x.id === task[1]);
+        if (!q) return { status: 404, body: { error: 'queue.none' } };
+        if (body.do === 'default') {
+            delete q.own;
+            if ((q.why as { kind?: string } | undefined)?.kind === 'own') q.why = q.whyBefore ?? undefined;
+        } else {
+            if ((q.why as { kind?: string } | undefined)?.kind !== 'own') q.whyBefore = q.why;
+            q.own = body.do;
+            q.why = { kind: 'own', do: body.do };
+        }
+        const { whyBefore: _w, ...sent } = q;
+        return { status: 200, body: { task: sent, head: 'h1', parent: 'h1' } };
+    }
+    const wait = /^waiting\/(W-B-P\d+)$/.exec(path);
+    if (wait) {
+        const w = b.waiting.find(x => x.id === wait[1]);
+        if (!w) return { status: 404, body: { error: 'waiting.none', id: wait[1] } };
+        b.waiting = b.waiting.filter(x => x !== w);
+        const br = branches.find(x => x.id === w.branch);
+        if (br && body.do === 'line') setBranch(br, 'line', (body.line as string | undefined) ?? (w.research as string));
+        if (br && body.do === 'never') setBranch(br, 'never');
+        return { status: 200, body: { branch: br, answer: body.do, head: 'h1', parent: 'h1' } };
+    }
     if (path === 'directions/order') {
         const order = (body.order as string[]).filter(id => find(id));
         const ignored = (body.order as string[]).filter(id => !find(id));
@@ -137,6 +200,14 @@ export async function followManaged(page: Page, opts: {
     fastReconnect?: boolean;
     /** `/status.features` (absent: none sent). */
     features?: string[];
+    /** `/status.offLine` (absent: none sent). */
+    offLine?: Record<string, unknown>;
+    /** `/status.queue` (absent: one task of G0001). */
+    queue?: Record<string, unknown>[];
+    /** `/status.waiting` (absent: none). */
+    waiting?: Record<string, unknown>[];
+    /** The research's tree (absent: `GED`). */
+    ged?: string;
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
@@ -152,15 +223,19 @@ export async function followManaged(page: Page, opts: {
         caps: opts.caps === undefined ? CAPS : opts.caps,
         working: opts.working ?? [MANAGED_AGENT],
         writes: [], replies: [], statusAsks: 0, down: false,
+        offLine: opts.offLine ? structuredClone(opts.offLine) : null,
+        queue: structuredClone(opts.queue ?? [{ id: 'T0101', text: 'Matriky Smrkov', state: 'next', research: 'G0001' }]),
+        waiting: structuredClone(opts.waiting ?? []),
     };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
         working: b.working,
-        waiting: [],
-        queue: [{ id: 'T0101', text: 'Matriky Smrkov', state: 'next', research: 'G0001' }],
+        waiting: b.waiting,
+        queue: b.queue.map(({ whyBefore: _w, ...q }) => q),
         links: ALL_LINKS,
         researches: b.researches,
         ...(b.caps ? { caps: b.caps } : {}),
+        ...(b.offLine ? { offLine: b.offLine } : {}),
         ...(opts.features ? { features: opts.features } : {}),
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
@@ -171,11 +246,11 @@ export async function followManaged(page: Page, opts: {
             b.statusAsks++;
             return route.fulfill(json(status()));
         }
-        if (path === 'tree.ged') return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
+        if (path === 'tree.ged') return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: opts.ged ?? GED });
         if (path === 'events') {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
         }
-        if (path.startsWith('directions')) {
+        if (/^(directions|offline|queue\/|waiting\/)/.test(path)) {
             const raw = req.postData();
             const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
             b.writes.push({ method: req.method(), path, body });
