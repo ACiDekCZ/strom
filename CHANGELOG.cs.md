@@ -4,7 +4,7 @@
 
 ## 3.22.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 4. listopadu 2026.*
 
 - **Linie výzkumu**: panel *Linie* v přehledu výzkumu spravuje linie bez terminálu. *+ Nová linie* má osobu, druh (*Předci*, *Potomci* nebo *Otázka*), nepovinnou otázku, název a limity generací a let; *Upravit* je změní a linii, která už existuje, nabídne s *Ukázat ji* nebo *Založit přesto*. Založení linie nic nestojí, agent na ní začne při dalším běhu výzkumu.
 - **Pořadí práce**: pořadí linií je pořadí, v jakém na nich výzkum pracuje, a mění se tažením, šipkami nebo *Přesunout na začátek*. *Pozastavit* a *Znovu spustit* mají *Zpět*, *Ukončit…* se nejdřív zeptá a vezme nepovinný důvod; ukončené linie jsou sbalené na konci. U každé linie je vidět, co se na ní teď dělá, její limity a co za poslední dny našla.

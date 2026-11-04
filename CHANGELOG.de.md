@@ -4,7 +4,7 @@
 
 ## 3.22.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 4. November 2026.*
 
 - **Forschungsrichtungen**: Das Panel *Richtungen* in der Übersicht der Forschung verwaltet die Richtungen ohne Terminal. *+ Neue Richtung* nimmt eine Person, eine Art (*Vorfahren*, *Nachkommen* oder *Frage*), eine optionale Frage, einen Namen und Grenzen für Generationen und Jahre; *Bearbeiten* ändert sie, und eine schon vorhandene Richtung wird mit *Anzeigen* oder *Trotzdem anlegen* angeboten. Das Anlegen kostet nichts; der Agent beginnt damit beim nächsten Forschungslauf.
 - **Reihenfolge der Arbeit**: Die Reihenfolge der Richtungen ist die Reihenfolge, in der die Forschung an ihnen arbeitet, geändert durch Ziehen, mit den Pfeilen oder *An den Anfang*. *Pausieren* und *Neu starten* haben *Rückgängig*, *Beenden…* fragt zuerst und nimmt einen optionalen Grund; beendete Richtungen sind am Ende zusammengeklappt. Jede Richtung zeigt, woran gerade gearbeitet wird, ihre Grenzen und was sie in den letzten Tagen gefunden hat.

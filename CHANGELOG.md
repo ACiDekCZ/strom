@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 ## 3.22.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 4 November 2026.*
 
 - **Research directions**: the *Directions* panel of the research overview manages the directions without the terminal. *+ New direction* takes a person, a kind (*Ancestors*, *Descendants* or *Question*), an optional question, a name and limits of generations and years; *Edit* changes them, and a direction that already exists is offered with *Show it* or *Create anyway*. Creating a direction costs nothing; the agent starts on it in the next research run.
 - **Order of work**: the order of the directions is the order in which the research works on them, changed by dragging, with the arrows or *Move to the top*. *Pause* and *Restart* come with *Undo*, *End…* asks first and takes an optional reason; ended directions are folded at the end. Each direction shows what is being done now, its limits and what it found in the last days.

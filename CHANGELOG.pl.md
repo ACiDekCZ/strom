@@ -6,7 +6,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 ## 3.22.0
 
-*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+*Wydano 4 listopada 2026.*
 
 - **Linie badania**: panel *Linie* w przeglądzie badania zarządza liniami bez terminala. *+ Nowa linia* ma osobę, rodzaj (*Przodkowie*, *Potomkowie* lub *Pytanie*), nieobowiązkowe pytanie, nazwę i limity pokoleń i lat; *Edytuj* je zmienia, a linię, która już istnieje, proponuje z *Pokaż ją* lub *Załóż mimo to*. Założenie linii nic nie kosztuje; agent zacznie nad nią pracę przy następnym przebiegu badania.
 - **Kolejność pracy**: kolejność linii to kolejność, w jakiej badanie nad nimi pracuje, zmieniana przeciąganiem, strzałkami lub *Przenieś na początek*. *Wstrzymaj* i *Uruchom ponownie* mają *Cofnij*, *Zakończ…* najpierw pyta i przyjmuje nieobowiązkowy powód; zakończone linie są zwinięte na końcu. Przy każdej linii widać, co się w niej teraz robi, jej limity i co znalazła w ostatnich dniach.
