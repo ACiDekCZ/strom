@@ -25,9 +25,11 @@ import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnse
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
-    ImagesState, WaitActionView, imageRanges, imagesArrived, imagesState, splitWaitingActions, waitingActions, waitingGroupMissing,
+    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupMissing,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
+import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
+import { clearOverviewImages, foldOverviewImages, overviewImagesResult } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { uiModule } from './module.js';
@@ -150,18 +152,9 @@ const answerForms = new Map<string, WaitingAnswerForm>();
 let answeringKey: string | null = null;
 /** Items whose answer met a task that waits for something else now (409 changed): the ochre note at the top. */
 const answerChanged = new Set<string>();
-/** The images state each item had at the last drawing, and the numbers that came since (until its detail folds). */
-const imagesSeen = new Map<string, ImagesState>();
-const imagesArrivals = new Map<string, { nums: number[]; at: number }>();
-/** How long the short state is lit after images arrived. */
-const ARRIVED_MS = 4000;
-/** Number chips in the book's frame at most (more: the sentence says it). */
-const MAX_SLOT_CHIPS = 24;
 /** The "More actions" menu open (the item's id) and how it is let go. */
 let moreMenuFor: string | null = null;
 let moreMenuCleanup: (() => void) | null = null;
-
-const itemKey = (s: LiveSession, id: string): string => `${s.treeId}|${id}`;
 
 /** The answer form drawn last loses no focus to a redraw: the same field, the caret where it was. */
 function keepAnswerFocus(): () => void {
@@ -182,117 +175,6 @@ function closeAnswerForm(): void {
     answerForms.get(answeringKey)?.keepDraftNow();
     answerChanged.delete(answeringKey);
     answeringKey = null;
-}
-
-/** Told to a screen reader once (images arrived). */
-function announceWaiting(text: string): void {
-    let region = document.getElementById('waiting-live-region');
-    if (!region) {
-        region = el('div', 'waiting-live-region');
-        region.id = 'waiting-live-region';
-        region.setAttribute('role', 'status');
-        region.setAttribute('aria-live', 'polite');
-        document.body.appendChild(region);
-    }
-    region.textContent = text;
-}
-
-/** What came to each item's images since the last drawing (a new status): lit for a while, said once. */
-function noteImagesArrived(s: LiveSession): void {
-    const T = strings.live.waitingTask;
-    const said: string[] = [];
-    for (const w of s.waiting) {
-        const now = imagesState(w);
-        const key = itemKey(s, w.id);
-        if (!now) continue;
-        const before = imagesSeen.get(key);
-        imagesSeen.set(key, now);
-        if (!before) continue;
-        const nums = imagesArrived(before, now);
-        if (nums.length === 0 && now.have <= before.have) continue;
-        const prev = imagesArrivals.get(key)?.nums ?? [];
-        const all = [...new Set([...prev, ...nums])].sort((a, b) => a - b);
-        imagesArrivals.set(key, { nums: all, at: Date.now() });
-        if (nums.length > 0) said.push(T.justArrived(imageRanges(nums), nums.length));
-    }
-    if (said.length > 0) announceWaiting(said.join('. '));
-}
-
-/** The short state of an item's images in its row: dots (up to 8) and how many, or which are needed. */
-function imagesShortEl(key: string, img: ImagesState): HTMLElement {
-    const T = strings.live.waitingTask;
-    const box = el('span', 'waiting-images');
-    const arrival = imagesArrivals.get(key);
-    const since = arrival ? Date.now() - arrival.at : Infinity;
-    if (img.detail !== 'unknown' && img.want !== undefined && img.want > 0 && img.want <= 8) {
-        const dots = el('span', 'img-dots');
-        dots.setAttribute('aria-hidden', 'true');
-        const nums = img.wanted && img.saved && img.wanted.length === img.want ? img.wanted : null;
-        for (let i = 0; i < img.want; i++) {
-            const on = nums ? img.saved!.includes(nums[i]) : i < img.have;
-            const dot = el('span', on ? 'img-dot is-on' : 'img-dot');
-            if (on && since < ARRIVED_MS && (nums ? arrival!.nums.includes(nums[i]) : i === img.have - 1)) {
-                dot.classList.add('is-new');
-                dot.style.animationDelay = `-${Math.round(since)}ms`;
-            }
-            dots.appendChild(dot);
-        }
-        box.appendChild(dots);
-    }
-    const missing = img.missing ?? [];
-    const text = img.detail === 'unknown' ? T.imagesUnknown(img.have)
-        : img.have > 0 || missing.length === 0 ? T.imagesShort(img.have, img.want ?? img.have)
-            : T.imagesNeeded(imageRanges(missing), missing.length);
-    const short = el('span', 'waiting-images__text', text);
-    if (since < ARRIVED_MS) {
-        short.classList.add('is-arrived');
-        short.style.animationDelay = `-${Math.round(since)}ms`;
-    }
-    box.appendChild(short);
-    if (arrival && arrival.nums.length > 0) {
-        box.appendChild(el('span', 'waiting-images__arrived', `· ${T.justArrived(imageRanges(arrival.nums), arrival.nums.length)}`));
-    }
-    return box;
-}
-
-/**
- * The state of an item's images in its detail: the book's frame with a chip
- * per number (saved / missing) and a sentence; a count not known: the
- * sentence and how it is finished; an older research: the sentence alone.
- */
-function appendImagesDetail(host: HTMLElement, img: ImagesState): void {
-    const T = strings.live.waitingTask;
-    const missing = img.missing ?? [];
-    if (img.detail === 'unknown') {
-        host.appendChild(el('p', 'wait-book__state', T.imagesUnknown(img.have)));
-        host.appendChild(el('p', 'research-overview__waiting-hint wait-book__hint', T.unknownHint));
-        return;
-    }
-    const want = img.want ?? img.have;
-    const sentence = missing.length === 0 ? T.imagesStateOld(img.have, want)
-        : img.have > 0 ? T.imagesState(img.have, want, imageRanges(missing), missing.length)
-            : T.imagesNone(imageRanges(missing), missing.length);
-    if (img.detail === 'old') {
-        host.appendChild(el('p', 'wait-book__state', sentence));
-        return;
-    }
-    const frame = el('div', 'wait-book');
-    if (img.book) {
-        frame.appendChild(el('span', 'wait-book__label', T.book));
-        frame.appendChild(el('span', 'wait-book__name', img.book));
-    }
-    if (img.wanted && img.saved && img.wanted.length <= MAX_SLOT_CHIPS) {
-        const slots = el('ul', 'wait-book__slots');
-        for (const n of img.wanted) {
-            const saved = img.saved.includes(n);
-            const chip = el('li', saved ? 'wait-book__slot is-saved' : 'wait-book__slot', `${saved ? '✓' : '○'} ${n} · ${saved ? T.slotSaved : T.slotMissing}`);
-            chip.dataset.image = String(n);
-            slots.appendChild(chip);
-        }
-        frame.appendChild(slots);
-    }
-    frame.appendChild(el('p', 'wait-book__state', sentence));
-    host.appendChild(frame);
 }
 
 /** An item's action drawn by its weight: the main one filled, the next outlined, the rest as links. */
@@ -441,8 +323,9 @@ export const researchOverviewMethods = uiModule({
         s.waitingView = newWaitingView();
         s.overviewShown.clear();
         closeAnswerForm();
-        imagesArrivals.clear();
-        imagesSeen.clear();
+        clearImagesSeen();
+        clearOverviewImages();
+        this.closeWaitingAnswerSheet();
         this.closeWaitingMoreMenu();
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '0'); } catch { /* not kept */ }
@@ -960,10 +843,18 @@ export const researchOverviewMethods = uiModule({
             view.detail = open ? null : w.id;
             // One thing at a time: an answer being written closes (its draft stays); what arrived was seen.
             closeAnswerForm();
-            if (open) imagesArrivals.delete(itemKey(s, w.id));
+            if (open) {
+                forgetImagesArrived(itemKey(s, w.id));
+                foldOverviewImages(itemKey(s, w.id));
+            }
             this.renderResearchOverview();
         };
         li.appendChild(row);
+        // Files dropped on an item that takes images: its detail opens with them (spec 048 §3).
+        if (mode !== 'sheet' && waitingActions(w, { writes: this.liveWaitingWrites(s), links: false, phone: false })?.some(v => v.key === 'images')) {
+            li.classList.add('takes-images');
+            bindImagesDrop(li, (files) => this.openWaitingImages(s, w, files));
+        }
         const person = personByRefn(w.person);
         if (person) {
             li.classList.add('has-person');
@@ -1073,8 +964,22 @@ export const researchOverviewMethods = uiModule({
         const W = L.waitingWrite;
         const key = itemKey(s, w.id);
         const task = researchTaskRef(w.id);
-        // The upload area of "Add images" (spec 048 §3) comes before the answer and the actions.
-        if (answeringKey === key && task && views.some(v => v.key === 'answer' && v.via === 'bridge')) {
+        const phone = mode === 'sheet';
+        // The upload area of "Add images" (spec 048 §3): open, the actions hide meanwhile.
+        const area = !phone && views.some(v => v.key === 'images') ? this.overviewImagesArea(s, w) : null;
+        if (area) {
+            detail.appendChild(area);
+            return;
+        }
+        // How the last upload left it (until the detail folds).
+        const result = overviewImagesResult(key);
+        if (result) {
+            const line = el('p', 'waiting-images-result', result);
+            line.setAttribute('role', 'status');
+            detail.appendChild(line);
+        }
+        // The answer written in the detail (a phone: its own sheet).
+        if (!phone && answeringKey === key && task && views.some(v => v.key === 'answer' && v.via === 'bridge')) {
             detail.appendChild(this.overviewAnswerForm(s, w, task).root);
             return;
         }
@@ -1086,7 +991,7 @@ export const researchOverviewMethods = uiModule({
             } else if (v.key === 'images') {
                 list.push({ key: 'images', label: T.haveImages, run: () => this.openWaitingImages(s, w) });
             } else if (v.key === 'answer' && v.via === 'bridge') {
-                list.push({ key: 'answer', label: T.answer, run: () => this.openOverviewAnswer(s, w) });
+                list.push({ key: 'answer', label: T.answer, run: () => phone ? this.openWaitingAnswerSheet(s, w) : this.openOverviewAnswer(s, w) });
             } else if (task) {
                 const taskDo = v.key === 'answer' ? undefined : v.key;
                 const url = this.activeResearchLink('task', { task, taskDo });
@@ -1136,9 +1041,16 @@ export const researchOverviewMethods = uiModule({
         if ([...shown, ...more].some(a => a.key === 'answer' && !!a.mark)) {
             detail.appendChild(el('p', 'research-overview__waiting-hint', T.answerHintOld));
         }
-        if (mode === 'sheet' && !views.some(v => v.key === 'answer' && v.via === 'bridge')) {
-            detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
+        // A phone adds no images and answers only through the bridge: it says where the rest is done.
+        if (phone && waitingForImages(w)) detail.appendChild(el('p', 'research-overview__muted waiting-phone-note', T.phoneImages));
+        if (phone && !views.some(v => v.key === 'answer' && v.via === 'bridge')) {
+            detail.appendChild(el('p', 'research-overview__muted waiting-phone-note', T.phoneNoAnswer));
         }
+    },
+
+    /** The answer being written in the overview closes (its draft stays). */
+    closeOverviewAnswer(): void {
+        closeAnswerForm();
     },
 
     /** "Answer" through the bridge: the answer opens in the item's detail, the field focused (its draft back). */

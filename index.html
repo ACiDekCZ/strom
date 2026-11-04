@@ -16481,6 +16481,212 @@
             .waiting-answer__text { min-height: 72px; }
             .wait-book { padding: 6px 8px; gap: 2px; }
         }
+        /* "Add images" (spec 048 §3): a drop area, the files with their numbers, Send · Cancel; the progress while they go. */
+        .waiting-upload { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+        .waiting-upload [hidden] { display: none; }
+        .waiting-upload__drop {
+            display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 12px; text-align: center;
+            border: 2px dashed var(--border); border-radius: 10px; background: var(--surface-2);
+            transition: border-color 0.15s, background-color 0.15s;
+        }
+        .waiting-upload.is-over .waiting-upload__drop,
+        .waiting-upload.is-over .waiting-upload__files { border-color: var(--primary); background: var(--primary-soft); }
+        .waiting-upload__drop-text { font-size: 13.5px; font-weight: 500; color: var(--text); }
+        .waiting-upload__formats { font-size: 12px; color: var(--text-faint); }
+        .waiting-upload__files {
+            display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none;
+            border: 2px dashed transparent; border-radius: 10px;
+        }
+        .waiting-upload__file {
+            display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 6px; align-items: center;
+            padding: 8px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface);
+        }
+        .waiting-upload__file > .waiting-upload__msg,
+        .waiting-upload__file > .waiting-upload__ask,
+        .waiting-upload__file > .waiting-upload__again,
+        .waiting-upload__file > .waiting-upload__progress,
+        .waiting-upload__file > .waiting-upload__retry { grid-column: 2 / -1; }
+        .waiting-upload__file > .waiting-upload__retry { justify-self: start; }
+        .waiting-upload__ext {
+            display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px;
+            background: var(--surface-2); border: 1px solid var(--divider); color: var(--text-light);
+            font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+        }
+        .waiting-upload__main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .waiting-upload__name { font-size: 13px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+        .waiting-upload__file.is-invalid .waiting-upload__name { color: var(--text-light); }
+        .waiting-upload__size { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .waiting-upload__side { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .waiting-upload__pickbox { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .waiting-upload__num {
+            max-width: 100%; min-height: 32px; padding: 4px 8px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px;
+        }
+        .waiting-upload__num.is-missing { border: 1.5px solid var(--warn-text); }
+        .waiting-upload__num:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .waiting-upload__how { font-size: 11.5px; color: var(--text-faint); }
+        .waiting-upload__fixed { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
+        .waiting-upload__fixed.is-saved { color: var(--primary-dark); font-weight: 600; }
+        .waiting-upload__remove {
+            flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none;
+            color: var(--text-light); font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+        }
+        .waiting-upload__remove:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .waiting-upload__msg { margin: 0; font-size: 12.5px; line-height: 1.4; }
+        .waiting-upload__msg.is-error { color: var(--error-text); }
+        .waiting-upload__msg.is-warn { color: var(--warn-text); }
+        .waiting-upload__msg.is-muted { color: var(--text-light); }
+        .waiting-upload__msg.is-ok { color: var(--primary-dark); font-weight: 600; }
+        .waiting-upload__ask {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border-radius: 6px;
+            border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); background: var(--warn-soft); color: var(--warn-text);
+            font-size: 12.5px;
+        }
+        .waiting-upload__ask-text { flex: 1 1 14em; min-width: 0; font-weight: 500; }
+        .waiting-upload__replace {
+            min-height: 30px; padding: 0 12px; border: 1px solid var(--warn-text); border-radius: 6px; background: var(--surface);
+            color: var(--warn-text); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+        }
+        .waiting-upload__keep {
+            padding: 0 2px; border: 0; background: none; color: var(--warn-text); font: inherit; font-size: 12.5px;
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        .waiting-upload__replace:focus-visible, .waiting-upload__keep:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .waiting-upload__again { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+        .waiting-upload__progress { display: flex; flex-direction: column; gap: 3px; }
+        .waiting-upload__bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; box-shadow: inset 0 0 0 1px var(--divider); }
+        .waiting-upload__fill { display: block; height: 100%; background: var(--primary); transition: width 0.2s linear; }
+        .waiting-upload__progress-text { font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .waiting-upload__line { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .waiting-upload__more { align-self: flex-start; }
+        .waiting-upload__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+        .waiting-upload__warn { flex: 1 1 100%; font-size: 12.5px; font-weight: 500; color: var(--warn-text); }
+        /* In the panel's dialog (and narrow): a file's number under its name. */
+        .waiting-upload.is-narrow .waiting-upload__file { grid-template-columns: 36px minmax(0, 1fr); }
+        .waiting-upload.is-narrow .waiting-upload__side { grid-column: 2 / -1; justify-content: space-between; }
+        /* Under 520px of its own width (the 400px overlay, the docked side panel, a phone): the same. */
+        @container (max-width: 519px) {
+            .waiting-upload__file { grid-template-columns: 36px minmax(0, 1fr); }
+            .waiting-upload__side { grid-column: 2 / -1; justify-content: space-between; }
+        }
+        @media (hover: hover) {
+            .waiting-upload__remove:hover { background: var(--hover-bg); color: var(--text); }
+            .waiting-upload__replace:hover { background: var(--warn-soft); }
+        }
+        /* How the last upload left the task (in the detail until it folds). */
+        .waiting-images-result {
+            margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--primary-soft); color: var(--primary-dark);
+            font-size: 13px; font-weight: 500;
+        }
+        /* A row that takes images while files are dragged over it. */
+        .takes-images { position: relative; }
+        .takes-images.is-drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; border-radius: 8px; }
+        .waiting-drop-overlay {
+            position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: 4px 8px;
+            border-radius: 8px; background: color-mix(in srgb, var(--primary-soft) 92%, transparent); color: var(--primary-dark);
+            font-size: 13px; font-weight: 600; text-align: center; pointer-events: none;
+        }
+        /* The small panel's one action of such an item: outlined, 28px; through the bridge green, into the terminal grey with its mark. */
+        .live-waiting-answer.waiting-panel-action {
+            display: inline-flex; align-items: center; gap: 4px; min-height: 28px; box-sizing: border-box; padding: 0 9px;
+            background: transparent; font-weight: 600; text-decoration: none; white-space: nowrap;
+        }
+        .waiting-panel-action.is-bridge, .waiting-panel-action.is-web { border-color: var(--primary); color: var(--primary-dark); }
+        .waiting-panel-action.is-terminal { border-color: var(--border); color: var(--text); }
+        @media (hover: hover) {
+            .waiting-panel-action.is-bridge:hover, .waiting-panel-action.is-web:hover { background: var(--primary-soft); }
+        }
+        .live-waiting-text > .waiting-images { display: flex; flex-wrap: wrap; margin-top: 2px; font-size: 12px; }
+        /* The small panel's dialog of an item ("Add images", "Answer"): beside the panel, the task's title under its heading. */
+        .modal-overlay.waiting-dialog-overlay {
+            align-items: flex-start; justify-content: flex-end; padding: 64px 16px 16px; box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.28);
+        }
+        .waiting-dialog {
+            display: flex; flex-direction: column; width: min(400px, calc(100vw - 32px)); max-height: calc(100vh - 80px);
+            box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface);
+            color: var(--text); box-shadow: var(--shadow-lg); overflow: hidden;
+        }
+        .waiting-dialog__head { display: flex; align-items: flex-start; gap: 8px; padding: 12px 10px 8px 16px; border-bottom: 1px solid var(--divider); }
+        .waiting-dialog__titles { flex: 1; min-width: 0; }
+        .waiting-dialog__title { margin: 0; font-size: 15px; font-weight: 600; }
+        .waiting-dialog__task {
+            margin: 2px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .waiting-dialog__close {
+            flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-md); background: none;
+            color: var(--text-light); font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        .waiting-dialog__close:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .waiting-dialog__close:hover { background: var(--hover-bg); color: var(--text); } }
+        .waiting-dialog__body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+        /* The phone's answer: a full-screen sheet, Cancel · Answer · Send on top, the field filling the rest. */
+        .modal-overlay.waiting-answer-sheet {
+            position: fixed; inset: 0 0 auto 0; height: 100vh; height: 100dvh; z-index: 1010;
+            flex-direction: column; align-items: stretch; justify-content: flex-start;
+            background: var(--surface); color: var(--text);
+        }
+        .waiting-answer-sheet__head {
+            flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+            min-height: 56px; padding: 6px 12px; box-sizing: border-box; border-bottom: 1px solid var(--divider);
+            padding-top: max(6px, env(safe-area-inset-top));
+        }
+        .waiting-answer-sheet__cancel {
+            justify-self: start; min-height: 44px; padding: 0 6px; border: 0; background: none; color: var(--primary);
+            font: inherit; font-size: 15px; cursor: pointer;
+        }
+        .waiting-answer-sheet__title { margin: 0; font-size: 16px; font-weight: 600; text-align: center; }
+        .waiting-answer-sheet__send {
+            justify-self: end; min-height: 44px; padding: 0 16px; border: 1px solid var(--primary); border-radius: var(--r-md);
+            background: var(--primary); color: var(--on-primary, #fff); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .waiting-answer-sheet__send[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+        .waiting-answer-sheet__send.is-sending { opacity: 0.6; }
+        .waiting-answer-sheet__cancel:focus-visible, .waiting-answer-sheet__send:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .waiting-answer-sheet__task {
+            flex: none; margin: 0; padding: 8px 16px 0; font-size: 13px; color: var(--text-muted, var(--text-light)); overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .waiting-answer-sheet__body {
+            flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+            padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+        }
+        .waiting-answer-sheet .waiting-answer { flex: 1; min-height: 0; }
+        .waiting-answer-sheet .waiting-answer__label {
+            position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+        }
+        .waiting-answer-sheet .waiting-answer__error { order: -1; }
+        .waiting-answer-sheet .waiting-answer__text {
+            flex: 1; min-height: 96px; resize: none; border: 2px solid var(--primary); font-size: 16px;
+        }
+        .waiting-phone-note { margin: 4px 0 0; }
+        @media (pointer: coarse) {
+            .waiting-upload__remove { width: 44px; height: 44px; }
+            .waiting-upload__num { min-height: 44px; font-size: 16px; }
+            .waiting-upload__replace, .waiting-upload__keep { min-height: 44px; }
+            .waiting-dialog__close { width: 44px; height: 44px; }
+            .live-waiting-answer.waiting-panel-action { min-height: 36px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .modal-overlay.waiting-dialog-overlay { padding-top: 56px; }
+        }
+        @media (max-width: 640px) {
+            .modal-overlay.waiting-dialog-overlay { align-items: flex-end; justify-content: center; padding: 8px; }
+            .waiting-dialog { width: 100%; max-height: calc(100dvh - 16px); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal-overlay.waiting-dialog-overlay { align-items: center; justify-content: center; padding: 8px; }
+            .waiting-dialog { max-height: calc(100vh - 16px); }
+            .waiting-answer-sheet__head { min-height: 48px; }
+            .waiting-answer-sheet__task { -webkit-line-clamp: 1; padding-top: 4px; }
+            .waiting-answer-sheet .waiting-answer__hint { display: none; }
+            .waiting-answer-sheet .waiting-answer__text { min-height: 48px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .waiting-upload__drop, .waiting-upload__fill { transition: none; }
+        }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
         /* The agent's text keeps a readable width; its actions go under it when both do not fit (long de labels). */
         .research-overview__now-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }

@@ -17,10 +17,12 @@ import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
-    postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting,
+    postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting, TaskImageResult, uploadTaskImage,
 } from '../research-waiting-write.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
-import { WaitingPhase, waitingPhase } from '../research-waiting.js';
+import { WaitingPhase, imagesState, waitingPhase } from '../research-waiting.js';
+import type { UploadOutcome } from './waiting-images-upload.js';
+import { imagesSentence, itemKey, takeOwnImages } from './waiting-images-ui.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -88,7 +90,7 @@ export const researchWaitingWriteMethods = uiModule({
      * again for it. A commit of its agent meanwhile: nothing taken, the newer
      * version comes as ever.
      */
-    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult | WaitingAnswerResult): void {
+    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult | WaitingAnswerResult | TaskImageResult): void {
         if (!result.ok || !result.head) return;
         this.researchTakeOwnWriteHead(s.researchId, before, result.head, result.parent);
         if (!s.ended && TreeManager.getTreeMetadata(s.treeId)?.research?.head === result.head) s.head = result.head;
@@ -415,11 +417,40 @@ export const researchWaitingWriteMethods = uiModule({
     },
 
     /**
-     * "Add images" at an item (spec 048 §3, `data-action="images"`): the
-     * upload area in its detail. Drawn by the upload part; until then nothing.
+     * One image of "Add images" (spec 048 §3) through the bridge, its number,
+     * Replace and progress; the research's new head taken as the tree's own.
      */
-    openWaitingImages(_s: LiveSession, _w: LiveWaiting): void {
-        /* The upload area (spec 048 §3) hooks in here. */
+    async uploadWaitingImage(s: LiveSession, task: string, file: File,
+        opts: { image: number | null; replace: boolean; onProgress: (sent: number, total: number) => void }): Promise<TaskImageResult> {
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await uploadTaskImage(s.bridge.base, task, file, { ...opts, maxBytes: s.accepts?.mediaMaxBytes });
+        this.takeWaitingWriteHead(s, before, result);
+        return result;
+    },
+
+    /**
+     * "Add images" finished: the task woke with its last image (the row goes
+     * at once, the toast says so) or is gone (the row goes silently);
+     * otherwise the images saved are taken as seen here (not lit as arrived)
+     * and the sentence of how it stands comes back ("✓ 1 of 2 images saved –
+     * image 58 missing. The task keeps waiting."); null: nothing to say.
+     */
+    settleWaitingImages(s: LiveSession, w: LiveWaiting, outcome: UploadOutcome): string | null {
+        const following = stillFollowing(s);
+        if (outcome.woken || outcome.gone) {
+            writeState(s).pending.set(w.id, { phase: waitingPhase(w), gone: true, until: Date.now() + WAITING_SETTLE_MS });
+            if (following) {
+                this.reshowLiveWaiting(s);
+                this.liveStatusSoon(s);
+            }
+            if (outcome.woken) this.showToast(strings.live.waitingTask.imagesAll, 6000, { kind: 'waiting-images' });
+            return null;
+        }
+        if (following) this.liveStatusSoon(s);
+        if (outcome.saved === 0) return null;
+        const now = outcome.inbox ? imagesState({ ...w, inbox: outcome.inbox }) : null;
+        takeOwnImages(itemKey(s, w.id), now);
+        return `✓ ${now ? `${imagesSentence(now)} ` : ''}${strings.live.waitingTask.stillWaits}`;
     },
 
     /** "Add a file" at a task: an image or PDF picked here goes to the research with the task's id. */

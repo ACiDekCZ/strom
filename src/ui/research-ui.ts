@@ -1318,8 +1318,9 @@ export const researchUiMethods = uiModule({
             if (!types) return false;
             return Array.prototype.indexOf.call(types, 'Files') >= 0;
         };
+        // A file field, or a place that takes files itself (images for a waiting task): not the window's drop.
         const onFileInput = (e: Event): boolean =>
-            !!(e.target as Element | null)?.closest?.('input[type="file"]');
+            !!(e.target as Element | null)?.closest?.('input[type="file"], .takes-images, .waiting-upload');
         const modalOpen = (): boolean => !!document.querySelector('.modal-overlay.active');
         // Files reading can take (spec 013): two zones, "Read now" left and "Add to materials" right.
         let readZones = false;
@@ -3148,7 +3149,10 @@ export const researchUiMethods = uiModule({
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
             li.appendChild(text);
-            if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) {
+            const s = answerable ? liveSession() : null;
+            if (s && !s.ended && this.appendPanelWaitingTask(li, what, s, w)) {
+                // Images, a website or a check (spec 048 §7): their short state and one main action, drawn there.
+            } else if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) {
                 // A question about a place: its card, answered through the bridge.
                 const answer = el('button', 'live-waiting-answer', strings.places.waiting.answer);
                 answer.type = 'button';

@@ -193,9 +193,12 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await expect(shown.nth(2)).toHaveText('Answer');
         // No terminal answer here: no hint of it.
         await expect(item.locator('.research-overview__waiting-hint')).toHaveCount(0);
-        // "Add images" leads to the upload area (another part); it fails nowhere.
+        // "Add images" opens the upload area in the detail (the actions hide meanwhile); Cancel brings them back.
         await shown.nth(0).click();
-        await expect(item.locator('.research-overview__waiting-detail')).toBeVisible();
+        await expect(item.locator('.waiting-upload')).toBeVisible();
+        await expect(row).toHaveCount(0);
+        await item.locator('.waiting-upload__cancel').click();
+        await expect(item.locator('.waiting-upload')).toHaveCount(0);
 
         const more = row.locator('.waiting-more');
         await expect(more).toHaveAttribute('aria-haspopup', 'menu');

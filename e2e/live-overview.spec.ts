@@ -1484,7 +1484,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(detail.locator('.research-overview__waiting-hint')).toHaveCount(0);
         await expect(ov.locator('.research-overview__waiting-groupchat')).toHaveCount(0);
         await expect(detail.locator('a.research-overview__waiting-web')).toHaveText('Open website ↗');
-        await expect(detail).toContainText('answered in the research on the computer');
+        await expect(detail).toContainText('Answers are given in the research on a computer.');
     });
 });
 
