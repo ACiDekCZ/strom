@@ -56,6 +56,10 @@ import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
 import {
+    PrefKey, SECTION_PREFS_EVENT, SectionPref, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, sectionPrefs, setSectionPref,
+    waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
+} from './live-section-prefs.js';
+import {
     QUEUE_ROWS_CAP, QueueFilter, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, requestQueueList,
     resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
@@ -158,8 +162,12 @@ export interface LiveSession {
     offLine?: LiveOffLine;
     /** Sections the panel folded by itself for lack of room (not remembered). */
     autoCollapsed: Set<LiveSectionKey>;
-    /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
+    /** Waiting task ids already shown: a new one unfolds "Waiting for you" (unless the user keeps it collapsed or hidden). */
     seenWaiting: Set<string>;
+    /** New items to do that came while "Awaiting action" was collapsed or hidden: their phase and groups open when it is expanded. */
+    waitingPendingOpen: Set<string>;
+    /** Overview sections shown expanded until it closes (a chip, a link to them), whatever their choice; hidden ones say so. */
+    overviewShown: Set<string>;
     /** How the overview shows "Awaiting action" (kept until it closes). */
     waitingView: WaitingView;
     /** Changes seen with the Changes section open (for "N new"). */
@@ -234,28 +242,8 @@ const RETRY_MAX_MS = 5000;
 const MAX_CHANGES = 3000;
 /** Change lines in the small panel. */
 const PANEL_CHANGES = 5;
-/** Sections the user folded (true) or unfolded (false), per device. */
-const SECTIONS_KEY = 'strom-live-sections';
 /** The panel folds these by itself, in this order, when it runs out of room. */
 const AUTO_FOLD: LiveSectionKey[] = ['queue', 'changes', 'working'];
-
-/** The user's fold choices of one set of sections (panel or overview). */
-export function storedLiveSections(key: string): Record<string, boolean> {
-    try {
-        const parsed = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
-        const out: Record<string, boolean> = {};
-        for (const [k, v] of Object.entries(parsed)) if (typeof v === 'boolean') out[k] = v;
-        return out;
-    } catch {
-        return {};
-    }
-}
-
-export function storeLiveSection(key: string, section: string, collapsed: boolean): void {
-    try {
-        localStorage.setItem(key, JSON.stringify({ ...storedLiveSections(key), [section]: collapsed }));
-    } catch { /* not kept */ }
-}
 
 /** The small panel hides on another tree and while the overview (which shows the same) is drawn. */
 function livePanelHidden(s: LiveSession): boolean {
@@ -264,14 +252,103 @@ function livePanelHidden(s: LiveSession): boolean {
 
 /** Whether a panel section is folded: the user's choice, else the panel's own. */
 function panelSectionCollapsed(s: LiveSession, key: LiveSectionKey): boolean {
-    const stored = storedLiveSections(SECTIONS_KEY)[key];
-    return stored ?? s.autoCollapsed.has(key);
+    const p = sectionPrefs()[key];
+    return p === 'collapsed' ? true : p === 'expanded' ? false : s.autoCollapsed.has(key);
+}
+
+/** A section the user hid: not drawn at all. */
+function panelSectionHidden(key: PrefKey): boolean {
+    return sectionPrefs()[key] === 'hidden';
+}
+
+/**
+ * How a panel section shows now and why (for the Customize panel editor):
+ * `autoFolded` = folded by the panel itself for lack of room (no choice made).
+ */
+export function livePanelSectionState(key: LiveSectionKey): { current: SectionPref; autoFolded: boolean } {
+    const p = sectionPrefs()[key];
+    const s = live;
+    if (p) return { current: p, autoFolded: false };
+    const autoFolded = !!s && s.autoCollapsed.has(key);
+    return { current: autoFolded ? 'collapsed' : 'expanded', autoFolded };
+}
+
+/**
+ * "Awaiting action" in a heading while it is collapsed or hidden: the items
+ * to do, those not seen yet, and whether any (of all to do / of the new) is
+ * important. The first look at a tree notes what is there as seen.
+ */
+export function waitingHeadInfo(s: LiveSession): { todo: number; fresh: number; important: boolean; freshImportant: boolean } {
+    const todo = todoWaiting(s.waiting);
+    let seen = waitingSeen(s.treeId);
+    if (!seen) {
+        noteWaitingSeen(s.treeId, todo.map(w => w.id));
+        seen = new Set(todo.map(w => w.id));
+    }
+    const fresh = newWaiting(todo, seen);
+    return { todo: todo.length, fresh: fresh.length, important: todo.some(isImportantWaiting), freshImportant: fresh.some(isImportantWaiting) };
+}
+
+/** "Awaiting action" is expanded and in view: what is to do now is seen. */
+export function noteWaitingShown(s: LiveSession): void {
+    noteWaitingSeen(s.treeId, todoWaiting(s.waiting).map(w => w.id));
+}
+
+/** The "N new" chip in the heading of a collapsed "Awaiting action" (null: nothing new). */
+export function waitingNewChip(s: LiveSession): HTMLElement | null {
+    const info = waitingHeadInfo(s);
+    if (info.fresh === 0) return null;
+    const chip = el('span', `live-panel-chip live-panel-new live-section__new${info.freshImportant ? ' is-important' : ''}`, strings.live.newChanges(info.fresh));
+    if (info.freshImportant) chip.title = strings.live.importantHint;
+    return chip;
+}
+
+/**
+ * The "Waiting N" chip that keeps a collapsed or hidden "Awaiting action"
+ * in sight (amber; solid with a dot while a decision or a permission waits).
+ */
+export function waitingChip(s: LiveSession, onClick: () => void, cls = ''): HTMLButtonElement | null {
+    const info = waitingHeadInfo(s);
+    if (info.todo === 0 || s.ended) return null;
+    const L = strings.live;
+    const chip = el('button', `live-panel-chip live-panel-chip--warn live-panel-waitchip${cls ? ` ${cls}` : ''}${info.important ? ' is-important' : ''}`, L.waitingShort(info.todo));
+    chip.type = 'button';
+    chip.setAttribute('aria-label', L.waitingChipAria(info.todo));
+    if (info.important) chip.title = L.importantHint;
+    chip.onclick = (e) => {
+        e.stopPropagation();
+        onClick();
+    };
+    return chip;
+}
+
+/** The box that says every section is hidden, with the way to Customize panel. */
+export function appendAllHidden(host: HTMLElement, onEdit: (anchor: HTMLElement) => void): void {
+    const L = strings.live;
+    const box = host.appendChild(el('div', 'live-panel-allhidden'));
+    box.appendChild(el('span', 'live-panel-allhidden__text', L.allHidden));
+    const link = box.appendChild(el('button', 'link-button live-panel-allhidden__edit', L.editPanel));
+    link.type = 'button';
+    link.onclick = () => onEdit(link);
 }
 
 /** "16 min", "1 h 5 min" since a moment. */
 export function liveDuration(since: number, now = Date.now()): string {
     const min = Math.max(0, Math.floor((now - since) / 60000));
     return min < 60 ? strings.live.minutes(min) : strings.live.hoursMinutes(Math.floor(min / 60), min % 60);
+}
+
+/** How a section of the panel or the overview folds, and what its heading carries besides the title. */
+export interface LiveFold {
+    id: string;
+    collapsed: boolean;
+    onToggle: () => void;
+    /** Chips after the title, inside the heading's button (part of its name): "N new", "hidden". */
+    extra?: HTMLElement[];
+    /** Shown expanded for a while whatever the choice: the heading does not fold. */
+    locked?: boolean;
+    /** A line between the heading and the body ("Hidden section, shown until the overview closes."). */
+    note?: HTMLElement;
 }
 
 /**
@@ -283,6 +360,9 @@ export function liveSection(host: HTMLElement, o: {
     collapsed: boolean; headCls?: string; onToggle: () => void;
     /** A control beside the heading (not inside its button). */
     aside?: HTMLElement;
+    extra?: HTMLElement[];
+    locked?: boolean;
+    note?: HTMLElement;
 }): HTMLElement {
     const head = el('button', `live-panel-heading live-section__head${o.headCls ? ` ${o.headCls}` : ''}`);
     head.type = 'button';
@@ -291,18 +371,27 @@ export function liveSection(host: HTMLElement, o: {
     const chevron = el('span', 'live-section__chevron', o.collapsed ? '▸' : '▾');
     chevron.setAttribute('aria-hidden', 'true');
     head.append(chevron, el('span', 'live-section__title', o.title));
+    // A pause between the title and each chip for a screen reader (the spans would run together).
+    for (const x of o.extra ?? []) head.append(el('span', 'live-section__sep', ', '), x);
     if (o.summary) head.appendChild(el('span', `live-section__sum${o.summaryCls ? ` ${o.summaryCls}` : ''}`, o.summary));
-    head.onclick = o.onToggle;
+    if (o.locked) {
+        head.setAttribute('aria-disabled', 'true');
+        head.classList.add('is-locked');
+    } else {
+        head.onclick = o.onToggle;
+    }
     const body = el('div', 'live-section__body');
     body.id = o.id;
     body.hidden = o.collapsed;
     if (o.aside) {
         const row = el('div', 'live-section__headrow');
         row.append(head, o.aside);
-        host.append(row, body);
+        host.append(row);
     } else {
-        host.append(head, body);
+        host.append(head);
     }
+    if (o.note) host.append(o.note);
+    host.append(body);
     return body;
 }
 
@@ -1110,6 +1199,9 @@ export const researchUiMethods = uiModule({
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
             window.addEventListener('strom:tree-switched', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
+            // A section choice (panel, overview, Settings, another tab) redraws what follows the research.
+            document.addEventListener(SECTION_PREFS_EVENT, () => this.onLiveSectionPrefs());
+            watchSectionPrefsStorage();
             // The Fan view's toolbar moved (the card stands below it).
             window.addEventListener('strom:fan-toolbar-moved', () => this.placeLivePanel());
             this.initLaunchQueue(startSearch);
@@ -2511,6 +2603,8 @@ export const researchUiMethods = uiModule({
                 ...(status.offLine ? { offLine: status.offLine } : {}),
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
+                waitingPendingOpen: new Set(),
+                overviewShown: new Set(),
                 waitingView: newWaitingView(),
                 seenInSection: 0,
                 startedAt: Date.now(),
@@ -2709,22 +2803,21 @@ export const researchUiMethods = uiModule({
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
         s.waiting = this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting));
-        // A task that was not there before unfolds "Waiting for you", even when folded.
+        // A task that was not there before unfolds "Waiting for you" (its phase and its group;
+        // the section is expanded by default). Collapsed or hidden by the user, nothing opens:
+        // the heading counts it as new, and expanding it later opens what came meanwhile.
         // What came already sent needs nothing from the user: it unfolds nothing (an item
         // that moves to sent keeps its id and is not new).
         const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
         for (const w of fresh) s.seenWaiting.add(w.id);
         const freshTodo = todoWaiting(fresh);
-        if (freshTodo.length > 0) {
-            if (storedLiveSections(SECTIONS_KEY).waiting === true) storeLiveSection(SECTIONS_KEY, 'waiting', false);
+        for (const w of freshTodo) s.waitingView.fresh.add(w.id);
+        const pref = sectionPrefs().waiting;
+        if (freshTodo.length > 0 && (pref === undefined || pref === 'expanded')) {
             s.autoCollapsed.delete('waiting');
-            // The overview too: its section, the phase and each new item's group.
-            this.unfoldOverviewSection('waiting');
-            s.waitingView.open.set('phase:todo', true);
-            for (const w of freshTodo) {
-                s.waitingView.fresh.add(w.id);
-                s.waitingView.open.set(`group:todo:${w.group?.key ?? OTHER_GROUP}`, true);
-            }
+            this.openWaitingItems(s, freshTodo);
+        } else {
+            for (const w of freshTodo) s.waitingPendingOpen.add(w.id);
         }
         s.queue = status.queue;
         s.queueMore = status.queueMore;
@@ -2998,7 +3091,7 @@ export const researchUiMethods = uiModule({
      * heading does not fold (the panel shown without following).
      */
     appendWaitingSection(body: HTMLElement, items: readonly LiveWaiting[], answerable: boolean,
-        fold?: { collapsed: boolean; onToggle: () => void; id: string }): HTMLElement {
+        fold?: LiveFold): HTMLElement {
         const r = strings.research;
         const L = strings.live;
         const todo = waitingTodoCount(items);
@@ -3007,7 +3100,7 @@ export const researchUiMethods = uiModule({
         const replies = sent > 0 ? L.waitingReplyCount(sent) : undefined;
         let host: HTMLElement;
         if (fold) {
-            host = liveSection(body, { id: fold.id, title, summary: replies, collapsed: fold.collapsed, onToggle: fold.onToggle, headCls: 'live-panel-heading-waiting' });
+            host = liveSection(body, { ...fold, title, summary: replies, headCls: 'live-panel-heading-waiting' });
         } else {
             const h = body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
             if (replies) h.appendChild(el('span', 'live-section__sum', replies));
@@ -3067,15 +3160,71 @@ export const researchUiMethods = uiModule({
         return host;
     },
 
-    /** Fold or unfold a section of the small panel (remembered on this device). */
+    /** Fold or unfold a section of the small panel: a lasting choice (this device, panel and overview alike). */
     toggleLiveSection(key: LiveSectionKey): void {
         const s = live;
         if (!s) return;
         const collapsed = panelSectionCollapsed(s, key);
-        storeLiveSection(SECTIONS_KEY, key, !collapsed);
         s.autoCollapsed.delete(key);
         if (key === 'changes' && collapsed) s.seenInSection = s.changes.length;
+        // The choice redraws (strom:live-section-prefs); an unchanged one redraws here.
+        const before = sectionPrefs()[key];
+        setSectionPref(key, collapsed ? 'expanded' : 'collapsed');
+        if (before === (collapsed ? 'expanded' : 'collapsed')) this.renderLivePanel();
+    },
+
+    /** Open the phase "To do" and the groups of these items in the overview's "Awaiting action". */
+    openWaitingItems(s: LiveSession, items: readonly LiveWaiting[]): void {
+        if (items.length === 0) return;
+        s.waitingView.open.set('phase:todo', true);
+        for (const w of items) s.waitingView.open.set(`group:todo:${w.group?.key ?? OTHER_GROUP}`, true);
+    },
+
+    /**
+     * The section choices changed (here, in Settings, in another tab): what
+     * came while "Awaiting action" was collapsed or hidden opens once it is
+     * expanded (as it would have opened then), and both places redraw.
+     */
+    onLiveSectionPrefs(): void {
+        const s = live;
+        if (!s) {
+            this.renderLivePanel();
+            return;
+        }
+        const pref = sectionPrefs().waiting;
+        if (s.waitingPendingOpen.size > 0 && (pref === undefined || pref === 'expanded')) {
+            this.openWaitingItems(s, s.waiting.filter(w => s.waitingPendingOpen.has(w.id)));
+            s.waitingPendingOpen.clear();
+        }
         this.renderLivePanel();
+    },
+
+    /** Restore defaults: every choice goes (no question), with Undo for a while. Nothing chosen: nothing happens. */
+    resetLiveSections(): void {
+        if (!hasSectionPrefs()) return;
+        const before = resetSectionPrefs();
+        this.showToast(strings.live.restoredToast, 6000, {
+            action: { label: strings.undo.undo, run: () => restoreSectionPrefs(before) },
+        });
+    },
+
+    /** A section hidden from its menu (it vanishes where it was clicked): said, with Undo for a while. */
+    hideLiveSection(key: PrefKey): void {
+        const before = sectionPrefs();
+        if (before[key] === 'hidden') return;
+        setSectionPref(key, 'hidden');
+        this.showToast(strings.live.hiddenToast, 6000, {
+            action: { label: strings.undo.undo, run: () => restoreSectionPrefs(before) },
+        });
+    },
+
+    /**
+     * "Customize panel": the editor of the section choices, under `anchor`
+     * (the ⋯ of the panel or the overview, or a "Customize panel" link).
+     * Drawn by the editor module once it is there; until then nothing opens.
+     */
+    openLiveSectionEditor(anchor: HTMLElement, surface: 'panel' | 'overview'): void {
+        anchor.dispatchEvent(new CustomEvent('strom:live-section-editor', { bubbles: true, detail: { surface } }));
     },
 
     /** Show a person from a live change: focus them and bring them into view. */
@@ -3240,7 +3389,10 @@ export const researchUiMethods = uiModule({
         toggle.type = 'button';
         toggle.setAttribute('aria-expanded', String(!collapsed));
         toggle.title = phone ? L.openOverview : collapsed ? r.show : r.hide;
-        toggle.onclick = () => (phone && !s.ended ? this.openResearchOverview() : this.toggleLivePanel());
+        // A phone with "Awaiting action" hidden: the sheet shows it until it closes (the strip counts it).
+        toggle.onclick = () => (phone && !s.ended
+            ? this.openResearchOverview({ showWaiting: panelSectionHidden('waiting') && waitingTodoCount(s.waiting) > 0 })
+            : this.toggleLivePanel());
         // The followed tree by name ("Live research" stays the panel's label); lit for a while after a switch.
         const treeName = this.liveTreeName(s.treeId, s.name);
         const title = toggle.appendChild(el('span', 'live-panel-title', s.ended ? r.ended : treeName));
@@ -3253,6 +3405,11 @@ export const researchUiMethods = uiModule({
         head.appendChild(toggle);
         // The buttons as one group: a name that does not fit beside them puts them all on a row under it.
         const actions = head.appendChild(el('div', 'live-panel-actions'));
+        // "Awaiting action" hidden: its count stays in the head, first (a click shows it in the overview).
+        // Folded, the summary has it; a phone's strip has its own.
+        const waitHidden = panelSectionHidden('waiting');
+        const headWaitChip = waitHidden && !collapsed && !phone ? waitingChip(s, () => this.openResearchOverview({ showWaiting: true })) : null;
+        if (headWaitChip) actions.appendChild(headWaitChip);
         // Folded: the other trees as one chip (unfolds the panel with them shown; spec 011).
         const otherChip = collapsed && !phone && !s.ended ? this.researchElsewhereChip('collapsed') : null;
         if (otherChip) actions.appendChild(otherChip);
@@ -3283,9 +3440,19 @@ export const researchUiMethods = uiModule({
             if (phone && !s.ended) {
                 summary.appendChild(el('span', 'live-panel-chip', liveState(s).label));
                 const todo = waitingTodoCount(s.waiting);
-                if (todo > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${todo}`));
+                if (todo > 0) {
+                    // A decision or a permission among them: solid amber with a dot.
+                    const important = todoWaiting(s.waiting).some(isImportantWaiting);
+                    const chip = summary.appendChild(el('span', `live-panel-chip live-panel-chip--warn${important ? ' is-important' : ''}`, `${r.waiting} ${todo}`));
+                    if (important) chip.title = L.importantHint;
+                }
                 // The other trees: a chip of its own that opens the tree list.
                 const chip = this.researchElsewhereChip('phone');
+                if (chip) summary.appendChild(chip);
+            }
+            // "Awaiting action" collapsed or hidden: its count first (a click opens the overview; hidden, shown there).
+            if (!phone && (waitHidden || panelSectionCollapsed(s, 'waiting'))) {
+                const chip = waitingChip(s, () => this.openResearchOverview({ showWaiting: waitHidden }));
                 if (chip) summary.appendChild(chip);
             }
             const fresh = s.changes.length - s.seenChanges;
@@ -3310,12 +3477,18 @@ export const researchUiMethods = uiModule({
             collapsed: panelSectionCollapsed(s, key),
             onToggle: () => this.toggleLiveSection(key),
         });
+        // Every section hidden: a word and the way back instead (the head keeps the count of what waits).
+        if (PANEL_PREF_KEYS.every(k => panelSectionHidden(k))) {
+            appendAllHidden(body, (anchor) => this.openLiveSectionEditor(anchor, 'panel'));
+        }
 
         // Once following has ended the bridge's "who is working" is stale —
         // show it only while live.
         const multi = linesMulti(s);
         const sel = selectedLine(s);
-        if (!s.ended && multi) {
+        if (panelSectionHidden('working')) {
+            // Hidden by the user: not drawn.
+        } else if (!s.ended && multi) {
             // Two or more lines at work: a row each, one can be selected (spec 011).
             const o = strings.otherResearch;
             const groups = workingLineGroups(s);
@@ -3346,8 +3519,12 @@ export const researchUiMethods = uiModule({
         }
 
         // What waits for the user comes before what changed: it needs them.
-        if (s.waiting.length > 0) {
-            const host = this.appendWaitingSection(body, s.waiting, !s.ended, fold('waiting'));
+        if (s.waiting.length > 0 && !panelSectionHidden('waiting')) {
+            const waitingFold = fold('waiting');
+            // Collapsed: "N new" beside the title (inside the heading's button); expanded and in view: all seen.
+            const newChip = waitingFold.collapsed ? waitingNewChip(s) : null;
+            if (!waitingFold.collapsed && !collapsed && !panel.hidden) noteWaitingShown(s);
+            const host = this.appendWaitingSection(body, s.waiting, !s.ended, { ...waitingFold, ...(newChip ? { extra: [newChip] } : {}) });
             if (!s.ended) {
                 // A question about a place is answered here (its Answer opens the dialog), the rest in the research.
                 const where = waitingAnswerPlace(s.waiting, this.waitingPlacesAccess().canAnswer);
@@ -3356,37 +3533,40 @@ export const researchUiMethods = uiModule({
         }
 
         // What changed: the last few here, all of them in the overview; a selected line: only its own.
+        const changesHidden = panelSectionHidden('changes');
         const changesFold = fold('changes');
-        if (!changesFold.collapsed) s.seenInSection = s.changes.length;
+        if (!changesFold.collapsed && !changesHidden) s.seenInSection = s.changes.length;
         const freshInSection = s.changes.length - s.seenInSection;
         const shownChanges = sel ? s.changes.filter(c => c.research === sel.id) : s.changes;
-        const changesHost = liveSection(body, {
-            ...changesFold, title: r.changes,
-            ...(sel ? { summary: strings.otherResearch.lineOnly(directionGlyph(sel), sel.name) }
-                : { summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new' }),
-        });
-        const changes = el('ul', 'live-panel-list live-changes');
-        changesHost.appendChild(changes);
-        this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
-        if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
-            const all = el('button', 'link-button live-all-changes', L.allInOverview);
-            all.type = 'button';
-            all.onclick = () => this.openResearchOverview();
-            changesHost.appendChild(all);
+        if (!changesHidden) {
+            const changesHost = liveSection(body, {
+                ...changesFold, title: r.changes,
+                ...(sel ? { summary: strings.otherResearch.lineOnly(directionGlyph(sel), sel.name) }
+                    : { summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new' }),
+            });
+            const changes = el('ul', 'live-panel-list live-changes');
+            changesHost.appendChild(changes);
+            this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
+            if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
+                const all = el('button', 'link-button live-all-changes', L.allInOverview);
+                all.type = 'button';
+                all.onclick = () => this.openResearchOverview();
+                changesHost.appendChild(all);
+            }
         }
 
         // The agent's queue: only while live (an old queue misleads).
-        if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 3);
+        if (!s.ended && !panelSectionHidden('queue')) this.appendQueueSection(body, s, fold('queue'), 3);
         panel.appendChild(body);
         if (!s.ended && s.spend && !phone) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
         const again = menuTask ? panel.querySelector<HTMLElement>(`.live-queue-more[data-task="${menuTask}"]`) : null;
         if (again && menuTask) this.openLiveTaskMenu(again, menuTask);
         // Too tall for the window: fold Up next, then Changes, then Working (never
-        // Waiting, never what the user chose). Not remembered.
+        // Waiting, never a section with a choice: one kept expanded makes the panel scroll). Not remembered.
         if (!collapsed && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
-            const stored = storedLiveSections(SECTIONS_KEY);
-            const next = AUTO_FOLD.find(k => stored[k] === undefined && !s.autoCollapsed.has(k)
+            const prefs = sectionPrefs();
+            const next = AUTO_FOLD.find(k => prefs[k] === undefined && !s.autoCollapsed.has(k)
                 && body.querySelector(`#live-sec-${k}`));
             if (next) {
                 s.autoCollapsed.add(next);
@@ -3424,7 +3604,7 @@ export const researchUiMethods = uiModule({
      * one link. Nothing changes here after an action: the next status tells.
      */
     appendQueueSection(body: HTMLElement, s: LiveSession,
-        fold: { id: string; collapsed: boolean; onToggle: () => void }, limit: number, title = strings.research.queue,
+        fold: LiveFold, limit: number, title = strings.research.queue,
         directions = false): void {
         const r = strings.research;
         const L = strings.live;

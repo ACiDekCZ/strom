@@ -208,7 +208,8 @@ test.describe('working lines in the live panel', () => {
         await expect(rows.first()).toHaveClass(/is-selected/);
         await expect(rows.first()).toContainText('Předci Jana Nováka — Křest Josefa Nováka 1842');
         await expect(rows.first().locator('.research-overview__now-meta')).toHaveText(/^agent-matriky · Josef Novák · since /);
-        await ov.locator('.live-queue-toggle').click();
+        // The panel's Up next unfolded by hand is the same choice in the overview.
+        await expect(ov.locator('.live-queue-toggle')).toHaveAttribute('aria-expanded', 'true');
         const pills = ov.locator('.research-overview__queue-filters .research-overview__filter');
         await expect(pills.and(page.locator('[data-direction="G0001"]'))).toHaveAttribute('aria-checked', 'true');
         // All in the overview drops the panel's selection too.
@@ -302,7 +303,8 @@ test.describe('working lines from the keyboard', () => {
         await panel(page).locator('.live-panel-expand').click();
         const ov = page.locator('#research-overview');
         await expect(ov).toBeVisible();
-        await ov.locator('.live-queue-toggle').click();
+        // The panel's Up next unfolded by hand is the same choice in the overview.
+        await expect(ov.locator('.live-queue-toggle')).toHaveAttribute('aria-expanded', 'true');
         const pill = (id: string) => ov.locator(`.research-overview__queue-filters .research-overview__filter[data-direction="${id}"]`);
         await pill('G0002').focus();
         await page.keyboard.press('Space');

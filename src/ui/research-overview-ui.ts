@@ -30,8 +30,8 @@ import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { uiModule } from './module.js';
 import {
-    LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
-    liveSession, storeLiveSection, storedLiveSections, timeEl,
+    LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
+    liveSession, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
@@ -43,14 +43,13 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 import { waitBranchText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
+import { PREF_KEYS, SectionPref, prefKeyOfOverview, sectionPrefs, setSectionPref } from './live-section-prefs.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
-/** The overview's own fold choices. */
-const SECTIONS_KEY = 'strom-live-overview-sections';
 /** The chip chosen in "Awaiting action" (per device). */
 const WAITING_FILTER_KEY = 'strom-live-overview-waiting-filter';
-/** Folded unless the user unfolds them. */
+/** Folded unless the user chose otherwise. */
 const FOLDED_BY_DEFAULT = new Set(['queue', 'knows']);
 /** Changes without a task are grouped by this long. */
 const GROUP_MS = 15 * 60_000;
@@ -94,8 +93,22 @@ function storeWaitingFilter(f: WaitingFilter): void {
     } catch { /* not kept */ }
 }
 
+/** The choice an overview section follows (none: its default). */
+function sectionPref(key: string): SectionPref | undefined {
+    const k = prefKeyOfOverview(key);
+    return k ? sectionPrefs()[k] : undefined;
+}
+
+/** Whether an overview section is folded by the choice (else by its default). */
 function sectionCollapsed(key: string): boolean {
-    return storedLiveSections(SECTIONS_KEY)[key] ?? FOLDED_BY_DEFAULT.has(key);
+    const p = sectionPref(key);
+    return p === 'collapsed' ? true : p === 'expanded' ? false : FOLDED_BY_DEFAULT.has(key);
+}
+
+/** How an overview section shows now without a temporary show (for the Customize panel editor). */
+export function overviewSectionState(key: string): SectionPref {
+    const p = sectionPref(key);
+    return p ?? (FOLDED_BY_DEFAULT.has(key) ? 'collapsed' : 'expanded');
 }
 
 function personByRefn(refn: string | undefined): Person | null {
@@ -185,7 +198,12 @@ export const researchOverviewMethods = uiModule({
         }
     },
 
-    openResearchOverview(): void {
+    /**
+     * Open the overview. `showWaiting`: "Awaiting action" shown there expanded
+     * until it closes, whatever its choice (the chip of a hidden or collapsed
+     * one), with the focus on its heading.
+     */
+    openResearchOverview(opts: { showWaiting?: boolean } = {}): void {
         const s = liveSession();
         if (!s || s.ended) return;
         s.overview = true;
@@ -193,8 +211,29 @@ export const researchOverviewMethods = uiModule({
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '1'); } catch { /* not kept */ }
         }
+        if (opts.showWaiting) {
+            this.showOverviewWaiting();
+            return;
+        }
         this.renderLivePanel();
         document.querySelector<HTMLElement>('#research-overview .research-overview__close')?.focus();
+    },
+
+    /** "Awaiting action" in the open overview, shown until it closes (the choice stays), in view and focused. */
+    showOverviewWaiting(): void {
+        const s = liveSession();
+        if (!s) return;
+        s.overviewShown.add('waiting');
+        // What came while it was out of sight opens as it would have.
+        this.openWaitingItems(s, s.waiting.filter(w => s.waitingPendingOpen.has(w.id)));
+        s.waitingPendingOpen.clear();
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-waiting"]');
+        if (body && heading) {
+            body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+            heading.focus({ preventScroll: true });
+        }
     },
 
     /** ⤡ (and Escape): back to the small panel; following goes on. */
@@ -202,8 +241,10 @@ export const researchOverviewMethods = uiModule({
         const s = liveSession();
         if (!s) return;
         s.overview = false;
-        // What was unfolded, opened and new in "Awaiting action" lasts while the overview is open.
+        // What was unfolded, opened and new in "Awaiting action" lasts while the overview is open;
+        // so do the sections shown whatever their choice.
         s.waitingView = newWaitingView();
+        s.overviewShown.clear();
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '0'); } catch { /* not kept */ }
         }
@@ -298,6 +339,11 @@ export const researchOverviewMethods = uiModule({
         // The full-screen sheet covers the tree: no follow switch there.
         const follow = mode === 'sheet' ? null : this.liveFollowButton('overview');
         sub.append(stop);
+        // "Awaiting action" hidden: its count stays in sight; a click shows it here until the overview closes.
+        if (sectionPref('waiting') === 'hidden' && s.waiting.length > 0) {
+            const chip = waitingChip(s, () => this.showOverviewWaiting());
+            if (chip) sub.append(chip);
+        }
         if (follow) head.appendChild(follow);
         head.appendChild(close);
         root.appendChild(head);
@@ -309,21 +355,55 @@ export const researchOverviewMethods = uiModule({
         this.appendOverviewSummary(body, s, mode);
         if (s.update) this.appendUpdateStrip(body, s.update.version, s.busy);
 
-        const fold = (key: string) => ({
-            id: `ov-sec-${key}`,
-            collapsed: sectionCollapsed(key),
-            onToggle: () => {
-                storeLiveSection(SECTIONS_KEY, key, !sectionCollapsed(key));
-                this.renderResearchOverview();
-            },
-        });
+        // A section hidden by the choice is not drawn, unless shown until the overview closes
+        // (expanded, its heading says so and does not fold). A click on a heading is a lasting choice.
+        const shown = (key: string): boolean => sectionPref(key) !== 'hidden' || s.overviewShown.has(key);
+        const fold = (key: string): LiveFold => {
+            const id = `ov-sec-${key}`;
+            const pk = prefKeyOfOverview(key);
+            if (sectionPref(key) === 'hidden') {
+                const tag = el('span', 'live-section__tag', L.hiddenTag);
+                const note = el('p', 'live-section__once');
+                note.appendChild(el('span', '', L.shownOnce));
+                const edit = note.appendChild(el('button', 'link-button live-section__once-edit', L.editPanel));
+                edit.type = 'button';
+                edit.onclick = () => this.openLiveSectionEditor(edit, 'overview');
+                return { id, collapsed: false, locked: true, extra: [tag], note, onToggle: () => {} };
+            }
+            if (s.overviewShown.has(key) && sectionCollapsed(key)) {
+                // Shown for a while: folding it ends that and keeps the choice.
+                return { id, collapsed: false, onToggle: () => {
+                    s.overviewShown.delete(key);
+                    if (pk) setSectionPref(pk, 'collapsed');
+                    this.renderResearchOverview();
+                } };
+            }
+            const collapsed = sectionCollapsed(key);
+            return { id, collapsed, onToggle: () => {
+                if (pk) setSectionPref(pk, collapsed ? 'expanded' : 'collapsed');
+            } };
+        };
 
-        this.appendOverviewNow(body, s, fold('now'), mode);
-        if (s.waiting.length > 0) this.appendOverviewWaiting(body, s, fold('waiting'), mode);
-        this.appendOverviewDirections(body, s, fold('directions'), mode);
-        this.appendOverviewTimeline(body, s, fold('timeline'), mode);
-        if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
-        this.appendOverviewKnows(body, fold('knows'), mode);
+        // Every section hidden: a word and the way back instead (a section shown for a while still comes).
+        if (PREF_KEYS.every(k => sectionPrefs()[k] === 'hidden')) {
+            appendAllHidden(body, (anchor) => this.openLiveSectionEditor(anchor, 'overview'));
+        }
+        if (shown('now')) this.appendOverviewNow(body, s, fold('now'), mode);
+        if (s.waiting.length > 0 && shown('waiting')) {
+            const f = fold('waiting');
+            // Collapsed: "N new" beside the title; expanded: what is to do now is seen.
+            if (f.collapsed) {
+                const chip = waitingNewChip(s);
+                if (chip) f.extra = [...(f.extra ?? []), chip];
+            } else {
+                noteWaitingShown(s);
+            }
+            this.appendOverviewWaiting(body, s, f, mode);
+        }
+        if (shown('directions')) this.appendOverviewDirections(body, s, fold('directions'), mode);
+        if (shown('timeline')) this.appendOverviewTimeline(body, s, fold('timeline'), mode);
+        if (!s.ended && shown('queue')) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
+        if (shown('knows')) this.appendOverviewKnows(body, fold('knows'), mode);
         this.appendOverviewFoot(root, s, mode);
         endQueueSlots();
         body.scrollTop = scrollTop;
@@ -413,7 +493,7 @@ export const researchOverviewMethods = uiModule({
      * groups with counts; a filter unfolds them). An older research: the rows
      * in its order. The heading counts what is to do.
      */
-    appendOverviewWaiting(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
+    appendOverviewWaiting(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode): void {
         const r = strings.research;
         const L = strings.live;
         const view = s.waitingView;
@@ -794,7 +874,7 @@ export const researchOverviewMethods = uiModule({
     },
 
     /** Now: who works on what, since when; "Show in tree" when the research names the person. */
-    appendOverviewNow(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
+    appendOverviewNow(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode): void {
         const L = strings.live;
         const w0 = s.working[0];
         const since0 = w0 ? Date.parse(w0.since) : NaN;
@@ -909,7 +989,7 @@ export const researchOverviewMethods = uiModule({
     },
 
     /** Progress: the changes while watching, by task, filtered; hover and click reach the tree. */
-    appendOverviewTimeline(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
+    appendOverviewTimeline(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode): void {
         const L = strings.live;
         // A preview: the last 24 hours, at most 20 steps; a quiet day still
         // shows the last step. The research has the rest.
@@ -1039,7 +1119,7 @@ export const researchOverviewMethods = uiModule({
     },
 
     /** What the research knows across the tree: open conflicts first, then hypotheses. */
-    appendOverviewKnows(body: HTMLElement, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
+    appendOverviewKnows(body: HTMLElement, fold: LiveFold, mode: Mode): void {
         const L = strings.live;
         const facts = strings.research.changeWords.facts as Record<string, string>;
         const rows: { person: Person; text: string; conflict: boolean; conflictId?: string }[] = [];
@@ -1101,9 +1181,15 @@ export const researchOverviewMethods = uiModule({
         if (foot.childElementCount > 0) root.appendChild(foot);
     },
 
-    /** Unfold one of the overview's sections (remembered like a click on its head). */
+    /**
+     * Show one of the overview's sections expanded until the overview closes
+     * (a way into it: a direction, a branch's tasks, a link to what waits);
+     * the choice stays as it is.
+     */
     unfoldOverviewSection(key: string): void {
-        if (sectionCollapsed(key)) storeLiveSection(SECTIONS_KEY, key, false);
+        const s = liveSession();
+        if (!s) return;
+        if (sectionCollapsed(key) || sectionPref(key) === 'hidden') s.overviewShown.add(key);
     },
 
     /** A person from the overview: centred in the tree (the sheet closes first). */

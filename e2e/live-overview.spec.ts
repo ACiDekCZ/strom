@@ -191,7 +191,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
     return bridge;
 }
 
-const head = (page: Page, root: string, title: string) =>
+const head = (page: Page, root: string, title: string | RegExp) =>
     page.locator(`${root} .live-section__head`).filter({ has: page.locator('.live-section__title', { hasText: title }) });
 
 test.describe('small live panel', () => {
@@ -222,25 +222,243 @@ test.describe('small live panel', () => {
         await work.click();
         await expect(work).toHaveAttribute('aria-expanded', now);
         await expect(page.locator(`#${await work.getAttribute('aria-controls')}`)).toBeVisible({ visible: now === 'true' });
-        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-sections') ?? '{}'))).toMatchObject({ working: now === 'false', changes: false });
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-section-prefs') ?? '{}').s)).toMatchObject({ working: now === 'false' ? 'collapsed' : 'expanded' });
         await page.reload();
         await expect(head(page, '#live-panel', 'At work')).toHaveAttribute('aria-expanded', now);
         await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
     });
 
-    test('short of room: Up next, then Changes fold by themselves, Waiting never; a new task unfolds Waiting', async ({ page }) => {
+    test('short of room: Up next, then Changes fold by themselves, Waiting never; folded by hand, a new task keeps it folded and counts as new', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 520 });
         const panel = page.locator('#live-panel');
         await expect(panel.locator('.live-changes li').first()).toBeAttached();
         await expect(head(page, '#live-panel', 'Up next')).toHaveAttribute('aria-expanded', 'false');
         await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
         // Folding by itself is not remembered.
-        expect(await page.evaluate(() => localStorage.getItem('strom-live-sections'))).toBeNull();
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-section-prefs') ?? '{}').s)).toEqual({});
 
         await head(page, '#live-panel', 'Awaiting action · 2').click();
         await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'false');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2').locator('.live-panel-new')).toHaveCount(0);
         bridge.waiting = [...bridge.waiting, { id: 'T0009', what: 'Nový úkol', at: new Date().toISOString() }];
-        await expect(head(page, '#live-panel', 'Awaiting action · 3')).toHaveAttribute('aria-expanded', 'true', { timeout: 15000 });
+        // Kept folded: the count and "1 new" in its heading (inside its button), nothing unfolds.
+        const waiting = head(page, '#live-panel', 'Awaiting action · 3');
+        await expect(waiting.locator('.live-panel-new')).toHaveText('1 new', { timeout: 15000 });
+        await expect(waiting).toHaveAttribute('aria-expanded', 'false');
+        await expect(waiting).toHaveAccessibleName(/^Awaiting action · 3\s*,\s*1 new/);
+    });
+});
+
+/** Choose how sections show (spec 044) as Customize panel does: the record, then its event. */
+async function setPrefs(page: Page, prefs: Record<string, string>): Promise<void> {
+    await page.evaluate((p) => {
+        localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 1, s: p }));
+        document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+    }, prefs);
+}
+
+const storedPrefs = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-section-prefs') ?? 'null'));
+
+test.describe('section choices: expanded, collapsed, hidden (spec 044)', () => {
+    test('the old fold choices are taken over once: the panel\'s over the overview\'s, its own "waiting: false" is no choice', async ({ page }) => {
+        await page.addInitScript(() => {
+            if (sessionStorage.getItem('seeded-prefs')) return;
+            sessionStorage.setItem('seeded-prefs', '1');
+            localStorage.setItem('strom-live-sections', JSON.stringify({ working: true, waiting: false, queue: false }));
+            localStorage.setItem('strom-live-overview-sections', JSON.stringify({ queue: true, timeline: true, waiting: false }));
+        });
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        await expect(head(page, '#live-panel', 'At work')).toHaveAttribute('aria-expanded', 'false');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
+        await expect(head(page, '#live-panel', 'Up next')).toHaveAttribute('aria-expanded', 'true');
+        expect(await storedPrefs(page)).toEqual({ v: 1, s: { working: 'collapsed', queue: 'expanded', changes: 'collapsed' } });
+        // The old records stay as they were (an older version still reads them).
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-sections'))).toBe(JSON.stringify({ working: true, waiting: false, queue: false }));
+        // One choice for both places: the panel's Up next expanded is the overview's Queue too.
+        await panel.locator('.live-panel-expand').click();
+        await expect(head(page, '#research-overview', 'Queue')).toHaveAttribute('aria-expanded', 'true');
+        await expect(head(page, '#research-overview', 'Progress')).toHaveAttribute('aria-expanded', 'false');
+        await expect(head(page, '#research-overview', /^Now/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('Awaiting action collapsed stays so: a new item counts as new in the panel and the overview, over a reload; expanding clears it', async ({ page }) => {
+        const bridge = await follow(page);
+        const panel = page.locator('#live-panel');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
+        await head(page, '#live-panel', 'Awaiting action · 2').click();
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'collapsed' });
+
+        bridge.waiting = [...bridge.waiting, { id: 'T0009', what: 'Nový úkol', at: new Date().toISOString() }];
+        const waiting = head(page, '#live-panel', 'Awaiting action · 3');
+        await expect(waiting.locator('.live-panel-new')).toHaveText('1 new', { timeout: 15000 });
+        await expect(waiting).toHaveAttribute('aria-expanded', 'false');
+        await expect(waiting.locator('.live-panel-new')).not.toHaveClass(/is-important/);
+        // The heading's title may wrap, nothing scrolls sideways.
+        expect(await panel.locator('.live-panel-body').evaluate((b) => b.scrollWidth <= b.clientWidth)).toBe(true);
+
+        await page.reload();
+        await expect(head(page, '#live-panel', 'Awaiting action · 3')).toHaveAttribute('aria-expanded', 'false');
+        await expect(head(page, '#live-panel', 'Awaiting action · 3').locator('.live-panel-new')).toHaveText('1 new');
+
+        // The same in the overview; expanding there is the choice for both, and the new ones are seen.
+        await panel.locator('.live-panel-expand').click();
+        const ovWaiting = head(page, '#research-overview', 'Awaiting action · 3');
+        await expect(ovWaiting).toHaveAttribute('aria-expanded', 'false');
+        await expect(ovWaiting.locator('.live-panel-new')).toHaveText('1 new');
+        await ovWaiting.click();
+        await expect(ovWaiting).toHaveAttribute('aria-expanded', 'true');
+        await expect(ovWaiting.locator('.live-panel-new')).toHaveCount(0);
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'expanded' });
+        await page.keyboard.press('Escape');
+        await expect(head(page, '#live-panel', 'Awaiting action · 3')).toHaveAttribute('aria-expanded', 'true');
+        await expect(panel.locator('.live-panel-new')).toHaveCount(0);
+        // Collapsed again: nothing new.
+        await head(page, '#live-panel', 'Awaiting action · 3').click();
+        await expect(head(page, '#live-panel', 'Awaiting action · 3').locator('.live-panel-new')).toHaveCount(0);
+    });
+
+    test('a new item that is important marks "N new" amber; one that comes already sent counts nothing', async ({ page }) => {
+        const bridge = await follow(page, undefined, (b) => { b.features = ['waiting.groups']; });
+        await setPrefs(page, { waiting: 'collapsed' });
+        const waiting = () => head(page, '#live-panel', 'Awaiting action');
+        await expect(waiting()).toHaveAttribute('aria-expanded', 'false');
+        bridge.waiting = [...bridge.waiting, { id: 'T0010', what: 'Odeslaný dotaz', kind: 'letter', section: 'letter', phase: 'sent', sentAt: new Date().toISOString(), at: new Date().toISOString() }];
+        await expect(head(page, '#live-panel', 'Awaiting action · 2').locator('.live-section__sum')).toHaveText('awaiting a reply 1', { timeout: 15000 });
+        await expect(waiting().locator('.live-panel-new')).toHaveCount(0);
+        bridge.waiting = [...bridge.waiting, { id: 'T0011', what: 'Smí agent číst archiv?', kind: 'permission', host: 'katalog.archiv-chlumy.cz', at: new Date().toISOString() }];
+        await expect(waiting().locator('.live-panel-new')).toHaveText('1 new', { timeout: 15000 });
+        await expect(waiting().locator('.live-panel-new')).toHaveClass(/is-important/);
+        await expect(waiting()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('Awaiting action hidden: its count stays in the head; the chip shows it in the overview until that closes, the choice stays', async ({ page }) => {
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toBeVisible();
+        await setPrefs(page, { waiting: 'hidden' });
+        await expect(head(page, '#live-panel', 'Awaiting action')).toHaveCount(0);
+        const chip = panel.locator('.live-panel-actions > .live-panel-waitchip');
+        await expect(chip).toHaveText('Waiting 2');
+        await expect(chip).toHaveAttribute('aria-label', 'Awaiting action: 2. Opens the overview.');
+        await expect(chip).not.toHaveClass(/is-important/);
+        // First in the head's group of buttons.
+        await expect(panel.locator('.live-panel-actions > :first-child')).toHaveClass(/live-panel-waitchip/);
+
+        await chip.click();
+        const ov = page.locator('#research-overview');
+        const shown = head(page, '#research-overview', 'Awaiting action · 2');
+        await expect(shown).toHaveAttribute('aria-expanded', 'true');
+        await expect(shown).toHaveAttribute('aria-disabled', 'true');
+        await expect(shown.locator('.live-section__tag')).toHaveText('hidden');
+        await expect(ov.locator('.live-section__once')).toContainText('Hidden section, shown until the overview closes.');
+        await expect(ov.locator('.live-section__once .link-button')).toHaveText('Customize panel');
+        await expect(shown).toBeFocused();
+        // Its heading does not fold; the choice is unchanged.
+        await shown.click({ force: true });
+        await expect(shown).toHaveAttribute('aria-expanded', 'true');
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'hidden' });
+        // The overview's head keeps the count too.
+        await expect(ov.locator('.research-overview__sub .live-panel-waitchip')).toHaveText('Waiting 2');
+
+        // Closed and opened again: hidden as chosen, the chip there shows it.
+        await page.keyboard.press('Escape');
+        await expect(head(page, '#live-panel', 'Awaiting action')).toHaveCount(0);
+        await panel.locator('.live-panel-expand').click();
+        await expect(head(page, '#research-overview', 'Awaiting action')).toHaveCount(0);
+        await ov.locator('.research-overview__sub .live-panel-waitchip').click();
+        await expect(head(page, '#research-overview', 'Awaiting action · 2')).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    test('an important item waiting (a permission) makes the chip solid amber with a hint; a folded panel keeps the chip in its summary', async ({ page }) => {
+        await follow(page, undefined, (b) => {
+            b.waiting = [...b.waiting, { id: 'T0012', what: 'Smí agent číst archiv?', kind: 'permission', host: 'katalog.archiv-chlumy.cz', at: new Date().toISOString() }];
+        });
+        const panel = page.locator('#live-panel');
+        await expect(head(page, '#live-panel', 'Awaiting action · 3')).toBeVisible();
+        await setPrefs(page, { waiting: 'hidden' });
+        const chip = panel.locator('.live-panel-actions > .live-panel-waitchip');
+        await expect(chip).toHaveText('Waiting 3');
+        await expect(chip).toHaveClass(/is-important/);
+        await expect(chip).toHaveAttribute('title', 'includes a decision or permission');
+
+        // The panel folded: the chip moves to the summary, first (once).
+        await panel.locator('.live-panel-toggle').click();
+        await expect(panel).toHaveClass(/collapsed/);
+        await expect(panel.locator('.live-panel-waitchip')).toHaveCount(1);
+        await expect(panel.locator('.live-panel-summary > :first-child')).toHaveText('Waiting 3');
+        await expect(panel.locator('.live-panel-summary > :first-child')).toHaveClass(/is-important/);
+
+        // Collapsed instead of hidden: the summary still counts it; a click opens the overview as it is.
+        await setPrefs(page, { waiting: 'collapsed' });
+        await expect(panel.locator('.live-panel-summary > .live-panel-waitchip')).toHaveText('Waiting 3');
+        await panel.locator('.live-panel-summary > .live-panel-waitchip').click();
+        await expect(head(page, '#research-overview', 'Awaiting action · 3')).toHaveAttribute('aria-expanded', 'false');
+        await page.keyboard.press('Escape');
+        // Expanded: no chip (as before).
+        await setPrefs(page, { waiting: 'expanded' });
+        await expect(panel.locator('.live-panel-waitchip')).toHaveCount(0);
+    });
+
+    test('phone: the strip keeps its count (amber when important); a hidden Awaiting action shows in the sheet until it closes', async ({ page }) => {
+        await follow(page, { width: 390, height: 844 }, (b) => {
+            b.waiting = [...b.waiting, { id: 'T0013', what: 'Smí agent číst archiv?', kind: 'permission', host: 'katalog.archiv-chlumy.cz', at: new Date().toISOString() }];
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel).toHaveClass(/phone-strip/);
+        await setPrefs(page, { waiting: 'hidden' });
+        const stripChip = panel.locator('.live-panel-summary .live-panel-chip--warn');
+        await expect(stripChip).toHaveText('Awaiting action 3');
+        await expect(stripChip).toHaveClass(/is-important/);
+        await expect(panel.locator('.live-panel-waitchip')).toHaveCount(0);
+        await panel.locator('.live-panel-toggle').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toHaveClass(/research-overview--sheet/);
+        await expect(head(page, '#research-overview', 'Awaiting action · 3').locator('.live-section__tag')).toHaveText('hidden');
+        await ov.locator('.research-overview__close').click();
+        await expect(ov).toHaveCount(0);
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'hidden' });
+    });
+
+    test('every section hidden: the state line and a way to Customize panel; the count of what waits stays', async ({ page }) => {
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toBeVisible();
+        await setPrefs(page, { working: 'hidden', waiting: 'hidden', changes: 'hidden', queue: 'hidden' });
+        await expect(panel.locator('.live-section__head')).toHaveCount(0);
+        await expect(panel.locator('.live-panel-state')).toBeVisible();
+        await expect(panel.locator('.live-panel-allhidden')).toContainText('All sections are hidden.');
+        await expect(panel.locator('.live-panel-allhidden .link-button')).toHaveText('Customize panel');
+        await expect(panel.locator('.live-panel-waitchip')).toHaveText('Waiting 2');
+        // The overview has two more: Directions and What the research knows stay.
+        await panel.locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.live-panel-allhidden')).toHaveCount(0);
+        await expect(head(page, '#research-overview', 'What the research knows')).toBeVisible();
+        await expect(head(page, '#research-overview', /^Now/)).toHaveCount(0);
+        await setPrefs(page, { working: 'hidden', waiting: 'hidden', changes: 'hidden', queue: 'hidden', directions: 'hidden', knows: 'hidden' });
+        await expect(ov.locator('.live-panel-allhidden')).toContainText('All sections are hidden.');
+        await expect(ov.locator('.live-section__head')).toHaveCount(0);
+    });
+
+    test('short of room: a section kept expanded is skipped by the panel\'s own folding (the panel scrolls); a section without a choice folds as before', async ({ page }) => {
+        await page.addInitScript(() => {
+            if (sessionStorage.getItem('seeded-prefs')) return;
+            sessionStorage.setItem('seeded-prefs', '1');
+            localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 1, s: { queue: 'expanded' } }));
+        });
+        await follow(page, { width: 1440, height: 520 });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-changes li').first()).toBeAttached();
+        await expect(head(page, '#live-panel', 'Up next')).toHaveAttribute('aria-expanded', 'true');
+        await expect(head(page, '#live-panel', 'Latest changes')).toHaveAttribute('aria-expanded', 'false');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
+        // Folded by the panel itself: not remembered; the choice made stays the only one.
+        expect((await storedPrefs(page)).s).toEqual({ queue: 'expanded' });
+        // A click on a section the panel folded expands it for good.
+        await head(page, '#live-panel', 'Latest changes').click();
+        await expect(head(page, '#live-panel', 'Latest changes')).toHaveAttribute('aria-expanded', 'true');
+        expect((await storedPrefs(page)).s).toEqual({ queue: 'expanded', changes: 'expanded' });
     });
 });
 

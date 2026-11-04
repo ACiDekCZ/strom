@@ -17,7 +17,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
     orderDirections, withPendingOrder, moveInOrder, dropInOrder, sameOrder, DirectionOrderWriter, DirectionMove, withBusyRetry,
@@ -590,7 +590,7 @@ export const researchDirectionsMethods = uiModule({
     },
 
     /** The Directions section of the overview (two or more directions). */
-    appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
+    appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode): void {
         const view = this.directionsView(s);
         if (view.managed) {
             this.appendManagedDirections(body, s, fold, mode, view);
@@ -645,7 +645,7 @@ export const researchDirectionsMethods = uiModule({
      * moves by drag, arrows or Alt+↑↓, the state changed right here, ended
      * ones folded below. An archive shows them read-only.
      */
-    appendManagedDirections(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void },
+    appendManagedDirections(body: HTMLElement, s: LiveSession, fold: LiveFold,
         mode: Mode, view: DirectionsView): void {
         const L = strings.live;
         const outside = outsideWork(s);
