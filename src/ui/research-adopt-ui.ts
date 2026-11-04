@@ -25,7 +25,7 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, sanitizeLiveStatus, statusAgentless,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
     researchLinkMark,
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
@@ -424,6 +424,7 @@ export const researchAdoptMethods = uiModule({
         let archive = false;
         // A research whose agent is not on this computer (`accepts.agentHere: false`): it waits for one.
         let agentAway = false;
+        let browser: BrowserInfo | null = null;
         try {
             const res = await fetchWithTimeout(`${base}/status`, 3000);
             if (res.ok) {
@@ -432,11 +433,14 @@ export const researchAdoptMethods = uiModule({
                 archive = st.accepts?.mode === 'archive';
                 agentAway = !archive && st.accepts?.agentHere === false;
                 // `tree.state` when the bridge says it: an archive, or a research waiting for its agent.
-                const state = sanitizeLiveStatus(st)?.treeState;
+                const live = sanitizeLiveStatus(st);
+                const state = live?.treeState;
                 if (state) { archive = state === 'archive'; agentAway = state === 'waiting'; }
+                // The agent's browser (spec 048 §11): only from a bridge that says it.
+                browser = live?.browser ?? null;
                 // `agent: { id, name, where? }` (an archive has none); a bare name from an older shape too.
                 const named = st.agent && typeof st.agent === 'object' ? (st.agent as { name?: unknown }).name : st.agent;
-                if (typeof named === 'string') agent = named.slice(0, 60);
+                if (typeof named === 'string') agent = named.trim().slice(0, 120);
             }
         } catch { /* the rows the status gives are left out */ }
         document.getElementById(READY_ID)?.remove();
@@ -449,14 +453,16 @@ export const researchAdoptMethods = uiModule({
         overlay.id = READY_ID;
         // An archive says so (the tag of the Research menu), and nothing of an agent; an empty tree too.
         const kindRow = archive ? `<dt>${esc(s.kindLabel)}</dt><dd><span class="research-sync-tag research-sync-tag--inline" id="research-ready-archive">${esc(strings.sync.archiveTag)}</span></dd>` : '';
-        const agentRow = archive ? '' : `<dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agentAway ? s.agentRowAway : agent ? s.agentRowOn(agent) : s.agentRow)}</dd>`;
+        // The agent's row; the Browser row goes right after it (filled below, kept up with each status).
+        const agentRow = archive ? '' : `<dt>${esc(s.agentRowLabel)}</dt><dd class="install-ready-agent" data-row="agent"></dd>`;
         const rows = hasPeople ? `
-                <dl class="install-ready-rows">
+                <dl class="install-ready-rows"${archive ? '' : ` data-browser-research="${esc(researchId)}"`}>
                     ${where ? `<dt>${esc(s.where)}</dt><dd class="install-ready-path">${esc(where)}</dd>` : ''}
                     ${kindRow}
                     ${agentRow}
                     <dt>${esc(s.originalsLabel)}</dt><dd>${esc(s.originalsRow)}</dd>
-                </dl>` : kindRow ? `<dl class="install-ready-rows">${kindRow}</dl>` : '';
+                </dl>
+                ${archive ? '' : '<p class="browser-live" role="status" aria-live="polite"></p>'}` : kindRow ? `<dl class="install-ready-rows">${kindRow}</dl>` : '';
         const sendMode = researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research);
         overlay.innerHTML = `
             <div class="modal modal--sm research-ready-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-ready-title">
@@ -479,6 +485,11 @@ export const researchAdoptMethods = uiModule({
             </div>`;
         document.body.appendChild(overlay);
         this.pushDialog(READY_ID);
+        const agentDl = overlay.querySelector<HTMLElement>('dl[data-browser-research]');
+        if (agentDl) {
+            this.renderBrowserRows(agentDl, { name: agent, away: agentAway }, browser);
+            this.watchBrowserRows();
+        }
         const close = (): void => this.closeResearchReady();
         overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
             const act = el.dataset.act;

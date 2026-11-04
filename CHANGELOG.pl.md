@@ -9,6 +9,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 *Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
 
 - **Mapa**: podkład mapy wczytuje się zgodnie z zasadami serwerów kafelków OpenStreetMap, jakkolwiek aplikacja jest uruchomiona. Kafelek wysyła adres strony, jak wymagają zasady, a tam, gdzie się nie da (aplikacja zapisana jako plik, rozszerzenie przeglądarki usuwające adres), kafelki są pobierane z identyfikatorem aplikacji i obrazki *Access blocked* z serwera już się nie pokazują. Gdy serwer mimo to odmówi podkładu, mówi o tym jedna informacja na mapie, a miejsca na niej zostają.
+- **Przeglądarka agenta**: przy badaniu, które podaje stan przeglądarki swojego agenta, *Badanie jest gotowe* i *Badanie dla drzewa* pokazują pod agentem wiersz *Przeglądarka*: *Claude in Chrome połączony*, brak rozszerzenia (z odnośnikiem do niego) albo agent, którego przeglądarki się nie śledzi, oraz archiwa jeszcze bez zgody, każde z *Zgoda…*, które otwiera je w badaniu. Pozycja w *Czeka na decyzję*, która czeka na skany z archiwum dostępnego tylko przez przeglądarkę, mówi, co pozwoliłoby agentowi zapisać je samemu; przy dwóch i więcej pozycjach jednego archiwum raz w nagłówku grupy. Oba zmieniają się z każdym stanem badania; telefon pokazuje je bez odnośników. Starsze badanie nie pokazuje niczego z tego.
 
 ## 3.22.0
 

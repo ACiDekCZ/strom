@@ -1734,7 +1734,22 @@ export interface LiveStatus {
     offLine?: LiveOffLine;
     /** `queueCounts` (with `queue.page` in `features`): the queue's counts for the filters; absent: not said. */
     queueCounts?: LiveQueueCounts;
+    /** The agent's name (`agent.name`, or a bare name); absent: none said (an archive has none). */
+    agentName?: string;
+    /** `browser` (with `browser.state` in `features`, not for an archive): the agent's browser and its archives; absent: not said. */
+    browser?: BrowserInfo;
 }
+
+/** `/status.features`: the bridge says the state of the agent's browser (`browser`, spec 048 §11). */
+export const BROWSER_STATE_FEATURE = 'browser.state';
+/** The agent's browser: the extension connected, missing, or an agent whose browser the research does not watch. */
+export type BrowserState = 'ready' | 'no-extension' | 'agent-without-browser';
+/** An archive the agent reaches only through the browser, and whether the research may download from it there. */
+export interface BrowserArchive { host: string; title?: string; permitted: boolean }
+/** `/status.browser`, checked: `url` only for `no-extension` (the extension's store page). */
+export interface BrowserInfo { state: BrowserState; url?: string; archives: BrowserArchive[] }
+/** Most archives of `browser.archives` kept. */
+export const MAX_BROWSER_ARCHIVES = 20;
 
 /** How often the research looks for history (`/status.experiments.historyPace`). */
 export type HistoryPace = 'sometimes' | 'rare' | 'idle';
@@ -2930,7 +2945,54 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
+        ...agentSaid(r.agent),
+        ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),
     };
+}
+
+/** `agent: { name }` (or a bare name, an older shape): the agent's name, when said. */
+function agentSaid(agent: unknown): Pick<LiveStatus, 'agentName'> {
+    const named = typeof agent === 'string' ? agent : asRecord(agent)?.name;
+    const name = cleanText(named, 120);
+    return name ? { agentName: name } : {};
+}
+
+/**
+ * `/status.browser` (spec 048 §11): only from a bridge that announces
+ * `browser.state`, never for an archive; an unknown state is null. `url` stays
+ * only as an https page of chromewebstore.google.com; at most 20 archives,
+ * each with a valid host (else left out) and a title of at most 120 characters.
+ */
+export function sanitizeBrowser(status: unknown): BrowserInfo | null {
+    const r = asRecord(status);
+    if (!r) return null;
+    const features = Array.isArray(r.features) ? r.features : [];
+    if (!features.includes(BROWSER_STATE_FEATURE)) return null;
+    const tree = asRecord(r.tree);
+    if (features.includes(TREE_STATE_FEATURE) && tree?.state === 'archive') return null;
+    const b = asRecord(r.browser);
+    if (!b) return null;
+    const state = b.state;
+    if (state !== 'ready' && state !== 'no-extension' && state !== 'agent-without-browser') return null;
+    const archives: BrowserArchive[] = [];
+    for (const a of Array.isArray(b.archives) ? b.archives : []) {
+        if (archives.length >= MAX_BROWSER_ARCHIVES) break;
+        const o = asRecord(a);
+        const host = o ? researchArchiveHost(o.host) : null;
+        if (!o || !host) continue;
+        const title = cleanText(o.title, 120);
+        archives.push({ host, ...(title ? { title } : {}), permitted: o.permitted === true });
+    }
+    return { state, ...(browserStoreUrl(b.url) ? { url: browserStoreUrl(b.url)! } : {}), archives };
+}
+
+/** The extension's store page: https on chromewebstore.google.com only, else null. */
+function browserStoreUrl(value: unknown): string | null {
+    if (typeof value !== 'string' || value.length > 500) return null;
+    try {
+        const u = new URL(value);
+        return u.protocol === 'https:' && u.hostname === 'chromewebstore.google.com' && !u.username && !u.password && !u.port ? u.href : null;
+    } catch { return null; }
 }
 
 /** `quality.rev`, read only when `features` names `quality.read`. */

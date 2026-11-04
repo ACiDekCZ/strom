@@ -101,6 +101,7 @@ import { researchOverviewMethods } from './research-overview-ui.js';
 import { liveSectionEditMethods } from './live-section-edit-ui.js';
 import { researchWaitingWriteMethods } from './research-waiting-write-ui.js';
 import { waitingTaskMethods } from './waiting-task-ui.js';
+import { researchBrowserMethods } from './research-browser-ui.js';
 import { researchRemovedMethods } from './research-removed-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
 import { directionFormMethods } from './direction-form-ui.js';
@@ -743,6 +744,10 @@ Object.assign(UIClass.prototype, researchWaitingWriteMethods);
 type WaitingTaskMethods = typeof waitingTaskMethods;
 export interface UIClass extends WaitingTaskMethods {}
 Object.assign(UIClass.prototype, waitingTaskMethods);
+
+type ResearchBrowserMethods = typeof researchBrowserMethods;
+export interface UIClass extends ResearchBrowserMethods {}
+Object.assign(UIClass.prototype, researchBrowserMethods);
 
 type ResearchRemovedMethods = typeof researchRemovedMethods;
 export interface UIClass extends ResearchRemovedMethods {}

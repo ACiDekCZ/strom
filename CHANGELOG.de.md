@@ -7,6 +7,7 @@
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
 - **Karte**: Der Kartenhintergrund wird nach den Nutzungsregeln der Kachelserver von OpenStreetMap geladen, wie auch immer die App geöffnet wird. Eine Kachel sendet die Adresse der Seite, wie die Regeln es verlangen; wo das nicht geht (die App als Datei gespeichert, eine Browser-Erweiterung, die sie entfernt), werden die Kacheln mit der Kennung der App angefragt, und die Bilder *Access blocked* des Servers erscheinen nicht mehr. Lehnt der Server den Hintergrund trotzdem ab, sagt das ein Hinweis auf der Karte, und die Orte bleiben darauf.
+- **Der Browser des Agenten**: Bei einer Forschung, die den Zustand des Browsers ihres Agenten meldet, zeigen *Die Forschung ist bereit* und *Forschung für diesen Stammbaum* unter dem Agenten eine Zeile *Browser*: *Claude in Chrome verbunden*, die fehlende Erweiterung (mit einem Link dazu) oder ein Agent, dessen Browser nicht überwacht wird, und die Archive noch ohne Erlaubnis, jedes mit *Erlaubnis…*, das es in der Forschung öffnet. Ein Eintrag in *Wartet auf Bearbeitung*, der auf Bilder aus einem nur im Browser zugänglichen Archiv wartet, sagt, womit der Agent sie selbst speichern würde; bei zwei und mehr Einträgen eines Archivs einmal in der Überschrift der Gruppe. Beides folgt jedem Status der Forschung; ein Telefon zeigt es ohne Links. Eine ältere Forschung zeigt nichts davon.
 
 ## 3.22.0
 

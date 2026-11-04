@@ -7,11 +7,12 @@
  * no mark; a terminal action keeps its mark.
  */
 
+import { browserNote } from '../research-browser.js';
 import { strings } from '../strings.js';
 import { LiveWaiting, researchLinkMark, researchTaskRef } from '../research-link.js';
 import { WaitActionView, imagesState, waitingActions } from '../research-waiting.js';
 import { DEFAULT_MEDIA_MAX_BYTES } from '../originals.js';
-import { MQ_PHONE_BAR } from '../breakpoints.js';
+import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { setResearchActionLabel } from './research-open-mark.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession } from './research-ui.js';
@@ -282,6 +283,10 @@ export const waitingTaskMethods = uiModule({
             const upload = this.waitingImagesUpload(s, w, 'dlg');
             if (!upload) return;
             if (files?.length) upload.addFiles(files);
+            // An archive only the agent's browser reaches (spec 048 §11.2): one line above the upload.
+            const phone = isPhoneBar();
+            const note = browserNote(s.browser, w, s.waiting, { phone, links: !phone && this.researchLinkAvailable('archive') });
+            if (note) body.appendChild(this.browserNoteEl(note, s.researchId, 'waiting-dialog__browser'));
             body.appendChild(upload.root);
             document.body.appendChild(overlay);
             upload.focus();

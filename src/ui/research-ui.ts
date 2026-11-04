@@ -38,7 +38,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, BrowserInfo, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
@@ -161,6 +161,8 @@ export interface LiveSession {
     researches: LiveDirection[];
     /** What the bridge does with the directions (its last status's `caps`; absent: an older research). */
     caps?: ResearchCaps;
+    /** The agent's browser (its last status's `browser`, spec 048 §11; absent: not said). */
+    browser?: BrowserInfo;
     /** Work outside the directions by branches (its last status's `offLine`; absent: not said). */
     offLine?: LiveOffLine;
     /** Sections the panel folded by itself for lack of room (not remembered). */
@@ -2847,6 +2849,7 @@ export const researchUiMethods = uiModule({
         s.offLine = status.offLine;
         s.update = status.update;
         s.busy = status.busy;
+        s.browser = status.browser;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
         // The latest status decides: without its count (an older research, a bridge just started) the history counts.

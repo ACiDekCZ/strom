@@ -32,6 +32,7 @@ import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrive
 import { clearOverviewImages, foldOverviewImages, overviewImagesResult } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
+import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
@@ -63,6 +64,8 @@ const GROUP_ROWS = 100;
 const RECENT_MS = 24 * 60 * 60_000;
 /** Steps (groups) the timeline shows at most. */
 const MAX_STEPS = 20;
+/** Items whose browser note their group's heading says (spec 048 §11.2): their details leave it out. */
+const browserNotedInHead = new Set<string>();
 
 type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -648,6 +651,7 @@ export const researchOverviewMethods = uiModule({
         }
 
         const phases = waitingPhases(s.waiting, filter);
+        browserNotedInHead.clear();
         for (const phase of ['todo', 'sent'] as WaitingPhase[]) {
             const groups = phases[phase];
             if (groups.length === 0) continue;
@@ -724,6 +728,14 @@ export const researchOverviewMethods = uiModule({
         row.appendChild(gh);
         const action = this.overviewWaitingGroupAction(s, g, phase, mode);
         if (action) row.appendChild(action);
+        // Two or more of its items wait for images from one browser-only archive: said once, here (spec 048 §11.2).
+        const ctx = this.overviewBrowserContext(mode);
+        const note = browserGroupNote(s.browser, g.items, s.waiting, ctx);
+        if (note) {
+            row.classList.add('has-browser-note');
+            row.appendChild(this.browserNoteEl(note, s.researchId, 'research-overview__waiting-groupnote-browser'));
+            for (const w of g.items) if (browserNote(s.browser, w, s.waiting, ctx)?.host === note.host) browserNotedInHead.add(itemKey(s, w.id));
+        }
         return row;
     },
 
@@ -799,6 +811,12 @@ export const researchOverviewMethods = uiModule({
             box.appendChild(btn);
         }
         return box.childElementCount > 0 ? box : null;
+    },
+
+    /** The browser note's context in the overview: a phone gets no links. */
+    overviewBrowserContext(mode: Mode): { phone: boolean; links: boolean } {
+        const phone = mode === 'sheet';
+        return { phone, links: !phone && this.researchLinkAvailable('archive') };
     },
 
     /** One waiting item: a compact row (kind, text in two lines, person, age); a click opens its detail. */
@@ -914,6 +932,10 @@ export const researchOverviewMethods = uiModule({
         if (w.to) detail.appendChild(el('small', 'research-overview__waiting-on', L.waitingTo(w.to)));
         const img = views ? imagesState(w) : null;
         if (img) appendImagesDetail(detail, img);
+        // An archive only the agent's browser reaches (spec 048 §11.2): under the book, unless its group's heading says it.
+        const bNote = views && !browserNotedInHead.has(key) ? browserNote(s.browser, w, s.waiting, this.overviewBrowserContext(mode)) : null;
+        const bNoteEl = bNote ? this.browserNoteEl(bNote, s.researchId) : null;
+        if (bNoteEl) detail.appendChild(bNoteEl);
         const meta = el('div', 'research-overview__waiting-meta');
         const person = personByRefn(w.person);
         if (person) {
@@ -931,6 +953,8 @@ export const researchOverviewMethods = uiModule({
         detail.appendChild(meta);
         if (views) {
             this.appendWaitingTaskActions(detail, s, w, views, mode);
+            // Not beside the open "Have images" area or an answer being written.
+            if (bNoteEl && detail.querySelector('.waiting-upload, .waiting-answer')) bNoteEl.remove();
             return detail;
         }
 

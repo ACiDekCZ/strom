@@ -7,6 +7,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 *This version is in preparation; this section grows with every test version.*
 
 - **Map**: the map background loads within the tile usage policy of OpenStreetMap however the app is opened. A tile sends the page's address, as the policy asks, and where none can be sent (the app saved as a file, a browser add-on that removes it) the tiles are asked for with the app's identification, no longer showing the server's *Access blocked* pictures. When the server refuses the background even so, one note on the map says so and the places stay on it.
+- **The agent's browser**: with a research that says the state of its agent's browser, *The research is ready* and *Research for this tree* show a *Browser* row under the agent: *Claude in Chrome connected*, the extension missing (with a link to it) or an agent whose browser is not watched, and the archives still without permission, each with *Permission…* that opens it in the research. An item in *Awaiting action* waiting for images from an archive only the browser reaches says what would let the agent save them itself, once in the heading for two or more items of one archive. Both follow every status of the research; a phone shows them without links. An older research shows neither.
 
 ## 3.22.0
 

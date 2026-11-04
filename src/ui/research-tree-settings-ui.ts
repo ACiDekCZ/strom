@@ -259,6 +259,11 @@ export const researchTreeSettingsMethods = uiModule({
                     </div>
                     <button type="button" class="close-btn" id="research-tree-settings-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
+                ${archive ? '' : `
+                <dl class="research-tree-agent" data-browser-research="${esc(link.id)}">
+                    <dt>${esc(strings.install.agentRowLabel)}</dt><dd class="install-ready-agent" data-row="agent"></dd>
+                </dl>
+                <p class="browser-live" role="status" aria-live="polite"></p>`}
                 ${archive || agentAway ? '' : `
                 <fieldset class="research-transcripts">
                     <legend>${esc(t.transcripts)}</legend>
@@ -282,6 +287,13 @@ export const researchTreeSettingsMethods = uiModule({
             </div>`;
         document.body.appendChild(overlay);
         this.pushDialog(SETTINGS_ID);
+        // The agent and its browser (spec 048 §11), kept up with each status of the research.
+        const agentDl = overlay.querySelector<HTMLElement>('dl.research-tree-agent');
+        if (agentDl) {
+            const st = this.researchStatusOf(link.id);
+            this.renderBrowserRows(agentDl, { name: st?.agentName ?? '', away: agentAway }, st?.browser);
+            this.watchBrowserRows();
+        }
         // Source images the research left out of its file (filled once the tree's stored images are read).
         const imagesHost = overlay.querySelector<HTMLElement>('#research-images-host');
         if (imagesHost) void this.renderResearchImagesSettings(treeId, imagesHost);

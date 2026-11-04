@@ -7,6 +7,7 @@
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
 - **Mapa**: podklad mapy se načítá podle pravidel dlaždicových serverů OpenStreetMap při každém způsobu spuštění aplikace. Dlaždice posílá adresu stránky, jak pravidla žádají, a kde to nejde (aplikace uložená jako soubor, doplněk prohlížeče, který adresu odstraňuje), žádá se o dlaždice s označením aplikace; obrázky *Access blocked* od serveru se už neukazují. Když server podklad přesto odmítne, řekne to jedna zpráva v mapě a místa na ní zůstanou.
+- **Prohlížeč agenta**: u výzkumu, který říká stav prohlížeče svého agenta, ukazují *Výzkum je připravený* a *Výzkum u stromu* pod agentem řádek *Prohlížeč*: *Claude in Chrome připojen*, chybějící rozšíření (s odkazem na ně) nebo agent, jehož prohlížeč se nehlídá, a archivy zatím bez svolení, každý se *Svolení…*, které ho otevře ve výzkumu. Položka v *Čeká na vyřízení*, která čeká na snímky z archivu dostupného jen přes prohlížeč, říká, co by agentovi umožnilo uložit je sám; u dvou a více položek jednoho archivu jednou v hlavičce skupiny. Obojí se mění s každým stavem výzkumu; telefon to ukazuje bez odkazů. Starší výzkum neukazuje nic z toho.
 
 ## 3.22.0
 

@@ -106,8 +106,8 @@ describe('texts of the research actions', () => {
 
     it('carry no ↗ at their end and no ◆ at their start, in any language', () => {
         const sections = ['research', 'places', 'history', 'live', 'sync', 'read'] as const;
-        // The web in a new window keeps its ↗ (an archive's site, the research's changes on the web).
-        const web = /\.(waitingOpenWeb|openWeb|archiveWeb|researchFullChangelog|fullChangelog|web|openPdf)$/;
+        // The web in a new window keeps its ↗ (an archive's site, the research's changes on the web, the browser extension's page).
+        const web = /\.(waitingOpenWeb|openWeb|archiveWeb|researchFullChangelog|fullChangelog|web|openPdf|extLink)$/;
         for (const lang of ['en', 'cs', 'de'] as Language[]) {
             setLanguage(lang);
             const all: { path: string; text: string }[] = [];
