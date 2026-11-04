@@ -448,7 +448,9 @@ test.describe('nothing new where nothing is decidable', () => {
         await expect(dialog.locator('[data-conflict-card], .prc-choice, .prc-side')).toHaveCount(0);
         await expect(dialog.locator('.person-research-conflict')).toHaveCount(2);
         await expect(dialog.locator('.person-research-sources-only')).toHaveText([
-            'The sources disagree here; this is decided in the research.', 'The sources disagree here; this is decided in the research.',
+            // Made by an edit in the app (its sides not said), and two sources that disagree: each says which.
+            'An edit made in the app differs from the research here; this is decided in the research.',
+            'The sources disagree here; this is decided in the research.',
         ]);
         await expect(dialog.locator('.person-research-conflict').first().locator('tbody td:first-child')).toHaveText([/1865/, '1865']);
         await page.locator('#person-research-close').click();
@@ -457,6 +459,8 @@ test.describe('nothing new where nothing is decidable', () => {
             await expect(tag(page, field)).toBeVisible();
             await expect(tag(page, field)).not.toHaveAttribute('aria-haspopup', 'dialog');
         }
+        await expect(tag(page, 'input-birthdate')).toHaveAttribute('aria-label', /: an edit in the app differs from the research\. What the research knows$/);
+        await expect(tag(page, 'input-deathdate')).toHaveAttribute('aria-label', /: the sources disagree\. What the research knows$/);
         await tag(page, 'input-birthdate').click();
         await expect(page.locator('#person-research-modal')).toBeVisible();
         await expect(panel(page)).toHaveCount(0);

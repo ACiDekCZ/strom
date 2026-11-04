@@ -15,10 +15,10 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { Person } from '../types.js';
 import {
-    LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
+    LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveSession, queueNoteText } from './research-ui.js';
+import { LiveSession, el, liveQueueItem, liveSession, queuePaged, queueNoteText } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -27,6 +27,7 @@ import {
     setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
+import { QueueList, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -120,33 +121,68 @@ export interface BranchQueueView {
     rows: { q: LiveQueueItem; pos: number }[];
     /** Its tasks set aside. */
     parked: LiveQueueItem[];
-    /** How many of its tasks are up next (the queue's tail not sent counted by the branch's own number). */
+    /** How many of its tasks are up next (the queue's counts; else the queue's tail not sent counted by the branch's own number). */
     total: number;
+    /** Its tasks are being read through the bridge (none shown yet). */
+    loading?: boolean;
+    /** Reading them failed: the research busy, or no answer. */
+    failed?: 'busy' | 'failed';
+    /** An older bridge: its tasks stand further on in the queue than the status's window, none of them in it. */
+    beyond?: boolean;
 }
 
 /**
- * The tasks of a branch in the queue's order: the place is the task's number
- * in the queue (the same as the queue shows); a queue sent whole is counted
- * exactly, one cut short trusts the branch's own count for the rest.
+ * The tasks of a branch in the queue's order. Read from the whole queue
+ * (`paged`, `queue.page`): each task's own place and the queue's count of
+ * the branch. Else from the status's window: the place is the task's number
+ * in the window (the same as the queue shows); a queue sent whole is counted
+ * exactly, one cut short trusts the branch's own count for the rest, and a
+ * branch with none of its tasks in the window says they stand further on.
  */
-export function branchQueueView(queue: readonly LiveQueueItem[], queueMore: number, b: OffLineBranch, shown = BRANCH_TASKS_SHOWN): BranchQueueView {
+export function branchQueueView(queue: readonly LiveQueueItem[], queueMore: number, b: OffLineBranch, shown = BRANCH_TASKS_SHOWN,
+    paged?: { list: QueueList | null; count: number | null }): BranchQueueView {
+    const windowParked = queue.filter(q => q.state === 'parked' && q.branch === b.id);
+    if (paged) {
+        const list = paged.list;
+        if (!list || list.total === null) {
+            return { rows: [], parked: windowParked, total: paged.count ?? 0, ...(list?.error ? { failed: list.error } : { loading: true }) };
+        }
+        const next = list.items.filter(q => q.state === 'next');
+        const parked = [...list.items.filter(q => q.state === 'parked'), ...windowParked.filter(q => !list.items.some(x => x.id === q.id))];
+        const read = list.next === null ? next.length : Math.max(next.length, list.total - list.items.filter(q => q.state === 'parked').length);
+        return {
+            rows: next.slice(0, shown).map((q, i) => ({ q, pos: q.pos ?? i + 1 })),
+            parked,
+            total: Math.max(paged.count ?? read, next.length),
+        };
+    }
     const mine: { q: LiveQueueItem; pos: number }[] = [];
     let pos = 0;
     for (const q of queue) {
         if (q.state !== 'next') continue;
         pos++;
-        if (q.branch === b.id) mine.push({ q, pos });
+        if (q.branch === b.id) mine.push({ q, pos: q.pos ?? pos });
     }
-    const parked = queue.filter(q => q.state === 'parked' && q.branch === b.id);
-    const total = queueMore > 0 ? Math.max(mine.length, b.tasks - parked.length) : mine.length;
-    return { rows: mine.slice(0, shown), parked, total };
+    const total = queueMore > 0 ? Math.max(mine.length, b.tasks - windowParked.length) : mine.length;
+    return { rows: mine.slice(0, shown), parked: windowParked, total, ...(mine.length === 0 && total > 0 ? { beyond: true } : {}) };
+}
+
+/** How many of a branch's tasks are up next: the queue's count when the research says it, else the status's window. */
+export function branchUpNext(s: LiveSession, b: OffLineBranch): number {
+    return s.queueCounts ? s.queueCounts.branch[b.id] ?? 0 : branchQueueView(s.queue, s.queueMore, b).total;
 }
 
 /** Why a task stands where it stands, in words ('' when the research does not say). */
 export function queueWhyText(q: LiveQueueItem, s: LiveSession | null): string {
     const why = q.why;
-    if (!why || !s) return '';
     const L = strings.live;
+    // A research with branches says no reason for a task about nobody: its way outside the directions in the
+    // branches' words (now and then / at the end / never), never the older research's "waits until the directions' work is done".
+    if (!why && s && q.offLine && s.features?.includes(OFF_LINE_BRANCHES_FEATURE)) {
+        const mode = L.offMode[q.offLine];
+        return q.branch ? L.qWhyOut(mode, branchName(q.branch)) : L.qWhyOutNoBranch(mode);
+    }
+    if (!why || !s) return '';
     switch (why.kind) {
         case 'own': return why.do === 'next' ? L.qWhyManualNext : L.qWhyManualLast;
         case 'line': return L.qWhyLine(directionName(s, why.research) || why.research);
@@ -460,12 +496,12 @@ export const researchOffLineMethods = uiModule({
             };
         }
         top.appendChild(head);
-        const view = branchQueueView(s.queue, s.queueMore, b);
+        const upNext = branchUpNext(s, b);
         const meta = el('div', 'research-direction__meta research-offline__meta');
         if (b.via) meta.appendChild(el('span', undefined, branchViaText(b)));
         const near = s.researches.find(d => d.id === b.nearest);
         if (near) meta.appendChild(el('span', undefined, `${L.dirNear(near.name)}${near.state === 'paused' ? ` ${L.dirNearPaused}` : ''}`));
-        meta.appendChild(el('span', 'research-offline__count', !never && view.total === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
+        meta.appendChild(el('span', 'research-offline__count', !never && upNext === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
         top.appendChild(meta);
         if (b.samples.length > 0 && !open && !never) {
             const samples = el('div', 'research-offline__samples', b.samples.map(x => x.text).join(' · '));
@@ -570,12 +606,24 @@ export const researchOffLineMethods = uiModule({
      */
     branchTaskList(s: LiveSession, b: OffLineBranch, canWrite: boolean, where: 'section' | 'detail'): HTMLElement {
         const L = strings.live;
-        const view = branchQueueView(s.queue, s.queueMore, b);
+        // Through the bridge: the branch's first page of the whole queue (read once per order of the queue).
+        const slot = where === 'section' ? 'branch' : 'helps';
+        const paged = queuePaged(s) && !!s.queueCounts;
+        const read = paged ? requestQueueList(s.bridge.base, { branch: b.id }, slot) : null;
+        const view = branchQueueView(s.queue, s.queueMore, b, BRANCH_TASKS_SHOWN,
+            paged ? { list: read, count: s.queueCounts ? s.queueCounts.branch[b.id] ?? 0 : null } : undefined);
         const box = el('div', 'research-offline__queue');
         box.dataset.branch = b.id;
-        const label = view.total === 0 ? L.branchQueue
+        const label = view.total === 0 || view.loading || view.failed || view.beyond ? L.branchQueue
             : view.rows.length < view.total ? L.branchQueueHead(view.rows.length, view.total) : L.branchQueueAll;
         box.appendChild(el('div', 'research-offline__queue-head', label));
+        if (view.loading || view.failed) {
+            this.appendQueueListState(box, view.failed ?? null, () => {
+                retryQueueList(s.bridge.base, { branch: b.id }, slot);
+                this.renderResearchOverview();
+            });
+            return box;
+        }
         const list = el('ul', 'research-offline__tasks');
         const menu = canWrite && (taskOrderOffered(s) || this.researchLinkAvailable('task'));
         for (const { q, pos } of view.rows) {
@@ -628,10 +676,12 @@ export const researchOffLineMethods = uiModule({
             list.appendChild(li);
         }
         if (list.childElementCount > 0) box.appendChild(list);
-        if (view.total === 0) {
+        if (view.beyond) {
+            box.appendChild(el('p', 'research-offline__queue-empty research-offline__queue-beyond', L.branchQueueBeyond(view.total)));
+        } else if (view.total === 0) {
             box.appendChild(el('p', 'research-offline__queue-empty', view.parked.length > 0 ? L.branchQueueOnlyParked : L.branchQueueEmpty));
         }
-        if (view.total > view.rows.length) {
+        if (view.total > view.rows.length && !view.beyond) {
             const all = el('button', 'link-button research-offline__all', L.branchAllTasks(view.total));
             all.type = 'button';
             all.dataset.do = 'all-tasks';
@@ -890,8 +940,7 @@ export const researchOffLineMethods = uiModule({
             toggle.setAttribute('aria-expanded', String(open));
             const ch = el('span', 'live-section__chevron', open ? '▾' : '▸');
             ch.setAttribute('aria-hidden', 'true');
-            const view = branchQueueView(s.queue, s.queueMore, b);
-            toggle.append(ch, el('span', undefined, view.total === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
+            toggle.append(ch, el('span', undefined, branchUpNext(s, b) === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
             toggle.onclick = (e) => {
                 e.stopPropagation();
                 helpsOpen = open ? null : b.id;
@@ -951,7 +1000,7 @@ export const researchOffLineMethods = uiModule({
         const s = liveSession();
         if (!s || !taskOrderOffered(s) || taskBusy.has(task)) return false;
         const L = strings.live;
-        const before = s.queue.find(q => q.id === task);
+        const before = liveQueueItem(s, task);
         taskBusy.add(task);
         taskProblems.delete(task);
         this.renderLivePanel();

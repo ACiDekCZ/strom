@@ -10,7 +10,7 @@ import type { StromData } from '../types.js';
 import { groupWaiting } from '../research-waiting.js';
 import {
     PLACES_GROUP, bulkAcceptable, bulkHandConflicts, bulkKeepable, candidateLetter, conflictOrigin,
-    isPlaceQuestion, pickableCandidates, placeAreas, placeQuestionChoices, placeQuestionFacts,
+    isPlaceQuestion, pickableCandidates, placeAreas, placeQuestionChoices, placeQuestionFacts, placesUnknownEverywhere,
     type PlaceQuestion,
 } from '../waiting-places.js';
 
@@ -37,13 +37,29 @@ describe('a place question', () => {
     it('offers by its question what it sends', () => {
         expect(placeQuestionChoices(propose)).toEqual([{ choice: 'none', take: 'none' }, { choice: 'unknown', take: 'unknown' }]);
         expect(placeQuestionChoices(propose, { chat: true }).map(c => c.choice)).toEqual(['none', 'unknown', 'chat']);
-        expect(placeQuestionChoices(researchConflict)).toEqual([
+        const all = { unknownAll: true };
+        expect(placeQuestionChoices(researchConflict, all)).toEqual([
             { choice: 'fix', take: 'c1' }, { choice: 'keep', take: 'keep' }, { choice: 'unknown', take: 'unknown' },
         ]);
-        expect(placeQuestionChoices(q('L0022', { question: 'conflict' })).map(c => c.choice)).toEqual(['keep', 'unknown']);
-        expect(placeQuestionChoices(form).map(c => c.take)).toEqual(['yes', 'no', 'unknown']);
+        expect(placeQuestionChoices(q('L0022', { question: 'conflict' }), all).map(c => c.choice)).toEqual(['keep', 'unknown']);
+        expect(placeQuestionChoices(form, all).map(c => c.take)).toEqual(['yes', 'no', 'unknown']);
+        // An older research refuses Don't know for a conflict and a form: not offered there; None of them only for a proposal.
+        expect(placeQuestionChoices(researchConflict).map(c => c.choice)).toEqual(['fix', 'keep']);
+        expect(placeQuestionChoices(form).map(c => c.choice)).toEqual(['yes', 'no']);
+        expect(placeQuestionChoices(propose, all).map(c => c.choice)).toEqual(['none', 'unknown']);
         expect(pickableCandidates(propose).map(c => candidateLetter(c.id))).toEqual(['A', 'B']);
         expect(pickableCandidates(researchConflict)).toEqual([]);
+    });
+
+    it("takes Don't know for a conflict and a form from the research 1.26.0-beta.7 on", () => {
+        expect(placesUnknownEverywhere('1.26.0-beta.7')).toBe(true);
+        expect(placesUnknownEverywhere('1.26.0')).toBe(true);
+        expect(placesUnknownEverywhere('1.27.1')).toBe(true);
+        expect(placesUnknownEverywhere('1.26.0-beta.6')).toBe(false);
+        expect(placesUnknownEverywhere('1.25.2')).toBe(false);
+        expect(placesUnknownEverywhere('')).toBe(false);
+        expect(placesUnknownEverywhere(undefined)).toBe(false);
+        expect(placesUnknownEverywhere('dev')).toBe(false);
     });
 
     it('counts the people, facts and years of its forms', () => {

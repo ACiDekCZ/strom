@@ -64,6 +64,11 @@ export function canDecideInApp(conflict: ResearchConflict | null | undefined, pe
     return researchPersonRef(person?.refn) !== null;
 }
 
+/** Whether a conflict was made by an edit in the app (a side is the user's), not by sources that disagree. */
+export function conflictFromEdit(conflict: Pick<ResearchConflict, 'take' | 'values'>): boolean {
+    return conflict.take === true || conflict.values.some(v => v.side === 'user');
+}
+
 /** The value of each side of a conflict canDecideInApp offers (null for any other). */
 export function conflictSides(conflict: ResearchConflict): { user: ResearchConflict['values'][number]; research: ResearchConflict['values'][number] } | null {
     const user = conflict.values.find(v => v.side === 'user');

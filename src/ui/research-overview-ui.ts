@@ -42,6 +42,7 @@ import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 import { waitBranchText } from './research-offline-ui.js';
+import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -233,6 +234,9 @@ export const researchOverviewMethods = uiModule({
         const on = !!s && !s.ended && s.overview && DataManager.getCurrentTreeId() === s.treeId;
         let root = document.getElementById('research-overview');
         if (!on || !s) {
+            // Nothing shows the queue's pages: their reads stop.
+            beginQueueSlots();
+            endQueueSlots();
             if (root) {
                 root.remove();
                 hoverCard(null);
@@ -270,6 +274,8 @@ export const researchOverviewMethods = uiModule({
         const scroller = root.querySelector<HTMLElement>('.research-overview__body');
         const scrollTop = scroller?.scrollTop ?? 0;
         root.replaceChildren();
+        // The queue's pages this drawing shows (a branch unfolded, the queue's filter); the rest is let go at its end.
+        beginQueueSlots();
 
         // Head: state dot, title over a line with the research's name and
         // Stop, then the follow switch and ⤡ / ×. Stop on the name's line
@@ -319,6 +325,7 @@ export const researchOverviewMethods = uiModule({
         if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
         this.appendOverviewKnows(body, fold('knows'), mode);
         this.appendOverviewFoot(root, s, mode);
+        endQueueSlots();
         body.scrollTop = scrollTop;
 
         this.setResearchOverviewDocked(mode === 'docked');

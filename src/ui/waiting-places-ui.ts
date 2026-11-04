@@ -24,7 +24,7 @@ import {
 } from '../places-bridge.js';
 import { waitingDaysAgo, waitingPhase } from '../research-waiting.js';
 import {
-    isPlaceQuestion, placeQuestionChoices, pickableCandidates, candidateLetter, placeQuestionKeys, placeQuestionFacts,
+    isPlaceQuestion, placeQuestionChoices, placesUnknownEverywhere, pickableCandidates, candidateLetter, placeQuestionKeys, placeQuestionFacts,
     placeQuestionsPersons, conflictOrigin, bulkAcceptable, bulkKeepable, bulkHandConflicts, placeAreas,
     waitingMapPoints, waitingMapView, spreadPins,
     type PlaceQuestion, type PlaceChoiceButton,
@@ -84,6 +84,8 @@ export interface WaitingPlacesAccess {
     canUndo: boolean;
     base: string | null;
     features: readonly string[];
+    /** The research takes Don't know for a conflict and a form too. */
+    unknownAll: boolean;
 }
 
 function geos(): Record<string, import('../types.js').PlaceGeo> | undefined {
@@ -106,7 +108,11 @@ export const waitingPlacesMethods = uiModule({
     waitingPlacesAccess(): WaitingPlacesAccess {
         const ctx = this.placesResearchContext();
         const canAnswer = !!ctx.researchId && !!ctx.base && ctx.features.includes(PLACES_ANSWER_FEATURE);
-        return { canAnswer, canUndo: canAnswer && ctx.features.includes(PLACES_UNDO_FEATURE), base: ctx.base, features: ctx.features };
+        const version = ctx.researchId ? this.researchStatusOf(ctx.researchId)?.version : undefined;
+        return {
+            canAnswer, canUndo: canAnswer && ctx.features.includes(PLACES_UNDO_FEATURE), base: ctx.base, features: ctx.features,
+            unknownAll: placesUnknownEverywhere(version),
+        };
     },
 
     /** The place questions to do, in the research's order, without those just answered here. */
@@ -358,7 +364,7 @@ export const waitingPlacesMethods = uiModule({
         ].filter(Boolean).join(' · ');
         const titleId = `waiting-place-${w.place}`;
         card.setAttribute('aria-labelledby', titleId);
-        const choices = access.canAnswer ? placeQuestionChoices(w) : [];
+        const choices = access.canAnswer ? placeQuestionChoices(w, { unknownAll: access.unknownAll }) : [];
         const sel = view.selected.get(w.place) ?? (w.question === 'conflict' ? 'c1' : '');
         card.innerHTML = `
             <header class="waiting-place-head">

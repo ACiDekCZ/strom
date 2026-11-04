@@ -15,7 +15,7 @@ import { sanitizeSyncReply, researchSchemeUrl } from '../research-link.js';
 import { researchAutoState, patchResearchAutoState } from '../research-device.js';
 import { heldConflicts } from '../research-sync.js';
 import {
-    canDecideInApp, conflictDecideMode, conflictFactDecidable, conflictSides, decideReply, decideRequestBody,
+    canDecideInApp, conflictDecideMode, conflictFromEdit, conflictFactDecidable, conflictSides, decideReply, decideRequestBody,
     postBridgeDecide, CONFLICT_DECIDE_FEATURE, DecideResult,
 } from '../research-decide.js';
 import { Person, ResearchConflict, StromData } from '../types.js';
@@ -58,6 +58,14 @@ function memoryStorage(): Storage {
         setItem: (k: string, v: string) => { store.set(k, String(v)); },
     };
 }
+
+describe('where a conflict comes from', () => {
+    it('an edit in the app (a side is the user\'s, or decidable by a side), else sources that disagree', () => {
+        expect(conflictFromEdit({ values: [{ value: '1865', side: 'user' }, { value: '1866', side: 'research' }] })).toBe(true);
+        expect(conflictFromEdit({ take: true, values: [{ value: '1865' }, { value: '1866' }] })).toBe(true);
+        expect(conflictFromEdit({ values: [{ value: '1865', sourceIds: ['S0001'] }, { value: '1866', sourceIds: ['S0002'] }] })).toBe(false);
+    });
+});
 
 describe('the research file: what makes a conflict decidable by a side', () => {
     it('reads _STROM_TAKE, each value\'s side and the raw sex of the fixture', () => {

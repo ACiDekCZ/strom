@@ -310,6 +310,20 @@ test.describe('live panel: up next, update, spend', () => {
         await expect(overview.locator('.live-queue-note')).toHaveCount(4);
     });
 
+    test('038: a research with branches says a task about nobody outside the directions in the branches\' words, not the older "waits"', async ({ page }) => {
+        await follow(page, {
+            features: ['tasks.offLine', 'offLine.branches'],
+            queue: [
+                { id: 'T0202', text: 'Matriky Lhota 1850–1860', state: 'next', offLine: 'occasional' },
+                { id: 'T0203', text: 'Sčítání Lhota 1880', state: 'next', offLine: 'last' },
+                { id: 'T0204', text: 'Pozemková kniha Lhota', state: 'next', offLine: 'never' },
+            ],
+        });
+        await expect(page.locator('#live-panel .live-queue-row .live-queue-note')).toHaveText([
+            'outside the directions · now and then', 'outside the directions · at the end', 'outside the directions · never',
+        ]);
+    });
+
     test('036: without the feature the same fields add no note', async ({ page }) => {
         await follow(page, {
             queue: [

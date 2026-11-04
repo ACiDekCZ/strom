@@ -105,8 +105,9 @@ async function setGeos(page: Page): Promise<void> {
 }
 
 /** The research tree, its bridge announcing `features`, its questions read. */
-async function research(page: Page, features: string[] = ALL, waiting = questions()): Promise<FakeBridge> {
-    const b = await fakeBridge(page, { features, treeGed: GED, places: fakePlaces({ reply: placesReply() }), waiting });
+/** `strom`: the research's version (from 1.26.0-beta.7 it takes Don't know for a conflict and a form too). */
+async function research(page: Page, features: string[] = ALL, waiting = questions(), strom = '1.26.0-beta.7'): Promise<FakeBridge> {
+    const b = await fakeBridge(page, { features, treeGed: GED, places: fakePlaces({ reply: placesReply() }), waiting, strom });
     await openResearch(page, { ged: GED });
     await poll(page);
     await setGeos(page);
@@ -233,6 +234,14 @@ test.describe('questions about places in Awaiting action', () => {
         await expect(toast(page)).toContainText('Noted: not known. The place stays off the map.');
         await expect.poll(() => cards(page)).toEqual(['L0012', 'L0020']);
         expect(b.places!.answers).toHaveLength(3);
+    });
+
+    test('an older research (before 1.26.0-beta.7): no Don\'t know for a conflict and a written place, a suggestion keeps it', async ({ page }) => {
+        await research(page, ALL, questions(), '1.26.0-beta.6');
+        await openWin(page);
+        await expect(cardOf(page, 'L0021').locator('.waiting-place-choice')).toHaveText(['Move to Jinov (Jinov District)', 'Keep']);
+        await expect(cardOf(page, 'L0030').locator('.waiting-place-choice')).toHaveText(['Yes', 'No']);
+        await expect(cardOf(page, 'L0013').locator('.waiting-place-choice')).toHaveText(['None of them', 'Don’t know']);
     });
 
     test('Accept all suggested: the preview with the research\'s counts, one step, one toast, one Undo; a hand-placed conflict stays out', async ({ page }) => {

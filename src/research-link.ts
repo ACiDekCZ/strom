@@ -1694,6 +1694,8 @@ export interface LiveStatus {
     caps?: ResearchCaps;
     /** `offLine` (with `offLine.branches` in `features`): work outside the directions by branches; absent: not said. */
     offLine?: LiveOffLine;
+    /** `queueCounts` (with `queue.page` in `features`): the queue's counts for the filters; absent: not said. */
+    queueCounts?: LiveQueueCounts;
 }
 
 /** How often the research looks for history (`/status.experiments.historyPace`). */
@@ -2090,6 +2092,8 @@ export interface LiveQueueItem {
     own?: 'next' | 'last';
     /** Why it stands where it stands (`offLine.branches`); absent for tasks about nobody. */
     why?: QueueWhy;
+    /** Its place in the whole queue, 1 = next (`queue.page`); absent: a task set aside, or an older research. */
+    pos?: number;
 }
 
 /** How work outside the directions is taken (the tree's choice, and a branch's own). */
@@ -2159,6 +2163,42 @@ export const DIRECTIONS_PEOPLE_FEATURE = 'directions.people';
 export const OFF_LINE_BRANCHES_FEATURE = 'offLine.branches';
 /** `/status.features`: a task's own place in the queue (`POST /queue/<T…>`, `queue[].why`). */
 export const QUEUE_OWN_FEATURE = 'queue.own';
+/** `/status.features`: the whole queue by pages (`GET /queue`), each task's `pos` and `/status.queueCounts`. */
+export const QUEUE_PAGE_FEATURE = 'queue.page';
+
+/** `/status.queueCounts`: tasks up next by direction and branch (absent = 0), all of them, set aside, and the order's print. */
+export interface LiveQueueCounts {
+    research: Record<string, number>;
+    branch: Record<string, number>;
+    next: number;
+    parked: number;
+    /** A print of the queue's order (16 hex): pages read with the same one are still valid. */
+    rev: string;
+}
+
+/** Most directions and branches read from `queueCounts`. */
+const MAX_COUNTED = 2000;
+
+/** `/status.queueCounts`, checked; null when its `rev` or counts are not valid. */
+export function sanitizeQueueCounts(value: unknown): LiveQueueCounts | null {
+    const r = asRecord(value);
+    if (!r || typeof r.rev !== 'string' || !/^[0-9a-f]{8,64}$/.test(r.rev)) return null;
+    const next = asCount(r.next);
+    const parked = asCount(r.parked);
+    if (next === null || parked === null) return null;
+    const map = (raw: unknown, ref: (v: unknown) => string | null): Record<string, number> => {
+        const out: Record<string, number> = {};
+        const m = asRecord(raw);
+        if (!m) return out;
+        for (const [k, v] of Object.entries(m).slice(0, MAX_COUNTED)) {
+            const id = ref(k);
+            const n = asCount(v);
+            if (id && n !== null && n > 0) out[id] = n;
+        }
+        return out;
+    };
+    return { research: map(r.research, researchDirectionRef), branch: map(r.branch, researchBranchRef), next, parked, rev: r.rev };
+}
 
 /** What works in the research now (`/status.busy`). */
 export interface LiveBusy {
@@ -2403,11 +2443,11 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
 const MAX_QUEUE = 20;
 
 /** The `queue` list of the status. Untrusted input: bad items are dropped. */
-export function sanitizeQueue(value: unknown, offLine = false, branches = false): LiveQueueItem[] {
+export function sanitizeQueue(value: unknown, offLine = false, branches = false, max = MAX_QUEUE): LiveQueueItem[] {
     if (!Array.isArray(value)) return [];
     const out: LiveQueueItem[] = [];
     for (const item of value) {
-        if (out.length >= MAX_QUEUE) break;
+        if (out.length >= max) break;
         const r = asRecord(item);
         const id = researchTaskRef(r?.id);
         const text = cleanText(r?.text);
@@ -2422,10 +2462,12 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false)
         const branch = branches ? researchBranchRef(r.branch) : null;
         const own = branches && (r.own === 'next' || r.own === 'last') ? r.own : null;
         const why = branches ? sanitizeQueueWhy(r.why) : null;
+        // Its place in the whole queue: tasks up next only (one set aside has none).
+        const pos = state === 'next' && typeof r.pos === 'number' && Number.isInteger(r.pos) && r.pos >= 1 && r.pos <= 10_000_000 ? r.pos : null;
         if (state) out.push({
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
-            ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}),
+            ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
         });
     }
     return out;
@@ -2803,6 +2845,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
+        ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
     };
 }
 

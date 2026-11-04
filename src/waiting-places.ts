@@ -14,6 +14,7 @@ import { forEachPlaceFact, placeKey } from './places.js';
 import { sameCoords } from './place-records.js';
 import { yearOf } from './dates.js';
 import { fitBounds } from './map.js';
+import { compareAppVersions, isAppVersion } from './app-version.js';
 
 export { PLACES_GROUP } from './research-waiting.js';
 
@@ -34,11 +35,25 @@ export interface PlaceChoiceButton {
 }
 
 /**
- * The footer of a question: propose — None of them · Don't know (· Chat);
- * conflict — Move to the suggestion (when there is one) · Keep · Don't know;
- * form — Yes · No · Don't know. `chat`: a chat link goes for it.
+ * The research version from which Don't know answers a conflict and a form
+ * too (an older one refuses it there; None of them only ever answers a proposal).
  */
-export function placeQuestionChoices(w: PlaceQuestion, opts: { chat?: boolean } = {}): PlaceChoiceButton[] {
+export const PLACES_UNKNOWN_ALL_SINCE = '1.26.0-beta.7';
+
+/** Whether the research of this version takes Don't know for a conflict and a form ('' / unknown = no). */
+export function placesUnknownEverywhere(version: string | undefined): boolean {
+    return !!version && isAppVersion(version) && compareAppVersions(version, PLACES_UNKNOWN_ALL_SINCE) >= 0;
+}
+
+/**
+ * The footer of a question: propose — None of them · Don't know (· Chat);
+ * conflict — Move to the suggestion (when there is one) · Keep (· Don't know);
+ * form — Yes · No (· Don't know). `chat`: a chat link goes for it;
+ * `unknownAll`: the research takes Don't know for a conflict and a form
+ * ({@link placesUnknownEverywhere}).
+ */
+export function placeQuestionChoices(w: PlaceQuestion, opts: { chat?: boolean; unknownAll?: boolean } = {}): PlaceChoiceButton[] {
+    const unknown: PlaceChoiceButton[] = opts.unknownAll ? [{ choice: 'unknown', take: 'unknown' }] : [];
     switch (w.question) {
         case 'propose':
             return [
@@ -50,13 +65,13 @@ export function placeQuestionChoices(w: PlaceQuestion, opts: { chat?: boolean } 
             return [
                 ...(w.candidates?.length ? [{ choice: 'fix' as const, take: w.candidates[0].id }] : []),
                 { choice: 'keep', take: 'keep' },
-                { choice: 'unknown', take: 'unknown' },
+                ...unknown,
             ];
         case 'form':
             return [
                 { choice: 'yes', take: 'yes' },
                 { choice: 'no', take: 'no' },
-                { choice: 'unknown', take: 'unknown' },
+                ...unknown,
             ];
     }
 }

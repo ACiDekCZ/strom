@@ -545,3 +545,152 @@ test.describe('work outside the directions through the bridge', () => {
         await expect(page.locator('#live-task-menu [data-action]')).toHaveCount(2);
     });
 });
+
+/**
+ * The whole queue read by pages (`queue.page`, spec 038 K7.5): 236 tasks,
+ * the status sends a window of 14, the branch Alois Fíšek has its 6 tasks at
+ * places 201–206 and the direction Potomci: Josef Fíšek its 5 at 40, 80, …, 200.
+ */
+const PAGED_FEATURES = [...FEATURES, 'queue.page'];
+const ALOIS_PLACES = [201, 202, 203, 204, 205, 206];
+
+function bigQueue(size: number, alois: number[] = ALOIS_PLACES): Record<string, unknown>[] {
+    const queue: Record<string, unknown>[] = [];
+    for (let i = 1; i <= size; i++) {
+        const id = `T${String(10000 + i)}`;
+        if (alois.includes(i)) {
+            queue.push({ id, text: `Alois Fíšek, úkol ${alois.indexOf(i) + 1}`, state: 'next', branch: 'B-P0031', why: { kind: 'off', mode: 'occasional', branch: 'B-P0031' } });
+        } else if (i % 40 === 0) {
+            queue.push({ id, text: `Josef Fíšek, úkol ${i / 40}`, state: 'next', research: 'G0002', why: { kind: 'line', research: 'G0002' } });
+        } else {
+            queue.push({ id, text: `Matriky Smrkov ${i}`, state: 'next', research: 'G0001', why: { kind: 'line', research: 'G0001' } });
+        }
+    }
+    queue.push({ id: 'T19999', text: 'Křest Karla Fíška', state: 'parked', branch: 'B-P0031', why: { kind: 'paused', research: 'G0004' } });
+    return queue;
+}
+
+/** Alois's branch: 6 tasks up next and 1 set aside (an older research knows only the 7). */
+const PAGED_LINE = { ...OFF_LINE, branches: [{ ...BRANCHES[0], tasks: 7, grows: false }, BRANCHES[1], BRANCHES[2]] };
+
+const followBig = (page: Page, opts: { size?: number; features?: string[] } = {}): Promise<ManagedBridge> =>
+    followManaged(page, {
+        caps: OFF_CAPS, features: opts.features ?? PAGED_FEATURES, offLine: PAGED_LINE, queue: bigQueue(opts.size ?? 236),
+        ged: GED_OFFLINE, paged: true,
+    });
+
+const nextNums = (page: Page) =>
+    overview(page).locator('.live-queue .live-queue-row:not(.live-queue-row--parked):not(.live-queue-row--more):not(.live-queue-state) .live-queue-num');
+
+test.describe('the whole queue by pages through the bridge (queue.page)', () => {
+    test('a branch beyond the window: its tasks with their places, the chips count the whole queue, Load more adds a page', async ({ page }) => {
+        const b = await followBig(page);
+        await openOverview(page);
+        await outToggle(page).click();
+        const alois = branchRow(page, 'B-P0031');
+        // The branch's tasks as the research counts them; nothing read before unfolding.
+        await expect(alois.locator('.research-offline__count')).toHaveText('7 tasks');
+        expect(b.queueReads).toEqual([]);
+
+        // Unfolded: the branch's first page read, the first three with their places in the whole queue.
+        await alois.locator('.research-offline__expand').click();
+        const list = alois.locator('.research-offline__queue');
+        await expect(list.locator('.research-offline__queue-head')).toHaveText('In the queue · first 3 of 6');
+        await expect(list.locator('.research-offline__task:not(.is-parked) .research-offline__task-num')).toHaveText(['201', '202', '203']);
+        await expect(list.locator('.research-offline__task:not(.is-parked) .research-offline__task-text')).toHaveText([
+            'Alois Fíšek, úkol 1', 'Alois Fíšek, úkol 2', 'Alois Fíšek, úkol 3',
+        ]);
+        await expect(list.locator('.research-offline__task.is-parked')).toHaveText(/^Set aside: Křest Karla Fíška/);
+        expect(b.queueReads).toEqual(['count=50&branch=B-P0031']);
+        // Folded and unfolded again: no new read.
+        await alois.locator('.research-offline__expand').click();
+        await alois.locator('.research-offline__expand').click();
+        await expect(list.locator('.research-offline__task:not(.is-parked) .research-offline__task-num')).toHaveText(['201', '202', '203']);
+
+        // All of them: the queue narrowed to the branch, the chip counts 6, the same list (no new read).
+        await alois.locator('[data-do="all-tasks"]').click();
+        const chip = overview(page).locator('.research-offline__chip');
+        await expect(chip).toHaveText('Branch Alois Fíšek 6 ×');
+        await expect(nextNums(page)).toHaveText(ALOIS_PLACES.map(String));
+        await expect(nextNums(page).first()).toHaveAttribute('aria-label', '201 in the queue');
+        await expect(overview(page).locator('.live-queue .live-queue-row--parked')).toHaveText(/Křest Karla Fíška/);
+        await expect(overview(page).locator('.live-queue-load')).toHaveCount(0);
+        expect(b.queueReads).toEqual(['count=50&branch=B-P0031']);
+
+        // A line's pill: its count from the whole queue, its tasks read from the whole queue with their places.
+        const row = overview(page).locator('.research-overview__queue-filters');
+        const josef = row.locator('[role="radio"][data-direction="G0002"]');
+        await expect(josef).toHaveText('Potomci: Josef Fíšek 5');
+        await expect(row.locator('[role="radio"][data-direction="all"]')).toHaveText('All 236');
+        await josef.click();
+        await expect(nextNums(page)).toHaveText(['40', '80', '120', '160', '200']);
+        expect(b.queueReads).toEqual(['count=50&branch=B-P0031', 'count=50&research=G0002']);
+
+        // The whole queue: the window, then Load more reads the next page after it.
+        await row.locator('[role="radio"][data-direction="all"]').click();
+        await expect(nextNums(page)).toHaveCount(14);
+        const load = overview(page).locator('.live-queue-load');
+        await expect(load).toHaveText('Load more');
+        await expect(overview(page).locator('.live-queue-shown')).toHaveText('14 of 236 shown');
+        await load.click();
+        await expect(nextNums(page)).toHaveCount(64);
+        await expect(nextNums(page).nth(14)).toHaveText('15');
+        await expect(overview(page).locator('.live-queue-shown')).toHaveText('64 of 236 shown');
+        await expect(load).toBeFocused();
+        expect(b.queueReads.at(-1)).toBe('from=14&count=50&state=next');
+        await load.click();
+        await expect(nextNums(page)).toHaveCount(114);
+        expect(b.queueReads.at(-1)).toBe('from=64&count=50&state=next');
+        expect(b.queueReads).toHaveLength(4);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        expect(await launchedLinks(page)).toEqual([]);
+    });
+
+    test('an older research without pages: no "first 0 of N", the branch says its tasks stand further on', async ({ page }) => {
+        const b = await followBig(page, { features: FEATURES });
+        await openOverview(page);
+        await outToggle(page).click();
+        const alois = branchRow(page, 'B-P0031');
+        await alois.locator('.research-offline__expand').click();
+        const list = alois.locator('.research-offline__queue');
+        await expect(list.locator('.research-offline__queue-head')).toHaveText('In the queue');
+        await expect(list.locator('.research-offline__queue-beyond')).toHaveText('The branch\'s tasks stand further on in the queue (6).');
+        await expect(list).not.toContainText('first 0');
+        await expect(list.locator('[data-do="all-tasks"]')).toHaveCount(0);
+        await expect(overview(page).locator('.live-queue-load')).toHaveCount(0);
+        expect(b.queueReads).toEqual([]);
+    });
+
+    test('5000 tasks: the queue and the branch stay smooth, the DOM holds at most 300 rows', async ({ page }) => {
+        const places = [4201, 4202, 4203, 4204, 4205, 4206];
+        await followManaged(page, {
+            caps: OFF_CAPS, features: PAGED_FEATURES, offLine: PAGED_LINE, queue: bigQueue(5000, places), ged: GED_OFFLINE, paged: true,
+        });
+        await page.evaluate(() => {
+            const w = window as unknown as { __longTasks: number[] };
+            w.__longTasks = [];
+            new PerformanceObserver(list => { for (const e of list.getEntries()) w.__longTasks.push(Math.round(e.duration)); })
+                .observe({ type: 'longtask' });
+        });
+        await openOverview(page);
+        await outToggle(page).click();
+        const alois = branchRow(page, 'B-P0031');
+        await alois.locator('.research-offline__expand').click();
+        await expect(alois.locator('.research-offline__task:not(.is-parked) .research-offline__task-num')).toHaveText(['4201', '4202', '4203']);
+        await overview(page).locator('.live-queue-toggle').click();
+        const load = overview(page).locator('.live-queue-load');
+        for (let k = 1; k <= 6; k++) {
+            await load.click();
+            await expect(nextNums(page)).toHaveCount(Math.min(300, 14 + 50 * k));
+        }
+        // At the cap: said so, no more reads, the rest through the filters.
+        await expect(load).toHaveCount(0);
+        await expect(overview(page).locator('.live-queue-row--cap .live-queue-shown'))
+            .toHaveText('300 of 5000 shown. A direction\'s or a branch\'s filter narrows the rest.');
+        expect(await overview(page).locator('.live-queue .live-queue-row').count()).toBeLessThanOrEqual(302);
+        const long = await page.evaluate(() => (window as unknown as { __longTasks: number[] }).__longTasks);
+        test.info().annotations.push({ type: 'longtasks', description: JSON.stringify(long) });
+        // No long task over 200 ms (a 50 ms one may come from the machine's load).
+        expect(long.filter(d => d > 200)).toEqual([]);
+    });
+});

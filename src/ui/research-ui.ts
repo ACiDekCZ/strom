@@ -39,6 +39,7 @@ import {
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueCounts, QUEUE_PAGE_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -54,6 +55,10 @@ import { queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered
 import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
+import {
+    QUEUE_ROWS_CAP, QueueFilter, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, requestQueueList,
+    resetQueueLists, retryQueueList,
+} from '../research-queue-pages.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -138,6 +143,8 @@ export interface LiveSession {
     accepts: ResearchAccepts | null;
     queue: LiveQueueItem[];
     queueMore: number;
+    /** The queue's counts for the filters (its last status's `queueCounts`, `queue.page`; absent: not said). */
+    queueCounts?: LiveQueueCounts;
     update: { version: string } | null;
     /** Sessions and runs working now (its last status's `busy`; absent: not said). */
     busy?: LiveBusy;
@@ -1058,6 +1065,17 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: st
 /** The followed research (null: none), for the overview. */
 export function liveSession(): LiveSession | null {
     return live;
+}
+
+/** The followed research's whole queue is read by pages now (`queue.page`, its bridge answering). */
+export function queuePaged(s: LiveSession | null): boolean {
+    return !!s && !s.ended && s.lostSince === null && !!s.bridge.base && !!s.features?.includes(QUEUE_PAGE_FEATURE);
+}
+
+/** A queued task by id: in the status's window, else in a page read past it. */
+export function liveQueueItem(s: LiveSession | null, id: string): LiveQueueItem | null {
+    if (!s) return null;
+    return s.queue.find(q => q.id === id) ?? queueListItem(s.bridge.base, id);
 }
 
 export const researchUiMethods = uiModule({
@@ -2483,6 +2501,7 @@ export const researchUiMethods = uiModule({
                 accepts: status.accepts,
                 queue: status.queue,
                 queueMore: status.queueMore,
+                ...(status.queueCounts ? { queueCounts: status.queueCounts } : {}),
                 update: status.update,
                 ...(status.busy ? { busy: status.busy } : {}),
                 spend: status.spend,
@@ -2513,6 +2532,10 @@ export const researchUiMethods = uiModule({
             };
             live.overview = this.researchOverviewRemembered();
             if (live.overview) live.collapsed = false;
+            // Pages of the queue read through the bridge redraw the overview when they come.
+            resetQueueLists();
+            if (live.queueCounts) noteQueueRev(bridge.base, live.queueCounts.rev);
+            onQueueListsChange(() => this.queueListsChanged());
             // Which tree is followed now, said in the panel (never a toast): started, or moved from another tree.
             if (from) this.noteLiveFollowStarted(live, from);
             DataManager.setLiveTree(treeId);
@@ -2705,6 +2728,9 @@ export const researchUiMethods = uiModule({
         }
         s.queue = status.queue;
         s.queueMore = status.queueMore;
+        s.queueCounts = status.queueCounts;
+        // A new order of the queue: the pages on screen are read again (after a pause), the others forgotten.
+        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev);
         s.researches = status.researches;
         s.caps = status.caps;
         s.offLine = status.offLine;
@@ -2902,6 +2928,7 @@ export const researchUiMethods = uiModule({
     endLiveFollow(s: LiveSession, reason: 'ended' | 'other' | 'stopped'): void {
         if (live !== s) return;
         forgetLiveBridge();
+        resetQueueLists();
         const wasEnded = s.ended;
         s.ended = true;
         if (s.timer) clearTimeout(s.timer);
@@ -3400,6 +3427,7 @@ export const researchUiMethods = uiModule({
         fold: { id: string; collapsed: boolean; onToggle: () => void }, limit: number, title = strings.research.queue,
         directions = false): void {
         const r = strings.research;
+        const L = strings.live;
         // The overview, two or more directions running: each task names its
         // direction, and pills filter the queue by one. The filter is the
         // panel's selected line too (one choice), so it narrows both.
@@ -3410,30 +3438,46 @@ export const researchUiMethods = uiModule({
         const inFilter = (q: LiveQueueItem): boolean => branch ? q.branch === branch
             : dirFilter === 'all' || q.research === dirFilter;
         const allNext = s.queue.filter(q => q.state === 'next');
-        const next = allNext.filter(inFilter);
-        const parked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
-        if (s.queue.length === 0 && s.queueMore === 0) return;
-        const shownNext = next.slice(0, limit);
-        const shownParked = parked.slice(0, limit);
+        const counts = s.queueCounts;
+        if (s.queue.length === 0 && s.queueMore === 0 && !(counts && counts.next + counts.parked > 0)) return;
+        // The counts of the whole queue (`queueCounts`), else of the status's window.
+        const nextCount = counts ? counts.next : allNext.length + s.queueMore;
+        const lineCount = (id: string): number => counts ? counts.research[id] ?? 0 : allNext.filter(q => q.research === id).length;
+        // The overview reads the whole queue by pages through the bridge (`queue.page`): a filter's
+        // tasks from all of it, the rest of the queue by "Load more"; never while the section is folded.
+        const paged = directions && !fold.collapsed && !!counts && queuePaged(s);
+        const base = s.bridge.base;
+        const filter: QueueFilter | null = !paged ? null
+            : branch ? { branch } : dirFilter !== 'all' ? { research: dirFilter } : null;
+        const whole: QueueFilter = { state: 'next' };
+        // A filter's list is read when shown; the whole queue's only once "Load more" was asked.
+        const list = filter ? requestQueueList(base, filter, 'queue')
+            : paged && queueList(base, whole) ? requestQueueList(base, whole, 'queue') : null;
+        const next = list ? list.items.filter(q => q.state === 'next') : allNext.filter(inFilter);
+        const windowParked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
+        const parked = list ? [...list.items.filter(q => q.state === 'parked'),
+            ...windowParked.filter(q => !list.items.some(x => x.id === q.id))] : windowParked;
+        const shownNext = list ? next : next.slice(0, limit);
+        const shownParked = list ? parked : parked.slice(0, limit);
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
 
         const sel = !directions && dirFilter !== 'all' ? s.researches.find(d => d.id === dirFilter) : undefined;
         const host = liveSection(body, {
             ...fold, title, headCls: 'live-queue-toggle',
-            summary: sel ? strings.otherResearch.lineQueueOf(next.length, allNext.length + s.queueMore, directionGlyph(sel))
-                : strings.live.queueCount(allNext.length + s.queueMore),
+            summary: sel ? strings.otherResearch.lineQueueOf(counts ? lineCount(sel.id) : next.length, nextCount, directionGlyph(sel))
+                : L.queueCount(nextCount),
         });
         if (multi) {
             const pills = el('div', 'research-overview__filters research-overview__queue-filters');
             pills.setAttribute('role', 'radiogroup');
-            pills.setAttribute('aria-label', strings.live.dirFilterLabel);
+            pills.setAttribute('aria-label', L.dirFilterLabel);
             const active = activeDirections(s);
             // A selected line no longer running keeps its pill.
             const picked = s.researches.find(d => d.id === dirFilter);
             if (picked && !active.includes(picked)) active.push(picked);
             const options: [string, string, number][] = [
-                ['all', strings.live.filterAll, allNext.length],
-                ...active.map(d => [d.id, d.name, allNext.filter(q => q.research === d.id).length] as [string, string, number]),
+                ['all', L.filterAll, counts ? counts.next : allNext.length],
+                ...active.map(d => [d.id, d.name, lineCount(d.id)] as [string, string, number]),
             ];
             for (const [id, label, n] of options) {
                 const chip = el('button', 'research-overview__filter', `${label} ${n}`);
@@ -3452,7 +3496,8 @@ export const researchUiMethods = uiModule({
         }
         if (branch) {
             // The branch's chip beside the lines' ones; × shows the whole queue again.
-            const chip = this.branchQueueChip(s, branch, allNext.filter(q => q.branch === branch).length);
+            const n = counts ? counts.branch[branch] ?? 0 : allNext.filter(q => q.branch === branch).length;
+            const chip = this.branchQueueChip(s, branch, n);
             let pills = host.querySelector<HTMLElement>('.research-overview__queue-filters');
             if (!pills) {
                 pills = el('div', 'research-overview__filters research-overview__queue-filters');
@@ -3464,19 +3509,34 @@ export const researchUiMethods = uiModule({
             pills.prepend(chip);
             pills.scrollLeft = 0;
         }
-        const list = el('ul', 'live-panel-list live-queue');
-        host.appendChild(list);
+        const ul = el('ul', 'live-panel-list live-queue');
+        host.appendChild(ul);
+        if (list && list.total === null) {
+            // The filter's first page not read yet: being read, or failed (try again).
+            this.appendQueueListState(ul, list.error, () => {
+                retryQueueList(base, list.filter, 'queue');
+                this.renderResearchOverview();
+            });
+            return;
+        }
         const canTask = this.researchLinkAvailable('task');
         // A task's own place (Do next / To the end) is set through the bridge, no mark.
         const canOrder = taskOrderOffered(s);
         // Narrowed to a branch: each task keeps its place in the whole queue,
-        // the same number as under the branch (a line's filter counts anew).
+        // the same number as under the branch (a line's filter counts anew,
+        // unless the bridge says each task's place).
         const placeOf = branch ? new Map(allNext.map((q, i) => [q.id, i + 1])) : null;
+        const placeAt = (q: LiveQueueItem, i: number): number =>
+            (list || branch || dirFilter === 'all' ? q.pos : undefined) ?? placeOf?.get(q.id) ?? i + 1;
+        // One width for every number of the list (the widest place's digits): the texts start in one column.
+        const widest = shownNext.reduce((m, q, i) => Math.max(m, placeAt(q, i)), 0);
+        if (widest >= 10) ul.style.setProperty('--live-queue-num', `${String(widest).length}ch`);
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
-            const place = placeOf?.get(q.id) ?? i + 1;
+            li.dataset.task = q.id;
+            const place = placeAt(q, i);
             const num = el('span', 'live-queue-num', String(place));
-            if (placeOf) num.setAttribute('aria-label', strings.live.branchQueuePos(place));
+            if (placeOf || list) num.setAttribute('aria-label', L.branchQueuePos(place));
             li.appendChild(num);
             const text = el('span', 'live-queue-text', q.text);
             // The panel, two or more lines at work: the task's line first.
@@ -3505,10 +3565,11 @@ export const researchUiMethods = uiModule({
                 };
                 li.appendChild(more);
             }
-            list.appendChild(li);
+            ul.appendChild(li);
         });
         for (const q of shownParked) {
             const li = el('li', 'live-queue-row live-queue-row--parked');
+            li.dataset.task = q.id;
             const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
             appendQueueNote(text, q, s);
             li.appendChild(text);
@@ -3518,17 +3579,103 @@ export const researchUiMethods = uiModule({
                 wake.onclick = () => this.runLiveTask(q.id, 'wake');
                 li.appendChild(wake);
             }
-            list.appendChild(li);
+            ul.appendChild(li);
         }
         const open = this.activeResearchLink('open');
+        if (paged && counts) {
+            // How far the list goes: "Load more" (a page) while there is more, the cap said at its end.
+            const total = list ? list.total ?? 0 : counts.next;
+            const has = list ? list.items.length : allNext.length;
+            const more = list ? list.next !== null : allNext.length < counts.next;
+            if (list?.error) {
+                this.appendQueueListState(ul, list.error, () => {
+                    loadMoreQueueList(base, list.filter, 'queue');
+                    this.renderResearchOverview();
+                });
+            } else if (more && has < QUEUE_ROWS_CAP) {
+                const li = el('li', 'live-queue-row live-queue-row--more live-queue-row--load');
+                const busy = !!list?.loading;
+                const btn = el('button', 'link-button live-queue-load', busy ? L.queueLoading : L.queueLoadMore);
+                btn.type = 'button';
+                btn.dataset.do = 'queue-more';
+                if (busy) {
+                    btn.setAttribute('aria-disabled', 'true');
+                    li.setAttribute('aria-busy', 'true');
+                } else {
+                    btn.onclick = () => {
+                        loadMoreQueueList(base, filter ?? whole, 'queue', filter ? undefined : { items: allNext, total: counts.next });
+                        this.renderResearchOverview();
+                        document.querySelector<HTMLElement>('#research-overview .live-queue-load')?.focus({ preventScroll: true });
+                    };
+                }
+                li.append(btn, el('span', 'live-queue-shown', L.queueShown(has, total)));
+                // Right under the tasks up next (more of them come there), above the set-aside ones.
+                ul.insertBefore(li, ul.querySelector('.live-queue-row--parked'));
+            } else if (has >= QUEUE_ROWS_CAP && total > has) {
+                const li = el('li', 'live-queue-row live-queue-row--more live-queue-row--cap');
+                li.appendChild(el('span', 'live-queue-shown', L.queueCapNote(has, total)));
+                if (open) {
+                    const rest = setResearchActionLabel(el('button', 'link-button live-queue-rest'), r.queueMore(total - has), researchLinkMark('open'));
+                    rest.type = 'button';
+                    rest.onclick = () => this.launchResearchLink(open);
+                    li.appendChild(rest);
+                }
+                ul.insertBefore(li, ul.querySelector('.live-queue-row--parked'));
+            }
+            return;
+        }
         if (hidden > 0 && open) {
             const li = el('li', 'live-queue-row live-queue-row--more');
             const more = setResearchActionLabel(el('button', 'link-button live-queue-rest'), r.queueMore(hidden), researchLinkMark('open'));
             more.type = 'button';
             more.onclick = () => this.launchResearchLink(open);
             li.appendChild(more);
-            list.appendChild(li);
+            ul.appendChild(li);
         }
+    },
+
+    /** A list of the queue not read: "Loading tasks…", or why it failed with Try again. */
+    appendQueueListState(host: HTMLElement, error: 'busy' | 'failed' | null, retry: () => void): void {
+        const L = strings.live;
+        const tag = host.tagName === 'UL' ? 'li' : 'div';
+        const row = el(tag, `live-queue-state${error ? ' is-error' : ''}`);
+        if (!error) {
+            row.setAttribute('aria-busy', 'true');
+            row.setAttribute('role', 'status');
+            row.appendChild(el('span', 'live-queue-state__text', L.queueLoading));
+        } else {
+            row.appendChild(el('span', 'live-queue-state__text', error === 'busy' ? L.queueLoadBusy : L.queueLoadFailed));
+            const btn = el('button', 'link-button live-queue-retry', L.dirRetry);
+            btn.type = 'button';
+            btn.dataset.do = 'queue-retry';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                retry();
+                document.querySelector<HTMLElement>(`#research-overview .live-queue-state[aria-busy="true"], #research-overview .live-queue-load`)
+                    ?.focus?.({ preventScroll: true });
+            };
+            row.appendChild(btn);
+        }
+        host.appendChild(row);
+    },
+
+    /** Pages of the queue came (or failed): the overview drawn again, the focus kept on "Load more" or moved to the rows it brought. */
+    queueListsChanged(): void {
+        const a = document.activeElement as HTMLElement | null;
+        const fromLoad = !!a?.matches?.('#research-overview .live-queue-load, #research-overview .live-queue-retry');
+        const before = fromLoad ? document.querySelectorAll('#research-overview .live-queue > .live-queue-row:not(.live-queue-row--more)').length : 0;
+        this.renderResearchOverview();
+        const now = document.activeElement;
+        if (!fromLoad || (now && now !== document.body && now.isConnected)) return;
+        const load = document.querySelector<HTMLElement>('#research-overview .live-queue-load');
+        if (load) {
+            load.focus({ preventScroll: true });
+            return;
+        }
+        // The list's end: the first task it brought (its ⋯), else the list's last control.
+        const rows = [...document.querySelectorAll<HTMLElement>('#research-overview .live-queue > .live-queue-row:not(.live-queue-row--more)')];
+        const first = rows[before] ?? rows[rows.length - 1];
+        first?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
     },
 
     /** Park / drop / wake a queued task in the research. */
@@ -3550,7 +3697,7 @@ export const researchUiMethods = uiModule({
         menu.setAttribute('role', 'menu');
         menu.setAttribute('aria-label', r.taskMenu);
         const s = liveSession();
-        const q = s?.queue.find(x => x.id === task);
+        const q = liveQueueItem(s, task);
         if (s && q && taskOrderOffered(s)) {
             const L = strings.live;
             const own: [TaskOrderDo, string, string | undefined][] = [

@@ -17,7 +17,7 @@ import { researchHypothesisNote, researchHypothesisState } from '../research-hyp
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
 import { researchConflictRef, researchLinkMark } from '../research-link.js';
-import { canDecideInApp } from '../research-decide.js';
+import { canDecideInApp, conflictFromEdit } from '../research-decide.js';
 import { ConflictScope } from '../research-conflict-card.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -200,7 +200,7 @@ export const personResearchMethods = uiModule({
                         <thead><tr><th scope="col">${esc(r.conflictValue)}</th><th scope="col">${esc(r.conflictSource)}</th></tr></thead>
                         <tbody>${c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${sourceCell(v)}</td></tr>`).join('')}</tbody>
                     </table>
-                    <p class="person-research-sources-only">${esc(strings.conflict.sourcesOnly)}</p>
+                    <p class="person-research-sources-only">${esc(conflictFromEdit(c) ? strings.conflict.editOnly : strings.conflict.sourcesOnly)}</p>
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
                         <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>${toAgent ? `
@@ -536,7 +536,7 @@ export const personResearchMethods = uiModule({
                 tag.setAttribute('aria-expanded', String(this.isResearchConflictPanelOpen(panelId)));
                 tag.setAttribute('aria-label', strings.conflict.panelTitle(researchConflictTitle(conflicts[0])));
             } else {
-                tag.setAttribute('aria-label', r.conflictTagSr(researchFactLabel(fact)));
+                tag.setAttribute('aria-label', (conflicts.some(conflictFromEdit) ? r.conflictTagEditSr : r.conflictTagSr)(researchFactLabel(fact)));
             }
             tag.onclick = (e) => {
                 e.preventDefault();

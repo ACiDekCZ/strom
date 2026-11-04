@@ -70,6 +70,55 @@ export interface ManagedBridge {
     waiting: Record<string, unknown>[];
     /** Who else is in which direction (`GET /directions/people`, added to each direction's person; absent: its person only). */
     people?: Record<string, string[]>;
+    /**
+     * The whole queue read by pages (`queue.page`): `queue` is all of it, the status sends its window (14 up next,
+     * 6 set aside, each with `pos`) and `queueCounts`; `rev` changes with every change of the queue's order.
+     */
+    paged?: { rev: number };
+    /** Each `GET /queue` asked (its query, without `app`). */
+    queueReads: string[];
+}
+
+/** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
+const QUEUE_WINDOW = 14;
+
+/** The tasks up next numbered by their place in the whole queue (`pos`); set-aside ones last, by id, without one. */
+function queueWithPlaces(b: ManagedBridge): Record<string, unknown>[] {
+    let pos = 0;
+    const next = b.queue.filter(q => q.state === 'next').map(({ whyBefore: _w, ...q }) => ({ ...q, pos: ++pos }));
+    const parked = b.queue.filter(q => q.state === 'parked').map(({ whyBefore: _w, ...q }) => q)
+        .sort((x, y) => String(x.id).localeCompare(String(y.id)));
+    return [...next, ...parked];
+}
+
+const queueRev = (b: ManagedBridge): string => (b.paged?.rev ?? 0).toString(16).padStart(16, '0');
+
+/** `/status.queueCounts` of a queue read by pages. */
+function queueCounts(b: ManagedBridge): Record<string, unknown> {
+    const research: Record<string, number> = {};
+    const branch: Record<string, number> = {};
+    let next = 0;
+    let parked = 0;
+    for (const q of b.queue) {
+        if (q.state !== 'next') { parked++; continue; }
+        next++;
+        if (typeof q.research === 'string') research[q.research] = (research[q.research] ?? 0) + 1;
+        if (typeof q.branch === 'string') branch[q.branch] = (branch[q.branch] ?? 0) + 1;
+    }
+    return { research, branch, next, parked, rev: queueRev(b) };
+}
+
+/** `GET /queue?from&count&branch&research&state`, as the research answers it. */
+function queuePage(b: ManagedBridge, query: URLSearchParams): BridgeReply {
+    const from = Number(query.get('from') ?? 0);
+    const count = Math.min(100, Number(query.get('count') ?? 50));
+    const rows = queueWithPlaces(b)
+        .filter(q => !query.get('branch') || q.branch === query.get('branch'))
+        .filter(q => !query.get('research') || q.research === query.get('research'))
+        .filter(q => !query.get('state') || q.state === query.get('state'));
+    const items = rows.slice(from, from + count);
+    const next = from + count < rows.length ? from + count : undefined;
+    return { status: 200, body: { items, total: rows.length, from, ...(next !== undefined ? { next } : {}), rev: queueRev(b), head: 'h1' } };
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -125,6 +174,11 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
     if (task) {
         const q = b.queue.find(x => x.id === task[1]);
         if (!q) return { status: 404, body: { error: 'queue.none' } };
+        // A queue read by pages: Do next puts the task first, To the end last; the order's print changes.
+        if (b.paged && (body.do === 'next' || body.do === 'last')) {
+            b.queue = body.do === 'next' ? [q, ...b.queue.filter(x => x !== q)] : [...b.queue.filter(x => x !== q), q];
+            b.paged.rev++;
+        }
         if (body.do === 'default') {
             delete q.own;
             if ((q.why as { kind?: string } | undefined)?.kind === 'own') q.why = q.whyBefore ?? undefined;
@@ -215,6 +269,8 @@ export async function followManaged(page: Page, opts: {
     ged?: string;
     /** Who else is in which direction (absent: each direction's person only). */
     people?: Record<string, string[]>;
+    /** `queue` is the whole queue, read by pages (`queue.page` should be in `features`). */
+    paged?: boolean;
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
@@ -234,12 +290,24 @@ export async function followManaged(page: Page, opts: {
         queue: structuredClone(opts.queue ?? [{ id: 'T0101', text: 'Matriky Smrkov', state: 'next', research: 'G0001' }]),
         waiting: structuredClone(opts.waiting ?? []),
         ...(opts.people ? { people: structuredClone(opts.people) } : {}),
+        ...(opts.paged ? { paged: { rev: 1 } } : {}),
+        queueReads: [],
+    };
+    const pagedFeature = !!opts.features?.includes('queue.page');
+    const windowOf = (): Record<string, unknown>[] => {
+        const all = queueWithPlaces(b);
+        return [...all.filter(q => q.state === 'next').slice(0, QUEUE_WINDOW), ...all.filter(q => q.state === 'parked').slice(0, 6)];
     };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
         working: b.working,
         waiting: b.waiting,
-        queue: b.queue.map(({ whyBefore: _w, ...q }) => q),
+        // An older research cuts the queue to the same window, without places and counts.
+        ...(b.paged ? {
+            queue: windowOf().map(({ pos, ...q }) => (pagedFeature ? { ...q, ...(pos ? { pos } : {}) } : q)),
+            queueMore: Math.max(0, b.queue.filter(q => q.state === 'next').length - QUEUE_WINDOW),
+            ...(pagedFeature ? { queueCounts: queueCounts(b) } : {}),
+        } : { queue: b.queue.map(({ whyBefore: _w, ...q }) => q) }),
         links: ALL_LINKS,
         researches: b.researches,
         ...(b.caps ? { caps: b.caps } : {}),
@@ -257,6 +325,12 @@ export async function followManaged(page: Page, opts: {
         if (path === 'tree.ged') return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: opts.ged ?? GED });
         if (path === 'events') {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
+        }
+        if (path === 'queue' && req.method() === 'GET') {
+            const query = new URL(req.url()).searchParams;
+            query.delete('app');
+            b.queueReads.push(query.toString());
+            return route.fulfill(json(queuePage(b, query).body));
         }
         if (/^(directions|offline|queue\/|waiting\/)/.test(path)) {
             const raw = req.postData();
