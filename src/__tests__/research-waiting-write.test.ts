@@ -28,11 +28,11 @@ const letter = (id: string, extra: Record<string, unknown> = {}) => ({
 
 describe('which writes the bridge takes', () => {
     it('only what it announces', () => {
-        expect(waitingWrites({ features: null, accepts: null })).toEqual({ sent: false, note: false, file: false });
-        expect(waitingWrites({ features: ['waiting.groups'], accepts: sanitizeAccepts({ media: {} }) })).toEqual({ sent: false, note: false, file: false });
-        expect(waitingWrites({ features: [WAITING_SENT_FEATURE], accepts: null })).toEqual({ sent: true, note: false, file: false });
-        expect(waitingWrites({ features: [WAITING_NOTE_FEATURE], accepts: null })).toEqual({ sent: false, note: true, file: false });
-        expect(waitingWrites({ features: [], accepts: sanitizeAccepts({ media: { task: true } }) })).toEqual({ sent: false, note: false, file: true });
+        expect(waitingWrites({ features: null, accepts: null })).toEqual({ sent: false, note: false, file: false, answer: false, images: false });
+        expect(waitingWrites({ features: ['waiting.groups'], accepts: sanitizeAccepts({ media: {} }) })).toEqual({ sent: false, note: false, file: false, answer: false, images: false });
+        expect(waitingWrites({ features: [WAITING_SENT_FEATURE], accepts: null })).toEqual({ sent: true, note: false, file: false, answer: false, images: false });
+        expect(waitingWrites({ features: [WAITING_NOTE_FEATURE], accepts: null })).toEqual({ sent: false, note: true, file: false, answer: false, images: false });
+        expect(waitingWrites({ features: [], accepts: sanitizeAccepts({ media: { task: true } }) })).toEqual({ sent: false, note: false, file: true, answer: false, images: false });
     });
 
     it('accepts.media.task only when exactly true; absent otherwise', () => {

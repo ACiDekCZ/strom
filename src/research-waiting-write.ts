@@ -14,8 +14,11 @@
  * back when the write fails.
  */
 
-import { LiveWaiting, ResearchAccepts, researchTaskRef, isResearchHead, cleanText, withAppVersion, waitingNote } from './research-link.js';
-import { waitingPhase, waitingTaskActions, WaitingPhase } from './research-waiting.js';
+import {
+    LiveWaiting, ResearchAccepts, WaitingInbox, researchTaskRef, isResearchHead, cleanText, withAppVersion, waitingNote, imageNumber, imageNumbers,
+    sanitizeWaitingInbox, MAX_IMAGE_NUMBER,
+} from './research-link.js';
+import { waitingPhase, waitingTaskActions, WaitingPhase, fileExt } from './research-waiting.js';
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
 import { sha256OfBlob } from './sha256.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
@@ -24,27 +27,35 @@ import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 export const WAITING_SENT_FEATURE = 'waiting.sent';
 /** The bridge gives the text of all a place's queries. */
 export const WAITING_NOTE_FEATURE = 'waiting.note';
+/** The bridge takes the person's answer to a task (`POST <token>/waiting/<T…>` `{do: "answer"}`, research 1.27, spec 048). */
+export const WAITING_ANSWER_FEATURE = 'waiting.answer';
 
 /** What the bridge takes from "Awaiting action" (each false: the task link, when the research offers it). */
 export interface WaitingWrites {
     sent: boolean;
     note: boolean;
     file: boolean;
+    /** The person's answer to a task (`waiting.answer`). */
+    answer: boolean;
+    /** Images of a book a task waits for (`accepts.media.taskImages`). */
+    images: boolean;
 }
 
 export function waitingWrites(env: {
     features: readonly string[] | null | undefined;
-    accepts: Pick<ResearchAccepts, 'mediaTask'> | null | undefined;
+    accepts: Pick<ResearchAccepts, 'mediaTask' | 'mediaTaskImages'> | null | undefined;
 }): WaitingWrites {
     return {
         sent: !!env.features?.includes(WAITING_SENT_FEATURE),
         note: !!env.features?.includes(WAITING_NOTE_FEATURE),
         file: env.accepts?.mediaTask === true,
+        answer: !!env.features?.includes(WAITING_ANSWER_FEATURE),
+        images: env.accepts?.mediaTaskImages === true,
     };
 }
 
 /** No writes at all (no bridge answering here). */
-export const NO_WAITING_WRITES: WaitingWrites = { sent: false, note: false, file: false };
+export const NO_WAITING_WRITES: WaitingWrites = { sent: false, note: false, file: false, answer: false, images: false };
 
 /** Kinds the bridge marks sent (anything else: 409 `waiting.not-sendable`). */
 const SENDABLE_KINDS: ReadonlySet<string> = new Set(['letter', 'family', 'other']);
@@ -106,11 +117,18 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
  * - `network`: no answer (not running, unreachable, not in time);
  * - `invalid`: not sent at all (an id or key it does not take);
  * - `unknown`: any other answer (another 409 too).
+ * An answer (spec 048): `changed` (409 `waiting.changed`, `at`: what the item says now) — the task waits for
+ * something else since the item was read, nothing written; `no-answer` (409 `waiting.no-answer`) — answered in
+ * the terminal (a check). A task's image: `image-exists` (409, `image`: saved already, again with Replace),
+ * `image-unwanted` (409, `want`: the numbers it asks for), `image-unknown` (409, `missing`: which one it is
+ * is not known — again with a number), `pdf` (415 `waiting.pdf`: no page of the PDF can be read), `no-images`
+ * (409 `waiting.no-images`: the task waits for no images of a book).
  */
 export type WaitingWriteCode =
     | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown'
     // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
-    | 'held';
+    | 'held'
+    | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'pdf' | 'no-images';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -123,6 +141,14 @@ export interface WaitingWriteRefused {
     reason: string;
     /** `held`: what holds it and the research's sentence in its language (shown as it is). */
     held?: ResearchWriteHeld;
+    /** `changed`: the item's `at` now (the `expect` of a new try; absent: not said). */
+    at?: string;
+    /** `image-exists`: the number saved already. */
+    image?: number;
+    /** `image-unwanted`: the numbers the task asks for. */
+    want?: number[];
+    /** `image-unknown`: the numbers still missing. */
+    missing?: number[];
 }
 
 export interface WaitingSentDone {
@@ -203,8 +229,20 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     const gone = code === 'waiting.none' || code === 'group.none';
     if (status === 404) return out(gone ? 'none' : 'unknown');
     if (status === 409) {
-        return out(gone ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file' : 'unknown');
+        if (code === 'waiting.changed') {
+            const at = cleanText(r.at, 40);
+            return { ...out('changed'), ...(at ? { at } : {}) };
+        }
+        if (code === 'waiting.image-exists') {
+            const image = imageNumber(r.image);
+            return { ...out('image-exists'), ...(image !== null ? { image } : {}) };
+        }
+        if (code === 'waiting.image-unwanted') return { ...out('image-unwanted'), want: imageNumbers(r.want, 1000) };
+        if (code === 'waiting.image-unknown') return { ...out('image-unknown'), missing: imageNumbers(r.missing) };
+        return out(gone ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file'
+            : code === 'waiting.no-answer' ? 'no-answer' : code === 'waiting.no-images' ? 'no-images' : 'unknown');
     }
+    if (status === 415 && code === 'waiting.pdf') return out('pdf');
     if (status === 423) return out('locked');
     if (status === 403) return out('app-only');
     if (status === 400) return out('bad-body');
@@ -269,6 +307,87 @@ export function waitingFileReply(status: number, body: unknown, retryAfter?: str
         const head = isResearchHead(r?.head);
         const parent = isResearchHead(r?.parent);
         return { ok: true, input: mediaReplyId(body) ?? '', ...(head ? { head } : {}), ...(parent ? { parent } : {}) };
+    }
+    return refusal(status, body, retryAfter);
+}
+
+export interface WaitingAnswerDone {
+    ok: true;
+    /** The task answered (back in the queue). */
+    task: string;
+    /** The research's version after the write, and the one it was made on ('' / absent: not said). */
+    head: string;
+    parent?: string;
+}
+
+export type WaitingAnswerResult = WaitingAnswerDone | WaitingWriteRefused;
+
+/** The bridge's answer to the person's answer, typed (200: the task back in the queue). */
+export function waitingAnswerReply(status: number, body: unknown, retryAfter?: string | null): WaitingAnswerResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return refusal(0, null, null);
+        const parent = isResearchHead(r.parent);
+        return { ok: true, task: researchTaskRef(r.task) ?? '', head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}) };
+    }
+    return refusal(status, body, retryAfter);
+}
+
+/** How the research said it took an image's number: the header, the file's name, the order of the missing ones. */
+export type TaskImageBy = 'image' | 'name' | 'order';
+
+export interface TaskImageDone {
+    ok: true;
+    task: string;
+    /** The number it went as (a PDF: its first page); null: not said. */
+    image: number | null;
+    /** Every number it went as (a PDF's pages). */
+    images: number[];
+    by: TaskImageBy | null;
+    /** The same file was there already: nothing new. */
+    same: boolean;
+    /** The task got its last missing image and is back in the queue. */
+    woken: boolean;
+    /** The task's images now (null: not said). */
+    inbox: WaitingInbox | null;
+    /** The research's ids of the files added and of those it replaced ("M0123"). */
+    added: string[];
+    replaced: string[];
+    head?: string;
+    parent?: string;
+}
+
+export type TaskImageResult = TaskImageDone | WaitingWriteRefused;
+
+/** Media ids of an answer ("M0123"), each once, at most 200. */
+function mediaIds(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.slice(0, MAX_TASKS).filter((v): v is string => typeof v === 'string' && /^[IM]\d{1,7}$/.test(v)))];
+}
+
+/** The bridge's answer to a task's image, typed. */
+export function taskImageReply(status: number, body: unknown, retryAfter?: string | null): TaskImageResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return refusal(0, null, null);
+        const head = isResearchHead(r.head);
+        const parent = isResearchHead(r.parent);
+        const images = imageNumbers(r.images, 1000);
+        const image = imageNumber(r.image) ?? images[0] ?? null;
+        return {
+            ok: true,
+            task: researchTaskRef(r.task) ?? '',
+            image,
+            images: images.length ? images : image !== null ? [image] : [],
+            by: r.by === 'image' || r.by === 'name' || r.by === 'order' ? r.by : null,
+            same: r.same === true,
+            woken: r.woken === true,
+            inbox: sanitizeWaitingInbox(r.inbox),
+            added: mediaIds(r.added),
+            replaced: mediaIds(r.replaced),
+            ...(head ? { head } : {}),
+            ...(parent ? { parent } : {}),
+        };
     }
     return refusal(status, body, retryAfter);
 }
@@ -388,6 +507,201 @@ export async function putWaitingFile(base: string, task: string, file: Blob & { 
     const headers = uploadHeaders({ mimeType: file.type, name: file.name || 'file' }, { task: ref });
     return bridgeRequest(`${base}|PUT|media/${sha}|${ref}`, `${base}/media/${sha}`, { method: 'PUT', headers, body: file },
         waitingFileReply, opts.timeoutMs ?? Math.max(FILE_MIN_TIMEOUT_MS, file.size / 2000));
+}
+
+/** The longest answer the research takes (characters). */
+export const WAITING_ANSWER_MAX = 4000;
+
+/**
+ * An answer's text as it goes: NFC, trimmed, without NUL; null when it is
+ * empty or longer than the research takes (nothing is sent then).
+ */
+export function waitingAnswerText(text: string): string | null {
+    // eslint-disable-next-line no-control-regex
+    const t = text.normalize('NFC').replace(/\u0000/g, '').trim();
+    return t && [...t].length <= WAITING_ANSWER_MAX ? t : null;
+}
+
+/**
+ * The person's answer to a task (`POST <base>/waiting/<T…>` `{do: "answer",
+ * text, expect}`, `waiting.answer`): the task goes back to the queue with it,
+ * no agent starts. `expect`: the item's `at` as read (another one now: 409
+ * `changed`, nothing written). The same answer twice: 404 `none` (taken as done).
+ */
+export function answerWaiting(base: string, task: string, answer: { text: string; expect?: string }, opts: { timeoutMs?: number } = {}): Promise<WaitingAnswerResult> {
+    const ref = researchTaskRef(task);
+    const text = waitingAnswerText(answer.text);
+    if (!ref || ref !== task || !text) return Promise.resolve(notSent());
+    const expect = typeof answer.expect === 'string' && answer.expect ? answer.expect : undefined;
+    const body = JSON.stringify({ do: 'answer', text, ...(expect ? { expect } : {}) });
+    return bridgeRequest(`${base}|POST|waiting/${ref}|answer|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
+        { method: 'POST', headers: JSON_TEXT, body }, waitingAnswerReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+}
+
+/** A file's type as it goes: the browser's, else by its extension (a TIFF or HEIC often has none). */
+const EXT_MIME: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', pdf: 'application/pdf',
+};
+export function taskImageMime(file: { type?: string; name?: string }): string {
+    return file.type || EXT_MIME[fileExt(file.name ?? '')] || 'application/octet-stream';
+}
+
+/** A file's SHA-256, once per file (a try again or a Replace does not read it again); large files in a worker. */
+const shaOfFile = new WeakMap<Blob, Promise<string>>();
+export function taskImageSha(file: Blob): Promise<string> {
+    let sha = shaOfFile.get(file);
+    if (!sha) {
+        sha = sha256OfBlob(file);
+        shaOfFile.set(file, sha);
+        sha.catch(() => shaOfFile.delete(file));
+    }
+    return sha;
+}
+
+export interface TaskImageOptions {
+    /** The number it goes as (`X-Strom-Image`); absent: the research tells it by the name or the order. */
+    image?: number | null;
+    /** Replace the image saved at that number (`X-Strom-Replace: 1`). */
+    replace?: boolean;
+    /** The research's limit (`accepts.media.max`). */
+    maxBytes?: number | null;
+    timeoutMs?: number;
+    /** Bytes sent so far of all (while the file goes). */
+    onProgress?: (sent: number, total: number) => void;
+}
+
+/**
+ * An image of a book for a task waiting for it (`PUT <base>/media/<sha256>`
+ * with `X-Strom-Task`, `X-Strom-Image`, `X-Strom-Replace`, `X-Strom-Name`;
+ * `accepts.media.taskImages`). The research saves it into the task's folder as
+ * `<n>.<ext>` and brings the task back with its last missing image (`woken`).
+ * Its progress is said while it goes (XMLHttpRequest; without it, none).
+ */
+export async function uploadTaskImage(base: string, task: string, file: Blob & { name?: string }, opts: TaskImageOptions = {}): Promise<TaskImageResult> {
+    const ref = researchTaskRef(task);
+    if (!ref || ref !== task) return notSent();
+    const image = opts.image ?? null;
+    if (image !== null && (!Number.isInteger(image) || image < 1 || image > MAX_IMAGE_NUMBER)) return notSent();
+    if (file.size > (opts.maxBytes ?? DEFAULT_MEDIA_MAX_BYTES)) return { ok: false, code: 'too-large', status: 0, retryAfter: null, reason: '' };
+    let sha: string;
+    try {
+        sha = await taskImageSha(file);
+    } catch {
+        return notSent();
+    }
+    const headers = uploadHeaders({ mimeType: taskImageMime(file), name: file.name || 'image' }, { task: ref });
+    if (image !== null) headers['X-Strom-Image'] = String(image);
+    if (opts.replace) headers['X-Strom-Replace'] = '1';
+    const key = `${base}|PUT|media/${sha}|${ref}|${image ?? ''}|${opts.replace ? 1 : 0}`;
+    const running = inFlight.get(key);
+    if (running) return running as Promise<TaskImageResult>;
+    const job = sendWithProgress(`${base}/media/${sha}`, headers, file,
+        opts.timeoutMs ?? Math.max(FILE_MIN_TIMEOUT_MS, file.size / 2000), opts.onProgress)
+        .then(res => res ? taskImageReply(res.status, res.body, res.retryAfter) : noAnswer());
+    inFlight.set(key, job);
+    void job.finally(() => inFlight.delete(key));
+    return job;
+}
+
+/** One PUT of a file, its progress said (XMLHttpRequest; fetch where there is none); null: no answer. Never throws. */
+function sendWithProgress(url: string, headers: Record<string, string>, body: Blob, timeoutMs: number,
+    onProgress?: (sent: number, total: number) => void): Promise<{ status: number; body: unknown; retryAfter: string | null } | null> {
+    const target = withAppVersion(url);
+    const parse = (text: string): unknown => {
+        try { return JSON.parse(text); } catch { return null; }
+    };
+    if (typeof XMLHttpRequest !== 'function') {
+        if (typeof fetch !== 'function') return Promise.resolve(null);
+        return (async () => {
+            const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+            const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+            try {
+                const res = await fetch(target, { method: 'PUT', mode: 'cors', credentials: 'omit', cache: 'no-store', headers, body, signal: ctl?.signal });
+                let text = '';
+                try { text = await res.text(); } catch { /* the status alone */ }
+                onProgress?.(body.size, body.size);
+                return { status: res.status, body: parse(text), retryAfter: res.headers?.get?.('Retry-After') ?? null };
+            } catch {
+                return null;
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        })();
+    }
+    return new Promise(resolve => {
+        let xhr: XMLHttpRequest;
+        try {
+            xhr = new XMLHttpRequest();
+            xhr.open('PUT', target, true);
+            xhr.withCredentials = false;
+            xhr.timeout = timeoutMs;
+            for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+        } catch {
+            resolve(null);
+            return;
+        }
+        if (onProgress && xhr.upload) {
+            xhr.upload.onprogress = (e: ProgressEvent) => onProgress(e.loaded, e.lengthComputable ? e.total : body.size);
+        }
+        xhr.onload = () => resolve({ status: xhr.status, body: parse(xhr.responseText ?? ''), retryAfter: xhr.getResponseHeader('Retry-After') });
+        xhr.onerror = () => resolve(null);
+        xhr.ontimeout = () => resolve(null);
+        xhr.onabort = () => resolve(null);
+        try {
+            xhr.send(body);
+        } catch {
+            resolve(null);
+        }
+    });
+}
+
+// ==================== AN ANSWER'S DRAFT ====================
+
+/** Where an answer's draft waits on this device (per tree and task). */
+export const WAITING_DRAFT_PREFIX = 'strom.waiting.draft.';
+/** Most of a draft kept (the field takes 4000). */
+const MAX_DRAFT = 8000;
+
+type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+const draftStorage = (): DraftStorage | null => {
+    try {
+        return typeof localStorage === 'undefined' ? null : localStorage;
+    } catch {
+        return null;
+    }
+};
+
+/** The draft's key (`strom.waiting.draft.<treeId>.<T…>`), or null for an id not a task's. */
+export function waitingDraftKey(treeId: string, task: string): string | null {
+    const ref = researchTaskRef(task);
+    return ref && ref === task && treeId && treeId.length <= 200 ? `${WAITING_DRAFT_PREFIX}${treeId}.${ref}` : null;
+}
+
+/** An answer's draft ('' = none, or storage not there). */
+export function readWaitingDraft(treeId: string, task: string, storage: DraftStorage | null = draftStorage()): string {
+    const key = waitingDraftKey(treeId, task);
+    if (!key || !storage) return '';
+    try {
+        const v = storage.getItem(key);
+        return typeof v === 'string' ? v.slice(0, MAX_DRAFT) : '';
+    } catch {
+        return '';
+    }
+}
+
+/** Keep an answer's draft (blank: it goes). Storage refused (private window, full): nothing kept, nothing thrown. */
+export function writeWaitingDraft(treeId: string, task: string, text: string, storage: DraftStorage | null = draftStorage()): void {
+    const key = waitingDraftKey(treeId, task);
+    if (!key || !storage) return;
+    try {
+        if (text.trim()) storage.setItem(key, text.slice(0, MAX_DRAFT));
+        else storage.removeItem(key);
+    } catch { /* not kept */ }
+}
+
+/** Drop an answer's draft (the answer saved, or the task waits no more). */
+export function clearWaitingDraft(treeId: string, task: string, storage: DraftStorage | null = draftStorage()): void {
+    writeWaitingDraft(treeId, task, '', storage);
 }
 
 // ==================== THE OPTIMISTIC MOVE ====================

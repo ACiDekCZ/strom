@@ -1494,8 +1494,13 @@ export interface LiveWaiting {
     note?: string;
     /** Whom a letter goes to. */
     to?: string;
-    /** Images: the folder for them, how many are saved there and how many the task wants. */
-    inbox?: { dir: string; have: number; want: number };
+    /**
+     * Images of a book (kind 'images', or 'web' with one book): how many of
+     * those asked for are there and how many it wants (absent: not known), the
+     * missing numbers, the book (spec 048, research 1.27); an older research
+     * sends only the folder, have and want.
+     */
+    inbox?: WaitingInbox;
     /** The task link's actions the research offers at it (only those are ever offered). */
     actions?: WaitingAction[];
 }
@@ -1530,10 +1535,43 @@ export type WaitingSection = typeof WAITING_SECTIONS[number];
 /** Kinds of places a waiting item is done at. */
 export const WAITING_GROUP_KINDS = ['archive', 'office', 'family', 'web', 'other'] as const;
 export type WaitingGroupKind = typeof WAITING_GROUP_KINDS[number];
-export interface WaitingGroup { key: string; name: string; kind: WaitingGroupKind }
-/** The task link's actions a waiting item may offer (answer: the link without `do`). */
-export const WAITING_ACTIONS = ['answer', 'file', 'note', 'folder', 'sent', 'chat'] as const;
+/** A place items are done at; an archive's group names its website (`url`, research 1.27). */
+export interface WaitingGroup { key: string; name: string; kind: WaitingGroupKind; url?: string }
+/**
+ * The actions a waiting item may offer: the task link's (answer: the link
+ * without `do`), and `images` — images of its book sent from the app through
+ * the bridge (`accepts.media.taskImages`, spec 048).
+ */
+export const WAITING_ACTIONS = ['answer', 'file', 'note', 'folder', 'images', 'sent', 'chat'] as const;
 export type WaitingAction = typeof WAITING_ACTIONS[number];
+/** The actions that go by the task link (all but `images`, which goes through the bridge). */
+export type WaitingLinkAction = Exclude<WaitingAction, 'images'>;
+
+/** Most missing image numbers kept (the research sends at most 50). */
+export const MAX_INBOX_MISSING = 50;
+/** The highest image number taken (`X-Strom-Image`: 1–6 digits). */
+export const MAX_IMAGE_NUMBER = 999_999;
+
+/** A task's images of a book as the research counts them (`inbox` of a waiting item, of a task image's answer). */
+export interface WaitingInbox {
+    /** Of the images asked for, how many are there (registered or lying in the folder). */
+    have: number;
+    /** How many it asks for; absent: not known (a website looked at for one book). */
+    want?: number;
+    /** The numbers still missing, ascending (at most 50); absent: an older research. */
+    missing?: number[];
+    /** The book's title, for the eye (at most 120 characters). */
+    book?: string;
+    /** The images asked for as the research says them ("57–58"). */
+    images?: string;
+    /** The book's record set ("B0012"). */
+    recordset?: string;
+    /** Its folder in the shared inbox (the name alone), and the whole path ('' = not said). */
+    folder?: string;
+    dir: string;
+    /** Files lying in the folder, not taken yet. */
+    lying?: number;
+}
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
     story: 'decide', permission: 'decide', place: 'decide', branch: 'decide', takeover: 'decide', check: 'decide',
@@ -1942,6 +1980,11 @@ export interface ResearchAccepts {
     mediaRegion: boolean;
     /** It takes a file for a waiting task (`accepts.media.task`: `X-Strom-Task` with `PUT /media/<sha256>`); absent: no. */
     mediaTask?: true;
+    /**
+     * It takes images of a book a task waits for (`accepts.media.taskImages`:
+     * `X-Strom-Image`, `X-Strom-Replace` with `X-Strom-Task`, research 1.27); absent: no.
+     */
+    mediaTaskImages?: true;
     /** The kinds of file it takes (`accepts.media.types`); null when it does not say. */
     mediaTypes: { mime: string; ext: string[] }[] | null;
     /** It takes batches ("Add materials", `accepts.media.batch`): at most so many files and bytes, ZIP or not; null: no batches. */
@@ -2034,6 +2077,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
         mediaRegion: asRecord(r.media)?.region === true,
         ...(asRecord(r.media)?.task === true ? { mediaTask: true as const } : {}),
+        ...(asRecord(r.media)?.taskImages === true ? { mediaTaskImages: true as const } : {}),
         mediaTypes: mediaTypes(asRecord(r.media)?.types),
         mediaBatch: mediaBatch(asRecord(r.media)?.batch),
         mediaEstimate: mediaEstimate(asRecord(r.media)?.estimate),
@@ -2291,6 +2335,47 @@ export function waitingNote(value: unknown): string | null {
         ? v : null;
 }
 
+/** An image number of a book (1–999999), or null. */
+export function imageNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_IMAGE_NUMBER ? value : null;
+}
+
+/** Image numbers: valid ones only, each once, ascending, at most `max`. */
+export function imageNumbers(value: unknown, max = MAX_INBOX_MISSING): number[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<number>();
+    for (const v of value.slice(0, 1000)) {
+        const n = imageNumber(v);
+        if (n !== null) seen.add(n);
+    }
+    return [...seen].sort((a, b) => a - b).slice(0, max);
+}
+
+/**
+ * A task's `inbox` (a waiting item's, or a task image's answer). Untrusted:
+ * without a count of what is there it is none; `want` 0 or absent = not
+ * known; anything else wrong is dropped, the rest stays.
+ */
+export function sanitizeWaitingInbox(value: unknown): WaitingInbox | null {
+    const r = asRecord(value);
+    const have = r ? asCount(r.have) : null;
+    if (!r || have === null) return null;
+    const out: WaitingInbox = { have, dir: cleanText(r.dir, 200) };
+    const want = asCount(r.want);
+    if (want !== null && want > 0 && want <= MAX_IMAGE_NUMBER) out.want = want;
+    if (Array.isArray(r.missing)) out.missing = imageNumbers(r.missing);
+    const book = cleanText(r.book, 120);
+    if (book) out.book = book;
+    const images = cleanText(r.images, 120);
+    if (images) out.images = images;
+    if (typeof r.recordset === 'string' && /^B\d{4,9}$/.test(r.recordset)) out.recordset = r.recordset;
+    const folder = cleanText(r.folder, 200);
+    if (folder) out.folder = folder;
+    const lying = asCount(r.lying);
+    if (lying !== null) out.lying = lying;
+    return out;
+}
+
 /** The fields of a `waiting.groups` research. Untrusted input: anything wrong is dropped, the item stays. */
 function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind']): Partial<LiveWaiting> {
     const out: Partial<LiveWaiting> = {};
@@ -2302,7 +2387,8 @@ function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind'
     const name = g ? cleanText(g.name, MAX_NAME) : '';
     if (g && key && name) {
         const gk = typeof g.kind === 'string' && (WAITING_GROUP_KINDS as readonly string[]).includes(g.kind) ? g.kind as WaitingGroupKind : 'other';
-        out.group = { key, name, kind: gk };
+        const gUrl = webUrl(g.url);
+        out.group = { key, name, kind: gk, ...(gUrl ? { url: gUrl } : {}) };
     }
     if (r.phase === 'sent') {
         out.phase = 'sent';
@@ -2318,10 +2404,8 @@ function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind'
     if (note) out.note = note;
     const to = cleanText(r.to, 120);
     if (to) out.to = to;
-    const inbox = asRecord(r.inbox);
-    const have = inbox ? asCount(inbox.have) : null;
-    const want = inbox ? asCount(inbox.want) : null;
-    if (inbox && have !== null && want !== null) out.inbox = { dir: cleanText(inbox.dir, 200), have, want };
+    const inbox = sanitizeWaitingInbox(r.inbox);
+    if (inbox) out.inbox = inbox;
     // Only the known actions, in their own order; an empty list stays (it offers none).
     if (Array.isArray(r.actions)) {
         const said = r.actions as unknown[];

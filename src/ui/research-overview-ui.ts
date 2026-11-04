@@ -799,7 +799,7 @@ export const researchOverviewMethods = uiModule({
         }
         const dir = taskDirectionName(s, w.research);
         if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));
-        if (w.inbox) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
+        if (w.inbox?.want !== undefined) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
         detail.appendChild(meta);
 
         const actions = el('div', 'research-overview__waiting-actions');
