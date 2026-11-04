@@ -646,6 +646,26 @@ test.describe('the whole queue by pages through the bridge (queue.page)', () => 
         expect(await launchedLinks(page)).toEqual([]);
     });
 
+    test('a line with tasks set aside: "N of M shown" counts only the tasks up next, as its chip does', async ({ page }) => {
+        const queue = bigQueue(236);
+        for (let i = 1; i <= 3; i++) {
+            queue.push({ id: `T1990${i}`, text: `Matriky Smrkov odložené ${i}`, state: 'parked', research: 'G0001', why: { kind: 'paused', research: 'G0001' } });
+        }
+        const b = await followManaged(page, { caps: OFF_CAPS, features: PAGED_FEATURES, offLine: PAGED_LINE, queue, ged: GED_OFFLINE, paged: true });
+        await openOverview(page);
+        await overview(page).locator('.live-queue-toggle').click();
+        const row = overview(page).locator('.research-overview__queue-filters');
+        const line = row.locator('[role="radio"][data-direction="G0001"]');
+        await expect(line).toHaveText(/ 225$/);
+        await line.click();
+        await expect(nextNums(page)).toHaveCount(50);
+        await expect(overview(page).locator('.live-queue-shown')).toHaveText('50 of 225 shown');
+        expect(b.queueReads.at(-1)).toBe('count=50&research=G0001');
+        await overview(page).locator('.live-queue-load').click();
+        await expect(nextNums(page)).toHaveCount(100);
+        await expect(overview(page).locator('.live-queue-shown')).toHaveText('100 of 225 shown');
+    });
+
     test('an older research without pages: no "first 0 of N", the branch says its tasks stand further on', async ({ page }) => {
         const b = await followBig(page, { features: FEATURES });
         await openOverview(page);

@@ -3777,9 +3777,13 @@ export const researchUiMethods = uiModule({
         const open = this.activeResearchLink('open');
         if (paged && counts) {
             // How far the list goes: "Load more" (a page) while there is more, the cap said at its end.
-            const total = list ? list.total ?? 0 : counts.next;
-            const has = list ? list.items.length : allNext.length;
-            const more = list ? list.next !== null : allNext.length < counts.next;
+            // Only the tasks up next count, as the chips do: a filter's list holds the set-aside ones
+            // after them (the research's order), never part of "N of M shown".
+            const filterNext = !filter ? counts.next
+                : filter.branch ? counts.branch[filter.branch] : filter.research ? counts.research[filter.research] : undefined;
+            const total = list ? filterNext ?? list.total ?? 0 : counts.next;
+            const has = list ? next.length : allNext.length;
+            const more = list ? list.next !== null && has < total : allNext.length < counts.next;
             if (list?.error) {
                 this.appendQueueListState(ul, list.error, () => {
                     loadMoreQueueList(base, list.filter, 'queue');
