@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    fitBounds, normalizeLon, panCenter, pinchZoomStep, pointInViewport, project, tileUrl, tilesForViewport, unproject, unwrapLongitudes, zoomAround,
+    fitBounds, initialTileAccess, isBlockedTileResponse, normalizeLon, panCenter, pinchZoomStep, pointInViewport, project, tileUrl, tilesForViewport, unproject, unwrapLongitudes, zoomAround,
     MAX_ZOOM, MIN_ZOOM, PINCH_ZOOM_IN_RATIO, PINCH_ZOOM_OUT_RATIO, TILE_SIZE,
 } from '../map.js';
 
@@ -260,5 +260,23 @@ describe('longitude helpers', () => {
         // A genuinely wide pair keeps its true span.
         const wide = unwrapLongitudes([179, -90]);
         expect(Math.max(...wide) - Math.min(...wide)).toBeCloseTo(91, 9);
+    });
+});
+
+describe('tile access (OSM tile policy)', () => {
+    it('pages over http(s) send a Referer and load tiles plainly; a file has none and tags its requests', () => {
+        expect(initialTileAccess('https:')).toBe('plain');
+        expect(initialTileAccess('http:')).toBe('plain');
+        expect(initialTileAccess('file:')).toBe('tagged');
+        expect(initialTileAccess('blob:')).toBe('tagged');
+    });
+
+    it('a refusal is an error status or the 200 "Access blocked" picture marked no-cache', () => {
+        expect(isBlockedTileResponse(200, 'max-age=88056, stale-while-revalidate=604800, stale-if-error=604800')).toBe(false);
+        expect(isBlockedTileResponse(200, null)).toBe(false);
+        expect(isBlockedTileResponse(200, 'no-cache')).toBe(true);
+        expect(isBlockedTileResponse(200, 'No-Store')).toBe(true);
+        expect(isBlockedTileResponse(403, 'max-age=60')).toBe(true);
+        expect(isBlockedTileResponse(429, null)).toBe(true);
     });
 });

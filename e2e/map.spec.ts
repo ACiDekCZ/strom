@@ -378,6 +378,84 @@ test('offline, the map says so instead of showing a blank canvas', async ({ page
     await context.setOffline(false);
 });
 
+/**
+ * The OSM tile server as it answers a request it refuses: HTTP 200 with the
+ * "Access blocked" picture and Cache-Control: no-cache (a real tile carries a
+ * max-age). `refuseTagged` also refuses requests carrying X-Requested-With.
+ * Returns what was asked: the X-Requested-With of each tile request.
+ */
+async function stubRefusingTiles(page: Page, opts: { refuseTagged: boolean }): Promise<string[]> {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    const tagged: string[] = [];
+    await page.route('**://tile.openstreetmap.org/**', async route => {
+        const req = route.request();
+        const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'X-Requested-With' };
+        if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+        const xrw = (await req.allHeaders())['x-requested-with'] ?? '';
+        tagged.push(xrw);
+        const refused = !xrw || opts.refuseTagged;
+        return route.fulfill({
+            status: 200, contentType: 'image/png', body: png,
+            headers: { ...cors, 'cache-control': refused ? 'no-cache' : 'max-age=86400' },
+        });
+    });
+    await page.addInitScript(() => {
+        const raw = localStorage.getItem('strom-settings');
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.mapTiles = true;
+        localStorage.setItem('strom-settings', JSON.stringify(settings));
+    });
+    return tagged;
+}
+
+async function openMapWithTwoPlaces(page: Page): Promise<void> {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await seedPlaces(page);
+    await seedCoords(page, { greenwich: [51.48, 0.0], pembroke: [51.67, -4.91] });
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+}
+
+test('tiles the server refuses without identification are asked for again with the app id, and drawn', async ({ page }) => {
+    await stubGeocoder(page, {});
+    const asked = await stubRefusingTiles(page, { refuseTagged: false });
+    await openMapWithTwoPlaces(page);
+
+    // Every drawn tile ends up loaded by the tagged request (a blob of its answer).
+    const tiles = page.locator('.map-tiles .map-tile');
+    await expect.poll(async () => tiles.evaluateAll(els =>
+        els.length > 0 && els.every(el => (el as HTMLImageElement).src.startsWith('blob:')))).toBe(true);
+    expect(asked.filter(x => x === 'info.stromapp.strom').length).toBeGreaterThan(0);
+    await expect(page.locator('.map-tiles-blocked')).toHaveCount(0);
+});
+
+test('tiles refused even with the app id: one note instead of the blocked pictures, the points stay', async ({ page }) => {
+    await stubGeocoder(page, {});
+    const asked = await stubRefusingTiles(page, { refuseTagged: true });
+    await openMapWithTwoPlaces(page);
+
+    const note = page.locator('.map-tiles-blocked');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveText(/OpenStreetMap tile server refused/);
+    await expect(note).toHaveCount(1);
+    // No tile picture is left showing, the points and the attribution stay.
+    await expect.poll(() => page.locator('.map-tiles .map-tile[src]').count()).toBe(0);
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    await expect(page.locator('.map-attribution')).toBeVisible();
+
+    // Panning asks for nothing more: the refusal holds for the page's life.
+    const before = asked.length;
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(note).toBeVisible();
+    expect(asked.length).toBe(before);
+});
+
 test('the map controls say what they do', async ({ page }) => {
     await stubTiles(page);
     await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });

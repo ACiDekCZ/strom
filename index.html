@@ -9454,6 +9454,32 @@
             text-decoration: none;
         }
         [data-theme="dark"] .map-attribution { background: rgba(0,0,0,0.5); color: #ccc; }
+        /* The tile server refused the background: one note in the middle of
+           the map, under the points and the bubble; clicks pass through. */
+        .map-tiles-blocked {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: max-content;
+            max-width: min(420px, calc(100% - 32px));
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: var(--card-bg, #fff);
+            color: var(--text-color, #222);
+            box-shadow: var(--shadow-sm);
+            font-size: 13px;
+            line-height: 1.4;
+            text-align: center;
+            pointer-events: none;
+            opacity: 0.94;
+        }
+        @media (max-width: 640px) {
+            .map-tiles-blocked { font-size: 12px; padding: 8px 12px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-tiles-blocked { font-size: 12px; padding: 6px 10px; }
+        }
         /* The bubble of a point: a fixed head (name, label, summary, house
            search), a list that scrolls inside it, a foot with the fix link.
            It never grows past 66% of the map (spec 031 §3). */

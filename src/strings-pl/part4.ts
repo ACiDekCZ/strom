@@ -517,6 +517,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         settingHint: 'Pozwala mapie wysyłać nazwy miejsc do usługi geokodowania. Odszukane już współrzędne zostają w drzewie.',
         tilesNotice: 'Podkład mapy wczytuje się z openstreetmap.org – wczytanie zdradza temu serwerowi tylko to, jaki obszar jest oglądany, nic więcej. Dane rodziny zostają w aplikacji.',
         tilesNoticeOk: 'Pokaż mapę',
+        tilesBlocked: 'Podkład mapy jest niedostępny: serwer kafelków OpenStreetMap go odrzucił. Miejsca są nadal widoczne.',
         timeMode: 'Migracje w czasie',
         timeModeEmpty: 'Po uzupełnieniu dat (urodzenia, zgonu, wydarzeń) widać przemieszczanie się rodu w czasie.',
         timePlay: 'Odtwórz',

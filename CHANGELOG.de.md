@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.22.1
+
+*Noch nicht veröffentlicht.*
+
+- **Karte**: Der Kartenhintergrund wird nach den Nutzungsregeln der Kachelserver von OpenStreetMap geladen, wie auch immer die App geöffnet wird. Eine Kachel sendet die Adresse der Seite, wie die Regeln es verlangen; wo das nicht geht (die App als Datei gespeichert, eine Browser-Erweiterung, die sie entfernt), werden die Kacheln mit der Kennung der App angefragt, und die Bilder *Access blocked* des Servers erscheinen nicht mehr. Lehnt der Server den Hintergrund trotzdem ab, sagt das ein Hinweis auf der Karte, und die Orte bleiben darauf.
+
 ## 3.22.0
 
 *Veröffentlicht am 4. November 2026.*

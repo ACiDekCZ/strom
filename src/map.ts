@@ -201,6 +201,37 @@ export function tileUrl(tile: TileRef): string {
     return `https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`;
 }
 
+/**
+ * How a tile is asked for.
+ * - 'plain': an ordinary <img>. The browser sends the page as Referer, which
+ *   the OSM tile policy requires of web pages.
+ * - 'tagged': fetch() with an X-Requested-With app id. Used where no Referer
+ *   can be sent (the app opened as a file: file:// pages send none, and
+ *   privacy add-ons strip it): the OSM servers accept such requests (they
+ *   answer the CORS preflight for exactly this header) and the policy names
+ *   the X-Requested-With app id as identification.
+ */
+export type TileAccess = 'plain' | 'tagged';
+
+/** The app id sent as X-Requested-With in 'tagged' tile requests. */
+export const TILE_REQUESTED_WITH = 'info.stromapp.strom';
+
+/** Pages served over http(s) send a Referer; anything else (file:, blob:) does not. */
+export function initialTileAccess(protocol: string): TileAccess {
+    return protocol === 'http:' || protocol === 'https:' ? 'plain' : 'tagged';
+}
+
+/**
+ * Whether a tile response is a refusal. The OSM servers answer a blocked
+ * request with HTTP 200 and the "Access blocked" picture, marked only by
+ * `Cache-Control: no-cache` (a real tile always carries a max-age) — so an
+ * <img> cannot tell, and an error status alone would miss it.
+ */
+export function isBlockedTileResponse(status: number, cacheControl: string | null): boolean {
+    if (status < 200 || status >= 300) return true;
+    return /\bno-(cache|store)\b/i.test(cacheControl ?? '');
+}
+
 /** Required by the OSM tile policy and shown in the map corner. */
 export const TILE_ATTRIBUTION = '© OpenStreetMap contributors';
 export const TILE_ATTRIBUTION_URL = 'https://www.openstreetmap.org/copyright';

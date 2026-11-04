@@ -34,6 +34,7 @@ import {
     fitBounds, panCenter, pointInViewport, tilesForViewport, tileUrl, MAX_ZOOM, MIN_ZOOM, TILE_ATTRIBUTION,
 } from '../map.js';
 import { SettingsManager } from '../settings.js';
+import { loadMapTile, releaseMapTile } from './map-tiles.js';
 import { managerKnownStreets, managerPlaceUsage, managerResearchActions } from './places-manager-ui.js';
 import { uiModule } from './module.js';
 
@@ -76,7 +77,7 @@ export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number,
             img.className = 'map-tile';
             img.alt = '';
             img.draggable = false;
-            img.src = tileUrl(t);
+            loadMapTile(img, tileUrl(t));
             layer.appendChild(img);
             live.set(key, img);
         }
@@ -84,7 +85,7 @@ export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number,
         img.style.top = `${t.top}px`;
     }
     for (const [key, img] of live) {
-        if (!seen.has(key)) { img.remove(); live.delete(key); }
+        if (!seen.has(key)) { releaseMapTile(img); img.remove(); live.delete(key); }
     }
 }
 

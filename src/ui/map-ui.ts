@@ -39,6 +39,7 @@ import {
 } from '../map.js';
 import { GEOCODER_NAME, geocodePlaces, placesCentroid } from '../geocode.js';
 import { uiModule } from './module.js';
+import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
 
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
@@ -69,6 +70,8 @@ let kindsMenuOpen = false;
 let kindTipTimer: number | null = null;
 /** Escape and the click outside the menu of kinds are listened to once, for every map canvas. */
 let mapKeysBound = false;
+/** The map listens once for the tile server's refusal (its note), for every map canvas. */
+let mapTilesBound = false;
 
 /** Per tree: the places the map's own lookup asked for and did not find (this page's life). */
 const geocodeMissed = new Map<string, Set<string>>();
@@ -574,7 +577,7 @@ export const mapMethods = uiModule({
                 img.className = 'map-tile';
                 img.alt = '';
                 img.draggable = false;
-                img.src = tileUrl(t);
+                loadMapTile(img, tileUrl(t));
                 layer.appendChild(img);
                 live.set(key, img);
             }
@@ -583,10 +586,36 @@ export const mapMethods = uiModule({
         }
         for (const [key, img] of live) {
             if (!seen.has(key)) {
+                releaseMapTile(img);
                 img.remove();
                 live.delete(key);
             }
         }
+        this.renderMapTilesBlocked(container);
+        if (!mapTilesBound) {
+            mapTilesBound = true;
+            onMapTilesChange(() => {
+                const open = document.getElementById('map-container');
+                if (open?.querySelector('.map-canvas')) this.renderMapTilesBlocked(open);
+            });
+        }
+    },
+
+    /**
+     * The tile server refused the background: one plain note on the map
+     * instead of a grid of "Access blocked" pictures. The points, the bar and
+     * the attribution stay; the note lets clicks through to the map.
+     */
+    renderMapTilesBlocked(container: HTMLElement): void {
+        const note = container.querySelector('.map-tiles-blocked');
+        if (!mapTilesBlocked()) { note?.remove(); return; }
+        if (note) return;
+        const el = document.createElement('div');
+        el.className = 'map-tiles-blocked';
+        el.setAttribute('role', 'status');
+        el.textContent = strings.map.tilesBlocked;
+        // Right above the tiles: the points, lines and bubble are drawn over it.
+        container.querySelector('.map-tiles')?.after(el);
     },
 
     drawMapMarkers(container: HTMLElement, places: MappedPlace[]): void {
