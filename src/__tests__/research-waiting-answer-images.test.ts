@@ -303,6 +303,22 @@ describe('the bridge\'s answers, typed', () => {
         expect(taskImageReply(409, { code: 'waiting.image-exists', image: 'x' })).not.toHaveProperty('image');
     });
 
+    it('the same as an image taken already (409 waiting.image-same): its id, place and number, cleaned', () => {
+        expect(taskImageReply(409, {
+            error: 'the same', code: 'waiting.image-same', image: 10, same: 'M0042', as: 'B0012:9', sameRecordset: 'B0012', sameImage: 9, task: 'T0412',
+        })).toEqual({
+            ok: false, code: 'image-same', status: 409, retryAfter: null, reason: 'the same',
+            image: 10, same: 'M0042', as: 'B0012:9', sameRecordset: 'B0012', sameImage: 9,
+        });
+        // A number as text is taken; a malformed id, book or number is left out; the place is one line, capped.
+        expect(taskImageReply(409, { code: 'waiting.image-same', same: 'M0042', sameImage: '9' })).toMatchObject({ code: 'image-same', sameImage: 9 });
+        const bad = taskImageReply(409, { code: 'waiting.image-same', image: 'x', same: '<b>M1</b>', sameRecordset: 'X1', sameImage: 0, as: `B1:9\n${'x'.repeat(200)}` });
+        expect(bad).toMatchObject({ ok: false, code: 'image-same' });
+        for (const k of ['image', 'same', 'sameRecordset', 'sameImage']) expect(bad).not.toHaveProperty(k);
+        expect(bad.ok === false && bad.as).toMatch(/^B1:9 x+…$/);
+        expect(bad.ok === false && bad.as?.length).toBe(80);
+    });
+
     it('the older file answer keeps its codes; the new ones are not "unknown" any more', () => {
         expect(waitingFileReply(409, { code: 'waiting.image-unknown', missing: [3] })).toMatchObject({ code: 'image-unknown', missing: [3] });
         expect(waitingFileReply(409, { code: 'something.else' })).toMatchObject({ code: 'unknown' });
@@ -485,5 +501,16 @@ describe('the texts (§10): plural forms, "z" / "ze"', () => {
         expect(T('en').sendImages(1)).toBe('Send 1 image');
         expect(T('de').imagesState(1, 2, '58', 1)).toBe('1 von 2 Bildern gespeichert – es fehlt Bild 58.');
         expect(T('de').groupMissing(2)).toBe('2 Bilder fehlen');
+    });
+
+    it('a file the same as an image taken already, in four languages (its number and id when said)', () => {
+        expect(T('en').sameAs(9, 'M0042')).toBe('Same as image 9 (M0042) – not added.');
+        expect(T('en').sameAs(null, 'M0042')).toBe('Same as an image already saved (M0042) – not added.');
+        expect(T('en').sameAs(null, '')).toBe('Same as an image already saved – not added.');
+        expect(T('cs').sameAs(9, 'M0042')).toBe('Stejný jako snímek 9 (M0042) – nepřidáno.');
+        expect(T('cs').sameAs(null, 'M0042')).toBe('Stejný jako už uložený snímek (M0042) – nepřidáno.');
+        expect(T('de').sameAs(9, 'M0042')).toBe('Identisch mit Bild 9 (M0042) – nicht hinzugefügt.');
+        expect(T('pl').sameAs(9, 'M0042')).toBe('Identyczny ze skanem 9 (M0042) – nie dodano.');
+        expect(T('pl').sameAs(9, '')).toBe('Identyczny ze skanem 9 – nie dodano.');
     });
 });

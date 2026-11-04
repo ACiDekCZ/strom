@@ -755,6 +755,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             keepOld: 'Zostaw zapisany',
             replacing: (n: number) => `Zastąpi zapisany skan ${n} (oryginał zostaje w badaniu).`,
             keptOld: (n: number) => `Skan ${n} pozostał bez zmian, plik nie został wysłany.`,
+            sameAs: (n: number | null, id: string) => `${n !== null ? `Identyczny ze skanem ${n}` : 'Identyczny z już zapisanym skanem'}${id ? ` (${id})` : ''} – nie dodano.`,
             unwanted: (list: string, count: number) => `Zadanie wymaga ${count === 1 ? 'skanu' : 'skanów'} ${list}.`,
             nameHas: (n: number) => `W nazwie jest ${n}.`,
             imageUnknown: (list: string, count: number) => `Badanie nie rozpoznaje, który to skan. Brak ${count === 1 ? 'skanu' : 'skanów'} ${list}.`,

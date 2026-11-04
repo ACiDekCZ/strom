@@ -16675,6 +16675,8 @@
         .waiting-images-result {
             margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--primary-soft); color: var(--primary-dark);
             font-size: 13px; font-weight: 500;
+            /* A long file name said in it (a file not added) wraps instead of widening the detail. */
+            overflow-wrap: anywhere;
         }
         /* A row that takes images while files are dragged over it. */
         .takes-images { position: relative; }

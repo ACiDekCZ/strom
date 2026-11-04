@@ -447,10 +447,12 @@ export const researchWaitingWriteMethods = uiModule({
             return null;
         }
         if (following) this.liveStatusSoon(s);
-        if (outcome.saved === 0) return null;
+        // Files not added (the same as an image taken already) are said after how it stands.
+        const notes = outcome.notes.slice(0, 5).join(' ') + (outcome.notes.length > 5 ? ' …' : '');
+        if (outcome.saved === 0) return notes || null;
         const now = outcome.inbox ? imagesState({ ...w, inbox: outcome.inbox }) : null;
         takeOwnImages(itemKey(s, w.id), now);
-        return `✓ ${now ? `${imagesSentence(now)} ` : ''}${strings.live.waitingTask.stillWaits}`;
+        return `✓ ${now ? `${imagesSentence(now)} ` : ''}${strings.live.waitingTask.stillWaits}${notes ? ` ${notes}` : ''}`;
     },
 
     /** "Add a file" at a task: an image or PDF picked here goes to the research with the task's id. */

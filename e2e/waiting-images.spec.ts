@@ -276,9 +276,41 @@ test.describe('Add images in the overview (accepts.media.taskImages)', () => {
         // A row of another kind takes no files.
         expect(await dragFiles(ov.locator('.research-overview__waiting-item[data-id="T0003"]'), ['DS_0058.jpg'], false)).toBe(false);
     });
+
+    test('the same as an image taken already (409 image-same): not added, the other file goes on; the line says it', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.replies.push({ status: 409, body: { error: 'the same', code: 'waiting.image-same', image: 113, same: 'M0042', as: 'B0012:57', sameRecordset: 'B0012', sameImage: 57, task: 'T0002' } });
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0002');
+        await item.locator('.waiting-actions [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('SOA_N12_0113.jpg'), jpeg('SOA_N12_0112.jpg')]);
+        await area.locator('.waiting-upload__send').click();
+
+        // Nothing to decide: the other file is sent, the area closes and the line says what was not added.
+        await expect(area).toHaveCount(0);
+        await expect(item.locator('.waiting-images-result')).toHaveText(
+            '✓ 1 of 2 images saved – image 113 missing. The task keeps waiting. SOA_N12_0113.jpg: Same as image 57 (M0042) – not added.');
+        expect(bridge.puts.map(p => [p.image, p.replace])).toEqual([['113', null], ['112', null]]);
+    });
 });
 
 test.describe('the small panel', () => {
+    test('a file the same as an image taken already (409 image-same): the dialog closes, the toast says it', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.replies.push({ status: 409, body: { error: 'the same', code: 'waiting.image-same', image: 112, same: 'M0042', as: 'B0012:57', sameImage: 57, task: 'T0002' } });
+        });
+        const row = page.locator('#live-panel .live-waiting-row').filter({ has: page.locator('[data-action]') }).filter({ hasText: '112–113' });
+        await dragFiles(row, ['SOA_N12_0112.jpg']);
+        const dialog = page.locator('.waiting-dialog');
+        await expect(dialog.locator('.waiting-upload__num')).toHaveValue('112');
+        await dialog.locator('.waiting-upload__send').click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: 'SOA_N12_0112.jpg: Same as image 57 (M0042) – not added.' })).toBeVisible();
+        expect(bridge.puts.map(p => p.image)).toEqual(['112']);
+    });
+
     test('one main action per item; Add images and Answer in a dialog; files dropped on a row', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 });
         const panel = page.locator('#live-panel');

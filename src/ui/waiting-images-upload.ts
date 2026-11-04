@@ -31,6 +31,8 @@ export interface UploadOutcome {
     inbox: WaitingInbox | null;
     /** Files saved now. */
     saved: number;
+    /** Files not added, each with why ("scan.jpg: Same as image 9 (M0123) – not added."); the area closes, so the host says them. */
+    notes: string[];
 }
 
 export interface WaitingImagesUploadOptions {
@@ -61,7 +63,9 @@ type FileState =
     /** Not saved for now: no room, busy, no answer (Try again). */
     | 'space' | 'busy' | 'fail'
     /** Not sent at all: kept the saved one; too large or a kind not taken (said by the bridge). */
-    | 'kept' | 'size' | 'format' | 'pdf';
+    | 'kept' | 'size' | 'format' | 'pdf'
+    /** Not added: the same file as another image taken already. */
+    | 'same';
 
 interface UpFile {
     id: number;
@@ -79,6 +83,9 @@ interface UpFile {
     said?: string;
     /** The numbers it was saved as. */
     savedAs?: number[];
+    /** `same`: the image it is the same as (its number, the research's id). */
+    sameImage?: number;
+    sameId?: string;
 }
 
 /** Files that wait for a choice before anything more goes. */
@@ -304,6 +311,12 @@ export class WaitingImagesUpload {
                 f.state = 'unknown';
                 f.missing = r.missing ?? [];
                 return;
+            // Nothing taken, nothing to decide: the others go on.
+            case 'image-same':
+                f.state = 'same';
+                f.sameImage = r.sameImage;
+                f.sameId = r.same;
+                return;
             case 'too-large': f.state = 'size'; return;
             case 'type': f.state = 'format'; return;
             case 'pdf': f.state = 'pdf'; return;
@@ -338,7 +351,13 @@ export class WaitingImagesUpload {
         const open = this.files.some(f => f.state === 'queued' || f.state === 'sending' || (!this.woken && !this.gone && DECIDE.includes(f.state)));
         if (open && !this.woken && !this.gone) return;
         this.finished = true;
-        this.opts.done({ woken: this.woken, gone: this.gone && !this.woken, inbox: this.lastInbox, saved: this.files.filter(f => f.state === 'saved').length });
+        this.opts.done({ woken: this.woken, gone: this.gone && !this.woken, inbox: this.lastInbox, saved: this.files.filter(f => f.state === 'saved').length, notes: this.notes() });
+    }
+
+    /** What the host says of the files not added (the same as an image taken already). */
+    private notes(): string[] {
+        const T = strings.live.waitingTask;
+        return this.files.filter(f => f.state === 'same').map(f => `${f.file.name}: ${T.sameAs(f.sameImage ?? null, f.sameId ?? '')}`);
     }
 
     /** Cancel: nothing more goes; what was saved stays saved. */
@@ -347,7 +366,7 @@ export class WaitingImagesUpload {
         const saved = this.files.filter(f => f.state === 'saved').length;
         if (saved > 0 && !this.finished) {
             this.finished = true;
-            this.opts.done({ woken: this.woken, gone: false, inbox: this.lastInbox, saved });
+            this.opts.done({ woken: this.woken, gone: false, inbox: this.lastInbox, saved, notes: this.notes() });
             return;
         }
         this.opts.cancel();
@@ -526,6 +545,9 @@ export class WaitingImagesUpload {
                 break;
             case 'kept':
                 li.appendChild(this.message(T.keptOld(f.num ?? 0), 'muted'));
+                break;
+            case 'same':
+                li.appendChild(this.message(T.sameAs(f.sameImage ?? null, f.sameId ?? ''), 'warn'));
                 break;
             case 'unwanted':
             case 'unknown': {

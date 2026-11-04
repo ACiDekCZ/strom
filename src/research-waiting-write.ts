@@ -122,13 +122,14 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
  * the terminal (a check). A task's image: `image-exists` (409, `image`: saved already, again with Replace),
  * `image-unwanted` (409, `want`: the numbers it asks for), `image-unknown` (409, `missing`: which one it is
  * is not known — again with a number), `pdf` (415 `waiting.pdf`: no page of the PDF can be read), `no-images`
- * (409 `waiting.no-images`: the task waits for no images of a book).
+ * (409 `waiting.no-images`: the task waits for no images of a book), `image-same` (409 `waiting.image-same`,
+ * `same`/`as`/`sameRecordset`/`sameImage`: the file is the same as another image taken already — nothing taken).
  */
 export type WaitingWriteCode =
     | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown'
     // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
     | 'held'
-    | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'pdf' | 'no-images';
+    | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'image-same' | 'pdf' | 'no-images';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -149,6 +150,13 @@ export interface WaitingWriteRefused {
     want?: number[];
     /** `image-unknown`: the numbers still missing. */
     missing?: number[];
+    /** `image-same`: the research's id of the image the file is the same as ("M0123"). */
+    same?: string;
+    /** `image-same`: where that image is, as the research says it ("B0003:9"; for the details only). */
+    as?: string;
+    /** `image-same`: that image's book ("B0003") and number there. */
+    sameRecordset?: string;
+    sameImage?: number;
 }
 
 export interface WaitingSentDone {
@@ -239,6 +247,17 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
         }
         if (code === 'waiting.image-unwanted') return { ...out('image-unwanted'), want: imageNumbers(r.want, 1000) };
         if (code === 'waiting.image-unknown') return { ...out('image-unknown'), missing: imageNumbers(r.missing) };
+        if (code === 'waiting.image-same') {
+            const image = imageNumber(r.image);
+            const same = typeof r.same === 'string' && /^[IM]\d{1,7}$/.test(r.same.trim()) ? r.same.trim() : '';
+            const as = cleanText(r.as, 80);
+            const book = typeof r.sameRecordset === 'string' && /^B\d{1,7}$/.test(r.sameRecordset.trim()) ? r.sameRecordset.trim() : '';
+            const sameImage = imageNumber(typeof r.sameImage === 'string' && /^\d{1,6}$/.test(r.sameImage) ? Number(r.sameImage) : r.sameImage);
+            return {
+                ...out('image-same'), ...(image !== null ? { image } : {}), ...(same ? { same } : {}), ...(as ? { as } : {}),
+                ...(book ? { sameRecordset: book } : {}), ...(sameImage !== null ? { sameImage } : {}),
+            };
+        }
         return out(gone ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file'
             : code === 'waiting.no-answer' ? 'no-answer' : code === 'waiting.no-images' ? 'no-images' : 'unknown');
     }
