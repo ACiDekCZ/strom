@@ -96,6 +96,21 @@ test.describe('couldn\'t connect to the research', () => {
             /^Connecting to Strom Research… If the browser asks about “Access other apps and services on this device”, choose Allow\.(Undo)?$/);
     });
 
+    test('the browser never shows its question (most8 on Windows): "Connecting…" ends in the dialog with the way to allow it, not for ever', async ({ page }) => {
+        await page.clock.install();
+        await setup(page, 'prompt');
+        await page.unroute(`${BRIDGE}/**`);
+        await page.route(`${BRIDGE}/**`, () => { /* held: the browser's question never comes */ });
+        void page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toBeVisible();
+        await page.clock.fastForward(61_000);
+        const d = dialog(page);
+        await expect(d).toBeVisible();
+        await expect(d.locator('.research-connect-failed')).toHaveAttribute('data-reason', 'prompt');
+        await expect(d.locator('.connect-reason')).toHaveText('The browser is waiting for permission');
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveCount(0);
+    });
+
     test('allowed and still unreachable: the research is not responding, Try again asks again', async ({ page }) => {
         await setup(page, 'granted');
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ send: b })), BRIDGE);
