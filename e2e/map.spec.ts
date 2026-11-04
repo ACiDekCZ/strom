@@ -444,8 +444,11 @@ test('tiles refused even with the app id: one note instead of the blocked pictur
     await expect(note).toBeVisible();
     await expect(note).toHaveText(/OpenStreetMap tile server refused/);
     await expect(note).toHaveCount(1);
-    // No tile picture is left showing, the points and the attribution stay.
+    // No tile picture is left showing, and no empty tile draws a frame (a grid
+    // of them reads as a map not loaded); the points and the attribution stay.
     await expect.poll(() => page.locator('.map-tiles .map-tile[src]').count()).toBe(0);
+    expect(await page.locator('.map-tiles .map-tile').evaluateAll(els =>
+        els.length > 0 && els.every(el => getComputedStyle(el).visibility === 'hidden'))).toBe(true);
     await expect(page.locator('.map-marker')).toHaveCount(2);
     await expect(page.locator('.map-attribution')).toBeVisible();
 

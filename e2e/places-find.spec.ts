@@ -49,10 +49,32 @@ async function stubTiles(page: Page): Promise<void> {
     await seedSetting(page, 'mapTiles', true);
 }
 
+/**
+ * The OSM tile server refusing every tile, as it answers one: HTTP 200 with
+ * the "Access blocked" picture and Cache-Control: no-cache, with or without
+ * the app's X-Requested-With.
+ */
+async function stubRefusedTiles(page: Page): Promise<void> {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    await page.route('**://tile.openstreetmap.org/**', route => {
+        const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'X-Requested-With' };
+        if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+        return route.fulfill({ status: 200, contentType: 'image/png', body: png, headers: { ...cors, 'cache-control': 'no-cache' } });
+    });
+}
+
 /** The Lhoták family around Lhota: Lhota, Lhotov and Jinov on the map; H. Lhota and Lhotínek not. */
-async function seed(page: Page): Promise<void> {
+async function seed(page: Page, opts: { refusedTiles?: boolean } = {}): Promise<void> {
     await seedSetting(page, 'geocoding', true);
-    await stubTiles(page);
+    if (opts.refusedTiles) {
+        await stubRefusedTiles(page);
+        await seedSetting(page, 'mapTiles', true);
+    } else {
+        await stubTiles(page);
+    }
     await openApp(page);
     await seedTree(page, {
         a: { firstName: 'Zorbin', lastName: 'Lhoták', birthDate: '1820', birthPlace: 'Lhota' },
@@ -261,6 +283,29 @@ for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
 }
 
 /** German (the longest texts) on a touch phone: the results, nothing found and the map by hand stay inside the panel. */
+test('the tile server refuses the background: the small map says so once, no empty tile frames, the letters stay', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubGeocoder(page, { 'Horní Lhota': [FAR, NEAR] });
+    await seed(page, { refusedTiles: true });
+    const r = await search(page, 'H. Lhota');
+    await expect(r.locator('.place-result')).toHaveCount(2, SEARCH);
+
+    const mini = r.locator('.place-mini-map');
+    const note = mini.locator('.map-tiles-blocked');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveCount(1);
+    await expect(note).toHaveText(/OpenStreetMap tile server refused/);
+    // No tile picture is left, and no empty tile draws a frame or a broken-image icon.
+    const tiles = mini.locator('.map-tile');
+    await expect.poll(() => mini.locator('.map-tile[src]').count()).toBe(0);
+    expect(await tiles.count()).toBeGreaterThan(0);
+    expect(await tiles.evaluateAll(els => els.every(el => getComputedStyle(el).visibility === 'hidden'))).toBe(true);
+    // The letters are drawn over the note and still pick.
+    await expect(r.locator('.place-mini-pin')).toHaveText(['A', 'B']);
+    await r.locator('.place-mini-pin').first().click();
+    await expect(toast(page, 'Matched to Horní Lhota, okres Lhotov, Česko')).toBeVisible();
+});
+
 test('in German at 390px with touch: nothing in the search panel overflows', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'de-DE' });
     const page = await context.newPage();

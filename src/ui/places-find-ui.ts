@@ -34,7 +34,7 @@ import {
     fitBounds, panCenter, pointInViewport, tilesForViewport, tileUrl, MAX_ZOOM, MIN_ZOOM, TILE_ATTRIBUTION,
 } from '../map.js';
 import { SettingsManager } from '../settings.js';
-import { loadMapTile, releaseMapTile } from './map-tiles.js';
+import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
 import { managerKnownStreets, managerPlaceUsage, managerResearchActions } from './places-manager-ui.js';
 import { uiModule } from './module.js';
 
@@ -87,6 +87,33 @@ export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number,
     for (const [key, img] of live) {
         if (!seen.has(key)) { releaseMapTile(img); img.remove(); live.delete(key); }
     }
+    renderTilesBlockedNote(layer);
+    if (!smallMapTilesBound) {
+        smallMapTilesBound = true;
+        // The refusal arrives after the tiles were asked for: every small map on the page says so then.
+        onMapTilesChange(() => {
+            document.querySelectorAll<HTMLElement>('.place-mini-tiles').forEach(renderTilesBlockedNote);
+        });
+    }
+}
+
+/** The small maps listen once for the tile server's refusal (its note). */
+let smallMapTilesBound = false;
+
+/**
+ * The tile server refused the background: the same one note as on the main
+ * map, right above a small map's tiles (its points and letters drawn over it).
+ */
+function renderTilesBlockedNote(layer: HTMLElement): void {
+    const next = layer.nextElementSibling;
+    const note = next?.classList.contains('map-tiles-blocked') ? next : null;
+    if (!mapTilesBlocked()) { note?.remove(); return; }
+    if (note) return;
+    const el = document.createElement('div');
+    el.className = 'map-tiles-blocked';
+    el.setAttribute('role', 'status');
+    el.textContent = strings.map.tilesBlocked;
+    layer.after(el);
 }
 
 /** The tree's places as grey dots of a small map. */

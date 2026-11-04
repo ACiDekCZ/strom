@@ -5664,6 +5664,9 @@
         .place-mini-map { height: 200px; }
         .place-mini-tiles, .place-mini-marks { position: absolute; inset: 0; }
         .place-mini-tiles .map-tile { position: absolute; width: 256px; height: 256px; pointer-events: none; user-select: none; }
+        .place-mini-map .map-tiles-blocked, .place-hand-map .map-tiles-blocked {
+            max-width: calc(100% - 16px); padding: 6px 10px; font-size: 12px; line-height: 1.35;
+        }
         .place-mini-dot {
             position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
             background: var(--text-faint); border: 1px solid var(--surface);
@@ -9052,6 +9055,10 @@
             user-select: none;
             -webkit-user-drag: none;
         }
+        /* A tile with no picture (on its way, offline, refused) shows the map's
+           own background, never a broken-image frame: an <img> whose src was
+           taken away draws one, and a grid of them reads as a map not loaded. */
+        img.map-tile:not([src]) { visibility: hidden; }
         /* The dot IS the marker: it sits on the spot and takes the clicks. The
            label is a caption hanging under it and never intercepts anything —
            otherwise two nearby places (Greenwich and Westminster) would cover
