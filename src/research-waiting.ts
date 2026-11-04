@@ -277,8 +277,8 @@ export function waitingActions(w: LiveWaiting, ctx: WaitActionsContext): WaitAct
  * The actions as they stand: the main one and those beside it, the rest
  * under "More actions" (none on a phone: what does not fit is not offered there).
  */
-export function splitWaitingActions(list: readonly WaitActionView[], opts: { phone: boolean; wide?: boolean }):
-    { shown: WaitActionView[]; more: WaitActionView[] } {
+export function splitWaitingActions<T = WaitActionView>(list: readonly T[], opts: { phone: boolean; wide?: boolean }):
+    { shown: T[]; more: T[] } {
     const n = 1 + (opts.phone ? PHONE_SECONDARY : opts.wide ? MAX_SECONDARY_WIDE : MAX_SECONDARY);
     return { shown: list.slice(0, n), more: opts.phone ? [] : list.slice(n) };
 }

@@ -15,10 +15,11 @@ import { researchMarkFlags } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
-    WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
+    WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
-    postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile,
+    postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting,
 } from '../research-waiting-write.js';
+import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
 import { WaitingPhase, waitingPhase } from '../research-waiting.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession } from './research-ui.js';
@@ -87,7 +88,7 @@ export const researchWaitingWriteMethods = uiModule({
      * again for it. A commit of its agent meanwhile: nothing taken, the newer
      * version comes as ever.
      */
-    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult): void {
+    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult | WaitingAnswerResult): void {
         if (!result.ok || !result.head) return;
         this.researchTakeOwnWriteHead(s.researchId, before, result.head, result.parent);
         if (!s.ended && TreeManager.getTreeMetadata(s.treeId)?.research?.head === result.head) s.head = result.head;
@@ -367,6 +368,58 @@ export const researchWaitingWriteMethods = uiModule({
         let copied = false;
         try { copied = document.execCommand('copy'); } catch { /* by hand */ }
         this.showToast(copied ? W.noteCopied : W.noteCopyFailed, copied ? 3000 : 6000, { kind: copied ? 'waiting-copied' : 'waiting-failed' });
+    },
+
+    /**
+     * The person's answer to an item (spec 048 §2), through the bridge
+     * (`waiting.answer`): taken, the row leaves To do at once and the toast
+     * says so; gone already (404): the row goes silently; the task waits for
+     * something else now (409 changed): the status is asked again and the
+     * next try expects what it says (`expect`); answered in the terminal
+     * (409 no-answer): the item is read again. The form says the rest.
+     */
+    async sendWaitingAnswer(s: LiveSession, w: LiveWaiting, text: string, expect?: string): Promise<WaitingAnswerOutcome> {
+        const task = researchTaskRef(w.id);
+        if (!task || !this.liveWaitingWrites(s).answer) return 'fail';
+        const st = writeState(s);
+        if (st.pending.get(w.id)?.until === Infinity) return 'skipped';
+        const back = st.pending.get(w.id);
+        st.pending.set(w.id, { phase: waitingPhase(w), until: Infinity });
+        let result: WaitingAnswerResult;
+        try {
+            const before = await this.waitingHeadBeforeWrite(s);
+            result = await answerWaiting(s.bridge.base, task, { text, expect: expect ?? w.at });
+            this.takeWaitingWriteHead(s, before, result);
+        } finally {
+            if (back) st.pending.set(w.id, back);
+            else st.pending.delete(w.id);
+        }
+        const taken = result.ok || result.code === 'none';
+        if (taken) st.pending.set(w.id, { phase: waitingPhase(w), gone: true, until: Date.now() + WAITING_SETTLE_MS });
+        if (!stillFollowing(s)) return taken ? (result.ok ? 'saved' : 'gone') : 'fail';
+        if (taken) this.reshowLiveWaiting(s);
+        this.liveStatusSoon(s);
+        if (result.ok) {
+            this.showToast(strings.live.waitingTask.answerSaved, 6000, { kind: 'waiting-answered' });
+            return 'saved';
+        }
+        switch (result.code) {
+            case 'none': return 'gone';
+            case 'changed': return 'changed';
+            case 'no-answer': return 'no-answer';
+            case 'busy': case 'locked': return 'busy';
+            // Held by the research (sealed elsewhere …): its own sentence and way, the form says it was not saved.
+            case 'held': this.showWaitingRefused(result); return 'fail';
+            default: return 'fail';
+        }
+    },
+
+    /**
+     * "Add images" at an item (spec 048 §3, `data-action="images"`): the
+     * upload area in its detail. Drawn by the upload part; until then nothing.
+     */
+    openWaitingImages(_s: LiveSession, _w: LiveWaiting): void {
+        /* The upload area (spec 048 §3) hooks in here. */
     },
 
     /** "Add a file" at a task: an image or PDF picked here goes to the research with the task's id. */

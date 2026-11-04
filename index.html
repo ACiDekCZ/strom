@@ -314,6 +314,8 @@
             --warn-soft: var(--warning-soft);
             --warn-text: var(--warning-text);
             --warn-line: #e8d7ae;
+            --error-text: #a3402c;    /* an error line on paper / error-soft (≥4.5:1) */
+            --error-soft: #f7e4dc;
             --text-muted: var(--text-light);
             --sub: #fcfaf5;           /* sub-rows (houses, variants) */
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
@@ -497,6 +499,8 @@
             --map-check: #e09a2e;
             --map-check-ring: var(--surface);
             --warn-line: #6b5a32;
+            --error-text: #f0a58f;
+            --error-soft: #3d2721;
             --sub: #2f2d27;
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
@@ -16347,6 +16351,135 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .waiting-note-text { max-height: calc(100vh - 150px); }
             .research-overview__waiting-groupactions { margin-top: 4px; }
+        }
+        /* An item waiting for images, a website or a check (spec 048 U6): its actions by weight — the main one
+           filled, the next outlined, the rest as links — and "More actions" (⋯) for what does not fit. */
+        .waiting-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+        .waiting-action {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 34px; max-width: 100%; box-sizing: border-box;
+            padding: 0 14px; border-radius: var(--r-md); font: inherit; font-size: 13px; font-weight: 600; line-height: 1.2;
+            text-align: left; text-decoration: none; cursor: pointer;
+        }
+        a.waiting-action { display: inline-flex; text-decoration: none; }
+        a.waiting-action.waiting-action--link { text-decoration: underline; }
+        .waiting-action--primary { background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary, #fff); }
+        .waiting-action--secondary { background: transparent; border: 1px solid var(--primary); color: var(--primary-dark); }
+        .waiting-action--link {
+            padding: 0 2px; background: none; border: 0; color: var(--primary); font-weight: 500;
+            text-decoration: underline; text-underline-offset: 2px;
+        }
+        @media (hover: hover) {
+            .waiting-action--primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+            .waiting-action--secondary:hover { background: var(--primary-soft); }
+            .waiting-action--link:hover { color: var(--primary-dark); }
+            .waiting-more:hover { background: var(--hover-bg); }
+        }
+        .waiting-action:focus-visible, .waiting-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .waiting-action[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+        .waiting-action:disabled { opacity: 0.6; cursor: default; }
+        .waiting-more {
+            flex: none; width: 34px; height: 34px; padding: 0; box-sizing: border-box; border: 1px solid var(--border);
+            border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .waiting-more[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); }
+        .waiting-more-menu { z-index: 1050; width: 250px; max-width: calc(100vw - 16px); min-width: 0; padding: 4px; box-sizing: border-box; }
+        .waiting-more-menu .context-menu-item {
+            min-height: 32px; padding: 6px 10px; box-sizing: border-box; border-radius: 6px;
+            font-size: 13px; color: var(--text); text-decoration: none;
+        }
+        /* The answer written here: label, field, hint and counter, an error line, Send · Cancel. */
+        .waiting-answer { display: flex; flex-direction: column; gap: 6px; }
+        .waiting-answer [hidden] { display: none; }
+        .waiting-answer__label { font-size: 12.5px; font-weight: 600; color: var(--text-light); }
+        .waiting-answer__text {
+            width: 100%; min-height: 96px; box-sizing: border-box; resize: vertical; padding: 8px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 14px; line-height: 1.45;
+        }
+        .waiting-answer__text:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
+        .waiting-answer.is-sending .waiting-answer__text { opacity: 0.75; }
+        .waiting-answer__foot { display: flex; align-items: baseline; gap: 10px; }
+        .waiting-answer__hint { flex: 1; min-width: 0; margin: 0; font-size: 12px; color: var(--text-faint); }
+        .waiting-answer__count { flex: none; font-size: 12px; font-weight: 600; color: var(--warn-text); font-variant-numeric: tabular-nums; }
+        .waiting-answer__error { margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--error-soft); color: var(--error-text); font-size: 13px; }
+        .waiting-answer__buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+        .waiting-answer__draft { margin: 0; font-size: 12px; color: var(--text-faint); }
+        .waiting-answer-changed {
+            padding: 8px 10px; border: 1px solid var(--warn-line); border-radius: 6px;
+            background: var(--warn-soft); color: var(--warn-text); font-size: 13px;
+        }
+        .waiting-answer-changed p { margin: 0; }
+        .waiting-answer-changed__title { font-weight: 600; }
+        .waiting-answer-changed__more { margin-top: 2px; }
+        /* The images of a book: dots and a short state in the row; the book's frame with its numbers in the detail. */
+        .waiting-images { display: inline-flex; align-items: center; gap: 6px; }
+        .img-dots { display: inline-flex; align-items: center; gap: 3px; }
+        .img-dot {
+            width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-faint);
+            transition: background-color 0.6s, border-color 0.6s;
+        }
+        .img-dot.is-on { background: var(--primary); border-color: var(--primary); }
+        .img-dot.is-new { animation: waiting-dot-fill 0.6s ease-out both; }
+        @keyframes waiting-dot-fill {
+            from { background: transparent; border-color: var(--text-faint); }
+            to { background: var(--primary); border-color: var(--primary); }
+        }
+        .waiting-images__text { margin-left: -3px; padding: 0 3px; border-radius: 4px; font-weight: 500; color: var(--text); }
+        .waiting-images__text.is-arrived { animation: waiting-arrived 4s linear both; }
+        @keyframes waiting-arrived { 0%, 60% { background: var(--primary-soft); } 100% { background: transparent; } }
+        .waiting-images__arrived { color: var(--text-light); }
+        .wait-book {
+            display: flex; flex-direction: column; gap: 4px; padding: 8px 10px;
+            border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-2);
+        }
+        .wait-book__label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-text); }
+        .wait-book__name { font-size: 13.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .wait-book__slots { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 2px 0; padding: 0; list-style: none; }
+        .wait-book__slot {
+            padding: 1px 8px; border: 1px dashed var(--text-faint); border-radius: 999px;
+            font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums;
+        }
+        .wait-book__slot.is-saved { border: 1px solid transparent; background: var(--primary-soft); color: var(--text); }
+        .wait-book__state { margin: 0; font-size: 13px; font-weight: 500; color: var(--text); }
+        /* A place under an archive: its name in two lines, what its items miss under it; its website beside Chat. */
+        .research-overview__group-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .research-overview__group-titles > .research-overview__group-title { flex: none; }
+        .research-overview__group-title.is-two-lines {
+            white-space: normal; overflow-wrap: anywhere; font-size: 14px;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+        .research-overview__group-missing { font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+        .waiting-live-region {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .img-dot { transition: none; }
+            .img-dot.is-new { animation: none; }
+            .waiting-images__text.is-arrived { animation-timing-function: step-end; }
+        }
+        /* Touch: every action, ⋯ and its menu's rows at least 44px; the field at 16px (no zoom on focus). */
+        @media (pointer: coarse) {
+            .waiting-action { min-height: 44px; }
+            .waiting-more { width: 44px; height: 44px; }
+            .waiting-more-menu .context-menu-item { min-height: 44px; }
+            .waiting-answer__text { font-size: 16px; }
+        }
+        /* Tablet (the 400px overlay): actions keep wrapping, a little closer. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .waiting-actions { gap: 8px 12px; }
+        }
+        /* Phone: touched, whatever the pointer reports. */
+        @media (max-width: 640px) {
+            .waiting-action { min-height: 44px; }
+            .waiting-more { width: 44px; height: 44px; }
+            .waiting-answer__text { font-size: 16px; }
+        }
+        /* Phone held sideways: little height — a shorter field, a tighter frame. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .waiting-action { min-height: 44px; }
+            .waiting-answer__text { min-height: 72px; }
+            .wait-book { padding: 6px 8px; gap: 2px; }
         }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
         /* The agent's text keeps a readable width; its actions go under it when both do not fit (long de labels). */

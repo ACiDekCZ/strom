@@ -1360,12 +1360,17 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await items.first().locator('.research-overview__waiting-row').click();
         await expect(items.first().locator('.research-overview__waiting-row')).toHaveAttribute('aria-expanded', 'true');
         const detail = items.first().locator('.research-overview__waiting-detail');
-        await expect(detail.locator('.research-overview__waiting-inbox')).toHaveText('saved 3/10');
-        // Images are saved by hand: Chat leads, as the detail's main button; nothing to answer, no hint.
-        await expect(detail.locator('.research-overview__waiting-action')).toHaveText(['Chat, AI, opens in the researchAI', 'Folder, opens in the research']);
+        // The images' state as a sentence (an older bridge: no book's frame); the row says how many.
+        await expect(items.first().locator('.waiting-images__text')).toHaveText('3 of 10 images');
+        await expect(detail.locator('.wait-book__state')).toHaveText('3 of 10 images saved.');
+        await expect(detail.locator('.wait-book')).toHaveCount(0);
+        await expect(detail.locator('.research-overview__waiting-inbox')).toHaveCount(0);
+        // Images are saved by hand (no images through this bridge): Discuss leads, as the detail's main button; no hint.
+        await expect(detail.locator('[data-action="images"]')).toHaveCount(0);
+        await expect(detail.locator('.research-overview__waiting-action')).toHaveText(['Discuss with the agent, AI, opens in the researchAI', 'Open folder, opens in the research']);
         const imagesChat = detail.locator('.research-overview__waiting-action[data-action="chat"]');
         await expect(imagesChat).toBeVisible();
-        await expect(imagesChat).toHaveClass(/is-primary/);
+        await expect(imagesChat).toHaveClass(/waiting-action--primary/);
         await expect(detail.locator('.research-overview__waiting-hint')).toHaveCount(0);
         await imagesChat.click();
         expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0008&do=chat`]);

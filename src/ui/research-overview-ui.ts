@@ -20,12 +20,14 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveChangeKind, LiveWaiting, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
+    ImagesState, WaitActionView, imageRanges, imagesArrived, imagesState, splitWaitingActions, waitingActions, waitingGroupMissing,
 } from '../research-waiting.js';
+import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { uiModule } from './module.js';
@@ -127,6 +129,199 @@ function hoverCard(id: PersonId | null): void {
     hovered?.classList.remove('overview-hover');
     hovered = id ? document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(id)}"]`) : null;
     hovered?.classList.add('overview-hover');
+}
+
+// ==================== AN ITEM'S ACTIONS, ANSWER AND IMAGES (spec 048 U6) ====================
+
+/** One action of an item as drawn: a button that runs, a website in a new window, or a write through the bridge. */
+interface ItemAction {
+    key: string;
+    label: string;
+    /** A link into the research: the mark of its group by the map (`researchLinkMark`). Absent: it stays here or goes through the bridge, no mark. */
+    mark?: ResearchActionMark;
+    href?: string;
+    run?: () => void;
+    /** Written through the bridge (one click only). */
+    write?: boolean;
+}
+
+/** Answer forms by tree and item: the open one (one at a time) and those kept over a redraw. */
+const answerForms = new Map<string, WaitingAnswerForm>();
+let answeringKey: string | null = null;
+/** Items whose answer met a task that waits for something else now (409 changed): the ochre note at the top. */
+const answerChanged = new Set<string>();
+/** The images state each item had at the last drawing, and the numbers that came since (until its detail folds). */
+const imagesSeen = new Map<string, ImagesState>();
+const imagesArrivals = new Map<string, { nums: number[]; at: number }>();
+/** How long the short state is lit after images arrived. */
+const ARRIVED_MS = 4000;
+/** Number chips in the book's frame at most (more: the sentence says it). */
+const MAX_SLOT_CHIPS = 24;
+/** The "More actions" menu open (the item's id) and how it is let go. */
+let moreMenuFor: string | null = null;
+let moreMenuCleanup: (() => void) | null = null;
+
+const itemKey = (s: LiveSession, id: string): string => `${s.treeId}|${id}`;
+
+/** The answer form drawn last loses no focus to a redraw: the same field, the caret where it was. */
+function keepAnswerFocus(): () => void {
+    const a = document.activeElement;
+    if (!(a instanceof HTMLTextAreaElement) || !a.closest('#research-overview .waiting-answer')) return () => {};
+    const { selectionStart, selectionEnd, scrollTop } = a;
+    return () => {
+        if (!a.isConnected || document.activeElement === a) return;
+        a.focus({ preventScroll: true });
+        a.setSelectionRange(selectionStart, selectionEnd);
+        a.scrollTop = scrollTop;
+    };
+}
+
+/** The open answer form closes (its draft stays). */
+function closeAnswerForm(): void {
+    if (!answeringKey) return;
+    answerForms.get(answeringKey)?.keepDraftNow();
+    answerChanged.delete(answeringKey);
+    answeringKey = null;
+}
+
+/** Told to a screen reader once (images arrived). */
+function announceWaiting(text: string): void {
+    let region = document.getElementById('waiting-live-region');
+    if (!region) {
+        region = el('div', 'waiting-live-region');
+        region.id = 'waiting-live-region';
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', 'polite');
+        document.body.appendChild(region);
+    }
+    region.textContent = text;
+}
+
+/** What came to each item's images since the last drawing (a new status): lit for a while, said once. */
+function noteImagesArrived(s: LiveSession): void {
+    const T = strings.live.waitingTask;
+    const said: string[] = [];
+    for (const w of s.waiting) {
+        const now = imagesState(w);
+        const key = itemKey(s, w.id);
+        if (!now) continue;
+        const before = imagesSeen.get(key);
+        imagesSeen.set(key, now);
+        if (!before) continue;
+        const nums = imagesArrived(before, now);
+        if (nums.length === 0 && now.have <= before.have) continue;
+        const prev = imagesArrivals.get(key)?.nums ?? [];
+        const all = [...new Set([...prev, ...nums])].sort((a, b) => a - b);
+        imagesArrivals.set(key, { nums: all, at: Date.now() });
+        if (nums.length > 0) said.push(T.justArrived(imageRanges(nums), nums.length));
+    }
+    if (said.length > 0) announceWaiting(said.join('. '));
+}
+
+/** The short state of an item's images in its row: dots (up to 8) and how many, or which are needed. */
+function imagesShortEl(key: string, img: ImagesState): HTMLElement {
+    const T = strings.live.waitingTask;
+    const box = el('span', 'waiting-images');
+    const arrival = imagesArrivals.get(key);
+    const since = arrival ? Date.now() - arrival.at : Infinity;
+    if (img.detail !== 'unknown' && img.want !== undefined && img.want > 0 && img.want <= 8) {
+        const dots = el('span', 'img-dots');
+        dots.setAttribute('aria-hidden', 'true');
+        const nums = img.wanted && img.saved && img.wanted.length === img.want ? img.wanted : null;
+        for (let i = 0; i < img.want; i++) {
+            const on = nums ? img.saved!.includes(nums[i]) : i < img.have;
+            const dot = el('span', on ? 'img-dot is-on' : 'img-dot');
+            if (on && since < ARRIVED_MS && (nums ? arrival!.nums.includes(nums[i]) : i === img.have - 1)) {
+                dot.classList.add('is-new');
+                dot.style.animationDelay = `-${Math.round(since)}ms`;
+            }
+            dots.appendChild(dot);
+        }
+        box.appendChild(dots);
+    }
+    const missing = img.missing ?? [];
+    const text = img.detail === 'unknown' ? T.imagesUnknown(img.have)
+        : img.have > 0 || missing.length === 0 ? T.imagesShort(img.have, img.want ?? img.have)
+            : T.imagesNeeded(imageRanges(missing), missing.length);
+    const short = el('span', 'waiting-images__text', text);
+    if (since < ARRIVED_MS) {
+        short.classList.add('is-arrived');
+        short.style.animationDelay = `-${Math.round(since)}ms`;
+    }
+    box.appendChild(short);
+    if (arrival && arrival.nums.length > 0) {
+        box.appendChild(el('span', 'waiting-images__arrived', `· ${T.justArrived(imageRanges(arrival.nums), arrival.nums.length)}`));
+    }
+    return box;
+}
+
+/**
+ * The state of an item's images in its detail: the book's frame with a chip
+ * per number (saved / missing) and a sentence; a count not known: the
+ * sentence and how it is finished; an older research: the sentence alone.
+ */
+function appendImagesDetail(host: HTMLElement, img: ImagesState): void {
+    const T = strings.live.waitingTask;
+    const missing = img.missing ?? [];
+    if (img.detail === 'unknown') {
+        host.appendChild(el('p', 'wait-book__state', T.imagesUnknown(img.have)));
+        host.appendChild(el('p', 'research-overview__waiting-hint wait-book__hint', T.unknownHint));
+        return;
+    }
+    const want = img.want ?? img.have;
+    const sentence = missing.length === 0 ? T.imagesStateOld(img.have, want)
+        : img.have > 0 ? T.imagesState(img.have, want, imageRanges(missing), missing.length)
+            : T.imagesNone(imageRanges(missing), missing.length);
+    if (img.detail === 'old') {
+        host.appendChild(el('p', 'wait-book__state', sentence));
+        return;
+    }
+    const frame = el('div', 'wait-book');
+    if (img.book) {
+        frame.appendChild(el('span', 'wait-book__label', T.book));
+        frame.appendChild(el('span', 'wait-book__name', img.book));
+    }
+    if (img.wanted && img.saved && img.wanted.length <= MAX_SLOT_CHIPS) {
+        const slots = el('ul', 'wait-book__slots');
+        for (const n of img.wanted) {
+            const saved = img.saved.includes(n);
+            const chip = el('li', saved ? 'wait-book__slot is-saved' : 'wait-book__slot', `${saved ? '✓' : '○'} ${n} · ${saved ? T.slotSaved : T.slotMissing}`);
+            chip.dataset.image = String(n);
+            slots.appendChild(chip);
+        }
+        frame.appendChild(slots);
+    }
+    frame.appendChild(el('p', 'wait-book__state', sentence));
+    host.appendChild(frame);
+}
+
+/** An item's action drawn by its weight: the main one filled, the next outlined, the rest as links. */
+function waitingActionEl(a: ItemAction, weight: 'primary' | 'secondary' | 'link'): HTMLElement {
+    const cls = `waiting-action waiting-action--${weight}`;
+    if (a.href) {
+        const web = el('a', `${cls} research-overview__waiting-web`, a.label);
+        web.href = a.href;
+        web.title = a.href;
+        web.target = '_blank';
+        web.rel = 'noopener noreferrer';
+        web.dataset.action = a.key;
+        return web;
+    }
+    const btn = el('button', `${cls} research-overview__waiting-action`);
+    if (a.mark) setResearchActionLabel(btn, a.label, a.mark);
+    else btn.textContent = a.label;
+    btn.type = 'button';
+    btn.dataset.action = a.key;
+    if (a.write) btn.dataset.write = 'bridge';
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        if (a.write) {
+            if (btn.disabled) return;
+            btn.disabled = true;
+        }
+        a.run?.();
+    };
+    return btn;
 }
 
 interface ChangeGroup {
@@ -245,6 +440,10 @@ export const researchOverviewMethods = uiModule({
         // so do the sections shown whatever their choice.
         s.waitingView = newWaitingView();
         s.overviewShown.clear();
+        closeAnswerForm();
+        imagesArrivals.clear();
+        imagesSeen.clear();
+        this.closeWaitingMoreMenu();
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '0'); } catch { /* not kept */ }
         }
@@ -271,8 +470,11 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         queueMicrotask(keepLineFocus());
+        queueMicrotask(keepAnswerFocus());
         const s = liveSession();
         const on = !!s && !s.ended && s.overview && DataManager.getCurrentTreeId() === s.treeId;
+        // "More actions" belongs to the open detail: gone with it.
+        if (moreMenuFor && (!on || s?.waitingView.detail !== moreMenuFor)) this.closeWaitingMoreMenu();
         let root = document.getElementById('research-overview');
         if (!on || !s) {
             // Nothing shows the queue's pages: their reads stop.
@@ -514,6 +716,7 @@ export const researchOverviewMethods = uiModule({
         });
         host.classList.add('research-overview__waiting');
         if (view.detail && !s.waiting.some(w => w.id === view.detail)) view.detail = null;
+        noteImagesArrived(s);
         const rows = (items: readonly LiveWaiting[]): HTMLElement => {
             const list = el('ul', 'research-overview__waiting-rows');
             for (const w of items) list.appendChild(this.overviewWaitingRow(s, w, mode));
@@ -617,11 +820,23 @@ export const researchOverviewMethods = uiModule({
         const places = g.key === PLACES_GROUP;
         const name = places ? strings.places.waiting.group : g.group?.name ?? L.waitingOtherGroup;
         const title = el('span', 'research-overview__group-title', name);
+        title.title = name;
         const kind = places ? name : L.waitingGroupKinds[g.group?.kind ?? 'other'];
-        gh.append(chevron, title);
+        // An archive's name is long (fond, institution): two lines, whole on hover.
+        if (g.group?.kind === 'archive') title.classList.add('is-two-lines');
+        // How many images its items miss together (a research that says which).
+        const missing = places ? null : waitingGroupMissing(g.items);
+        const missingText = missing ? L.waitingTask.groupMissing(missing) : '';
+        if (missing) {
+            const titles = el('span', 'research-overview__group-titles');
+            titles.append(title, el('span', 'research-overview__group-missing', missingText));
+            gh.append(chevron, titles);
+        } else {
+            gh.append(chevron, title);
+        }
         if (kind !== name) gh.appendChild(el('span', 'research-overview__group-kind', kind));
         gh.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
-        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}`);
+        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}${missingText ? `, ${missingText}` : ''}`);
         gh.onclick = toggle;
         row.appendChild(gh);
         const action = this.overviewWaitingGroupAction(s, g, phase, mode);
@@ -656,6 +871,16 @@ export const researchOverviewMethods = uiModule({
             };
             box.appendChild(btn);
             return box;
+        }
+        // The archive's website: one session in its browser for all the place's tasks.
+        if (g.group?.url) {
+            const web = el('a', 'waiting-action waiting-action--link research-overview__waiting-archiveweb', L.waitingTask.archiveWeb);
+            web.href = g.group.url;
+            web.title = g.group.url;
+            web.target = '_blank';
+            web.rel = 'noopener noreferrer';
+            web.onclick = (e) => e.stopPropagation();
+            box.appendChild(web);
         }
         const task = mode === 'sheet' ? null : waitingGroupChatTask(g.items);
         const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
@@ -717,6 +942,8 @@ export const researchOverviewMethods = uiModule({
         const meta = el('span', 'research-overview__waiting-meta');
         const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         meta.appendChild(el('span', people.length > 0 ? 'research-overview__waiting-who' : 'research-overview__muted', people.length > 0 ? people.join(', ') : L.wholeResearch));
+        const img = imagesState(w);
+        if (img) meta.appendChild(imagesShortEl(itemKey(s, w.id), img));
         if (waitingPhase(w) === 'sent') {
             const ts = Date.parse(w.sentAt || w.at);
             if (Number.isFinite(ts)) {
@@ -731,6 +958,9 @@ export const researchOverviewMethods = uiModule({
         row.appendChild(meta);
         row.onclick = () => {
             view.detail = open ? null : w.id;
+            // One thing at a time: an answer being written closes (its draft stays); what arrived was seen.
+            closeAnswerForm();
+            if (open) imagesArrivals.delete(itemKey(s, w.id));
             this.renderResearchOverview();
         };
         li.appendChild(row);
@@ -776,6 +1006,11 @@ export const researchOverviewMethods = uiModule({
             this.appendBranchWaitingActions(detail, w, s);
             return detail;
         }
+        // Images, a website or a check (spec 048 U6): the actions of their kind, an answer written here, the images' state.
+        const writes = this.liveWaitingWrites(s);
+        const views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: mode === 'sheet' });
+        const key = itemKey(s, w.id);
+        if (views && answerChanged.has(key)) detail.appendChild(waitingAnswerChangedNote());
         const text = el('div', 'research-overview__waiting-text');
         appendLinkedText(text, w.what);
         detail.appendChild(text);
@@ -786,6 +1021,8 @@ export const researchOverviewMethods = uiModule({
             detail.appendChild(on);
         }
         if (w.to) detail.appendChild(el('small', 'research-overview__waiting-on', L.waitingTo(w.to)));
+        const img = views ? imagesState(w) : null;
+        if (img) appendImagesDetail(detail, img);
         const meta = el('div', 'research-overview__waiting-meta');
         const person = personByRefn(w.person);
         if (person) {
@@ -799,8 +1036,12 @@ export const researchOverviewMethods = uiModule({
         }
         const dir = taskDirectionName(s, w.research);
         if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));
-        if (w.inbox?.want !== undefined) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
+        if (!img && w.inbox?.want !== undefined) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
         detail.appendChild(meta);
+        if (views) {
+            this.appendWaitingTaskActions(detail, s, w, views, mode);
+            return detail;
+        }
 
         const actions = el('div', 'research-overview__waiting-actions');
         // The research runs on the computer: a phone gets no (research) into it, only the bridge's writes.
@@ -816,6 +1057,222 @@ export const researchOverviewMethods = uiModule({
         if (hint) detail.appendChild(el('p', 'research-overview__waiting-hint', L.waitingAnswerHint));
         if (mode === 'sheet') detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
         return detail;
+    },
+
+    /**
+     * The actions of an item waiting for images, a website or a check (spec
+     * 048 §1, §5, §9), by weight: the main one filled, the next outlined, the
+     * rest as links; beyond two beside it, "More actions" (⋯). The research's
+     * other actions it offers (Sent, a file, the query's text) come after
+     * them. "Answer" through the bridge opens the answer in the detail (the
+     * actions hide meanwhile); through the terminal, its hint goes under them.
+     */
+    appendWaitingTaskActions(detail: HTMLElement, s: LiveSession, w: LiveWaiting, views: readonly WaitActionView[], mode: Mode): void {
+        const L = strings.live;
+        const T = L.waitingTask;
+        const W = L.waitingWrite;
+        const key = itemKey(s, w.id);
+        const task = researchTaskRef(w.id);
+        // The upload area of "Add images" (spec 048 §3) comes before the answer and the actions.
+        if (answeringKey === key && task && views.some(v => v.key === 'answer' && v.via === 'bridge')) {
+            detail.appendChild(this.overviewAnswerForm(s, w, task).root);
+            return;
+        }
+        if (answeringKey === key) closeAnswerForm();
+        const list: ItemAction[] = [];
+        for (const v of views) {
+            if (v.key === 'web') {
+                if (w.url) list.push({ key: 'web', label: T.openWeb, href: w.url });
+            } else if (v.key === 'images') {
+                list.push({ key: 'images', label: T.haveImages, run: () => this.openWaitingImages(s, w) });
+            } else if (v.key === 'answer' && v.via === 'bridge') {
+                list.push({ key: 'answer', label: T.answer, run: () => this.openOverviewAnswer(s, w) });
+            } else if (task) {
+                const taskDo = v.key === 'answer' ? undefined : v.key;
+                const url = this.activeResearchLink('task', { task, taskDo });
+                if (!url) continue;
+                const label = v.key === 'answer' ? T.answer : v.key === 'chat' ? T.discuss : T.openFolder;
+                list.push({ key: v.key, label, mark: researchLinkMark('task', { taskDo }), run: () => this.launchResearchLink(url) });
+            }
+        }
+        // What else the research offers at the task (its writes through the bridge where it takes them).
+        const writes = this.liveWaitingWrites(s);
+        const links = mode !== 'sheet' && !!task && this.researchLinkAvailable('task');
+        for (const action of waitingTaskActions(w) ?? []) {
+            if (!task || action === 'answer' || action === 'chat' || action === 'folder') continue;
+            if (action === 'sent' && writes.sent && waitingSendable(w)) {
+                list.push({ key: 'sent', label: W.sent, write: true, run: () => { void this.markWaitingSent(s, w); } });
+            } else if (action === 'file' && writes.file && waitingFileWritable(w)) {
+                list.push({ key: 'file', label: W.file, write: true, run: () => this.pickWaitingFile(s, w) });
+            } else if (links) {
+                const url = this.activeResearchLink('task', { task, taskDo: waitingActionDo(action) });
+                if (url) list.push({ key: action, label: L.waitingActions[action], mark: researchLinkMark('task', { taskDo: waitingActionDo(action) }), run: () => this.launchResearchLink(url) });
+            }
+        }
+        if (task && writes.sent && waitingUnsendable(w)) {
+            list.push({ key: 'unsent', label: W.unsent, write: true, run: () => { void this.markWaitingUnsent(s, w.id); } });
+        }
+        const { shown, more } = splitWaitingActions(list, { phone: mode === 'sheet' });
+        if (shown.length > 0) {
+            const row = el('div', 'research-overview__waiting-actions waiting-actions');
+            shown.forEach((a, i) => row.appendChild(waitingActionEl(a, i === 0 ? 'primary' : i === 1 ? 'secondary' : 'link')));
+            if (more.length > 0) {
+                const btn = el('button', 'waiting-more', '⋯');
+                btn.type = 'button';
+                btn.dataset.more = w.id;
+                btn.title = T.more;
+                btn.setAttribute('aria-label', T.more);
+                btn.setAttribute('aria-haspopup', 'menu');
+                btn.setAttribute('aria-expanded', String(moreMenuFor === w.id));
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openWaitingMoreMenu(btn, w.id, more);
+                };
+                row.appendChild(btn);
+            }
+            detail.appendChild(row);
+        }
+        // Answered in the terminal: the answer is kept with the task.
+        if ([...shown, ...more].some(a => a.key === 'answer' && !!a.mark)) {
+            detail.appendChild(el('p', 'research-overview__waiting-hint', T.answerHintOld));
+        }
+        if (mode === 'sheet' && !views.some(v => v.key === 'answer' && v.via === 'bridge')) {
+            detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
+        }
+    },
+
+    /** "Answer" through the bridge: the answer opens in the item's detail, the field focused (its draft back). */
+    openOverviewAnswer(s: LiveSession, w: LiveWaiting): void {
+        closeAnswerForm();
+        answeringKey = itemKey(s, w.id);
+        this.closeWaitingMoreMenu();
+        this.renderResearchOverview();
+        const form = answerForms.get(answeringKey);
+        if (form?.root.isConnected) form.focus();
+    },
+
+    /** The item's answer form, the same node over every redraw (what is written, the caret, an error). */
+    overviewAnswerForm(s: LiveSession, w: LiveWaiting, task: string): WaitingAnswerForm {
+        const key = itemKey(s, w.id);
+        let form = answerForms.get(key);
+        if (form && !form.spent) return form;
+        const focusAnswer = (): void => {
+            this.renderResearchOverview();
+            const li = document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(w.id)}"]`);
+            li?.querySelector<HTMLElement>('[data-action="answer"]')?.focus();
+        };
+        form = new WaitingAnswerForm({
+            treeId: s.treeId, task, idPrefix: `ov-answer-${w.id}`,
+            send: async (text) => {
+                // The item as the research says it now (its wording may have changed meanwhile).
+                const now = s.waiting.find(x => x.id === w.id) ?? w;
+                const outcome = await this.sendWaitingAnswer(s, now, text);
+                if (outcome === 'changed') {
+                    answerChanged.add(key);
+                    this.renderResearchOverview();
+                } else if (outcome !== 'busy' && outcome !== 'fail' && outcome !== 'skipped') {
+                    answerChanged.delete(key);
+                }
+                return outcome;
+            },
+            cancel: () => {
+                closeAnswerForm();
+                focusAnswer();
+            },
+            done: () => {
+                answerForms.delete(key);
+                if (answeringKey === key) answeringKey = null;
+                answerChanged.delete(key);
+                this.renderResearchOverview();
+            },
+        });
+        answerForms.set(key, form);
+        return form;
+    },
+
+    /** "More actions" of an item: a menu under ⋯ (Escape, a click elsewhere or a choice closes it). */
+    openWaitingMoreMenu(anchor: HTMLElement, id: string, items: readonly ItemAction[]): void {
+        const wasOpen = moreMenuFor === id;
+        this.closeWaitingMoreMenu();
+        if (wasOpen) return;
+        const T = strings.live.waitingTask;
+        const menu = el('div', 'context-menu waiting-more-menu');
+        menu.id = 'waiting-more-menu';
+        menu.dataset.id = id;
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', T.more);
+        const button = (): HTMLElement | null =>
+            document.querySelector<HTMLElement>(`#research-overview .waiting-more[data-more="${CSS.escape(id)}"]`);
+        for (const a of items) {
+            const item = a.href ? el('a', 'context-menu-item waiting-more-menu__item') : el('div', 'context-menu-item waiting-more-menu__item');
+            if (a.mark) setResearchActionLabel(item, a.label, a.mark);
+            else item.textContent = a.label;
+            item.setAttribute('role', 'menuitem');
+            item.tabIndex = -1;
+            item.dataset.action = a.key;
+            if (a.write) item.dataset.write = 'bridge';
+            if (item instanceof HTMLAnchorElement && a.href) {
+                item.href = a.href;
+                item.title = a.href;
+                item.target = '_blank';
+                item.rel = 'noopener noreferrer';
+                item.onclick = () => this.closeWaitingMoreMenu();
+            } else {
+                const go = (): void => {
+                    this.closeWaitingMoreMenu();
+                    a.run?.();
+                };
+                item.onclick = go;
+                item.onkeydown = (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+                };
+            }
+            menu.appendChild(item);
+        }
+        document.body.appendChild(menu);
+        moreMenuFor = id;
+        anchor.setAttribute('aria-expanded', 'true');
+        const rect = anchor.getBoundingClientRect();
+        const left = Math.max(8, Math.min(rect.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8));
+        const below = rect.bottom + 4;
+        const top = below + menu.offsetHeight > window.innerHeight - 8 ? Math.max(8, rect.top - menu.offsetHeight - 4) : below;
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+        (menu.firstElementChild as HTMLElement | null)?.focus();
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                this.closeWaitingMoreMenu();
+                button()?.focus();
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const all = [...menu.querySelectorAll<HTMLElement>('.context-menu-item')];
+                const i = all.indexOf(document.activeElement as HTMLElement);
+                all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus();
+            } else if (e.key === 'Tab') {
+                this.closeWaitingMoreMenu();
+            }
+        };
+        const onDown = (e: Event): void => {
+            const t = e.target as Node;
+            if (!menu.contains(t) && !button()?.contains(t)) this.closeWaitingMoreMenu();
+        };
+        document.addEventListener('keydown', onKey, true);
+        const arm = setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
+        moreMenuCleanup = () => {
+            clearTimeout(arm);
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('pointerdown', onDown, true);
+            button()?.setAttribute('aria-expanded', 'false');
+        };
+    },
+
+    closeWaitingMoreMenu(): void {
+        moreMenuCleanup?.();
+        moreMenuCleanup = null;
+        moreMenuFor = null;
+        document.getElementById('waiting-more-menu')?.remove();
     },
 
     /**
