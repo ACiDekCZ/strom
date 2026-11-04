@@ -2,9 +2,9 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
-## 3.22.1
+## 3.23.0
 
-*Zatím nevydáno.*
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
 - **Mapa**: podklad mapy se načítá podle pravidel dlaždicových serverů OpenStreetMap při každém způsobu spuštění aplikace. Dlaždice posílá adresu stránky, jak pravidla žádají, a kde to nejde (aplikace uložená jako soubor, doplněk prohlížeče, který adresu odstraňuje), žádá se o dlaždice s označením aplikace; obrázky *Access blocked* od serveru se už neukazují. Když server podklad přesto odmítne, řekne to jedna zpráva v mapě a místa na ní zůstanou.
 

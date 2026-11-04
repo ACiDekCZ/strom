@@ -4,9 +4,9 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
-## 3.22.1
+## 3.23.0
 
-*Jeszcze nie wydano.*
+*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
 
 - **Mapa**: podkład mapy wczytuje się zgodnie z zasadami serwerów kafelków OpenStreetMap, jakkolwiek aplikacja jest uruchomiona. Kafelek wysyła adres strony, jak wymagają zasady, a tam, gdzie się nie da (aplikacja zapisana jako plik, rozszerzenie przeglądarki usuwające adres), kafelki są pobierane z identyfikatorem aplikacji i obrazki *Access blocked* z serwera już się nie pokazują. Gdy serwer mimo to odmówi podkładu, mówi o tym jedna informacja na mapie, a miejsca na niej zostają.
 

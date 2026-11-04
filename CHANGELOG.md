@@ -2,9 +2,9 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
-## 3.22.1
+## 3.23.0
 
-*Not released yet.*
+*This version is in preparation; this section grows with every test version.*
 
 - **Map**: the map background loads within the tile usage policy of OpenStreetMap however the app is opened. A tile sends the page's address, as the policy asks, and where none can be sent (the app saved as a file, a browser add-on that removes it) the tiles are asked for with the app's identification, no longer showing the server's *Access blocked* pictures. When the server refuses the background even so, one note on the map says so and the places stay on it.
 
