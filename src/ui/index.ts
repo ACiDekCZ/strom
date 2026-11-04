@@ -98,6 +98,7 @@ import { rodViewMethods } from './rod-view.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
+import { liveSectionEditMethods } from './live-section-edit-ui.js';
 import { researchWaitingWriteMethods } from './research-waiting-write-ui.js';
 import { researchRemovedMethods } from './research-removed-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
@@ -729,6 +730,10 @@ Object.assign(UIClass.prototype, cardSignalsUiMethods);
 type ResearchOverviewMethods = typeof researchOverviewMethods;
 export interface UIClass extends ResearchOverviewMethods {}
 Object.assign(UIClass.prototype, researchOverviewMethods);
+
+type LiveSectionEditMethods = typeof liveSectionEditMethods;
+export interface UIClass extends LiveSectionEditMethods {}
+Object.assign(UIClass.prototype, liveSectionEditMethods);
 
 type ResearchWaitingWriteMethods = typeof researchWaitingWriteMethods;
 export interface UIClass extends ResearchWaitingWriteMethods {}

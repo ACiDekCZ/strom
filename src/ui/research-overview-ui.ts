@@ -283,6 +283,7 @@ export const researchOverviewMethods = uiModule({
                 hoverCard(null);
             }
             this.setResearchOverviewDocked(false);
+            this.syncLiveSectionEditor();
             return;
         }
         const L = strings.live;
@@ -325,7 +326,8 @@ export const researchOverviewMethods = uiModule({
         head.appendChild(el('span', 'live-dot live-dot--still'));
         const titles = el('div', 'research-overview__titles');
         const sub = el('div', 'research-overview__sub');
-        sub.appendChild(el('span', 'research-overview__name', s.name));
+        // A long name is cut short beside Stop and the head's buttons: whole on hover.
+        sub.appendChild(el('span', 'research-overview__name', s.name)).title = s.name;
         titles.append(el('h2', 'research-overview__title', L.overviewTitle), sub);
         head.appendChild(titles);
         const close = el('button', 'research-overview__close', mode === 'sheet' ? '×' : '⤡');
@@ -345,6 +347,8 @@ export const researchOverviewMethods = uiModule({
             if (chip) sub.append(chip);
         }
         if (follow) head.appendChild(follow);
+        // Customize panel: after the follow switch, before ⤡ / ×.
+        head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
         head.appendChild(close);
         root.appendChild(head);
 
@@ -359,6 +363,11 @@ export const researchOverviewMethods = uiModule({
         // (expanded, its heading says so and does not fold). A click on a heading is a lasting choice.
         const shown = (key: string): boolean => sectionPref(key) !== 'hidden' || s.overviewShown.has(key);
         const fold = (key: string): LiveFold => {
+            const f = foldOf(key);
+            const pk = prefKeyOfOverview(key);
+            return pk ? { ...f, menu: (h, at) => this.openLiveSectionMenu(h, pk, 'overview', at) } : f;
+        };
+        const foldOf = (key: string): LiveFold => {
             const id = `ov-sec-${key}`;
             const pk = prefKeyOfOverview(key);
             if (sectionPref(key) === 'hidden') {
@@ -410,6 +419,7 @@ export const researchOverviewMethods = uiModule({
 
         this.setResearchOverviewDocked(mode === 'docked');
         ensureLiveTicker();
+        this.syncLiveSectionEditor();
     },
 
     /** The summary strip: state, what came while watching, this month. */

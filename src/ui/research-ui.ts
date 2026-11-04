@@ -80,6 +80,7 @@ import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -349,6 +350,8 @@ export interface LiveFold {
     locked?: boolean;
     /** A line between the heading and the body ("Hidden section, shown until the overview closes."). */
     note?: HTMLElement;
+    /** The section's own menu (right click, a long press, Menu / Shift+F10): at the pointer, or under the heading (null). */
+    menu?: (head: HTMLElement, at: { x: number; y: number } | null) => void;
 }
 
 /**
@@ -363,6 +366,7 @@ export function liveSection(host: HTMLElement, o: {
     extra?: HTMLElement[];
     locked?: boolean;
     note?: HTMLElement;
+    menu?: LiveFold['menu'];
 }): HTMLElement {
     const head = el('button', `live-panel-heading live-section__head${o.headCls ? ` ${o.headCls}` : ''}`);
     head.type = 'button';
@@ -378,8 +382,12 @@ export function liveSection(host: HTMLElement, o: {
         head.setAttribute('aria-disabled', 'true');
         head.classList.add('is-locked');
     } else {
-        head.onclick = o.onToggle;
+        // The release of a long press that opened the section's menu does not fold it too.
+        head.onclick = () => {
+            if (!sectionClickSwallowed()) o.onToggle();
+        };
     }
+    if (o.menu) bindSectionMenu(head, o.menu);
     const body = el('div', 'live-section__body');
     body.id = o.id;
     body.hidden = o.collapsed;
@@ -3186,6 +3194,10 @@ export const researchUiMethods = uiModule({
      * expanded (as it would have opened then), and both places redraw.
      */
     onLiveSectionPrefs(): void {
+        // Settings, when open, shows the same choices.
+        this.renderResearchFollowSettings();
+        // An open editor or section menu shows the new choices (also with no panel drawn).
+        this.syncLiveSectionEditor();
         const s = live;
         if (!s) {
             this.renderLivePanel();
@@ -3204,6 +3216,7 @@ export const researchUiMethods = uiModule({
         if (!hasSectionPrefs()) return;
         const before = resetSectionPrefs();
         this.showToast(strings.live.restoredToast, 6000, {
+            kind: 'live-sections',
             action: { label: strings.undo.undo, run: () => restoreSectionPrefs(before) },
         });
     },
@@ -3214,17 +3227,9 @@ export const researchUiMethods = uiModule({
         if (before[key] === 'hidden') return;
         setSectionPref(key, 'hidden');
         this.showToast(strings.live.hiddenToast, 6000, {
+            kind: 'live-sections',
             action: { label: strings.undo.undo, run: () => restoreSectionPrefs(before) },
         });
-    },
-
-    /**
-     * "Customize panel": the editor of the section choices, under `anchor`
-     * (the ⋯ of the panel or the overview, or a "Customize panel" link).
-     * Drawn by the editor module once it is there; until then nothing opens.
-     */
-    openLiveSectionEditor(anchor: HTMLElement, surface: 'panel' | 'overview'): void {
-        anchor.dispatchEvent(new CustomEvent('strom:live-section-editor', { bubbles: true, detail: { surface } }));
     },
 
     /** Show a person from a live change: focus them and bring them into view. */
@@ -3413,16 +3418,21 @@ export const researchUiMethods = uiModule({
         // Folded: the other trees as one chip (unfolds the panel with them shown; spec 011).
         const otherChip = collapsed && !phone && !s.ended ? this.researchElsewhereChip('collapsed') : null;
         if (otherChip) actions.appendChild(otherChip);
+        // ◎ ⤢ ⋯ close together (one row with Stop under a long name, 260px wide on a tablet).
+        const icons = el('div', 'live-panel-icons');
         const followBtn = phone ? null : this.liveFollowButton('panel');
-        if (followBtn) actions.appendChild(followBtn);
+        if (followBtn) icons.appendChild(followBtn);
         if (this.canOpenResearchOverview()) {
             const expand = el('button', 'live-panel-expand', '⤢');
             expand.type = 'button';
             expand.setAttribute('aria-label', L.openOverview);
             expand.title = L.openOverview;
             expand.onclick = () => this.openResearchOverview();
-            actions.appendChild(expand);
+            icons.appendChild(expand);
         }
+        // Customize panel (a phone's strip has none: its sheet has it).
+        if (!phone) icons.appendChild(this.liveSectionMoreButton('live-panel-more', 'panel'));
+        if (icons.childElementCount > 0) actions.appendChild(icons);
         const action = el('button', 'live-panel-action', s.ended ? r.close : r.stop);
         action.type = 'button';
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
@@ -3472,10 +3482,11 @@ export const researchUiMethods = uiModule({
             stateLine.classList.add('is-lost');
             stateLine.setAttribute('role', 'status');
         }
-        const fold = (key: LiveSectionKey) => ({
+        const fold = (key: LiveSectionKey): LiveFold => ({
             id: `live-sec-${key}`,
             collapsed: panelSectionCollapsed(s, key),
             onToggle: () => this.toggleLiveSection(key),
+            menu: (h, at) => this.openLiveSectionMenu(h, key, 'panel', at),
         });
         // Every section hidden: a word and the way back instead (the head keeps the count of what waits).
         if (PANEL_PREF_KEYS.every(k => panelSectionHidden(k))) {
@@ -3575,6 +3586,8 @@ export const researchUiMethods = uiModule({
             }
         }
         if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
+        // An open Customize panel or section menu follows the redraw.
+        this.syncLiveSectionEditor();
     },
 
     appendUpdateStrip(panel: HTMLElement, version: string, busy?: LiveBusy): void {

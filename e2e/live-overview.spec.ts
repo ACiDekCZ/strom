@@ -1,5 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
-import { card } from './helpers.js';
+import { test, expect, Page, Locator } from '@playwright/test';
+import { card, openApp } from './helpers.js';
 
 /**
  * Following a research live: every section of the small panel folds on its
@@ -459,6 +459,332 @@ test.describe('section choices: expanded, collapsed, hidden (spec 044)', () => {
         await head(page, '#live-panel', 'Latest changes').click();
         await expect(head(page, '#live-panel', 'Latest changes')).toHaveAttribute('aria-expanded', 'true');
         expect((await storedPrefs(page)).s).toEqual({ queue: 'expanded', changes: 'expanded' });
+    });
+});
+
+/** A long press as a finger makes it: pointerdown, held, pointerup, then the click the release makes. */
+async function longPress(page: Page, target: Locator, ms = 650): Promise<void> {
+    // The panel redraws now and then: wait for a heading in view.
+    let box = await target.boundingBox();
+    for (let i = 0; !box && i < 20; i++) {
+        await page.waitForTimeout(50);
+        box = await target.boundingBox();
+    }
+    if (!box) throw new Error('no box to press');
+    const at = { clientX: box.x + 20, clientY: box.y + box.height / 2, pointerType: 'touch', button: 0, isPrimary: true, bubbles: true };
+    await target.dispatchEvent('pointerdown', at);
+    await page.waitForTimeout(ms);
+    await target.dispatchEvent('pointerup', at);
+    await target.dispatchEvent('click', { clientX: at.clientX, clientY: at.clientY });
+}
+
+/** Nothing scrolls sideways: the window, and each open layer of Customize panel. */
+async function noSideways(page: Page): Promise<void> {
+    const wide = await page.evaluate(() => {
+        const out: string[] = [];
+        const doc = document.documentElement;
+        if (doc.scrollWidth > doc.clientWidth + 1) out.push(`page ${doc.scrollWidth}>${doc.clientWidth}`);
+        for (const n of document.querySelectorAll<HTMLElement>('.live-sec-edit, .live-sec-edit *, .live-sec-menu, .live-sec-menu *')) {
+            if (n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflowX !== 'visible' && !n.matches('.live-sec-seg__opt')) out.push(`${n.className} ${n.scrollWidth}>${n.clientWidth}`);
+            const r = n.getBoundingClientRect();
+            if (r.width > 0 && (r.left < -0.5 || r.right > window.innerWidth + 0.5)) out.push(`${n.className} outside ${Math.round(r.left)}..${Math.round(r.right)}`);
+        }
+        return out;
+    });
+    expect(wide).toEqual([]);
+}
+
+/** The smallest height of what a finger can press (the visible box). */
+const minHeight = (loc: Locator) => loc.evaluateAll((els) => Math.min(...els.map(e => e.getBoundingClientRect().height)));
+
+const TALL = { width: 1440, height: 1300 };
+
+test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', () => {
+    test('popover, section menu and Settings make the same choice; Hidden from the menu says so with Undo', async ({ page }) => {
+        await follow(page, TALL);
+        const panel = page.locator('#live-panel');
+        // Awaiting action: never folded by the panel itself.
+        const waiting = () => head(page, '#live-panel', 'Awaiting action');
+        await expect(waiting()).toHaveAttribute('aria-expanded', 'true');
+        // ⋯ between ⤢ and Stop following, in the group of icons.
+        const icons = panel.locator('.live-panel-icons > button');
+        await expect(icons.last()).toHaveClass(/live-panel-more/);
+        await expect(icons.nth(-2)).toHaveClass(/live-panel-expand/);
+        const more = panel.locator('.live-panel-more');
+        await expect(more).toHaveAttribute('aria-label', 'Customize panel');
+
+        // 1. The popover: the panel's rows, a line, the overview's two.
+        await more.click();
+        const pop = page.locator('.live-sec-edit[role="dialog"]');
+        await expect(pop).toHaveAttribute('aria-label', 'Customize panel');
+        await expect(more).toHaveAttribute('aria-expanded', 'true');
+        await expect(pop.locator('.live-sec-edit__label')).toHaveText(['At work', 'Awaiting action', 'Latest changes', 'Up next', 'Directions', 'What the research knows']);
+        await expect(pop.locator('.live-sec-edit__sep')).toHaveCount(1);
+        const row = (key: string) => pop.locator(`.live-sec-edit__row[data-key="${key}"]`);
+        await expect(row('working').locator('.live-sec-edit__note')).toHaveText('default · in the overview: Now');
+        await expect(row('knows').locator('.live-sec-edit__grip')).toHaveAttribute('aria-hidden', 'true');
+        // No choice: nothing checked, the state now dashed; Restore defaults off.
+        await expect(row('waiting').locator('[role="radio"][aria-checked="true"]')).toHaveCount(0);
+        await expect(row('waiting').locator('[role="radio"].is-current')).toHaveText('Expanded');
+        await expect(pop.locator('.live-sec-reset')).toHaveAttribute('aria-disabled', 'true');
+        // Right edges aligned, 6px under ⋯, 320 wide.
+        const [m, b] = [(await more.boundingBox())!, (await pop.boundingBox())!];
+        expect(Math.abs((m.x + m.width) - (b.x + b.width))).toBeLessThanOrEqual(1);
+        expect(Math.abs(b.y - (m.y + m.height + 6))).toBeLessThanOrEqual(1);
+        expect(Math.round(b.width)).toBe(320);
+
+        await row('waiting').locator('[role="radio"]', { hasText: 'Collapsed' }).click();
+        await expect(waiting()).toHaveAttribute('aria-expanded', 'false');
+        await expect(row('waiting').locator('[role="radio"][aria-checked="true"]')).toHaveText('Collapsed');
+        await expect(row('waiting').locator('.is-current')).toHaveCount(0);
+        await expect(row('waiting').locator('.live-sec-edit__note')).toHaveCount(0);
+        await expect(pop.locator('.live-sec-reset')).toHaveAttribute('aria-disabled', 'false');
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'collapsed' });
+        // An outside click closes it, the popover hid nothing without a word.
+        await page.mouse.click(200, 400);
+        await expect(pop).toHaveCount(0);
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+
+        // 2. A section's menu (right click): ✓ on the choice only, then Customize panel….
+        const changes = head(page, '#live-panel', 'Latest changes');
+        await changes.click({ button: 'right' });
+        const menu = page.locator('.live-sec-menu[role="menu"]');
+        await expect(menu).toHaveAttribute('aria-label', 'Options for Latest changes');
+        await expect(menu.locator('.live-sec-menu__head')).toHaveText(/^Latest changes · default/);
+        await expect(changes).toHaveClass(/is-menu-open/);
+        await expect(menu.locator('[role="menuitemradio"]')).toHaveText(['Expanded', 'Collapsed', 'Hidden']);
+        await expect(menu.locator('[role="menuitemradio"][aria-checked="true"]')).toHaveCount(0);
+        await expect(menu.locator('[role="menuitem"]')).toHaveText('Customize panel…');
+        await menu.locator('[role="menuitemradio"]', { hasText: 'Hidden' }).click();
+        await expect(menu).toHaveCount(0);
+        await expect(changes).toHaveCount(0);
+        const toast = page.locator('.toast[data-kind="live-sections"]');
+        await expect(toast).toContainText('Section hidden');
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'collapsed', changes: 'hidden' });
+        await toast.getByRole('button', { name: 'Undo' }).click();
+        await expect(head(page, '#live-panel', 'Latest changes')).toBeVisible();
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'collapsed' });
+        // A section's menu shows the stored choice; Customize panel… opens the popover.
+        await waiting().click({ button: 'right' });
+        await expect(menu.locator('[role="menuitemradio"][aria-checked="true"]')).toHaveText(/Collapsed/);
+        await expect(menu.locator('.live-sec-menu__head')).toHaveText('Awaiting action');
+        await menu.locator('[role="menuitem"]').click();
+        await expect(menu).toHaveCount(0);
+        await expect(pop).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        await expect(more).toBeFocused();
+
+        // 3. Settings: the same choices, one for all; a change there shows in the panel at once.
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const group = page.locator('#settings-group-research-follow');
+        await expect(group).toBeVisible();
+        await expect(group.locator('.settings-group-title')).toHaveText(/Following research/i);
+        await expect(group.locator('.settings-group-note')).toHaveText('On this device, for all trees, in the panel and the overview.');
+        const set = (key: string) => group.locator(`.live-sec-set__row[data-key="${key}"]`);
+        await expect(set('waiting').locator('[aria-checked="true"]')).toHaveText('Collapsed');
+        await expect(set('working').locator('.settings-desc')).toHaveText('default · in the overview: Now');
+        await expect(group.locator('.is-current')).toHaveCount(0);
+        await set('waiting').locator('[role="radio"]', { hasText: 'Expanded' }).click();
+        await expect(waiting()).toHaveAttribute('aria-expanded', 'true');
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'expanded' });
+        // Hidden from Settings: no toast.
+        await set('knows').locator('[role="radio"]', { hasText: 'Hidden' }).click();
+        await expect(set('knows').locator('[aria-checked="true"]')).toHaveText('Hidden');
+        await expect(toast).toHaveCount(0);
+        await group.locator('.live-sec-reset').click();
+        await expect(page.locator('.toast[data-kind="live-sections"]')).toContainText('Defaults restored');
+        await expect(group.locator('[aria-checked="true"]')).toHaveCount(0);
+        await expect(group.locator('.live-sec-reset')).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    test('Restore defaults: no question, the popover closes, a toast with Undo brings the choices back', async ({ page }) => {
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        await setPrefs(page, { queue: 'collapsed', changes: 'hidden', knows: 'hidden' });
+        await expect(head(page, '#live-panel', 'Latest changes')).toHaveCount(0);
+        await panel.locator('.live-panel-more').click();
+        const pop = page.locator('.live-sec-edit');
+        await pop.locator('.live-sec-reset').click();
+        await expect(pop).toHaveCount(0);
+        await expect(panel.locator('.live-panel-more')).toBeFocused();
+        await expect(head(page, '#live-panel', 'Latest changes')).toBeVisible();
+        expect((await storedPrefs(page))?.s ?? {}).toEqual({});
+        const toast = page.locator('.toast[data-kind="live-sections"]');
+        await expect(toast).toContainText('Defaults restored');
+        await toast.getByRole('button', { name: 'Undo' }).click();
+        await expect(head(page, '#live-panel', 'Latest changes')).toHaveCount(0);
+        expect((await storedPrefs(page)).s).toEqual({ queue: 'collapsed', changes: 'hidden', knows: 'hidden' });
+    });
+
+    test('keyboard: Shift+F10 and the Menu key open a heading\'s menu under it; arrows choose in the popover; Escape gives focus back', async ({ page }) => {
+        await follow(page, TALL);
+        const panel = page.locator('#live-panel');
+        const queue = head(page, '#live-panel', 'Awaiting action');
+        await expect(queue).toHaveAttribute('aria-expanded', 'true');
+        await queue.focus();
+        await page.keyboard.press('Shift+F10');
+        const menu = page.locator('.live-sec-menu');
+        await expect(menu).toBeVisible();
+        // Under the heading, the first item focused; arrows walk, Escape closes back to the heading.
+        const [h, mb] = [(await queue.boundingBox())!, (await menu.boundingBox())!];
+        expect(mb.y).toBeGreaterThanOrEqual(h.y + h.height);
+        await expect(menu.locator('[role="menuitemradio"]').first()).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(menu.locator('[role="menuitemradio"]').nth(1)).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await expect(queue).toBeFocused();
+        await expect(queue).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('ContextMenu');
+        await expect(menu).toBeVisible();
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Enter');
+        await expect(menu).toHaveCount(0);
+        await expect(head(page, '#live-panel', 'Awaiting action')).toHaveAttribute('aria-expanded', 'false');
+        expect((await storedPrefs(page)).s).toEqual({ waiting: 'collapsed' });
+        // The popover: the tab stop is the choice; → moves and chooses at once.
+        await panel.locator('.live-panel-more').click();
+        const pop = page.locator('.live-sec-edit');
+        await expect(pop.locator('[data-key="working"] [tabindex="0"]')).toBeFocused();
+        const queueSeg = pop.locator('[data-key="waiting"] [role="radiogroup"]');
+        await expect(queueSeg.locator('[tabindex="0"]')).toHaveText('Collapsed');
+        await queueSeg.locator('[tabindex="0"]').focus();
+        await page.keyboard.press('ArrowRight');
+        await expect(queueSeg.locator('[aria-checked="true"]')).toHaveText('Hidden');
+        await expect(queueSeg.locator('[aria-checked="true"]')).toBeFocused();
+        await expect(head(page, '#live-panel', 'Awaiting action')).toHaveCount(0);
+        await page.keyboard.press('ArrowLeft');
+        await page.keyboard.press('ArrowLeft');
+        await expect(queueSeg.locator('[aria-checked="true"]')).toHaveText('Expanded');
+        await expect(head(page, '#live-panel', 'Awaiting action')).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        await expect(panel.locator('.live-panel-more')).toBeFocused();
+        // The overview stays open: Escape went to the popover only.
+        await panel.locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await ov.locator('.research-overview__more').click();
+        await expect(pop.locator('.live-sec-edit__label')).toHaveText(['Now', 'Awaiting action', 'Directions', 'Progress', 'Queue', 'What the research knows']);
+        await expect(pop.locator('.live-sec-edit__sep')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        await expect(ov).toBeVisible();
+        await expect(ov.locator('.research-overview__more')).toBeFocused();
+    });
+
+    test('Settings: no group without a tree in research', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await expect(page.locator('#settings-modal')).toBeVisible();
+        await expect(page.locator('#settings-group-research-follow')).toBeHidden();
+    });
+});
+
+test.describe('Customize panel on a touch screen (spec 044)', () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    test('tablet 1024×768: a long press opens the menu and does not fold; targets of 44px; nothing sideways', async ({ page }) => {
+        await follow(page, { width: 1024, height: 768 });
+        const panel = page.locator('#live-panel');
+        // Awaiting action: never folded by the panel itself.
+        const queue = head(page, '#live-panel', 'Awaiting action');
+        await expect(queue).toHaveAttribute('aria-expanded', 'true');
+        await longPress(page, queue);
+        const menu = page.locator('.live-sec-menu');
+        await expect(menu).toBeVisible();
+        await expect(queue).toHaveAttribute('aria-expanded', 'true');
+        expect(await minHeight(menu.locator('.live-sec-menu__item'))).toBeGreaterThanOrEqual(44);
+        await noSideways(page);
+        // A short tap still folds.
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await longPress(page, queue, 120);
+        await expect(menu).toHaveCount(0);
+        await expect(queue).toHaveAttribute('aria-expanded', 'false');
+        // The head's icons: 44px tall to a finger, from a margin around 28px buttons.
+        for (const b of await panel.locator('.live-panel-icons > button').all()) {
+            const r = (await b.boundingBox())!;
+            expect(r.width).toBeLessThan(44);
+            const hit = await page.evaluate(([x, y1, y2]) => [document.elementFromPoint(x, y1), document.elementFromPoint(x, y2)].map(n => n?.className ?? ''), [r.x + r.width / 2, r.y + r.height / 2 - 21, r.y + r.height / 2 + 21]);
+            const cls = (await b.getAttribute('class'))!;
+            expect(hit).toEqual([cls, cls]);
+        }
+        await panel.locator('.live-panel-more').click();
+        const pop = page.locator('.live-sec-edit');
+        await expect(pop).not.toHaveClass(/live-sec-sheet/);
+        expect(await minHeight(pop.locator('[role="radio"]'))).toBeGreaterThanOrEqual(44);
+        expect(await minHeight(pop.locator('.live-sec-reset'))).toBeGreaterThanOrEqual(44);
+        await noSideways(page);
+    });
+
+    test('phone 390×844: ⋯ in the sheet opens a bottom sheet; a long press on a heading opens its sheet; × and the backdrop close', async ({ page }) => {
+        await follow(page, { width: 390, height: 844 });
+        const panel = page.locator('#live-panel');
+        await expect(panel).toHaveClass(/phone-strip/);
+        await expect(panel.locator('.live-panel-more')).toHaveCount(0);
+        await panel.locator('.live-panel-toggle').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toHaveClass(/research-overview--sheet/);
+        const more = ov.locator('.research-overview__more');
+        expect(await minHeight(more)).toBeGreaterThanOrEqual(44);
+        await more.click();
+        const sheet = page.locator('.live-sec-edit.live-sec-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.live-sec-sheet__title')).toHaveText('Customize panel');
+        expect(await minHeight(sheet.locator('[role="radio"]'))).toBeGreaterThanOrEqual(44);
+        expect(await minHeight(sheet.locator('.live-sec-sheet__close, .live-sec-reset'))).toBeGreaterThanOrEqual(44);
+        const sb = (await sheet.boundingBox())!;
+        expect(sb.y + sb.height).toBeCloseTo(844, 0);
+        expect(sb.height).toBeLessThanOrEqual(844 * 0.86 + 1);
+        // The segment under its name, across the row.
+        const lab = (await sheet.locator('[data-key="queue"] .live-sec-edit__label').boundingBox())!;
+        const seg = (await sheet.locator('[data-key="queue"] [role="radiogroup"]').boundingBox())!;
+        expect(seg.y).toBeGreaterThan(lab.y + lab.height - 1);
+        await noSideways(page);
+        await sheet.locator('[data-key="queue"] [role="radio"]', { hasText: 'Collapsed' }).click();
+        expect((await storedPrefs(page)).s).toEqual({ queue: 'collapsed' });
+        await sheet.locator('.live-sec-sheet__close').click();
+        await expect(sheet).toHaveCount(0);
+        await expect(ov).toBeVisible();
+
+        // A long press on a heading in the sheet: its own sheet, 48px rows, ✓ on the choice.
+        const queue = head(page, '#research-overview', 'Queue');
+        const was = await queue.getAttribute('aria-expanded');
+        await longPress(page, queue);
+        const sec = page.locator('.live-sec-menu.live-sec-sheet');
+        await expect(sec).toBeVisible();
+        await expect(queue).toHaveAttribute('aria-expanded', was!);
+        await expect(sec.locator('.live-sec-sheet__title')).toHaveText('Queue');
+        await expect(sec.locator('[aria-checked="true"]')).toHaveText(/Collapsed/);
+        expect(await minHeight(sec.locator('.live-sec-menu__item'))).toBeGreaterThanOrEqual(48);
+        await noSideways(page);
+        // A tap on the backdrop closes.
+        await page.mouse.click(195, 40);
+        await expect(sec).toHaveCount(0);
+        await expect(ov).toBeVisible();
+        // Customize panel… from a heading's sheet opens the editor's sheet.
+        await longPress(page, head(page, '#research-overview', /^Now/));
+        await sec.locator('[role="menuitem"]').click();
+        await expect(sheet).toBeVisible();
+    });
+
+    test('phone sideways 844×390: a centered sheet 560 wide, each name beside its segment', async ({ page }) => {
+        await follow(page, { width: 844, height: 390 });
+        // Sideways the small panel stays, with its ⋯; the editor is a sheet all the same.
+        await page.locator('#live-panel .live-panel-more').click();
+        const sheet = page.locator('.live-sec-edit.live-sec-sheet');
+        await expect(sheet).toBeVisible();
+        const sb = (await sheet.boundingBox())!;
+        expect(Math.round(sb.width)).toBe(560);
+        expect(Math.abs(sb.x - (844 - 560) / 2)).toBeLessThanOrEqual(1);
+        expect(sb.height).toBeLessThanOrEqual(390 - 12 + 1);
+        const lab = (await sheet.locator('[data-key="queue"] .live-sec-edit__label').boundingBox())!;
+        const seg = (await sheet.locator('[data-key="queue"] [role="radiogroup"]').boundingBox())!;
+        expect(seg.x).toBeGreaterThan(lab.x + lab.width);
+        expect(Math.round(seg.width)).toBe(330);
+        expect(await minHeight(sheet.locator('[role="radio"]'))).toBeGreaterThanOrEqual(44);
+        await noSideways(page);
     });
 });
 

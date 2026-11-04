@@ -198,6 +198,9 @@ test.describe('live panel: up next, update, spend', () => {
     async function follow(page: Page, extra: Record<string, unknown>): Promise<void> {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
+        // Up next kept expanded by choice: the panel's head (◎ ⤢ ⋯ Stop following under the name)
+        // leaves the 520px panel short of room, and Up next would otherwise fold by itself.
+        await page.addInitScript(() => localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 1, s: { queue: 'expanded' } })));
         await page.route(`${BRIDGE}/**`, async (route) => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
