@@ -179,6 +179,9 @@ export const waitingTaskMethods = uiModule({
         const phone = isPhone();
         const views = waitingActions(w, { writes: this.liveWaitingWrites(s), links: !phone && this.researchLinkAvailable('task'), phone });
         if (!views) return false;
+        // Two lines of its text beside the action (§7); the whole text on hover.
+        what.classList.add('waiting-panel-what');
+        if (!what.title && w.what) what.title = w.what;
         const img = imagesState(w);
         if (img) what.after(imagesShortEl(itemKey(s, w.id), img));
         const action = views[0] ? this.panelWaitingAction(s, w, views[0]) : null;

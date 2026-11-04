@@ -289,6 +289,15 @@ test.describe('the small panel', () => {
         await expect(images).toHaveText('Add images');
         await expect(images.locator('.research-open-mark')).toHaveCount(0);
         await expect(row('T0003').locator('.waiting-panel-action')).toHaveText('Answer');
+        // Two lines of the text beside the one action (§7), the whole text in its title.
+        const what = row('T0001').locator('.live-waiting-what');
+        const lines = await what.evaluate((e) => {
+            const cs = getComputedStyle(e);
+            const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.15;
+            return Math.floor(e.getBoundingClientRect().height / lh);
+        });
+        expect(lines).toBeLessThanOrEqual(2);
+        await expect(what).toHaveAttribute('title', /57–58/);
 
         // Dropped on the row: the dialog with the files and their numbers.
         await dragFiles(row('T0002'), ['SOA_N12_0112.jpg', 'SOA_N12_0113.jpg']);
