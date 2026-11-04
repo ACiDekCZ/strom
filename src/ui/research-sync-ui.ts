@@ -31,6 +31,7 @@ import { formatLiveClock } from '../live-time.js';
 import { PhoneSummary } from '../phone.js';
 import { localNetworkDenied } from '../local-network.js';
 import { BRIDGE_ANSWER_MS, askOnce, tallyBridgeAsk, waitAtMost } from '../bridge-ask.js';
+import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { currentAppBrowser } from '../research-transfer.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
@@ -65,7 +66,7 @@ import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
-    fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
+    fetchWithTimeout, readStatusPart, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
@@ -909,8 +910,9 @@ export const researchSyncMethods = uiModule({
             let why: BridgeRuntime['why'] = '';
             let timedOut = false;
             try {
-                const res = await fetchWithTimeout(url, BRIDGE_ANSWER_MS);
-                if (res.ok) status = sanitizeLiveStatus(await res.json());
+                // A bridge that answers the light status: its heavy parts read only when they changed.
+                const res = await fetchWithTimeout(statusAskUrl(url), BRIDGE_ANSWER_MS);
+                if (res.ok) status = sanitizeLiveStatus(await completeStatus(url, await res.json(), readStatusPart));
                 // Busy (starting up, a long write): ask again after the time it names.
                 else if (res.status === 503) busyFor = retryAfterMs(res.headers.get('Retry-After'));
                 // Something answers there, but not to this address (an old token, another tree's bridge).

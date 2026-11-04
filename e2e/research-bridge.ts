@@ -96,6 +96,10 @@ export interface FakeBridge {
     statusHang?: boolean;
     /** Slow (a big research): `/status` answers after this many ms of real time. */
     statusDelayMs?: number;
+    /** How each `/status` was asked: `full`, or `parts` (`parts=1`, the light status). */
+    statusAsks?: string[];
+    /** Heavy parts read apart (`GET /status/<part>`, a bridge with `status.parts` in its features). */
+    partReads?: string[];
     /** `/status` asks of this bridge on their way now, and the most at once so far. */
     statusOpen?: number;
     statusOpenMax?: number;
@@ -1635,6 +1639,13 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 return result ? json(200, result) : json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
             }
         }
+        // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
+        const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
+        if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
+            (b.partReads ??= []).push(partPath[1]);
+            if (partPath[1] !== 'waiting') return json(404, { error: 'no such part', code: 'status.part' });
+            return json(200, { part: 'waiting', rev: partRev(b.waiting), head: b.head, ...(b.waiting ? { waiting: b.waiting } : {}) });
+        }
         if (url.pathname.endsWith('/status')) {
             if (b.statusHang) return new Promise<void>(() => { /* never answers */ });
             if (b.statusDelayMs) {
@@ -1644,12 +1655,16 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 b.statusOpen--;
             }
             if (b.statusCode) return json(b.statusCode, { error: 'not here' });
+            // The light status: its heavy parts left out, their revs said instead.
+            const light = b.features?.includes('status.parts') && url.searchParams.get('parts') === '1';
+            (b.statusAsks ??= []).push(url.searchParams.get('parts') === '1' ? 'parts' : 'full');
             return json(200, {
                 tree: { id: UUID, name: 'Fíškovi' }, head: b.head, links: b.links,
                 accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
                 ...(b.batches ? { batches: b.batches } : {}),
                 ...(b.strom ? { strom: b.strom } : {}),
-                ...(b.waiting ? { waiting: b.waiting } : {}),
+                ...(b.waiting && !light ? { waiting: b.waiting } : {}),
+                ...(light ? { parts: { waiting: partRev(b.waiting) } } : {}),
                 ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
                 ...(b.read ? { reads: b.read.reads } : {}),
@@ -1821,6 +1836,11 @@ export async function editJan(page: Page, place = 'Praha'): Promise<void> {
         const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
         dm.updatePerson(jan.id, { birthPlace: place });
     }, place);
+}
+
+/** A part's rev: the print of its content (the same content, the same rev). */
+function partRev(value: unknown): string {
+    return createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);
 }
 
 export const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());

@@ -211,6 +211,35 @@ test.describe('the state of the tree and sending straight', () => {
         await expect.poll(() => bridge.statusOpen ?? 0, { timeout: 10_000 }).toBe(0);
     });
 
+    test('a bridge with status.parts (research 1.26.0): the light status, Awaiting action read apart only when its rev changes; an older one the full status (1104)', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const task = (id: string, what: string) => ({ id, what, on: 'user', at: new Date().toISOString() });
+        const bridge = await fakeBridge(page, { features: ['status.parts'], waiting: [task('T0001', 'Confirm the father of Jan')] });
+        const items = () => page.evaluate(() => (window.Strom.UI as unknown as { researchWaiting(): { items: { id: string }[] } | null })
+            .researchWaiting()?.items.map(i => i.id) ?? []);
+        await poll(page);
+        await poll(page);
+        await poll(page);
+        // The first answer full (what it can do not known yet), then light; the part read once.
+        expect(bridge.statusAsks).toEqual(['full', 'parts', 'parts']);
+        expect(bridge.partReads).toEqual(['waiting']);
+        expect(await items()).toEqual(['T0001']);
+        // A task more awaits the user: its rev changed, read once, shown.
+        bridge.waiting = [task('T0001', 'Confirm the father of Jan'), task('T0002', 'Pick a register')];
+        await poll(page);
+        await poll(page);
+        expect(bridge.partReads).toEqual(['waiting', 'waiting']);
+        expect(await items()).toEqual(['T0001', 'T0002']);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'unsent');
+        // The bridge no longer says it (another version): the full status again.
+        bridge.features = [];
+        await poll(page);
+        await poll(page);
+        expect(bridge.statusAsks!.slice(-2)).toEqual(['parts', 'full']);
+        expect(await items()).toEqual(['T0001', 'T0002']);
+    });
+
     test('a stuck bridge (no answer in time): the way out, and "Start the research" beside it', async ({ page }) => {
         // The time an ask may take runs on the page clock (research-auto-send.spec.ts does the same).
         await page.clock.install();

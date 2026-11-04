@@ -26,6 +26,7 @@ import { formatBytesShort } from './originals-ui.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
+import { statusAskUrl } from '../status-parts.js';
 
 const DIALOG_ID = 'batch-modal';
 const UNFINISHED_KEY = 'strom-batch:';
@@ -901,7 +902,7 @@ export const batchMethods = uiModule({
     async batchAddressGone(r: Run, status: number): Promise<boolean> {
         if (status !== 401 && status !== 403 && status !== 404) return false;
         try {
-            const res = await fetchWithTimeout(`${r.base}/status?poll=1`, BRIDGE_ANSWER_MS);
+            const res = await fetchWithTimeout(statusAskUrl(`${r.base}/status?poll=1`), BRIDGE_ANSWER_MS);
             if (!res.ok) return true;
             return sanitizeLiveStatus(await res.json().catch(() => null))?.treeId !== r.researchId;
         } catch (err) {

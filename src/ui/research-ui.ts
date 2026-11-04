@@ -82,6 +82,7 @@ import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
+import { completeStatus, statusAskUrl } from '../status-parts.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -833,6 +834,13 @@ export async function fetchWithTimeout(url: string, ms: number): Promise<Respons
     }
 }
 
+/** One heavy part of a light status (`GET <token>/status/<part>`, research 1.26.0). */
+export async function readStatusPart(url: string): Promise<unknown> {
+    const res = await fetchWithTimeout(url, BRIDGE_ANSWER_MS);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
 export async function fetchGedcomText(url: string): Promise<string> {
     const res = await fetchWithTimeout(url, 30000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -943,9 +951,9 @@ async function localNetworkReason(): Promise<ConnectReason> {
 }
 
 export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<LiveStatus | null> {
-    const res = await fetchWithTimeout(url, ms);
+    const res = await fetchWithTimeout(statusAskUrl(url), ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const status = sanitizeLiveStatus(await res.json());
+    const status = sanitizeLiveStatus(await completeStatus(url, await res.json(), readStatusPart));
     // The bridge runs on this computer: what it announces holds here.
     if (status) noteResearchLinks(status.links, status.linkScheme);
     if (status?.treeId) {
@@ -1476,7 +1484,7 @@ export const researchUiMethods = uiModule({
             // takes) — asked, so the tree knows its bridge from now on, not only after a ?live=.
             if (header.isStromResearch && header.treeId && /\/tree\.ged$/.test(url.pathname)) {
                 const base = `${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`;
-                void fetchStatus(`${base}/status`, 4000).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
+                void fetchStatus(`${base}/status`).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
             }
             await this.openGedcomText(text, opts);
         });
