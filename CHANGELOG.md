@@ -19,6 +19,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Surnames**: in a Polish tree a Polish surname pairs the Polish way, *Jaworski* with *Jaworska*, and never gets a Czech *-ová* form (*Nowak*, *Mróz*), now also with the app in Czech; in a Czech tree that has both, *Jaworska* pairs with *Jaworski*.
 - **GEDCOM import**: the ids and stamps of a GEDCOM 7 file (*UID*, *CREA*, *EXID*) no longer count as unsupported, and a sentence in the summary says what *Unsupported* counts: the parts of the file Strom does not know and did not carry over, listed by their tag, never the people and partnerships counted above. A couple's status written as *_RELATIONSHIP_STATUS* is read like *_STAT*, also in Polish, German and Czech words, so partners and a separated couple no longer arrive married; a status it does not know stays unsupported.
 - **Maiden name**: in the person form of a woman the maiden name field says *Surname at birth*, and the empty married surname says that the surname taken at marriage goes there.
+- **Connection to the research**: a big research that needs a few seconds to say its state is no longer reported as *The research doesn't respond*: the app waits up to 15 s for its answer, asks it one thing at a time and keeps the last known state meanwhile; only three asks in a row without an answer say it does not respond. A research that is not running or turns the connection down is said at once, as before.
 
 ## 3.21.2
 

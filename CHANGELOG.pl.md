@@ -21,6 +21,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Nazwiska**: w polskim drzewie polskie nazwisko łączy się w pary po polsku, *Jaworski* z *Jaworska*, i nigdy nie dostaje czeskiej formy na *-ová* (*Nowak*, *Mróz*), teraz także z aplikacją po czesku; w czeskim drzewie, które ma oba, *Jaworska* łączy się w parę z *Jaworski*.
 - **Import GEDCOM**: identyfikatory i znaczniki czasu pliku GEDCOM 7 (*UID*, *CREA*, *EXID*) nie liczą się już jako nieobsługiwane, a zdanie w podsumowaniu mówi, co liczy *Nieobsługiwane*: części pliku, których Strom nie zna i nie przeniósł, wymienione według znacznika, nigdy osoby i relacje policzone wyżej. Status pary zapisany jako *_RELATIONSHIP_STATUS* jest czytany jak *_STAT*, także w słowach polskich, niemieckich i czeskich, więc partnerzy i para w separacji nie przychodzą już jako małżeństwo; nieznany status pozostaje nieobsługiwany.
 - **Nazwisko rodowe**: w formularzu osoby kobiety pole nazwiska rodowego podpowiada *Nazwisko z urodzenia*, a puste nazwisko po ślubie mówi, że tam wpisuje się nazwisko przyjęte po ślubie.
+- **Połączenie z badaniem**: duże badanie, któremu podanie stanu zajmuje kilka sekund, nie jest już zgłaszane jako *Badanie nie odpowiada*: aplikacja czeka na jego odpowiedź do 15 s, pyta je zawsze tylko o jedno naraz i w tym czasie obowiązuje ostatni znany stan; nie odpowiada dopiero po trzech zapytaniach z rzędu bez odpowiedzi. Badanie, które nie działa albo odrzuca połączenie, jest zgłaszane od razu, jak dotąd.
 
 ## 3.21.2
 

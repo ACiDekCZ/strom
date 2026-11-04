@@ -30,6 +30,7 @@ import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromDa
 import { formatLiveClock } from '../live-time.js';
 import { PhoneSummary } from '../phone.js';
 import { localNetworkDenied } from '../local-network.js';
+import { BRIDGE_ANSWER_MS, askOnce, tallyBridgeAsk, waitAtMost } from '../bridge-ask.js';
 import { currentAppBrowser } from '../research-transfer.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
@@ -124,8 +125,12 @@ const POLL_PENDING_MS = 15_000;
 const POLL_DOWN_MS = 15_000;
 /** A status this fresh counts as "the bridge runs" without asking again. */
 const FRESH_MS = 30_000;
-/** Timeouts: the background ask, the ask before a send, the send itself (the research writes it, up to 20 s and then 202). */
-const POLL_TIMEOUT_MS = 3000;
+/**
+ * Timeouts: the background ask (as long as the bridge's own answer may take, a little more: a
+ * big research needs seconds), the ask before a send (it goes on with the last status known
+ * meanwhile), the send itself (the research writes it, up to 20 s and then 202).
+ */
+const POLL_TIMEOUT_MS = BRIDGE_ANSWER_MS + 1000;
 const PING_TIMEOUT_MS = 1500;
 const SEND_TIMEOUT_MS = 120_000;
 /** An answer younger than this is not asked again when the menu opens or the window comes back. */
@@ -183,8 +188,9 @@ interface BridgeRuntime {
     /** Since when it does not answer (ms; 0 = it answers). */
     downSince: number;
     /**
-     * How the last ask failed: `hung` — connected, no answer in time (the bridge
-     * runs but is stuck); `refused` — it answered but not to this address (the
+     * How the last ask failed: `hung` — connected, no answer in time several
+     * asks in a row (HUNG_AFTER_TIMEOUTS: the bridge runs but is stuck; one slow
+     * answer leaves the last state standing); `refused` — it answered but not to this address (the
      * token or the tree no longer its: open the research from the app again);
      * `denied` — the browser blocks the address (its local network permission,
      * "Apps on device" in Edge): the research may well be running;
@@ -194,6 +200,8 @@ interface BridgeRuntime {
 }
 
 const runtime = new Map<string, BridgeRuntime>();
+/** Asks in a row a research's bridge did not answer in time (tallyBridgeAsk). */
+const strikes = new Map<string, number>();
 
 /** Where to allow the research in this browser's site settings (Brave: its localhost access). */
 const blockedSub = (): string => strings.sync.blockedSub(currentAppBrowser() === 'brave' ? strings.sync.settingBrave : strings.sync.settingApps);
@@ -883,43 +891,62 @@ export const researchSyncMethods = uiModule({
     // ==================== ASKING THE BRIDGE ====================
 
     /**
-     * Ask a research's bridge for its status (short timeout); takes in what it says. Null: it does not answer.
+     * Ask a research's bridge for its status; takes in what it says. Null: it does not answer.
+     * `timeout`: how long this caller waits — the ask itself may take BRIDGE_ANSWER_MS (a big
+     * research needs seconds), one at a time per bridge; a caller whose time is up goes on with
+     * what was last known (the answer is taken in when it comes). Only HUNG_AFTER_TIMEOUTS asks
+     * in a row without an answer make it "not responding".
      * `base`: at that address (the followed bridge) instead of the one kept.
      */
     async askResearchBridge(researchId: string, timeout: number, base?: string): Promise<LiveStatus | null> {
         const bridge = parseLiveBridge(base ?? storedResearchBridge(researchId)?.base);
         if (!bridge) return null;
-        let status: LiveStatus | null = null;
-        let blocked = false;
-        let busyFor = 0;
-        let why: BridgeRuntime['why'] = '';
-        try {
-            const res = await fetchWithTimeout(`${bridge.status}?poll=1`, timeout);
-            if (res.ok) status = sanitizeLiveStatus(await res.json());
-            // Busy (starting up, a long write): ask again after the time it names.
-            else if (res.status === 503) busyFor = retryAfterMs(res.headers.get('Retry-After'));
-            // Something answers there, but not to this address (an old token, another tree's bridge).
-            else if (res.status === 401 || res.status === 403 || res.status === 404) why = 'refused';
-        } catch (err) {
-            blocked = err instanceof TypeError;
-            // No answer in time: the bridge is there but stuck (B5 of the rc.22 round).
-            if ((err as { name?: string })?.name === 'AbortError' || (err as { name?: string })?.name === 'TimeoutError') why = 'hung';
-            // Refused by the browser itself: never said as "not running" (F4 of the Windows round).
-            else if (blocked && await localNetworkDenied()) why = 'denied';
-        }
-        // An address of another research (the port went to another tree's bridge): not ours.
-        if (status && status.treeId !== researchId) { status = null; why = 'refused'; }
-        const prev = runtime.get(researchId);
-        const downSince = status ? 0 : (prev?.up || !prev?.downSince ? Date.now() : prev.downSince);
-        runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince,
-            busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
-        if (status) {
-            noteResearchLinks(status.links, status.linkScheme);
-            noteResearchWaiting(researchId, status.waiting, status);
-            noteResearchBridgeStatus(researchId, status.accepts, status.head, researchTreeOfStatus(status));
-            tellBridgeStatus(researchId, status);
-        }
-        return status;
+        const url = `${bridge.status}?poll=1`;
+        const ask = askOnce(`${researchId} ${url}`, async (): Promise<LiveStatus | null> => {
+            let status: LiveStatus | null = null;
+            let blocked = false;
+            let busyFor = 0;
+            let why: BridgeRuntime['why'] = '';
+            let timedOut = false;
+            try {
+                const res = await fetchWithTimeout(url, BRIDGE_ANSWER_MS);
+                if (res.ok) status = sanitizeLiveStatus(await res.json());
+                // Busy (starting up, a long write): ask again after the time it names.
+                else if (res.status === 503) busyFor = retryAfterMs(res.headers.get('Retry-After'));
+                // Something answers there, but not to this address (an old token, another tree's bridge).
+                else if (res.status === 401 || res.status === 403 || res.status === 404) why = 'refused';
+            } catch (err) {
+                blocked = err instanceof TypeError;
+                // No answer in time: slow, or stuck once it happens a few times in a row (B5 of the rc.22 round).
+                if ((err as { name?: string })?.name === 'AbortError' || (err as { name?: string })?.name === 'TimeoutError') timedOut = true;
+                // Refused by the browser itself: never said as "not running" (F4 of the Windows round).
+                else if (blocked && await localNetworkDenied()) why = 'denied';
+            }
+            const tally = tallyBridgeAsk(strikes.get(researchId) ?? 0, timedOut ? 'timeout' : 'answer');
+            strikes.set(researchId, tally.strikes);
+            const prev = runtime.get(researchId);
+            // Slow, not stuck: what it said last stands (nothing is called off, no "strom live stop").
+            if (tally.keepLast) return prev?.up ? prev.status : null;
+            if (tally.hung) why = 'hung';
+            // An address of another research (the port went to another tree's bridge): not ours.
+            if (status && status.treeId !== researchId) { status = null; why = 'refused'; }
+            const downSince = status ? 0 : (prev?.up || !prev?.downSince ? Date.now() : prev.downSince);
+            runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince,
+                busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
+            if (status) {
+                noteResearchLinks(status.links, status.linkScheme);
+                noteResearchWaiting(researchId, status.waiting, status);
+                noteResearchBridgeStatus(researchId, status.accepts, status.head, researchTreeOfStatus(status));
+                tellBridgeStatus(researchId, status);
+            }
+            return status;
+        });
+        const waited = await waitAtMost(ask, timeout);
+        if (waited.done) return waited.value;
+        // Still on its way: this caller goes on with what was last known; the answer is shown when it comes.
+        void ask.then(() => this.refreshResearchSyncUi());
+        const rt = runtime.get(researchId);
+        return rt?.up ? rt.status : null;
     },
 
     /**
@@ -1008,6 +1035,7 @@ export const researchSyncMethods = uiModule({
      */
     researchBridgeMoved(researchId: string): void {
         runtime.delete(researchId);
+        strikes.delete(researchId);
         olderAsked.delete(researchId);
         for (const tree of TreeManager.getTrees()) {
             const link = tree.research;

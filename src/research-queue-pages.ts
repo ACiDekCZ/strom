@@ -14,6 +14,7 @@
  */
 
 import { LiveQueueItem, sanitizeQueue, withAppVersion } from './research-link.js';
+import { BRIDGE_ANSWER_MS } from './bridge-ask.js';
 
 /** Tasks asked per page. */
 export const QUEUE_PAGE = 50;
@@ -28,8 +29,8 @@ const QUEUE_PAGE_MAX = 100;
 export const QUEUE_ROWS_CAP = 300;
 /** The pause after a change of the queue before the lists on screen are read again. */
 export const QUEUE_REFRESH_MS = 800;
-/** How long one page may take. */
-const QUEUE_PAGE_TIMEOUT_MS = 10_000;
+/** How long one page may take (a big research answers in seconds). */
+const QUEUE_PAGE_TIMEOUT_MS = BRIDGE_ANSWER_MS;
 
 /** What a list is narrowed to (none: the whole queue up next). */
 export interface QueueFilter {

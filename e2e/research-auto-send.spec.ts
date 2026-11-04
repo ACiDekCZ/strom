@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
 import {
-    BRIDGE, BRIDGE2, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge, acceptLoad,
+    BRIDGE, BRIDGE2, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, pollUntilStuck, researchGed, FakeBridge, acceptLoad,
 } from './research-bridge.js';
 
 /**
@@ -863,8 +863,10 @@ test('a send taken back before this page knew (not its last write) is shown with
 test('the rc.22 round: a stuck bridge says it does not respond (B5), an old address that it turned down (B4), both in the pill', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.statusHang = true;
-    void page.evaluate(() => window.Strom.UI.pollResearchBridge());
-    await page.clock.fastForward(4000);
+    // Three asks in a row without an answer (one slow answer is no "not responding", 1104).
+    await pollUntilStuck(page, async (i) => {
+        if (i < 3) await expect(pill(page)).not.toContainText("The research doesn't respond");
+    });
     await expect(pill(page)).toContainText("The research doesn't respond");
     await openResearchMenu(page);
     await expect(block(page)).toContainText('strom live stop');
@@ -1073,8 +1075,10 @@ test('V-E: the conflict decided in the research (its record: none open) — no "
 test('the rc.23 round: beside an open conflict, a stuck bridge, a refused address and a stopped one are each said (A1); a send by hand then never the old way (A2)', async ({ page }) => {
     const bridge = await conflictLeft(page);
     bridge.statusHang = true;
-    void page.evaluate(() => window.Strom.UI.pollResearchBridge());
-    await page.clock.fastForward(4000);
+    // Three asks in a row without an answer (one slow answer is no "not responding", 1104).
+    await pollUntilStuck(page, async (i) => {
+        if (i < 3) await expect(pill(page)).not.toContainText("The research doesn't respond");
+    });
     await expect(pill(page)).toContainText("The research doesn't respond");
     await openResearchMenu(page);
     await expect(block(page)).toContainText('strom live stop');
@@ -1085,6 +1089,8 @@ test('the rc.23 round: beside an open conflict, a stuck bridge, a refused addres
     await page.clock.fastForward(4000);
     await expect(page.locator('.toast', { hasText: "doesn't respond" }).getByRole('button', { name: 'Try again' })).toBeVisible();
     await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
+    // The send's ask of the stuck bridge is still on its way: it ends at its own limit (one ask at a time).
+    await page.clock.fastForward(16_000);
     bridge.statusHang = false;
     bridge.statusCode = 404;
     await poll(page);

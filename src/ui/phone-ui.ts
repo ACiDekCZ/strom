@@ -17,6 +17,7 @@ import {
 } from '../phone.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { tallyBridgeAsk } from '../bridge-ask.js';
 
 const DIALOG_ID = 'phone-modal';
 const POLL_MS = 2000;
@@ -59,8 +60,10 @@ interface PhoneDialog {
     /** Its bridge being asked (in the `down` state). */
     watching: boolean;
     state: PhoneState | null;
-    /** The bridge did not answer the last ask: the last state stays, greyed. */
+    /** The bridge did not answer the last ask (or, slow, several in a row): the last state stays, greyed. */
     lost: boolean;
+    /** Asks in a row without an answer in time (a slow research is not lost at the first). */
+    misses?: number;
     enabling: boolean;
     noDialog: boolean;
     refused: boolean;
@@ -271,14 +274,21 @@ export const phoneMethods = uiModule({
         if (!base) { d.lost = true; this.renderPhoneDialog(); return; }
         d.asking = true;
         let next: PhoneState | null = null;
+        let timedOut = false;
         try {
             const res = await fetchWithTimeout(`${base}/phone`, ASK_TIMEOUT_MS);
             if (res.ok) next = sanitizePhoneState(await res.json().catch(() => null));
-        } catch {
+        } catch (err) {
             next = null;
+            const name = (err as { name?: string })?.name;
+            timedOut = name === 'AbortError' || name === 'TimeoutError';
         }
         d.asking = false;
         if (ph !== d) return;
+        const tally = tallyBridgeAsk(d.misses ?? 0, timedOut ? 'timeout' : 'answer');
+        d.misses = tally.strikes;
+        // Slow, not gone: the state shown stays as it is until it answers.
+        if (tally.keepLast) return;
         if (!next) {
             d.lost = true;
             this.renderPhoneDialog();

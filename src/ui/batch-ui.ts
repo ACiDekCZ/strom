@@ -25,6 +25,7 @@ import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 
 const DIALOG_ID = 'batch-modal';
 const UNFINISHED_KEY = 'strom-batch:';
@@ -32,6 +33,12 @@ const UNFINISHED_KEY = 'strom-batch:';
 const MAX_ROWS = 400;
 const ASK_TIMEOUT_MS = 5000;
 const PUT_MIN_TIMEOUT_MS = 60_000;
+
+/** The ask was given up for no answer in time (fetchWithTimeout aborted it). */
+function isTimeout(err: unknown): boolean {
+    const name = (err as { name?: string })?.name;
+    return name === 'AbortError' || name === 'TimeoutError';
+}
 
 interface Item {
     file: File;
@@ -800,8 +807,10 @@ export const batchMethods = uiModule({
             try {
                 const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
                 if (res.ok && mediaReplyId(await res.json().catch(() => null))) { r.skippedAsked++; return 'ok'; }
-            } catch {
-                return 'down';
+            } catch (err) {
+                // Only asked whether it has the file already: a slow answer (a busy research) is no
+                // reason to pause, the file goes as if it had not (its sha makes a second copy one).
+                if (!isTimeout(err)) return 'down';
             }
         }
         const headers: Record<string, string> = {
@@ -892,11 +901,12 @@ export const batchMethods = uiModule({
     async batchAddressGone(r: Run, status: number): Promise<boolean> {
         if (status !== 401 && status !== 403 && status !== 404) return false;
         try {
-            const res = await fetchWithTimeout(`${r.base}/status?poll=1`, ASK_TIMEOUT_MS);
+            const res = await fetchWithTimeout(`${r.base}/status?poll=1`, BRIDGE_ANSWER_MS);
             if (!res.ok) return true;
             return sanitizeLiveStatus(await res.json().catch(() => null))?.treeId !== r.researchId;
-        } catch {
-            return true;
+        } catch (err) {
+            // No answer in time: a slow research, not an address turned down.
+            return !isTimeout(err);
         }
     },
 

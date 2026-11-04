@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 import {
-    BRIDGE, FakeBridge, HEAD, NEW_HEAD, UUID, block, dot, dropFile, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed,
+    BRIDGE, FakeBridge, HEAD, NEW_HEAD, UUID, block, dot, dropFile, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, pollUntilStuck, researchGed,
     acceptLoad, moveHead,
 } from './research-bridge.js';
 
@@ -183,6 +183,34 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(block(page).locator('[data-action="startResearch"]')).toBeVisible();
     });
 
+    test('a slow bridge (a big research, its status in 5 s): its state as ever, never "not responding", a send goes; one ask at a time (1104)', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        bridge.statusDelayMs = 5000;
+        // The ask in the background waits for the answer (the old 3 s limit said "not responding" here).
+        expect(await poll(page)).toBe(true);
+        // Asks meanwhile from several places: one on its way; a quick one goes on with the last status known.
+        const quick = await page.evaluate(async (id) => {
+            const ui = window.Strom.UI as unknown as { askResearchBridge(id: string, ms: number): Promise<{ head?: string } | null>; pollResearchBridge(o?: object): Promise<boolean> };
+            const [polled, asked] = await Promise.all([ui.pollResearchBridge({ timeout: 16_000, reschedule: false }), ui.askResearchBridge(id, 1500)]);
+            return { polled, head: asked?.head ?? null };
+        }, UUID);
+        expect(quick).toEqual({ polled: true, head: HEAD });
+        expect(bridge.statusOpenMax).toBe(1);
+        await expect(page.locator('#research-sync-pill')).not.toContainText("doesn't respond");
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'unsent');
+        await expect(block(page)).not.toContainText('strom live stop');
+        // Sent by hand: the ask before the send does not wait for the slow answer.
+        await block(page).getByRole('menuitem', { name: 'Send changes' }).click();
+        await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes.');
+        expect(bridge.posts).toHaveLength(1);
+        expect(bridge.statusOpenMax).toBe(1);
+        bridge.statusDelayMs = 0;
+        await expect.poll(() => bridge.statusOpen ?? 0, { timeout: 10_000 }).toBe(0);
+    });
+
     test('a stuck bridge (no answer in time): the way out, and "Start the research" beside it', async ({ page }) => {
         // The time an ask may take runs on the page clock (research-auto-send.spec.ts does the same).
         await page.clock.install();
@@ -190,9 +218,14 @@ test.describe('the state of the tree and sending straight', () => {
         const bridge = await fakeBridge(page);
         await poll(page);
         bridge.statusHang = true;
-        const asked = poll(page);
-        await page.clock.fastForward(4000);
-        await asked;
+        // Not after one ask without an answer (a big research is slow, 1104): after three in a row.
+        await pollUntilStuck(page, async (i) => {
+            if (i === 3) return;
+            await openResearchMenu(page);
+            await expect(block(page)).not.toHaveAttribute('data-state', 'bridgeDown');
+            await expect(block(page)).not.toContainText('strom live stop');
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        });
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
         await expect(block(page)).toContainText('strom live stop');

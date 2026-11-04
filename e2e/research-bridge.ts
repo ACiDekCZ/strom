@@ -94,6 +94,11 @@ export interface FakeBridge {
     statusExtra?: Record<string, unknown>;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
+    /** Slow (a big research): `/status` answers after this many ms of real time. */
+    statusDelayMs?: number;
+    /** `/status` asks of this bridge on their way now, and the most at once so far. */
+    statusOpen?: number;
+    statusOpenMax?: number;
     /** `/status` answers with this code instead (404: an old token). */
     statusCode?: number;
     /** A send fails on the way (the connection drops). */
@@ -1632,6 +1637,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         }
         if (url.pathname.endsWith('/status')) {
             if (b.statusHang) return new Promise<void>(() => { /* never answers */ });
+            if (b.statusDelayMs) {
+                b.statusOpen = (b.statusOpen ?? 0) + 1;
+                b.statusOpenMax = Math.max(b.statusOpenMax ?? 0, b.statusOpen);
+                await new Promise(r => setTimeout(r, b.statusDelayMs));
+                b.statusOpen--;
+            }
             if (b.statusCode) return json(b.statusCode, { error: 'not here' });
             return json(200, {
                 tree: { id: UUID, name: 'Fíškovi' }, head: b.head, links: b.links,
@@ -1813,6 +1824,19 @@ export async function editJan(page: Page, place = 'Praha'): Promise<void> {
 }
 
 export const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());
+
+/**
+ * A stuck bridge (`statusHang`) is said as one only after three asks in a row without an answer
+ * in time (15 s each, 1104): run them on the page clock (installed). `after(i)`: after the i-th.
+ */
+export async function pollUntilStuck(page: Page, after?: (i: number) => Promise<void>): Promise<void> {
+    for (let i = 1; i <= 3; i++) {
+        const asked = poll(page);
+        await page.clock.fastForward(16_500);
+        await asked;
+        if (after) await after(i);
+    }
+}
 export const links = (page: Page) => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links);
 
 /**

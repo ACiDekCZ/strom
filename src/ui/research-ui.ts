@@ -81,6 +81,7 @@ import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
+import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -941,7 +942,7 @@ async function localNetworkReason(): Promise<ConnectReason> {
     return st.state === 'denied' ? 'denied' : st.state === 'prompt' ? 'prompt' : 'down';
 }
 
-export async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus | null> {
+export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<LiveStatus | null> {
     const res = await fetchWithTimeout(url, ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const status = sanitizeLiveStatus(await res.json());

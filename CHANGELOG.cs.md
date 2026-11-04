@@ -19,6 +19,7 @@
 - **Příjmení**: v polském stromu se polské příjmení páruje po polsku, *Jaworski* s *Jaworska*, a nikdy nedostane českou podobu na *-ová* (*Nowak*, *Mróz*), nově i s aplikací v češtině; v českém stromu, který má obě, se *Jaworska* páruje s *Jaworski*.
 - **Import GEDCOM**: identifikátory a razítka souboru GEDCOM 7 (*UID*, *CREA*, *EXID*) už se nepočítají mezi nepodporované a věta v souhrnu říká, co *Nepodporováno* počítá: části souboru, které Strom nezná a nepřenesl, vypsané podle značky, nikdy osoby a vztahy spočítané výše. Stav páru zapsaný jako *_RELATIONSHIP_STATUS* se čte jako *_STAT*, i polskými, německými a českými slovy, takže partneři a pár v odluce už nepřijdou jako manželé; stav, který aplikace nezná, zůstává mezi nepodporovanými.
 - **Rodné příjmení**: ve formuláři osoby ženy má pole rodného příjmení nápovědu *Příjmení z narození* a prázdné příjmení po sňatku říká, že sem patří příjmení získané sňatkem.
+- **Spojení s výzkumem**: velký výzkum, kterému trvá několik sekund, než řekne svůj stav, už se nehlásí jako *Výzkum neodpovídá*: aplikace čeká na jeho odpověď až 15 s, ptá se ho vždy jen na jednu věc a mezitím platí poslední známý stav; neodpovídá teprve po třech dotazech za sebou bez odpovědi. Výzkum, který neběží nebo spojení odmítne, se hlásí hned jako dřív.
 
 ## 3.21.2
 
