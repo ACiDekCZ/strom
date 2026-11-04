@@ -221,9 +221,15 @@ test('story reader: paragraphs, bold, escaped HTML, Draft tag; Edit lands in the
     await expect(reader.locator('.story-chips')).toHaveCount(0);
     await expect(reader.locator('.buttons button')).toHaveText(['Close']);
     await expect(reader.locator('#person-story-ch-own .story-ch-actions #person-story-edit')).toHaveText('Edit');
-    await expect(reader.locator('.story-reader-facts li')).toHaveText(['krest 1865, Lipany']);
-    await expect(reader.locator('.story-reader-note')).toHaveText('Neni to pramen.');
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('person-story-body');
+    // The facts and the caveat: folded under "What the text is based on" (1104), no count without sources.
+    const basis = reader.locator('details.story-basis');
+    await expect(basis.locator('summary')).toHaveText(/^What the text is based on/);
+    await expect(basis.locator('.story-basis-note')).toBeHidden();
+    await basis.locator('summary').click();
+    await expect(basis.locator('.story-basis-facts li')).toHaveText(['krest 1865, Lipany']);
+    await expect(basis.locator('.story-basis-note')).toHaveText('Author’s note: Neni to pramen.');
+    await basis.locator('summary').click();
 
     await reader.locator('#person-story-edit').click();
     await expect(reader).toHaveCount(0);

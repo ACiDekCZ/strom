@@ -17,7 +17,7 @@ import { personInitials } from '../initials.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
-import { sourceCodeNamer, storySourcesShown, storySourcesHtml } from '../story-sources.js';
+import { sourceCodeNamer, storyBasisDetailsHtml, storyBasisShown, storyBasisWords, storyFactText } from '../story-sources.js';
 import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
 import { shownName } from '../person-name.js';
 
@@ -258,18 +258,11 @@ export const personSourcesMethods = uiModule({
         // The research's bare source codes ("[S0164]") read as the sources' titles.
         const catalog = DataManager.getData().sources;
         const named = sourceCodeNamer(catalog);
-        const extraHtml = (story: Story): string => {
-            const facts = (story.facts ?? []).filter(f => f.trim());
-            // The sources the story rests on: titles, a web address as a link.
-            const sources = storySourcesHtml(storySourcesShown(catalog, story.sources), s.sourcesHead, { cls: 'story-reader-sources' });
-            if (!facts.length && !story.note && !sources) return '';
-            return `<div class="story-reader-extra">
-                ${facts.length > 0 ? `<div class="menu-section-header">${esc(s.facts)}</div>
-                    <ul class="story-reader-facts">${facts.map(f => `<li>${esc(named(f))}</li>`).join('')}</ul>` : ''}
-                ${sources}
-                ${story.note ? `<p class="story-reader-note">${esc(story.note)}</p>` : ''}
-            </div>`;
-        };
+        // What the text is based on: one section folded under each story (the sources once, the facts readable, the caveat).
+        const lang = getCurrentLanguage();
+        const basisWords = storyBasisWords(strings);
+        const extraHtml = (story: Story): string => storyBasisDetailsHtml(
+            storyBasisShown(catalog, story, f => storyFactText(f, strings, lang)), basisWords, { cls: 'story-basis' });
         const stateTag = (story: Story, nv: boolean): string => nv
             ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
             : story.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : '';

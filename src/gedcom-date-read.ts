@@ -39,6 +39,16 @@ export function gedcomDatePhrase(dateStr: string): string | null {
     return dateStr.replace(/@#D[^@]*@\s*/gi, '').trim() || null;
 }
 
+/**
+ * A GEDCOM date read whole into a flex date ("25 SEP 1857" → "1857-09-25",
+ * "BET 1888 AND 1892" → "1888..1892"), or null when the value is not one date
+ * alone (a phrase, a date read only in part, other words after it).
+ */
+export function gedcomDateWhole(dateStr: string): string | null {
+    const read = readGedcomDate(dateStr);
+    return read.date && !read.lossy && !read.phrase ? read.date : null;
+}
+
 const YEAR_RE = /^\d{3,4}$/;
 
 /**

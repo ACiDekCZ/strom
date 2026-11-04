@@ -130,30 +130,46 @@ describe('sections', () => {
         expect(body(fiskTree())).not.toContain('pp-draft-tag">');
     });
 
-    it('the sources a story rests on under its prose (a couple’s too); a bare code reads as the title; only with the Sources group', () => {
+    it('under each story one folded section "What the text is based on": the sources once, the facts readable, the caveat (a couple’s too, 1104)', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].story!.sources = ['s1', 's3', 'gone'];
-        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.', sources: ['s2'] };
+        d.persons['jan' as PersonId].story!.facts = ['Narozen 1860 [S0042]', 'DEAT 25 SEP 1857 Čapkov [S0042]'];
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.', sources: ['s2'], facts: ['MARR 2 FEB 1888 Čapkov'] };
         const html = body(d);
-        const own = html.indexOf('<div class="pp-story-src">');
+        // One section per story, folded, after the prose; no second block of sources.
+        expect(html.match(/class="pp-coll pp-basis"/g)).toHaveLength(2);
+        expect(html).not.toContain('pp-story-src');
+        const own = html.indexOf('id="pp-basis"');
         expect(own).toBeGreaterThan(html.indexOf('Jan se narodil v Čapkově'));
-        expect(html.slice(own)).toMatch(/^<div class="pp-story-src"><p class="pp-story-src-h">Opírá se o prameny<\/p><ul class="pp-story-src-list">/);
-        expect(html).toContain('<li><a href="https://example.org/scan" rel="noopener noreferrer" target="_blank">Matrika narozených Čapkov 1850–1870 ↗</a></li><li>Matrika zemřelých Čapkov</li></ul>');
+        expect(html).toContain('id="pp-basis-body" hidden');
+        expect(html).toContain('Z čeho text vychází (2) ');
+        const sec = html.slice(own, html.indexOf('</div></div>', own));
+        // The pointers and the code its facts cite (s3 = S0042), each once.
+        expect(sec).toContain('<p class="pp-basis-h">Prameny</p><ul class="pp-basis-list pp-basis-src"><li><a href="https://example.org/scan" rel="noopener noreferrer" target="_blank">Matrika narozených Čapkov 1850–1870 ↗</a></li><li>Matrika zemřelých Čapkov</li></ul>');
+        expect(sec).toContain('<p class="pp-basis-h">Fakta</p><ul class="pp-basis-list pp-basis-facts"><li>Narozen 1860</li><li>Úmrtí 25. 9. 1857, Čapkov</li></ul>');
+        expect(sec).toContain('<p class="pp-basis-note">Poznámka autora: Nic nedokazuje.</p>');
+        expect(html).not.toMatch(/DEAT|MARR 2|25 SEP/);
+        // The couple's chapter: its own section.
         expect(html).toContain('<li>Matrika oddaných Čapkov</li>');
-        // "[S0042]" is the research's code of a source the tree has: its title in the text and the facts.
+        expect(html).toContain('<li>Sňatek 2. 2. 1888, Čapkov</li>');
+        // "[S0042]" in the text still reads as the source's title.
         expect(html).toContain('Jan se narodil v Čapkově. (Matrika zemřelých Čapkov)');
-        expect(html).toContain('Narozen 1860 (Matrika zemřelých Čapkov)');
-        // The print: titles without links; the English page; no Sources group: no block.
+        // The file: <details>, folded.
+        const file = doc(d);
+        expect(file).toMatch(/<details class="pp-coll pp-basis" id="pp-basis"><summary class="pp-disc"><span class="pp-sum-main"><span class="pp-disc--inline">Z čeho text vychází \(2\)/);
+        expect(file).not.toMatch(/<details class="pp-coll pp-basis" id="pp-basis" open/);
+        // Print: nothing under the text (the sources are in the Sources section).
         const print = doc(d, { mode: 'print' });
-        expect(print).toContain('<li>Matrika narozených Čapkov 1850–1870</li>');
-        expect(print).not.toContain('Čapkov 1850–1870 ↗');
-        expect(body(d, { lang: 'en' })).toContain('<p class="pp-story-src-h">Based on sources</p>');
-        expect(body(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false } })).not.toContain('pp-story-src');
-        // No sources: no block.
-        expect(body(fiskTree())).not.toContain('pp-story-src');
+        expect(print).not.toMatch(/class="pp-coll pp-basis|pp-basis-body"/);
+        expect(print).toContain('Matrika zemřelých Čapkov');
+        // English; no Sources group: the facts and the caveat only, no count.
+        expect(body(d, { lang: 'en' })).toContain('What the text is based on (2) ');
+        const off = body(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false } });
+        expect(off).toContain('Z čeho text vychází <span class="pp-fold-state">');
+        expect(off).not.toContain('pp-basis-src');
     });
 
-    it('a source only a story rests on (no event cites it): its block, its bare code named, in the Sources section and its count', () => {
+    it('a source only a story rests on (no event cites it): in its section, its bare code named, in the Sources section and its count', () => {
         const d = fiskTree();
         d.sources!['s9'].refn = 'S0077';
         d.sources!['s8'] = { id: 's8', title: 'Kronika obce Čapkov', url: 'https://example.org/kronika' };
@@ -161,7 +177,7 @@ describe('sections', () => {
         d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Jan a Marie hospodařili na čísle 12.', sources: ['s8'] };
         const html = body(d);
         expect(html).toContain('Obec vyhořela roku 1868 (Nepoužitý pramen ze Lhoty).');
-        expect(html).toContain('<div class="pp-story-src"><p class="pp-story-src-h">Opírá se o prameny</p><ul class="pp-story-src-list"><li>Nepoužitý pramen ze Lhoty</li></ul></div>');
+        expect(html).toContain('<ul class="pp-basis-list pp-basis-src"><li>Nepoužitý pramen ze Lhoty</li></ul>');
         expect(html).toContain('<li><a href="https://example.org/kronika" rel="noopener noreferrer" target="_blank">Kronika obce Čapkov ↗</a></li>');
         // The Sources section lists them with what they support, and counts them.
         const sec = html.slice(html.indexOf('id="pp-sec-sources"'));
@@ -172,7 +188,7 @@ describe('sections', () => {
         expect(body(d, { personId: 'marie' as PersonId })).toContain('Kronika obce Čapkov ↗</a></li>');
         // Without the Sources group: no block and no section; the code still reads as the title.
         const off = body(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, sources: false } });
-        expect(off).not.toContain('pp-story-src');
+        expect(off).not.toContain('pp-basis-src');
         expect(off).toContain('Obec vyhořela roku 1868 (Nepoužitý pramen ze Lhoty).');
         // The Sources dialog of the person menu still lists the cited sources only.
         expect(personSourceRows(d, 'jan' as PersonId, getStringsForLang('cs')).map(r => r.source.id)).toEqual(['s1', 's2', 's3']);

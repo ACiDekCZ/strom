@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { applyLivingPrivacy, stripSources } from '../privacy.js';
-import { nameSourceCodes, rewriteStorySources, storySourceIds, storySourcesHtml, storySourcesShown } from '../story-sources.js';
+import { nameSourceCodes, rewriteStorySources, storyBasisDetailsHtml, storyBasisHead, storyBasisShown, storyBasisSourceIds, storyBasisWords, storyFactText, storySourceIds } from '../story-sources.js';
 import { storyCompareHtml } from '../story-compare.js';
 import { getStringsForLang } from '../strings.js';
 import { Person, StromData } from '../types.js';
@@ -184,32 +184,84 @@ describe('naming the research\'s source codes', () => {
     });
 });
 
-describe('the block', () => {
+describe('the section "What the text is based on" (1104)', () => {
     const d = load();
     const s = ondrej(d).story!;
-    it('titles, a web address as a link to a new window with ↗; print: the title alone; nothing to list: nothing', () => {
-        const list = storySourcesShown(d.sources, s.sources);
-        const html = storySourcesHtml(list, 'Opírá se o prameny', { cls: 'x' });
-        expect(html).toContain('<p class="x-h">Opírá se o prameny</p>');
-        expect(html).toContain('<li>Křest Ondřeje 1850</li>');
-        expect(html).toContain('<a href="https://obec.example.org/hasici" rel="noopener noreferrer" target="_blank">Hasiči v Lískové ↗</a>');
-        expect(storySourcesHtml(list, 'h', { cls: 'x', link: false })).not.toContain('<a ');
-        expect(storySourcesHtml([], 'h', { cls: 'x' })).toBe('');
-        // An address that is no web address is no link.
-        const bad: StromData['sources'] = { z: { id: 'z', title: 'Zlý', url: 'javascript:alert(1)' } };
-        expect(storySourcesHtml(storySourcesShown(bad, ['z']), 'h', { cls: 'x' })).not.toContain('href');
+    const S = getStringsForLang('cs');
+    const W = storyBasisWords(S);
+    const read = (f: string) => storyFactText(f, S, 'cs');
+
+    it('the sources once: the pointers, then the sources the facts cite by code; a code the tree has no source for is left out', () => {
+        expect(titles(d, storyBasisSourceIds(d.sources, s))).toEqual(['Křest Ondřeje 1850', 'Hasiči v Lískové', 'Kronika Lískové']);
+        // An older file: no pointers, the facts' codes alone.
+        expect(titles(d, storyBasisSourceIds(d.sources, { facts: ['BAPM 1850 Lísková [S0002, S0099]', 'EVEN 1905 [S0002]'] })))
+            .toEqual(['Hasiči v Lískové']);
+        expect(storyBasisSourceIds(d.sources, undefined)).toEqual([]);
     });
 
-    it('the comparison of versions: the sources of each version and which ones the new version leaves out', () => {
-        const L = getStringsForLang('cs').story;
+    it('a fact line reads as words, never as GEDCOM: the event named, the date of the language, the codes gone', () => {
+        expect(read('DEAT 25 SEP 1857 Lhota [S0027]')).toBe('Úmrtí 25. 9. 1857, Lhota');
+        expect(read('BAPM 1850 Lísková [S0001]')).toBe('Křest 1850, Lísková');
+        expect(read('DEAT BET 24 SEP 1888 AND 7 NOV 1892 Lhota [S0001, S0002]')).toBe('Úmrtí mezi 24. 9. 1888 a 7. 11. 1892, Lhota');
+        expect(read('MARR 28 MAY 1839 Lhota [S0027]')).toBe('Sňatek 28. 5. 1839, Lhota');
+        expect(read('OCCU Lhota podruh [S0006]')).toBe('Povolání: Lhota podruh');
+        expect(read('BIRT 5 MAY 1863 [K-04]')).toBe('Narození 5. 5. 1863 [K-04]');
+        // A tag of no name of its own goes; the line goes on with its date.
+        expect(read('EVEN 22 FEB 1886 [S0007]')).toBe('22. 2. 1886');
+        // Another program's own words keep their words.
+        expect(read('krest 1865, Lipany')).toBe('krest 1865, Lipany');
+        expect(storyFactText('RESI FROM 22 MAR 1871 TO 22 MAR 1882 Lhota čp. 5 [S0001]', getStringsForLang('de'), 'de'))
+            .toBe('Wohnort von 22.3.1871 bis 22.3.1882, Lhota čp. 5');
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            for (const line of ['BIRT 17 MAR 1812 Lhota [S0027, S1000]', 'RESI ABT 1850 Lhota', 'CHR 3 OCT 1886 Lhota [S1022]', 'MARB 1839 [S0001]']) {
+                expect(storyFactText(line, getStringsForLang(lang), lang)).not.toMatch(/\b(BIRT|RESI|CHR|MARB|MAR|OCT|ABT)\b|\[S\d/);
+            }
+        }
+    });
+
+    it('the facts readable and each once, the caveat; the heading counts the sources', () => {
+        const b = storyBasisShown(d.sources, { ...s, facts: [...s.facts!, 'BAPM 1850 Lísková [S0001]'] }, read);
+        expect(b.facts).toEqual(['Křest 1850, Lísková', read('EVEN NOV 1905 Lísková [S0002]')]);
+        expect(b.facts[1]).not.toMatch(/EVEN|NOV/);
+        expect(b.note).toBe('Vyprávění, ne pramen.');
+        expect(storyBasisHead(b, W)).toBe('Z čeho text vychází (3)');
+        expect(storyBasisHead({ sources: [], facts: ['x'], note: '' }, W)).toBe('Z čeho text vychází');
+    });
+
+    it('one <details>, folded: the sources (a web address a link to a new window with ↗), the facts, the caveat; nothing to show: nothing', () => {
+        const html = storyBasisDetailsHtml(storyBasisShown(d.sources, s, read), W, { cls: 'x' });
+        expect(html).toMatch(/^<details class="x"><summary class="x-sum"><span>Z čeho text vychází \(3\)<\/span>/);
+        expect(html).not.toContain(' open');
+        expect(html.match(/<details/g)).toHaveLength(1);
+        expect(html).toContain('<p class="x-h">Prameny</p>');
+        expect(html).toContain('<li>Křest Ondřeje 1850</li>');
+        expect(html).toContain('<a href="https://obec.example.org/hasici" rel="noopener noreferrer" target="_blank">Hasiči v Lískové ↗</a>');
+        expect(html).toContain('<p class="x-h">Fakta</p>');
+        expect(html).toContain('<li>Křest 1850, Lísková</li>');
+        expect(html).toContain('<p class="x-note">Poznámka autora: Vyprávění, ne pramen.</p>');
+        // Each source once: the facts' codes cite sources the pointers already name.
+        expect(html.match(/Hasiči v Lískové/g)).toHaveLength(1);
+        expect(html).not.toMatch(/BAPM|EVEN|\[S0/);
+        expect(storyBasisDetailsHtml({ sources: [], facts: [], note: '' }, W, { cls: 'x' })).toBe('');
+        // An address that is no web address is no link.
+        const bad: StromData['sources'] = { z: { id: 'z', title: 'Zlý', url: 'javascript:alert(1)' } };
+        expect(storyBasisDetailsHtml(storyBasisShown(bad, { sources: ['z'] }, read), W, { cls: 'x' })).not.toContain('href');
+    });
+
+    it('the comparison of versions: the same section in each panel; Changes says what the new version adds or leaves out, readable', () => {
+        const L = S.story;
         const html = storyCompareHtml({ approved: s, draft: s.draft! }, L, {
-            idPrefix: 't', prose: t => `<p>${t}</p>`,
-            sources: ids => storySourcesShown(d.sources, ids), name: t => nameSourceCodes(t, d.sources),
+            idPrefix: 't', prose: t => `<p>${t}</p>`, name: t => nameSourceCodes(t, d.sources),
+            basis: { shown: v => storyBasisShown(d.sources, v, read), words: W },
         });
-        expect(html).toContain(`<div class="sc-label">${L.sourcesHead}</div>`);
+        expect(html).toContain(`<div class="sc-label">${W.head}</div>`);
         expect(html).toMatch(/sc-line--del"><span class="sc-mark" aria-hidden="true">−<\/span><del[^>]*>Kronika Lískové<\/del>/);
         // The approved text's code named in its panel.
         expect(html).toContain('hořelo (Hasiči v Lískové).');
-        expect(html.match(/class="sc-src"/g)).toHaveLength(2);
+        expect(html.match(/<details class="sc-basis"/g)).toHaveLength(2);
+        expect(html).not.toMatch(/BAPM|EVEN/);
+        // Without the section: no facts at all, never raw.
+        const bare = storyCompareHtml({ approved: s, draft: s.draft! }, L, { idPrefix: 't', prose: t => `<p>${t}</p>` });
+        expect(bare).not.toMatch(/BAPM|EVEN|sc-basis/);
     });
 });

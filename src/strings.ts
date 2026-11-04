@@ -5845,8 +5845,9 @@ const stringsEN = {
         fieldTitle: 'Title',
         fieldText: 'Text',
         fieldFacts: 'Based on',
-        // The sources a story rests on (Story.sources), under its text.
-        sourcesHead: 'Based on sources',
+        // Inside the folded section "What the text is based on" under a story.
+        basisSources: 'Sources',
+        basisFacts: 'Facts',
         fieldNote: 'Caveat',
         noTitle: 'no title',
         approvedTag: 'Approved',
@@ -13005,8 +13006,9 @@ const stringsCZ: StringsType = {
         fieldTitle: 'Nadpis',
         fieldText: 'Text',
         fieldFacts: 'Opírá se o',
-        // The sources a story rests on (Story.sources), under its text.
-        sourcesHead: 'Opírá se o prameny',
+        // Inside the folded section under a story.
+        basisSources: 'Prameny',
+        basisFacts: 'Fakta',
         fieldNote: 'Výhrada',
         noTitle: 'bez nadpisu',
         approvedTag: 'Schváleno',
@@ -20074,8 +20076,9 @@ const stringsDE: StringsType = {
         fieldTitle: 'Titel',
         fieldText: 'Text',
         fieldFacts: 'Gestützt auf',
-        // The sources a story rests on (Story.sources), under its text.
-        sourcesHead: 'Stützt sich auf Quellen',
+        // Inside the folded section under a story.
+        basisSources: 'Quellen',
+        basisFacts: 'Fakten',
         fieldNote: 'Vorbehalt',
         noTitle: 'ohne Titel',
         approvedTag: 'Freigegeben',

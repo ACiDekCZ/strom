@@ -18,7 +18,7 @@ import { getStringsForLang } from './strings.js';
 import { researchOpenSvg } from './history-symbols.js';
 import { researchLinkMark } from './research-link.js';
 import { proseHtml } from './story-text.js';
-import { sourceCodeNamer, storySourcesShown } from './story-sources.js';
+import { sourceCodeNamer, storyBasisShown, storyBasisWords, storyFactText } from './story-sources.js';
 import { storyCompareHtml } from './story-compare.js';
 import { shownName } from './person-name.js';
 import { buildLineages } from './lineage.js';
@@ -240,7 +240,10 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
                 + `<div class="bc-head"><div><h2 id="${id}-h">${esc(L.compareTitle)}</h2><div class="bc-sub">${esc(L.compareSub(who, day))}</div></div><button type="button" class="bc-x" data-compare-close aria-label="${esc(S.buttons.close)}">&times;</button></div>`
                 + `<div class="bc-body">${storyCompareHtml({ approved: story, draft }, L, {
                     idPrefix: id, prose, name: sourceCodeNamer(tree.sources),
-                    ...(parts.sources ? { sources: (ids: readonly string[] | undefined) => storySourcesShown(tree.sources, ids) } : {}),
+                    basis: {
+                        shown: v => storyBasisShown(parts.sources ? tree.sources : undefined, v, f => storyFactText(f, S, lang)),
+                        words: storyBasisWords(S),
+                    },
                 })}</div>`
                 + `<div class="bc-foot${urls.final && urls.keep ? '' : ' bc-foot--note'}">${foot}</div></dialog>`);
             const sentence = esc(L.nvBook(day)).replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');

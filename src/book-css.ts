@@ -102,12 +102,6 @@ a { color: inherit; }
 .book-story h4 .book-story-title { font-weight: 400; font-style: italic; color: #4a4438; }
 .book-story .story-subhead { font-size: 12pt; font-style: italic; margin: 10px 0 4px; break-after: avoid; }
 .book-story ul { margin: 0 0 .6em 1.2em; padding: 0; }
-/* The sources a story rests on (Story.sources): titles with their numbers of the list at the end. */
-.book-story-src { margin: 6px 0 0; text-align: left; font: 10.5pt ${SANS}; color: #4a4438; break-inside: avoid; }
-.book-story .book-story-src-h { margin: 0 0 2px; font-weight: 600; }
-.book-story .book-story-src-list { margin: 0 0 0 1.2em; padding: 0; }
-.book-story-src-list li { overflow-wrap: anywhere; }
-.book-story-src-list a { color: #8a5a2b; }
 .book-children { break-inside: avoid; }
 .book-children ul { list-style: none; margin: 0; padding: 0; }
 .book-child { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }

@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PartnershipId, Story } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { storyProseHtml } from '../story-text.js';
-import { sourceCodeNamer, storySourcesShown } from '../story-sources.js';
+import { sourceCodeNamer, storyBasisShown, storyBasisWords, storyFactText } from '../story-sources.js';
 import { storyCompareHtml, wireStoryCompare, STORY_COMPARE_CSS } from '../story-compare.js';
 import { ResearchStoryDo, LiveWaiting, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -183,8 +183,11 @@ export const storyCompareMethods = uiModule({
         }, L, {
             idPrefix: 'story-compare',
             prose: (text, title) => storyProseHtml(text, { title }),
-            // The sources each version rests on, a bare source code read as the source's title.
-            sources: ids => storySourcesShown(DataManager.getData().sources, ids),
+            // What each version is based on (one folded section); a bare source code in the text read as the source's title.
+            basis: {
+                shown: v => storyBasisShown(DataManager.getData().sources, v, f => storyFactText(f, strings, getCurrentLanguage())),
+                words: storyBasisWords(strings),
+            },
             name: sourceCodeNamer(DataManager.getData().sources),
         });
 

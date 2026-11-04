@@ -28,6 +28,7 @@ import {
 } from '../types.js';
 import { coupleEventLabel, newestLifeEvent } from '../events.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { storyFactText } from '../story-sources.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
 import { personInitials } from '../initials.js';
@@ -669,7 +670,10 @@ export const personModalMethods = uiModule({
         const factsGroup = document.getElementById('story-facts-group');
         const facts = document.getElementById('story-facts');
         if (factsGroup && facts) {
-            const lines = [...(story?.facts ?? []), ...(story?.note ? [story.note] : [])];
+            // The facts readable (never the raw GEDCOM lines), each once, then the caveat.
+            const lang = getCurrentLanguage();
+            const read = [...new Set((story?.facts ?? []).map(f => storyFactText(f, strings, lang)).filter(Boolean))];
+            const lines = [...read, ...(story?.note ? [story.note] : [])];
             facts.innerHTML = lines.map(f => `<div>${this.escapeHtml(f)}</div>`).join('');
             factsGroup.style.display = lines.length > 0 ? '' : 'none';
         }

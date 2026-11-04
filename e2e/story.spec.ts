@@ -68,8 +68,9 @@ test('a story imported from GEDCOM survives the form and the export', async ({ p
 
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    // The facts and the caveat are shown, read-only, under the text.
-    await expect(modal.locator('#story-facts')).toContainText('BIRT 5 MAY 1863 [K-04]');
+    // The facts (readable, 1104) and the caveat are shown, read-only, under the text.
+    await expect(modal.locator('#story-facts')).toContainText('Birth 5 May 1863 [K-04]');
+    await expect(modal.locator('#story-facts')).not.toContainText('BIRT');
     await expect(modal.locator('#story-facts')).toContainText('Neni pramen.');
 
     // Editing only the text keeps everything the file brought with it.
@@ -91,7 +92,7 @@ test('a story imported from GEDCOM survives the form and the export', async ({ p
     });
 });
 
-test('the sources a story rests on: under it in the reader, a code in its text by title, kept by the form', async ({ page }) => {
+test('the sources a story rests on: folded under it in the reader, a code in its text by title, kept by the form', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
@@ -115,14 +116,21 @@ test('the sources a story rests on: under it in the reader, a code in its text b
     await expect(reader).toBeVisible();
     await expect(reader).toContainText('Roku 1905 hořelo (Kronika Lískové).');
     await expect(reader).not.toContainText('[S0003]');
-    const block = reader.locator('.story-reader-sources');
-    await expect(block.locator('.story-reader-sources-h')).toHaveText(/Based on sources|Opírá se o prameny/);
+    // One folded section under the text (1104): the head with the count, the sources inside once opened.
+    const block = reader.locator('details.story-basis');
+    await expect(block).toHaveCount(1);
+    await expect(block).not.toHaveAttribute('open', /.*/);
+    const head = block.locator('summary');
+    await expect(head).toHaveText(/^(What the text is based on|Z čeho text vychází) \(2\)/);
+    await expect(block.locator('a')).toBeHidden();
+    await head.click();
+    await expect(block).toHaveAttribute('open', '');
     const link = block.locator('a');
     await expect(link).toHaveCount(1);
     await expect(link).toHaveText('Kronika Lískové ↗');
     await expect(link).toHaveAttribute('href', 'https://obec.example.org/kronika');
     await expect(link).toHaveAttribute('target', '_blank');
-    await expect(block.locator('li').nth(1)).toHaveText('Hasiči v Lískové');
+    await expect(block.locator('.story-basis-src li').nth(1)).toHaveText('Hasiči v Lískové');
     await page.keyboard.press('Escape');
     await expect(reader).toBeHidden();
 
@@ -136,7 +144,7 @@ test('the sources a story rests on: under it in the reader, a code in its text b
     expect(sources).toEqual([ids.a, ids.b]);
 });
 
-test('a story without sources has no sources block', async ({ page }) => {
+test('a story without sources, facts or a caveat has no section under it', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const id = await page.evaluate(() => {
@@ -148,5 +156,5 @@ test('a story without sources has no sources block', async ({ page }) => {
     await page.evaluate(i => window.Strom.UI.showPersonStoryDialog(i), id);
     const reader = page.locator('#person-story-modal');
     await expect(reader).toContainText('Jen text');
-    await expect(reader.locator('.story-reader-sources')).toHaveCount(0);
+    await expect(reader.locator('.story-basis')).toHaveCount(0);
 });

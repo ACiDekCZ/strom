@@ -10,6 +10,7 @@ import { storyCompareHtml } from '../story-compare.js';
 import { buildFamilyBook } from '../book.js';
 import { getStringsForLang } from '../strings.js';
 import { storyProseHtml } from '../story-text.js';
+import { storyBasisShown, storyFactText, storyBasisWords } from '../story-sources.js';
 import { StromData, Story, PersonId, PartnershipId } from '../types.js';
 
 const L = getStringsForLang('cs').story;
@@ -79,7 +80,19 @@ describe('the comparison as HTML', () => {
         expect(out).toContain('<ins data-sr="přidáno:">ve Lhotě, jako jeho otec</ins>');
         expect(out).toContain('<span class="sc-tag sc-tag--add">nový</span>');
         expect(out).toMatch(/<span class="sc-none">bez nadpisu<\/span><span class="sc-arrow"[^>]*>→<\/span><ins[^>]*>Mlynář z Horní Lhoty<\/ins>/);
-        expect(out.match(/sc-line--add/g)).toHaveLength(3);   // two facts + the caveat
+        expect(out.match(/sc-line--add/g)).toHaveLength(1);   // the caveat; no basis section asked for
+        // With the section "What the text is based on": the facts added, readable, no tags or codes.
+        const S = getStringsForLang('cs');
+        const withBasis = storyCompareHtml({ approved: JAN, draft: DRAFT }, L, {
+            idPrefix: 't', prose: (t, title) => storyProseHtml(t, { title }),
+            basis: { shown: v => storyBasisShown(undefined, v, f => storyFactText(f, S, 'cs')), words: storyBasisWords(S) },
+        });
+        expect(withBasis.match(/sc-line--add/g)).toHaveLength(3);   // two facts + the caveat
+        expect(withBasis).toContain('<div class="sc-label">Z čeho text vychází</div>');
+        expect(withBasis).toContain('<ins data-sr="přidáno:">Povolání: mlynář</ins>');
+        expect(withBasis).toContain('<ins data-sr="přidáno:">požár 1856</ins>');
+        expect(withBasis).not.toMatch(/OCCU|EVEN|S0001/);
+        expect(withBasis).toContain('<details class="sc-basis">');
         expect(out).toContain('aria-selected="true"');
         expect(out).toMatch(/id="t-new"[^>]*hidden/);
     });

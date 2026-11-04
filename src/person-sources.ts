@@ -5,7 +5,8 @@
  * page (spec 025) both read it.
  */
 
-import { StromData, PersonId, PartnershipId, Source, LifeEvent, CoupleEvent } from './types.js';
+import { StromData, PersonId, PartnershipId, Source, LifeEvent, CoupleEvent, Story } from './types.js';
+import { storyBasisSourceIds } from './story-sources.js';
 import { yearOf } from './dates.js';
 import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { shownName } from './person-name.js';
@@ -105,7 +106,8 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
     }
     if (opts.stories) {
         // A story's sources (its facts' and its background's, e.g. a chronicle no event cites).
-        const told = (st: { text?: string; sources?: string[] } | undefined) => (st?.text?.trim() ? st.sources : undefined);
+        // Its pointers and the sources its facts cite by code, as the story's section lists them.
+        const told = (st: Story | undefined) => (st?.text?.trim() ? storyBasisSourceIds(catalog, st) : undefined);
         add(told(person.story), { label: S.personPage.sec.story, ctx: { personId }, year: null, story: true });
         for (const u of Object.values(data.partnerships)) {
             if (u.person1Id !== personId && u.person2Id !== personId) continue;

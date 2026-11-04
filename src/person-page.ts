@@ -27,7 +27,7 @@ import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from '
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
-import { nameSourceCodes, sourceCodeNamer, storySourcesShown, storySourcesHtml } from './story-sources.js';
+import { nameSourceCodes, storyBasisBodyHtml, storyBasisEmpty, storyBasisHead, storyBasisShown, storyBasisWords, storyFactText } from './story-sources.js';
 import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead, partnershipsInOrder, partnershipSortKey } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
@@ -1726,37 +1726,28 @@ function draftTag(c: Ctx, st: Story): string {
     return st.status === 'draft' ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
 }
 
-/** What the story rests on (facts, the author's note), folded under the prose. */
+/**
+ * What the story's text is based on, one section folded under the prose (spec
+ * 1104): the sources it rests on (its pointers and the codes its facts cite,
+ * each once; only with the page's Sources group, as every other source of the
+ * page), its facts readable, the author's caveat. The window folds it with a
+ * button, the file with <details>; print leaves it out (the sources are in the
+ * page's Sources section, the facts in the life).
+ */
 function storyBasisHtml(c: Ctx, st: Story, key: string, id: string): string {
-    const { P, page } = c;
-    // A bare source code reads as the source's title; the researchers' section still lists the code.
-    const named = sourceCodeNamer(c.tree.sources);
-    const facts = (st.facts ?? []).map(f => ({ text: stripResearchIds(named(f)).text, ids: stripResearchIds(f).ids }))
-        .filter(f => f.text.trim());
-    const note = st.note?.trim() ? stripResearchIds(st.note).text : '';
-    if (!facts.length && !note) return '';
-    const showIds = page.groups.research;
-    const items = facts.map(f => {
-        f.ids.forEach(rid => c.ids.add(rid));
-        return `<li>${esc(f.text.trim())}${showIds ? f.ids.map(rid => `<span class="pp-id">${esc(rid)}</span>`).join('') : ''}</li>`;
-    }).join('');
+    if (c.opts.mode === 'print') return '';
+    const { page, S } = c;
+    // The researchers' section still lists the research ids the facts carry.
+    for (const f of st.facts ?? []) stripResearchIds(f).ids.forEach(rid => c.ids.add(rid));
+    const b = storyBasisShown(page.groups.sources ? c.tree.sources : undefined, st,
+        f => stripResearchIds(storyFactText(f, S, page.lang)).text, t => stripResearchIds(t).text);
+    if (storyBasisEmpty(b)) return '';
+    const L = storyBasisWords(S);
     return fold(c, {
         key, id, cls: 'pp-basis',
-        head: `<span class="pp-disc--inline">${esc(P.storyBasis)} ${foldState('▸', '▾')}</span>`,
-        body: `<div class="pp-basis-body">${items ? `<ul>${items}</ul>` : ''}`
-            + (note ? `<p class="pp-basis-note">${esc(P.authorNote)}: ${esc(note)}</p>` : '') + `</div>`,
+        head: `<span class="pp-disc--inline">${esc(storyBasisHead(b, L))} ${foldState('▸', '▾')}</span>`,
+        body: `<div class="pp-basis-body">${storyBasisBodyHtml(b, L, { cls: 'pp-basis' })}</div>`,
     });
-}
-
-/**
- * The sources the story rests on (Story.sources), under its prose: titles,
- * a web address as a link (print: the title alone). Only with the page's
- * Sources group, as every other source of the page.
- */
-function storySourcesBlock(c: Ctx, st: Story): string {
-    if (!c.page.groups.sources) return '';
-    return storySourcesHtml(storySourcesShown(c.tree.sources, st.sources), c.S.story.sourcesHead,
-        { cls: 'pp-story-src', link: c.opts.mode !== 'print' });
 }
 
 // ── Couple's chapters (spec 027 §5–§6) ──
@@ -1944,7 +1935,6 @@ function storyHtml(c: Ctx): string {
             ? `<p class="pp-kicker">${esc(P.sec.story)}${tag}</p><h2 class="pp-story-title">${esc(title)}</h2>`
             : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
         body += `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 3 })}</div>`
-            + storySourcesBlock(c, own)
             + storyBasisHtml(c, own, 'basis', 'pp-basis');
         // Continued reading (§6.1): the own story leads on to the marriages' chapters.
         if (chapters.length) {
@@ -1963,7 +1953,7 @@ function storyHtml(c: Ctx): string {
             // Every chapter on the page counts (round 2): the tone from two.
             tint: (own ? 1 : 0) + chapters.length >= 2,
             partnerHtml: ch.partnerId ? personLink(c, esc(ch.partnerName), ch.partnerId) : '',
-            basisHtml: storySourcesBlock(c, u.story!) + storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
+            basisHtml: storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
         });
     }
     return section('story', P.sec.story, body, head);

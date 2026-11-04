@@ -20372,26 +20372,34 @@
         .story-reader-text ul { margin: 0 0 0.9em; padding-left: 1.3em; }
         .story-reader-text li { margin: 0 0 0.3em; }
         .story-reader-text > :last-child { margin-bottom: 0; }
-        .story-reader-extra {
-            margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--divider);
-            font-family: var(--font-sans); font-size: 13px; color: var(--text-light);
+        /* What the text is based on: one quiet folded line under each story (the person page's pattern). */
+        .story-basis { margin-top: 14px; font-family: var(--font-sans); font-size: 13.5px; color: var(--text-light); }
+        .story-basis-sum {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 32px; max-width: 100%;
+            list-style: none; cursor: pointer; color: var(--primary); font-weight: 600; border-radius: 6px;
         }
-        .story-reader-extra .menu-section-header { padding: 0 0 6px; }
-        .story-reader-facts { margin: 0 0 10px; padding-left: 18px; }
-        .story-reader-facts li { margin: 2px 0; }
-        .story-reader-note { margin: 0; font-style: italic; }
-        /* The sources a story rests on (Story.sources): titles, a web address as a link. */
-        .story-reader-sources { margin: 0 0 10px; }
-        .story-reader-sources-h {
-            margin: 0; padding: 0 0 6px; font-size: 10px; font-weight: 700;
+        .story-basis-sum::-webkit-details-marker { display: none; }
+        .story-basis-sum:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .story-basis-chev { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; line-height: 1; transition: transform 0.15s; }
+        .story-basis[open] .story-basis-chev { transform: rotate(90deg); }
+        .story-basis-body {
+            margin-top: 6px; padding: 10px 14px; border-radius: 8px; background: var(--surface-2, var(--hover-bg));
+            overflow-wrap: anywhere;
+        }
+        .story-basis-h {
+            margin: 0; padding: 0 0 4px; font-size: 10px; font-weight: 700;
             letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint);
         }
-        .story-reader-sources-list { margin: 0; padding-left: 18px; }
-        .story-reader-sources-list li { margin: 2px 0; overflow-wrap: anywhere; }
-        .story-reader-sources-list a { color: var(--primary); }
+        .story-basis-list { margin: 0 0 10px; padding-left: 18px; }
+        .story-basis-list li { margin: 2px 0; }
+        .story-basis-list a { color: var(--primary); }
+        .story-basis-note { margin: 0; font-style: italic; }
         @media (pointer: coarse) {
-            .story-reader-sources-list a { display: inline-flex; align-items: center; min-height: 44px; }
+            .story-basis-sum { min-height: 44px; }
+            .story-basis-src a { display: inline-flex; align-items: center; min-height: 44px; }
         }
+        @media (hover: hover) { .story-basis-sum:hover span:first-child { text-decoration: underline; } }
+        @media (prefers-reduced-motion: reduce) { .story-basis-chev { transition: none; } }
         /* A couple's story (Partnership.story), one per marriage, under the person's own. */
         .story-reader-body > .story-reader-couple:not(:first-child) {
             margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider);
