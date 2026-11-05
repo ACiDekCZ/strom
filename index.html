@@ -15125,7 +15125,8 @@
             border-bottom: 1px solid var(--divider);
             overflow-wrap: anywhere;
         }
-        .research-overview__body > .live-follow-note { margin: 0 0 12px; border-radius: var(--r-md); border-bottom: 0; }
+        /* The overview: the same gap above and below the line (under the head or "Follow in", over the summary) (1105). */
+        .research-overview__body > .live-follow-note { margin: 12px 0; border-radius: var(--r-md); border-bottom: 0; }
         /* An agent began while the tree was open: offered, the tree never locked by itself. */
         .live-agent-started {
             display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
@@ -16848,6 +16849,8 @@
             background: var(--divider); border-bottom: 1px solid var(--divider);
         }
         .research-overview__summary--two { grid-template-columns: repeat(2, 1fr); }
+        /* Under "Follow in" the summary closes up to its band: no white strip there once the line about the switch is gone (1105). */
+        .research-overview > .live-follow-view + .research-overview__body > .research-overview__summary { margin-top: 0; }
         .research-overview__cell { background: var(--surface-2); padding: 10px 14px; min-width: 0; }
         .research-overview__cell-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-text); }
         .research-overview__cell-value { font-size: 16px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }

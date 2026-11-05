@@ -1061,6 +1061,42 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         expect(await followView(page)).toBe('fan');
     });
 
+    test('the overview: the line about the switch has the same gap above and below; once it goes the summary closes up to "Follow in" (1105)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        const row = page.locator('.research-overview .live-follow-view--overview');
+        await expect(row).toBeVisible();
+        await page.mouse.move(10, 880);
+        /** Gaps (px): "Follow in" → the line, the line → the summary; with no line "Follow in" → the summary. */
+        const gaps = () => page.evaluate(() => {
+            const r = document.querySelector('.research-overview .live-follow-view--overview')!.getBoundingClientRect();
+            const sum = document.querySelector('.research-overview__summary')!.getBoundingClientRect();
+            const n = document.querySelector('.research-overview .live-follow-note')?.getBoundingClientRect();
+            return n ? { above: n.top - r.bottom, below: sum.top - n.bottom } : { none: sum.top - r.bottom };
+        });
+        // The line (said anew, its time counted from now) under "Follow in", over the summary.
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { noteLiveFollowStarted(s: unknown, from: unknown): void; renderResearchOverview(): void };
+            ui.noteLiveFollowStarted({ treeId: window.Strom.DataManager.getCurrentTreeId(), name: 'Fíškovi' }, { followed: null, open: null });
+            ui.renderResearchOverview();
+        });
+        const note = page.locator('.research-overview .live-follow-note');
+        await expect(note).toBeVisible();
+        const shown = await gaps();
+        expect(shown.above!).toBeGreaterThan(4);
+        expect(Math.abs(shown.above! - shown.below!)).toBeLessThanOrEqual(1);
+        // The line goes by itself (FOLLOW_NOTICE_MS): the gap is the one of an overview drawn without it.
+        await expect(note).toHaveCount(0, { timeout: 10_000 });
+        const after = await gaps();
+        await page.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview(): void }).renderResearchOverview());
+        const plain = await gaps();
+        expect(plain.none).toBeDefined();
+        expect(Math.abs(after.none! - plain.none!)).toBeLessThanOrEqual(0.5);
+        // No white strip between the two bands.
+        expect(after.none!).toBeLessThan(2);
+    });
+
     test.describe('a phone (spec 043)', () => {
         test.use({ hasTouch: true });
 
