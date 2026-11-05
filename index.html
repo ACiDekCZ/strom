@@ -10232,7 +10232,7 @@
             position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
             display: flex; flex-direction: column; gap: 0; max-width: 200px; padding: 2px 7px; border-radius: 6px;
             background: rgba(255,255,255,0.9); color: #222; font-size: 12px; line-height: 1.3; white-space: nowrap; pointer-events: none;
-            box-shadow: 0 1px 3px rgba(20, 16, 8, 0.12);
+            border: 1px solid color-mix(in srgb, var(--follow-c) 45%, transparent); box-shadow: 0 1px 3px rgba(20, 16, 8, 0.12);
         }
         .map-work-label b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
         .map-work-label small { font-size: 10.5px; color: #555; overflow: hidden; text-overflow: ellipsis; }
@@ -10258,7 +10258,7 @@
         }
         .map-follow-notice {
             display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-width: 0;
-            padding: 6px 6px 6px 10px; border-radius: 10px; border: 1px solid var(--border);
+            padding: 6px 6px 6px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--follow-c) 55%, var(--border));
             background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-size: 13px; line-height: 1.35;
         }
         .map-follow-notice-mark {

@@ -82,33 +82,46 @@ function pointOf(points: readonly MapPoint[], key: string, joined: string): MapP
         ?? points.find(p => p.type === 'town' && p.placeKeys.includes(key));
 }
 
-/**
- * The notices stand at the top centre of the map, under whatever stands
- * there already (the follow or evidence pill, the scope and kind pills).
- * A phone and a phone held sideways place them by CSS alone.
- */
-function placeNotices(container: HTMLElement): void {
-    const host = container.querySelector<HTMLElement>('.map-follow-notices');
-    if (!host) return;
-    if (isPhoneBar() || matchMedia('(max-width: 1024px) and (max-height: 500px) and (orientation: landscape)').matches) {
-        host.style.top = '';
-        return;
-    }
-    host.style.top = '12px';
+const LANDSCAPE_PHONE = '(max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
+
+/** The bottom of what stands at the top of the map over the given columns (px from the container's top). */
+function clearBelow(container: HTMLElement, left: number, right: number, from: number, sels: string): number {
     const box = container.getBoundingClientRect();
-    const me = host.getBoundingClientRect();
-    let top = 12;
-    const above: Element[] = [
-        ...document.querySelectorAll('#live-follow-pill, #evidence-pill'),
-        ...container.querySelectorAll('.map-topleft > *, .map-controls'),
-    ];
-    for (const el of above) {
+    let top = from;
+    for (const el of document.querySelectorAll(sels)) {
         const r = el.getBoundingClientRect();
         if (!r.height || r.top > box.top + box.height / 2) continue;
-        if (r.right <= me.left || r.left >= me.right) continue;
+        if (r.right <= left || r.left >= right) continue;
         top = Math.max(top, r.bottom - box.top + 8);
     }
-    host.style.top = `${Math.round(top)}px`;
+    return top;
+}
+
+/**
+ * The map's pause pill stands under the map's scope and kind pills, the
+ * notices under the pill (top centre). A phone and a phone held sideways
+ * place both by CSS alone.
+ */
+function placeMapChrome(container: HTMLElement): void {
+    const phone = isPhoneBar() || matchMedia(LANDSCAPE_PHONE).matches;
+    const pill = document.querySelector<HTMLElement>('#live-follow-pill.live-follow-pill--map');
+    if (pill) {
+        pill.style.top = '';
+        if (!phone) {
+            const box = container.getBoundingClientRect();
+            const r = pill.getBoundingClientRect();
+            const top = clearBelow(container, r.left, r.right, r.top - box.top, '#map-container .map-topleft > *');
+            pill.style.top = `${Math.round(box.top + top)}px`;
+        }
+    }
+    const host = container.querySelector<HTMLElement>('.map-follow-notices');
+    if (!host) return;
+    host.style.top = '';
+    if (phone) return;
+    host.style.top = '12px';
+    const me = host.getBoundingClientRect();
+    host.style.top = `${Math.round(clearBelow(container, me.left, me.right, 12,
+        '#live-follow-pill, #evidence-pill, #map-container .map-topleft > *, #map-container .map-controls'))}px`;
 }
 
 export const mapFollowMethods = uiModule({
@@ -277,11 +290,18 @@ export const mapFollowMethods = uiModule({
             host.innerHTML = html;
             host.dataset.html = html;
         }
-        placeNotices(container);
+        placeMapChrome(container);
+    },
+
+    /** Place the map's pause pill and notices again (the pill came or went). */
+    placeMapFollowChrome(): void {
+        const container = document.getElementById('map-container');
+        if (container && TreeRenderer.getViewMode() === 'map') placeMapChrome(container);
     },
 
     /** Move the marks with the map (after every draw of the markers: a pan, a zoom). */
     positionMapFollow(container: HTMLElement): void {
+        placeMapChrome(container);
         const layer = container.querySelector<HTMLElement>('.map-follow-layer');
         if (!layer || !this.mapCenter) return;
         const { width, height } = this.mapViewportSize(container);
@@ -296,7 +316,6 @@ export const mapFollowMethods = uiModule({
         container.querySelectorAll<HTMLElement>('.map-markers .map-marker').forEach(mk => {
             mk.classList.toggle('is-worked', worked.has(mk.dataset.key ?? ''));
         });
-        placeNotices(container);
         const svg = container.querySelector<SVGSVGElement>('svg.map-trail-line');
         if (svg) {
             svg.innerHTML = lines.map(l => {

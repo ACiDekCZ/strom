@@ -561,6 +561,7 @@ export const liveFollowMethods = uiModule({
         if (first) {
             this.renderLiveFollowPill();
             this.renderLivePanel();
+            this.placeMapFollowChrome();
         }
     },
 
@@ -615,6 +616,7 @@ export const liveFollowMethods = uiModule({
         if (!was) return;
         this.renderLiveFollowPill();
         this.renderLivePanel();
+        this.placeMapFollowChrome();
     },
 
     /**

@@ -26,12 +26,15 @@ function esc(t: string): string {
     return t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-/** Lift the legend over the fan's own colour legend (bottom left, 14 px). */
+/** Lift the legend over the fan's own colour legend (bottom left). */
 function liftOverFanLegend(host: HTMLElement): void {
     const own = document.getElementById('fan-legend');
     const place = (): void => {
-        const h = own && !own.hidden ? own.offsetHeight : 0;
-        host.style.bottom = `${h > 0 ? 14 + h + 8 : 14}px`;
+        // The fan's legend stands higher while the focus buttons are shown: measure where it is.
+        const parent = host.parentElement;
+        const r = own && !own.hidden ? own.getBoundingClientRect() : null;
+        if (!parent || !r || !r.height) { host.style.bottom = '14px'; return; }
+        host.style.bottom = `${Math.round(parent.getBoundingClientRect().bottom - r.top + 8)}px`;
     };
     place();
     if (typeof ResizeObserver === 'undefined' || !own || fanLegendWatched === own) return;
