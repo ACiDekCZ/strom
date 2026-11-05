@@ -1,6 +1,7 @@
 {
   "name": "strom",
   "version": "3.23.0",
+  "stromDoc": "dbe2569fc0b1679cd1419b7f13ce194ab10b4d7c",
   "description": "Family tree application",
   "main": "dist/bundle.js",
   "scripts": {
@@ -16,7 +17,8 @@
     "gen:devel-demo": "tsx scripts/generate-devel-demo.ts",
     "test:e2e": "sh scripts/e2e.sh",
     "test:e2e:smoke": "sh scripts/e2e.sh --grep @smoke",
-    "test:quick": "sh scripts/e2e.sh --quick"
+    "test:quick": "sh scripts/e2e.sh --quick",
+    "help:pin": "node scripts/pin-strom-doc.mjs"
   },
   "keywords": [
     "family-tree",
