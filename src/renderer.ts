@@ -6023,6 +6023,7 @@ class TreeRendererClass {
                 pinnedCenter: () => UI.liveFollowPinned?.() ?? null,
                 menuExtra: (id, isCentre) => UI.fanFollowMenuItems?.(id, isCentre) ?? [],
                 unpinCenter: () => UI.unpinFanCenter?.(),
+                menuClosed: () => UI.fanFollowMenuClosed?.(),
                 selectedRod: () => UI.selectedRod(),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),
                 personPage: id => UI.runPersonMenuAction(id, 'page'),

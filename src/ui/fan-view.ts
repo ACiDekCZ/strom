@@ -70,6 +70,8 @@ export interface FanViewHost {
     menuExtra?(id: PersonId, isCentre: boolean): Array<{ id: FanMenuItemId; label: string; run: () => void }>;
     /** "Release" on the pinned centre's label. */
     unpinCenter?(): void;
+    /** A sector's menu (or its sheet) closed. */
+    menuClosed?(): void;
     /** After every redraw of the SVG (the evidence highlight is put back). */
     afterDraw(): void;
     /** The person's detail (the same dialog as elsewhere; read-only where the tree is). */
@@ -412,6 +414,11 @@ export class FanViewController {
         this.host.setFocus(id);
     }
 
+    /** A sector's menu is open. */
+    menuOpen(): boolean {
+        return !!this.menuKey;
+    }
+
     /** The pill or the pinned centre's label again (the pin changed without a new focus). */
     refreshPill(): void {
         this.updatePill();
@@ -721,6 +728,7 @@ export class FanViewController {
                 if (this.menuKey !== key) return;
                 this.menuKey = null;
                 this.hideRing();
+                this.host.menuClosed?.();
                 this.ignoreTapUntil = performance.now() + 400;
                 requestAnimationFrame(() => {
                     const a = document.activeElement;
@@ -812,6 +820,7 @@ export class FanViewController {
             this.host.hideMenuSheet();
         }
         if (refocus) this.focusKey(key);
+        this.host.menuClosed?.();
     }
 
     private showRing(p: FanZoomPoint): void {

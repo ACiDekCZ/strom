@@ -770,20 +770,25 @@ test.describe('follow the agent in the fan (spec 043)', () => {
     const followView = (page: Page) => page.evaluate(() => window.Strom.UI.liveFollowView());
     const sector = (page: Page, id: string) => page.locator(`#fan-chart .fan-sector[data-fan-person="${id}"]`).first();
     const centre = (page: Page) => page.evaluate(() => document.querySelector('#fan-chart [data-fan-key="f"]')?.getAttribute('data-fan-person') ?? null);
-    /** Count the signals (pulses) drawn in the fan from now on (each drawing of the marks that starts one). */
+    /** Count the signals started from now on (one per start: a redraw during a signal carries it on,
+     *  and a signal started before the count, e.g. the arrival in the fan, is not counted). */
     const countPulses = (page: Page) => page.evaluate(() => {
-        const w = window as unknown as { __pulses: number; __pulseWrap?: boolean };
-        w.__pulses = 0;
+        const w = window as unknown as { __pulses: Set<string>; __pulseWrap?: boolean; __pulseFrom: number };
+        w.__pulses = new Set();
+        w.__pulseFrom = performance.now();
         if (w.__pulseWrap) return;
         w.__pulseWrap = true;
         const ui = window.Strom.UI as unknown as { applyFanFollowMarks: (p?: Set<number>) => void };
         const draw = ui.applyFanFollowMarks;
         ui.applyFanFollowMarks = function (this: unknown, p?: Set<number>) {
             draw.call(this, p);
-            if (document.querySelector('#fan-chart .fan-follow-layer .fan-work-glow.is-pulse')) w.__pulses++;
+            for (const g of document.querySelectorAll('#fan-chart .fan-follow-layer .fan-work-glow.is-pulse')) {
+                if (Number(g.getAttribute('data-pulse-at')) < w.__pulseFrom) continue;
+                w.__pulses.add(`${g.getAttribute('data-pulse-at')}|${g.getAttribute('d') ?? 'f'}`);
+            }
         };
     });
-    const pulses = (page: Page) => page.evaluate(() => (window as unknown as { __pulses: number }).__pulses);
+    const pulses = (page: Page) => page.evaluate(() => (window as unknown as { __pulses: Set<string> }).__pulses.size);
 
     test('the family view follows as before; "Follow in" switches to the fan without a pause, arrow keys choose; gone when following is off', async ({ page }) => {
         await follow(page, { idle: 60_000, on: true });
@@ -871,6 +876,81 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await nextStatus(bridge);
         await expect(sector(page, await idOf(page, 'P0003'))).toHaveClass(/is-working/);
         expect(await pulses(page)).toBe(0);
+    });
+
+    test('arriving in the fan signals once where the agent works: following on, the fan chosen, the app opened again, Back to the agent; an open sector menu holds it; none with reduced motion (1105)', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await follow(page, { idle: 60_000 });
+        const jan = await idOf(page, 'P0012');
+        // Following runs in the fan around Jan (the Settings' own centre), so his disc is drawn.
+        await page.evaluate((id) => {
+            const tree = window.Strom.DataManager.getCurrentTreeId();
+            localStorage.setItem('strom-live-follow-view', 'fan');
+            localStorage.setItem('strom-live-follow-fan-center', 'person');
+            localStorage.setItem(`strom-live-follow-fan-person:${tree}`, id);
+        }, jan);
+        await countPulses(page);
+        // Following on: into the fan, a signal once.
+        await btn(page).click();
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(() => view(page)).toBe('fan');
+        await expect.poll(() => centre(page)).toBe(jan);
+        await expect(page.locator('#fan-chart .is-working')).toHaveCount(1);
+        await expect.poll(() => pulses(page)).toBe(1);
+        const afterOn = 1;
+        // Redraws (a zoom) carry nothing new.
+        await page.locator('#fan-zoom-controls [data-fan-zoom-act="in"]').click();
+        await page.waitForTimeout(400);
+        expect(await pulses(page)).toBe(afterOn);
+        // Family and the fan chosen again: once more.
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('family'));
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => pulses(page)).toBe(afterOn + 1);
+        // The descendants view pauses; Back to the agent returns to the fan: once more.
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        await page.locator('#live-follow-pill .live-follow-back').click();
+        await expect.poll(() => view(page)).toBe('fan');
+        await expect.poll(() => pulses(page)).toBe(afterOn + 2);
+        // An open sector's menu holds the signal back until it closes.
+        await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click({ button: 'right' });
+        await expect(page.locator('.fan-menu')).toBeVisible();
+        await page.evaluate(() => { window.Strom.UI.setLiveFollow(false); window.Strom.UI.setLiveFollow(true); });
+        await page.waitForTimeout(300);
+        await expect(page.locator('.fan-menu')).toBeVisible();
+        expect(await pulses(page)).toBe(afterOn + 2);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.fan-menu')).toHaveCount(0);
+        await expect.poll(() => pulses(page)).toBe(afterOn + 3);
+        // The app opened again: once more.
+        await page.reload();
+        await expect(page.locator('#live-panel')).toBeVisible();
+        expect(await view(page)).toBe('fan');
+        await expect(page.locator('#fan-chart .fan-follow-layer .fan-work-glow[data-pulse-at]')).toHaveCount(1);
+        // Reduced motion: marked, no signal.
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await countPulses(page);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('family'));
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .is-working')).toHaveCount(1);
+        await page.waitForTimeout(300);
+        expect(await pulses(page)).toBe(0);
+    });
+
+    test('arriving in the fan with the person worked on outside it: the label "Working outside the fan", no signal (1105)', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await countPulses(page);
+        // Eva's fan does not draw her brother Jan.
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), await idOf(page, 'P0013'));
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => centre(page)).toBe(await idOf(page, 'P0013'));
+        await expect(page.locator('.fan-follow-overlay .fan-follow-chip')).toContainText('Jan');
+        await page.waitForTimeout(400);
+        expect(await pulses(page)).toBe(0);
+        await expect(page.locator('.fan-follow-overlay .fan-follow-chip.is-pulse, .fan-follow-overlay .is-pulse')).toHaveCount(0);
     });
 
     test('the sector menu pins the centre; Release returns to the centre the rule gives', async ({ page }) => {

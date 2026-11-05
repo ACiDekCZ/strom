@@ -21,7 +21,7 @@ import { FollowTarget, sessionTone } from '../live-follow-targets.js';
 import { trailStrength } from '../live-follow-map.js';
 import { getFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
-import { currentFollowTargets, followNumbered, followPinned, followTrail } from './live-follow-ui.js';
+import { currentFollowTargets, followNumbered, followPinned, followTrail, takeFanArrival } from './live-follow-ui.js';
 import type { FanMenuItemId } from './fan-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -115,7 +115,19 @@ interface ChipGroup {
     entries: Array<{ targets: FollowTarget[]; anchor: FanAnchor }>;
 }
 
+/** One signal: two rounds of 750 ms (index.html `fan-work-pulse`). */
+const PULSE_MS = 1500;
+/** Row of working[] → when its signal started (a redraw meanwhile carries it on, not anew). */
+const pulsing = new Map<number, number>();
+/** Rows whose signal waits for the sector's menu to close. */
+let heldPulse = new Set<number>();
+
 export const fanFollowMethods = uiModule({
+    /** The sector's menu closed: a signal that waited for it plays now. */
+    fanFollowMenuClosed(): void {
+        if (heldPulse.size) this.applyFanFollowMarks();
+    },
+
     /** The marks of following over the fan (cleared when following does not apply). `pulse`: rows that changed. */
     applyFanFollowMarks(pulse?: Set<number>): void {
         const chart = document.getElementById('fan-chart');
@@ -143,6 +155,15 @@ export const fanFollowMethods = uiModule({
         // The fan's redraw may take the legend along: put it back.
         if (!document.getElementById('follow-legend')) this.renderFollowLegend();
         const targets = currentFollowTargets();
+        // The signals due now: the rows that changed, once on arriving in the fan, and those that waited
+        // for the menu; an open sector's menu holds them back (it closes, they play).
+        const now = performance.now();
+        const due = new Set<number>([...(pulse ?? []), ...heldPulse]);
+        if (takeFanArrival()) for (const t of targets) due.add(t.row);
+        heldPulse = new Set();
+        if (fan.menuOpen()) heldPulse = due;
+        else for (const r of due) pulsing.set(r, now);
+        for (const [r, at] of pulsing) if (now - at >= PULSE_MS) pulsing.delete(r);
         const trail = getFollowTrail() && !isPhoneBar() ? followTrail() : [];
         if (!targets.length && !trail.length) return;
         const numbered = followNumbered();
@@ -231,8 +252,12 @@ export const fanFollowMethods = uiModule({
             const drawable = first === 'f' || !!el?.querySelector('.fan-fill');
             if (drawable) {
                 const glow = shape('fan-work-glow', 7);
-                if (motion && list.some(t => pulse?.has(t.row))) {
+                const at = Math.min(...list.map(t => pulsing.get(t.row) ?? Infinity));
+                if (motion && Number.isFinite(at)) {
                     glow.classList.add('is-pulse');
+                    glow.setAttribute('data-pulse-at', String(Math.round(at)));
+                    // A redraw during the signal: it goes on where it was.
+                    if (now > at) glow.style.animationDelay = `${-Math.round(now - at)}ms`;
                     glow.addEventListener('animationend', () => glow.classList.remove('is-pulse'), { once: true });
                 }
                 layer.append(glow, shape('fan-work-line', 2.6));

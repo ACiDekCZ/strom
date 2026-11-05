@@ -97,6 +97,11 @@ interface FollowSession {
     lastPlaces: Map<number, WorkPlace>;
     /** The legend of the marks is open (null: not yet shown; it opens when the trail first appears). */
     legendOpen: boolean | null;
+    /**
+     * The fan signals once where the agent works when it is next drawn: following turned on, the app
+     * opened again, the fan chosen, Back to the agent (Milan 5 Nov 2026).
+     */
+    fanArrive: boolean;
 }
 
 let session: FollowSession | null = null;
@@ -161,6 +166,7 @@ function followSession(): FollowSession | null {
         session = {
             view: getFollowView(), focusBefore, fanPinned: null,
             mapPaused: false, trail: [], cardTrail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
+            fanArrive: true,
         };
         seenMode = TreeRenderer.getViewMode();
     }
@@ -287,6 +293,14 @@ export function followNumbered(): boolean {
     return !!s && followActive() && sessionNumbers(s.working).numbered;
 }
 
+/** The fan is drawn while following: true once after it is opened (the arrival's signal is due). */
+export function takeFanArrival(): boolean {
+    const fs = followSession();
+    if (!fs?.fanArrive) return false;
+    fs.fanArrive = false;
+    return true;
+}
+
 /** The pinned fan centre (null: none, or not following). */
 export function followPinned(): PersonId | null {
     return followActive() ? session?.fanPinned ?? null : null;
@@ -391,6 +405,7 @@ export const liveFollowMethods = uiModule({
         fs.view = view;
         seenMode = view;
         lastTarget = null;
+        if (view === 'fan') fs.fanArrive = true;
         if (view === 'family') {
             // Paused or nothing to jump to: the family view all the same.
             if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.setViewMode('family');
@@ -569,6 +584,7 @@ export const liveFollowMethods = uiModule({
             return true;
         }
         fs.view = mode;
+        if (mode === 'fan') fs.fanArrive = true;
         lastTarget = null;
         this.renderLivePanel();
         this.refreshFollowMarks(new Set());
@@ -670,7 +686,12 @@ export const liveFollowMethods = uiModule({
         lastTarget = null;
         this.renderLiveFollowPill();
         this.renderLivePanel();
-        const view = followSession()?.view ?? 'family';
+        const fsNow = followSession();
+        if (fsNow?.view === 'fan') {
+            fsNow.fanArrive = true;
+            if (TreeRenderer.getViewMode() === 'fan') this.refreshFollowMarks(new Set());
+        }
+        const view = fsNow?.view ?? 'family';
         if (view !== 'family' && TreeRenderer.getViewMode() !== view) {
             this.switchFollowView(view);
             return;
