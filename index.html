@@ -9288,6 +9288,12 @@
             pointer-events: none;
         }
         .map-topleft > * { pointer-events: auto; max-width: 100%; }
+        /* The research's card stands top right over the map (wider than a phone): the zoom buttons go
+           left of it, never under it, and the scope and the kinds end before them (1105). */
+        @media (min-width: 641px) {
+            body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-controls { right: calc(var(--live-card-right) + var(--live-card-w) + 8px); }
+            body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-topleft { right: calc(var(--live-card-right) + var(--live-card-w) + 56px); }
+        }
         .map-scope {
             display: flex;
             flex: none;
@@ -14929,12 +14935,14 @@
 
         /* "Research now" panel of a followed live research. Desktop: a card
            top-right under the toolbar. */
+        /* The research's card: its width and its gap to the window's right edge (the map's zoom buttons step left of it). */
+        body { --live-card-w: 300px; --live-card-right: 16px; }
         .live-panel {
             position: fixed;
             top: 64px;
-            right: 16px;
+            right: var(--live-card-right);
             z-index: 96;
-            width: 300px;
+            width: var(--live-card-w);
             max-height: min(60vh, 520px);
             display: flex;
             flex-direction: column;
@@ -15158,7 +15166,8 @@
         }
         /* Tablet: narrower card, same place. */
         @media (min-width: 641px) and (max-width: 1024px) {
-            .live-panel { width: 260px; right: 12px; max-height: 50vh; }
+            body { --live-card-w: 260px; --live-card-right: 12px; }
+            .live-panel { max-height: 50vh; }
         }
         /* Phone chrome (focus chip at the top, zoom stack bottom-right): a
            strip above the bottom bar, clear of the zoom buttons. */

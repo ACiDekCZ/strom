@@ -1421,6 +1421,51 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         await expect(page.locator('#follow-legend button.follow-legend')).toBeVisible();
     });
 
+    test('the research\'s card never covers the map\'s zoom buttons: left of it at 1440, 1024 and held sideways, as before on a phone (1105)', async ({ page }) => {
+        const errs = errors(page);
+        await stubTiles(page);
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(page.locator('#map-container .map-zoom-in')).toBeVisible();
+        const clash = () => page.evaluate(() => {
+            const p = document.getElementById('live-panel')!.getBoundingClientRect();
+            const out: string[] = [];
+            for (const b of document.querySelectorAll<HTMLElement>('#map-container .map-controls button')) {
+                const r = b.getBoundingClientRect();
+                if (r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom) out.push(`under ${b.className}`);
+                const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                if (!at || !b.contains(at)) out.push(`hidden ${b.className}`);
+            }
+            const topleft = document.querySelector('#map-container .map-topleft')!.getBoundingClientRect();
+            const zoom = document.querySelector('#map-container .map-controls')!.getBoundingClientRect();
+            if (topleft.right > zoom.left) out.push('scope over the zoom buttons');
+            if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
+            return out;
+        });
+        const zoom = () => page.evaluate(() => (window.Strom.UI as unknown as { mapZoom: number }).mapZoom);
+        for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 844, height: 390 }]) {
+            await page.setViewportSize(size);
+            await expect(page.locator('#live-panel')).toBeVisible();
+            await expect.poll(clash, { message: `${size.width}` }).toEqual([]);
+        }
+        // Reachable: a click on + zooms the map (no element over it).
+        await page.setViewportSize({ width: 1024, height: 768 });
+        await expect.poll(clash).toEqual([]);
+        const before = await zoom();
+        await page.locator('#map-container .map-zoom-in').click({ timeout: 3000 });
+        await expect.poll(zoom).toBe(before + 1);
+        // A phone: the strip is at the bottom, the buttons stay at the map's right edge.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(page.locator('#live-panel.phone-strip')).toBeVisible();
+        expect(await page.evaluate(() => {
+            const m = document.getElementById('map-container')!.getBoundingClientRect();
+            return Math.round(m.right - document.querySelector('#map-container .map-controls')!.getBoundingClientRect().right);
+        })).toBe(8);
+        expect(errs).toEqual([]);
+    });
+
     test.describe('a phone (spec 043 §8)', () => {
         test.use({ hasTouch: true });
 
