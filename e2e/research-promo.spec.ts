@@ -363,13 +363,15 @@ test.describe('existing tree on desktop', () => {
         await expect(card(page, 'Jan')).toBeVisible();
 
         // Arrows: from the trigger, ArrowUp lands on the last row — Settings —
-        // then "Strom:" and once more on the item above it.
+        // then How Strom works, "Strom:" and once more on the item above it.
         const trigger = page.locator('.actions-menu-btn');
         await trigger.focus();
         await page.keyboard.press('Enter');
         await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
         await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-settings-row')).toBeFocused();
+        await page.keyboard.press('ArrowUp');
+        await expect(page.locator('#actions-help-row')).toBeFocused();
         await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-tree-row')).toBeFocused();
         await page.keyboard.press('ArrowUp');

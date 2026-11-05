@@ -76,7 +76,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         ':scope > .tree-switcher-action:visible, :scope > .actions-submenu-wrap:visible > .actions-submenu-row')
         .evaluateAll(els => els.map(el => (el as HTMLElement).innerText.replace(/\s+/g, ' ').trim()));
 
-    test('the first level by frequency: no Undo / Redo, one Export… without a subtitle, Settings last', async ({ page }) => {
+    test('the first level by frequency: no Undo / Redo, one Export… without a subtitle, How Strom works, Settings last', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
@@ -91,8 +91,9 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(rows[3]).toBe('For the family ›');
         // "Ancestor research · New" only while it is new (menu 1020 §1.1): seen here, so the tree's list has it.
         expect(rows[4]).toMatch(/^Tree:/);
-        expect(rows[5]).toBe('Settings');
-        expect(rows).toHaveLength(6);
+        expect(rows[5]).toBe('How Strom works');
+        expect(rows[6]).toBe('Settings');
+        expect(rows).toHaveLength(7);
         // Undo / Redo are in the toolbar, not here; no ⚙ in the toolbar.
         await expect(dropdown.locator('#actions-undo-row, #actions-redo-row')).toHaveCount(0);
         await expect(page.locator('.actions-toolbar-settings')).toHaveCount(0);

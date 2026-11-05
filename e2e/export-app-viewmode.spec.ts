@@ -146,7 +146,7 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         // The same "For the family ›" as in editing; About is reached through Settings (menu 1020 D1, D18).
         const rows = (await dropdown.locator(':scope > .tree-switcher-action:visible, :scope > .actions-submenu-wrap:visible > .actions-submenu-row')
             .allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'Settings']);
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'How Strom works', 'Settings']);
         await expect(page.locator('#actions-view-about-row')).toHaveCount(0);
 
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -174,7 +174,7 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await page.evaluate(() => window.Strom.UI.stopSlideshow());
     });
 
-    test('a phone: More has no Undo / Redo, For the family ›, Tree overview, View, Settings | About', async ({ page }, testInfo) => {
+    test('a phone: More has no Undo / Redo, For the family ›, Tree overview, View, Settings | How Strom works | About', async ({ page }, testInfo) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await exportedTree(page, testInfo);
         // The view-mode banner sits above the bottom bar, More is not under it.
@@ -188,7 +188,7 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
         // "For the family ›" as in editing (menu 1020 D18).
         expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview']);
-        await expect(sheet.locator('.bottom-sheet-pair').last().locator('.bottom-sheet-item')).toHaveText(['Settings', 'About Strom']);
+        await expect(sheet.locator('.bottom-sheet-pair').last().locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
         await page.locator('#sheet-family').click();
         await page.locator('#sheet-book').click();
         await expect(page.locator('#book-modal')).toBeVisible();

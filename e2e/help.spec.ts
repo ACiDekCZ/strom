@@ -188,7 +188,7 @@ test.describe('How Strom works on a phone', () => {
         await expect(page.locator('.person-card').first()).toBeVisible();
         await page.locator('#bb-view-more').tap();
         const tiles = page.locator('.bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item');
-        await expect(tiles).toHaveText(['Settings', 'How Strom works', 'About']);
+        await expect(tiles).toHaveText(['Settings', 'How Strom works', 'About Strom']);
         await page.locator('#sheet-help').tap();
         await expect(help(page)).toBeVisible();
         await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
