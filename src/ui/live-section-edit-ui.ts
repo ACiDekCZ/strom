@@ -716,7 +716,9 @@ export const liveSectionEditMethods = uiModule({
             line.append(text, segment(row, name.id, 'live-sec-seg--settings'));
             body.appendChild(line);
         }
-        this.appendFollowPrefRows(body);
+        // Following an agent: never offered while every research tree is an archive (no agent to follow).
+        const agentTree = TreeManager.getTrees().some(t => !!t.research?.id && t.research.mode !== 'archive');
+        if (agentTree || hasFollowPrefs()) this.appendFollowPrefRows(body);
         const foot = el('div', 'settings-row live-sec-set__reset');
         const reset = el('button', 'link-button live-sec-reset', strings.live.resetDefaults);
         reset.type = 'button';
