@@ -319,12 +319,34 @@ export const fanFollowMethods = uiModule({
         }
         const rows = isPhoneBar();
         const list = rows ? htmlEl('div', 'fan-follow-rows') : null;
-        if (list) overlay.appendChild(list);
+        if (list) {
+            overlay.appendChild(list);
+            // Upright, the fan stands low (above the strip) and the room above it is empty: the rows there,
+            // under the pills at its top (the centre pin, the original person, the paused pill).
+            if (!matchMedia('(orientation: landscape) and (max-height: 500px)').matches) {
+                const place = (): void => {
+                    const box = overlay.getBoundingClientRect();
+                    let clear = 8;
+                    for (const sel of ['#fan-center-pin', '#fan-origin-pill', '#fan-legend-chip', '#live-follow-pill', '#evidence-pill']) {
+                        const el = document.querySelector<HTMLElement>(sel);
+                        const r = el && !el.hidden ? el.getBoundingClientRect() : null;
+                        if (r && r.height > 0 && r.top < box.top + box.height / 2) clear = Math.max(clear, r.bottom - box.top + 8);
+                    }
+                    list.style.top = `${Math.round(clear)}px`;
+                    list.style.bottom = 'auto';
+                };
+                place();
+                // The pills are placed after the fan's drawing: once more when they stand.
+                requestAnimationFrame(() => requestAnimationFrame(() => { if (list.isConnected) place(); }));
+            }
+        }
         const lines = rows ? null : svgEl('svg', { class: 'fan-follow-leads', width: W, height: H, 'aria-hidden': 'true' }) as SVGSVGElement;
         if (lines) overlay.appendChild(lines);
         const centre = fan.sectorPoint('f') ?? { x: W / 2, y: H / 2 };
         const vb = zoom.viewBox();
-        const placed: Array<{ el: HTMLElement; side: 'l' | 'r' | 't'; x: number; y: number; ax: number; ay: number; tone: string }> = [];
+        const placed: Array<{ el: HTMLElement; side: 'l' | 'r' | 't'; x: number; y: number; ax: number; ay: number; tone: string; lead: boolean }> = [];
+        // Above the fan, on the centre's vertical: where a label stands that has no ray of its own.
+        const top = { x: centre.x, y: centre.y - Math.max(model.R, model.Rd) * vb.ppu - 12 };
 
         const relText = (o: { anchor: FanAnchor }): string => {
             if (o.anchor.kind === 'beyond') return F.genN(o.anchor.generation ?? 0);
@@ -387,12 +409,13 @@ export const fanFollowMethods = uiModule({
                 }
                 continue;
             }
-            // Where: out on the anchor's ray, past the fan's edge; no anchor: the top right corner.
-            if (!ap || !g.anchorId) {
-                chip.classList.add('is-corner');
+            // Where: out on the anchor's ray, past the fan's edge. No anchor, or the centre itself (a sibling,
+            // a spouse or a descendant of the centre): above the fan, no leader line across the rings (the
+            // label names the relation to the centre; its dot marks the centre).
+            if (!ap || !g.anchorId || g.anchorId === model.focus.id) {
+                if (!ap || !g.anchorId) chip.classList.add('is-corner');
                 chip.style.maxWidth = `${Math.min(300, W - 24)}px`;
-                chip.style.right = '12px';
-                chip.style.top = '12px';
+                placed.push({ el: chip, side: 't', x: top.x, y: top.y, ax: ap?.x ?? top.x, ay: ap?.y ?? top.y, tone, lead: false });
                 continue;
             }
             const isDesc = model.desc.some(s => s.person?.id === g.anchorId) && !model.sectors.some(s => s.person?.id === g.anchorId);
@@ -404,7 +427,7 @@ export const fanFollowMethods = uiModule({
             const side: 'l' | 'r' | 't' = dx < -0.35 ? 'l' : dx > 0.35 ? 'r' : 't';
             const room = side === 'l' ? px : side === 'r' ? W - px : W;
             chip.style.maxWidth = `${Math.max(140, Math.min(290, room - 18))}px`;
-            placed.push({ el: chip, side, x: px, y: py, ax: ap.x, ay: ap.y, tone });
+            placed.push({ el: chip, side, x: px, y: py, ax: ap.x, ay: ap.y, tone, lead: true });
         }
 
         // Lay the labels out: per side by height, none over another, none outside the surface.
@@ -421,7 +444,7 @@ export const fanFollowMethods = uiModule({
                 floor = y + h + 8;
                 p.el.style.left = `${Math.round(x)}px`;
                 p.el.style.top = `${Math.round(y)}px`;
-                if (lines) {
+                if (lines && p.lead) {
                     const ex = side === 'l' ? x + w : side === 'r' ? x : x + w / 2;
                     const ey = side === 't' ? y + h : y + h / 2;
                     lines.insertBefore(svgEl('polyline', {

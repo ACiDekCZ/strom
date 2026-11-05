@@ -777,7 +777,7 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(page.locator('#live-follow-pill')).toHaveCount(0);
     });
 
-    test('a person the fan does not draw: a chip at the nearest ancestor; a click opens the family view there', async ({ page }) => {
+    test('a person the fan does not draw (the centre\'s sister): a chip above the fan names her and the relation, no leader line across the rings; a click opens the family view there', async ({ page }) => {
         const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
@@ -789,7 +789,10 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         const chip = page.locator('.fan-follow-overlay button.fan-follow-chip');
         await expect(chip).toHaveCount(1);
         await expect(chip).toContainText('Eva');
+        await expect(chip).toContainText('(sister)');
         await expect(page.locator('#fan-chart .is-working')).toHaveCount(0);
+        await expect(page.locator('.fan-follow-leads .fan-follow-lead')).toHaveCount(0);
+        await expect(page.locator('.fan-follow-leads .fan-follow-dot')).toHaveCount(1);
         const fits = await page.evaluate(() => {
             const c = document.querySelector('.fan-follow-chip')!.getBoundingClientRect();
             const s = document.getElementById('fan-chart')!.getBoundingClientRect();
