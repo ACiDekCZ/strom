@@ -1289,6 +1289,36 @@ async function recordLaunches(page: Page): Promise<void> {
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
 
 test.describe('Awaiting action from a research with waiting.groups', () => {
+    // The kind chips wrap onto further lines: none is cut at the panel's edge, German being the longest (1105).
+    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        test(`the kind chips wrap inside the overview at ${size.width}, no chip cut`, async ({ page }) => {
+            await follow(page, size, grouped);
+            if (size.width > 640) await page.locator('#live-panel .live-panel-expand').click();
+            else await page.locator('#live-panel .live-panel-toggle').click();
+            const ov = page.locator('#research-overview');
+            await expect(ov).toBeVisible();
+            for (const lang of ['de', 'cs', 'en']) {
+                await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+                const bar = ov.locator('.research-overview__waiting-filters');
+                await expect(bar.locator('.research-overview__filter')).toHaveCount(6);
+                const m = await bar.evaluate(row => {
+                    const r = row.getBoundingClientRect();
+                    const panel = row.closest('#research-overview')!.getBoundingClientRect();
+                    const chips = [...row.querySelectorAll('.research-overview__filter')].map(c => c.getBoundingClientRect());
+                    return {
+                        overflow: row.scrollWidth - row.clientWidth,
+                        outside: chips.filter(c => c.left < r.left - 0.5 || c.right > r.right + 0.5
+                            || c.left < panel.left - 0.5 || c.right > panel.right + 0.5).length,
+                        lines: new Set(chips.map(c => Math.round(c.top))).size,
+                    };
+                });
+                expect(m.overflow, lang).toBeLessThanOrEqual(0);
+                expect(m.outside, lang).toBe(0);
+                if (lang === 'de') expect(m.lines, lang).toBeGreaterThan(1);
+            }
+        });
+    }
+
     test('the small panel: the first five to do with their kind, the rest in the overview', async ({ page }) => {
         await follow(page, { width: 1440, height: 900 }, grouped);
         const panel = page.locator('#live-panel');
@@ -1516,7 +1546,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         const ov = page.locator('#research-overview');
         await expect(ov).toHaveClass(/research-overview--sheet/);
         const filters = ov.locator('.research-overview__waiting-filters');
-        await expect(filters).toHaveCSS('overflow-x', 'auto');
+        await expect(filters).toHaveCSS('flex-wrap', 'wrap');
         await ov.locator('.research-overview__waiting-group').first().click();
         await ov.locator('.research-overview__waiting-item', { hasText: 'Dohledat sňatek 1' }).locator('.research-overview__waiting-row').click();
         const detail = ov.locator('.research-overview__waiting-detail');

@@ -16366,7 +16366,8 @@
             overflow-wrap: anywhere;
         }
         /* "Awaiting action": chips by kind, To do / Awaiting a reply, groups by place, compact rows with one detail open. */
-        .research-overview__waiting-filters { margin: 6px 0 2px; }
+        /* The kinds wrap onto further lines like the other chip rows: no chip is cut at the panel's edge (1105). */
+        .research-overview__waiting-filters { margin: 6px 0 2px; flex-wrap: wrap; overflow: visible; }
         .research-overview__filter.has-new { position: relative; }
         .research-overview__filter.has-new::after {
             content: ''; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%;
@@ -16433,9 +16434,7 @@
         @media (min-width: 641px) and (max-width: 1024px) {
             .research-overview__waiting-row { padding: 8px 4px; }
         }
-        /* Phone: the chips scroll edge to edge. */
         @media (max-width: 640px) {
-            .research-overview__waiting-filters { margin-left: -16px; margin-right: -16px; padding: 0 16px; }
             .research-overview__waiting-what { font-size: 15px; }
         }
         /* Phone held sideways: little height, one line of text per row. */
