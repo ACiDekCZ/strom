@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.24.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Jak Strom funguje přímo v aplikaci**: celá dokumentace aplikace a výzkumu, česky, anglicky, německy a polsky, je součástí jediného souboru a otevře se i bez připojení, z *Akce*, na telefonu z *Více* a z *O aplikaci Strom*. Obsah po částech (A · R · S), hledání slova nebo čísla pravidla (*R4.3*), *Rejstřík pojmů*, odkazy mezi pravidly se *Zpět* a *Na webu ↗* pro tutéž stránku na webu. Pravidlo novější než výzkum připojený ke stromu to řekne. *Prohlídka aplikace* se přestěhovala sem z *O aplikaci Strom* a její kroky popisují dnešní aplikaci.
+- **Nápověda přímo u pravidla**: nenápadný *?* v záhlavích *Fronta*, *Čeká na vyřízení* a práce agenta v *Přehledu výzkumu* a jeho malém panelu, v okně *Místa*, v *Místech ve stromu*, v panelu rozporů a v *Rozporech* osoby otevře *Jak Strom funguje* na pravidle, kterým se ta část řídí.
+- **Stejnojmenné obce na mapě**: když se jménem místa jmenuje víc obcí (Lhota), dohledání místa vezme tu nejbližší ostatním místům stromu místo prvního výsledku, pořád jedním dotazem na místo. Kontrola místa řekne, kolik obcí toho jména mapa našla. Polohy zadané ručně nebo ponechané se nikdy nepřesunou, ani dohledáním, ani sloučeným souborem.
+- **Překlad přepisu**: pramen, jehož poznámka nese překlad přepisu od výzkumu (třeba latinského nebo cyrilského zápisu z matriky), ho ukáže pod přepisem v okně pramene i na stránce osoby, sbalený jako *Překlad přepisu*. Poznámka sama zůstává, jak byla.
+- **Čeká na vyřízení**: úkol, který je u svého místa jediný, dostane záhlaví svého místa s akcemi místa jako každá skupina, místo holého řádku, který se četl jako součást místa nad ním. Čipy druhů se zalomí na druhý řádek, místo aby se uřízly na okraji panelu.
+- **Co je nového výzkumu z okna O aplikaci**: *Co je nového* výzkumu v *O aplikaci Strom* otevře stejné okno s body výzkumu, přečtenými přes jeho most, a *Všechny změny výzkumu ↗* vedou dál na přehled změn výzkumu na GitHubu.
+
 ## 3.23.0
 
 *Vydáno 5. listopadu 2026.*

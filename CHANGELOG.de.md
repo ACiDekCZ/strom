@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.24.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **So funktioniert Strom in der App**: Die ganze Dokumentation der App und der Forschung, auf Deutsch, Englisch, Tschechisch und Polnisch, ist Teil der einen Datei und öffnet sich auch ohne Verbindung, aus *Aktionen*, auf dem Telefon aus *Mehr* und aus *Über Strom*. Inhalt nach Teilen (A · R · S), Suche nach einem Wort oder einer Regelnummer (*R4.3*), ein *Begriffsverzeichnis*, Verweise zwischen Regeln mit *Zurück* und *Im Web ↗* für dieselbe Seite auf der Website. Eine Regel, die neuer ist als die mit dem Stammbaum verbundene Forschung, sagt das. Der *Rundgang durch die App* ist aus *Über Strom* hierher gezogen, und seine Schritte beschreiben die heutige App.
+- **Hilfe direkt bei der Regel**: Ein unauffälliges *?* in den Überschriften von *Warteschlange*, *Wartet auf Bearbeitung* und der Arbeit des Agenten in der *Forschungsübersicht* und ihrem kleinen Feld, im Fenster *Orte*, in *Orte im Baum*, im Feld der Widersprüche und in den *Widersprüchen* einer Person öffnet *So funktioniert Strom* bei der Regel, nach der sich dieser Teil richtet.
+- **Gleichnamige Orte auf der Karte**: Tragen mehrere Gemeinden den Namen eines Ortes (Lhota), nimmt die Suche des Ortes die, die den übrigen Orten des Stammbaums am nächsten liegt, statt des ersten Treffers, weiterhin mit einer Anfrage pro Ort. Die Prüfung des Ortes sagt, wie viele Gemeinden dieses Namens die Karte gefunden hat. Von Hand gesetzte oder beibehaltene Lagen werden nie verschoben, weder von einer Suche noch von einer zusammengeführten Datei.
+- **Übersetzung der Transkription**: Eine Quelle, deren Notiz die Übersetzung der Transkription durch die Forschung trägt (etwa eines lateinischen oder kyrillischen Kirchenbucheintrags), zeigt sie unter der Transkription in der Ansicht der Quelle und auf der Personenseite, zugeklappt als *Übersetzung der Transkription*. Die Notiz selbst bleibt, wie sie war.
+- **Wartet auf Bearbeitung**: Eine Aufgabe, die an ihrem Ort die einzige ist, bekommt die Überschrift ihres Ortes mit dessen Aktionen wie jede Gruppe, statt einer nackten Zeile, die sich wie ein Teil des Ortes darüber las. Die Chips der Arten brechen in eine zweite Zeile um, statt am Rand des Feldes abgeschnitten zu werden.
+- **Was ist neu der Forschung aus Über Strom**: *Was ist neu* der Forschung in *Über Strom* öffnet dasselbe Fenster mit den Punkten der Forschung, über ihre Brücke gelesen, und *Alle Änderungen der Forschung ↗* führt weiter zur Änderungsliste der Forschung auf GitHub.
+
 ## 3.23.0
 
 *Veröffentlicht am 5. November 2026.*

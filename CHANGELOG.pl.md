@@ -4,6 +4,17 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.24.0
+
+*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+
+- **Jak działa Strom w aplikacji**: cała dokumentacja aplikacji i badania, po polsku, angielsku, czesku i niemiecku, jest częścią jednego pliku i otwiera się także bez połączenia, z *Akcje*, na telefonie z *Więcej* i z *O aplikacji Strom*. Spis treści według części (A · R · S), wyszukiwanie słowa albo numeru reguły (*R4.3*), *Słowniczek pojęć*, odnośniki między regułami z *Wstecz* i *W sieci ↗* dla tej samej strony w internecie. Reguła nowsza niż badanie połączone z drzewem mówi o tym. *Przewodnik po aplikacji* przeniósł się tu z *O aplikacji Strom*, a jego kroki opisują dzisiejszą aplikację.
+- **Pomoc od razu przy regule**: dyskretny *?* w nagłówkach *Kolejka*, *Czeka na decyzję* i pracy agenta w *Przeglądzie badania* i jego małym panelu, w oknie *Miejsca*, w *Miejscach w drzewie*, w panelu sprzeczności i w *Sprzecznościach* osoby otwiera *Jak działa Strom* na regule, według której działa ta część.
+- **Miejscowości o tej samej nazwie na mapie**: gdy kilka miejscowości nosi nazwę miejsca (Lhota), wyszukanie miejsca bierze tę najbliższą pozostałym miejscom drzewa zamiast pierwszego wyniku, nadal jednym zapytaniem na miejsce. Sprawdzenie miejsca mówi, ile miejscowości o tej nazwie mapa znalazła. Położenia wskazane ręcznie albo zachowane nigdy się nie przesuwają, ani przez wyszukiwanie, ani przez scalony plik.
+- **Tłumaczenie transkrypcji**: źródło, którego notatka zawiera tłumaczenie transkrypcji od badania (na przykład łacińskiego albo cyrylickiego wpisu z księgi metrykalnej), pokazuje je pod transkrypcją w oknie źródła i na stronie osoby, zwinięte jako *Tłumaczenie transkrypcji*. Sama notatka zostaje taka, jaka była.
+- **Czeka na decyzję**: zadanie, które jest jedyne przy swoim miejscu, dostaje nagłówek swojego miejsca z akcjami miejsca jak każda grupa, zamiast gołego wiersza, który czytał się jak część miejsca powyżej. Chipy rodzajów zawijają się do drugiego wiersza, zamiast urywać się na krawędzi panelu.
+- **Co nowego badania z okna O aplikacji**: *Co nowego* badania w *O aplikacji Strom* otwiera to samo okno z punktami badania, odczytanymi przez jego most, a *Wszystkie zmiany badania ↗* prowadzą dalej do listy zmian badania na GitHubie.
+
 ## 3.23.0
 
 *Wydano 5 listopada 2026.*

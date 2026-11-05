@@ -2,6 +2,17 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.24.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **How Strom works in the app**: the whole documentation of the app and the research, in English, Czech, German and Polish, is part of the single file and opens without a connection, from *Actions*, *More* on a phone and *About Strom*. Contents by part (A · R · S), search by a word or a rule number (*R4.3*), a *Glossary*, links between rules with *Back*, and *On the web ↗* for the same page on the website. A rule newer than the research connected to the tree says so. The *App tour* moved here from *About Strom*, and its steps describe today's app.
+- **Help right at the rule**: a quiet *?* in the headings of *Queue*, *Awaiting action* and the agent's work in the *Research overview* and its small panel, of *Places*, *Places in the tree*, the conflicts panel and a person's *Conflicts* opens *How Strom works* at the rule that part follows.
+- **Towns of the same name on the map**: when several towns share a place's name (Lhota), finding the place takes the one nearest the tree's other places instead of the first match, still with one request per place. The place's check says how many towns of that name the map found. Locations placed by hand or kept are never moved, neither by a lookup nor by a merged file.
+- **Translation of a transcript**: a source whose note carries the research's translation of the transcript (of a Latin or Cyrillic register entry, say) shows it under the transcript in the source view and on the person page, folded as *Translation of the transcript*. The note itself stays as it was.
+- **Awaiting action**: a task that is the only one of its place gets its place's heading with the place's actions, as any group, instead of a bare row that read as part of the place above. The kind chips wrap onto a second line instead of being cut off at the panel's edge.
+- **The research's What's new from About**: the research's *What's new* in *About Strom* opens the same dialog with the research's points, read over its bridge, and *All research changes ↗* leads on to the research's changelog on GitHub.
+
 ## 3.23.0
 
 *Released 5 November 2026.*
