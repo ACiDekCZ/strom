@@ -4,7 +4,7 @@
 
 ## 3.23.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 5. listopadu 2026.*
 
 - **Mapa**: podklad mapy se načítá podle pravidel dlaždicových serverů OpenStreetMap při každém způsobu spuštění aplikace. Dlaždice posílá adresu stránky, jak pravidla žádají, a kde to nejde (aplikace uložená jako soubor, doplněk prohlížeče, který adresu odstraňuje), žádá se o dlaždice s označením aplikace; obrázky *Access blocked* od serveru se už neukazují. Když server podklad přesto odmítne, řekne to jedna zpráva v mapě a místa na ní zůstanou.
 - **Snímky a odpovědi z aplikace**: položka v *Čeká na vyřízení*, která čeká na snímky, web nebo kontrolu, se vyřídí v aplikaci. *Mám snímky* vezme vybrané soubory nebo soubory přetažené na položku, dá jim čísla, která úkol chce (podle jména souboru, po řadě nebo ručně, i stránky PDF), před odesláním je zkontroluje a ukazuje průběh; u snímku, který už je uložený, se zeptá *Nahradit*, nebo *Nechat uložený*, soubor stejný jako snímek, který výzkum už má, se nepřidá a věta řekne, se kterým, a u souboru, který výzkum pod tím číslem už měl, stojí *Už bylo uloženo*. *Odpovědět* napíše k úkolu odpověď, která zůstává jako koncept, dokud neodejde, a úkol se vrátí do fronty. Položka ukazuje, jak jsou na tom její snímky (*1 ze 2 snímků*), knihu s jejími čísly a co právě přibylo; položky jednoho archivu stojí pohromadě pod ním s jeho webem a tím, co mu ještě chybí, název archivu na jednom řádku a jeho akce pod ním, když se vedle nevejdou. Malý panel nabízí u každé položky jednu hlavní akci s vlastním dialogem a telefon dává odpověď, snímky se přidávají na počítači. Funguje to s výzkumem 1.27.0; starší výzkum bere odpověď ve svém terminálu.
