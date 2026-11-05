@@ -64,6 +64,12 @@ export interface FanViewHost {
     addParentLabel(): string;
     /** The family line chosen in the tree view (its legend row marked). */
     selectedRod?(): string | null;
+    /** The centre pinned while following the research agent (its label replaces the origin pill). */
+    pinnedCenter?(): PersonId | null;
+    /** Extra items of a person's menu (pin / release the centre while following), after re-centring. */
+    menuExtra?(id: PersonId, isCentre: boolean): Array<{ id: FanMenuItemId; label: string; run: () => void }>;
+    /** "Release" on the pinned centre's label. */
+    unpinCenter?(): void;
     /** After every redraw of the SVG (the evidence highlight is put back). */
     afterDraw(): void;
     /** The person's detail (the same dialog as elsewhere; read-only where the tree is). */
@@ -84,7 +90,7 @@ export interface FanMenuSpec {
     items: Array<{ id: FanMenuItemId; label: string; kbd?: string; run: () => void }>;
 }
 
-export type FanMenuItemId = 'recenter' | 'detail' | 'page' | 'first' | 'add';
+export type FanMenuItemId = 'recenter' | 'pin' | 'unpin' | 'detail' | 'page' | 'first' | 'add';
 
 /** §5.5: the re-centring swap. */
 const SWAP_MS = 320;
@@ -139,6 +145,10 @@ export class FanViewController {
     private shown: PersonId | null = null;
     /** How the coming focus change was asked for here (null: from elsewhere — search, ↩). */
     private pendingNav: 'back' | 'origin' | null = null;
+    /** The coming focus becomes the origin (a centre pinned or released while following). */
+    private originNext: PersonId | null = null;
+    /** "Centre: Name · Release" while the pinned centre is shown. */
+    private centrePin: HTMLElement | null = null;
     private swap: Swap | null = null;
     private swapAnims: Animation[] = [];
     private pill: HTMLButtonElement | null = null;
@@ -329,6 +339,13 @@ export class FanViewController {
         if (focus === this.shown) return false;
         const nav = this.pendingNav;
         this.pendingNav = null;
+        if (this.originNext === focus) {
+            this.originNext = null;
+            this.origin = focus;
+            this.history = [];
+            this.shown = focus;
+            return true;
+        }
         if (nav === 'origin') this.history = [];
         else if (nav !== 'back') {
             if (this.history[this.history.length - 1] === focus) this.history.pop();
@@ -373,6 +390,39 @@ export class FanViewController {
 
     getOrigin(): PersonId | null {
         return this.origin;
+    }
+
+    /**
+     * Re-centre on a person who becomes the origin (the way back starts
+     * anew): a centre pinned or released while following the agent.
+     */
+    recenterAsOrigin(id: PersonId): void {
+        if (!this.host.active()) return;
+        if (id === this.host.focusId()) {
+            this.origin = id;
+            this.history = [];
+            this.updatePill();
+            if (this.model && this.chart) this.draw();
+            return;
+        }
+        if (this.busy()) return;
+        this.originNext = id;
+        this.beginSwap('zoom', this.pointOfPerson(id) ?? undefined);
+        this.host.setFocus(id);
+    }
+
+    /** The pill or the pinned centre's label again (the pin changed without a new focus). */
+    refreshPill(): void {
+        this.updatePill();
+    }
+
+    /** The middle of a person's first sector in stage px (null: not drawn). */
+    pointOfPerson(id: PersonId): FanZoomPoint | null {
+        const m = this.model;
+        if (!m) return null;
+        if (m.focus.id === id) return this.sectorPoint('f');
+        const s = m.sectors.find(x => x.person?.id === id && !x.repeatOf) ?? m.desc.find(x => x.person?.id === id && !x.repeatOfKey);
+        return s ? this.sectorPoint(s.key) : null;
     }
 
     private busy(): boolean {
@@ -495,7 +545,9 @@ export class FanViewController {
         const focus = this.host.focusId();
         const show = !!origin && !!focus && origin !== focus && this.host.active();
         if (this.pillTimer) { clearTimeout(this.pillTimer); this.pillTimer = null; }
-        if (show) {
+        const pinned = this.host.pinnedCenter?.() ?? null;
+        this.updateCentrePin(!!pinned && pinned === focus && this.host.active() ? pinned : null);
+        if (show && !(pinned && pinned === focus)) {
             const p = this.host.data().persons[origin!];
             const name = p ? shownNameFull(p) : '';
             const nameEl = pill.querySelector<HTMLElement>('.fan-origin-name');
@@ -515,6 +567,39 @@ export class FanViewController {
             pill.hidden = true;
             pill.classList.remove('is-leaving');
         }, FADE_MS);
+    }
+
+    /** "Centre: Name · Release" at the top left while the pinned centre is shown (null: none). */
+    private updateCentrePin(id: PersonId | null): void {
+        const stage = this.stage();
+        if (!id || !stage) {
+            if (this.centrePin) this.centrePin.hidden = true;
+            return;
+        }
+        if (!this.centrePin || !stage.contains(this.centrePin)) {
+            const box = document.createElement('div');
+            box.className = 'fan-center-pin';
+            box.id = 'fan-center-pin';
+            box.setAttribute('role', 'status');
+            const label = document.createElement('span');
+            label.className = 'fan-center-pin-label';
+            const name = document.createElement('b');
+            name.className = 'fan-center-pin-name';
+            const release = document.createElement('button');
+            release.type = 'button';
+            release.className = 'fan-center-pin-release';
+            release.addEventListener('click', () => this.host.unpinCenter?.());
+            box.append(label, name, release);
+            stage.appendChild(box);
+            this.centrePin = box;
+        }
+        const box = this.centrePin;
+        const p = this.host.data().persons[id];
+        box.querySelector('.fan-center-pin-label')!.textContent = strings.fan.centerLabel;
+        box.querySelector('.fan-center-pin-name')!.textContent = p ? shownNameFull(p) : '';
+        box.querySelector('.fan-center-pin-release')!.textContent = strings.fan.release;
+        box.hidden = false;
+        this.placePill(box);
     }
 
     /**
@@ -538,8 +623,8 @@ export class FanViewController {
      * followed research's card and of the legend chip when they stand at the
      * top of the stage: narrower when one is to its right, otherwise below it.
      */
-    private placePill(): void {
-        const pill = this.pill, stage = this.stage();
+    private placePill(el?: HTMLElement): void {
+        const pill = el ?? this.pill, stage = this.stage();
         if (!pill || pill.hidden || !stage) return;
         pill.style.top = '';
         pill.style.maxWidth = '';
@@ -570,7 +655,11 @@ export class FanViewController {
         const pill = this.pill;
         if (!pill) return;
         pill.addEventListener('click', () => this.goOrigin());
-        const replace = () => { this.placeChip(); if (!pill.hidden) this.placePill(); };
+        const replace = () => {
+            this.placeChip();
+            if (!pill.hidden) this.placePill();
+            if (this.centrePin && !this.centrePin.hidden) this.placePill(this.centrePin);
+        };
         if (typeof MutationObserver === 'function') new MutationObserver(replace).observe(document.body, { childList: true });
         if (typeof ResizeObserver === 'function') {
             const stage = this.stage();
@@ -603,6 +692,7 @@ export class FanViewController {
             if (!p) return null;
             const items: FanMenuSpec['items'] = [];
             if (kind !== 'focus') items.push({ id: 'recenter', label: S.recenter, kbd: 'Enter', run: () => this.recenter(pid, this.sectorPoint(key) ?? undefined) });
+            items.push(...(this.host.menuExtra?.(pid, kind === 'focus') ?? []));
             items.push({ id: 'detail', label: S.personDetail, run: () => this.host.personDetail(pid) });
             items.push({ id: 'page', label: S.personPage, run: () => this.host.personPage(pid) });
             const first = el.getAttribute('data-fan-repeat-of');
@@ -763,7 +853,7 @@ export class FanViewController {
     }
 
     /** A sector's middle in stage px (null: no such sector). */
-    private sectorPoint(key: string): FanZoomPoint | null {
+    sectorPoint(key: string): FanZoomPoint | null {
         const zoom = this.zoom;
         if (!zoom) return null;
         const vb = zoom.viewBox();

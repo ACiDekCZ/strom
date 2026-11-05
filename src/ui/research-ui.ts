@@ -26,6 +26,8 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { sessionTone } from '../live-follow-targets.js';
+import { hasFollowPrefs, resetFollowPrefs, restoreFollowPrefs } from '../live-follow-prefs.js';
 import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
 import { StromData, TreeId, PersonId, SourceExcerpt } from '../types.js';
@@ -1144,6 +1146,13 @@ export function waitsOnUser(on: string | undefined): boolean {
  * the bottom bar (its height and the 8px gap above it; 0 without a strip, or
  * when the panel is a card at the top). The tree's pills stand on top of it.
  */
+/** A session's number in "At work": a 20px circle in the session's colour. */
+export function workingNumberBadge(n: number): HTMLElement {
+    const badge = el('span', `live-working-num follow-${sessionTone(n)}`, String(n));
+    badge.title = strings.live.sessionN(n);
+    return badge;
+}
+
 function publishLiveStrip(): void {
     const panel = document.getElementById('live-panel');
     const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
@@ -3250,12 +3259,23 @@ export const researchUiMethods = uiModule({
     },
 
     /** Restore defaults: every choice goes (no question), with Undo for a while. Nothing chosen: nothing happens. */
-    resetLiveSections(): void {
-        if (!hasSectionPrefs()) return;
-        const before = resetSectionPrefs();
+    resetLiveSections(withFollow = false): void {
+        const follow = withFollow && hasFollowPrefs();
+        if (!hasSectionPrefs() && !follow) return;
+        // The choices of following first: the sections' reset redraws Settings.
+        const followBefore = follow ? resetFollowPrefs() : null;
+        const before = hasSectionPrefs() ? resetSectionPrefs() : null;
+        if (!before) this.renderResearchFollowSettings();
         this.showToast(strings.live.restoredToast, 6000, {
             kind: 'live-sections',
-            action: { label: strings.undo.undo, run: () => restoreSectionPrefs(before) },
+            action: {
+                label: strings.undo.undo,
+                run: () => {
+                    if (followBefore) restoreFollowPrefs(followBefore);
+                    if (before) restoreSectionPrefs(before);
+                    else this.renderResearchFollowSettings();
+                },
+            },
         });
     },
 
@@ -3283,8 +3303,14 @@ export const researchUiMethods = uiModule({
         const working = el('ul', 'live-panel-list live-working');
         host.appendChild(working);
         if (s.working.length === 0) working.appendChild(el('li', 'live-empty', r.nobodyWorking));
-        for (const w of s.working) {
+        s.working.forEach((w, i) => {
             const li = el('li');
+            // Two or more runs while following: the session's number in its colour (as in the fan).
+            const num = this.liveWorkingNumber(i);
+            if (num !== null) {
+                li.classList.add('has-num');
+                li.appendChild(workingNumberBadge(num));
+            }
             li.appendChild(el('strong', undefined, w.who));
             if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
             // Whom it works on, a click shows them (focused when the tree on screen lacks them).
@@ -3308,7 +3334,7 @@ export const researchUiMethods = uiModule({
             const since = timeEl(w.since, 'sincefor');
             if (since) li.appendChild(since);
             working.appendChild(li);
-        }
+        });
     },
 
     /**
@@ -3476,6 +3502,9 @@ export const researchUiMethods = uiModule({
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
         actions.appendChild(action);
         panel.appendChild(head);
+        // Following on: "Follow in: Family / Fan / Map" right under the head (also folded; a phone has it as the strip's second row).
+        const followView = phone ? null : this.liveFollowViewRow('panel');
+        if (followView) panel.appendChild(followView);
         // Which tree is followed now (after a switch): under the head, above "Elsewhere".
         if (!panel.hidden) appendFollowNote(panel, s);
         if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version, s.busy);
@@ -3510,6 +3539,9 @@ export const researchUiMethods = uiModule({
             const phoneFollow = phone ? this.liveFollowButton('phone') : null;
             if (phoneFollow) summary.appendChild(phoneFollow);
             if (summary.childElementCount > 0) panel.appendChild(summary);
+            // The phone strip's second row: "Follow in" while following is on.
+            const phoneView = phone ? this.liveFollowViewRow('phone') : null;
+            if (phoneView) panel.appendChild(phoneView);
         }
 
         const body = el('div', 'live-panel-body');

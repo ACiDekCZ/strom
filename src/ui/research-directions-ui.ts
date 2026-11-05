@@ -17,7 +17,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveFold, LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, liveSession, pausedText, timeEl, workingNumberBadge } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
     orderDirections, withPendingOrder, moveInOrder, dropInOrder, sameOrder, DirectionOrderWriter, DirectionMove, withBusyRetry,
@@ -524,8 +524,15 @@ export const researchDirectionsMethods = uiModule({
         row.appendChild(glyph);
         const main = el('span', 'live-line__main');
         main.appendChild(el('span', 'live-line__name', name));
+        const working = liveSession()?.working ?? [];
         for (const w of g.workers) {
-            if (w.task) main.appendChild(el('span', 'live-line__task', w.task));
+            // Two or more runs while following: each run's session number in its colour (as in the fan).
+            const num = this.liveWorkingNumber(working.indexOf(w));
+            if (w.task || num !== null) {
+                const task = main.appendChild(el('span', 'live-line__task'));
+                if (num !== null) task.appendChild(workingNumberBadge(num));
+                if (w.task) task.append(w.task);
+            }
             const meta = el('span', 'live-line__meta');
             const person = personByRefn(w.person);
             const parts: (string | HTMLElement)[] = [];

@@ -7,9 +7,13 @@
  *     (zoom kept, 0.8 when too far out to read); at most one jump per 8 s,
  *     the latest target wins; never while a dialog, a menu, a card tooltip,
  *     typing or a highlight mode is up (then later);
- *   - the user moving the tree, focusing someone else or switching the view
- *     pauses it (a pill: Back to the agent · ×); 20 s without touching the
- *     tree it comes back by itself.
+ *   - the user moving the tree, focusing someone else or switching to the
+ *     descendants or the timeline pauses it (a pill: Back to the agent · ×);
+ *     20 s without touching the tree it comes back by itself.
+ * Following runs in the family view, the fan or the map ("Follow in", the
+ * view tabs): switching among these keeps it on. In the fan nothing moves:
+ * the people worked on are marked (fan-follow-ui.ts), the fan centres on the
+ * person focused before following started (or a pinned or chosen one).
  * The switch is remembered per device; ending the live following keeps it.
  */
 
@@ -17,9 +21,14 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
-import { PersonId } from '../types.js';
+import { PersonId, ViewMode, LAST_FOCUSED } from '../types.js';
 import { uiModule } from './module.js';
 import { el, liveSession } from './research-ui.js';
+import { segmentArrowTarget } from './live-section-edit.js';
+import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson } from '../live-follow-prefs.js';
+import {
+    FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
+} from '../live-follow-targets.js';
 
 const FOLLOW_KEY = 'strom-live-follow';
 /** The far-out zoom where cards lose their text, and the zoom a jump then takes. */
@@ -57,6 +66,41 @@ let jumpTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let listening = false;
 
+/** One run of following (on, live, this tree); gone when following ends. */
+interface FollowSession {
+    /** The view following runs in (or last ran in). */
+    view: FollowView;
+    /** The focus when following started; the user focusing someone in the family view replaces it. */
+    focusBefore: PersonId | null;
+    /** The fan's centre pinned from a sector's menu. */
+    fanPinned: PersonId | null;
+    /** Panning the map by hand (the map's work marks, a later part). */
+    mapPaused: boolean;
+    /** The people worked on before (memory only; drawn by the fan and the map later). */
+    trail: TrailEntry[];
+    /** Row of working[] → its last person (the signal only on a change). */
+    lastTargets: Map<number, PersonId>;
+}
+
+let session: FollowSession | null = null;
+/** The view mode last seen, to tell a switch of view from a move inside one. */
+let seenMode: ViewMode | null = null;
+
+const isFollowView = (m: ViewMode): m is FollowView => (FOLLOW_VIEWS as readonly string[]).includes(m);
+
+function personOfRefn(): (refn: string) => PersonId | null {
+    const persons = Object.values(DataManager.getData().persons);
+    return (refn: string) => persons.find(x => x.refn === refn)?.id ?? null;
+}
+
+/** The tree's default person: the one set for it, else the first one. */
+function defaultPerson(): PersonId | null {
+    const d = DataManager.getData();
+    const set = d.defaultPersonId;
+    if (set && set !== LAST_FOCUSED && d.persons[set]) return set;
+    return (Object.keys(d.persons)[0] as PersonId | undefined) ?? null;
+}
+
 /** The run the tree follows: the first one at work on a person of this tree. */
 function followTarget(): PersonId | null {
     const s = liveSession();
@@ -74,6 +118,56 @@ function followTarget(): PersonId | null {
 function followActive(): boolean {
     const s = liveSession();
     return followOn && !!s && !s.ended && s.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode();
+}
+
+/** The session of following, started when following applies, dropped when it does not. */
+function followSession(): FollowSession | null {
+    if (!followActive()) {
+        session = null;
+        return null;
+    }
+    if (!session) {
+        session = {
+            view: getFollowView(), focusBefore: TreeRenderer.getFocusPersonId(), fanPinned: null,
+            mapPaused: false, trail: [], lastTargets: new Map(),
+        };
+        seenMode = TreeRenderer.getViewMode();
+    }
+    return session;
+}
+
+/** Every person worked on now, by session (none while following does not apply). */
+export function currentFollowTargets(): FollowTarget[] {
+    const s = liveSession();
+    if (!followActive() || !s) return [];
+    return followTargets(s.working, personOfRefn());
+}
+
+/** Session numbers are shown (two or more runs at work). */
+export function followNumbered(): boolean {
+    const s = liveSession();
+    return !!s && followActive() && sessionNumbers(s.working).numbered;
+}
+
+/** The pinned fan centre (null: none, or not following). */
+export function followPinned(): PersonId | null {
+    return followActive() ? session?.fanPinned ?? null : null;
+}
+
+/** Where the fan centres while following (null: not following). */
+export function followFanCenter(): PersonId | null {
+    const fs = followSession();
+    if (!fs) return null;
+    const persons = DataManager.getData().persons;
+    const treeId = DataManager.getCurrentTreeId();
+    return fanCenter({
+        pinned: fs.fanPinned,
+        setting: getFanCenterSetting(),
+        chosen: treeId ? getFanPerson(treeId) : null,
+        defaultPerson: defaultPerson(),
+        focusBefore: fs.focusBefore,
+        exists: id => !!persons[id],
+    });
 }
 
 /** Something the user is in the middle of: a jump would pull the tree from under it. */
@@ -113,10 +207,155 @@ export const liveFollowMethods = uiModule({
         storeOn(on);
         pausedByUser = false;
         lastTarget = null;
+        session = null;
         this.clearLiveFollowTimers();
+        const fs = on ? followSession() : null;
+        if (fs) {
+            fs.lastTargets = changedTargets(new Map(), currentFollowTargets()).next;
+            if (fs.view !== 'family' && TreeRenderer.getViewMode() !== fs.view) this.switchFollowView(fs.view);
+        }
         this.renderLiveFollowPill();
         this.renderLivePanel();
+        this.refreshFollowMarks(new Set());
         if (on) this.followJump(true);
+    },
+
+    /** The view following runs in now (null: not following). */
+    liveFollowView(): FollowView | null {
+        return followSession()?.view ?? null;
+    },
+
+    /** "Follow in": run following in another view (no pause; a jump there at once). */
+    setLiveFollowView(view: FollowView): void {
+        const fs = followSession();
+        if (!fs) return;
+        if (TreeRenderer.getViewMode() === view) {
+            fs.view = view;
+            this.renderLivePanel();
+            return;
+        }
+        this.switchFollowView(view);
+    },
+
+    /** Switch the view for following (its own switch: never counted as the user taking over). */
+    switchFollowView(view: FollowView): void {
+        const fs = followSession();
+        if (!fs) return;
+        fs.view = view;
+        seenMode = view;
+        lastTarget = null;
+        if (view === 'family') {
+            // Paused or nothing to jump to: the family view all the same.
+            if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.setViewMode('family');
+            this.followJump(true);
+        } else {
+            TreeRenderer.setViewMode(view);
+        }
+        this.renderLivePanel();
+    },
+
+    /**
+     * "Follow in: Family / Fan / Map" (the small panel, the overview, the
+     * phone strip): only while following is on. Radios, an arrow key moves
+     * and chooses at once.
+     */
+    liveFollowViewRow(where: 'panel' | 'overview' | 'phone'): HTMLElement | null {
+        const s = liveSession();
+        if (!followOn || !s || s.ended || DataManager.isViewMode()) return null;
+        const fs = followSession();
+        if (!fs) return null;
+        const row = el('div', `live-follow-view live-follow-view--${where}`);
+        row.setAttribute('role', 'radiogroup');
+        const label = el('span', 'live-follow-view__label', strings.live.followIn);
+        label.id = `live-follow-view-l-${where}`;
+        row.setAttribute('aria-labelledby', label.id);
+        const seg = el('div', 'live-follow-view__seg');
+        const V = strings.viewModeSwitch;
+        const choose = (v: FollowView, focus: boolean): void => {
+            this.setLiveFollowView(v);
+            // The panel is drawn anew: the focus goes to the same choice there.
+            if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(`.live-follow-view--${where} [data-view="${v}"]`)?.focus());
+        };
+        FOLLOW_VIEWS.forEach((v, i) => {
+            const b = el('button', 'live-follow-view__opt', V[v]);
+            b.type = 'button';
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', String(fs.view === v));
+            b.tabIndex = fs.view === v ? 0 : -1;
+            b.dataset.view = v;
+            b.onclick = () => choose(v, false);
+            b.onkeydown = (e) => {
+                const t = segmentArrowTarget(e.key, i, FOLLOW_VIEWS.length);
+                if (t === null) return;
+                e.preventDefault();
+                choose(FOLLOW_VIEWS[t], true);
+            };
+            seg.appendChild(b);
+        });
+        row.append(label, seg);
+        return row;
+    },
+
+    /**
+     * The session number of a row of "At work" (1, 2, … in the colours of
+     * the marks in the fan): only while following and two or more rows run;
+     * a paused row has none.
+     */
+    liveWorkingNumber(index: number): number | null {
+        const s = liveSession();
+        if (!s || !followActive()) return null;
+        const { numbers, numbered } = sessionNumbers(s.working);
+        return numbered ? numbers[index] ?? null : null;
+    },
+
+    /** Where the fan centres when following opens it (null: not following, the fan's own rule). */
+    liveFollowFanCenter(): PersonId | null {
+        return followFanCenter();
+    },
+
+    /** The pinned fan centre (null: none). */
+    liveFollowPinned(): PersonId | null {
+        return followPinned();
+    },
+
+    /** Pin a person as the fan's centre (the sector menu); re-centre there. */
+    pinFanCenter(id: PersonId): void {
+        const fs = followSession();
+        if (!fs) return;
+        fs.fanPinned = id;
+        TreeRenderer.getFanView()?.recenterAsOrigin(id);
+    },
+
+    /** Release the pinned centre: back to the centre the rule gives. */
+    unpinFanCenter(): void {
+        const fs = followSession();
+        if (!fs) return;
+        fs.fanPinned = null;
+        const centre = followFanCenter();
+        if (centre) TreeRenderer.getFanView()?.recenterAsOrigin(centre);
+    },
+
+    /**
+     * The people worked on changed (or following started, or the view): note
+     * the rows whose person changed (they signal) and mark the fan again.
+     * `pulse`: the rows to signal (default: those that changed now).
+     */
+    refreshFollowMarks(pulse?: Set<number>): void {
+        const fs = followActive() ? session : null;
+        let changed = pulse ?? new Set<number>();
+        if (fs) {
+            const targets = currentFollowTargets();
+            const diff = changedTargets(fs.lastTargets, targets);
+            if (!pulse) changed = diff.changed;
+            const now = Date.now();
+            for (const row of diff.changed) {
+                const prev = fs.lastTargets.get(row);
+                const t = targets.find(x => x.row === row);
+                if (prev && t) fs.trail = pushTrail(fs.trail, { personId: prev, placeKey: null, session: t.session, at: now }, now);
+            }
+            fs.lastTargets = diff.next;
+        }
+        if (TreeRenderer.getViewMode() === 'fan') this.applyFanFollowMarks(changed);
     },
 
     clearLiveFollowTimers(): void {
@@ -129,17 +368,51 @@ export const liveFollowMethods = uiModule({
     /** A status, a change, a redraw: jump when the target moved on (or the user moved away). */
     syncLiveFollow(): void {
         this.listenForLiveFollow();
-        if (!followActive()) {
+        if (!followSession()) {
             this.renderLiveFollowPill();
+            this.refreshFollowMarks();
             return;
         }
-        // The user focused someone else or left the family view since the last jump.
-        if (!pausedByUser && lastTarget
-            && (TreeRenderer.getFocusPersonId() !== lastTarget || TreeRenderer.getViewMode() !== 'family')) {
-            this.pauseLiveFollow();
-            return;
-        }
+        if (this.followViewChanged()) return;
+        this.refreshFollowMarks();
+        // The user focused someone else in the family view since the last jump.
+        if (this.followMovedAway()) return;
         if (!pausedByUser) this.followJump(false);
+    },
+
+    /**
+     * The view mode changed since last seen: the family view, the fan or the
+     * map take following along (no pause, a jump there at once); the
+     * descendants or the timeline pause it. True when it changed.
+     */
+    followViewChanged(): boolean {
+        const fs = followSession();
+        const mode = TreeRenderer.getViewMode();
+        if (!fs || mode === seenMode) return false;
+        seenMode = mode;
+        if (!isFollowView(mode)) {
+            this.pauseLiveFollow();
+            return true;
+        }
+        fs.view = mode;
+        lastTarget = null;
+        this.renderLivePanel();
+        this.refreshFollowMarks(new Set());
+        if (!pausedByUser) this.followJump(true);
+        return true;
+    },
+
+    /** In the family view the user focused someone else than the last jump did: pause (true). */
+    followMovedAway(): boolean {
+        const fs = followSession();
+        if (!fs || !lastTarget || TreeRenderer.getViewMode() !== 'family') return false;
+        const focus = TreeRenderer.getFocusPersonId();
+        if (!focus || focus === lastTarget) return false;
+        // The user's own focus: the fan centres on it from now on.
+        fs.focusBefore = focus;
+        if (pausedByUser) return false;
+        this.pauseLiveFollow();
+        return true;
     },
 
     /** Jump to the target now if nothing stands in the way; else later. `now`: skip the 8 s brake. */
@@ -147,6 +420,8 @@ export const liveFollowMethods = uiModule({
         if (jumpTimer) clearTimeout(jumpTimer);
         jumpTimer = null;
         if (!followActive() || pausedByUser) return;
+        // The fan and the map do not move with the agent: their marks follow (refreshFollowMarks).
+        if ((followSession()?.view ?? 'family') !== 'family') return;
         const target = followTarget();
         if (!target) return;
         const there = target === lastTarget && TreeRenderer.getFocusPersonId() === target && TreeRenderer.getViewMode() === 'family';
@@ -166,7 +441,29 @@ export const liveFollowMethods = uiModule({
         const scale = ZoomPan.getScale() < ZOOM_FAR ? ZOOM_READABLE : ZoomPan.getScale();
         const glide = (id: PersonId): void => { ZoomPan.glideToPerson(id, scale); };
         if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.presetViewMode('family');
+        seenMode = 'family';
         TreeRenderer.setFocus(target, false, glide);
+    },
+
+    /**
+     * A label of a person worked on outside the fan: the family view, that
+     * person focused and glided to (no brake). The fan's depth stays.
+     */
+    followToPerson(id: PersonId): void {
+        const fs = followSession();
+        if (!fs || !DataManager.getPerson(id)) return;
+        fs.view = 'family';
+        pausedByUser = false;
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = null;
+        lastTarget = id;
+        lastJumpAt = Date.now();
+        const scale = ZoomPan.getScale() < ZOOM_FAR ? ZOOM_READABLE : ZoomPan.getScale();
+        TreeRenderer.presetViewMode('family');
+        seenMode = 'family';
+        TreeRenderer.setFocus(id, false, (pid: PersonId) => { ZoomPan.glideToPerson(pid, scale); });
+        this.renderLiveFollowPill();
+        this.renderLivePanel();
     },
 
     /** The user took over: pause (the pill), come back after 20 s without touching the tree. */
@@ -184,7 +481,7 @@ export const liveFollowMethods = uiModule({
         }
     },
 
-    /** Back to the agent: now, without the brake. */
+    /** Back to the agent: now, without the brake, in the view following last ran in. */
     resumeLiveFollow(): void {
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = null;
@@ -192,6 +489,11 @@ export const liveFollowMethods = uiModule({
         lastTarget = null;
         this.renderLiveFollowPill();
         this.renderLivePanel();
+        const view = followSession()?.view ?? 'family';
+        if (view !== 'family' && TreeRenderer.getViewMode() !== view) {
+            this.switchFollowView(view);
+            return;
+        }
         this.followJump(true);
     },
 
@@ -229,6 +531,11 @@ export const liveFollowMethods = uiModule({
         listening = true;
         const touched = (e: Event): void => {
             if (!followActive()) return;
+            // The fan and the map: moving them by hand does not pause (only keeps a pause going).
+            if (TreeRenderer.getViewMode() === 'fan' || TreeRenderer.getViewMode() === 'map') {
+                if (pausedByUser) this.pauseLiveFollow();
+                return;
+            }
             const target = e.target as HTMLElement | null;
             // A press on a card or a control opens something (that holds the jump); on the canvas it drags.
             if (e.type !== 'wheel' && target?.closest('.person-card, button, a, input, .context-menu')) {
@@ -244,12 +551,13 @@ export const liveFollowMethods = uiModule({
         // Someone else focused or another view since the last jump (search,
         // Focus in the menu, the view tabs): the user has the tree.
         const movedAway = (): void => {
-            if (!followActive() || pausedByUser || !lastTarget) return;
-            if (TreeRenderer.getFocusPersonId() !== lastTarget || TreeRenderer.getViewMode() !== 'family') this.pauseLiveFollow();
+            if (!followSession()) return;
+            if (this.followViewChanged()) return;
+            this.followMovedAway();
         };
         ZoomPan.onChange(movedAway);
         // A press on a card holds the jump; once it drags past the threshold it is a pan like one from the canvas (T38).
-        ZoomPan.onCardPanStart(() => { if (followActive()) this.pauseLiveFollow(); });
+        ZoomPan.onCardPanStart(() => { if (followActive() && TreeRenderer.getViewMode() === 'family') this.pauseLiveFollow(); });
         new MutationObserver(movedAway).observe(document.body, { attributes: true, attributeFilter: ['data-view-mode'] });
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'f' && e.key !== 'F') return;

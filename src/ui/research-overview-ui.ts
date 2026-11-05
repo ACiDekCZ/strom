@@ -439,6 +439,10 @@ export const researchOverviewMethods = uiModule({
         head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
         head.appendChild(close);
         root.appendChild(head);
+        // Following on: "Follow in: Family / Fan / Map" under the head (in the phone's sheet too: a phone
+        // held sideways keeps the strip to one row and has it only here).
+        const followView = this.liveFollowViewRow('overview');
+        if (followView) root.appendChild(followView);
 
         const body = el('div', 'research-overview__body');
         root.appendChild(body);

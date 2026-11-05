@@ -36,6 +36,8 @@ const LINE_GED = GED.replace(/\/Fíšek\/|\/Fíšková\//g, '/Brandvold-Ekhammar
 
 interface Bridge {
     person: string; paused: boolean;
+    /** More runs at work after the first one (two or more sessions). */
+    more: Array<{ person: string; task: string; paused?: boolean }>;
     /** The asks of the reconnect chain so far (/events, /status): each comes after the one before it was read. */
     chain: number;
 }
@@ -54,12 +56,14 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
         if (on) localStorage.setItem('strom-live-follow', '1');
     }, [LINKS, o.gap ?? 1200, o.idle ?? 2500, !!o.on, !!o.quick] as const);
-    const bridge: Bridge = { person: 'P0012', paused: false, chain: 0 };
+    const bridge: Bridge = { person: 'P0012', paused: false, more: [], chain: 0 };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 5,
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 60_000).toISOString(), task: 'T0101 Matriky',
             ...(bridge.person ? { person: bridge.person } : {}),
-            ...(bridge.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) }],
+            ...(bridge.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) },
+        ...bridge.more.map((m, i) => ({ who: `agent-${i + 2}`, since: new Date(Date.now() - 30_000).toISOString(), task: m.task, person: m.person,
+            ...(m.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) }))],
         waiting: [], queue: [], links: LINKS,
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
@@ -415,9 +419,12 @@ test.describe('follow the agent in the tree', () => {
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
         await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
-        // Re-centred on the father (it pauses following): the original person pill comes, and the paused pill.
+        // Re-centred on the father: the original person pill comes; following goes on in the fan (spec 043).
         await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
         await expect(page.locator('#fan-origin-pill')).toBeVisible();
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        // Paused (as from the family view): the paused pill too.
+        await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
         await expect(page.locator('#live-follow-pill')).toBeVisible();
         const clash = (): Promise<string[]> => page.evaluate(() => {
             const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
@@ -477,6 +484,9 @@ test.describe('follow the agent in the tree', () => {
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
         await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+        // A tap in the fan does not pause following (spec 043): paused as from the family view.
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
         await expect(page.locator('#live-follow-pill')).toBeVisible();
         // In the fan the card stands lower and is fitted to that room.
         await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('live-panel')!.getBoundingClientRect().top))).toBeGreaterThan(90);
@@ -587,8 +597,10 @@ test.describe('follow the agent in the tree', () => {
             await expect.poll(() => focusRefn(page)).toBe('P0012');
             await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
             await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
-            await expect(page.locator('#live-follow-pill')).toBeVisible();
             await expect(page.locator('#fan-origin-pill')).toBeVisible();
+            // A tap in the fan does not pause following (spec 043): paused as from the family view.
+            await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+            await expect(page.locator('#live-follow-pill')).toBeVisible();
             const layout = (): Promise<string[]> => page.evaluate(() => {
                 const rect = (sel: string) => {
                     const el = document.querySelector(sel);
@@ -627,6 +639,246 @@ test.describe('follow the agent in the tree', () => {
             // Tablet held sideways and upright keep the full pill.
             await page.setViewportSize({ width: 390, height: 844 });
             await expect(page.locator('#live-follow-pill .evidence-pill-label')).toBeVisible();
+        });
+    });
+});
+
+test.describe('follow the agent in the fan (spec 043)', () => {
+    const view = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.getViewMode());
+    const followView = (page: Page) => page.evaluate(() => window.Strom.UI.liveFollowView());
+    const sector = (page: Page, id: string) => page.locator(`#fan-chart .fan-sector[data-fan-person="${id}"]`).first();
+    const centre = (page: Page) => page.evaluate(() => document.querySelector('#fan-chart [data-fan-key="f"]')?.getAttribute('data-fan-person') ?? null);
+    /** Count the signals (pulses) drawn in the fan from now on (each drawing of the marks that starts one). */
+    const countPulses = (page: Page) => page.evaluate(() => {
+        const w = window as unknown as { __pulses: number; __pulseWrap?: boolean };
+        w.__pulses = 0;
+        if (w.__pulseWrap) return;
+        w.__pulseWrap = true;
+        const ui = window.Strom.UI as unknown as { applyFanFollowMarks: (p?: Set<number>) => void };
+        const draw = ui.applyFanFollowMarks;
+        ui.applyFanFollowMarks = function (this: unknown, p?: Set<number>) {
+            draw.call(this, p);
+            if (document.querySelector('#fan-chart .fan-follow-layer .fan-work-glow.is-pulse')) w.__pulses++;
+        };
+    });
+    const pulses = (page: Page) => page.evaluate(() => (window as unknown as { __pulses: number }).__pulses);
+
+    test('the family view follows as before; "Follow in" switches to the fan without a pause, arrow keys choose; gone when following is off', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const row = page.locator('#live-panel .live-follow-view');
+        await expect(row).toBeVisible();
+        await expect(row).toHaveAttribute('role', 'radiogroup');
+        await expect(row.locator('.live-follow-view__label')).toHaveText('Follow in');
+        await expect(row.locator('[role="radio"]')).toHaveText(['Family', 'Fan', 'Map']);
+        await expect(row.locator('[aria-checked="true"]')).toHaveText('Family');
+        await row.locator('[role="radio"]', { hasText: 'Fan' }).click();
+        await expect.poll(() => view(page)).toBe('fan');
+        expect(await followView(page)).toBe('fan');
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#live-panel .live-follow-view [aria-checked="true"]')).toHaveText('Fan');
+        // The person worked on is marked in the fan.
+        // The fan centres on the person focused before following started (the person the tree opened on),
+        // not on the one worked on: Jan is not drawn there, a chip names him.
+        const before = await page.evaluate(() => window.Strom.UI.liveFollowFanCenter());
+        expect(before).not.toBe(await idOf(page, 'P0012'));
+        await expect.poll(() => centre(page)).toBe(before);
+        await expect(page.locator('.fan-follow-overlay .fan-follow-chip')).toContainText('Jan');
+        // Arrow keys: the choice moves and is made at once, the focus stays on the row.
+        await page.locator('#live-panel .live-follow-view [aria-checked="true"]').focus();
+        await page.keyboard.press('ArrowLeft');
+        await expect.poll(() => view(page)).toBe('family');
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await expect(page.locator('#live-panel .live-follow-view [aria-checked="true"]')).toBeFocused();
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        // The overview has it too.
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await expect(page.locator('.live-follow-view--overview')).toBeVisible();
+        await page.keyboard.press('Escape');
+        // Off: no row.
+        await btn(page).click();
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#live-panel .live-follow-view')).toHaveCount(0);
+    });
+
+    test('in the fan a tap on a sector keeps following; the descendants view pauses it; Back to the agent returns to the fan', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        expect(await followView(page)).toBe('fan');
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        await page.locator('#live-follow-pill .live-follow-back').click();
+        await expect.poll(() => view(page)).toBe('fan');
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+    });
+
+    test('a session moving to another person signals once; the same person again does not; two sessions get their numbers', async ({ page }) => {
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        const jan = await idOf(page, 'P0012'), josef = await idOf(page, 'P0001'), anna = await idOf(page, 'P0002');
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), jan);
+        await expect.poll(() => centre(page)).toBe(jan);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await countPulses(page);
+        bridge.person = 'P0001';
+        await nextStatus(bridge);
+        await expect(sector(page, josef)).toHaveClass(/is-working/);
+        await expect.poll(() => pulses(page)).toBe(1);
+        await nextStatus(bridge);
+        expect(await pulses(page)).toBe(1);
+        // No numbers with one session.
+        await expect(page.locator('#fan-chart .fan-work-num')).toHaveCount(0);
+        await expect(page.locator('#live-panel .live-working-num')).toHaveCount(0);
+        bridge.more = [{ person: 'P0002', task: 'T0102 Sčítání' }];
+        await nextStatus(bridge);
+        await expect(sector(page, anna)).toHaveClass(/is-working/);
+        await expect(page.locator('#fan-chart .fan-work-num')).toHaveCount(2);
+        await expect(page.locator('#fan-chart .fan-work-num.follow-primary')).toHaveCount(1);
+        await expect(page.locator('#fan-chart .fan-work-num.follow-accent')).toHaveCount(1);
+        await expect(page.locator('#live-panel .live-working-num')).toHaveText(['1', '2']);
+        // Reduced motion: marked, no signal.
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await countPulses(page);
+        bridge.person = 'P0003';
+        await nextStatus(bridge);
+        await expect(sector(page, await idOf(page, 'P0003'))).toHaveClass(/is-working/);
+        expect(await pulses(page)).toBe(0);
+    });
+
+    test('the sector menu pins the centre; Release returns to the centre the rule gives', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        const before = await centre(page);
+        const father = page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]');
+        const fatherId = await father.getAttribute('data-fan-person');
+        await father.click({ button: 'right' });
+        await page.locator('.fan-menu [data-fan-menu="pin"]').click();
+        await expect.poll(() => centre(page)).toBe(fatherId);
+        const pin = page.locator('#fan-center-pin');
+        await expect(pin).toBeVisible();
+        await expect(pin.locator('.fan-center-pin-name')).toHaveText(/Fíšek/);
+        expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBe(fatherId);
+        // The menu of the pinned centre offers Release.
+        await page.locator('#fan-chart [data-fan-key="f"]').first().click({ button: 'right' });
+        await expect(page.locator('.fan-menu [data-fan-menu="unpin"]')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await pin.locator('.fan-center-pin-release').click();
+        await expect(pin).toBeHidden();
+        await expect.poll(() => centre(page)).toBe(before);
+        expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBeNull();
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+    });
+
+    test('a person the fan does not draw: a chip at the nearest ancestor; a click opens the family view there', async ({ page }) => {
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        const jan = await idOf(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), jan);
+        await expect.poll(() => centre(page)).toBe(jan);
+        bridge.person = 'P0013';
+        await nextStatus(bridge);
+        const chip = page.locator('.fan-follow-overlay button.fan-follow-chip');
+        await expect(chip).toHaveCount(1);
+        await expect(chip).toContainText('Eva');
+        await expect(page.locator('#fan-chart .is-working')).toHaveCount(0);
+        const fits = await page.evaluate(() => {
+            const c = document.querySelector('.fan-follow-chip')!.getBoundingClientRect();
+            const s = document.getElementById('fan-chart')!.getBoundingClientRect();
+            return c.left >= s.left - 0.5 && c.right <= s.right + 0.5 && c.top >= s.top - 0.5 && c.bottom <= s.bottom + 0.5;
+        });
+        expect(fits).toBe(true);
+        await chip.click();
+        await expect.poll(() => view(page)).toBe('family');
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        expect(await followView(page)).toBe('family');
+    });
+
+    test('Settings: the follow rows, a choice kept on the device, the chosen person for this tree, Restore defaults', async ({ page }) => {
+        await follow(page, { idle: 60_000 });
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const group = page.locator('#settings-group-research-follow');
+        await expect(group).toBeVisible();
+        const set = (key: string) => group.locator(`.live-sec-set__row[data-key="${key}"]`);
+        await expect(set('follow-view').locator('[aria-checked="true"]')).toHaveText('Family');
+        await expect(set('follow-fan-center').locator('[aria-checked="true"]')).toHaveText('Focused person');
+        await expect(set('follow-fan-person')).toHaveCount(0);
+        await expect(group.locator('[data-key="follow-trail"] input[type="checkbox"]')).toBeChecked();
+        await set('follow-view').locator('[role="radio"]', { hasText: 'Fan' }).click();
+        await expect(set('follow-view').locator('[aria-checked="true"]')).toHaveText('Fan');
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-follow-view'))).toBe('fan');
+        await set('follow-fan-center').locator('[role="radio"]', { hasText: 'Chosen person' }).click();
+        const person = set('follow-fan-person');
+        await expect(person).toBeVisible();
+        await expect(person).toContainText('None chosen for this tree');
+        await person.locator('.live-follow-person__btn').click();
+        await page.locator('#live-follow-person-picker .person-picker-input').fill('Eva');
+        await page.locator('#live-follow-person-picker .person-picker-item').first().click();
+        await expect(set('follow-fan-person')).toContainText('Eva Fíšková');
+        await expect(set('follow-fan-person')).toContainText('for the tree “Fíškovi”');
+        const tree = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+        expect(await page.evaluate((t) => localStorage.getItem(`strom-live-follow-fan-person:${t}`), tree)).toBe(await idOf(page, 'P0013'));
+        await group.locator('[data-key="follow-trail"] input[type="checkbox"]').uncheck();
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-follow-trail'))).not.toBeNull();
+        await group.locator('.live-sec-reset').click();
+        await expect(page.locator('.toast[data-kind="live-sections"]')).toContainText('Defaults restored');
+        await expect(set('follow-view').locator('[aria-checked="true"]')).toHaveText('Family');
+        await expect(set('follow-fan-person')).toHaveCount(0);
+        await expect(group.locator('[data-key="follow-trail"] input[type="checkbox"]')).toBeChecked();
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-follow-view'))).toBeNull();
+        // Undo brings them back.
+        await page.locator('.toast[data-kind="live-sections"]').getByRole('button', { name: 'Undo' }).click();
+        await expect(set('follow-view').locator('[aria-checked="true"]')).toHaveText('Fan');
+        await expect(set('follow-fan-person')).toContainText('Eva Fíšková');
+        // Following starts in the stored view.
+        await page.keyboard.press('Escape');
+        await btn(page).click();
+        await expect.poll(() => view(page)).toBe('fan');
+        expect(await followView(page)).toBe('fan');
+    });
+
+    test.describe('a phone (spec 043)', () => {
+        test.use({ hasTouch: true });
+
+        test('"Follow in" is the strip\'s second row: 40px options, nothing wider than the window', async ({ page }) => {
+            await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            const row = page.locator('#live-panel .live-follow-view--phone');
+            await expect(row).toBeVisible();
+            for (const lang of ['de', 'cs', 'pl', 'en']) {
+                await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+                const bad = await page.evaluate(() => {
+                    const out: string[] = [];
+                    const r = document.querySelector('.live-follow-view--phone')!;
+                    for (const o of r.querySelectorAll<HTMLElement>('[role="radio"]')) {
+                        const b = o.getBoundingClientRect();
+                        if (b.height < 40) out.push(`small ${o.textContent}`);
+                        if (o.scrollWidth > o.clientWidth + 1) out.push(`cut ${o.textContent}`);
+                    }
+                    if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
+                    return out;
+                });
+                expect(bad, lang).toEqual([]);
+            }
+            await page.locator('#live-panel .live-follow-view--phone [role="radio"]').nth(1).tap();
+            await expect.poll(() => view(page)).toBe('fan');
+            await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+            // Held sideways the strip keeps one row: "Follow in" is in the overview sheet.
+            await page.setViewportSize({ width: 844, height: 390 });
+            await expect(row).toBeHidden();
+            await page.evaluate(() => window.Strom.UI.openResearchOverview());
+            const sheet = page.locator('.live-follow-view--overview');
+            await expect(sheet).toBeVisible();
+            await expect(sheet.locator('[aria-checked="true"]')).toHaveText('Fan');
         });
     });
 });

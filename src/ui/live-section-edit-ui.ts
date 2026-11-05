@@ -10,6 +10,14 @@
 import { strings } from '../strings.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
+import { DataManager } from '../data.js';
+import { PersonPicker } from '../person-picker.js';
+import { shownNameFull } from '../person-name.js';
+import {
+    FAN_CENTER_SETTINGS, FOLLOW_VIEWS, FanCenterSetting, FollowView, fanPersonOtherTree, getFanCenterSetting, getFanPerson,
+    getFollowTrail, getFollowView, hasFollowPrefs, setFanCenterSetting, setFanPerson, setFollowTrail, setFollowView,
+} from '../live-follow-prefs.js';
+import { PersonId, TreeId } from '../types.js';
 import { uiModule } from './module.js';
 import type { UIClass } from './index.js';
 import { el, livePanelSectionState } from './research-ui.js';
@@ -245,8 +253,55 @@ function fillEditorList(list: HTMLElement, surface: Surface, sheet: boolean): vo
     refocus(list, mark);
 }
 
-function syncReset(reset: HTMLElement): void {
-    reset.setAttribute('aria-disabled', String(!hasSectionPrefs()));
+/** `withFollow`: Settings, whose Restore defaults also takes the choices of following (view, fan centre, trail). */
+function syncReset(reset: HTMLElement, withFollow = false): void {
+    reset.setAttribute('aria-disabled', String(!(hasSectionPrefs() || (withFollow && hasFollowPrefs()))));
+}
+
+/** The picker of Settings' chosen fan centre (one at a time; gone with the next drawing). */
+let fanPersonPicker: PersonPicker | null = null;
+
+/**
+ * A choice of Settings › Following research as a segment: radios with a
+ * roving tab stop, an arrow moves and chooses at once.
+ */
+function choiceSegment<T extends string>(labelId: string, options: ReadonlyArray<{ value: T; label: string }>, chosen: T, pick: (v: T) => void, wide = false): HTMLElement {
+    const seg = el('div', `live-sec-seg live-sec-seg--settings${wide ? ' live-sec-seg--wide' : ''}`);
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-labelledby', labelId);
+    options.forEach((o, i) => {
+        const b = el('button', 'live-sec-seg__opt', o.label);
+        b.type = 'button';
+        b.title = o.label;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(o.value === chosen));
+        b.tabIndex = o.value === chosen ? 0 : -1;
+        b.dataset.value = o.value;
+        b.onclick = () => { if (o.value !== chosen) pick(o.value); };
+        b.onkeydown = (e) => {
+            const t = segmentArrowTarget(e.key, i, options.length);
+            if (t === null) return;
+            e.preventDefault();
+            (seg.children[t] as HTMLElement).focus();
+            if (options[t].value !== chosen) pick(options[t].value);
+        };
+        seg.appendChild(b);
+    });
+    return seg;
+}
+
+/** A row of the group: the name and a hint on the left, the control on the right. */
+function settingsLine(key: string, name: string, desc: string | null, control: HTMLElement | null): { line: HTMLElement; labelId: string } {
+    const line = el('div', 'settings-row live-sec-set__row');
+    line.dataset.key = key;
+    const text = el('span', 'settings-text');
+    const label = el('span', 'settings-name', name);
+    label.id = `live-sec-set-l-${key}`;
+    text.appendChild(label);
+    if (desc) text.appendChild(el('span', 'settings-desc', desc));
+    line.appendChild(text);
+    if (control) line.appendChild(control);
+    return { line, labelId: label.id };
 }
 
 /** A sheet's handle and title row (× closes); dragging either down closes it. */
@@ -641,13 +696,15 @@ export const liveSectionEditMethods = uiModule({
         const group = document.getElementById('settings-group-research-follow');
         const body = group?.querySelector<HTMLElement>('.settings-group-body');
         if (!group || !body) return;
-        const show = hasSectionPrefs() || TreeManager.getTrees().some(t => !!t.research?.id);
+        const show = hasSectionPrefs() || hasFollowPrefs() || TreeManager.getTrees().some(t => !!t.research?.id);
         group.hidden = !show;
         if (!show) {
             body.replaceChildren();
             return;
         }
         const mark = focusMark(body);
+        fanPersonPicker?.destroy();
+        fanPersonPicker = null;
         body.replaceChildren();
         for (const row of sectionEditRows('settings', sectionPrefs(), () => ({ current: 'expanded', autoFolded: false }))) {
             const line = el('div', 'settings-row live-sec-set__row');
@@ -659,13 +716,106 @@ export const liveSectionEditMethods = uiModule({
             line.append(text, segment(row, name.id, 'live-sec-seg--settings'));
             body.appendChild(line);
         }
+        this.appendFollowPrefRows(body);
         const foot = el('div', 'settings-row live-sec-set__reset');
         const reset = el('button', 'link-button live-sec-reset', strings.live.resetDefaults);
         reset.type = 'button';
-        reset.onclick = () => this.resetLiveSections();
-        syncReset(reset);
+        reset.onclick = () => this.resetLiveSections(true);
+        syncReset(reset, true);
         foot.appendChild(reset);
         body.appendChild(foot);
         refocus(body, mark);
+    },
+
+    /**
+     * Settings › Following research, after the sections (spec 043 §7): the
+     * view following starts in, the fan's centre while following (a chosen
+     * person per tree), the session trail.
+     */
+    appendFollowPrefRows(body: HTMLElement): void {
+        const S = strings.settings;
+        const V = strings.viewModeSwitch;
+        const redraw = (): void => this.renderResearchFollowSettings();
+
+        const view = settingsLine('follow-view', S.followView, S.followViewHelp, null);
+        view.line.appendChild(choiceSegment<FollowView>(view.labelId, FOLLOW_VIEWS.map(v => ({ value: v, label: V[v] })), getFollowView(), (v) => {
+            setFollowView(v);
+            redraw();
+        }));
+        body.appendChild(view.line);
+
+        const setting = getFanCenterSetting();
+        const centreLabels: Record<FanCenterSetting, string> = {
+            focus: S.followFanCenterFocus, root: S.followFanCenterRoot, person: S.followFanCenterPerson,
+        };
+        const centre = settingsLine('follow-fan-center', S.followFanCenter, setting === 'focus' ? S.followFanCenterFocusHelp : null, null);
+        centre.line.appendChild(choiceSegment<FanCenterSetting>(centre.labelId, FAN_CENTER_SETTINGS.map(v => ({ value: v, label: centreLabels[v] })), setting, (v) => {
+            setFanCenterSetting(v);
+            redraw();
+        }, true));
+        body.appendChild(centre.line);
+
+        // The chosen person: for the tree open now (none open: no row).
+        const treeId = DataManager.getCurrentTreeId();
+        if (setting === 'person' && treeId) body.appendChild(this.followFanPersonRow(treeId));
+
+        const trail = el('label', 'settings-checkbox settings-row live-sec-set__trail');
+        trail.dataset.key = 'follow-trail';
+        const box = el('input');
+        box.type = 'checkbox';
+        box.checked = getFollowTrail();
+        box.dataset.value = 'trail';
+        box.onchange = () => {
+            setFollowTrail(box.checked);
+            redraw();
+        };
+        const text = el('span', 'settings-text');
+        text.append(el('span', 'settings-name', S.followTrail), el('span', 'settings-desc', S.followTrailHelp));
+        trail.append(box, text);
+        body.appendChild(trail);
+    },
+
+    /** "Name · for the tree …  Change", or none chosen for this tree (another tree's choice said) and "Choose person". */
+    followFanPersonRow(treeId: string): HTMLElement {
+        const S = strings.settings;
+        const treeName = (id: string): string => TreeManager.getTreeMetadata(id as TreeId)?.name ?? '';
+        const chosen = getFanPerson(treeId);
+        const person = chosen ? DataManager.getPerson(chosen) : null;
+        const other = person ? null : fanPersonOtherTree(treeId);
+        const desc = person ? S.followFanPersonThisTree(treeName(treeId)) : other ? S.followFanPersonOther(treeName(other)) : null;
+        const row = settingsLine('follow-fan-person', person ? shownNameFull(person) : S.followFanPersonNone, desc, null);
+        row.line.classList.add('live-follow-person');
+        const btn = el('button', 'live-follow-person__btn', person ? S.followFanPersonChange : S.followFanPersonPick);
+        btn.type = 'button';
+        btn.dataset.value = 'pick';
+        btn.setAttribute('aria-describedby', row.labelId);
+        btn.setAttribute('aria-expanded', 'false');
+        const host = el('div', 'live-follow-person__picker');
+        host.id = 'live-follow-person-picker';
+        host.hidden = true;
+        btn.onclick = () => {
+            if (!host.hidden) {
+                fanPersonPicker?.destroy();
+                fanPersonPicker = null;
+                host.hidden = true;
+                host.replaceChildren();
+                btn.setAttribute('aria-expanded', 'false');
+                return;
+            }
+            host.hidden = false;
+            btn.setAttribute('aria-expanded', 'true');
+            fanPersonPicker?.destroy();
+            fanPersonPicker = new PersonPicker({
+                containerId: host.id,
+                onSelect: (id: PersonId) => {
+                    setFanPerson(treeId, id);
+                    this.renderResearchFollowSettings();
+                    document.querySelector<HTMLElement>('#settings-group-research-follow [data-key="follow-fan-person"] .live-follow-person__btn')?.focus({ preventScroll: true });
+                },
+            });
+            host.querySelector<HTMLInputElement>('input')?.focus();
+        };
+        row.line.append(btn, host);
+        return row.line;
     },
 });

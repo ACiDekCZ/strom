@@ -3113,6 +3113,14 @@ class TreeRendererClass {
         this.viewMode = mode;
         this.resetChildrenShown();
         this.persistViewMode();
+        // Following the research agent opens the fan around its own centre
+        // (the person focused before following, a pinned or a chosen one).
+        const centre = mode === 'fan' ? UI.liveFollowFanCenter?.() ?? null : null;
+        if (centre && centre !== this.focusPersonId && DataManager.getPerson(centre)) {
+            this.fanView?.deactivate();
+            void this.setFocus(centre, false);
+            return;
+        }
         // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
         // the viewport (reported on a live tree: switching to descendants
@@ -5629,7 +5637,13 @@ class TreeRendererClass {
                 esc: (t) => this.escapeHtml(t),
                 relTypeLabel: (t) => strings.parentRelType[t],
                 addParentLabel: () => strings.contextMenu.addParent,
-                afterDraw: () => { if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight(); },
+                afterDraw: () => {
+                    if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight();
+                    UI.applyFanFollowMarks?.();
+                },
+                pinnedCenter: () => UI.liveFollowPinned?.() ?? null,
+                menuExtra: (id, isCentre) => UI.fanFollowMenuItems?.(id, isCentre) ?? [],
+                unpinCenter: () => UI.unpinFanCenter?.(),
                 selectedRod: () => UI.selectedRod(),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),
                 personPage: id => UI.runPersonMenuAction(id, 'page'),

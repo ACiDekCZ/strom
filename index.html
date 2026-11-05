@@ -10095,6 +10095,136 @@
         #fan-chart [data-fan-key]:focus { outline: none; }
         #fan-chart .fan-key-ring { stroke: var(--primary); stroke-width: 2.5px; }
 
+        /* ==================== FOLLOWING THE AGENT IN THE FAN (spec 043 §3, §4) ====================
+           Session colours: session 1 the app's green (dark: the fan's lighter green), the others copper;
+           each with a soft variant for glows and backgrounds. Only aliases of existing tokens. */
+        :root {
+            --follow-c1: var(--primary);
+            --follow-c2: var(--accent-text);
+            --follow-c1-soft: var(--primary-soft);
+            --follow-c2-soft: color-mix(in srgb, var(--follow-c2) 20%, transparent);
+        }
+        [data-theme="dark"] {
+            --follow-c1: var(--primary-dark);
+            --follow-c2: var(--accent);
+        }
+        .follow-primary { --follow-c: var(--follow-c1); --follow-soft: var(--follow-c1-soft); }
+        .follow-accent { --follow-c: var(--follow-c2); --follow-soft: var(--follow-c2-soft); }
+        /* The marks over the fan (fan-follow-ui.ts): an outline copied from the sector, never on the sector itself. */
+        .fan-follow-layer { pointer-events: none; }
+        .fan-follow-layer .fan-work-glow { stroke: var(--follow-c); stroke-opacity: 0.3; }
+        .fan-follow-layer .fan-work-line { stroke: var(--follow-c); }
+        .fan-follow-layer .fan-work-weak { stroke: var(--follow-c); stroke-opacity: 0.85; }
+        .fan-follow-layer .fan-work-pin line { stroke: var(--follow-c); }
+        .fan-follow-layer .fan-work-pin circle { fill: var(--follow-c); }
+        .fan-follow-layer .fan-work-num circle { fill: var(--follow-c); stroke: var(--surface); }
+        .fan-follow-layer .fan-work-num text { fill: var(--surface); font-family: var(--font-sans); }
+        /* The signal: two pulses when a session moves to another person, then nothing. */
+        @keyframes fan-work-pulse {
+            from { stroke-width: 7px; stroke-opacity: 0.55; }
+            to { stroke-width: 22px; stroke-opacity: 0; }
+        }
+        .fan-follow-layer .fan-work-glow.is-pulse { animation: fan-work-pulse 750ms ease-out 2; }
+        @media (prefers-reduced-motion: reduce) { .fan-follow-layer .fan-work-glow.is-pulse { animation: none; } }
+
+        /* HTML over the fan: hints at the view's edge, labels of people the fan does not draw. */
+        .fan-follow-overlay { position: absolute; z-index: 3; pointer-events: none; }
+        .fan-follow-overlay > button, .fan-follow-overlay > .fan-follow-rows, .fan-follow-overlay > .fan-follow-menu { pointer-events: auto; }
+        .fan-follow-leads { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+        .fan-follow-lead { stroke: var(--follow-c); }
+        .fan-follow-dot { fill: var(--follow-c); }
+        .fan-follow-anchor-dot {
+            position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%;
+            background: var(--follow-c); pointer-events: none;
+        }
+        .fan-follow-edge, .fan-follow-chip {
+            position: absolute; box-sizing: border-box; margin: 0; min-width: 0;
+            border: 1.5px solid var(--follow-c); background: var(--surface); color: var(--text);
+            box-shadow: 0 4px 14px rgba(20, 16, 8, 0.14);
+            font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        }
+        .fan-follow-edge {
+            display: inline-flex; align-items: center; gap: 7px; height: 36px; max-width: min(240px, calc(100% - 16px));
+            padding: 0 12px 0 6px; border-radius: 999px; font-weight: 500;
+        }
+        .fan-follow-edge-dot {
+            flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+            background: var(--follow-c); color: var(--surface); font-size: 13px; line-height: 1;
+        }
+        .fan-follow-edge-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fan-follow-chip {
+            display: flex; align-items: flex-start; gap: 8px; min-height: 36px; max-width: 290px;
+            padding: 7px 12px 7px 10px; border-radius: 10px; line-height: 1.35;
+        }
+        .fan-follow-chip.is-corner { max-width: 300px; }
+        .fan-follow-chip-dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--follow-c); }
+        .fan-follow-chip-num, .live-working-num {
+            flex: none; width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box;
+            display: inline-grid; place-items: center; background: var(--follow-c); color: var(--surface);
+            font-size: 11px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+        }
+        .fan-follow-chip-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-wrap: pretty; overflow-wrap: anywhere; }
+        .fan-follow-chip-sub { font-size: 11.5px; color: var(--text-light); }
+        .fan-follow-edge:focus-visible, .fan-follow-chip:focus-visible { outline: 2px solid var(--follow-c); outline-offset: 2px; }
+        @media (hover: hover) {
+            .fan-follow-edge:hover, .fan-follow-chip:hover { background: var(--hover-bg); }
+        }
+        /* Several people at one label: a small menu of them. */
+        .fan-follow-menu {
+            position: absolute; z-index: 5; box-sizing: border-box; min-width: 180px; max-width: min(300px, calc(100% - 16px));
+            padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-lg);
+        }
+        .fan-follow-menu-item {
+            display: flex; align-items: center; width: 100%; min-height: 36px; padding: 6px 10px; margin: 0; box-sizing: border-box;
+            border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13.5px;
+            text-align: left; cursor: pointer; overflow-wrap: anywhere;
+        }
+        @media (hover: hover) { .fan-follow-menu-item:hover { background: var(--hover-bg); } }
+        .fan-follow-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* A phone: the labels as rows under the fan, no leader lines (the anchor keeps its dot). */
+        .fan-follow-rows {
+            position: absolute; left: 8px; right: 8px; bottom: 8px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .fan-follow-rows > .fan-follow-chip {
+            position: static; width: 100%; max-width: none !important; min-height: 44px; align-items: center;
+        }
+        .fan-follow-rows .fan-follow-chip-dot { margin-top: 0; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .fan-follow-rows { left: auto; right: 8px; top: 8px; bottom: auto; width: 230px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto; }
+        }
+        @media (pointer: coarse) {
+            .fan-follow-edge { height: 44px; }
+            .fan-follow-chip { min-height: 44px; }
+            .fan-follow-menu-item { min-height: 44px; }
+        }
+
+        /* §2.3: "Centre: Name · Release" while the pinned centre is shown (in place of the original person pill). */
+        .fan-center-pin {
+            position: absolute; left: 12px; top: 12px; z-index: 4;
+            display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box;
+            height: 34px; max-width: calc(100% - 24px); padding: 0 4px 0 12px; min-width: 0;
+            border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+            color: var(--text); font-size: 13px;
+        }
+        .fan-center-pin[hidden] { display: none; }
+        .fan-center-pin-label { flex: none; color: var(--text-light); white-space: nowrap; }
+        .fan-center-pin-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fan-center-pin-release {
+            position: relative; flex: none; height: 26px; margin: 0 0 0 4px; padding: 0 10px; min-width: 0; min-height: 0;
+            border: 0; border-radius: 999px; background: var(--follow-c1-soft); color: var(--follow-c1);
+            font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .fan-center-pin-release:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { .fan-center-pin-release:hover { background: var(--hover-bg); } }
+        @media (pointer: coarse) {
+            .fan-center-pin { height: 44px; padding-right: 4px; }
+            .fan-center-pin-release { height: 36px; }
+            /* The finger's room: 44px tall. */
+            .fan-center-pin-release::after { content: ''; position: absolute; inset: -4px -2px; }
+        }
+
         /* ==================== FOCUS MODE ==================== */
         .person-card.focused {
             border-color: var(--primary);
@@ -16027,6 +16157,46 @@
         .live-follow-btn--overview { width: 30px; height: 30px; }
         .live-follow-btn--phone { width: 44px; height: 44px; margin-left: auto; font-size: 18px; }
         .live-panel.phone-strip .live-panel-summary { align-items: center; }
+        /* "Follow in: Family / Fan / Map" (spec 043 §1.5): under the head while following is on. */
+        .live-follow-view {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 40px; box-sizing: border-box;
+            padding: 5px 10px 5px 14px; background: var(--surface-2); border-bottom: 1px solid var(--divider);
+        }
+        .live-follow-view__label { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .live-follow-view__seg {
+            margin-left: auto; flex: none; display: flex; gap: 2px; padding: 2px; box-sizing: border-box;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+        }
+        /* Two classes: dialogs style every button. */
+        .live-follow-view__seg > .live-follow-view__opt {
+            height: 22px; min-width: 0; min-height: 0; margin: 0; padding: 0 9px; box-sizing: border-box;
+            border: 0; border-radius: 6px; background: none; box-shadow: none; color: var(--text);
+            font: inherit; font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
+        }
+        .live-follow-view__opt[aria-checked="true"] { background: var(--primary); color: var(--on-primary); font-weight: 600; box-shadow: 0 1px 2px rgba(20, 16, 8, 0.15); }
+        @media (hover: hover) { .live-follow-view__opt[aria-checked="false"]:hover { background: var(--hover-bg); } }
+        .live-follow-view__opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-overview > .live-follow-view { padding-left: 16px; padding-right: 16px; border-top: 1px solid var(--divider); }
+        /* The phone strip's second row: the segment across, 40px tall options in a 52px row. */
+        .live-follow-view--phone { min-height: 52px; padding: 4px 10px 6px 14px; background: none; border-bottom: 0; border-top: 1px solid var(--divider); }
+        .live-follow-view--phone .live-follow-view__seg { flex: 1 1 auto; margin-left: 0; border-radius: 10px; background: var(--surface-2); }
+        .live-follow-view--phone .live-follow-view__seg > .live-follow-view__opt { flex: 1 1 0; min-width: 64px; height: 40px; border-radius: 8px; font-size: 13.5px; }
+        @media (pointer: coarse) {
+            .live-follow-view__seg > .live-follow-view__opt { height: 40px; }
+            .live-follow-view { min-height: 48px; }
+        }
+        /* The narrowest phones: the label over the segment. */
+        @media (max-width: 360px) {
+            .live-follow-view--phone { flex-wrap: wrap; }
+            .live-follow-view--phone .live-follow-view__seg { flex-basis: 100%; }
+        }
+        /* A phone held sideways: the strip keeps its height for the tree and the fan; "Follow in" is in the overview sheet. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .live-follow-view--phone { display: none; }
+        }
+        /* "At work": a session's number in its colour (two or more runs while following). */
+        .live-working > li.has-num > .live-working-num { margin-right: 6px; vertical-align: -4px; }
+        .live-line__task > .live-working-num { margin-right: 6px; vertical-align: -4px; }
         /* Its pill sits below the highlight pill when both are up. */
         .evidence-pill ~ .live-follow-pill { top: 112px; }
         /* Phones: both at the bottom. The live-follow pill (one row, 50px) keeps
@@ -16341,6 +16511,27 @@
         }
         @media (pointer: coarse) {
             .live-sec-seg--settings > .live-sec-seg__opt { height: 44px; }
+        }
+        /* Following (spec 043 §7): the fan centre's longer choices take the room they need; the chosen person's row. */
+        .live-sec-seg--settings.live-sec-seg--wide { width: auto; min-width: 300px; }
+        .live-sec-seg--wide > .live-sec-seg__opt { flex: 1 1 auto; padding: 0 10px; }
+        .live-follow-person__btn {
+            flex: none; min-height: 30px; padding: 0 12px; margin: 0; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+        }
+        @media (hover: hover) { .live-follow-person__btn:hover { background: var(--hover-bg); } }
+        .live-follow-person__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .live-follow-person__picker { flex: 1 0 100%; min-width: 0; }
+        .live-follow-person__picker[hidden] { display: none; }
+        @media (max-width: 640px) {
+            .live-sec-seg--settings.live-sec-seg--wide { min-width: 0; width: 100%; }
+            /* German names of the choices are long: two lines rather than cut. */
+            .live-sec-seg--wide > .live-sec-seg__opt { flex: 1 1 0; white-space: normal; text-align: center; line-height: 1.15; padding: 0 6px; }
+            .live-follow-person__btn { align-self: flex-start; }
+        }
+        @media (pointer: coarse) {
+            .live-follow-person__btn { min-height: 44px; }
         }
         .research-overview__body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 12px; }
         .research-overview__body .live-panel-update { margin: 10px -16px 0; padding: 6px 16px; }
