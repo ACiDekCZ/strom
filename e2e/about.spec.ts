@@ -26,29 +26,60 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
 });
 
 /**
- * What's new: About links the changelog on GitHub in the UI language at the
- * section of the running version, in a new tab. The tests run on localhost,
- * where the branch follows the version: a beta version reads the beta branch,
- * a released one main. The anchor is the version without its suffix.
+ * What's new: About opens the same "What's new" dialog as after an update
+ * (its "All changes ↗" leads on to the changelog on GitHub), over About. The
+ * link keeps the changelog's address in the UI language at the section of the
+ * running version (opened as a link only where the build has no notes). The
+ * tests run on localhost, where the branch follows the version: a beta version
+ * reads the beta branch, a released one main. The anchor is the version
+ * without its suffix.
  */
 const CHANGELOG_BRANCH = /-beta\b/.test(APP_VERSION) ? 'beta' : 'main';
 const CHANGELOG_ANCHOR = APP_VERSION.split('-')[0].replace(/\./g, '');
 const changelogHref = (file: string) =>
     `https://github.com/ACiDekCZ/strom/blob/${CHANGELOG_BRANCH}/${file}#${CHANGELOG_ANCHOR}`;
 
-// The Czech and German links (file per language) are checked in cs.spec.ts
+// The Czech and German labels are checked in cs.spec.ts
 // and de.spec.ts; every language × branch × version in about-changelog.test.ts.
-test('About links the changelog in the UI language at this version', async ({ page }) => {
+test('About\'s What\'s new opens the dialog of an update over About; closing it goes back to About', async ({ page }) => {
     await openApp(page);
+    const seenBefore = await page.evaluate(() => localStorage.getItem('strom-whats-new-seen'));
     await page.locator('.app-logo').click();
     const about = page.locator('#about-modal');
     await expect(about).toBeVisible();
-    const link = about.getByRole('link', { name: "What's new ↗" });
+    const link = about.getByRole('link', { name: "What's new", exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', changelogHref('CHANGELOG.md'));
-    await expect(link).toHaveAttribute('target', '_blank');
-    await expect(link).toHaveAttribute('rel', /noopener/);
-    await expect(link).toHaveAttribute('rel', /noreferrer/);
+    await expect(link).toHaveAttribute('aria-haspopup', 'dialog');
+
+    // Not a new window: the dialog in the app, the same one as after an update.
+    const popups: unknown[] = [];
+    page.on('popup', (p) => popups.push(p));
+    await link.click();
+    const notes = page.locator('#release-notes-modal');
+    await expect(notes).toBeVisible();
+    await expect(notes.getByRole('heading', { name: "What's new" })).toBeVisible();
+    await expect(notes).toContainText(`Strom ${APP_VERSION}`);
+    await expect(notes.locator('.release-notes-list li').first()).toBeVisible();
+    const full = notes.getByRole('link', { name: 'All changes ↗' });
+    await expect(full).toHaveAttribute('href', changelogHref('CHANGELOG.md'));
+    await expect(full).toHaveAttribute('target', '_blank');
+    // "Don't show next time" is about the dialog after an update: not here.
+    await expect(notes.locator('#release-notes-dont-show')).toHaveCount(0);
+    expect(popups).toHaveLength(0);
+
+    // Escape closes the notes alone; About stays, its link takes the focus back.
+    await page.keyboard.press('Escape');
+    await expect(notes).toHaveCount(0);
+    await expect(about).toBeVisible();
+    await expect(link).toBeFocused();
+    // Opened again and closed by its button: About still there; nothing recorded.
+    await link.click();
+    await expect(notes).toBeVisible();
+    await notes.locator('.release-notes-close').click();
+    await expect(notes).toHaveCount(0);
+    await expect(about).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('strom-whats-new-seen'))).toBe(seenBefore);
 });
 
 /**
@@ -91,7 +122,7 @@ for (const vp of [
         expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width);
 
         // What's new sits beside the source link, inside the dialog and the viewport too.
-        const whatsNew = about.getByRole('link', { name: "What's new ↗" });
+        const whatsNew = about.getByRole('link', { name: "What's new", exact: true });
         await whatsNew.scrollIntoViewIfNeeded();
         await expect(whatsNew).toBeVisible();
         const wn = await whatsNew.boundingBox();

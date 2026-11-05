@@ -88,8 +88,10 @@ export const miscMethods = uiModule({
             versionEl.textContent = APP_VERSION;
         }
 
-        // What's new: the changelog in the UI language at this version's
-        // section, on the beta branch for a beta build (see about-links.ts).
+        // What's new: the same dialog as after an update (its "All changes"
+        // leads on to GitHub). A version without notes in the UI language:
+        // the changelog in that language at this version's section, on the
+        // beta branch for a beta build (see about-links.ts).
         const changelogEl = modal.querySelector<HTMLAnchorElement>('#about-changelog');
         if (changelogEl) {
             const changelog = aboutChangelogLink(getCurrentLanguage(), APP_VERSION,
@@ -97,7 +99,15 @@ export const miscMethods = uiModule({
             changelogEl.href = changelog.href;
             changelogEl.target = changelog.target;
             changelogEl.rel = changelog.rel;
-            changelogEl.textContent = changelog.label;
+            const inApp = this.hasAppReleaseNotes();
+            changelogEl.textContent = inApp ? strings.releaseNotes.title : changelog.label;
+            changelogEl.dataset.opens = inApp ? 'dialog' : 'web';
+            if (inApp) changelogEl.setAttribute('aria-haspopup', 'dialog');
+            else changelogEl.removeAttribute('aria-haspopup');
+            changelogEl.onclick = inApp ? (e) => {
+                e.preventDefault();
+                this.showAboutWhatsNew();
+            } : null;
         }
 
         // The users' group: a row of its own under the source link, only in the

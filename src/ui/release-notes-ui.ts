@@ -335,11 +335,14 @@ export const releaseNotesMethods = uiModule({
     /**
      * Build and open the dialog: the notes of this version in the UI language
      * (`withApp`), then the research's section when it brought one; only the
-     * research's when the app has nothing new.
+     * research's when the app has nothing new. Opened from About
+     * (`fromAbout`): the app's notes alone, over About, without "Don't show
+     * next time" (that is about the dialog after an update); a research's
+     * section waiting stays for its own time.
      */
-    showReleaseNotesDialog(withApp = true): void {
+    showReleaseNotesDialog(withApp = true, fromAbout = false): void {
         const blocks = withApp ? releaseNotesFor(EMBEDDED_NOTES, getCurrentLanguage()) : null;
-        const research = researchSection;
+        const research = fromAbout ? null : researchSection;
         if (!blocks && !research) return;
         document.getElementById(RELEASE_NOTES_DIALOG_ID)?.remove();
         const s = strings.releaseNotes;
@@ -377,6 +380,7 @@ export const releaseNotesMethods = uiModule({
             fullRow.appendChild(full);
             content.appendChild(fullRow);
         }
+        if (fromAbout) overlay.dataset.fromAbout = '1';
         if (research) {
             overlay.dataset.researchVersion = research.version;
             content.appendChild(researchSectionNode(research));
@@ -393,7 +397,8 @@ export const releaseNotesMethods = uiModule({
         closeBtn.type = 'button';
         // Phones stack the footer: the button goes under the checkbox.
         closeBtn.dataset.dismiss = '';
-        buttons.append(check, closeBtn);
+        if (fromAbout) buttons.append(closeBtn);
+        else buttons.append(check, closeBtn);
 
         modal.append(header, content, buttons);
         overlay.appendChild(modal);
@@ -418,6 +423,13 @@ export const releaseNotesMethods = uiModule({
      */
     closeReleaseNotesDialog(): void {
         const overlay = document.getElementById(RELEASE_NOTES_DIALOG_ID);
+        // Opened from About: asked for, so nothing to record; back to About's link.
+        if (overlay?.dataset.fromAbout === '1') {
+            overlay.remove();
+            this.dialogStack = this.dialogStack.filter(d => d !== RELEASE_NOTES_DIALOG_ID);
+            document.getElementById('about-changelog')?.focus({ preventScroll: true });
+            return;
+        }
         const box = overlay?.querySelector<HTMLInputElement>('#release-notes-dont-show');
         if (box?.checked) SettingsManager.setWhatsNewAfterUpdate(false);
         if (!overlay || overlay.dataset.app === '1') {
@@ -428,6 +440,16 @@ export const releaseNotesMethods = uiModule({
         if (research) writeResearchSeen(research);
         overlay?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== RELEASE_NOTES_DIALOG_ID);
+    },
+
+    /** This version has notes of its own in the UI language (About's "What's new" opens them in the app). */
+    hasAppReleaseNotes(): boolean {
+        return releaseNotesFor(EMBEDDED_NOTES, getCurrentLanguage()) !== null;
+    },
+
+    /** About → "What's new": the same dialog as after an update, over About. */
+    showAboutWhatsNew(): void {
+        this.showReleaseNotesDialog(true, true);
     },
 
     /** Settings → Notifications: "What's new after an update". */
