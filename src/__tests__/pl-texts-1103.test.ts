@@ -39,3 +39,11 @@ describe('a cited fact: person and fact joined by the language\'s dash', () => {
         }
     });
 });
+
+describe('the help mark of "Awaiting action" (1105)', () => {
+    it('pl names the section as the overview\'s heading does', () => {
+        const pl = getStringsForLang('pl');
+        expect(pl.help.topics.waiting).toBe(pl.research.waiting);
+        expect(pl.help.topics.waiting).toBe('Czeka na decyzję');
+    });
+});
