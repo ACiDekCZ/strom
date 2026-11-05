@@ -637,6 +637,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             intro: 'Księgi metrykalne i inne zapisy, z których pochodzą dane na tej stronie.',
             supports: 'Potwierdza',
             transcript: 'Transkrypcja',
+            translation: 'Tłumaczenie transkrypcji',
             archivePage: 'Strona w archiwum',
             archiveScan: 'Skan w archiwum',
             open: 'Otwórz źródło',

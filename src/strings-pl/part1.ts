@@ -834,6 +834,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         sameBook: 'Kolejny zapis z tej samej księgi',
         viewerOpenPage: 'Otwórz stronę w archiwum',
         viewerTranscript: 'Transkrypcja',
+        viewerTranslation: 'Tłumaczenie transkrypcji',
         viewerCites: 'Dokumentuje',
         viewerZoom: 'Powiększ',
         addExcerpt: 'Dodaj wycinek',

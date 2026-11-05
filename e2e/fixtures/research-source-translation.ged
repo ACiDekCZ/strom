@@ -1,0 +1,37 @@
+0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.27.0
+2 NAME Strom Research
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @P0001@ INDI
+1 NAME Vendula /Kvapilová/
+1 SEX F
+1 BIRT
+2 DATE 12 MAR 1881
+2 PLAC Kvapilov
+2 SOUR @S0001@
+1 DEAT
+2 DATE 4 FEB 1950
+2 SOUR @S0002@
+1 REFN P0001
+2 TYPE strom-research
+0 @S0001@ SOUR
+1 TITL Метрическая книга о родившихся 1881
+1 TEXT Родилась Вендула, дочь Цтибора Квапила
+2 CONT и жены его Анны.
+1 NOTE Evidence: original, primary
+1 NOTE Překlad:
+2 CONT Narodila se Vendula, dcera Ctibora Kvapila
+2 CONT a jeho manželky Anny.
+1 REFN S0001
+2 TYPE strom-research
+0 @S0002@ SOUR
+1 TITL Kniha zemřelých Kvapilov 1950
+1 TEXT Zemřela Vendula Kvapilová
+1 NOTE Evidence: original, primary
+1 REFN S0002
+2 TYPE strom-research
+0 TRLR

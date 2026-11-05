@@ -45,6 +45,7 @@ import { fanScreenSizes } from './fan-labels.js';
 import { fanZoomInlineScript } from './fan-zoom.js';
 import { websiteUrl } from './about-links.js';
 import type { ImageRegistry } from './image-registry.js';
+import { sourceTranslation } from './source-translation.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -2933,6 +2934,11 @@ function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
         }
         if (s.transcript?.trim()) {
             body.push(`<div><p class="pp-kicker">${esc(P.sources.transcript)}</p><p class="pp-transcript">${esc(stripResearchIds(s.transcript).text)}</p></div>`);
+        }
+        // The research's translation of the transcript (a section of the source's note): folded under it.
+        const translation = sourceTranslation(s.note);
+        if (translation) {
+            body.push(`<details class="pp-translation"><summary class="pp-kicker">${esc(P.sources.translation)}</summary><p class="pp-transcript pp-translation-text">${esc(stripResearchIds(translation).text)}</p></details>`);
         }
         const pageUrl = [s.url, ...(s.excerpts ?? []).map(e => e.pageUrl)].map(safeHttpUrl).find(u => u && !linked.has(u));
         const page = extLink(pageUrl ?? undefined, P.sources.archivePage);

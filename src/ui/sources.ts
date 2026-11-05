@@ -14,6 +14,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { bookReference, entryDateLine } from '../source-page.js';
+import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
@@ -423,13 +424,18 @@ export const sourcesMethods = uiModule({
         // (not in an archive: it has no reading results to give).
         const reading = src.reading && !this.activeResearchAgentless()
             ? `<p class="viewer-reading"><button type="button" class="link-button viewer-reading-open" id="source-viewer-reading">${esc(strings.read.sourceLink)}</button></p>` : '';
+        // The research's translation of the transcript (a section of the note): folded under it.
+        const translationText = sourceTranslation(src.note);
+        const translation = translationText
+            ? `<details class="viewer-translation"><summary class="viewer-section-title">${esc(s.viewerTranslation)}</summary>
+                <p class="viewer-translation-text">${esc(translationText)}</p></details>` : '';
         if (src.transcript) {
             // Who read the entry, as the research says (nothing when it does not).
             const readBy = src.readBy === 'user' || src.readBy === 'research' || src.readBy === 'both' ? s.readBy[src.readBy] : '';
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerTranscript)}</h3>
-                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}${reading}</section>`);
-        } else if (reading) {
-            chunks.push(reading);
+                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}${translation}${reading}</section>`);
+        } else if (translation || reading) {
+            chunks.push(translation ? `<section>${translation}${reading}</section>` : reading);
         }
         const cites = DataManager.listSourceCitations(src.id).map(ref => {
             if (ref.kind === 'partnership') {

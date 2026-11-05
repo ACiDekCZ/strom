@@ -21044,6 +21044,19 @@
             color: var(--text-faint); margin: 0 0 4px;
         }
         .viewer-transcript { font-family: var(--font-serif); font-size: 15px; line-height: 1.55; white-space: pre-wrap; margin: 0; }
+        /* The research's translation of the transcript: folded under it, opened by its heading. */
+        .viewer-translation { margin-top: 10px; min-width: 0; }
+        .viewer-translation > summary {
+            display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; min-height: 32px;
+            margin: 0; list-style: none; cursor: pointer;
+        }
+        .viewer-translation > summary::-webkit-details-marker { display: none; }
+        .viewer-translation > summary::after { content: '▸'; font-size: 12px; letter-spacing: 0; }
+        .viewer-translation[open] > summary::after { content: '▾'; }
+        .viewer-translation > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .viewer-translation-text { font-family: var(--font-serif); font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; }
+        @media (hover: hover) { .viewer-translation > summary:hover { color: var(--text-light); } }
+        @media (pointer: coarse) { .viewer-translation > summary { min-height: 44px; } }
         .viewer-cites { margin: 0; padding-left: 18px; font-size: 14px; }
 
         /* Source images left out of the research's file (loaded on demand, kept with the tree). */
