@@ -472,7 +472,38 @@ export const fanFollowMethods = uiModule({
             placed.push({ el: chip, side, x: px, y: py, ax: ap.x, ay: ap.y, tone, lead: true });
         }
 
-        // Lay the labels out: per side by height, none over another, none outside the surface.
+        // What stands over the surface (the research's card, the legend, the zoom buttons, the pills): a label
+        // there would be hidden under it.
+        const or = overlay.getBoundingClientRect();
+        const obstacles = ['#live-panel', '#fan-legend', '#fan-legend-chip', '#fan-zoom-controls', '#evidence-pill',
+            '#live-follow-pill', '#fan-center-pin', '#fan-origin-pill']
+            .map(sel => document.querySelector<HTMLElement>(sel))
+            .filter((el): el is HTMLElement => !!el && !el.hidden && el.getClientRects().length > 0)
+            .map(el => el.getBoundingClientRect())
+            .filter(r => r.width > 0 && r.height > 0)
+            .map(r => ({ left: r.left - or.left, right: r.right - or.left, top: r.top - or.top, bottom: r.bottom - or.top }));
+        const GAP = 8;
+        const clear = (el: HTMLElement, x: number, y: number): { x: number; y: number; w: number; h: number } => {
+            let w = el.offsetWidth, h = el.offsetHeight;
+            for (let pass = 0; pass < 4; pass++) {
+                const o = obstacles.find(b => b.left < x + w + GAP && b.right > x - GAP && b.top < y + h + GAP && b.bottom > y - GAP);
+                if (!o) break;
+                // Beside it, on the fan's side (as wide as a label gets there); where there is no room, under it.
+                const left = o.left + (o.right - o.left) / 2 > W / 2;
+                const room = left ? o.left - GAP - 8 : W - 8 - o.right - GAP;
+                if (room >= 140) {
+                    el.style.maxWidth = `${Math.min(290, room)}px`;
+                    w = el.offsetWidth; h = el.offsetHeight;
+                    x = left ? o.left - w - GAP : o.right + GAP;
+                    y = Math.min(y, H - h - 8);
+                } else if (o.bottom + GAP + h <= H - 8) y = o.bottom + GAP;
+                else y = Math.max(8, o.top - h - GAP);
+            }
+            return { x, y, w, h };
+        };
+
+        // Lay the labels out: per side by height, none over another, none outside the surface nor under
+        // what stands over it.
         for (const side of ['l', 'r', 't'] as const) {
             const mine = placed.filter(p => p.side === side).sort((a, b) => a.y - b.y);
             let floor = 8;
@@ -483,12 +514,16 @@ export const fanFollowMethods = uiModule({
                 x = Math.min(Math.max(x, 8), W - w - 8);
                 y = Math.max(y, floor);
                 y = Math.min(y, H - h - 8);
-                floor = y + h + 8;
+                const moved = clear(p.el, x, y);
+                x = moved.x; y = moved.y;
+                const cw = moved.w, ch = moved.h;
+                floor = y + ch + 8;
                 p.el.style.left = `${Math.round(x)}px`;
                 p.el.style.top = `${Math.round(y)}px`;
                 if (lines && p.lead) {
-                    const ex = side === 'l' ? x + w : side === 'r' ? x : x + w / 2;
-                    const ey = side === 't' ? y + h : y + h / 2;
+                    // The edge towards the ray (a label moved beside what stands over it may sit on the other side).
+                    const ex = side === 't' ? x + cw / 2 : p.x >= x + cw ? x + cw : p.x <= x ? x : side === 'l' ? x + cw : x;
+                    const ey = side === 't' ? y + ch : y + ch / 2;
                     lines.insertBefore(svgEl('polyline', {
                         class: `fan-follow-lead follow-${p.tone}`, fill: 'none', 'stroke-width': 1.4,
                         points: `${p.ax},${p.ay} ${side === 't' ? ex : p.x},${side === 't' ? p.y : ey} ${ex},${ey}`,

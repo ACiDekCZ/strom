@@ -34,6 +34,25 @@ const LINE_GED = GED.replace(/\/Fíšek\/|\/Fíšková\//g, '/Brandvold-Ekhammar
     .replace('0 @F0000@ FAM', ['0 @P0014@ INDI', '1 NAME Karl /Brandvold-Ekhammarsson Lindenau/', '1 SEX M', '1 BIRT', '2 DATE 1870', '1 REFN P0014', '1 FAMC @F0001@', '0 @F0000@ FAM'].join('\n'))
     .replace('1 CHIL @P0013@', '1 CHIL @P0013@\n1 CHIL @P0014@');
 
+/**
+ * Anna's line upwards: her father, his mother, hers, hers and hers (Jan's
+ * ancestor 110, beyond a fan of five generations around Jan, anchored at 55:
+ * up and to the right, where the research's card stands at 1440).
+ */
+const DEEP_GED = GED.replace('0 TRLR', [
+    '0 @P0101@ INDI', '1 NAME Tomáš /Zrzavý/', '1 SEX M', '1 REFN P0101', '1 FAMC @F0102@', '1 FAMS @F0101@',
+    '0 @P0104@ INDI', '1 NAME Marta /Kvasnicová/', '1 SEX F', '1 REFN P0104', '1 FAMC @F0103@', '1 FAMS @F0102@',
+    '0 @P0105@ INDI', '1 NAME Dora /Lojková/', '1 SEX F', '1 REFN P0105', '1 FAMC @F0104@', '1 FAMS @F0103@',
+    '0 @P0107@ INDI', '1 NAME Klára /Lojková/', '1 SEX F', '1 REFN P0107', '1 FAMC @F0105@', '1 FAMS @F0104@',
+    '0 @P0109@ INDI', '1 NAME Viktorie /Cibulková/', '1 SEX F', '1 REFN P0109', '1 FAMS @F0105@',
+    '0 @F0101@ FAM', '1 HUSB @P0101@', '1 CHIL @P0002@',
+    '0 @F0102@ FAM', '1 WIFE @P0104@', '1 CHIL @P0101@',
+    '0 @F0103@ FAM', '1 WIFE @P0105@', '1 CHIL @P0104@',
+    '0 @F0104@ FAM', '1 WIFE @P0107@', '1 CHIL @P0105@',
+    '0 @F0105@ FAM', '1 WIFE @P0109@', '1 CHIL @P0107@',
+    '0 TRLR'].join('\n'))
+    .replace('1 REFN P0002\n1 FAMS @F0001@', '1 REFN P0002\n1 FAMC @F0101@\n1 FAMS @F0001@');
+
 interface Bridge {
     person: string; paused: boolean;
     /** The family the first run works on (`working[].family`: a couple's task, e.g. a pair's narrative). */
@@ -918,6 +937,32 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');
         expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBeNull();
         await expect(page.locator('#fan-center-pin')).toBeHidden();
+    });
+
+    test('a label of a person beyond the fan stands clear of the research\'s card (1440) (1105)', async ({ page }) => {
+        const bridge = await follow(page, { idle: 60_000, on: true, ged: DEEP_GED });
+        bridge.person = 'P0109';
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), await idOf(page, 'P0012'));
+        await expect.poll(() => centre(page)).toBe(await idOf(page, 'P0012'));
+        const chip = page.locator('.fan-follow-overlay .fan-follow-chip');
+        await expect(chip).toContainText('Viktorie');
+        await expect(page.locator('#live-panel')).toBeVisible();
+        const hit = await page.evaluate(() => {
+            const a = document.querySelector('.fan-follow-chip')!.getBoundingClientRect();
+            const out: string[] = [];
+            for (const sel of ['#live-panel', '#fan-legend', '#fan-legend-chip', '#fan-zoom-controls', '#fan-center-pin']) {
+                const el = document.querySelector<HTMLElement>(sel);
+                if (!el || el.hidden || !el.getClientRects().length) continue;
+                const b = el.getBoundingClientRect();
+                if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(sel);
+            }
+            const st = document.getElementById('fan-stage')!.getBoundingClientRect();
+            if (a.left < st.left || a.right > st.right || a.top < st.top || a.bottom > st.bottom) out.push('outside the stage');
+            return out;
+        });
+        expect(hit).toEqual([]);
     });
 
     test('the app opened again on the person the jump focused: the fan centres on the focus from before following, not on the agent\'s person (1105)', async ({ page }) => {
