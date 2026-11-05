@@ -294,6 +294,30 @@ test.describe('Add images in the overview (accepts.media.taskImages)', () => {
             '✓ 1 of 2 images saved – image 113 missing. The task keeps waiting. SOA_N12_0113.jpg: Same as image 57 (M0042) – not added.');
         expect(bridge.puts.map(p => [p.image, p.replace])).toEqual([['113', null], ['112', null]]);
     });
+
+    test('the very file under that number already (200 same: true): "Already saved", not "✓ saved"; the line says it', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.replies.push({ status: 200, body: { task: 'T0002', image: 112, by: 'image', same: true, inbox: { dir: 'inbox/T0002', have: 1, want: 2, missing: [113] }, head: '' } });
+            b.replies.push({ status: 409, body: { error: 'image exists', code: 'waiting.image-exists', image: 113 } });
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0002');
+        await item.locator('.waiting-actions [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('SOA_N12_0112.jpg'), jpeg('SOA_N12_0113.jpg')]);
+        await area.locator('.waiting-upload__send').click();
+
+        // The other file waits for a decision, so the area stays: the first file says it was there already.
+        const files = area.locator('.waiting-upload__file');
+        await expect(files.nth(1).locator('.waiting-upload__ask-text')).toHaveText('Image 113 is already saved. Replace it?');
+        await expect(files.nth(0).locator('.waiting-upload__msg')).toHaveText('Already saved as image 112.');
+        await expect(files.nth(0)).not.toContainText('✓');
+        // Keep the saved one: the area closes, the line says what stands and that the file was there already.
+        await files.nth(1).locator('.waiting-upload__keep').click();
+        await expect(area).toHaveCount(0);
+        await expect(item.locator('.waiting-images-result')).toHaveText(
+            '✓ 1 of 2 images saved – image 113 missing. The task keeps waiting. SOA_N12_0112.jpg: Already saved as image 112.');
+    });
 });
 
 test.describe('the small panel', () => {

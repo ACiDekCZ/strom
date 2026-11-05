@@ -83,6 +83,8 @@ interface UpFile {
     said?: string;
     /** The numbers it was saved as. */
     savedAs?: number[];
+    /** `saved`: the bridge had this very file under that number already (200 `same: true`). */
+    already?: boolean;
     /** `same`: the image it is the same as (its number, the research's id). */
     sameImage?: number;
     sameId?: string;
@@ -293,6 +295,7 @@ export class WaitingImagesUpload {
             f.state = 'saved';
             f.sent = f.file.size;
             f.savedAs = r.images.length ? r.images : r.image !== null ? [r.image] : f.num !== null ? [f.num] : [];
+            f.already = r.same;
             if (r.inbox) this.lastInbox = r.inbox;
             if (r.woken) this.woken = true;
             return;
@@ -354,10 +357,21 @@ export class WaitingImagesUpload {
         this.opts.done({ woken: this.woken, gone: this.gone && !this.woken, inbox: this.lastInbox, saved: this.files.filter(f => f.state === 'saved').length, notes: this.notes() });
     }
 
-    /** What the host says of the files not added (the same as an image taken already). */
+    /**
+     * What the host says of the files not added (the same as an image taken
+     * already) and of those the research had under that number already: the
+     * area closes when the batch is done, so their sentence goes on there.
+     */
     private notes(): string[] {
         const T = strings.live.waitingTask;
-        return this.files.filter(f => f.state === 'same').map(f => `${f.file.name}: ${T.sameAs(f.sameImage ?? null, f.sameId ?? '')}`);
+        return this.files.flatMap(f => f.state === 'same' ? [`${f.file.name}: ${T.sameAs(f.sameImage ?? null, f.sameId ?? '')}`]
+            : f.state === 'saved' && f.already ? [`${f.file.name}: ${this.alreadyText(f)}`] : []);
+    }
+
+    /** "Already saved as image 57." (the numbers the bridge said, else none). */
+    private alreadyText(f: UpFile): string {
+        const nums = f.savedAs ?? [];
+        return strings.live.waitingTask.alreadySaved(nums.length ? imageRanges(nums) : null, nums.length);
     }
 
     /** Cancel: nothing more goes; what was saved stays saved. */
@@ -533,6 +547,10 @@ export class WaitingImagesUpload {
         switch (f.state) {
             case 'saved': {
                 const nums = f.savedAs ?? [];
+                if (f.already) {
+                    li.appendChild(this.message(this.alreadyText(f), 'muted'));
+                    break;
+                }
                 li.appendChild(this.message(nums.length === 1 ? T.savedAs(nums[0]) : nums.length > 1 ? T.savedAs(nums[0]).replace(String(nums[0]), imageRanges(nums)) : T.savedNoNum, 'ok'));
                 break;
             }

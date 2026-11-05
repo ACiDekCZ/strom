@@ -750,6 +750,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             sendingN: (n: number) => `Wysyłanie: ${nPl(n, 'plik', 'pliki', 'plików')}…`,
             savedAs: (n: number) => `✓ zapisano jako skan ${n}`,
             savedNoNum: '✓ zapisano',
+            alreadySaved: (list: string | null, count: number) => list ? `Już zapisano jako ${count === 1 ? 'skan' : 'skany'} ${list}.` : 'Już zapisano.',
             replaceAsk: (n: number) => `Skan ${n} jest już zapisany. Zastąpić?`,
             replace: 'Zastąp',
             keepOld: 'Zostaw zapisany',

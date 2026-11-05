@@ -513,4 +513,15 @@ describe('the texts (§10): plural forms, "z" / "ze"', () => {
         expect(T('pl').sameAs(9, 'M0042')).toBe('Identyczny ze skanem 9 (M0042) – nie dodano.');
         expect(T('pl').sameAs(9, '')).toBe('Identyczny ze skanem 9 – nie dodano.');
     });
+
+    it('a file the research had under that number already (200 same: true), in four languages', () => {
+        expect(T('en').alreadySaved('112', 1)).toBe('Already saved as image 112.');
+        expect(T('en').alreadySaved('3–5', 3)).toBe('Already saved as images 3–5.');
+        expect(T('en').alreadySaved(null, 0)).toBe('Already saved.');
+        expect(T('cs').alreadySaved('112', 1)).toBe('Už bylo uloženo jako snímek 112.');
+        expect(T('cs').alreadySaved(null, 0)).toBe('Už bylo uloženo.');
+        expect(T('de').alreadySaved('112', 1)).toBe('Bereits als Bild 112 gespeichert.');
+        expect(T('pl').alreadySaved('112', 1)).toBe('Już zapisano jako skan 112.');
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) expect(T(lang).alreadySaved('1', 1)).not.toMatch(/✓|\b(you|your|vy|váš|Sie|Ihr)\b/i);
+    });
 });
