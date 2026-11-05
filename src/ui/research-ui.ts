@@ -1046,12 +1046,9 @@ export function researchDateLabel(gedDate: string | null, asOf?: string | null):
     return formatFlexDate(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : todayIso());
 }
 
-/** Changed cards stay highlighted this long, then the highlight goes. */
-const HIGHLIGHT_MS = 30_000;
 /** Panel times ("5 min ago") are refreshed this often. */
 const TIME_TICK_MS = 30_000;
 
-let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 let timeTicker: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -2294,7 +2291,6 @@ export const researchUiMethods = uiModule({
             if (live) {
                 // The ended session's panel makes way for the current state.
                 live = null;
-                TreeRenderer.setChangedIds(null);
             }
             idlePanel = researchId;
             this.renderLivePanel();
@@ -2330,7 +2326,6 @@ export const researchUiMethods = uiModule({
         if (live) {
             // The ended session's panel makes way for the current state.
             live = null;
-            TreeRenderer.setChangedIds(null);
         }
         idlePanel = researchId;
         this.renderLivePanel();
@@ -2919,8 +2914,6 @@ export const researchUiMethods = uiModule({
         if (change.head && change.head === s.head) return;
         const data = await this.refreshLiveTree(s, change.head);
         if (!data) return;
-        const refs = extractChangedRefs(change.what);
-        const changedIds = personsByRefs(data, refs);
         const nameOf = (ref: string): string | null => {
             const [id] = personsByRefs(data, [ref]);
             const p = id ? data.persons[id] : undefined;
@@ -2948,15 +2941,7 @@ export const researchUiMethods = uiModule({
         }
         s.changes = [...items, ...s.changes].slice(0, MAX_CHANGES);
         s.adds = [...adds, ...s.adds].slice(0, MAX_CHANGES);
-        if (DataManager.getCurrentTreeId() === s.treeId) {
-            TreeRenderer.setChangedIds(new Set(changedIds));
-            // The highlight marks what just came; it goes after a while.
-            if (highlightTimer) clearTimeout(highlightTimer);
-            highlightTimer = setTimeout(() => {
-                highlightTimer = null;
-                if (live === s) TreeRenderer.setChangedIds(null);
-            }, HIGHLIGHT_MS);
-        }
+        // The cards show what came by themselves (TreeRenderer.renderLive: the scene of the load).
         this.renderLivePanel();
     },
 
@@ -3086,7 +3071,6 @@ export const researchUiMethods = uiModule({
         if (followNote?.treeId === s.treeId) clearFollowNote();
         if (reason === 'stopped') {
             live = null;
-            TreeRenderer.setChangedIds(null);
         } else if (!wasEnded && reason === 'other') {
             this.showToast(strings.research.liveOtherTree, 6000);
         }
@@ -3098,7 +3082,6 @@ export const researchUiMethods = uiModule({
     closeLivePanel(): void {
         if (live && !live.ended) return;
         live = null;
-        TreeRenderer.setChangedIds(null);
         this.renderLivePanel();
     },
 

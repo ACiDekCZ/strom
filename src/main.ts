@@ -3,7 +3,7 @@
  * Main entry point
  */
 
-import { DataManager } from './data.js';
+import { DataManager, DataChangedDetail } from './data.js';
 import { TreeManager } from './tree-manager.js';
 import { TreeRenderer } from './renderer.js';
 import { UI } from './ui.js';
@@ -158,14 +158,17 @@ function syncUrlTreeParam(): void {
 /** Listeners every startup path needs — including the locked ones (V3). */
 function registerAppListeners(): void {
     // Listen for data changes (e.g., after import)
-    window.addEventListener('strom:data-changed', () => {
+    window.addEventListener('strom:data-changed', (e) => {
         // The card timeline's chips change the open tree's default for a while only (K4.5): another tree, its default.
         keepLifelineChipsFor(DataManager.getCurrentTreeId());
         // Locked ↔ readable flips with every tree (re)load: sync the
         // read-only gating before the render reads it.
         UI.syncLockedState();
         UI.syncNewerDataState();
-        TreeRenderer.render();
+        // A live load from the research's source: the tree goes over without a flash (spec 055).
+        const detail = (e as CustomEvent<DataChangedDetail | undefined>).detail;
+        if (detail?.source === 'live') void TreeRenderer.renderLive(detail.previous);
+        else TreeRenderer.render();
         UI.refreshSearch();
         // Track changes for embedded mode unsaved warning
         UI.markDataChanged();

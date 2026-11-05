@@ -307,9 +307,9 @@ test.describe('live research (?live=)', () => {
         await expect(panel.locator('.live-waiting')).toContainText('Confirm the father of <b>Jan</b>');
         expect(await panel.locator('b, img').count()).toBe(0);
 
-        // The change arrives: Ludmila appears, glows, is listed.
+        // The change arrives: Ludmila appears, is announced to the screen reader, is listed.
         await expect(card(page, 'Ludmila')).toBeVisible();
-        await expect(card(page, 'Ludmila')).toHaveClass(/live-changed/);
+        await expect(page.locator('#live-announce')).toContainText('Person added: Ludmila Fíšková');
         await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Fíšková');
         await expect(panel.locator('.live-working')).toContainText('agent-2');
         await expect(panel.locator('.live-working')).toContainText('Sčítání 1921');

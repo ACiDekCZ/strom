@@ -14789,18 +14789,135 @@
             text-align: center;
         }
 
-        /* People the last live-research change touched. */
-        .person-card.live-changed {
-            box-shadow: 0 0 0 3px var(--primary), 0 0 14px 3px color-mix(in srgb, var(--primary) 50%, transparent);
+        /* ==================== A LIVE LOAD OF THE RESEARCH'S TREE (spec 055) ====================
+           src/live-scene.ts. Every effect takes the session's colour from --live-c (set on the card,
+           the notch, the light): a 043 session colour, never a colour of its own. */
+        .person-card { --live-c: var(--follow-c1); }
+        /* A card the load changed (or added, once it stands): a ring in the session's colour,
+           150 ms in, held to 500 ms, gone by 1 s; its changed rows tinted the same way. */
+        .person-card.live-touched {
             z-index: 5;
-            animation: live-changed-pulse 1.6s ease-out 2;
+            animation: live-touched 1000ms linear;
         }
-        @keyframes live-changed-pulse {
-            0% { box-shadow: 0 0 0 0 var(--primary); }
-            100% { box-shadow: 0 0 0 3px var(--primary), 0 0 14px 3px color-mix(in srgb, var(--primary) 50%, transparent); }
+        @keyframes live-touched {
+            0% { box-shadow: var(--shadow-sm); border-color: var(--border); }
+            15%, 50% {
+                box-shadow: var(--shadow-sm), 0 0 0 3px color-mix(in srgb, var(--live-c) 28%, transparent);
+                border-color: var(--live-c);
+            }
+            100% { box-shadow: var(--shadow-sm); border-color: var(--border); }
+        }
+        .person-card.live-touched .live-field { border-radius: 3px; animation: live-field 1000ms linear; }
+        @keyframes live-field {
+            0%, 100% { background: transparent; }
+            15%, 50% { background: color-mix(in srgb, var(--live-c) 16%, transparent); }
+        }
+        /* Without motion (the setting off, reduced motion): the ring stands for 1.6 s, no fade. */
+        .person-card.live-touched-static {
+            z-index: 5;
+            box-shadow: var(--shadow-sm), 0 0 0 3px color-mix(in srgb, var(--live-c) 28%, transparent);
+            border-color: var(--live-c);
+        }
+        .person-card.live-touched-static .live-field {
+            border-radius: 3px;
+            background: color-mix(in srgb, var(--live-c) 16%, transparent);
+        }
+        /* The light along the line (variant A): a glow running down the line to a new card. */
+        .live-pulse-layer {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            overflow: visible;
+        }
+        .live-pulse-layer .live-pulse { fill: none; stroke: var(--live-c); stroke-linecap: round; stroke-linejoin: round; }
+        .live-pulse-layer .live-pulse--halo { stroke-width: 10; stroke-opacity: 0.22; }
+        .live-pulse-layer .live-pulse--core { stroke-width: 3; stroke-opacity: 0.95; }
+        /* The card lights up once the light arrives (the glow is animated from the script). */
+        .live-bloom {
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            pointer-events: none;
+            opacity: 0;
+        }
+        /* A new person out of the view: a notch at the edge of the tree's area on their side. */
+        .live-edge {
+            position: absolute;
+            z-index: 40;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            animation: live-edge-life 4800ms linear forwards;
+        }
+        .live-edge--left { left: 0; top: calc(var(--live-edge-at) - 22px); justify-items: start; }
+        .live-edge--right { right: 0; top: calc(var(--live-edge-at) - 22px); justify-items: end; }
+        .live-edge--top { top: 0; left: calc(var(--live-edge-at) - 22px); align-items: start; }
+        .live-edge--bottom { bottom: 0; left: calc(var(--live-edge-at) - 22px); align-items: end; }
+        .live-edge__mark { display: block; width: 6px; height: 36px; border-radius: 3px; background: var(--live-c); }
+        .live-edge--top .live-edge__mark, .live-edge--bottom .live-edge__mark { width: 36px; height: 6px; }
+        .live-edge:focus-visible { outline: 2px solid var(--live-c); outline-offset: -2px; border-radius: 6px; }
+        @keyframes live-edge-life {
+            0%, 4.2% { opacity: 0; }
+            8.3%, 87.5% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .live-edge__tip {
+            position: absolute;
+            display: none;
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 6px 10px;
+            border-radius: var(--r-md, 8px);
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md, var(--shadow-sm));
+            font-size: 13px;
+            line-height: 1.3;
+            pointer-events: none;
+        }
+        .live-edge--left .live-edge__tip { left: 14px; top: 50%; transform: translateY(-50%); }
+        .live-edge--right .live-edge__tip { right: 14px; top: 50%; transform: translateY(-50%); }
+        .live-edge--top .live-edge__tip { top: 14px; left: 50%; transform: translateX(-50%); }
+        .live-edge--bottom .live-edge__tip { bottom: 14px; left: 50%; transform: translateX(-50%); }
+        /* Paused while pointed at or focused, and fully shown even when that happens during its fade-in. */
+        @media (hover: hover) {
+            .live-edge:hover { animation-play-state: paused; opacity: 1 !important; }
+            .live-edge:hover .live-edge__tip { display: block; }
+        }
+        .live-edge:focus-visible { animation-play-state: paused; opacity: 1 !important; }
+        .live-edge:focus-visible .live-edge__tip { display: block; }
+        /* The trail on the cards of a followed research (K3.2): a dot in the top-right corner, fainter with age. */
+        .live-trail-dot {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--live-c);
+            pointer-events: auto;
+            z-index: 2;
+        }
+        /* The screen reader's announcement of a load (src/ui/live-announce.ts). */
+        #live-announce {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
         @media (prefers-reduced-motion: reduce) {
-            .person-card.live-changed { animation: none; }
+            .person-card.live-touched, .person-card.live-touched .live-field { animation: none; }
+            .live-edge { animation: none; }
+        }
+        /* A phone (also held sideways): the trail stays off the cards (src/ui/live-follow-ui.ts); the notch keeps its 44 px target. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .live-trail-dot { display: none; }
         }
 
         /* "Research now" panel of a followed live research. Desktop: a card
@@ -16671,6 +16788,18 @@
         .live-sec-seg--settings { flex: none; width: 300px; max-width: 100%; }
         .live-sec-seg--settings > .live-sec-seg__opt { height: 30px; padding: 0 8px; font-size: 12.5px; }
         .settings-row.live-sec-set__reset { padding: 8px 14px 10px; }
+        /* Motion when changes load (spec 055 §4): reduced motion in the system holds it off, with a note why. */
+        .live-sec-set__motion.is-disabled { opacity: 0.5; cursor: default; }
+        .live-sec-set__motion-note {
+            display: block;
+            margin-top: 6px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: var(--warning-soft);
+            color: var(--warning-text);
+            font-size: 12.5px;
+            line-height: 1.35;
+        }
         /* Phones: the segment under its name, across the row. */
         @media (max-width: 640px) {
             .live-sec-set__row { flex-direction: column; align-items: stretch; }

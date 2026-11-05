@@ -119,3 +119,22 @@ export function pushTrail(trail: readonly TrailEntry[], entry: TrailEntry, now: 
 export function trailOpacity(index: number): number {
     return TRAIL_OPACITY[Math.max(0, Math.min(TRAIL_OPACITY.length - 1, index))];
 }
+
+/**
+ * The trail on the cards of the family view (spec 055 K3.2): people added
+ * or changed while following, by session; the same limits as the trail of
+ * places and people worked on (8, none older than 60 min, memory only).
+ */
+export interface CardTrailEntry {
+    personId: PersonId;
+    kind: 'added' | 'changed';
+    session: number;
+    at: number;
+}
+
+/** The trail with new entries in front (a person once, the newest entry kept). */
+export function pushCardTrail(trail: readonly CardTrailEntry[], entries: readonly CardTrailEntry[], now: number): CardTrailEntry[] {
+    const fresh = new Set(entries.map(e => e.personId));
+    return [...entries, ...trail.filter(e => !fresh.has(e.personId))]
+        .filter(e => now - e.at <= TRAIL_MAX_AGE_MS).slice(0, TRAIL_MAX);
+}

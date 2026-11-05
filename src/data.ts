@@ -88,6 +88,12 @@ function dropUndefinedKeys(obj: object): void {
     }
 }
 
+/** What a 'strom:data-changed' event may tell: a live load from the source, with the data shown before it. */
+export interface DataChangedDetail {
+    source: 'live';
+    previous: StromData;
+}
+
 /** Import action types for view mode */
 export type ViewModeImportAction = 'new' | 'update' | 'copy';
 
@@ -3516,13 +3522,17 @@ class DataManagerClass {
     replaceWithSourceData(newData: StromData): void {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (this.isReadOnly() || !this.currentTreeId) return;
+        // The tree shown until now: the drawing goes from it to the new one (spec 055).
+        const previous = this.data;
         this.data = migrateData(newData);
         this.save();
         UndoManager.setActiveTree(this.currentTreeId);
         UndoManager.clear();
         this.onUndoRedoChanged?.();
         CrossTree.invalidateCacheForTree(this.currentTreeId);
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'live', previous } }));
+        }
     }
 
     /**

@@ -82,6 +82,7 @@ export const followLegendMethods = uiModule({
                 if (!input.matches('.follow-legend-switch input')) return;
                 setFollowTrail(input.checked);
                 this.refreshFollowMarks(new Set());
+                TreeRenderer.refreshCardTrail();
             });
         }
         const L = strings.live;

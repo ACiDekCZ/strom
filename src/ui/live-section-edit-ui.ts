@@ -11,11 +11,13 @@ import { strings } from '../strings.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
+import { TreeRenderer } from '../renderer.js';
 import { PersonPicker } from '../person-picker.js';
 import { shownNameFull } from '../person-name.js';
 import {
     FAN_CENTER_SETTINGS, FOLLOW_VIEWS, FanCenterSetting, FollowView, fanPersonOtherTree, getFanCenterSetting, getFanPerson,
     getFollowTrail, getFollowView, hasFollowPrefs, setFanCenterSetting, setFanPerson, setFollowTrail, setFollowView,
+    getLiveMotion, setLiveMotion,
 } from '../live-follow-prefs.js';
 import { PersonId, TreeId } from '../types.js';
 import { uiModule } from './module.js';
@@ -260,6 +262,8 @@ function syncReset(reset: HTMLElement, withFollow = false): void {
 
 /** The picker of Settings' chosen fan centre (one at a time; gone with the next drawing). */
 let fanPersonPicker: PersonPicker | null = null;
+/** The settings follow the system's reduced motion (one listener). */
+let motionMediaWatched = false;
 
 /**
  * A choice of Settings › Following research as a segment: radios with a
@@ -769,12 +773,53 @@ export const liveSectionEditMethods = uiModule({
         box.dataset.value = 'trail';
         box.onchange = () => {
             setFollowTrail(box.checked);
+            TreeRenderer.refreshCardTrail();
             redraw();
         };
         const text = el('span', 'settings-text');
         text.append(el('span', 'settings-name', S.followTrail), el('span', 'settings-desc', S.followTrailHelp));
         trail.append(box, text);
         body.appendChild(trail);
+        body.appendChild(this.liveMotionRow());
+    },
+
+    /**
+     * Motion when changes load (spec 055 §4): off, a live load shows the new
+     * tree at once with a short highlight. Reduced motion in the system: off
+     * whatever is stored (the row says why and cannot be changed).
+     */
+    liveMotionRow(): HTMLElement {
+        const S = strings.settings;
+        const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+        if (media && !motionMediaWatched) {
+            motionMediaWatched = true;
+            media.addEventListener?.('change', () => this.renderResearchFollowSettings());
+        }
+        const reduced = media?.matches === true;
+        const row = el('label', 'settings-checkbox settings-row live-sec-set__motion');
+        row.dataset.key = 'live-motion';
+        const box = el('input');
+        box.type = 'checkbox';
+        box.checked = !reduced && getLiveMotion();
+        box.dataset.value = 'motion';
+        if (reduced) {
+            box.disabled = true;
+            box.setAttribute('aria-disabled', 'true');
+            row.classList.add('is-disabled');
+        }
+        box.onchange = () => {
+            setLiveMotion(box.checked);
+            this.renderResearchFollowSettings();
+        };
+        const text = el('span', 'settings-text');
+        text.append(el('span', 'settings-name', S.liveMotion), el('span', 'settings-desc', S.liveMotionHelp));
+        if (reduced) {
+            const note = el('span', 'live-sec-set__motion-note', S.liveMotionReduced);
+            note.setAttribute('role', 'note');
+            text.appendChild(note);
+        }
+        row.append(box, text);
+        return row;
     },
 
     /** "Name · for the tree …  Change", or none chosen for this tree (another tree's choice said) and "Choose person". */

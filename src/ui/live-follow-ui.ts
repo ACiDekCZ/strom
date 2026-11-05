@@ -25,10 +25,13 @@ import { PersonId, ViewMode, LAST_FOCUSED } from '../types.js';
 import { uiModule } from './module.js';
 import { el, liveSession } from './research-ui.js';
 import { segmentArrowTarget } from './live-section-edit.js';
-import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson } from '../live-follow-prefs.js';
+import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson, getFollowTrail } from '../live-follow-prefs.js';
 import {
     FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
+    CardTrailEntry, pushCardTrail, sessionTone,
 } from '../live-follow-targets.js';
+import type { LiveDiff } from '../live-diff.js';
+import { isPhoneBar } from '../breakpoints.js';
 import { WorkPlace, resolveWorkPlace, samePlace, workPlaceId } from '../live-follow-map.js';
 import { WORKING_PLACE_FEATURE } from '../research-link.js';
 
@@ -82,6 +85,12 @@ interface FollowSession {
     mapPaused: boolean;
     /** The people and places worked on before (memory only; drawn by the fan and the map). */
     trail: TrailEntry[];
+    /**
+     * The people a live load added or changed (spec 055 K3.2; memory only;
+     * drawn as dots on the cards of the family view). A list of its own: the
+     * fan's and the map's trail stays as it was.
+     */
+    cardTrail: CardTrailEntry[];
     /** Row of working[] → its last person (the signal only on a change). */
     lastTargets: Map<number, PersonId>;
     /** Row of working[] → its last work place (the map's signal only on a change). */
@@ -137,7 +146,7 @@ function followSession(): FollowSession | null {
     if (!session) {
         session = {
             view: getFollowView(), focusBefore: TreeRenderer.getFocusPersonId(), fanPinned: null,
-            mapPaused: false, trail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
+            mapPaused: false, trail: [], cardTrail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
         };
         seenMode = TreeRenderer.getViewMode();
     }
@@ -165,6 +174,73 @@ export function currentWorkPlaces(targets: readonly FollowTarget[] = currentFoll
     const usePlace = placeFromBridge();
     for (const t of targets) out.set(t.row, resolveWorkPlace(data, { personId: t.personId, place: s.working[t.row]?.place }, usePlace));
     return out;
+}
+
+/** A session's colour on the cards (043: the first one primary, the others accent). */
+function toneColor(session: number): string {
+    return sessionTone(session) === 'primary' ? 'var(--follow-c1)' : 'var(--follow-c2)';
+}
+
+/**
+ * The session a live load's change of a person belongs to (an estimate: the
+ * bridge does not say): the run at work on that person or on a parent, a
+ * child or a partner of theirs; else the run whose task the last change
+ * came with; else the first one. Not following: the first one.
+ */
+export function liveSessionOf(id: PersonId): number {
+    const s = liveSession();
+    if (!s || !followActive()) return 1;
+    const targets = followTargets(s.working, personOfRefn());
+    if (targets.length === 0) return 1;
+    const data = DataManager.getData();
+    const p = data.persons[id];
+    const near = new Set<PersonId>([id, ...(p?.parentIds ?? []), ...(p?.childIds ?? [])]);
+    for (const uid of p?.partnerships ?? []) {
+        const u = data.partnerships[uid];
+        if (u) { near.add(u.person1Id); near.add(u.person2Id); }
+    }
+    const byPerson = targets.find(t => t.personId === id) ?? targets.find(t => near.has(t.personId));
+    if (byPerson) return byPerson.session;
+    const task = s.changes[0]?.task;
+    const byTask = task ? targets.find(t => t.task === task) : undefined;
+    return byTask?.session ?? 1;
+}
+
+/** The trail on the cards (newest first): following on, the trail on, not on a phone. */
+function cardTrailShown(): ReadonlyArray<{ personId: PersonId; kind: 'added' | 'changed'; color: string }> {
+    if (!followActive() || !session || !getFollowTrail() || isPhoneBar()) return [];
+    const now = Date.now();
+    session.cardTrail = pushCardTrail(session.cardTrail, [], now);
+    return session.cardTrail.map(e => ({ personId: e.personId, kind: e.kind, color: toneColor(e.session) }));
+}
+
+/** A live load's scene ended: the people it added or changed go to the front of the card trail. */
+function noteLiveLoad(diff: LiveDiff): void {
+    const fs = followSession();
+    if (!fs) return;
+    const now = Date.now();
+    const entries: CardTrailEntry[] = [
+        ...diff.added.map(personId => ({ personId, kind: 'added' as const, session: liveSessionOf(personId), at: now })),
+        ...[...new Set([...diff.changed.keys(), ...diff.merged.values()])]
+            .filter(personId => !diff.added.includes(personId))
+            .map(personId => ({ personId, kind: 'changed' as const, session: liveSessionOf(personId), at: now })),
+    ];
+    if (entries.length === 0) return;
+    fs.cardTrail = pushCardTrail(fs.cardTrail, entries, now);
+    TreeRenderer.refreshCardTrail();
+}
+
+let liveHooksSet = false;
+/** What a live load of the tree asks following (TreeRenderer.renderLive): colours, the card trail, the jump targets. */
+export function setLiveRenderHooks(): void {
+    if (liveHooksSet) return;
+    liveHooksSet = true;
+    TreeRenderer.setLiveHooks({
+        colorOf: id => toneColor(liveSessionOf(id)),
+        jumpTargets: () => new Set(pausedByUser ? [] : currentFollowTargets().map(t => t.personId)),
+        onLoaded: noteLiveLoad,
+        cardTrail: cardTrailShown,
+    });
 }
 
 /** The trail of this run of following (newest first; empty when not following). */
@@ -654,6 +730,7 @@ export const liveFollowMethods = uiModule({
 
     /** Moving or zooming the tree by hand, and the F key. */
     listenForLiveFollow(): void {
+        setLiveRenderHooks();
         if (listening) return;
         const container = document.getElementById('tree-container');
         if (!container) return;

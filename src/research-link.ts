@@ -1140,6 +1140,40 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         if (nextIds.has(oldId)) continue;
         map.set(newId, oldId);
     }
+    // A person without a number (a placeholder for an unknown partner, a
+    // person the importer made up) is the same person when the numbered
+    // people around them are the same: their name and their numbered
+    // parents, children and partners (the unnumbered ones get new ids too).
+    const noRefnKeys = (data: StromData, remap: boolean): Map<string, string> => {
+        const numbered = (x: string) => !!data.persons?.[x as PersonId]?.refn?.trim();
+        const id = (x: string) => (remap ? (map.get(x) ?? x) : x);
+        const partners = new Map<string, string[]>();
+        for (const ps of Object.values(data.partnerships ?? {})) {
+            if (!ps?.person1Id || !ps?.person2Id) continue;
+            (partners.get(ps.person1Id) ?? partners.set(ps.person1Id, []).get(ps.person1Id)!).push(ps.person2Id);
+            (partners.get(ps.person2Id) ?? partners.set(ps.person2Id, []).get(ps.person2Id)!).push(ps.person1Id);
+        }
+        const seen = new Map<string, string | null>();
+        for (const [pid, p] of Object.entries(data.persons ?? {})) {
+            if (!p || p.refn?.trim()) continue;
+            const ids = (v: readonly string[] | undefined) => (v ?? []).filter(numbered).map(id).sort().join(',');
+            const near = [ids(p.parentIds), ids(p.childIds), ids(partners.get(pid))];
+            if (near.every(n => !n)) continue;
+            const key = [p.isPlaceholder ? 1 : 0, p.gender, p.firstName ?? '', p.lastName ?? '', ...near].join('\u0000');
+            seen.set(key, seen.has(key) ? null : pid);
+        }
+        const out = new Map<string, string>();
+        for (const [k, pid] of seen) if (pid) out.set(k, pid);
+        return out;
+    };
+    const prevNoRefn = noRefnKeys(previous, false);
+    const takenPersons = new Set(map.values());
+    for (const [key, newId] of noRefnKeys(next, true)) {
+        const oldId = prevNoRefn.get(key);
+        if (!oldId || oldId === newId || nextIds.has(oldId) || takenPersons.has(oldId)) continue;
+        map.set(newId, oldId);
+        takenPersons.add(oldId);
+    }
 
     const pairKey = (a: string | null | undefined, b: string | null | undefined, remap: boolean): string | null => {
         if (!a || !b) return null;

@@ -17,6 +17,8 @@ export const FOLLOW_PREF_KEYS = {
     fanCenter: 'strom-live-follow-fan-center',
     fanPersonPrefix: 'strom-live-follow-fan-person:',
     trail: 'strom-live-follow-trail',
+    /** Motion when a live load brings changes (spec 055 §4): '0' off, missing or '1' on. */
+    motion: 'strom-live-motion',
 } as const;
 
 function read(key: string): string | null {
@@ -90,9 +92,18 @@ export function setFollowTrail(on: boolean): void {
     write(FOLLOW_PREF_KEYS.trail, on ? null : '0');
 }
 
+/** Motion when changes load (on by default): new people grow out of their line, the others move. */
+export function getLiveMotion(): boolean {
+    return read(FOLLOW_PREF_KEYS.motion) !== '0';
+}
+
+export function setLiveMotion(on: boolean): void {
+    write(FOLLOW_PREF_KEYS.motion, on ? null : '0');
+}
+
 function followKeys(): string[] {
     return allKeys().filter(k => k === FOLLOW_PREF_KEYS.view || k === FOLLOW_PREF_KEYS.fanCenter
-        || k === FOLLOW_PREF_KEYS.trail || k.startsWith(FOLLOW_PREF_KEYS.fanPersonPrefix));
+        || k === FOLLOW_PREF_KEYS.trail || k === FOLLOW_PREF_KEYS.motion || k.startsWith(FOLLOW_PREF_KEYS.fanPersonPrefix));
 }
 
 /** Something differs from the defaults (Reset to defaults has work to do). */

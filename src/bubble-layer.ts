@@ -268,3 +268,8 @@ export function closeOpenBubble(): void {
 export function openBubble(): HTMLElement | null {
     return open?.bubble ?? null;
 }
+
+/** The element the open bubble belongs to (its tab), or null. */
+export function openBubbleOwner(): HTMLElement | null {
+    return open?.owner ?? null;
+}

@@ -83,7 +83,13 @@ import {
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
-import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble } from './bubble-layer.js';
+import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble, openBubbleOwner } from './bubble-layer.js';
+import { LiveDiff, diffLive, liveChangeCount } from './live-diff.js';
+import { playLiveScene } from './live-scene.js';
+import { LIVE, edgeNotchSpot, EdgeSide, liveMotionOn, cardTrailOpacity } from './live-transition.js';
+import { getLiveMotion } from './live-follow-prefs.js';
+import { announceLive } from './ui/live-announce.js';
+import { MOBILE_MAX, MQ_PHONE_LANDSCAPE } from './breakpoints.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -188,6 +194,95 @@ interface ChildrenScene {
     cards: Map<PersonId, HTMLElement>;
     /** A copy of the lines, for the ghost. */
     lines: SVGSVGElement;
+}
+
+/**
+ * A live load in progress (TreeRenderer.renderLive): the tree as it stood
+ * and the cards as they get matched to the new drawing by person id.
+ */
+interface LiveRender {
+    /** The data shown before the load. */
+    previous: StromData;
+    /** No scene, no rings (a second pass of the same data). */
+    quiet: boolean;
+    positions: Map<PersonId, Position>;
+    connections: Connection[];
+    spouseLines: SpouseLine[];
+    /** A copy of the lines, for the ghost, and their markup to tell a change. */
+    lines: SVGSVGElement;
+    linesHtml: string;
+    /** The cards before; the ones matched are taken out as the new drawing goes. */
+    cards: Map<PersonId, HTMLElement>;
+    /** Every card before (the scene takes the ones that leave from here). */
+    allCards: Map<PersonId, HTMLElement>;
+    /** Cards kept as they were (their element stays). */
+    kept: Set<PersonId>;
+    /** Cards drawn anew (their content changed). */
+    redrawn: Set<PersonId>;
+    /** New elements: their names are fitted at once. */
+    fresh: HTMLElement[];
+    /** The card placed last, to put a new one after it. */
+    last: HTMLElement | null;
+}
+
+/** What a live load tells the rest of the app (src/ui/live-follow-ui.ts sets it). */
+export interface LiveRenderHooks {
+    /** The colour (a CSS value) of the session a person's change belongs to. */
+    colorOf?: (id: PersonId) => string;
+    /** The people following is about to jump to: no edge notch for them. */
+    jumpTargets?: () => ReadonlySet<PersonId>;
+    /** A live load was drawn: who came, went and changed. */
+    onLoaded?: (diff: LiveDiff) => void;
+    /** The trail on the cards: the newest first, each with its colour. */
+    cardTrail?: () => ReadonlyArray<{ personId: PersonId; kind: 'added' | 'changed'; color: string }>;
+}
+
+/** A card's content for telling whether a live load changed it (its place and running animations' phase left out). */
+function cardSignature(card: HTMLElement): string {
+    const left = card.style.left, top = card.style.top;
+    card.style.left = '';
+    card.style.top = '';
+    const shell = (card.cloneNode(false) as HTMLElement).outerHTML;
+    card.style.left = left;
+    card.style.top = top;
+    return (shell + card.innerHTML).replace(/animation-delay:[^;"]*/g, '');
+}
+
+/** The texts of a card's rows, for marking the ones a live load changed (.live-field). */
+function cardRows(card: HTMLElement): Array<[HTMLElement, string]> {
+    const rows: Array<[HTMLElement, string]> = [];
+    const name = card.querySelector<HTMLElement>('.name-text');
+    if (name) rows.push([name.closest<HTMLElement>('.name') ?? name, `${name.dataset.given ?? ''} ${name.dataset.surname ?? ''}`]);
+    const birth = card.querySelector<HTMLElement>('.card-birth');
+    if (birth) rows.push([birth, birth.dataset.birth ?? birth.textContent ?? '']);
+    const meta = card.querySelector<HTMLElement>('.birth-date');
+    if (meta) rows.push([meta, meta.dataset.full ?? meta.querySelector('.meta-text')?.textContent ?? meta.textContent ?? '']);
+    const years = card.querySelector<HTMLElement>('.card-years');
+    if (years) rows.push([years, years.textContent ?? '']);
+    card.querySelectorAll<HTMLElement>('.card-lines > *').forEach((row, i) => rows.push([row, `${i}:${row.textContent ?? ''}`]));
+    return rows;
+}
+
+/** Mark the rows of `fresh` whose text differs from the same row of `old` (by kind and order). */
+function markChangedRows(old: HTMLElement, fresh: HTMLElement): void {
+    const kindOf = (el: HTMLElement) => el.className.split(' ')[0];
+    const before = new Map<string, string>();
+    const seen = new Map<string, number>();
+    for (const [el, text] of cardRows(old)) {
+        const k = kindOf(el);
+        const n = seen.get(k) ?? 0;
+        seen.set(k, n + 1);
+        before.set(`${k}#${n}`, text);
+    }
+    seen.clear();
+    for (const [el, text] of cardRows(fresh)) {
+        const k = kindOf(el);
+        const n = seen.get(k) ?? 0;
+        seen.set(k, n + 1);
+        const was = before.get(`${k}#${n}`);
+        if (was !== undefined && was !== text) el.classList.add('live-field');
+        if (was === undefined && text.trim()) el.classList.add('live-field');
+    }
 }
 /** Room the sibling-order pill ("3 of 5") takes on a card's bottom-right edge, with its inset (px). */
 const SIBLING_ORDER_PILL_RIGHT = 60;
@@ -320,8 +415,12 @@ class TreeRendererClass {
     private viewStandIn: ViewStandIn | null = null;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
-    /** People the last live-research change touched: 'live-changed' glow. */
-    private changedIds: Set<PersonId> | null = null;
+    /** What a live load tells the rest of the app (setLiveHooks). */
+    private liveHooks: LiveRenderHooks = {};
+    /** Each card's content as drawn (cardSignature): a live load keeps a card whose content is the same. */
+    private cardSigs = new WeakMap<HTMLElement, string>();
+    /** The edge notches of the last live load (a new person out of view), their timer. */
+    private liveEdgeTimer: ReturnType<typeof setTimeout> | null = null;
     /** "Show in tree" from the tree overview: these people stand out, the rest dims. Not kept over a reload. */
     private evidenceIds: Set<PersonId> | null = null;
     /** Shown faintly beside the highlighted people (a lineage's married-in spouses): neither framed nor dimmed. */
@@ -510,26 +609,72 @@ class TreeRendererClass {
         return this.renderInternal();
     }
 
-    private async renderInternal(): Promise<void> {
+    /**
+     * A live load of the research's tree (spec 055): the tree just loaded
+     * replaces the one shown without an empty frame — the cards are matched
+     * by person id (one whose content did not change keeps its element, its
+     * photo and fitted name), and the change plays as a short scene
+     * (src/live-scene.ts): cards move, new people grow out of their line with
+     * the light along it, changed cards get a ring. Other views (timeline,
+     * fan, map) draw as usual. `previous`: the data shown before the load.
+     */
+    renderLive(previous: StromData | null): Promise<void> {
+        if (!previous || STANDALONE_VIEWS.includes(this.viewMode)) return this.renderInternal();
+        return this.renderInternal({ previous, quiet: false });
+    }
+
+    /** Hooks of a live load (colours of the sessions, the trail, the following's jump targets). */
+    setLiveHooks(hooks: LiveRenderHooks): void {
+        this.liveHooks = hooks;
+    }
+
+    private async renderInternal(liveLoad: { previous: StromData; quiet: boolean } | null = null): Promise<void> {
         // Sequence token: a newer render started while this one awaited must
         // win, or both append their cards to the same canvas (duplicates).
         const seq = ++this.renderSeq;
-        // A transition of children shown in place ends with any new drawing
-        this.finishChildrenTransition();
-        // The cards go: an open bubble (in the top layer) with them
-        closeOpenBubble();
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
 
         if (!canvas || !svg) return;
 
-        // A re-render invalidates the anchor of the cross-tree chooser (its
-        // badge card is about to be removed) — close it first.
-        UI.hideCrossTreeChooser?.();
+        if (!liveLoad) {
+            // A transition of children shown in place ends with any new drawing
+            this.finishChildrenTransition();
+            // The cards go: an open bubble (in the top layer) with them
+            closeOpenBubble();
+            // A re-render invalidates the anchor of the cross-tree chooser (its
+            // badge card is about to be removed) — close it first.
+            UI.hideCrossTreeChooser?.();
+        }
 
-        // Clear previous render
-        canvas.querySelectorAll('.person-card').forEach(c => c.remove());
+        // The other trees the cards are matched against (IndexedDB) are read
+        // BEFORE anything is taken off: from here on the drawing runs in one
+        // go, so no frame ever shows the canvas empty (spec 055).
+        const allTrees = STANDALONE_VIEWS.includes(this.viewMode) ? null : await this.getAllTreesForCrossTreeMatching();
+        if (seq !== this.renderSeq) return;
+
+        // A live load: the tree as it stands now, for matching the cards and the scene.
+        let live: LiveRender | null = null;
+        if (liveLoad) {
+            this.finishChildrenTransition();
+            const cards = new Map<PersonId, HTMLElement>();
+            canvas.querySelectorAll<HTMLElement>(':scope > .person-card[data-id]').forEach(c => cards.set(c.dataset.id as PersonId, c));
+            if (cards.size > 0 && !STANDALONE_VIEWS.includes(this.viewMode)) {
+                live = {
+                    previous: liveLoad.previous, quiet: liveLoad.quiet,
+                    positions: new Map(this.positions), connections: this.connections, spouseLines: this.spouseLines,
+                    lines: svg.cloneNode(true) as SVGSVGElement, linesHtml: svg.innerHTML,
+                    cards, allCards: new Map(cards), kept: new Set(), redrawn: new Set(), fresh: [], last: null,
+                };
+            } else {
+                closeOpenBubble();
+                UI.hideCrossTreeChooser?.();
+            }
+        }
+
+        // Clear previous render (a live load keeps the cards: matched below)
+        if (!live) canvas.querySelectorAll('.person-card').forEach(c => c.remove());
         svg.innerHTML = '';
         this.positions.clear();
         this.connections = [];
@@ -544,6 +689,7 @@ class TreeRendererClass {
         // The first render knows whether the tree is empty: the welcome may show now.
         document.documentElement.classList.remove('app-booting');
         if (persons.length === 0) {
+            if (live) canvas.querySelectorAll('.person-card').forEach(c => c.remove());
             if (empty) empty.style.display = 'block';
             this.focusPersonId = null;
             this.updateFocusUI();
@@ -664,6 +810,7 @@ class TreeRendererClass {
         if (active) {
             const el = document.getElementById(active.id);
             if (el) {
+                if (live) canvas.querySelectorAll('.person-card').forEach(c => c.remove());
                 canvas.style.display = 'none';
                 active.draw(el);
                 this.updateFocusUI();
@@ -678,16 +825,20 @@ class TreeRendererClass {
 
         canvas.style.display = '';
 
-        const current = await this.renderCards(canvas, seq);
-        if (!current) return;
+        this.renderCards(canvas, allTrees, live);
         this.renderLines(svg);
         this.renderEdgeLinks(svg, canvas);
         this.renderViewLinkLabels(canvas);
         this.renderViewLinkIslands(canvas);
         this.updateSVGSize(svg);
+        this.applyCardTrail(canvas);
         // Fit long names once, after the cards are in the DOM and measurable.
-        // Printing: now, the page is printed before the next frame.
-        if (this.printing) this.fitCardNames(canvas);
+        // Printing: now, the page is printed before the next frame. A live
+        // load: the new cards now (the kept ones are fitted), before a frame
+        // shows them unfitted.
+        if (live) {
+            if (live.fresh.length > 0) this.fitCardNames(canvas, 0, live.fresh);
+        } else if (this.printing) this.fitCardNames(canvas);
         else requestAnimationFrame(() => this.fitCardNames(canvas));
 
         // Update focus UI (shows panel with focused person name, generation controls)
@@ -704,8 +855,204 @@ class TreeRendererClass {
         UI.updateGenLabels?.();
         // "Linked in the view only · n" over the view, the open list in step.
         UI.updateViewLinksIndicator?.();
-        // Pills on a bottom edge came out otherwise than measured: once more at their size.
-        if (this.edgeRoomRerenderSeq === seq && seq === this.renderSeq) this.render();
+        // Pills on a bottom edge came out otherwise than measured: once more at their size
+        // (after a live load's scene, quietly: the same data, the cards kept).
+        const again = this.edgeRoomRerenderSeq === seq && seq === this.renderSeq;
+        if (live) this.playLive(canvas, svg, live, again ? () => {
+            if (seq === this.renderSeq) void this.renderInternal({ previous: DataManager.getData(), quiet: true });
+        } : null);
+        else if (again) this.render();
+    }
+
+    /**
+     * After a live load's drawing (renderInternal): the cards that left go,
+     * the view keeps the anchor in place, the scene plays, new people out of
+     * the view get a notch at the edge, the screen reader hears what changed.
+     * `then`: runs once the scene ends.
+     */
+    private playLive(canvas: HTMLElement, svg: SVGSVGElement, live: LiveRender, then: (() => void) | null): void {
+        // An open bubble stays only on a card kept on its place.
+        const owner = openBubbleOwner()?.closest<HTMLElement>('.person-card');
+        const ownerId = owner?.dataset.id as PersonId | undefined;
+        if (owner && (!owner.isConnected || !ownerId || !live.kept.has(ownerId)
+            || live.positions.get(ownerId)?.x !== this.positions.get(ownerId)?.x || live.positions.get(ownerId)?.y !== this.positions.get(ownerId)?.y)) {
+            closeOpenBubble();
+        }
+        if (live.redrawn.size > 0 || live.cards.size > 0) UI.hideCrossTreeChooser?.();
+
+        const data = DataManager.getData();
+        const diff = live.quiet ? { added: [], removed: [], changed: new Map(), merged: new Map(), moved: [] } as LiveDiff : diffLive(live.previous, data);
+        // A person drawn anew but not in the data's change (a relation came or went): no ring.
+        // The anchor: the focus, or the kept card nearest the middle of the view.
+        const container = document.getElementById('tree-container');
+        let anchorId: PersonId | null = this.focusPersonId && live.positions.has(this.focusPersonId) && this.positions.has(this.focusPersonId) ? this.focusPersonId : null;
+        if (!anchorId && container) {
+            const { scale, tx, ty } = ZoomPan.getTransform();
+            const cx = (container.clientWidth / 2 - tx) / scale, cy = (container.clientHeight / 2 - ty) / scale;
+            let best = Infinity;
+            for (const [id, p] of live.positions) {
+                if (!this.positions.has(id)) continue;
+                const d = Math.hypot(p.x - cx, p.y - cy);
+                if (d < best) { best = d; anchorId = id; }
+            }
+        }
+        const shift = anchorId ? this.keepCardInPlace(anchorId, live.positions, false) : { x: 0, y: 0 };
+        const anchorBox = anchorId ? this.cardBox(anchorId) : null;
+        const anchor = anchorBox ? { x: (anchorBox.left + anchorBox.right) / 2, y: (anchorBox.top + anchorBox.bottom) / 2 } : { x: 0, y: 0 };
+
+        const coarse = window.matchMedia?.('(pointer: coarse)').matches === true;
+        const compact = isCompactMotion(window.innerWidth, coarse);
+        const phone = window.innerWidth <= MOBILE_MAX || window.matchMedia?.(MQ_PHONE_LANDSCAPE).matches === true;
+        const cap = childrenTransitionTiming('open', compact).cap;
+        let moves = 0;
+        for (const [id, p] of this.positions) {
+            const was = live.positions.get(id);
+            if (was && (Math.abs(was.x + shift.x - p.x) > 0.5 || Math.abs(was.y + shift.y - p.y) > 0.5)) moves++;
+        }
+        const canAnimate = typeof Element.prototype.animate === 'function';
+        const motion = canAnimate && liveMotionOn(getLiveMotion(), this.reducedMotion()) && (this.viewMode === 'family' || this.viewMode === 'descendants');
+        const overLimit = liveChangeCount(diff) > LIVE.maxChangedForScene || moves > cap * 3;
+        const colorOf = (id: PersonId) => this.liveHooks.colorOf?.(id) ?? 'var(--follow-c1)';
+        const leave = new Map(live.cards);
+
+        const done = (): void => {
+            if (this.childrenTransition === handle) this.childrenTransition = null;
+            container?.removeEventListener('pointerdown', cut, true);
+            container?.removeEventListener('wheel', cut, true);
+            if (!live.quiet) this.liveHooks.onLoaded?.(diff);
+            then?.();
+        };
+        const cut = (e: Event): void => {
+            // A touch drag does not cut the scene short (the finger is often still on the glass).
+            if (e.type === 'pointerdown' && (e as PointerEvent).pointerType === 'touch') return;
+            handle?.finish();
+        };
+        let handle: { finish: () => void } | null = null;
+        if (live.quiet || !container) {
+            for (const el of leave.values()) el.remove();
+            done();
+        } else {
+            handle = playLiveScene({
+                diff,
+                before: { positions: live.positions, connections: live.connections, spouseLines: live.spouseLines, data: live.previous, cards: live.allCards, lines: live.lines },
+                after: { positions: this.positions, connections: this.connections, spouseLines: this.spouseLines, data },
+                redrawn: live.redrawn, shift, anchor, linesChanged: svg.innerHTML !== live.linesHtml,
+                motion: motion && !this.printing, overLimit, compact, phone, cap,
+                transform: ZoomPan.getTransform(), container, canvas, svg,
+                cardEl: id => this.cardElement(id),
+                cardSize: id => {
+                    const el = this.cardElement(id) ?? live.allCards.get(id);
+                    return { w: el?.offsetWidth || this.config.cardWidth, h: el?.offsetHeight || this.cardHeightOf(id) };
+                },
+                colorOf,
+                onDone: () => done(),
+            });
+            // The cards that left and the scene did not take: gone now.
+            for (const el of leave.values()) if (el.parentElement === canvas) el.remove();
+            if (handle) {
+                this.childrenTransition = handle;
+                container.addEventListener('pointerdown', cut, true);
+                container.addEventListener('wheel', cut, { capture: true, passive: true });
+            }
+        }
+        if (live.quiet) return;
+        this.showLiveEdges(diff.added, colorOf);
+        announceLive(diff, live.previous, data);
+    }
+
+    /**
+     * §3.4: a new person out of the view gets a notch at the edge of the
+     * tree's area on their side (one per side; several people: their count),
+     * in the session's colour; a click glides to them. It goes after a while
+     * by itself (CSS), the next load replaces it.
+     */
+    private showLiveEdges(added: readonly PersonId[], colorOf: (id: PersonId) => string): void {
+        const container = document.getElementById('tree-container');
+        if (!container) return;
+        container.querySelectorAll('.live-edge').forEach(el => el.remove());
+        if (this.liveEdgeTimer) clearTimeout(this.liveEdgeTimer);
+        this.liveEdgeTimer = null;
+        if (added.length === 0 || (this.viewMode !== 'family' && this.viewMode !== 'descendants')) return;
+        const skip = this.liveHooks.jumpTargets?.() ?? new Set<PersonId>();
+        const { scale, tx, ty } = ZoomPan.getTransform();
+        const w = container.clientWidth, h = container.clientHeight;
+        const bySide = new Map<EdgeSide, Array<{ id: PersonId; at: number; dist: number }>>();
+        for (const id of added) {
+            if (skip.has(id)) continue;
+            const box = this.cardBox(id);
+            if (!box) continue;
+            const rect = { left: box.left * scale + tx, top: box.top * scale + ty, right: box.right * scale + tx, bottom: box.bottom * scale + ty };
+            const spot = edgeNotchSpot(rect, w, h);
+            if (!spot) continue;
+            const cx = (rect.left + rect.right) / 2 - w / 2, cy = (rect.top + rect.bottom) / 2 - h / 2;
+            const list = bySide.get(spot.side) ?? [];
+            list.push({ id, at: spot.at, dist: Math.hypot(cx, cy) });
+            bySide.set(spot.side, list);
+        }
+        const L = strings.live;
+        for (const [side, list] of bySide) {
+            list.sort((a, b) => a.dist - b.dist);
+            const first = list[0];
+            const person = DataManager.getPerson(first.id);
+            const name = person ? shownNameFull(person, '?') : '?';
+            const at = list.reduce((sum, it) => sum + it.at, 0) / list.length;
+            const span = side === 'left' || side === 'right' ? h : w;
+            const pos = Math.max(LIVE.edge.corner + LIVE.edge.length / 2, Math.min(span - LIVE.edge.corner - LIVE.edge.length / 2, at));
+            const label = list.length === 1 ? L.edgeAdded(name) : L.edgeAddedMany(list.length);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `live-edge live-edge--${side}`;
+            btn.style.setProperty('--live-c', colorOf(first.id));
+            btn.style.setProperty('--live-edge-at', `${pos}px`);
+            btn.setAttribute('aria-label', L.edgeShowAria(name));
+            btn.innerHTML = `<span class="live-edge__mark" aria-hidden="true"></span><span class="live-edge__tip" aria-hidden="true">${this.escapeHtml(label)}</span>`;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                btn.remove();
+                ZoomPan.glideToPerson(first.id);
+            });
+            btn.addEventListener('animationend', (e) => { if (e.animationName === 'live-edge-life') btn.remove(); });
+            container.appendChild(btn);
+        }
+        // Without the animation's end (a hidden page, reduced motion): gone after its time anyway.
+        const life = LIVE.edge.in[1] + LIVE.edge.holdMs + LIVE.edge.outMs + 200;
+        this.liveEdgeTimer = setTimeout(() => {
+            container.querySelectorAll<HTMLElement>('.live-edge').forEach(el => {
+                if (!el.matches(':hover, :focus-visible')) {
+                    el.remove();
+                    return;
+                }
+                // Kept while pointed at or focused; afterwards gone with its animation, or at once without one.
+                const later = () => { if (el.getAnimations().length === 0) el.remove(); };
+                el.addEventListener('mouseleave', later, { once: true });
+                el.addEventListener('blur', later, { once: true });
+            });
+            this.liveEdgeTimer = null;
+        }, life);
+    }
+
+    /** The trail of a followed research on the cards (§3.3): a dot per person worked on lately, older ones fainter. */
+    private applyCardTrail(canvas: HTMLElement): void {
+        canvas.querySelectorAll('.live-trail-dot').forEach(el => el.remove());
+        if (this.viewMode !== 'family' && this.viewMode !== 'descendants') return;
+        const trail = this.liveHooks.cardTrail?.() ?? [];
+        const L = strings.live;
+        trail.forEach((entry, i) => {
+            const card = this.cardElement(entry.personId);
+            if (!card) return;
+            const dot = document.createElement('span');
+            dot.className = 'live-trail-dot';
+            dot.style.setProperty('--live-c', entry.color);
+            dot.style.opacity = String(cardTrailOpacity(i));
+            dot.title = entry.kind === 'added' ? L.trailAdded : L.trailChanged;
+            card.appendChild(dot);
+        });
+    }
+
+    /** The trail on the cards changed (a load, the setting): draw it again, nothing else. */
+    refreshCardTrail(): void {
+        const canvas = document.getElementById('tree-canvas');
+        if (canvas) this.applyCardTrail(canvas);
     }
 
     /**
@@ -3581,19 +3928,6 @@ class TreeRendererClass {
     }
 
     /**
-     * Mark the people a live research change just touched ('live-changed').
-     * Pass null to clear. Class toggling only; re-applied on every render.
-     */
-    setChangedIds(ids: Set<PersonId> | null): void {
-        this.changedIds = ids && ids.size > 0 ? ids : null;
-        document.querySelectorAll('.person-card').forEach(el => {
-            const card = el as HTMLElement;
-            const id = card.dataset.id as PersonId | undefined;
-            card.classList.toggle('live-changed', !!(id && this.changedIds?.has(id)));
-        });
-    }
-
-    /**
      * "Where evidence is missing → Show in tree": the people in `ids` get a
      * dashed frame, everyone else dims (cards and fan sectors). Null ends it.
      * Class toggling only; re-applied on every render. `faint`: people shown
@@ -3847,14 +4181,12 @@ class TreeRendererClass {
         return CrossTree.getTreesDataForMatching(TreeManager);
     }
 
-    /** Returns false when a newer render superseded this one during the await. */
-    private async renderCards(canvas: HTMLElement, seq: number): Promise<boolean> {
-        // Get all trees for cross-tree matching (only if not in view mode)
-        const allTrees = await this.getAllTreesForCrossTreeMatching();
-        if (seq !== this.renderSeq) return false;
-        // Clear again after the await: nothing may have been added in between,
-        // but a card left by an interrupted render must never survive.
-        canvas.querySelectorAll('.person-card').forEach(c => c.remove());
+    /**
+     * Draw the cards (synchronous: the other trees were read before,
+     * renderInternal). A live load (`live`) matches them to the cards drawn
+     * by person id instead of drawing all anew (placeCard).
+     */
+    private renderCards(canvas: HTMLElement, allTrees: Map<TreeId, { name: string; data: StromData }> | null, live: LiveRender | null): void {
         const currentTreeId = DataManager.getCurrentTreeId();
 
         // Optional branch colouring: classify once per render (never in timeline).
@@ -3945,7 +4277,6 @@ class TreeRendererClass {
             if (this.highlightIds && !person.isPlaceholder) {
                 classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
             }
-            if (this.changedIds?.has(id)) classes += ' live-changed';
             // A person of a family shown "linked in the view only" (the hook of its look: package C).
             const ghostOf = this.viewLayer?.ghostIds.has(id) ? this.viewLayer.ghostOf.get(id) : undefined;
             if (ghostOf) classes += ' view-ghost';
@@ -4563,14 +4894,56 @@ class TreeRendererClass {
                 });
             }
 
-            canvas.appendChild(card);
+            this.placeCard(canvas, card, id, live);
         }
         // Measure again with the pills as drawn (once: the second render knows them).
         if (edgeRoomStale && !this.edgeRoomRetried) {
             this.edgeRoomRetried = true;
-            this.edgeRoomRerenderSeq = seq;
+            this.edgeRoomRerenderSeq = this.renderSeq;
         } else this.edgeRoomRetried = false;
-        return true;
+    }
+
+    /**
+     * Put a card just built into the canvas. A live load matches it to the
+     * card drawn for the same person: the same content keeps the old element
+     * (its photo decoded, its name fitted, its animations running) on its new
+     * place; other content replaces it (the photo element moves across) with
+     * the changed rows marked; a new person's card goes in after the one
+     * placed before it.
+     */
+    private placeCard(canvas: HTMLElement, card: HTMLElement, id: PersonId, live: LiveRender | null): void {
+        const sig = cardSignature(card);
+        this.cardSigs.set(card, sig);
+        if (!live) {
+            canvas.appendChild(card);
+            return;
+        }
+        const old = live.cards.get(id);
+        if (!old) {
+            const next = live.last ? live.last.nextElementSibling : canvas.querySelector(':scope > .person-card');
+            if (next) canvas.insertBefore(card, next);
+            else canvas.appendChild(card);
+            live.fresh.push(card);
+            live.last = card;
+            return;
+        }
+        live.cards.delete(id);
+        if (this.cardSigs.get(old) === sig) {
+            old.className = card.className;
+            old.style.left = card.style.left;
+            old.style.top = card.style.top;
+            live.kept.add(id);
+            live.last = old;
+            return;
+        }
+        const oldImg = old.querySelector<HTMLImageElement>('.card-avatar img');
+        const newImg = card.querySelector<HTMLImageElement>('.card-avatar img');
+        if (oldImg && newImg && oldImg.getAttribute('src') === newImg.getAttribute('src')) newImg.replaceWith(oldImg);
+        markChangedRows(old, card);
+        old.replaceWith(card);
+        live.redrawn.add(id);
+        live.fresh.push(card);
+        live.last = card;
     }
 
     /**
@@ -4585,14 +4958,18 @@ class TreeRendererClass {
      * years only; 3 = ellipsis on whichever line still overflows. The full name
      * always stays in the name-text title attribute.
      */
-    private fitCardNames(canvas: HTMLElement, attempt = 0): void {
+    private fitCardNames(canvas: HTMLElement, attempt = 0, only?: readonly HTMLElement[]): void {
         if (canvas.clientWidth === 0 && attempt < 5) {
-            requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
+            requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1, only));
             return;
         }
         // Fitted in the fallback font before the card fonts were in: fit again
         // once they are (the serif name is wider, it would end up clipped).
         cardFontsPending()?.then(() => { if (canvas.isConnected) this.fitCardNames(canvas); });
+        // `only`: these cards (a live load's new ones), the rest stay as fitted.
+        const names = only
+            ? only.filter(c => c.isConnected).flatMap(c => [...c.querySelectorAll<HTMLElement>('.name')])
+            : [...canvas.querySelectorAll<HTMLElement>('.person-card .name')];
         // In passes over all cards (each card fits on its own: fixed width,
         // absolutely placed): every write of a step, then one round of reads.
         // A write and a read per card forced a layout of the page per card
@@ -4600,7 +4977,7 @@ class TreeRendererClass {
         type Item = { nameEl: HTMLElement; textEl: HTMLElement; given: string; surname: string;
             meta: HTMLElement | null; metaText: HTMLElement | null };
         const items: Item[] = [];
-        canvas.querySelectorAll<HTMLElement>('.person-card .name').forEach(nameEl => {
+        names.forEach(nameEl => {
             const textEl = nameEl.querySelector<HTMLElement>('.name-text');
             // A custom card's name in computed rows is drawn as it is (src/card-width.ts).
             if (!textEl || nameEl.classList.contains('name--rows')) return;
@@ -4660,7 +5037,7 @@ class TreeRendererClass {
         // The custom card has one name row above its lines: no two-line step either.
         const density = SettingsManager.getCardDensity();
         if (density === 'compact' || isFieldCardDensity(density)) {
-            this.fitCardBirths(canvas);
+            this.fitCardBirths(canvas, only);
             return;
         }
 
@@ -4686,7 +5063,7 @@ class TreeRendererClass {
         }
         // Step 3 (ellipsis on an overflowing line) is handled by the
         // .name-line { text-overflow: ellipsis } CSS.
-        this.fitCardBirths(canvas);
+        this.fitCardBirths(canvas, only);
     }
 
     /**
@@ -4695,8 +5072,10 @@ class TreeRendererClass {
      * show, the row is left out (the full name stays in the tooltip). Reads
      * only after the name has been fitted, one layout for all cards.
      */
-    private fitCardBirths(canvas: HTMLElement): void {
-        const rows = [...canvas.querySelectorAll<HTMLElement>('.person-card .card-birth')];
+    private fitCardBirths(canvas: HTMLElement, only?: readonly HTMLElement[]): void {
+        const rows = only
+            ? only.filter(c => c.isConnected).flatMap(c => [...c.querySelectorAll<HTMLElement>('.card-birth')])
+            : [...canvas.querySelectorAll<HTMLElement>('.person-card .card-birth')];
         if (!rows.length) return;
         rows.forEach(el => el.classList.remove('is-dropped'));
         const drop: HTMLElement[] = [];

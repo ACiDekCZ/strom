@@ -580,7 +580,7 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         const group = page.locator('#settings-group-research-follow');
         await expect(group).toBeVisible();
         await expect(group.locator('.settings-group-title')).toHaveText(/Following research/i);
-        await expect(group.locator('.settings-group-note')).toHaveText('On this device, for all trees (the chosen person only for its own tree). Applies to the panel, overview, fan and map.');
+        await expect(group.locator('.settings-group-note')).toHaveText('On this device, for all trees (the chosen person only for its own tree). Applies to the panel, overview, Family, fan and map.');
         const set = (key: string) => group.locator(`.live-sec-set__row[data-key="${key}"]`);
         await expect(set('waiting').locator('[aria-checked="true"]')).toHaveText('Collapsed');
         await expect(set('working').locator('.settings-desc')).toHaveText('default · in the overview: Now');
