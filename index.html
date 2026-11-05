@@ -268,6 +268,8 @@
             --warning-soft: #f6ecd3;  /* warning tint backgrounds */
             --read-amber-bg: #fbf5e6;   /* a read document: uncertain, readers differ */
             --read-amber-line: #e8d7ae;
+            --help-mark-line: #a39a87;  /* outline of the help mark "?" (decoration) */
+            --help-mark-hit: #f3dfa6;   /* a match in the help's search results */
             --read-amber-text: #7f5500;
             --read-amber-dot: #b5772a;
             /* History in the life timeline (spec 020, experiment): a row of the layer */
@@ -458,6 +460,8 @@
             --warning-soft: #3a3324;
             --read-amber-bg: #3a3324;
             --read-amber-line: #6b5a32;
+            --help-mark-line: #6e675a;
+            --help-mark-hit: #6a5521;
             --read-amber-text: #e9c77f;
             --read-amber-dot: #d19a4a;
             --hist-bg: #34312a;         /* lighter than --surface, so it does not merge */
@@ -1006,6 +1010,7 @@
         body.view-mode .actions-menu-dropdown #actions-ann-row,
         body.view-mode .actions-menu-dropdown #actions-family-row,
         body.view-mode .actions-menu-dropdown #actions-family-submenu > .tree-switcher-action,
+        body.view-mode .actions-menu-dropdown #actions-help-row,
         body.view-mode .actions-menu-dropdown #actions-settings-row { display: flex !important; }
         body.view-mode .actions-menu-dropdown #actions-settings-divider { display: block !important; }
         /* Small dot on the ⋯ trigger so the anniversaries signal survives the
@@ -3519,6 +3524,11 @@
             min-height: 44px; min-width: 0; padding: 0 8px; gap: 8px; white-space: nowrap;
         }
         .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { min-height: 48px; margin: 2px 4px; }
+        /* Settings | How Strom works | About: three tiles; a long name (de, pl)
+           wraps inside its tile instead of pushing the row wider. */
+        .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item {
+            white-space: normal; text-align: center; line-height: 1.2; overflow-wrap: anywhere; padding: 4px 6px;
+        }
         .bottom-sheet-pair-label { flex: none; font-size: 13px; color: var(--text-light); padding: 0 4px 0 8px; }
         /* Shortcut chips only with a mouse (a touch screen has no keyboard to hint at). */
         .bottom-sheet .menu-kbd { display: none; margin-left: 0; }
@@ -3540,6 +3550,7 @@
             .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item {
                 justify-content: flex-start; padding: 10px 16px; background: none; border-radius: 8px;
             }
+            .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item { text-align: left; padding: 10px 16px; }
             .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { margin: 0; width: 100%; min-height: 44px; }
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-storage-row { min-height: 44px; margin: 2px 0; }
             .bottom-sheet-more .bottom-sheet-handle { margin-top: 2px; margin-bottom: 4px; }
@@ -22431,6 +22442,400 @@
         .tree-switcher-item:focus-visible,
         .context-menu-item:focus-visible { outline-offset: -2px; }
         .modal-overlay [tabindex="-1"]:focus { outline: none; }
+        /* ==== How Strom works: the help window (src/ui/help-ui.ts, 1105 §2–§8, §11) ====
+           Above every other window (the Research overview, Places, the conflicts panel).
+           Computer: 1040 × min(760, 100dvh − 48), the chapter list on the left of a chapter.
+           Tablet: min(720, 100vw − 48), the chapter's rules folded under its title.
+           Phone and a phone held sideways: the whole screen. */
+        .modal-overlay.help-overlay { z-index: 2000; }
+        .modal.help-modal {
+            display: flex; flex-direction: column; padding: 0; overflow: hidden;
+            min-width: 0; width: 1040px; max-width: calc(100vw - 48px);
+            height: min(760px, calc(100dvh - 48px)); max-height: none;
+            border-radius: 14px; background: var(--surface); color: var(--text);
+            box-shadow: 0 16px 48px rgba(20, 16, 8, 0.18);
+            font-size: 15px; line-height: 1.6;
+        }
+        [data-theme="dark"] .modal.help-modal { box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55); }
+        .modal.help-modal:focus { outline: none; }
+        :where(.help-modal) button { font: inherit; color: inherit; margin: 0; }
+        .help-modal :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .help-modal .help-h1:focus-visible, .help-modal .help-rule-title:focus-visible { outline: none; }
+        .help-icon { flex: none; width: 18px; height: 18px; }
+        .help-num { color: var(--primary); font-variant-numeric: tabular-nums; }
+
+        /* Header: [‹ Back] title [search] [×] */
+        .help-header {
+            flex: none; display: flex; align-items: center; gap: 8px; height: 56px;
+            padding: 0 12px 0 14px; border-bottom: 1px solid var(--divider); box-sizing: border-box;
+        }
+        .help-back {
+            display: none; flex: none; align-items: center; justify-content: center; gap: 3px;
+            min-width: 34px; height: 34px; padding: 0 10px 0 6px; border: 0; border-radius: 8px;
+            background: transparent; color: var(--primary); font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .help-modal[data-has-hist="1"] .help-back { display: inline-flex; }
+        .help-title {
+            flex: 1; min-width: 0; padding-left: 6px; font-size: 16px; font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .modal.help-modal label.help-search {
+            flex: 0 1 340px; min-width: 0; display: flex; align-items: center; gap: 7px; height: 34px;
+            margin: 0; padding: 0 4px 0 10px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--bg); box-sizing: border-box; color: var(--text-faint);
+            font-size: 14px; font-weight: 400; line-height: 1.2; cursor: text;
+        }
+        .modal.help-modal label.help-search:focus-within { border-color: var(--primary); box-shadow: var(--shadow-focus); }
+        .help-search .help-icon { width: 15px; height: 15px; }
+        .modal.help-modal input.help-search-input,
+        .modal.help-modal input.help-search-input:focus {
+            flex: 1; min-width: 0; width: auto; height: 100%; margin: 0; padding: 0;
+            border: 0; border-radius: 0; outline: none; box-shadow: none; background: transparent;
+            font: inherit; font-size: 14px; color: var(--text); -webkit-appearance: none; appearance: none;
+        }
+        .help-search-input::placeholder { color: var(--text-faint); opacity: 1; }
+        .help-search-input::-webkit-search-cancel-button { display: none; }
+        .help-search-clear {
+            flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+            background: transparent; color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .help-search-clear[hidden] { display: none; }
+        .help-search-open {
+            display: none; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px;
+            padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-light); cursor: pointer;
+        }
+        .help-close {
+            flex: none; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+            padding: 0; border: 0; border-radius: 8px; background: var(--surface-2); color: var(--text-light); cursor: pointer;
+        }
+        .help-close .help-icon { width: 16px; height: 16px; }
+
+        /* Body: the chapter list (computer, a chapter) | the scrolling column */
+        .help-body { flex: 1; min-height: 0; display: flex; position: relative; }
+        .help-side {
+            flex: none; width: 256px; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 14px; padding: 14px 10px 20px;
+            border-right: 1px solid var(--divider); background: var(--bg); font-size: 13px; line-height: 1.35;
+        }
+        .help-side[hidden] { display: none; }
+        .help-side-home {
+            align-self: flex-start; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent;
+            font-size: 13px; font-weight: 600; color: var(--primary); cursor: pointer;
+        }
+        .help-side-part { display: flex; flex-direction: column; gap: 1px; }
+        .help-side-part-title {
+            padding: 0 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+            text-transform: uppercase; color: var(--accent-text); overflow-wrap: anywhere;
+        }
+        .help-side-ch {
+            display: flex; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px;
+            background: transparent; font-size: 13px; line-height: 1.35; text-align: left; cursor: pointer;
+        }
+        .help-side-ch .help-num { flex: none; width: 22px; }
+        .help-side-ch-title { min-width: 0; overflow-wrap: anywhere; }
+        .help-side-ch[aria-current="page"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
+        .help-side-rules { display: flex; flex-direction: column; padding: 3px 0 6px 30px; }
+        .help-side-rule {
+            padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 12.5px;
+            line-height: 1.35; text-align: left; color: var(--text-light); overflow-wrap: anywhere; cursor: pointer;
+        }
+        .help-side-rule.is-current { color: var(--text); font-weight: 600; }
+        .help-side-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding-top: 10px; border-top: 1px solid var(--divider); }
+        .help-side-foot > * { padding: 5px 8px; font-size: 13px; font-weight: 400; }
+        .help-main { flex: 1; min-width: 0; position: relative; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+        .help-col {
+            max-width: 700px; margin: 0 auto; padding: 22px 36px 32px; box-sizing: border-box;
+            overflow-wrap: anywhere; text-wrap: pretty;
+        }
+        .help-linkbtn {
+            display: inline-flex; align-items: center; min-height: 28px; padding: 0; border: 0; background: transparent;
+            color: var(--primary); font-weight: 600; text-align: left; text-decoration: underline;
+            text-underline-offset: 2px; cursor: pointer;
+        }
+        .help-modal a { color: var(--primary); text-underline-offset: 2px; }
+
+        /* Contents */
+        .help-home { display: flex; flex-direction: column; gap: 22px; }
+        .help-notice {
+            padding: 9px 12px; border-radius: 8px; border: 1px solid var(--read-amber-line);
+            background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45;
+        }
+        .help-home-search {
+            display: none; align-items: center; gap: 8px; width: 100%; height: 44px; padding: 0 12px;
+            border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
+            color: var(--text-faint); font-size: 15px; text-align: left; cursor: text; box-sizing: border-box;
+        }
+        .help-home-search .help-icon { width: 17px; height: 17px; }
+        .help-home-search span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .help-home-info { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; font-size: 13px; line-height: 1.5; color: var(--text-light); }
+        .help-part { display: flex; flex-direction: column; gap: 4px; }
+        .help-part-head { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--divider); }
+        .help-part-id { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--accent-text); }
+        .modal.help-modal .help-part-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.35; }
+        .help-chapters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 0 24px; }
+        .help-ch {
+            display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; min-width: 0; padding: 10px 8px;
+            margin: 0 -8px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer;
+        }
+        .help-ch .help-num { font-size: 13.5px; font-weight: 600; padding-top: 1px; }
+        .help-ch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .help-ch-title { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+        .help-ch-desc { font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .help-home-end { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--divider); }
+        .help-install { align-self: flex-start; display: inline-flex; align-items: center; min-height: 28px; font-size: 13px; }
+        .help-foot { font-size: 12.5px; line-height: 1.5; color: var(--text-light); }
+
+        /* A chapter */
+        .help-article { display: flex; flex-direction: column; }
+        .help-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; line-height: 1.4; color: var(--text-light); }
+        .help-trail { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 28px; }
+        .help-trail .help-linkbtn { font-weight: 400; }
+        .help-modal a.help-web { margin-left: auto; display: inline-flex; align-items: center; min-height: 28px; color: var(--text-light); }
+        .modal.help-modal .help-h1 { margin: 10px 0 2px; font-size: 24px; line-height: 1.25; font-weight: 600; }
+        .help-h1 .help-num { margin-right: 10px; }
+        .help-intro { margin: 8px 0 6px; font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
+        .help-rule {
+            display: flex; align-items: flex-start; gap: 8px; border-radius: 8px;
+            transition: background-color 1.4s ease;
+        }
+        .help-rule--2 { margin: 26px -10px 6px; padding: 6px 10px; }
+        .help-rule--3 { margin: 18px -10px 4px; padding: 5px 10px; }
+        .help-rule--4 { margin: 14px -10px 2px; padding: 4px 10px; }
+        .help-rule.is-target, .help-term.is-target { background: var(--primary-soft); }
+        .modal.help-modal .help-rule-title { flex: 1; min-width: 0; margin: 0; font-weight: 600; color: var(--text); }
+        .modal.help-modal h2.help-rule-title { font-size: 18px; line-height: 1.35; }
+        .modal.help-modal h3.help-rule-title { font-size: 15.5px; line-height: 1.4; }
+        .modal.help-modal h4.help-rule-title { font-size: 14.5px; line-height: 1.4; }
+        .help-rule-title .help-num { margin-right: 8px; }
+        h4.help-rule-title .help-num { color: var(--text-light); font-weight: 500; }
+        .help-copy {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+            height: 28px; min-width: 28px; padding: 0 6px; margin: -3px -4px 0 0; border: 0; border-radius: 7px;
+            background: transparent; color: var(--text-faint); font-size: 12.5px; font-weight: 600;
+            line-height: 1; white-space: nowrap; cursor: pointer;
+        }
+        .help-copy .help-icon { width: 15px; height: 15px; }
+        .help-copy.is-copied { color: var(--primary); }
+        .help-copy.is-copied .help-icon, .help-copy-done:empty { display: none; }
+        .help-p { margin: 0 0 10px; }
+        .help-list { margin: 0 0 12px; padding-left: 22px; line-height: 1.55; }
+        .help-list .help-list { margin: 3px 0 0; }
+        .help-list li { margin: 3px 0; }
+        .help-icode {
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.86em;
+            padding: 1px 5px; border-radius: 4px; background: var(--surface-2); color: var(--text);
+        }
+        .help-code {
+            margin: 2px 0 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--divider);
+            background: var(--surface-2); font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+        }
+        .help-table-wrap { margin: 2px 0 14px; overflow-x: auto; border: 1px solid var(--divider); border-radius: 8px; }
+        .help-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 13.5px; line-height: 1.45; overflow-wrap: break-word; }
+        .help-table th {
+            text-align: left; padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text-light);
+            background: var(--surface-2); border-bottom: 1px solid var(--divider);
+        }
+        .help-table td { padding: 8px 12px; border-top: 1px solid var(--divider); vertical-align: top; }
+        .help-table tr:first-child td { border-top: 0; }
+        .help-meta {
+            display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 2px 0 14px;
+            padding-top: 9px; border-top: 1px dashed var(--border); font-size: 13.5px; line-height: 1.5; color: var(--text-light);
+        }
+        .help-meta--notes { margin-top: 0; padding-top: 0; border-top: 0; }
+        .help-meta-label {
+            padding-top: 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+            text-transform: uppercase; color: var(--accent-text);
+        }
+        .help-meta-value { min-width: 0; }
+        .help-meta strong, .help-meta .help-icode { color: var(--text); }
+        .help-ver-note {
+            grid-column: 2; justify-self: start; display: inline-flex; align-items: baseline; gap: 7px;
+            padding: 5px 10px; border-radius: 7px; background: var(--warning-soft); color: var(--warning-text);
+            font-size: 13px; line-height: 1.45;
+        }
+        .help-ver-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; transform: translateY(-1px); }
+        .help-quote { margin: 4px 0 14px; padding: 2px 0 2px 14px; border-left: 3px solid var(--divider); color: var(--text-light); }
+        .help-quote > :last-child { margin-bottom: 0; }
+        .help-toc { margin: 10px 0 4px; border: 1px solid var(--divider); border-radius: 10px; background: var(--bg); }
+        .help-toc-toggle {
+            width: 100%; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px;
+            border: 0; background: transparent; font-size: 13.5px; font-weight: 600; text-align: left; cursor: pointer;
+        }
+        .help-toc-chev { font-size: 10px; color: var(--text-faint); }
+        .help-toc-count { font-weight: 400; color: var(--text-light); }
+        .help-toc-list { display: flex; flex-direction: column; padding: 0 6px 8px; }
+        .help-toc-list[hidden] { display: none; }
+        .help-toc-row {
+            display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px; border: 0;
+            border-radius: 6px; background: transparent; font-size: 13.5px; line-height: 1.35; text-align: left; cursor: pointer;
+        }
+        .help-toc-row--3 { padding-left: 26px; }
+        .help-toc-row .help-num { flex: none; }
+        .help-toc-title { min-width: 0; }
+        .help-pager { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 30px; }
+        .help-pager-card {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 10px 12px;
+            border: 1px solid var(--divider); border-radius: 10px; background: transparent; text-align: left; cursor: pointer;
+        }
+        .help-pager-next { align-items: flex-end; text-align: right; }
+        .help-pager-dir { font-size: 12px; color: var(--text-light); }
+        .help-pager-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+        .help-pager-title .help-num { margin-right: 6px; }
+        .help-article .help-foot { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--divider); }
+
+        /* Search */
+        .help-results { display: flex; flex-direction: column; gap: 18px; }
+        .help-search-hint, .help-none { display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5; color: var(--text-light); }
+        .help-none { gap: 8px; padding: 18px 0; color: var(--text); }
+        .help-none-title { font-weight: 600; }
+        .help-none-hint { color: var(--text-light); }
+        .help-search-hint .help-linkbtn, .help-none .help-linkbtn { align-self: flex-start; }
+        .help-num-hit {
+            display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 10px;
+            border: 1px solid var(--primary); background: transparent; text-align: left; cursor: pointer;
+        }
+        .help-num-hit-go { flex: none; font-size: 13px; color: var(--text-light); }
+        .help-num-hit-title { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+        .help-num-hit-title .help-num { margin-right: 6px; }
+        .help-kbd {
+            flex: none; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px;
+            background: var(--surface-2); font: inherit; font-size: 11.5px; color: var(--text-light);
+        }
+        .help-group { display: flex; flex-direction: column; }
+        .modal.help-modal .help-group-title {
+            margin: 0; padding-bottom: 4px; font-size: 11px; font-weight: 600; line-height: 1.4;
+            letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text);
+        }
+        .help-term-hit { display: flex; flex-direction: column; gap: 3px; padding: 9px 0; border-bottom: 1px solid var(--divider); }
+        .help-term-label { font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+        .help-term-def { font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
+        .help-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+        .help-chip {
+            display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 28px;
+            padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent;
+            font-size: 12.5px; font-weight: 600; color: var(--primary); font-variant-numeric: tabular-nums; cursor: pointer;
+        }
+        .help-rule-hit {
+            display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+            padding: 10px 8px; margin: 0 -8px; border: 0; border-bottom: 1px solid var(--divider); border-radius: 8px;
+            background: transparent; text-align: left; cursor: pointer;
+        }
+        .help-rule-hit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+        .help-rule-hit-title { min-width: 0; font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+        .help-rule-hit-title .help-num { margin-right: 6px; }
+        .help-rule-hit-ch { font-size: 12.5px; color: var(--text-faint); }
+        .help-snippet { font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
+        .help-hit { background: var(--help-mark-hit); color: var(--text); border-radius: 3px; padding: 0 1px; }
+
+        /* Glossary */
+        .help-index { display: flex; flex-direction: column; gap: 14px; }
+        .help-index-head { display: flex; flex-direction: column; gap: 4px; }
+        .modal.help-modal .help-index .help-h1 { margin: 0; }
+        .help-index-note { font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
+        .help-letters { display: flex; flex-wrap: wrap; gap: 4px; }
+        .help-chip.help-letter { padding: 0; border-color: var(--divider); font-size: 13px; }
+        .help-terms { display: flex; flex-direction: column; }
+        .help-term {
+            display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 3px 16px; padding: 10px 0;
+            border-bottom: 1px solid var(--divider); transition: background-color 1.4s ease;
+        }
+        .help-term-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+        @media (hover: hover) {
+            .help-back:hover, .help-search-open:hover, .help-close:hover, .help-copy:hover, .help-side-home:hover,
+            .help-side-ch:hover, .help-ch:hover, .help-rule-hit:hover, .help-pager-card:hover, .help-toc-row:hover,
+            .help-home-search:hover { background: var(--hover-bg); }
+            .help-side-ch[aria-current="page"]:hover { background: var(--primary-soft); }
+            .help-copy:hover, .help-search-clear:hover { color: var(--primary); }
+            .help-side-rule:hover { color: var(--text); }
+            .help-chip:hover, .help-num-hit:hover { background: var(--primary-soft); }
+        }
+        /* Tablet (and a phone, below): no chapter list on the left, larger controls. */
+        @media (max-width: 1024px) {
+            .modal.help-modal { width: min(720px, calc(100vw - 48px)); height: calc(100dvh - 48px); }
+            .help-header { height: 60px; }
+            .help-back { min-width: 44px; height: 44px; }
+            .help-close { width: 44px; height: 44px; }
+            .modal.help-modal label.help-search { height: 40px; }
+            .help-search-clear { width: 36px; height: 36px; }
+            .help-modal .help-side { display: none; }
+            .help-col { max-width: 660px; padding: 20px 28px 32px; }
+            .help-copy { height: 40px; min-width: 40px; margin-top: -9px; }
+            .help-chip { min-height: 40px; min-width: 40px; }
+            .help-linkbtn, .help-install, .help-modal a.help-web, .help-trail { min-height: 44px; }
+        }
+        @media (min-width: 1025px) {
+            .help-toc { display: none; }
+        }
+        /* Phone, and a phone held sideways: the whole screen, the search field on the contents. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal-overlay.help-overlay { align-items: stretch; justify-content: stretch; }
+            .modal.help-modal {
+                width: 100%; max-width: none; min-width: 0; height: 100dvh; max-height: none; padding: 0; border-radius: 0;
+                box-shadow: none;
+            }
+            .help-header {
+                height: calc(52px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 4px 0 6px; gap: 4px;
+            }
+            .help-modal:not([data-screen="home"]) .help-back { display: inline-flex; }
+            .help-back { width: 44px; padding: 0; }
+            .help-back .help-icon { width: 22px; height: 22px; }
+            .help-back-label { display: none; }
+            .help-title { padding-left: 10px; }
+            .help-modal[data-screen="search"] .help-title { display: none; }
+            .modal.help-modal label.help-search { display: none; }
+            .modal.help-modal[data-screen="search"] label.help-search { display: flex; flex: 1; }
+            .help-modal[data-screen="art"] .help-search-open,
+            .help-modal[data-screen="index"] .help-search-open { display: flex; }
+            .help-close { background: transparent; }
+            .help-close .help-icon { width: 20px; height: 20px; }
+            .help-home-search { display: flex; }
+            .help-col { max-width: none; padding: 16px 16px calc(32px + env(safe-area-inset-bottom, 0px)); }
+            .modal.help-modal .help-h1 { font-size: 22px; }
+        }
+        @media (max-width: 640px) {
+            .help-term { grid-template-columns: minmax(0, 1fr); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .help-header { height: calc(48px + env(safe-area-inset-top, 0px)); }
+            .help-col {
+                max-width: 660px;
+                padding: 12px max(24px, env(safe-area-inset-right, 0px)) 28px max(24px, env(safe-area-inset-left, 0px));
+            }
+        }
+        @media (pointer: coarse) {
+            .help-back, .help-search-open { min-width: 44px; height: 44px; }
+            .help-close { width: 44px; height: 44px; }
+            .help-copy { height: 44px; min-width: 44px; margin-top: -10px; }
+            .help-chip { min-height: 40px; min-width: 40px; }
+            .help-side-ch, .help-side-rule, .help-side-home, .help-toc-row { min-height: 44px; }
+            .help-linkbtn, .help-install, .help-modal a.help-web, .help-trail { min-height: 44px; }
+            .help-search-clear { width: 40px; height: 40px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .help-rule, .help-term { transition: none; }
+        }
+
+        /* About → How Strom works: one row across the dialog. */
+        .about-help {
+            display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; margin: 10px 0 12px;
+            padding: 12px 14px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--bg); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+        }
+        .about-help-q {
+            flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 50%; border: 1px solid var(--primary); color: var(--primary); font-size: 13px; font-weight: 600;
+            box-sizing: border-box;
+        }
+        .about-help-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .about-help-title { font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+        .about-help-sub { font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .about-help-chev { flex: none; font-size: 18px; color: var(--text-faint); }
+        .about-help:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .about-help:hover { background: var(--primary-soft); border-color: var(--primary); }
+        }
     </style>
 </head>
 <body>
@@ -22651,6 +23056,10 @@
                     <div class="actions-submenu actions-tree-submenu" id="actions-tree-submenu" role="menu"></div>
                 </div>
                 <div class="tree-switcher-divider" id="actions-settings-divider"></div>
+                <!-- How Strom works (the help window, src/ui/help-ui.ts), right above Settings. -->
+                <div class="tree-switcher-action actions-menu-help" id="actions-help-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showHelp()" tabindex="0" role="menuitem">
+                    <span data-i18n="help.title"></span>
+                </div>
                 <!-- Settings: its one place, the last row at every width (the toolbar ⚙ is gone). -->
                 <div class="tree-switcher-action actions-menu-settings" id="actions-settings-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.settings"></span>
@@ -23649,6 +24058,15 @@
                 <span class="about-title">Strom <span id="about-version">2.5.0</span></span>
             </div>
             <p class="about-description" data-i18n="about.description"></p>
+            <!-- How Strom works: About closes, the help window opens (one click). -->
+            <button type="button" class="about-help" id="about-help" onclick="window.Strom.UI.showHelpFromAbout()">
+                <span class="about-help-q" aria-hidden="true">?</span>
+                <span class="about-help-text">
+                    <span class="about-help-title" data-i18n="help.title"></span>
+                    <span class="about-help-sub" data-i18n="help.aboutSub"></span>
+                </span>
+                <span class="about-help-chev" aria-hidden="true">&rsaquo;</span>
+            </button>
             <p class="about-author"><span data-i18n="about.createdBy"></span> <strong data-i18n="about.authorName"></strong></p>
             <!-- License and the link to the source code (AGPL-3.0 section 13:
                  the app runs over the network, so it offers its source). -->

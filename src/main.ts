@@ -15,6 +15,8 @@ import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
+import { setHelpResearchVersion } from './ui/help-ui.js';
+import { activeResearchId } from './ui/history-ui.js';
 import { initToolbarFit } from './ui/toolbar-fit.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
@@ -352,6 +354,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // "What's new": whether this browser held trees before anything can be added.
     UI.captureReleaseNotesStart();
+    // "How Strom works" compares a rule's version with the research connected to the tree.
+    setHelpResearchVersion(() => {
+        const rid = activeResearchId();
+        return rid ? UI.researchBridgeVersion(rid) : '';
+    });
     // The startup tree is in memory: editing may begin (see .app-loading).
     document.documentElement.classList.remove('app-loading');
     document.getElementById('storage-blocked-notice')?.remove();

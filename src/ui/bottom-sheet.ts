@@ -449,9 +449,10 @@ export const bottomSheetMethods = uiModule({
             ] });
         }
 
-        // 7) Settings | About tiles (the version is in About).
+        // 7) Settings | How Strom works | About tiles (the version is in About).
         blocks.push({ divider: true, rows: [], pair: [
             { label: s.menu.settings, id: 'sheet-settings', run: () => this.showSettingsDialog() },
+            { label: s.help.title, id: 'sheet-help', run: () => this.showHelp() },
             { label: s.about.title, id: 'sheet-about', run: () => this.showAboutDialog() },
         ] });
 

@@ -12,6 +12,7 @@
  */
 
 import { researchActionLabel } from './research-open-mark.js';
+import { isHelpOpen } from './help-ui.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
@@ -83,6 +84,8 @@ export const conflictPanelMethods = uiModule({
         tag.setAttribute('aria-expanded', 'true');
 
         const onKey = (e: KeyboardEvent): void => {
+            // "How Strom works" opened from the panel sits above it and takes the keys.
+            if (isHelpOpen()) return;
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopImmediatePropagation();
@@ -100,7 +103,7 @@ export const conflictPanelMethods = uiModule({
         };
         const onDown = (e: Event): void => {
             const t = e.target as Node;
-            if (sheet || panel.contains(t) || tag.contains(t)) return;
+            if (sheet || panel.contains(t) || tag.contains(t) || isHelpOpen()) return;
             // A click elsewhere: the panel goes, the keyboard where the click went.
             this.closeResearchConflictPanel({ focus: false });
         };

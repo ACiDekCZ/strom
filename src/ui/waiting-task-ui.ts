@@ -8,6 +8,7 @@
  */
 
 import { browserNote } from '../research-browser.js';
+import { isHelpOpen } from './help-ui.js';
 import { strings } from '../strings.js';
 import { LiveWaiting, researchLinkMark, researchTaskRef } from '../research-link.js';
 import { WaitActionView, imagesState, waitingActions } from '../research-waiting.js';
@@ -62,7 +63,7 @@ export function clearOverviewImages(): void {
 /** A window key handler taking Escape before everything else (the overview's, the page's). */
 function onEscape(run: () => void): () => void {
     const onKey = (e: KeyboardEvent): void => {
-        if (e.key !== 'Escape' || e.isComposing) return;
+        if (e.key !== 'Escape' || e.isComposing || isHelpOpen()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         run();

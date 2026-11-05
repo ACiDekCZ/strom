@@ -160,6 +160,7 @@ import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
 import { researchLoadMethods } from './research-load-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 import { releaseNotesMethods } from './release-notes-ui.js';
+import { helpMethods } from './help-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -922,5 +923,9 @@ Object.assign(UIClass.prototype, tourMethods);
 type ReleaseNotesMethods = typeof releaseNotesMethods;
 export interface UIClass extends ReleaseNotesMethods {}
 Object.assign(UIClass.prototype, releaseNotesMethods);
+
+type HelpMethods = typeof helpMethods;
+export interface UIClass extends HelpMethods {}
+Object.assign(UIClass.prototype, helpMethods);
 
 export const UI = new UIClass();

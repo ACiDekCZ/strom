@@ -14,7 +14,7 @@ function romanPl(n: number): string {
     return tens + ones;
 }
 
-export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'> = {
+export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help'> = {
     history: {
         settingLabel: 'Historia na osi czasu życia',
         settingHint: 'Wydarzenia epoki i miejsc, w których osoba żyła, z wiekiem osoby. Szuka ich badanie, każde ma źródło.',
@@ -1082,5 +1082,42 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         tlCentLabel: 'Stulecie',
         tlKindsLabel: 'Rodzaje wydarzeń',
         tlNone: 'Ród nie ma żadnych datowanych wydarzeń.',
+    },
+    help: {
+        title: 'Jak działa Strom',
+        aboutSub: 'Na jakiej podstawie decydują aplikacja i badania',
+        search: 'Szukaj w pomocy',
+        searchPh: 'Szukaj słowa lub numeru (R4.3)',
+        index: 'Słowniczek pojęć',
+        install: 'Instalacja i polecenia badań',
+        docVer: (a: string, r: string) => `Opisuje aplikację Strom ${a} i badania ${r}.`,
+        close: 'Zamknij',
+        closeT: 'Zamknij (Esc)',
+        clear: 'Wyczyść',
+        back: 'Wstecz',
+        backTo: (x: string) => `Wstecz do ${x}`,
+        home: 'Spis treści',
+        web: 'W sieci',
+        toc: 'Zasady w rozdziale',
+        copyAria: (id: string) => `Kopiuj link do ${id}`,
+        copied: 'Skopiowano',
+        prev: 'Poprzedni',
+        next: 'Następny',
+        pager: 'Rozdziały',
+        terms: 'Pojęcia',
+        rules: 'Zasady',
+        jump: 'Przejdź do',
+        enter: 'Enter',
+        none: (q: string) => `Nic nie znaleziono dla „${q}”.`,
+        noneHint: 'Może pomóc inne słowo, numer zasady lub słowniczek.',
+        searchHint: 'Słowo z tekstu lub numer zasady, np. R4.3.',
+        idxNote: 'Pojęcia tak, jak nazywa je aplikacja, i zasady, które je opisują.',
+        letters: 'Litery',
+        unknown: (id: string) => `Zasady ${id} nie ma w pomocy. Oto spis treści.`,
+        verRes: (v: string, f: string) => `Badania połączone z tym drzewem mają wersję ${v}, to obowiązuje od ${f}.`,
+        verApp: (v: string, f: string) => `Ta aplikacja ma wersję ${v}, to obowiązuje od ${f}.`,
+        lic: 'Jak działa Strom · © 2026 Milan Víšek',
+        licLink: 'CC BY 4.0',
+        source: 'Źródło',
     },
 };
