@@ -22689,6 +22689,9 @@
         }
         .help-table td { padding: 8px 12px; border-top: 1px solid var(--divider); vertical-align: top; }
         .help-table tr:first-child td { border-top: 0; }
+        /* A field name or command in a cell never breaks inside (entrie|s, --way|slow):
+           its column takes the width it needs, the table scrolls in its own wrap. */
+        .help-table .help-icode { white-space: nowrap; }
         .help-meta {
             display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 2px 0 14px;
             padding-top: 9px; border-top: 1px dashed var(--border); font-size: 13.5px; line-height: 1.5; color: var(--text-light);

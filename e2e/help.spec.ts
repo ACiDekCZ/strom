@@ -249,3 +249,66 @@ test.describe('How Strom works in German: nothing overflows', () => {
         });
     }
 });
+
+test.describe('How Strom works: code in a table never breaks inside (1105)', () => {
+    for (const locale of ['cs-CZ', 'de-DE']) {
+        test.describe(locale, () => {
+            test.use({ locale });
+
+            for (const width of [1440, 390]) {
+                test(`${width} wide: each field name and command in a cell keeps one line, a narrow table scrolls in its own frame`, async ({ page }) => {
+                    await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
+                    await openApp(page);
+                    await page.evaluate(() => window.Strom.UI.showHelp());
+                    await expect(help(page)).toBeVisible();
+                    if (width < 600) await page.locator('.help-home-search').click();
+                    await search(page, 'R8.3.3');
+                    await page.locator('.help-search-input').press('Enter');
+                    const rule = page.locator('.help-rule[data-rule="R8.3.3"]');
+                    await expect(rule).toHaveClass(/is-target/);
+
+                    // Code boxes in cells drawn on more than one line, and what sticks out
+                    // of the help outside a table's own scrolling frame.
+                    const check = () => page.evaluate(() => {
+                        const broken = [...document.querySelectorAll<HTMLElement>('.help-table td .help-icode')]
+                            .filter(c => c.getClientRects().length !== 1)
+                            .map(c => c.textContent);
+                        const overflow: string[] = [];
+                        for (const el of document.querySelectorAll<HTMLElement>('html, body, .help-modal, .help-main, .help-col, .help-header')) {
+                            if (el.scrollWidth > el.clientWidth + 1) overflow.push(`${el.className || el.tagName} ${el.scrollWidth}>${el.clientWidth}`);
+                        }
+                        const col = document.querySelector('.help-col')!.getBoundingClientRect();
+                        const wraps = [...document.querySelectorAll<HTMLElement>('.help-table-wrap')];
+                        for (const w of wraps) {
+                            if (w.getBoundingClientRect().right > col.right + 1) overflow.push('help-table-wrap sticks out');
+                        }
+                        return { broken, overflow, tables: wraps.length, scrolling: wraps.filter(w => w.scrollWidth > w.clientWidth + 1).length };
+                    });
+
+                    // R8.3.3: the field names (entries, illegible, certainty, section).
+                    const codes = await rule.evaluate(r => {
+                        let el: Element | null = r;
+                        while ((el = el.nextElementSibling) && !el.matches('.help-table-wrap')) { /* to the rule's table */ }
+                        return el ? [...el.querySelectorAll('td .help-icode')].map(c => c.textContent) : [];
+                    });
+                    expect(codes).toEqual(expect.arrayContaining(['entries', 'illegible', 'certainty', 'section']));
+                    let r = await check();
+                    expect(r.broken).toEqual([]);
+                    expect(r.overflow).toEqual([]);
+                    if (width < 600) expect(r.scrolling).toBeGreaterThan(0);
+
+                    // Commands with spaces and links with parameters (--way browser,
+                    // ?tree=…&research=…&person=…) stay whole too.
+                    for (const chapter of ['R9', 'S1']) {
+                        await page.evaluate(c => window.Strom.UI.showHelp(c), chapter);
+                        await expect(page.locator('.help-h1')).toContainText(chapter);
+                        r = await check();
+                        expect(r.tables).toBeGreaterThan(0);
+                        expect(r.broken).toEqual([]);
+                        expect(r.overflow).toEqual([]);
+                    }
+                });
+            }
+        });
+    }
+});
