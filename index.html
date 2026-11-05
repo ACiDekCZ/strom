@@ -16356,8 +16356,10 @@
             flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
             font-size: 11px; font-weight: 400; line-height: 1.5; color: var(--text-light);
         }
-        .research-overview__waiting-grouphead { display: flex; align-items: center; gap: 8px; }
-        .research-overview__waiting-grouphead > .research-overview__waiting-group { flex: 1; min-width: 0; }
+        /* The heading (name, what it misses) keeps room for itself and takes what is left of the line: the actions
+           stay at the right end beside it, or wrap under it (from the left) when they do not fit. */
+        .research-overview__waiting-grouphead { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+        .research-overview__waiting-grouphead > .research-overview__waiting-group { flex: 1 1 22rem; min-width: 0; }
         .research-overview__waiting-group:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview__waiting-age { color: var(--text-faint); font-size: 11px; }
         .research-overview__waiting-groupchat { flex: none; margin-top: 8px; }
@@ -16417,7 +16419,7 @@
             .research-overview__phase-head { margin-top: 4px; }
         }
         /* Written through the research's bridge: Sent (an item, a place), Back to To do, Add a file, All queries' text. */
-        .research-overview__waiting-groupactions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 8px; }
+        .research-overview__waiting-groupactions { display: flex; flex: 0 1 auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 6px; margin-top: 8px; }
         .research-overview__waiting-groupactions .research-overview__waiting-groupchat { margin-top: 0; }
         .research-overview__waiting-write:disabled { opacity: 0.6; cursor: default; }
         .waiting-note-overlay { z-index: 1100; }
@@ -16431,15 +16433,10 @@
             .research-overview__waiting-groupwrite, .research-overview__waiting-write, .waiting-note-copy { display: inline-flex; align-items: center; min-height: 44px; }
             .waiting-note-modal .close-btn { min-width: 44px; min-height: 44px; }
         }
-        /* Tablet: the place's actions may take a line of their own under a long name. */
-        @media (min-width: 641px) and (max-width: 1024px) {
-            .research-overview__waiting-grouphead { flex-wrap: wrap; }
-        }
         /* Phone: the place's actions under its heading, the text as large as the rows. */
         @media (max-width: 640px) {
-            .research-overview__waiting-grouphead { flex-wrap: wrap; }
             .research-overview__waiting-grouphead > .research-overview__waiting-group { flex-basis: 100%; }
-            .research-overview__waiting-groupactions { margin-top: 0; padding-bottom: 6px; justify-content: flex-start; }
+            .research-overview__waiting-groupactions { margin-top: 0; padding-bottom: 6px; }
             .waiting-note-text { font-size: 15px; max-height: none; }
             /* A phone is touched: the writes at least 44px, whatever the pointer reports. */
             .research-overview__waiting-groupwrite, .research-overview__waiting-write, .waiting-note-copy { display: inline-flex; align-items: center; min-height: 44px; }
@@ -16538,14 +16535,13 @@
         }
         .wait-book__slot.is-saved { border: 1px solid transparent; background: var(--primary-soft); color: var(--text); }
         .wait-book__state { margin: 0; font-size: 13px; font-weight: 500; color: var(--text); }
-        /* A place under an archive: its name in two lines, what its items miss under it; its website beside Chat. */
+        /* A place under an archive: its name in one line, what its items miss under it; its website beside Chat. */
         .research-overview__group-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-        .research-overview__group-titles > .research-overview__group-title { flex: none; }
-        .research-overview__group-title.is-two-lines {
-            white-space: normal; overflow-wrap: anywhere; font-size: 14px;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        .research-overview__group-titles > .research-overview__group-title { flex: none; font-size: 14px; }
+        .research-overview__group-missing {
+            font-size: 12.5px; font-weight: 400; color: var(--text-light);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .research-overview__group-missing { font-size: 12.5px; font-weight: 400; color: var(--text-light); }
         .waiting-live-region {
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
             clip: rect(0 0 0 0); white-space: nowrap; border: 0;

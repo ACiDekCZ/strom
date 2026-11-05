@@ -709,8 +709,8 @@ export const researchOverviewMethods = uiModule({
         const title = el('span', 'research-overview__group-title', name);
         title.title = name;
         const kind = places ? name : L.waitingGroupKinds[g.group?.kind ?? 'other'];
-        // An archive's name is long (fond, institution): two lines, whole on hover.
-        if (g.group?.kind === 'archive') title.classList.add('is-two-lines');
+        // An archive's name is long (fond, institution): one line cut at its end, whole on hover;
+        // the place's actions go under the heading rather than squeeze it (CSS).
         // How many images its items miss together (a research that says which).
         const missing = places ? null : waitingGroupMissing(g.items);
         const missingText = missing ? L.waitingTask.groupMissing(missing) : '';
