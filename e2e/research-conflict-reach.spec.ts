@@ -318,13 +318,16 @@ test.describe('a reader and the keyboard', () => {
             await page.keyboard.press('Tab');
             forward.push(await at());
         }
-        expect(forward).toEqual(['source', 'choice-research', 'more', 'close', 'choice-user']);
+        // The help mark "?" before × (1105) is a stop of its own.
+        expect(forward).toEqual(['source', 'choice-research', 'more', 'help', 'close']);
+        await page.keyboard.press('Tab');
+        expect(await at()).toBe('choice-user');
         const back: string[] = [];
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
             await page.keyboard.press('Shift+Tab');
             back.push(await at());
         }
-        expect(back).toEqual(['close', 'more', 'choice-research']);
+        expect(back).toEqual(['close', 'help', 'more', 'choice-research']);
         decide.replies.push(TAKE_200({ janBirth: '3 FEB 1865' }));
         await page.keyboard.press('Enter');
         await expect(panel(page)).toHaveCount(0);

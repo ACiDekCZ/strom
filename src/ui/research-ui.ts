@@ -401,7 +401,7 @@ export function liveSection(host: HTMLElement, o: {
     body.hidden = o.collapsed;
     if (o.aside && o.help) {
         // The control and "?" go under the heading together when they do not fit beside it.
-        const row = el('div', 'live-section__headrow');
+        const row = el('div', 'live-section__headrow live-section__headrow--m');
         const tail = el('span', 'live-section__tail');
         tail.append(o.aside, helpMark(o.help));
         row.append(head, tail);
@@ -411,7 +411,7 @@ export function liveSection(host: HTMLElement, o: {
         row.append(head, o.aside);
         host.append(row);
     } else if (o.help) {
-        const row = el('div', 'live-section__headrow live-section__headrow--help');
+        const row = el('div', 'live-section__headrow live-section__headrow--help live-section__headrow--m');
         row.append(head, helpMark(o.help));
         host.append(row);
     } else {
@@ -3143,7 +3143,7 @@ export const researchUiMethods = uiModule({
         if (fold) {
             host = liveSection(body, { ...fold, title, summary: replies, headCls: 'live-panel-heading-waiting', help: 'waiting' });
         } else {
-            const row = body.appendChild(el('div', 'live-section__headrow live-section__headrow--help'));
+            const row = body.appendChild(el('div', 'live-section__headrow live-section__headrow--help live-section__headrow--m'));
             const h = row.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
             if (replies) h.appendChild(el('span', 'live-section__sum', replies));
             row.appendChild(helpMark('waiting'));
