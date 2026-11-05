@@ -15,7 +15,9 @@
  * too when the app had a research linked before this page started. An open
  * from Strom Research holds the app's section back (it waits for the next
  * usual start); the research's comes alone once the app is free. The About
- * dialog gets a line with the research's version and its changelog link.
+ * dialog gets a line with the research's version and its "What's new": the
+ * same dialog with the research's points while its bridge answered them in
+ * this page, else its changelog link.
  *
  * See src/ui/module.ts for the composition pattern.
  */
@@ -96,8 +98,11 @@ let researchWaitSince = 0;
 let appDialogClosed = false;
 /** What the research's bridge last said in this page. */
 let pageResearch: { researchId: string; version: string; feature: boolean } | null = null;
-/** Versions whose link the About dialog asked for in this page. */
+/** Versions (in a language) whose "What's new" the About dialog asked for in this page. */
 const aboutAsked = new Set<string>();
+/** The research's last usable answer to `/whats-new` in this page, with the language it was asked in. */
+interface AskedResearch { answer: ResearchWhatsNew; lang: string }
+let lastResearchAnswer: AskedResearch | null = null;
 let bridgeListening = false;
 
 function readSeenVersion(): string | null {
@@ -338,11 +343,12 @@ export const releaseNotesMethods = uiModule({
      * research's when the app has nothing new. Opened from About
      * (`fromAbout`): the app's notes alone, over About, without "Don't show
      * next time" (that is about the dialog after an update); a research's
-     * section waiting stays for its own time.
+     * section waiting stays for its own time. About's research line passes
+     * the research's section to show alone (`aboutResearch`).
      */
-    showReleaseNotesDialog(withApp = true, fromAbout = false): void {
+    showReleaseNotesDialog(withApp = true, fromAbout = false, aboutResearch: ResearchSection | null = null): void {
         const blocks = withApp ? releaseNotesFor(EMBEDDED_NOTES, getCurrentLanguage()) : null;
-        const research = fromAbout ? null : researchSection;
+        const research = fromAbout ? aboutResearch : researchSection;
         if (!blocks && !research) return;
         document.getElementById(RELEASE_NOTES_DIALOG_ID)?.remove();
         const s = strings.releaseNotes;
@@ -380,11 +386,13 @@ export const releaseNotesMethods = uiModule({
             fullRow.appendChild(full);
             content.appendChild(fullRow);
         }
-        if (fromAbout) overlay.dataset.fromAbout = '1';
+        if (fromAbout) overlay.dataset.fromAbout = aboutResearch ? 'research' : 'app';
         if (research) {
-            overlay.dataset.researchVersion = research.version;
             content.appendChild(researchSectionNode(research));
-            researchSection = null;
+            if (!fromAbout) {
+                overlay.dataset.researchVersion = research.version;
+                researchSection = null;
+            }
         }
 
         const buttons = el('div', 'buttons release-notes-buttons');
@@ -424,10 +432,16 @@ export const releaseNotesMethods = uiModule({
     closeReleaseNotesDialog(): void {
         const overlay = document.getElementById(RELEASE_NOTES_DIALOG_ID);
         // Opened from About: asked for, so nothing to record; back to About's link.
-        if (overlay?.dataset.fromAbout === '1') {
+        const fromAbout = overlay?.dataset.fromAbout;
+        if (overlay && fromAbout) {
             overlay.remove();
             this.dialogStack = this.dialogStack.filter(d => d !== RELEASE_NOTES_DIALOG_ID);
-            document.getElementById('about-changelog')?.focus({ preventScroll: true });
+            const back = fromAbout === 'research'
+                ? document.querySelector<HTMLElement>('#about-modal .about-research-changelog')
+                : document.getElementById('about-changelog');
+            back?.focus({ preventScroll: true });
+            // A research's section that came meanwhile has its own time now.
+            if (researchSection) this.scheduleReleaseNotes(RETRY_MS);
             return;
         }
         const box = overlay?.querySelector<HTMLInputElement>('#release-notes-dont-show');
@@ -450,6 +464,13 @@ export const releaseNotesMethods = uiModule({
     /** About → "What's new": the same dialog as after an update, over About. */
     showAboutWhatsNew(): void {
         this.showReleaseNotesDialog(true, true);
+    },
+
+    /** About → the research's "What's new": the same dialog with the research's points alone, over About. */
+    showAboutResearchWhatsNew(answer: ResearchWhatsNew): void {
+        if (answer.points.length === 0) return;
+        this.showReleaseNotesDialog(false, true,
+            { version: answer.version, url: answer.url, blocks: researchNotesBlocks(answer.points) });
     },
 
     /** Settings → Notifications: "What's new after an update". */
@@ -504,6 +525,7 @@ export const releaseNotesMethods = uiModule({
             if (!res.ok) return null;
             const answer = sanitizeResearchWhatsNew(await res.json());
             if (answer?.url) writeKnownResearch(answer.version, answer.url);
+            if (answer) lastResearchAnswer = { answer, lang };
             return answer;
         } catch {
             return null;
@@ -518,6 +540,8 @@ export const releaseNotesMethods = uiModule({
     offerResearchWhatsNew(): void {
         if (!researchSection) return;
         const overlay = document.getElementById(RELEASE_NOTES_DIALOG_ID);
+        // Over About (asked for there, records nothing): the section waits until it is closed.
+        if (overlay?.dataset.fromAbout) return;
         if (overlay) {
             if (overlay.dataset.researchVersion) return;
             overlay.dataset.researchVersion = researchSection.version;
@@ -532,10 +556,12 @@ export const releaseNotesMethods = uiModule({
     },
 
     /**
-     * About: "Research X.Y.Z • What's new ↗" on a computer that knows a
+     * About: "Research X.Y.Z • What's new" on a computer that knows a
      * research — its version from its bridge in this page, else the last one
-     * known. The link is the one its bridge gave for that version; without
-     * it, a bridge that answers `/whats-new` in this page is asked.
+     * known. While its bridge answered `/whats-new` for that version in this
+     * page (asked here when it answers it and was not asked yet), "What's new"
+     * opens the same dialog as after an update with the research's points;
+     * otherwise it is the changelog link its bridge gave for that version.
      */
     fillAboutResearchRow(meta: Element): void {
         meta.querySelector('.about-research')?.remove();
@@ -545,20 +571,52 @@ export const releaseNotesMethods = uiModule({
         if (!version) return;
         const row = el('div', 'about-meta-row about-research');
         row.appendChild(el('span', 'about-research-version', strings.releaseNotes.researchVersion(version)));
-        const addLink = (href: string): void => {
-            if (row.querySelector('a')) return;
-            const sep = el('span', undefined, '•');
-            sep.setAttribute('aria-hidden', 'true');
-            row.append(sep, researchLink('about-research-changelog', strings.about.whatsNew, href));
-        };
+        const lang = changelogLanguageOf(getCurrentLanguage());
+        const usable = (got: AskedResearch | null): ResearchWhatsNew | null =>
+            got && got.lang === lang && got.answer.version === version && got.answer.points.length > 0 ? got.answer : null;
         const url = known?.version === version ? known.url : null;
-        if (url) addLink(url);
+        /** "What's new" as the changelog link (new tab), or as the dialog in the app (its address kept on the link). */
+        const setLink = (href: string | null, answer: ResearchWhatsNew | null): void => {
+            let a = row.querySelector<HTMLAnchorElement>('a.about-research-changelog');
+            if (a?.dataset.opens === 'dialog') return;
+            if (!answer && !href) return;
+            if (!a) {
+                const sep = el('span', undefined, '•');
+                sep.setAttribute('aria-hidden', 'true');
+                a = el('a', 'about-research-changelog');
+                row.append(sep, a);
+            }
+            if (!answer) {
+                a.textContent = strings.about.whatsNew;
+                a.href = href!;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.dataset.opens = 'web';
+                return;
+            }
+            a.textContent = strings.releaseNotes.title;
+            a.href = answer.url ?? href ?? '#';
+            a.removeAttribute('target');
+            a.removeAttribute('rel');
+            a.dataset.opens = 'dialog';
+            a.setAttribute('aria-haspopup', 'dialog');
+            a.onclick = (e) => {
+                e.preventDefault();
+                this.showAboutResearchWhatsNew(answer);
+            };
+        };
+        const cached = usable(lastResearchAnswer);
+        setLink(url, cached);
         meta.appendChild(row);
         const asked = pageResearch;
-        if (url || !asked?.feature || asked.version !== version || aboutAsked.has(version)) return;
-        aboutAsked.add(version);
-        void this.askResearchWhatsNew(asked.researchId).then((answer) => {
-            if (answer?.url && answer.version === version && row.isConnected) addLink(answer.url);
+        const key = `${version}|${lang}`;
+        if (cached || !asked?.feature || asked.version !== version || aboutAsked.has(key)) return;
+        aboutAsked.add(key);
+        void this.askResearchWhatsNew(asked.researchId).then(() => {
+            if (!row.isConnected) return;
+            const answer = usable(lastResearchAnswer);
+            const got = lastResearchAnswer?.answer;
+            setLink(got?.version === version ? got.url ?? url : url, answer);
         });
     },
 });

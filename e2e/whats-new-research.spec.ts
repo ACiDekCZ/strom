@@ -10,7 +10,9 @@ import { openResearch, fakeBridge, poll, FakeBridge, BRIDGE, UUID } from './rese
  * research linked before the page started is told its first version too; an
  * older bridge is never asked; an open from the research (?live=) shows the
  * research's section alone and keeps the app's for the next usual start.
- * About shows "Research X.Y.Z • What's new ↗". Nothing on a phone. The bridge
+ * About shows "Research X.Y.Z • What's new": the same dialog with the
+ * research's points while its bridge answers them, else its changelog link
+ * ("What's new ↗"). Nothing on a phone. The bridge
  * is answered by page.route (invented data).
  */
 
@@ -242,8 +244,76 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         expect(w.asks).toHaveLength(0);
     });
 
-    test('About: "Research X.Y.Z • What\'s new ↗", the link asked once and then kept', async ({ page }) => {
-        const { b, w } = await linked(page, { seen: NEW });
+    test('About: "Research X.Y.Z • What\'s new" opens the research\'s points in the What\'s new dialog over About, recording nothing; Escape goes back to the link', async ({ page }) => {
+        const { w } = await linked(page, { seen: NEW });
+        await reload(page);
+        await bridgeAnswered(page);
+        const appSeen = await getKey(page, APP_SEEN_KEY);
+
+        await page.evaluate(() => window.Strom.UI.showAboutDialog());
+        const about = page.locator('#about-modal');
+        const row = about.locator('.about-research');
+        await expect(row.locator('.about-research-version')).toHaveText(`Research ${NEW}`);
+        const link = row.getByRole('link', { name: 'What\'s new', exact: true });
+        await expect(link).toHaveAttribute('aria-haspopup', 'dialog');
+        // The changelog's address stays on the link; it opens no new tab.
+        await expect(link).toHaveAttribute('href', URL);
+        await expect(link).not.toHaveAttribute('target', '_blank');
+        expect(w.asks).toHaveLength(1);
+
+        const popups: unknown[] = [];
+        page.on('popup', (p) => popups.push(p));
+        await link.click();
+        const d = dialog(page);
+        await expect(d).toBeVisible();
+        await expect(d.getByRole('heading', { name: 'What\'s new' })).toBeVisible();
+        await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
+        await expect(d.locator('.release-notes-research li')).toHaveCount(2);
+        await expect(d.locator('.release-notes-research li').first().locator('strong')).toHaveText('Archive by choice.');
+        // The research's points alone: no app section, no "Don't show next time".
+        await expect(d.locator('.release-notes-version')).toHaveCount(0);
+        await expect(d.getByRole('link', { name: 'All changes ↗' })).toHaveCount(0);
+        await expect(d.locator('#release-notes-dont-show')).toHaveCount(0);
+        const all = d.getByRole('link', { name: 'All research changes ↗' });
+        await expect(all).toHaveAttribute('href', URL);
+        await expect(all).toHaveAttribute('target', '_blank');
+        expect(popups).toHaveLength(0);
+
+        // Escape closes the notes alone; About stays, its research link takes the focus back.
+        await page.keyboard.press('Escape');
+        await expect(d).toHaveCount(0);
+        await expect(about).toBeVisible();
+        await expect(link).toBeFocused();
+        // Again, closed by its button: nothing recorded, nothing asked again.
+        await link.click();
+        await expect(d).toBeVisible();
+        await d.locator('.release-notes-close').click();
+        await expect(d).toHaveCount(0);
+        await expect(about).toBeVisible();
+        expect(await getKey(page, SEEN_KEY)).toBe(NEW);
+        expect(await getKey(page, APP_SEEN_KEY)).toBe(appSeen);
+        expect(w.asks).toHaveLength(1);
+    });
+
+    test('About after the research\'s dialog of an update: its answer opens the dialog again, not asked twice', async ({ page }) => {
+        const { w } = await linked(page, { seen: SEEN });
+        await reload(page);
+        const d = dialog(page);
+        await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
+        await d.locator('.release-notes-close').click();
+        await expect(d).toHaveCount(0);
+        expect(await getKey(page, SEEN_KEY)).toBe(NEW);
+
+        await page.evaluate(() => window.Strom.UI.showAboutDialog());
+        const link = page.locator('#about-modal .about-research').getByRole('link', { name: 'What\'s new', exact: true });
+        await expect(link).toHaveAttribute('aria-haspopup', 'dialog');
+        await link.click();
+        await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
+        expect(w.asks).toHaveLength(1);
+    });
+
+    test('About without the research\'s points: the changelog link of its version, kept while the bridge is not running', async ({ page }) => {
+        const { b, w } = await linked(page, { seen: NEW, points: [] });
         await reload(page);
         await expect.poll(() => page.evaluate(() => localStorage.getItem('strom-research-whats-new'))).toContain(NEW);
 
@@ -254,14 +324,17 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         await expect(link).toHaveAttribute('href', URL);
         await expect(link).toHaveAttribute('target', '_blank');
         await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        await expect(link).not.toHaveAttribute('aria-haspopup', 'dialog');
         expect(w.asks).toHaveLength(1);
 
-        // The bridge not running: the last known version and its link.
+        // The bridge not running (its points answered too): the last known version and its link.
+        w.body = { version: NEW, lang: 'en', url: URL, points: ['A point.'] };
         b.down = true;
         await reload(page);
         await page.evaluate(() => window.Strom.UI.showAboutDialog());
         await expect(row.locator('.about-research-version')).toHaveText(`Research ${NEW}`);
         await expect(row.getByRole('link', { name: 'What\'s new ↗' })).toHaveAttribute('href', URL);
+        await expect(row.getByRole('link', { name: 'What\'s new ↗' })).toHaveAttribute('target', '_blank');
         expect(w.asks).toHaveLength(1);
     });
 
