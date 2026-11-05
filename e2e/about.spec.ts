@@ -26,6 +26,31 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
 });
 
 /**
+ * The cup on "Buy me a coffee" steams: three wisps rise one after another.
+ * With reduced motion the steam stands still, fully drawn.
+ */
+test('The coffee cup in About steams; with reduced motion the steam stands still', async ({ page }) => {
+    // The suite runs with reduced motion (playwright.config.ts); motion back on here.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openApp(page);
+    await page.locator('.app-logo').click();
+    const steam = page.locator('#about-modal .about-coffee .about-coffee-steam');
+    await expect(steam).toHaveCount(3);
+    const anim = () => steam.evaluateAll((els) => els.map((el) => {
+        const cs = getComputedStyle(el);
+        return { name: cs.animationName, delay: cs.animationDelay, opacity: cs.opacity };
+    }));
+    const moving = await anim();
+    expect(moving.map((a) => a.name)).toEqual(['about-coffee-steam', 'about-coffee-steam', 'about-coffee-steam']);
+    expect(new Set(moving.map((a) => a.delay)).size).toBe(3);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const still = await anim();
+    expect(still.map((a) => a.name)).toEqual(['none', 'none', 'none']);
+    expect(still.map((a) => a.opacity)).toEqual(['1', '1', '1']);
+});
+
+/**
  * What's new: About opens the same "What's new" dialog as after an update
  * (its "All changes ↗" leads on to the changelog on GitHub), over About. The
  * link keeps the changelog's address in the UI language at the section of the

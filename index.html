@@ -1672,6 +1672,21 @@
             text-decoration: none;
         }
         .about-coffee .ui-icon { color: var(--accent); }
+        /* Steam over the cup: three wisps rise slowly and fade, one after another
+           (negative delays: all three are on their way from the first frame).
+           Rising wisps may leave the icon's box, hence overflow: visible. */
+        .about-coffee-cup { overflow: visible; }
+        .about-coffee-steam { animation: about-coffee-steam 3s ease-in-out infinite; }
+        .about-coffee-steam:nth-of-type(2) { animation-delay: -1s; }
+        .about-coffee-steam:nth-of-type(3) { animation-delay: -2s; }
+        @keyframes about-coffee-steam {
+            0% { transform: translate(0, 2px); opacity: 0; }
+            35% { opacity: 0.85; }
+            65% { transform: translate(0.6px, -1px); }
+            100% { transform: translate(-0.3px, -3.5px); opacity: 0; }
+        }
+        /* Reduced motion: the steam stands still, fully drawn. */
+        @media (prefers-reduced-motion: reduce) { .about-coffee-steam { animation: none; opacity: 1; } }
         @media (hover: hover) { .about-coffee:hover { background: var(--hover-bg); } }
         .about-coffee:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .person-card:active {
@@ -23652,7 +23667,7 @@
             <div class="about-support">
                 <p data-i18n="about.support"></p>
                 <a class="about-coffee" href="https://www.buymeacoffee.com/acidekcz" target="_blank" rel="noopener noreferrer">
-                    <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg>
+                    <svg class="ui-icon about-coffee-cup" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="about-coffee-steam" d="M6 5.5c-.8-.9.8-1.6 0-3"/><path class="about-coffee-steam" d="M10 5.5c-.8-.9.8-1.6 0-3"/><path class="about-coffee-steam" d="M14 5.5c-.8-.9.8-1.6 0-3"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg>
                     <span data-i18n="about.coffee"></span>
                 </a>
             </div>
