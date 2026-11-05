@@ -18,8 +18,10 @@ import { isPhoneBar } from '../breakpoints.js';
 import { FOCUS_R, FanModel } from '../fan-chart.js';
 import { findFanAnchor, fanPeople, FanAnchor } from '../fan-follow-anchor.js';
 import { FollowTarget, sessionTone } from '../live-follow-targets.js';
+import { trailStrength } from '../live-follow-map.js';
+import { getFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
-import { currentFollowTargets, followNumbered, followPinned } from './live-follow-ui.js';
+import { currentFollowTargets, followNumbered, followPinned, followTrail } from './live-follow-ui.js';
 import type { FanMenuItemId } from './fan-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -120,6 +122,10 @@ export const fanFollowMethods = uiModule({
         const stage = document.getElementById('fan-stage');
         const svg = chart?.querySelector<SVGSVGElement>('svg.fan-svg') ?? null;
         svg?.querySelectorAll('.fan-follow-layer').forEach(e => e.remove());
+        svg?.querySelectorAll('.is-trail').forEach(e => {
+            e.classList.remove('is-trail');
+            (e as SVGElement).style.removeProperty('--trail-o');
+        });
         svg?.querySelectorAll('.is-working, .is-working-repeat').forEach(e => {
             e.classList.remove('is-working', 'is-working-repeat');
             e.removeAttribute('data-follow-session');
@@ -134,8 +140,11 @@ export const fanFollowMethods = uiModule({
         const model = fan?.getModel() ?? null;
         const zoom = fan?.getZoom() ?? null;
         if (!chart || !stage || !svg || !fan || !model || !zoom || TreeRenderer.getViewMode() !== 'fan') return;
+        // The fan's redraw may take the legend along: put it back.
+        if (!document.getElementById('follow-legend')) this.renderFollowLegend();
         const targets = currentFollowTargets();
-        if (!targets.length) return;
+        const trail = getFollowTrail() && !isPhoneBar() ? followTrail() : [];
+        if (!targets.length && !trail.length) return;
         const numbered = followNumbered();
         const vb = zoom.viewBox();
         const ppu = vb.ppu || 1;
@@ -144,6 +153,39 @@ export const fanFollowMethods = uiModule({
         svg.appendChild(layer);
         const visible = fanPeople(model);
         const motion = !reducedMotion();
+
+        // The trail first (under the marks): a person the fan does not draw leaves it on the anchor;
+        // a sector worked on now carries only the mark.
+        if (trail.length) {
+            const now = new Set<string>();
+            for (const t of targets) {
+                const k = keysOf(model, t.personId).first;
+                if (k) now.add(k);
+            }
+            const spotOf = (pid: PersonId): string | null => {
+                const k = keysOf(model, pid).first;
+                if (k) return k;
+                const a = anchorOf(model, pid, visible);
+                return a.kind !== 'none' && a.anchorId ? keysOf(model, a.anchorId).first : null;
+            };
+            for (const [key, v] of trailStrength(trail, e => spotOf(e.personId), now)) {
+                const el = svg.querySelector<SVGElement>(`[data-fan-key="${key}"]`);
+                const attrs = { class: `fan-trail follow-${sessionTone(v.session)}`, style: `--trail-o: ${v.opacity}` };
+                let shape: SVGElement | null = null;
+                if (key === 'f') shape = svgEl('circle', { ...attrs, cx: 0, cy: 0, r: FOCUS_R });
+                else {
+                    const d = el?.querySelector('.fan-fill')?.getAttribute('d');
+                    if (d) shape = svgEl('path', { ...attrs, d });
+                }
+                if (!shape) continue;
+                shape.setAttribute('data-trail-key', key);
+                layer.appendChild(shape);
+                if (el) {
+                    el.classList.add('is-trail');
+                    el.style.setProperty('--trail-o', String(v.opacity));
+                }
+            }
+        }
 
         const byPerson = new Map<PersonId, FollowTarget[]>();
         for (const t of targets) {

@@ -29,6 +29,8 @@ import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPer
 import {
     FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
 } from '../live-follow-targets.js';
+import { WorkPlace, resolveWorkPlace, samePlace, workPlaceId } from '../live-follow-map.js';
+import { WORKING_PLACE_FEATURE } from '../research-link.js';
 
 const FOLLOW_KEY = 'strom-live-follow';
 /** The far-out zoom where cards lose their text, and the zoom a jump then takes. */
@@ -64,6 +66,8 @@ let lastTarget: PersonId | null = null;
 let lastJumpAt = 0;
 let jumpTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+/** The map's own pause comes back after 20 s without touching the map. */
+let mapIdleTimer: ReturnType<typeof setTimeout> | null = null;
 let listening = false;
 
 /** One run of following (on, live, this tree); gone when following ends. */
@@ -74,12 +78,16 @@ interface FollowSession {
     focusBefore: PersonId | null;
     /** The fan's centre pinned from a sector's menu. */
     fanPinned: PersonId | null;
-    /** Panning the map by hand (the map's work marks, a later part). */
+    /** The map was moved by hand: it stops panning to the work (marks, pulse and trail go on). */
     mapPaused: boolean;
-    /** The people worked on before (memory only; drawn by the fan and the map later). */
+    /** The people and places worked on before (memory only; drawn by the fan and the map). */
     trail: TrailEntry[];
     /** Row of working[] → its last person (the signal only on a change). */
     lastTargets: Map<number, PersonId>;
+    /** Row of working[] → its last work place (the map's signal only on a change). */
+    lastPlaces: Map<number, WorkPlace>;
+    /** The legend of the marks is open (null: not yet shown; it opens when the trail first appears). */
+    legendOpen: boolean | null;
 }
 
 let session: FollowSession | null = null;
@@ -129,7 +137,7 @@ function followSession(): FollowSession | null {
     if (!session) {
         session = {
             view: getFollowView(), focusBefore: TreeRenderer.getFocusPersonId(), fanPinned: null,
-            mapPaused: false, trail: [], lastTargets: new Map(),
+            mapPaused: false, trail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
         };
         seenMode = TreeRenderer.getViewMode();
     }
@@ -141,6 +149,46 @@ export function currentFollowTargets(): FollowTarget[] {
     const s = liveSession();
     if (!followActive() || !s) return [];
     return followTargets(s.working, personOfRefn());
+}
+
+/** The bridge names the place record a run works on (`working.place`); without it the field is not read. */
+function placeFromBridge(): boolean {
+    return !!liveSession()?.features?.includes(WORKING_PLACE_FEATURE);
+}
+
+/** Where each run at work works (row of working[] → its place), for the given targets. */
+export function currentWorkPlaces(targets: readonly FollowTarget[] = currentFollowTargets()): Map<number, WorkPlace> {
+    const s = liveSession();
+    const out = new Map<number, WorkPlace>();
+    if (!s) return out;
+    const data = DataManager.getData();
+    const usePlace = placeFromBridge();
+    for (const t of targets) out.set(t.row, resolveWorkPlace(data, { personId: t.personId, place: s.working[t.row]?.place }, usePlace));
+    return out;
+}
+
+/** The trail of this run of following (newest first; empty when not following). */
+export function followTrail(): readonly TrailEntry[] {
+    return followActive() ? session?.trail ?? [] : [];
+}
+
+/** The map was moved by hand while following there. */
+export function followMapPaused(): boolean {
+    return followActive() && !!session?.mapPaused;
+}
+
+/** The legend of the marks: open (true), folded (false), not shown yet (null). */
+export function followLegendOpen(): boolean | null {
+    return followActive() ? session?.legendOpen ?? null : null;
+}
+
+export function setFollowLegendOpen(open: boolean): void {
+    if (followActive() && session) session.legendOpen = open;
+}
+
+/** The timings of following (a test may shorten them). */
+export function followTiming(): { gap: number; idle: number; retry: number } {
+    return timing();
 }
 
 /** Session numbers are shown (two or more runs at work). */
@@ -171,6 +219,10 @@ export function followFanCenter(): PersonId | null {
 }
 
 /** Something the user is in the middle of: a jump would pull the tree from under it. */
+export function followBusy(highlight: boolean): boolean {
+    return somethingOpen(highlight);
+}
+
 function somethingOpen(highlight: boolean): boolean {
     if (highlight) return true;
     const active = document.activeElement as HTMLElement | null;
@@ -190,7 +242,7 @@ export const liveFollowMethods = uiModule({
         if (size === 'panel') btn.id = 'live-follow';
         btn.setAttribute('aria-pressed', String(followOn));
         btn.classList.toggle('is-on', followOn);
-        btn.classList.toggle('is-paused', followOn && pausedByUser);
+        btn.classList.toggle('is-paused', followOn && (pausedByUser || (followMapPaused() && TreeRenderer.getViewMode() === 'map')));
         const label = followOn ? L.followOff : L.followOn;
         btn.setAttribute('aria-label', label);
         btn.title = followOn && !followTarget() ? `${label} · ${L.followIdle}` : label;
@@ -211,7 +263,10 @@ export const liveFollowMethods = uiModule({
         this.clearLiveFollowTimers();
         const fs = on ? followSession() : null;
         if (fs) {
-            fs.lastTargets = changedTargets(new Map(), currentFollowTargets()).next;
+            const targets = currentFollowTargets();
+            fs.lastTargets = changedTargets(new Map(), targets).next;
+            fs.lastPlaces = currentWorkPlaces(targets);
+            if (fs.view === 'map' && TreeRenderer.getViewMode() === 'map') this.mapFollowPan(true);
             if (fs.view !== 'family' && TreeRenderer.getViewMode() !== fs.view) this.switchFollowView(fs.view);
         }
         this.renderLiveFollowPill();
@@ -343,26 +398,50 @@ export const liveFollowMethods = uiModule({
     refreshFollowMarks(pulse?: Set<number>): void {
         const fs = followActive() ? session : null;
         let changed = pulse ?? new Set<number>();
+        let moved = pulse ?? new Set<number>();
         if (fs) {
             const targets = currentFollowTargets();
+            const places = currentWorkPlaces(targets);
             const diff = changedTargets(fs.lastTargets, targets);
-            if (!pulse) changed = diff.changed;
+            // The map signals a run that moved to another place (a new run counts).
+            const placeChanged = new Set<number>();
+            for (const t of targets) if (!samePlace(fs.lastPlaces.get(t.row), places.get(t.row))) placeChanged.add(t.row);
+            if (!pulse) {
+                changed = diff.changed;
+                moved = placeChanged;
+            }
+            // The run's previous person and place go to the front of the trail.
             const now = Date.now();
-            for (const row of diff.changed) {
-                const prev = fs.lastTargets.get(row);
-                const t = targets.find(x => x.row === row);
-                if (prev && t) fs.trail = pushTrail(fs.trail, { personId: prev, placeKey: null, session: t.session, at: now }, now);
+            for (const t of targets) {
+                if (!diff.changed.has(t.row) && !placeChanged.has(t.row)) continue;
+                const prev = fs.lastTargets.get(t.row);
+                if (!prev) continue;
+                const was = fs.lastPlaces.get(t.row);
+                fs.trail = pushTrail(fs.trail, {
+                    personId: prev, placeKey: was && was.kind !== 'noPlace' ? workPlaceId(was) : null, session: t.session, at: now,
+                    geo: was?.geo ?? null,
+                }, now);
             }
             fs.lastTargets = diff.next;
+            fs.lastPlaces = places;
+            // The legend opens by itself the first time a trail appears.
+            if (fs.legendOpen === null && fs.trail.length > 0) fs.legendOpen = true;
         }
-        if (TreeRenderer.getViewMode() === 'fan') this.applyFanFollowMarks(changed);
+        const mode = TreeRenderer.getViewMode();
+        if (mode === 'fan') this.applyFanFollowMarks(changed);
+        if (mode === 'map') this.applyMapFollowMarks(moved);
+        else this.clearMapFollowMarks();
+        this.renderFollowLegend();
     },
 
     clearLiveFollowTimers(): void {
         if (jumpTimer) clearTimeout(jumpTimer);
         if (idleTimer) clearTimeout(idleTimer);
+        if (mapIdleTimer) clearTimeout(mapIdleTimer);
         jumpTimer = null;
         idleTimer = null;
+        mapIdleTimer = null;
+        this.stopMapFollowPan();
     },
 
     /** A status, a change, a redraw: jump when the target moved on (or the user moved away). */
@@ -389,7 +468,10 @@ export const liveFollowMethods = uiModule({
         const fs = followSession();
         const mode = TreeRenderer.getViewMode();
         if (!fs || mode === seenMode) return false;
+        const left = seenMode;
         seenMode = mode;
+        // Leaving the map ends its own pause (the next visit pans to the work again).
+        if (left === 'map' && fs.mapPaused) this.endMapPause();
         if (!isFollowView(mode)) {
             this.pauseLiveFollow();
             return true;
@@ -398,6 +480,7 @@ export const liveFollowMethods = uiModule({
         lastTarget = null;
         this.renderLivePanel();
         this.refreshFollowMarks(new Set());
+        if (mode === 'map' && !pausedByUser) this.mapFollowPan(true);
         if (!pausedByUser) this.followJump(true);
         return true;
     },
@@ -497,23 +580,67 @@ export const liveFollowMethods = uiModule({
         this.followJump(true);
     },
 
-    /** "Following paused · Back to the agent · ×" over the tree while the user has it. */
-    renderLiveFollowPill(): void {
-        const show = followActive() && pausedByUser;
-        let pill = document.getElementById('live-follow-pill');
-        if (!show) {
-            pill?.remove();
-            return;
+    /**
+     * The map moved by hand (a drag, the wheel, a pinch, +/−, Fit) while
+     * following there: only the map's panning to the work pauses; the marks,
+     * the signal and the trail go on. 20 s without touching the map it comes
+     * back by itself.
+     */
+    noteMapMovedByUser(): void {
+        const fs = followSession();
+        if (!fs || fs.view !== 'map' || TreeRenderer.getViewMode() !== 'map') return;
+        this.stopMapFollowPan();
+        const first = !fs.mapPaused;
+        fs.mapPaused = true;
+        if (mapIdleTimer) clearTimeout(mapIdleTimer);
+        mapIdleTimer = setTimeout(() => this.resumeMapFollow(), timing().idle);
+        if (first) {
+            this.renderLiveFollowPill();
+            this.renderLivePanel();
         }
-        if (pill) return;
+    },
+
+    /** Back to the agent on the map: panning on again, the map goes to the place worked on now. */
+    resumeMapFollow(): void {
+        this.endMapPause();
+        this.mapFollowPan(true, true);
+    },
+
+    /** The map's pause ends (Back, 20 s, the map left): the pill and the ◎ switch say so. */
+    endMapPause(): void {
+        if (mapIdleTimer) clearTimeout(mapIdleTimer);
+        mapIdleTimer = null;
+        const was = !!session?.mapPaused;
+        if (session) session.mapPaused = false;
+        if (!was) return;
+        this.renderLiveFollowPill();
+        this.renderLivePanel();
+    },
+
+    /**
+     * "Following paused · Back to the agent · ×" over the tree while the user
+     * has it; on the map moved by hand "Map panning paused · Back to the agent · ×".
+     */
+    renderLiveFollowPill(): void {
+        const kind = !followActive() ? null
+            : pausedByUser ? 'follow'
+                : followMapPaused() && TreeRenderer.getViewMode() === 'map' ? 'map' : null;
+        let pill = document.getElementById('live-follow-pill');
+        if (pill && pill.dataset.kind !== kind) {
+            pill.remove();
+            pill = null;
+        }
+        if (!kind || pill) return;
         const L = strings.live;
-        pill = el('div', 'evidence-pill live-follow-pill');
+        pill = el('div', `evidence-pill live-follow-pill${kind === 'map' ? ' live-follow-pill--map' : ''}`);
         pill.id = 'live-follow-pill';
+        pill.dataset.kind = kind;
         pill.setAttribute('role', 'status');
-        pill.appendChild(el('span', 'evidence-pill-label', L.followPaused));
+        if (kind === 'map') pill.appendChild(el('span', 'live-follow-pill__mark', '◎')).setAttribute('aria-hidden', 'true');
+        pill.appendChild(el('span', 'evidence-pill-label', kind === 'map' ? L.mapPaused : L.followPaused));
         const back = el('button', 'evidence-pill-next live-follow-back', L.followBack);
         back.type = 'button';
-        back.onclick = () => this.resumeLiveFollow();
+        back.onclick = () => (kind === 'map' ? this.resumeMapFollow() : this.resumeLiveFollow());
         const close = el('button', 'evidence-pill-close', '×');
         close.type = 'button';
         close.setAttribute('aria-label', L.followOff);

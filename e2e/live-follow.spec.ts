@@ -36,8 +36,12 @@ const LINE_GED = GED.replace(/\/Fíšek\/|\/Fíšková\//g, '/Brandvold-Ekhammar
 
 interface Bridge {
     person: string; paused: boolean;
+    /** The research's place record the first run works on (`working[].place`, read with `working.place`). */
+    place?: string;
+    /** `/status.features`. */
+    features?: string[];
     /** More runs at work after the first one (two or more sessions). */
-    more: Array<{ person: string; task: string; paused?: boolean }>;
+    more: Array<{ person: string; task: string; paused?: boolean; place?: string }>;
     /** The asks of the reconnect chain so far (/events, /status): each comes after the one before it was read. */
     chain: number;
 }
@@ -59,10 +63,13 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
     const bridge: Bridge = { person: 'P0012', paused: false, more: [], chain: 0 };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 5,
+        ...(bridge.features ? { features: bridge.features } : {}),
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 60_000).toISOString(), task: 'T0101 Matriky',
             ...(bridge.person ? { person: bridge.person } : {}),
+            ...(bridge.place ? { place: bridge.place } : {}),
             ...(bridge.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) },
         ...bridge.more.map((m, i) => ({ who: `agent-${i + 2}`, since: new Date(Date.now() - 30_000).toISOString(), task: m.task, person: m.person,
+            ...(m.place ? { place: m.place } : {}),
             ...(m.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) }))],
         waiting: [], queue: [], links: LINKS,
     });
@@ -79,6 +86,41 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
     await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
     await expect(page.locator('#live-panel')).toBeVisible();
     return bridge;
+}
+
+/** Map tiles served locally (a 1×1 PNG) and the one-time tiles notice acknowledged. */
+async function stubTiles(page: Page): Promise<void> {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    await page.addInitScript(() => {
+        const raw = localStorage.getItem('strom-settings');
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.mapTiles = true;
+        localStorage.setItem('strom-settings', JSON.stringify(settings));
+    });
+}
+
+/**
+ * Places for the map (invented): Jan born in Rybná, Josef in Habrov, Eva in
+ * Lhota u Habrova (no position); the research's records L0003 farnost Habrov
+ * (Habrov in the tree), L0007 Dolní Mez (a position on the record only),
+ * L0009 Horní Mez (no position anywhere).
+ */
+async function seedMapPlaces(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const data = window.Strom.DataManager.getData();
+        const by = (r: string) => Object.values(data.persons).find(p => p.refn === r)!;
+        by('P0012').birthPlace = 'Rybná';
+        by('P0001').birthPlace = 'Habrov';
+        by('P0013').birthPlace = 'Lhota u Habrova';
+        data.places = { rybna: { lat: 49.71, lon: 16.42 }, habrov: { lat: 49.8, lon: 16.5 } };
+        data.placeRecords = {
+            L0003: { id: 'L0003', names: [{ name: 'farnost Habrov' }], coords: { lat: 49.8, lon: 16.5 } },
+            L0007: { id: 'L0007', names: [{ name: 'Dolní Mez' }], coords: { lat: 49.6, lon: 16.3 } },
+            L0009: { id: 'L0009', names: [{ name: 'Horní Mez' }] },
+        } as never;
+        data.placeRefs = { habrov: 'L0003' };
+    });
 }
 
 /**
@@ -882,6 +924,237 @@ test.describe('follow the agent in the fan (spec 043)', () => {
             const sheet = page.locator('.live-follow-view--overview');
             await expect(sheet).toBeVisible();
             await expect(sheet.locator('[aria-checked="true"]')).toHaveText('Fan');
+        });
+    });
+});
+
+test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
+    const work = (page: Page) => page.locator('#map-container .map-marker-work');
+    /** Count the signals (pulses) started on the map from now on. */
+    const countMapPulses = (page: Page) => page.evaluate(() => {
+        const w = window as unknown as { __mapPulses: number; __mapPulseWrap?: boolean };
+        w.__mapPulses = 0;
+        if (w.__mapPulseWrap) return;
+        w.__mapPulseWrap = true;
+        const ui = window.Strom.UI as unknown as { applyMapFollowMarks: (p?: Set<number>) => void };
+        const draw = ui.applyMapFollowMarks;
+        ui.applyMapFollowMarks = function (this: unknown, p?: Set<number>) {
+            const before = document.querySelectorAll('#map-container .map-marker-work.is-pulse').length;
+            draw.call(this, p);
+            if (document.querySelectorAll('#map-container .map-marker-work.is-pulse').length > before) w.__mapPulses++;
+        };
+    });
+    const mapPulses = (page: Page) => page.evaluate(() => (window as unknown as { __mapPulses: number }).__mapPulses);
+    /** Where an element's middle is, from the map's middle (px). */
+    const offMapCentre = (page: Page, sel: string) => page.evaluate((s) => {
+        const el = document.querySelector(s)!.getBoundingClientRect();
+        const box = document.getElementById('map-container')!.getBoundingClientRect();
+        return Math.hypot(el.left + el.width / 2 - (box.left + box.width / 2), el.top + el.height / 2 - (box.top + box.height / 2));
+    }, sel);
+    const errors = (page: Page): string[] => {
+        const out: string[] = [];
+        page.on('pageerror', e => out.push(e.message));
+        return out;
+    };
+
+    test('with working.place the research\'s place record is marked (solid ring, its name beside it); a move to another place signals once and leaves a fainter trail', async ({ page }) => {
+        const errs = errors(page);
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place'];
+        bridge.place = 'L0003';
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(page.locator('#map-container .map-canvas')).toBeVisible();
+        await expect(work(page)).toHaveCount(1);
+        await expect(work(page)).toHaveClass(/is-record/);
+        await expect(work(page)).toHaveAttribute('data-follow-session', '1');
+        await expect(work(page).locator('.map-work-label b')).toHaveText('farnost Habrov');
+        const ring = await work(page).locator('.map-work-ring').boundingBox();
+        expect(Math.round(ring!.width)).toBe(44);
+        // The bubble: the work in the place's bubble, the person a link to the family view.
+        await work(page).locator('.map-work-ring').click();
+        const popup = page.locator('#map-container .map-popup .map-popup-work');
+        await expect(popup).toContainText('Work in progress');
+        await expect(popup).toContainText('T0101 Matriky');
+        await expect(popup.locator('.map-work-person')).toContainText('Jan');
+        await page.locator('#map-container .map-popup-close').first().click();
+
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await countMapPulses(page);
+        bridge.place = 'L0007';
+        await nextStatus(bridge);
+        await expect(work(page).locator('.map-work-label b')).toHaveText('Dolní Mez');
+        await expect.poll(() => mapPulses(page)).toBe(1);
+        // A place no fact of the tree names: outside the map's scope, a hollow dot in the ring.
+        await expect(work(page)).toHaveClass(/is-outscope/);
+        await expect(work(page).locator('.map-work-hollow')).toHaveCount(1);
+        await nextStatus(bridge);
+        expect(await mapPulses(page)).toBe(1);
+        // The trail: Habrov before; the person's own place (Rybná) before that is fainter.
+        bridge.place = undefined;
+        bridge.person = 'P0001';
+        await nextStatus(bridge);
+        await expect(work(page).locator('.map-work-label b')).toHaveText('Habrov');
+        const dots = page.locator('#map-container .map-trail-dot');
+        await expect(dots).toHaveCount(1);
+        expect(await dots.first().getAttribute('data-key')).toBe('#L0007');
+        bridge.person = 'P0012';
+        await nextStatus(bridge);
+        await expect(dots).toHaveCount(2);
+        const strength = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('#map-container .map-trail-dot')]
+            .map(d => [d.dataset.key, Number(d.style.getPropertyValue('--trail-o'))])));
+        expect(strength['habrov']).toBeGreaterThan(strength['#L0007']);
+        await expect(page.locator('#map-container svg.map-trail-line line')).not.toHaveCount(0);
+        // The legend opened by itself with the trail; its switch hides the trail.
+        const legend = page.locator('#map-container #follow-legend .follow-legend-card');
+        await expect(legend).toBeVisible();
+        await legend.locator('.follow-legend-switch input').click();
+        await expect(dots).toHaveCount(0);
+        await expect(page.locator('#map-container svg.map-trail-line')).toHaveCount(0);
+        await expect(work(page)).toHaveCount(1);
+        expect(errs).toEqual([]);
+    });
+
+    test('without the feature the place field is not read: the person\'s own place, no crash', async ({ page }) => {
+        const errs = errors(page);
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.place = 'L0007';
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(work(page)).toHaveCount(1);
+        await expect(work(page)).toHaveClass(/is-person/);
+        await expect(work(page).locator('.map-work-label b')).toHaveText('Rybná');
+        await expect(work(page)).toHaveAttribute('data-key', 'rybna');
+        await expect(page.locator('#map-container .map-follow-notice')).toHaveCount(0);
+        expect(errs).toEqual([]);
+    });
+
+    test('a place without a position: a notice at the top with Find position; a record without one: the notice alone', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place'];
+        bridge.person = 'P0013';
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(page.locator('#map-container .map-canvas')).toBeVisible();
+        const notice = page.locator('#map-container .map-follow-notice');
+        await expect(notice).toHaveCount(1);
+        await expect(notice).toHaveAttribute('data-follow-session', '1');
+        await expect(notice.locator('b')).toHaveText('Lhota u Habrova');
+        await expect(notice).toContainText('no position on the map');
+        await expect(work(page)).toHaveCount(0);
+        // Under the map's pills, never over them.
+        const overlap = await page.evaluate(() => {
+            const n = document.querySelector('.map-follow-notices')!.getBoundingClientRect();
+            return [...document.querySelectorAll('.map-topleft > *, .map-controls, #live-follow-pill')].some(e => {
+                const r = e.getBoundingClientRect();
+                return r.height > 0 && r.left < n.right && r.right > n.left && r.top < n.bottom && r.bottom > n.top;
+            });
+        });
+        expect(overlap).toBe(false);
+        await notice.locator('.map-follow-locate').click();
+        await expect(page.locator('#places-modal')).toBeVisible();
+        await page.locator('#places-close-x').click();
+        bridge.place = 'L0009';
+        await nextStatus(bridge);
+        await expect(notice.locator('b')).toHaveText('Horní Mez');
+        await expect(notice.locator('.map-follow-locate')).toHaveCount(0);
+    });
+
+    test('moving the map pauses its panning (pill, ◎ paused); marks keep coming; Back to the agent centres the place', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(work(page)).toHaveCount(1);
+        const box = (await page.locator('#map-container').boundingBox())!;
+        const x = box.x + box.width * 0.3, y = box.y + box.height * 0.65;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x + 300, y - 150, { steps: 6 });
+        await page.mouse.up();
+        const pill = page.locator('#live-follow-pill.live-follow-pill--map');
+        await expect(pill).toBeVisible();
+        await expect(pill).toContainText('Map panning paused');
+        await expect(btn(page)).toHaveClass(/is-paused/);
+        // Marks keep coming while paused; the map does not move.
+        const centreBefore = await page.evaluate(() => JSON.stringify(window.Strom.UI.mapCenter));
+        bridge.person = 'P0001';
+        await nextStatus(bridge);
+        await expect(work(page).locator('.map-work-label b')).toHaveText('Habrov');
+        expect(await page.evaluate(() => JSON.stringify(window.Strom.UI.mapCenter))).toBe(centreBefore);
+        await pill.locator('.live-follow-back').click();
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        await expect(btn(page)).not.toHaveClass(/is-paused/);
+        await expect.poll(() => offMapCentre(page, '#map-container .map-marker-work .map-work-ring')).toBeLessThan(40);
+    });
+
+    test('the fan keeps a trail of the people worked on before, older fainter; the legend\'s switch hides it', async ({ page }) => {
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        const jan = await idOf(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), jan);
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        for (const p of ['P0001', 'P0002', 'P0003']) {
+            bridge.person = p;
+            await nextStatus(bridge);
+        }
+        const trail = page.locator('#fan-chart .fan-follow-layer .fan-trail');
+        await expect(trail).toHaveCount(3);
+        const o = await page.evaluate(async (ids) => {
+            const out: number[] = [];
+            for (const id of ids) {
+                const key = document.querySelector(`#fan-chart [data-fan-person="${id}"]`)?.getAttribute('data-fan-key');
+                const el = document.querySelector<SVGElement>(`#fan-chart .fan-trail[data-trail-key="${key}"]`);
+                out.push(el ? Number(el.style.getPropertyValue('--trail-o')) : -1);
+            }
+            return out;
+        }, [await idOf(page, 'P0002'), await idOf(page, 'P0001'), jan]);
+        expect(o[0]).toBeGreaterThan(o[1]);
+        expect(o[1]).toBeGreaterThan(o[2]);
+        expect(o[2]).toBeGreaterThan(0);
+        // The sector worked on now carries the mark, not the trail.
+        await expect(page.locator(`#fan-chart .fan-trail[data-trail-key="${await page.locator(`#fan-chart .fan-sector[data-fan-person="${await idOf(page, 'P0003')}"]`).first().getAttribute('data-fan-key')}"]`)).toHaveCount(0);
+        const legend = page.locator('#follow-legend[data-view="fan"] .follow-legend-card');
+        await expect(legend).toBeVisible();
+        await expect(legend.locator('li')).toHaveCount(2);
+        await legend.locator('.follow-legend-switch input').click();
+        await expect(trail).toHaveCount(0);
+        await legend.locator('.follow-legend-close').click();
+        await expect(page.locator('#follow-legend button.follow-legend')).toBeVisible();
+    });
+
+    test.describe('a phone (spec 043 §8)', () => {
+        test.use({ hasTouch: true });
+
+        test('the map\'s work ring without its label, no trail and no legend', async ({ page }) => {
+            const errs = errors(page);
+            await stubTiles(page);
+            const bridge = await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true, quick: true });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            await seedMapPlaces(page);
+            await nextStatus(bridge);
+            await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+            await expect(work(page)).toHaveCount(1);
+            await expect(work(page).locator('.map-work-label')).toBeHidden();
+            bridge.person = 'P0001';
+            await nextStatus(bridge);
+            await expect(work(page)).toHaveAttribute('data-key', 'habrov');
+            await expect(page.locator('#map-container .map-trail-dot')).toHaveCount(0);
+            await expect(page.locator('#follow-legend')).toHaveCount(0);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+            expect(errs).toEqual([]);
         });
     });
 });
