@@ -23,6 +23,7 @@ import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
+import { helpMark } from './help-mark.js';
 
 const DIALOG_ID = 'person-research-modal';
 /** How long a conflict's card opened at stays lit up (DEV §6.2). */
@@ -217,8 +218,10 @@ export const personResearchMethods = uiModule({
             from !== undefined && to !== undefined ? (from === to ? String(from) : `${from}–${to}`)
                 : from !== undefined ? `${from}–` : to !== undefined ? `–${to}` : '';
 
-        const section = (title: string, body: string): string => body
-            ? `<section class="person-research-section"><h3 class="menu-section-header">${esc(title)}</h3>${body}</section>` : '';
+        // A section with its help (the conflicts): the heading in a row, "?" last on its right (1105 §10).
+        const section = (title: string, body: string, help = false): string => !body ? ''
+            : help ? `<section class="person-research-section" data-section="help"><div class="person-research-section-head"><h3 class="menu-section-header">${esc(title)}</h3></div>${body}</section>`
+            : `<section class="person-research-section"><h3 class="menu-section-header">${esc(title)}</h3>${body}</section>`;
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = DIALOG_ID;
@@ -234,7 +237,7 @@ export const personResearchMethods = uiModule({
                 </div>
                 <div class="person-research-body">
                     ${this.researchEdgeSectionHtml(personId)}
-                    ${section(r.conflicts, openHtml + decidedHtml)}
+                    ${section(r.conflicts, openHtml + decidedHtml, true)}
                     ${section(r.hypotheses, hypotheses.length > 0 ? `<div class="person-research-hypos">${this.researchHypothesesHtml(personId, hypotheses)}</div>` : '')}
                     ${section(r.searched, searched.length > 0 ? `
                         <table class="person-research-searched">
@@ -252,6 +255,7 @@ export const personResearchMethods = uiModule({
             </div>`;
         document.body.appendChild(overlay);
         this.pushDialog(DIALOG_ID);
+        overlay.querySelector('[data-section="help"] > .person-research-section-head')?.append(helpMark('personConflicts'));
         const close = (): void => this.closePersonResearchDialog();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#person-research-close-x') as HTMLButtonElement).onclick = close;

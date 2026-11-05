@@ -17520,6 +17520,8 @@
         /* "What the research knows". */
         .person-research-body { display: flex; flex-direction: column; gap: 14px; }
         .person-research-section .menu-section-header { padding: 0 0 6px; margin: 0; }
+        .person-research-section-head { display: flex; align-items: center; padding: 0 0 6px; }
+        .person-research-section-head > .menu-section-header { flex: 1 1 auto; min-width: 0; padding: 0; overflow-wrap: anywhere; }
         .person-research-conflict {
             border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
         }
@@ -22442,6 +22444,37 @@
         .tree-switcher-item:focus-visible,
         .context-menu-item:focus-visible { outline-offset: -2px; }
         .modal-overlay [tabindex="-1"]:focus { outline: none; }
+        /* ==== The help mark "?" (src/ui/help-mark.ts, 1105 §9): the last item on the right of a
+           heading row (a section's after its count, a window's before ×); it always opens the help. ==== */
+        .help-mark {
+            flex: none; position: relative; width: 18px; height: 18px; min-width: 0; min-height: 0;
+            margin: 0 0 0 8px; padding: 0; box-sizing: border-box;
+            display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+            border: 1px solid var(--help-mark-line); background: transparent; color: var(--text-faint);
+            font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: 0;
+            text-transform: none; cursor: pointer; box-shadow: none;
+        }
+        .help-mark::before { content: ''; position: absolute; inset: -5px; }   /* a 28 px target */
+        @media (pointer: coarse) { .help-mark::before { inset: -13px; } }     /* a 44 px target */
+        @media (hover: hover) {
+            .help-mark:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+        }
+        .help-mark:active { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+        .help-mark:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .help-mark[aria-expanded="true"] { color: var(--surface); border-color: var(--primary); background: var(--primary); }
+        /* A window: right before ×, 8 px; × stays on top where the touch targets meet. */
+        .modal-header > .help-mark { margin-left: auto; margin-right: 8px; }
+        .modal-header > .help-mark + .close-btn { position: relative; z-index: 1; }
+        .prc-panel-head > .help-mark { margin: 0 0 0 auto; }
+        .prc-panel-head > .help-mark + .prc-panel-close { z-index: 1; }
+        /* A section of the Research overview or the small panel: beside the folding heading
+           (never inside its button), the heading takes the room and wraps its title. */
+        .live-section__headrow > .help-mark, .live-section__tail > .help-mark { margin-left: 0; }
+        .live-section__headrow--help { flex-wrap: nowrap; column-gap: 8px; }
+        .live-section__headrow--help > .live-section__head,
+        .live-section__headrow--help > h4.live-panel-heading { flex: 1 1 auto; min-width: 0; }
+        .live-section__tail { flex: none; display: inline-flex; align-items: baseline; gap: 8px; margin-left: auto; }
+        .live-section__tail > .live-lines-all { margin: 0; }
         /* ==== How Strom works: the help window (src/ui/help-ui.ts, 1105 §2–§8, §11) ====
            Above every other window (the Research overview, Places, the conflicts panel).
            Computer: 1040 × min(760, 100dvh − 48), the chapter list on the left of a chapter.

@@ -13,6 +13,7 @@
 
 import { researchActionLabel } from './research-open-mark.js';
 import { isHelpOpen } from './help-ui.js';
+import { helpMark } from './help-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
@@ -173,6 +174,10 @@ export const conflictPanelMethods = uiModule({
         const focusKey = panel.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.focus ?? '' : null;
         // The arrow outside the scrolling body (it sticks out of the box).
         panel.innerHTML = `<span class="prc-panel-arrow" aria-hidden="true"></span><div class="prc-panel-body">${html}</div>`;
+        // "?" right before ×: how a conflict is decided here (1105 §10).
+        const mark = helpMark('conflicts');
+        mark.dataset.focus = 'help';
+        panel.querySelector('.prc-panel-close')?.before(mark);
         if (focusKey !== null) {
             const target = focusKey ? panel.querySelector<HTMLElement>(`[data-focus="${focusKey}"]:not(:disabled)`) : null;
             // Not decidable from the app: the choice asked is off, the keyboard on the way that is left.

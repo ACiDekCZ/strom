@@ -50,6 +50,7 @@ import { placesView, resetPlacesView } from './places-identify-ui.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import type { MapScope } from './map-ui.js';
+import { helpMark } from './help-mark.js';
 
 /** A row of the dialog: a place with its location, when it has one. */
 interface ManagerPlace {
@@ -224,6 +225,7 @@ export const placesManagerMethods = uiModule({
                     <button type="button" class="secondary" id="places-close" data-dismiss>${strings.buttons.close}</button>
                 </div>
             </div>`;
+        overlay.querySelector('#places-close-x')?.before(helpMark('placesManager'));
         document.body.appendChild(overlay);
         // Wrap the body into its scroll container now, not in the skeleton's
         // observer later: moving the rows there afterwards would drop the

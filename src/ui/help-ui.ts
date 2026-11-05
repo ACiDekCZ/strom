@@ -105,6 +105,14 @@ export function isHelpOpen(): boolean {
     return win !== null;
 }
 
+const closeListeners = new Set<() => void>();
+
+/** Called after the help closes (its opener has the keyboard back by then). Returns the way to stop listening. */
+export function onHelpClose(fn: () => void): () => void {
+    closeListeners.add(fn);
+    return () => { closeListeners.delete(fn); };
+}
+
 // ---------------------------------------------------------------------------
 // Small DOM helpers (no innerHTML anywhere).
 
@@ -1163,6 +1171,7 @@ export function closeHelp(opts: { fromHistory?: boolean } = {}): void {
     }
     const opener = w.opener;
     if (opener && opener.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
+    for (const fn of [...closeListeners]) fn();
 }
 
 export const helpMethods = uiModule({

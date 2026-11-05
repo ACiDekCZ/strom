@@ -36,7 +36,7 @@ import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
-    liveSession, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
+    liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
@@ -599,6 +599,7 @@ export const researchOverviewMethods = uiModule({
         const replies = s.waiting.length - todo;
         const host = liveSection(body, {
             ...fold, title: `${r.waiting} · ${todo}`, summary: replies > 0 ? L.waitingReplyCount(replies) : undefined, headCls: 'live-panel-heading-waiting',
+            help: 'waiting',
         });
         host.classList.add('research-overview__waiting');
         if (view.detail && !s.waiting.some(w => w.id === view.detail)) view.detail = null;
@@ -1284,6 +1285,7 @@ export const researchOverviewMethods = uiModule({
             ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
             summary: multi ? undefined
                 : w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
+            help: nowHelpTopic(s),
         });
         // First in Now: the other trees where an agent works or something waits (spec 011).
         this.appendResearchElsewhere(host, 'overview');

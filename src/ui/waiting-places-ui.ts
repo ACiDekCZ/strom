@@ -41,6 +41,7 @@ import { drawTiles, dotsHtml, mapSize, type SmallMapView } from './places-find-u
 import { fetchStatus, liveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
+import { helpMark } from './help-mark.js';
 
 const MODAL_ID = 'waiting-places-modal';
 /** How long the toasts with Undo stand. */
@@ -163,6 +164,7 @@ export const waitingPlacesMethods = uiModule({
                     <button type="button" class="secondary" id="waiting-places-close" data-dismiss>${this.escapeHtml(strings.buttons.close)}</button>
                 </div>
             </div>`;
+        overlay.querySelector('#waiting-places-x')?.before(helpMark('places'));
         document.body.appendChild(overlay);
         const modal = overlay.querySelector('.modal') as HTMLElement;
         normalizeModal(modal);

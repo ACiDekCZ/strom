@@ -26,6 +26,8 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { helpMark } from './help-mark.js';
+import type { HelpTopic } from '../help/topics.js';
 import { StromData, TreeId, PersonId, SourceExcerpt } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate, instantLocalDay } from '../dates.js';
@@ -367,6 +369,8 @@ export function liveSection(host: HTMLElement, o: {
     collapsed: boolean; headCls?: string; onToggle: () => void;
     /** A control beside the heading (not inside its button). */
     aside?: HTMLElement;
+    /** The help mark "?" of this place: the last item of the heading row, after `aside`. */
+    help?: HelpTopic;
     extra?: HTMLElement[];
     locked?: boolean;
     note?: HTMLElement;
@@ -395,9 +399,20 @@ export function liveSection(host: HTMLElement, o: {
     const body = el('div', 'live-section__body');
     body.id = o.id;
     body.hidden = o.collapsed;
-    if (o.aside) {
+    if (o.aside && o.help) {
+        // The control and "?" go under the heading together when they do not fit beside it.
+        const row = el('div', 'live-section__headrow');
+        const tail = el('span', 'live-section__tail');
+        tail.append(o.aside, helpMark(o.help));
+        row.append(head, tail);
+        host.append(row);
+    } else if (o.aside) {
         const row = el('div', 'live-section__headrow');
         row.append(head, o.aside);
+        host.append(row);
+    } else if (o.help) {
+        const row = el('div', 'live-section__headrow live-section__headrow--help');
+        row.append(head, helpMark(o.help));
         host.append(row);
     } else {
         host.append(head);
@@ -405,6 +420,11 @@ export function liveSection(host: HTMLElement, o: {
     if (o.note) host.append(o.note);
     host.append(body);
     return body;
+}
+
+/** The help of the Now heading: how the agent works, or why it pauses while some run is paused (1105 §10). */
+export function nowHelpTopic(s: LiveSession): HelpTopic {
+    return s.working.some(w => w.paused) ? 'nowPaused' : 'now';
 }
 
 /** A change's text with the people in it as links (a click shows them in the tree). */
@@ -3121,10 +3141,12 @@ export const researchUiMethods = uiModule({
         const replies = sent > 0 ? L.waitingReplyCount(sent) : undefined;
         let host: HTMLElement;
         if (fold) {
-            host = liveSection(body, { ...fold, title, summary: replies, headCls: 'live-panel-heading-waiting' });
+            host = liveSection(body, { ...fold, title, summary: replies, headCls: 'live-panel-heading-waiting', help: 'waiting' });
         } else {
-            const h = body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
+            const row = body.appendChild(el('div', 'live-section__headrow live-section__headrow--help'));
+            const h = row.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
             if (replies) h.appendChild(el('span', 'live-section__sum', replies));
+            row.appendChild(helpMark('waiting'));
             host = body;
         }
         const list = el('ul', 'live-panel-list live-waiting');
@@ -3535,13 +3557,13 @@ export const researchUiMethods = uiModule({
                 aside.dataset.direction = sel.id;
                 aside.onclick = () => this.setWorkingLine('all');
             }
-            const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside });
+            const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside, help: nowHelpTopic(s) });
             this.appendWorkingLines(host, s, groups);
         } else if (!s.ended) {
             const w = s.working[0];
             const since = w ? Date.parse(w.since) : NaN;
             const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
-            const host = liveSection(body, { ...fold('working'), title: r.atWork, summary });
+            const host = liveSection(body, { ...fold('working'), title: r.atWork, summary, help: nowHelpTopic(s) });
             this.appendWorkingList(host, s);
         }
 
@@ -3672,7 +3694,7 @@ export const researchUiMethods = uiModule({
 
         const sel = !directions && dirFilter !== 'all' ? s.researches.find(d => d.id === dirFilter) : undefined;
         const host = liveSection(body, {
-            ...fold, title, headCls: 'live-queue-toggle',
+            ...fold, title, headCls: 'live-queue-toggle', help: 'queue',
             summary: sel ? strings.otherResearch.lineQueueOf(counts ? lineCount(sel.id) : next.length, nextCount, directionGlyph(sel))
                 : L.queueCount(nextCount),
         });

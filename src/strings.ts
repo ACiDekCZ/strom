@@ -7560,6 +7560,10 @@ const stringsEN = {
         lic: 'How Strom works · © 2026 Milan Víšek',
         licLink: 'CC BY 4.0',
         source: 'Source',
+        // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
+        mark: (topic: string) => `How it works: ${topic}`,
+        markTitle: (topic: string, id: string) => `How it works: ${topic} (${id})`,
+        topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Waiting to be handled', now: 'Agent at work', nowPaused: 'Pause' },
     },
 };
 
@@ -14842,6 +14846,10 @@ const stringsCZ: StringsType = {
         lic: 'Jak Strom funguje · © 2026 Milan Víšek',
         licLink: 'CC BY 4.0',
         source: 'Zdroj',
+        // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
+        mark: (topic: string) => `Jak to funguje: ${topic}`,
+        markTitle: (topic: string, id: string) => `Jak to funguje: ${topic} (${id})`,
+        topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení' },
     },
 };
 
@@ -22045,6 +22053,10 @@ const stringsDE: StringsType = {
         lic: 'So funktioniert Strom · © 2026 Milan Víšek',
         licLink: 'CC BY 4.0',
         source: 'Quelle',
+        // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
+        mark: (topic: string) => `So funktioniert es: ${topic}`,
+        markTitle: (topic: string, id: string) => `So funktioniert es: ${topic} (${id})`,
+        topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Erledigung', now: 'Arbeit des Agenten', nowPaused: 'Pause' },
     },
 };
 

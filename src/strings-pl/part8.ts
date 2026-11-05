@@ -1119,5 +1119,9 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         lic: 'Jak działa Strom · © 2026 Milan Víšek',
         licLink: 'CC BY 4.0',
         source: 'Źródło',
+        // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
+        mark: (topic: string) => `Jak to działa: ${topic}`,
+        markTitle: (topic: string, id: string) => `Jak to działa: ${topic} (${id})`,
+        topics: { queue: 'Kolejka', places: 'Miejsca', placesManager: 'Miejsca w drzewie', conflicts: 'Sprzeczności', personConflicts: 'Sprzeczności', waiting: 'Czeka na załatwienie', now: 'Praca agenta', nowPaused: 'Wstrzymanie' },
     },
 };
