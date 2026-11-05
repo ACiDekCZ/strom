@@ -133,9 +133,16 @@ const ONE_MORE = ged({ kids: [['P0014', 'Lubor /Hlohovec/', 'M', 1872]] });
 test.describe('live load without a blink (055)', () => {
     test('Family: no empty frame, the cards that stay keep their element, the new child grows with the light', async ({ page }) => {
         const bridge = await follow(page);
+        // The zoom and the focused person stay (K1.2); the kept card stays where it was on screen.
+        const view = () => page.evaluate(() => ({ scale: window.Strom.ZoomPan.getTransform().scale, focus: window.Strom.TreeRenderer.getFocusPersonId() }));
+        const before = await view();
+        const anchorAt = async () => (await page.locator('#tree-canvas .person-card[aria-label="Radim Hlohovec"]').boundingBox())!;
+        const was = await anchorAt();
         await load(page, bridge, ONE_MORE);
         await expect(card(page, 'Lubor')).toBeVisible();
         await expect(page.locator('#live-announce')).toContainText('Person added: Lubor Hlohovec');
+        expect(await view()).toEqual(before);
+        await expect.poll(async () => Math.abs((await anchorAt()).x - was.x) + Math.abs((await anchorAt()).y - was.y)).toBeLessThan(2);
         await expect.poll(async () => (await rec(page)).animatedMax).toBeGreaterThan(0);
         const r = await rec(page);
         expect(r.min).toBeGreaterThan(0);
