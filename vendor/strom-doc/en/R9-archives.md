@@ -18,8 +18,8 @@ The procedure in brief:
    pages ([R9.3](#R9.3)) and the agent's browser in Chrome ([R9.4](#R9.4), [R9.5](#R9.5)) follow the same rules.
 4. **Waiting:** where the agent may not go, a person saves the images. The task waits for the images and returns by
    itself once all of them are in the research ([R9.6](#R9.6)).
-5. **Decision:** the table and the course of a task are in [R9.8](#R9.8), a person's steps in [R9.9](#R9.9),
-   examples in [R9.10](#R9.10), frequently asked questions in [R9.11](#R9.11).
+5. **Decision:** the table and the course of a task are in [R9.8](#R9.8), a person's steps in [R9.9](#R9.9) and
+   examples in [R9.10](#R9.10).
 
 > **Note: where exactly the agent's browser applies.** strom watches the agent's browser only with **Claude Code**
 > and the **Claude in Chrome** extension. strom cannot watch the browser or computer use of another agent (Codex,
@@ -504,31 +504,3 @@ The levels and limits are from the list of archives of the research 1.27.0. The 
 - **Since:** research 1.27.0
 
 <!-- zdroj: research:assets/archives.json szukajwarchiwach.gov.pl (restricted, browserOnly) -->
-
-<a id="R9.11"></a>
-## R9.11 Frequently asked questions
-
-- **Why does the agent not "go" into an archive?** The archive's terms or its robots.txt do not allow automated
-  tools, or permission is missing. strom watches this for the downloader, the web fetch and the agent's browser
-  ([R9.1](#R9.1), [R9.3](#R9.3), [R9.4](#R9.4)).
-- **Why does a task wait for images from a person?** Where only a person may go, a person saves the images. The agent
-  names the book and the numbers of the images; the task returns by itself once the images are in the research
-  ([R9.6](#R9.6)).
-- **Is this safe with regard to the archive's terms?** strom always follows the strictest known level, at a person's
-  pace or slower, and only a person gives permission. The agent's browser opens an archive only one page at a time
-  and counts it together with the fetches ([R9.2](#R9.2), [R9.4](#R9.4)).
-- **Why does Codex or another agent not do it?** Only with Claude Code and the Claude in Chrome extension can strom
-  watch every page that opens. Another agent does not go into an archive only through the browser
-  of its own accord ([R9.4](#R9.4), [R9.4.2](#R9.4.2)).
-- **What about CAPTCHA and a check that a person is at the computer?** The agent never passes or gets around it. An
-  archive with such a check is opened by a person in their own browser.
-- **Why does Chrome want to allow more downloads?** Chrome saves only one file from one page; further downloads are
-  allowed by a person in the address bar. The agent does not change Chrome's settings ([R9.5](#R9.5)).
-- **What if only part of the images is saved?** The task goes on waiting, and What waits says which are missing
-  ([R9.6](#R9.6)).
-- **Why is there no Permission… at some archives only through the browser?** The list keeps such an archive as by
-  hand only: its image viewer takes its images from a server closed to all robots, or its terms say so. A person saves
-  the images ([R9.1](#R9.1), [R9.10.2](#R9.10.2)).
-- **Since:** research 1.27.0
-
-<!-- zdroj: research:CHANGELOG.cs.md 1.27.0 · src/core/browserhelp.ts · src/core/chromehook.ts:1-25 · src/commands/media.ts media save · assets/method/locate.md -->

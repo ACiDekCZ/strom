@@ -131,6 +131,35 @@ The Map shows the places of people's events.
 
 <!-- zdroj: app:src/places.ts collectPlaces, groupTownPoints · src/ui/map-ui.ts (localStorage strom.map.kinds) · strings.ts map.scopeView, map.scopeTree, map.kinds · CHANGELOG.cs.md 3.21.0 -->
 
+<a id="A6.5.1"></a>
+### A6.5.1 Where the map gets a place's location
+
+In a tree of its own (without the research) the app looks up the location of places itself, in the OpenStreetMap
+service (Nominatim). It sends only the name of the place as it is written in the tree, and only with consent. In a
+tree from the research, places are identified by the research ([R4](R4-places.md)).
+
+- **Limits:**
+  - before the first lookup the app asks (**Look up coordinates online?**). Only place names leave the app, no names
+    of people, dates or relations. At most one request about every second;
+  - the coordinates are saved into the tree: each place is looked up once, and the map then works offline too;
+  - the automatic lookup takes the service's **first result** for the written name. It does not tell apart towns of
+    the same name: a place can thus land in a town of the same name elsewhere. Such a location is then marked
+    **Check** ([R4.4.1](R4-places.md#R4.4.1));
+  - only a place with a house number that the service did not find is looked up by its town. Of the towns of that
+    name, the one nearest the tree's other places is chosen (“Several towns have this name; the one nearest the tree’s
+    other places was chosen.”); the place shows **Located by the town of …**;
+  - what is not found stays without a location. The app guesses nothing: “check the spelling, or add the country”.
+- **Controls:** app: **Settings → Look up places online**; in the places window **Wrong spot? Fix this place**,
+  **Search for this place under another name** (only the location is attached, the entry in the tree does not
+  change), **Use for the other house numbers in … too**, **Clean orphaned places (n)**.
+- **Why:** looking up places is the only part of the app that sends anything out; therefore only with consent, only
+  names, and each place once (a comment in the code). The limit of one request per second is a condition of the
+  service.
+- **Since:** app 1.10.0; **Wrong spot? Fix this place** 1.10.1; **Clean orphaned places** 2.1.0; the location by the
+  town 3.21.0
+
+<!-- zdroj: app:src/geocode.ts hlavička, REQUEST_INTERVAL_MS=1100, geocodePlace (limit 1, parseGeocodeResponse první výsledek), geocodeTown/pickTownHit nearestTo (od v3.21.0), geocodePlaces townFallback · app:src/strings.ts map.consentTitle, consentBody, settingLabel, wrongSpot (v1.10.1), searchLabel, attachOnly, useForOthers, cleanOrphans (v2.1.0), nearestTown, byTown, doneWithMisses · FB podnět 2026-11-04 (stejnojmenná obec) -->
+
 <a id="A6.6"></a>
 ## A6.6 A family line in the view
 

@@ -21,7 +21,7 @@ Der Ablauf in Kürze:
 4. **Warten:** wohin der Agent nicht darf, dort speichert der Mensch die Bilder. Die Aufgabe wartet auf die Bilder
    und kehrt von selbst zurück, sobald alle in der Forschung sind ([R9.6](#R9.6)).
 5. **Entscheidung:** die Tabelle und der Ablauf einer Aufgabe stehen in [R9.8](#R9.8), die Schritte des Menschen in
-   [R9.9](#R9.9), Beispiele in [R9.10](#R9.10), häufige Fragen in [R9.11](#R9.11).
+   [R9.9](#R9.9) und Beispiele in [R9.10](#R9.10).
 
 > **Hinweis: wo genau der Browser des Agenten gilt.** Den Browser des Agenten überwacht strom nur bei **Claude Code**
 > mit der Erweiterung **Claude in Chrome**. Den Browser oder die Computersteuerung eines anderen Agenten (Codex,
@@ -530,32 +530,3 @@ Stufen und Grenzen stammen aus der Liste der Archive der Forschung 1.27.0. Die F
 - **Gilt seit:** Forschung 1.27.0
 
 <!-- zdroj: research:assets/archives.json szukajwarchiwach.gov.pl (restricted, browserOnly) -->
-
-<a id="R9.11"></a>
-## R9.11 Häufige Fragen
-
-- **Warum „geht“ der Agent nicht in ein Archiv?** Die Bedingungen des Archivs oder seine robots.txt erlauben
-  automatische Werkzeuge nicht, oder die Erlaubnis fehlt. strom überwacht das beim Downloader, beim Webabruf und beim
-  Browser des Agenten ([R9.1](#R9.1), [R9.3](#R9.3), [R9.4](#R9.4)).
-- **Warum wartet eine Aufgabe auf Bilder vom Menschen?** Wohin nur der Mensch darf, dort speichert der Mensch die
-  Bilder. Der Agent nennt das Buch und die Nummern der Bilder; die Aufgabe kehrt von selbst zurück, sobald die Bilder
-  in der Forschung sind ([R9.6](#R9.6)).
-- **Ist das gegenüber den Bedingungen des Archivs sicher?** strom geht immer nach der strengsten bekannten Stufe, im
-  Tempo eines Menschen oder langsamer, und die Erlaubnis gibt nur der Mensch. Der Browser des Agenten öffnet ein
-  Archiv nur eine Seite nach der anderen und zählt es zusammen mit den Abrufen ([R9.2](#R9.2), [R9.4](#R9.4)).
-- **Warum tut es Codex oder ein anderer Agent nicht?** Nur bei Claude Code mit der Erweiterung Claude in Chrome kann
-  strom jedes Öffnen einer Seite überwachen. Ein anderer Agent geht nicht von sich aus in ein Archiv nur über den
-  Browser ([R9.4](#R9.4), [R9.4.2](#R9.4.2)).
-- **Was ist mit CAPTCHA und der Prüfung, ob ein Mensch am Computer ist?** Der Agent durchläuft oder umgeht sie nie.
-  Ein Archiv mit einer solchen Prüfung öffnet der Mensch in seinem Browser.
-- **Warum will Chrome weitere Downloads erlauben lassen?** Chrome speichert von einer Seite nur eine Datei; weitere
-  Downloads erlaubt der Mensch in der Adressleiste. Der Agent ändert die Einstellungen von Chrome nicht
-  ([R9.5](#R9.5)).
-- **Was, wenn nur ein Teil der Bilder gespeichert ist?** Die Aufgabe wartet weiter, und Was wartet sagt, welche
-  fehlen ([R9.6](#R9.6)).
-- **Warum gibt es bei manchen Archiven nur über den Browser keine Erlaubnis…?** Die Liste führt ein solches Archiv
-  als nur von Hand: sein Bildbetrachter nimmt die Bilder von einem Server, der allen Robotern geschlossen ist, oder seine
-  Bedingungen sagen es so. Die Bilder speichert der Mensch ([R9.1](#R9.1), [R9.10.2](#R9.10.2)).
-- **Gilt seit:** Forschung 1.27.0
-
-<!-- zdroj: research:CHANGELOG.cs.md 1.27.0 · src/core/browserhelp.ts · src/core/chromehook.ts:1-25 · src/commands/media.ts media save · assets/method/locate.md -->

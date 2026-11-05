@@ -178,6 +178,19 @@ konci. Všechny mají definice ve všech čtyřech jazycích.
 
 - **Čísla:** [R6.1.1](cs/R6-awaiting-action.md#R6.1.1), R6.3, R6.5
 
+<a id="namesake"></a>
+### Jmenovec
+
+| Jazyk | Termín | Definice |
+|---|---|---|
+| cs | jmenovec | Jiná osoba stejného jména. Zápis patří hledané osobě, jen když ji určí víc než jméno: rok, místo, dům, povolání, manžel nebo manželka, rodiče. |
+| en | namesake | Another person of the same name. A record belongs to the person sought only when more than the name identifies them: year, place, house, occupation, spouse, parents. |
+| de | Namensvetter | Eine andere Person gleichen Namens. Ein Eintrag gehört der gesuchten Person nur, wenn mehr als der Name sie bestimmt: Jahr, Ort, Haus, Beruf, Ehepartner, Eltern. |
+| pl | imiennik | Inna osoba o tym samym imieniu i nazwisku. Wpis należy do poszukiwanej osoby tylko wtedy, gdy wskazuje ją coś więcej niż imię: rok, miejsce, dom, zawód, małżonek, rodzice. |
+
+- **Genealogicky:** identifikace osoby (identity), rozlišení jmenovců.
+- **Čísla:** [R10.1](cs/R10-people-and-hypotheses.md#R10.1), R10.2, R10.3
+
 <a id="subscription-limit"></a>
 ### Limit předplatného
 
@@ -276,6 +289,18 @@ konci. Všechny mají definice ve všech čtyřech jazycích.
 
 - **Čísla:** [R6.2.2](cs/R6-awaiting-action.md#R6.2.2), R6.6
 
+<a id="input"></a>
+### Podklad
+
+| Jazyk | Termín | Definice |
+|---|---|---|
+| cs | podklad, podklady (terminal, `strom intake`, `strom input`) | Soubor nebo text, který výzkumu dal uživatel. Uloží se beze změny a dostane úkol; z dokladu se stane pramen, z ostatního vodítko. |
+| en | input, inputs (terminal, `strom intake`, `strom input`) | A file or text the user gave the research. It is kept unchanged and gets a task; a document becomes a source, the rest a lead. |
+| de | Unterlage, Unterlagen (terminal, `strom intake`, `strom input`) | Eine Datei oder ein Text, den der Benutzer der Forschung gegeben hat. Sie wird unverändert gespeichert und bekommt eine Aufgabe; aus einer Urkunde wird eine Quelle, aus dem Rest ein Hinweis. |
+| pl | materiał, materiały (terminal, `strom intake`, `strom input`) | Plik lub tekst, który użytkownik dał badaniu. Zostaje zapisany bez zmian i dostaje zadanie; dokument staje się źródłem, reszta wskazówką. |
+
+- **Čísla:** [R11](cs/R11-material-from-the-user.md), R11.1, R11.2, R11.3, R11.4
+
 <a id="gate"></a>
 ### Podmínka
 
@@ -299,6 +324,18 @@ konci. Všechny mají definice ve všech čtyřech jazycích.
 | pl | widok, widoki (terminal, `strom media view`) | Obraz ze skanu przygotowany dla modelu: cały skan zmniejszony do znalezienia wpisu albo połówka, wycinek lub część w rozmiarze, jaki model przyjmuje w całości. |
 
 - **Čísla:** [R8.5](cs/R8-reading-scans.md#R8.5), R8.3.2
+
+<a id="lesson"></a>
+### Poučení
+
+| Jazyk | Termín | Definice |
+|---|---|---|
+| cs | poučení (terminal, `strom lesson`) | Jedna věta o zvláštnosti knihy, archivu nebo místa, zapsaná k němu. Vidí ji každý úkol, který tam hledá. |
+| en | lesson (terminal, `strom lesson`) | One sentence about a peculiarity of a book, an archive or a place, recorded on it. Every task that searches there shows it. |
+| de | Lehre (terminal, `strom lesson`) | Ein Satz über eine Besonderheit eines Buches, eines Archivs oder eines Ortes, dort vermerkt. Jede Aufgabe, die dort sucht, zeigt ihn. |
+| pl | wniosek (terminal, `strom lesson`) | Jedno zdanie o osobliwości księgi, archiwum lub miejsca, zapisane przy nim. Pokazuje je każde zadanie, które tam szuka. |
+
+- **Čísla:** [R8.1.2](cs/R8-reading-scans.md#R8.1.2)
 
 <a id="off-the-lines-work"></a>
 ### Práce mimo linie
@@ -556,7 +593,7 @@ konci. Všechny mají definice ve všech čtyřech jazycích.
 | pl | Wskazówka (app; terminal od badania 1.26.0) · tylko wskazówka (terminal 1.25.2) | Co zweryfikować, nie dana: opowieść rodzinna, drzewo genealogiczne, indeks lub szacunek. Dana bez cytatu lub tylko ze słabego źródła. |
 
 - **Genealogicky:** hypotéza, stopa k ověření (lead); rejstřík a rodokmen jako odvozený nebo autorský pramen.
-- **Čísla:** [R3.3](cs/R3-verification-and-citation.md#R3.3), R3.1, R3.1.1, R3.5.1, S2.3
+- **Čísla:** [R3.3](cs/R3-verification-and-citation.md#R3.3), R3.1, R3.1.1, R3.5.1, R11.2, R11.3, S2.3
 
 <a id="conflict-tag"></a>
 ### Značka rozporu u údaje
@@ -597,7 +634,7 @@ Pojmy aplikace a jejího spojení s výzkumem, v abecedním pořadí.
 | de | Strom-Archiv (im Umschalter **Archiv**) | Ein Stammbaum, den die Forschung mit den Quellen auf der Festplatte hält, ohne Agent. Änderungen aus der App nimmt es immer als gültig. |
 | pl | Archiwum Strom (w przełączniku **Archiwum**) | Drzewo, które badanie przechowuje ze źródłami na dysku, bez agenta. Zmiany z aplikacji przyjmuje zawsze jako ważne. |
 
-- **Čísla:** [S1.3](cs/S1-connecting-app-and-research.md#S1.3), S2.4
+- **Čísla:** [R7.8](cs/R7-when-the-agent-works.md#R7.8), R7.8.1, S1.3, S2.4
 
 <a id="what-will-be-sent"></a>
 ### Co se pošle
@@ -633,7 +670,7 @@ Pojmy aplikace a jejího spojení s výzkumem, v abecedním pořadí.
 | de | Hypothesen | Eine Frage, die die Forschung zu einer Person oder Verbindung führt, mit Versionen der Antwort; sie ist offen, für eine Version entschieden oder verworfen. |
 | pl | Hipotezy | Pytanie, które badanie prowadzi o osobie lub powiązaniu, z wersjami odpowiedzi; jest otwarte, rozstrzygnięte na rzecz jednej wersji albo anulowane. |
 
-- **Čísla:** [S3.5](cs/S3-what-the-research-knows.md#S3.5), S3.5.1
+- **Čísla:** [R10.3](cs/R10-people-and-hypotheses.md#R10.3), R10.3.1, S3.5, S3.5.1
 
 <a id="pedigree-collapse"></a>
 ### Implex
@@ -729,7 +766,7 @@ Pojmy aplikace a jejího spojení s výzkumem, v abecedním pořadí.
 | de | Material senden… · Materialien (app) | Eine Datei, an die Forschung zu einer Person oder Quelle gesendet. Sie kommt nicht in den Stammbaum; die Forschung macht daraus eine Aufgabe für den Agenten. |
 | pl | Wyślij materiał… · Materiały (app) | Plik wysłany do badania przy osobie lub źródle. Do drzewa się nie dodaje; badanie robi z niego zadanie dla agenta. |
 
-- **Čísla:** [A3.5](cs/A3-evidence-in-the-app.md#A3.5)
+- **Čísla:** [A3.5](cs/A3-evidence-in-the-app.md#A3.5), R11, R11.4
 
 <a id="research-bridge"></a>
 ### Most výzkumu
@@ -753,7 +790,7 @@ Pojmy aplikace a jejího spojení s výzkumem, v abecedním pořadí.
 | de | Mögliche doppelte Person | Zwei Personen mit demselben Namen und denselben Geburtsjahren, die eine zweimal eingetragene Person sein können. |
 | pl | Możliwy duplikat osoby | Dwie osoby z tym samym imieniem i nazwiskiem oraz latami urodzenia, które mogą być jedną osobą zapisaną dwa razy. |
 
-- **Čísla:** [A5.6](cs/A5-tree-check.md#A5.6), A5.6.2
+- **Čísla:** [A5.6](cs/A5-tree-check.md#A5.6), A5.6.2, R10.2
 
 <a id="above-the-person"></a>
 ### Nad osobou

@@ -79,6 +79,26 @@ miejsca w danym czasie, archiwum i konkretną księgę (zbiór aktów) z dostęp
 
 <!-- zdroj: research:src/core/indexfirst.ts:1-28 INDEX_FIRST_DEFAULT · src/commands/read.ts:217 --no-index, :265 guardIndexFirst -->
 
+<a id="R8.1.2"></a>
+### R8.1.2 Wniosek o księdze
+
+Osobliwość księgi, archiwum lub miejsca zapisuje się przy nim jako wniosek. Kto następnym razem pracuje z księgą,
+zobaczy go.
+
+- **Pilnuje kod:**
+  - wniosek to jedno zdanie, najwyżej 200 znaków; z dłuższego tekstu początek tworzy wniosek, a reszta trafia do
+    szczegółów (najwyżej 2000 znaków);
+  - wniosek należy do księgi, archiwum lub miejsca, które istnieją w badaniu (`--on B…|R…|L…`);
+  - zadanie pokazuje wnioski ksiąg, w których szuka (`strom task show`).
+- **Tylko metodyka:** należy tu kalibracja księgi, dwa lata na stronę, ręka, która pisze 7 jak 1. Notatka w zadaniu
+  lub w dzienniku tym nie jest: tej przy księdze nikt nie zobaczy.
+- **Dlaczego:** osobliwość księgi powinien zobaczyć każdy, kto otworzy ją następnym razem (metodyka „Lessons belong
+  where they apply”).
+- **Obsługa:** terminal: `strom lesson add "<poučení>" --on B…`, `strom lesson list`, `strom lesson edit`.
+- **Obowiązuje od:** badanie 1.0.0
+
+<!-- zdroj: research:src/commands/analysis.ts lesson add (LESSON_MAX, --on repository|recordset|place) · research:src/core/model.ts:732 LESSON_MAX=200, LESSON_DETAIL_MAX=2000 · research:src/commands/tasks.ts:354 taskDetail lessons · research:assets/method/core.md "Lessons belong where they apply" -->
+
 <a id="R8.2"></a>
 ## R8.2 Skany tylko przez program pobierający
 

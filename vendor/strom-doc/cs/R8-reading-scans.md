@@ -73,6 +73,24 @@ knihu (soubor záznamů) s přístupem: adresou nebo signaturou.
 
 <!-- zdroj: research:src/core/indexfirst.ts:1-28 INDEX_FIRST_DEFAULT · src/commands/read.ts:217 --no-index, :265 guardIndexFirst -->
 
+<a id="R8.1.2"></a>
+### R8.1.2 Poučení ke knize
+
+Zvláštnost knihy, archivu nebo místa se zapíše k němu jako poučení. Kdo s knihou pracuje příště, ho uvidí.
+
+- **Hlídá kód:**
+  - poučení je jedna věta, nejvýš 200 znaků; delší text začátkem tvoří poučení a zbytek jde do podrobností (nejvýš
+    2000 znaků);
+  - poučení patří ke knize, archivu nebo místu, které ve výzkumu existují (`--on B…|R…|L…`);
+  - úkol ukáže poučení knih, ve kterých hledá (`strom task show`).
+- **Jen metodika:** sem patří kalibrace knihy, dva roky na stranu, ruka, která píše 7 jako 1. Poznámka v úkolu
+  nebo deníku to není: tu u knihy nikdo neuvidí.
+- **Proč:** zvláštnost knihy má vidět každý, kdo ji otevře příště (metodika „Lessons belong where they apply“).
+- **Ovládání:** terminál: `strom lesson add "<poučení>" --on B…`, `strom lesson list`, `strom lesson edit`.
+- **Platí od:** výzkum 1.0.0
+
+<!-- zdroj: research:src/commands/analysis.ts lesson add (LESSON_MAX, --on repository|recordset|place) · research:src/core/model.ts:732 LESSON_MAX=200, LESSON_DETAIL_MAX=2000 · research:src/commands/tasks.ts:354 taskDetail lessons · research:assets/method/core.md "Lessons belong where they apply" -->
+
 <a id="R8.2"></a>
 ## R8.2 Snímky jen přes stahovač
 

@@ -221,3 +221,49 @@ spustit {command} a přihlásit se**.
 - **Platí od:** výzkum 1.25.2; zastavení po sezení s chybou přihlášení od 1.0.0
 
 <!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+
+<a id="R7.8"></a>
+## R7.8 Archiv Stromu: výzkum, na kterém agent nepracuje
+
+Výzkum může být jen **Archiv Stromu**: data se zadávají v aplikaci Strom a výzkum je drží i s prameny, originály
+a historií. Agent na něm nepracuje a nic nezkoumá. Archiv zapíná a vypíná jen člověk, tam i zpět; nic se při tom
+nemaže.
+
+- **Hlídá kód:**
+  - práce agenta je v archivu odmítnutá: rozhovor (`strom chat`), samostatná práce, nová linie, revize osoby,
+    čtení skenů (`strom read`, `strom clips`, `strom transcripts`), čtení dokumentu, ztotožnění míst. Odmítnutí řekne
+    jednou větou, kde se výzkum zapíná;
+  - přepnutí na archiv odloží otevřené, rozdělané i čekající úkoly s důvodem „odloženo: výzkum je Archiv Stromu“.
+    Nový úkol v archivu čeká odložený. Po zapnutí výzkumu se úkoly vrátí, kde byly: do fronty, nebo zpět k čekání
+    na člověka;
+  - na archiv nejde přepnout, dokud někdo na výzkumu pracuje. Sezení se nejdřív dokončí;
+  - zapnutí výzkumu bez agenta na počítači nabídne agenta nainstalovat. Bez agenta zůstane archiv, jak byl;
+  - přepnutí potvrzuje člověk; agent ho neudělá.
+- Co aplikace do archivu pošle, se zapíše, jak to přijde: [S2.4](S2-edits-from-the-app.md#S2.4). Jak archiv
+  ukazuje aplikace: [S1.3](S1-connecting-app-and-research.md#S1.3).
+- **Proč:** archiv je pro rodokmen bez AI agenta: data z aplikace mají svou historii, prameny a zálohu (`strom pack`)
+  a nic se neplatí za čtení (kód, CHANGELOG 1.20.0).
+- **Ovládání:** terminál: menu výzkumu, první položka; `strom mode` (ukáže), `strom mode archive`, `strom mode
+  research`. Pro nové výzkumy se ptá `strom setup` (**Čím má být nový výzkum na tomto počítači?**); změní to
+  **Nastavení → Nové výzkumy: výzkum, nebo jen Archiv Stromu**.
+- **Platí od:** výzkum 1.12.0; volba pro nové výzkumy i s agentem na počítači 1.15.0; odmítnuté čtení skenů 1.20.0
+
+<!-- zdroj: research:src/core/mode.ts (hlavička, switchMode, holdForArchive, heldInArchive) · research:src/core/state.ts refuseInArchive · research:src/commands/trees.ts strom mode (liveWorkers, agentReady, requireHuman "mode") · refuseInArchive v session.ts:805 (run), start.ts (chat), research.ts (research new, review), document.ts, placeid.ts, calibrate.ts · cs.json archive.held, ui.mode.*, ui.archive.refuse · CHANGELOG 1.15.0, 1.20.0 · switchMode od v1.12.0 -->
+
+<a id="R7.8.1"></a>
+### R7.8.1 Výzkum čeká na agenta
+
+Výzkum, jehož agent na tomto počítači není (nenainstalovaný, nebo výzkum přenesený z jiného počítače), na něj čeká.
+Do té doby se chová jako Archiv Stromu.
+
+- **Hlídá kód:**
+  - co pošle aplikace, se zapíše jako v archivu; pro agenta nic nevzniká a práce agenta je odmítnutá s větou, že
+    výzkum čeká na agenta, a kde ho nainstalovat nebo vybrat jiného;
+  - uložený režim se nemění a úkoly se neodkládají. Po instalaci agenta výzkum pokračuje sám s úkoly, které měl;
+  - agent, který ve výzkumu právě pracuje (i jiný než nastavený), ho dělá výzkumem.
+- **Ovládání:** terminál: menu, první položka (**Nechat jen jako Archiv Stromu: ukládat data z aplikace Strom**,
+  nebo instalace agenta); `strom mode` ukáže stav. Aplikace ukazuje takový výzkum jako **Archiv**
+  ([S1.3](S1-connecting-app-and-research.md#S1.3)).
+- **Platí od:** výzkum 1.15.0
+
+<!-- zdroj: research:src/core/state.ts (hlavička, stateOf, actsAsArchive, kindOf, refuseInArchive agent.missing) · cs.json ui.mode.is.waiting, ui.waiting.refuse, ui.menu.keeparchive · CHANGELOG 1.15.0 -->

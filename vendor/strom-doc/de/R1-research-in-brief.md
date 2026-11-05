@@ -29,7 +29,9 @@ an den Linien.
   Unterlagen vom Benutzer, wo die Einträge liegen, Beleg einer Verbindung, Prüfung, Ergänzung einer Person,
   Anfrage an ein Archiv, Erzählung.
 - **Erst der Stammbaum, dann darüber hinaus:** eine in den Einträgen gefundene Familie, die keine belegte Verbindung
-  mit dem Stammbaum verbindet, wird nicht weiter erforscht, bis die Verbindung belegt ist.
+  mit dem Stammbaum verbindet, wird nicht weiter erforscht, bis die Verbindung belegt ist
+  ([R10.4](R10-people-and-hypotheses.md#R10.4)).
+- Was die Forschung mit Unterlagen vom Benutzer tut: [R11](R11-material-from-the-user.md).
 - Ausführlich: [R2](R2-lines-and-queue.md).
 
 <!-- zdroj: research:src/core/queue.ts LEVEL_ORDER · assets/method/core.md „The tree first, then above it“ -->
@@ -42,6 +44,8 @@ auf, was erledigt ist und was als Nächstes kommen soll, und schließt die Sitzu
 Sitzung auf Sitzung, solange es Arbeit gibt und die Bedingung es erlaubt, die der Mensch gesetzt hat (zum Beispiel
 das Tempo des wöchentlichen Limits des Abonnements).
 
+- Die Forschung kann auch nur ein **Strom-Archiv** sein, an dem kein Agent arbeitet:
+  [R7.8](R7-when-the-agent-works.md#R7.8).
 - Ausführlich: [R7](R7-when-the-agent-works.md).
 
 <!-- zdroj: research:src/commands/run.ts · assets/method/core.md „The time is strom's to say“ -->
@@ -57,7 +61,8 @@ forschende Person versteht.
   und die Familienüberlieferung sind immer nur ein Hinweis, ein Register dient zum Finden des Eintrags. Ausführlich:
   [R3](R3-verification-and-citation.md).
 - Ein Namensvetter ist nicht die gesuchte Person. Eine Person bestimmen Jahr, Ort, Haus, Beruf, Ehemann oder Ehefrau
-  und die Eltern. Zwei Einträge mit demselben Namen und anderen Eltern sind zwei Personen.
+  und die Eltern. Zwei Einträge mit demselben Namen und anderen Eltern sind zwei Personen. Identifizierung von
+  Personen, ihre Namen und konkurrierende Hypothesen: [R10](R10-people-and-hypotheses.md).
 - Eine erfolglose Suche ist ein Ergebnis. Es wird erfasst, was genau durchsucht wurde, damit dasselbe Buch nicht
   zweimal durchsucht wird.
 - Wenn die Einträge voneinander abweichen, wählt der Agent nicht stillschweigend: er erfasst einen **Widerspruch**.

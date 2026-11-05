@@ -18,8 +18,8 @@ Przebieg w skrócie:
    ([R9.3](#R9.3)) i przeglądarka agenta w Chrome ([R9.4](#R9.4), [R9.5](#R9.5)) kierują się tymi samymi zasadami.
 4. **Oczekiwanie:** tam, gdzie agentowi nie wolno, skany zapisuje człowiek. Zadanie czeka na skany i wraca samo, gdy
    w badaniu są wszystkie ([R9.6](#R9.6)).
-5. **Decyzja:** tabela i przebieg zadania są w [R9.8](#R9.8), kroki człowieka w [R9.9](#R9.9), przykłady w
-   [R9.10](#R9.10), częste pytania w [R9.11](#R9.11).
+5. **Decyzja:** tabela i przebieg zadania są w [R9.8](#R9.8), kroki człowieka w [R9.9](#R9.9) i przykłady w
+   [R9.10](#R9.10).
 
 > **Uwaga: gdzie dokładnie obowiązuje przeglądarka agenta.** Przeglądarki agenta strom pilnuje tylko przy **Claude
 > Code** z rozszerzeniem **Claude in Chrome**. Przeglądarki ani sterowania komputerem innego agenta (Codex,
@@ -501,29 +501,3 @@ Poziomy i ograniczenia pochodzą z listy archiwów badania 1.27.0. Rodzina Horá
 - **Obowiązuje od:** badanie 1.27.0
 
 <!-- zdroj: research:assets/archives.json szukajwarchiwach.gov.pl (restricted, browserOnly) -->
-
-<a id="R9.11"></a>
-## R9.11 Częste pytania
-
-- **Dlaczego agent „nie wchodzi” do archiwum?** Warunki archiwum lub jego robots.txt nie pozwalają na automatyczne
-  narzędzia albo brakuje zgody. strom pilnuje tego przy programie pobierającym, pobieraniu stron i przeglądarce agenta
-  ([R9.1](#R9.1), [R9.3](#R9.3), [R9.4](#R9.4)).
-- **Dlaczego zadanie czeka na skany od człowieka?** Tam, gdzie wolno tylko człowiekowi, skany zapisuje człowiek.
-  Agent podaje księgę i numery skanów; zadanie wraca samo, gdy skany są w badaniu ([R9.6](#R9.6)).
-- **Czy to jest bezpieczne wobec warunków archiwum?** strom zawsze kieruje się najsurowszym znanym poziomem, idzie
-  w tempie człowieka lub wolniej, a zgodę daje tylko człowiek. Przeglądarka agenta otwiera archiwum tylko po jednej
-  stronie i liczy się razem z pobraniami ([R9.2](#R9.2), [R9.4](#R9.4)).
-- **Dlaczego nie zrobi tego Codex ani inny agent?** Tylko przy Claude Code z rozszerzeniem Claude in Chrome strom może
-  pilnować każdego otwarcia strony. Inny agent nie wchodzi sam do archiwum tylko przez przeglądarkę ([R9.4](#R9.4),
-  [R9.4.2](#R9.4.2)).
-- **Co z CAPTCHA i sprawdzeniem, czy przy komputerze jest człowiek?** Agent nigdy go nie przechodzi ani nie obchodzi.
-  Archiwum z takim sprawdzeniem otwiera człowiek w swojej przeglądarce.
-- **Dlaczego Chrome chce zgody na więcej pobrań?** Chrome zapisuje z jednej strony tylko jeden plik; na kolejne
-  pobrania zezwala człowiek w pasku adresu. Agent nie zmienia ustawień Chrome ([R9.5](#R9.5)).
-- **Co, jeśli zapisano tylko część skanów?** Zadanie czeka dalej, a Co czeka mówi, których brakuje ([R9.6](#R9.6)).
-- **Dlaczego przy niektórych archiwach tylko przez przeglądarkę nie ma Zgody…?** Lista prowadzi takie archiwum jako
-  tylko ręcznie: jego przeglądarka skanów bierze obrazy z serwera zamkniętego dla wszystkich robotów albo tak mówią jego
-  warunki. Skany zapisuje człowiek ([R9.1](#R9.1), [R9.10.2](#R9.10.2)).
-- **Obowiązuje od:** badanie 1.27.0
-
-<!-- zdroj: research:CHANGELOG.cs.md 1.27.0 · src/core/browserhelp.ts · src/core/chromehook.ts:1-25 · src/commands/media.ts media save · assets/method/locate.md -->

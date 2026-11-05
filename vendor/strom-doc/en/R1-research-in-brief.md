@@ -27,7 +27,8 @@ queue. Work on people no line reaches comes after the work on the lines.
 - Tasks have kinds, in the order they go when their place in the queue is otherwise equal: material from the user,
   where the records are, proving a link, verification, enriching a person, a request to an archive, a story.
 - **The tree first, then above it:** a family found in the records that no proven link joins to the tree is not
-  researched further until the link is proven.
+  researched further until the link is proven ([R10.4](R10-people-and-hypotheses.md#R10.4)).
+- What the research does with material from the user: [R11](R11-material-from-the-user.md).
 - In detail: [R2](R2-lines-and-queue.md).
 
 <!-- zdroj: research:src/core/queue.ts LEVEL_ORDER · assets/method/core.md „The tree first, then above it“ -->
@@ -39,6 +40,8 @@ The agent works in **sessions**. One session is one task with a time limit. At t
 and what should come next, and closes the session. When working alone, session follows session as long as there is
 work and the condition set by a person allows it (for example the pace of the weekly subscription limit).
 
+- A research can also be only a **Strom archive**, which the agent does not work on:
+  [R7.8](R7-when-the-agent-works.md#R7.8).
 - In detail: [R7](R7-when-the-agent-works.md).
 
 <!-- zdroj: research:src/commands/run.ts · assets/method/core.md „The time is strom's to say“ -->
@@ -52,7 +55,8 @@ analysis and correlation of the evidence, resolution of conflicts, and a written
 - Every fact has a degree of certainty: **Lead**, **Possible**, **Probable**, **Proven**. A family tree and family
   memory are always only a lead; an index serves to find the entry. In detail: [R3](R3-verification-and-citation.md).
 - A namesake is not the person sought. A person is identified by year, place, house, occupation, spouse and parents.
-  Two records with the same name and different parents are two persons.
+  Two records with the same name and different parents are two persons. Identifying persons, their names and
+  competing hypotheses: [R10](R10-people-and-hypotheses.md).
 - A search that finds nothing is a result. What exactly was searched is written down, so the same book is not searched
   twice.
 - When records differ, the agent does not choose silently: it writes a **conflict**. In detail: [R5](R5-conflicts.md).

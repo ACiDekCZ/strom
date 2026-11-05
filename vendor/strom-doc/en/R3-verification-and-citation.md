@@ -94,16 +94,12 @@ A family tree, a memory, an index, a catalogue and an online tree say where to l
 A fact from them stays a Lead until a record proves it.
 
 - **Enforced by the code:** a family tree, a memory and an authored work are weak sources: a fact only from them is
-  never Probable or Proven ([R3.2](#R3.2)). A family tree taken over (GEDCOM, an app file) is entered whole as Lead
-  with a citation of one source of the kind family tree (`--form authored`).
+  never Probable or Proven ([R3.2](#R3.2)). A family tree taken over: [R11.3](R11-material-from-the-user.md#R11.3).
 - **Method only:** an index. The code does not treat it as weak: with its citation a fact without `--status` gets the
   degree Probable, and with `--information primary` even Proven passes. The method wants an index only for finding the
   page; the entry is read in the register. Even an entry missing from an index is only a lead: a similar form of the
   surname is a candidate.
-- **Method only:** material from the user. An official or church document (birth, marriage or death certificate, an
-  extract from a register, military papers) is a source (`--form original --information primary`). A photo, a letter,
-  a family tree and a memory are leads; what the user says: `--kind family-memory --form authored --information
-  secondary`.
+- Material from the user (a document, a photo, a letter, what the user says): [R11.2](R11-material-from-the-user.md#R11.2).
 - **Since:** research 1.0.0
 
 <!-- zdroj: research:assets/method/core.md:8-12 · locate.md:22-24 · link.md:6-12 · intake.md:9-16 · src/core/evidence.ts:27 isWeak · src/core/import.ts:1-7, :113-117 · src/commands/sources.ts:221 -->
@@ -277,3 +273,27 @@ reason.
 - **Since:** research 1.26.0
 
 <!-- zdroj: research:src/core/storykeep.ts StoryVersion, StoryDrop, StorySource, storySources · src/commands/story.ts:104 --drop, :151 told from a lead, :231 story show · assets/method/narrate.md · CHANGELOG.cs.md 1.26.0 -->
+
+<a id="R3.9.1"></a>
+### R3.9.1 What a story claims
+
+A story is written from the facts, for the family. What has not been proven is not made up.
+
+- **Method only:**
+  - every claim rests on a recorded fact; what is inferred is marked as an inference; what is not known is said;
+  - the background of the place and time (a war, an epidemic, a fire, what the village lived on) only from a source
+    recorded in the research and only as background, never as the cause of what a person did, unless the record says
+    so;
+  - a couple's story tells their shared life: the marriage, the household, the homes, the children, being widowed.
+    The life of each of them before and after it belongs to their own story and is mentioned in one sentence;
+  - an old occupation and a term the reader does not understand are explained; the story is written in the language
+    of the research;
+  - the format of the text: only paragraphs, subheadings, bullets, bold and italics. Anything else (links, tables,
+    quotations, numbered lists) the app shows as plain text, according to the method.
+- Approval and a new version of an approved story: [R6.3.2](R6-awaiting-action.md#R6.3.2).
+- **Controls:** terminal: `strom story set P… --text @notes/… --fact E… --source S… --note "co je odvozené"`
+  (a couple's story on the family F…).
+- **Since:** research 1.0.0; the background of the place and time 1.10.0; the format of the text 1.8.0; a couple's
+  story 1.23.0
+
+<!-- zdroj: research:assets/method/narrate.md (celé; formát od v1.8.0, pozadí od v1.10.0, pár od v1.23.0) · research:src/commands/story.ts --note -->

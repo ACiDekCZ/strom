@@ -92,16 +92,14 @@ Drzewo genealogiczne, wspomnienie, indeks, katalog i drzewo online mówią, gdzi
 z nich pozostaje Wskazówką, dopóki nie udokumentuje jej akt.
 
 - **Pilnuje kod:** drzewo genealogiczne, wspomnienie i dzieło autorskie są źródłami słabymi: dana tylko z nich nigdy
-  nie jest Prawdopodobne ani Udokumentowane ([R3.2](#R3.2)). Przejęte drzewo genealogiczne (GEDCOM, plik aplikacji)
-  zapisuje się w całości jako Wskazówka z cytatem jednego źródła rodzaju drzewo genealogiczne (`--form authored`).
+  nie jest Prawdopodobne ani Udokumentowane ([R3.2](#R3.2)). Przejęte drzewo genealogiczne:
+  [R11.3](R11-material-from-the-user.md#R11.3).
 - **Tylko metodyka:** indeks. Kod nie uważa go za słaby: z jego cytatem dana bez `--status` dostaje stopień
   Prawdopodobne, a z `--information primary` przechodzi nawet Udokumentowane. Metodyka chce indeksu tylko do
   odnalezienia strony; wpis czyta się w księdze metrykalnej. Także brakujący wpis w indeksie jest tylko wskazówką:
   podobna forma nazwiska to kandydat.
-- **Tylko metodyka:** materiał od użytkownika. Dokument urzędowy lub kościelny (akt urodzenia, ślubu, zgonu, wypis
-  z księgi metrykalnej, dokumenty wojskowe) jest źródłem (`--form original --information primary`). Zdjęcie, list,
-  drzewo genealogiczne i wspomnienie są wskazówką; to, co powie użytkownik:
-  `--kind family-memory --form authored --information secondary`.
+- Materiał od użytkownika (dokument, zdjęcie, list, to, co powie):
+  [R11.2](R11-material-from-the-user.md#R11.2).
 - **Obowiązuje od:** badanie 1.0.0
 
 <!-- zdroj: research:assets/method/core.md:8-12 · locate.md:22-24 · link.md:6-12 · intake.md:9-16 · src/core/evidence.ts:27 isWeak · src/core/import.ts:1-7, :113-117 · src/commands/sources.ts:221 -->
@@ -275,3 +273,25 @@ wersji.
 - **Obowiązuje od:** badanie 1.26.0
 
 <!-- zdroj: research:src/core/storykeep.ts StoryVersion, StoryDrop, StorySource, storySources · src/commands/story.ts:104 --drop, :151 told from a lead, :231 story show · assets/method/narrate.md · CHANGELOG.cs.md 1.26.0 -->
+
+<a id="R3.9.1"></a>
+### R3.9.1 Co twierdzi opowieść
+
+Opowieść pisze się z danych dla rodziny. Tego, czego nie udokumentowano, się nie dopowiada.
+
+- **Tylko metodyka:**
+  - każde twierdzenie opiera się na zapisanej danej; to, co jest wywnioskowane, jest oznaczone jako wywnioskowane;
+    czego się nie wie, mówi się wprost;
+  - tło miejsca i czasu (wojna, epidemia, pożar, z czego żyła wieś) tylko ze źródła zapisanego w badaniu i tylko jako
+    tło, nigdy jako przyczyna tego, co osoba zrobiła, o ile nie mówi tego akt;
+  - opowieść pary opowiada wspólne życie: ślub, gospodarstwo domowe, domy, dzieci, owdowienie. Życie każdego z nich
+    przed nim i po nim należy do jego własnej opowieści i wspomina się je jednym zdaniem;
+  - dawny zawód i pojęcie, którego czytelnik nie rozumie, się objaśnia; pisze się w języku badania;
+  - format tekstu: tylko akapity, śródtytuły, wypunktowania, pogrubienie i kursywa. Pozostałe (linki, tabele, cytaty,
+    listy numerowane) aplikacja zgodnie z metodyką pokaże jako zwykły tekst.
+- Zatwierdzenie i nowa wersja zatwierdzonej opowieści: [R6.3.2](R6-awaiting-action.md#R6.3.2).
+- **Obsługa:** terminal: `strom story set P… --text @notes/… --fact E… --source S… --note "co je odvozené"`
+  (opowieść pary przy rodzinie F…).
+- **Obowiązuje od:** badanie 1.0.0; tło miejsca i czasu 1.10.0; format tekstu 1.8.0; opowieść pary 1.23.0
+
+<!-- zdroj: research:assets/method/narrate.md (celé; formát od v1.8.0, pozadí od v1.10.0, pár od v1.23.0) · research:src/commands/story.ts --note -->

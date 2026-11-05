@@ -125,6 +125,34 @@ Mapa ukazuje místa událostí osob.
 
 <!-- zdroj: app:src/places.ts collectPlaces, groupTownPoints · src/ui/map-ui.ts (localStorage strom.map.kinds) · strings.ts map.scopeView, map.scopeTree, map.kinds · CHANGELOG.cs.md 3.21.0 -->
 
+<a id="A6.5.1"></a>
+### A6.5.1 Odkud mapa bere polohu místa
+
+Ve vlastním stromu (bez výzkumu) dohledá polohu míst aplikace sama, ve službě OpenStreetMap (Nominatim). Pošle jen
+název místa, jak je zapsaný ve stromu, a jen se souhlasem. Ve stromu z výzkumu ztotožňuje místa výzkum
+([R4](R4-places.md)).
+
+- **Hranice:**
+  - před prvním dohledáním se aplikace zeptá (**Dohledat souřadnice online?**). Odejdou jen názvy míst, žádná jména,
+    data ani vztahy. Nejvýš jeden dotaz zhruba za sekundu;
+  - souřadnice se uloží do stromu: každé místo se dohledá jednou a mapa pak funguje i bez připojení;
+  - automatické dohledání vezme **první výsledek** služby pro zapsaný název. Stejnojmenné obce při tom nerozliší:
+    místo tak může padnout do obce stejného jména jinde. Takovou polohu pak označí **Ověřit**
+    ([R4.4.1](R4-places.md#R4.4.1));
+  - jen místo s číslem domu, které služba nenašla, se dohledá podle obce. Z obcí toho jména se vybere ta nejblíž
+    ostatním místům stromu („Obec toho jména je víckrát; vybrána ta nejblíž ostatním místům stromu.“); u místa stojí
+    **Poloha podle obce**;
+  - co se nenajde, zůstane bez polohy. Aplikace nic nehádá: „pomůže opravit zápis nebo doplnit zemi“.
+- **Ovládání:** aplikace: **Nastavení → Dohledávat místa online**; v okně míst **Špatné místo? Opravit**, **Najít toto
+  místo pod jiným názvem** (připojí se jen poloha, zápis ve stromu se nemění), **Použít i pro další čísla domů v …**,
+  **Vyčistit osiřelá místa (n)**.
+- **Proč:** dohledání míst je jediná část aplikace, která něco posílá ven; proto jen se souhlasem, jen názvy a každé
+  místo jednou (komentář v kódu). Limit jednoho dotazu za sekundu je podmínka služby.
+- **Platí od:** aplikace 1.10.0; **Špatné místo? Opravit** 1.10.1; **Vyčistit osiřelá místa** 2.1.0; poloha podle obce
+  3.21.0
+
+<!-- zdroj: app:src/geocode.ts hlavička, REQUEST_INTERVAL_MS=1100, geocodePlace (limit 1, parseGeocodeResponse první výsledek), geocodeTown/pickTownHit nearestTo (od v3.21.0), geocodePlaces townFallback · app:src/strings.ts map.consentTitle, consentBody, settingLabel, wrongSpot (v1.10.1), searchLabel, attachOnly, useForOthers, cleanOrphans (v2.1.0), nearestTown, byTown, doneWithMisses · FB podnět 2026-11-04 (stejnojmenná obec) -->
+
 <a id="A6.6"></a>
 ## A6.6 Rod v pohledu
 

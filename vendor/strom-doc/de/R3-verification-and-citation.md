@@ -96,16 +96,14 @@ Stammbaum, Erinnerung, Register, Katalog und Online-Stammbaum sagen, wo zu suche
 Angabe. Eine Angabe aus ihnen bleibt Hinweis, bis ein Eintrag sie belegt.
 
 - **Prüft der Code:** Stammbaum, Erinnerung und verfasstes Werk sind schwache Quellen: eine Angabe nur aus ihnen ist
-  nie Wahrscheinlich oder Belegt ([R3.2](#R3.2)). Ein übernommener Stammbaum (GEDCOM, Datei der App) wird ganz als
-  Hinweis erfasst, mit der Zitation einer Quelle der Art Stammbaum (`--form authored`).
+  nie Wahrscheinlich oder Belegt ([R3.2](#R3.2)). Ein übernommener Stammbaum:
+  [R11.3](R11-material-from-the-user.md#R11.3).
 - **Nur Methodik:** das Register. Der Code hält es nicht für schwach: mit seiner Zitation bekommt eine Angabe ohne
   `--status` den Grad Wahrscheinlich, und mit `--information primary` geht auch Belegt durch. Die Methodik will das
   Register nur zum Finden der Seite; der Eintrag wird im Kirchenbuch gelesen. Auch ein fehlender Eintrag im Register
   ist nur ein Hinweis: eine ähnliche Form des Familiennamens ist ein Kandidat.
-- **Nur Methodik:** Material vom Benutzer. Ein amtliches oder kirchliches Dokument (Geburts-, Heirats-,
-  Sterbeurkunde, Auszug aus dem Kirchenbuch, Militärpapiere) ist eine Quelle (`--form original --information
-  primary`). Foto, Brief, Stammbaum und Erinnerung sind Hinweise; was der Benutzer sagt: `--kind family-memory --form
-  authored --information secondary`.
+- Unterlagen vom Benutzer (Urkunde, Foto, Brief, was der Benutzer sagt):
+  [R11.2](R11-material-from-the-user.md#R11.2).
 - **Gilt seit:** Forschung 1.0.0
 
 <!-- zdroj: research:assets/method/core.md:8-12 · locate.md:22-24 · link.md:6-12 · intake.md:9-16 · src/core/evidence.ts:27 isWeak · src/core/import.ts:1-7, :113-117 · src/commands/sources.ts:221 -->
@@ -287,3 +285,28 @@ vorigen Fassung ohne Grund.
 - **Gilt seit:** Forschung 1.26.0
 
 <!-- zdroj: research:src/core/storykeep.ts StoryVersion, StoryDrop, StorySource, storySources · src/commands/story.ts:104 --drop, :151 told from a lead, :231 story show · assets/method/narrate.md · CHANGELOG.cs.md 1.26.0 -->
+
+<a id="R3.9.1"></a>
+### R3.9.1 Was eine Erzählung behauptet
+
+Eine Erzählung wird aus den Angaben für die Familie geschrieben. Was nicht belegt ist, wird nicht hinzugedacht.
+
+- **Nur Methodik:**
+  - jede Behauptung stützt sich auf eine erfasste Angabe; was abgeleitet ist, ist als Ableitung gekennzeichnet; was
+    nicht bekannt ist, wird gesagt;
+  - Hintergrund von Ort und Zeit (Krieg, Epidemie, Brand, wovon das Dorf lebte) nur aus einer in der Forschung
+    erfassten Quelle und nur als Hintergrund, nie als Ursache dessen, was die Person tat, wenn es der Eintrag nicht
+    sagt;
+  - die Erzählung eines Paares erzählt das gemeinsame Leben: Heirat, Haushalt, Wohnorte, Kinder, Verwitwung. Das
+    Leben jedes der beiden davor und danach gehört in seine eigene Erzählung und wird mit einem Satz erwähnt;
+  - ein alter Beruf und ein Begriff, den die Lesenden nicht verstehen, werden erklärt; geschrieben wird in der
+    Sprache der Forschung;
+  - Format des Textes: nur Absätze, Zwischenüberschriften, Aufzählungspunkte, Fettdruck und Kursivschrift. Anderes
+    (Links, Tabellen, Zitate, nummerierte Listen) zeigt die App nach der Methodik als einfachen Text.
+- Freigabe und neue Fassung einer freigegebenen Erzählung: [R6.3.2](R6-awaiting-action.md#R6.3.2).
+- **Bedienung:** Terminal: `strom story set P… --text @notes/… --fact E… --source S… --note "co je odvozené"`
+  (Erzählung eines Paares bei der Familie F…).
+- **Gilt seit:** Forschung 1.0.0; Hintergrund von Ort und Zeit 1.10.0; Format des Textes 1.8.0; Erzählung eines
+  Paares 1.23.0
+
+<!-- zdroj: research:assets/method/narrate.md (celé; formát od v1.8.0, pozadí od v1.10.0, pár od v1.23.0) · research:src/commands/story.ts --note -->

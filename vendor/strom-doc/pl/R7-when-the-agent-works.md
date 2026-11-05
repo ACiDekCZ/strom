@@ -238,3 +238,52 @@ zalogowany – raz uruchomić {command} i się zalogować**.
 - **Obowiązuje od:** badanie 1.25.2; zatrzymanie po sesji z błędem logowania od 1.0.0
 
 <!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+
+<a id="R7.8"></a>
+## R7.8 Archiwum Strom: badanie, nad którym agent nie pracuje
+
+Badanie może być tylko **Archiwum Strom**: dane wprowadza się w aplikacji Strom, a badanie przechowuje je razem ze
+źródłami, oryginałami i historią. Agent nad nim nie pracuje i niczego nie bada. Archiwum włącza i wyłącza tylko
+człowiek, w obie strony; nic się przy tym nie usuwa.
+
+- **Pilnuje kod:**
+  - praca agenta jest w archiwum odrzucana: rozmowa (`strom chat`), samodzielna praca, nowa linia, przegląd osoby,
+    odczyt skanów (`strom read`, `strom clips`, `strom transcripts`), odczyt dokumentu, identyfikacja miejsc. Odmowa
+    mówi jednym zdaniem, gdzie włącza się badanie;
+  - przełączenie na archiwum odkłada otwarte, rozpoczęte i czekające zadania z powodem „odłożone: badanie jest
+    Archiwum Strom”. Nowe zadanie w archiwum czeka odłożone. Po włączeniu badania zadania wracają tam, gdzie były: do
+    kolejki albo z powrotem do czekania na człowieka;
+  - na archiwum nie można przełączyć, dopóki ktoś pracuje nad badaniem. Sesja najpierw dobiega końca;
+  - włączenie badania bez agenta na komputerze proponuje instalację agenta. Bez agenta archiwum zostaje takie, jakie
+    było;
+  - przełączenie potwierdza człowiek; agent go nie wykona.
+- To, co aplikacja wyśle do archiwum, zapisuje się tak, jak przyjdzie: [S2.4](S2-edits-from-the-app.md#S2.4). Jak
+  archiwum pokazuje aplikacja: [S1.3](S1-connecting-app-and-research.md#S1.3).
+- **Dlaczego:** archiwum jest dla drzewa genealogicznego bez agenta AI: dane z aplikacji mają swoją historię, źródła
+  i kopię zapasową (`strom pack`), a za odczyt nic się nie płaci (kod, CHANGELOG 1.20.0).
+- **Obsługa:** terminal: menu badania, pierwsza pozycja; `strom mode` (pokazuje), `strom mode archive`, `strom mode
+  research`. O nowe badania pyta `strom setup` (**Czym ma być nowe badanie na tym komputerze?**); zmienia to
+  **Ustawienia → Nowe badania: badanie czy tylko Archiwum Strom**.
+- **Obowiązuje od:** badanie 1.12.0; wybór dla nowych badań także z agentem na komputerze 1.15.0; odrzucony odczyt
+  skanów 1.20.0
+
+<!-- zdroj: research:src/core/mode.ts (hlavička, switchMode, holdForArchive, heldInArchive) · research:src/core/state.ts refuseInArchive · research:src/commands/trees.ts strom mode (liveWorkers, agentReady, requireHuman "mode") · refuseInArchive v session.ts:805 (run), start.ts (chat), research.ts (research new, review), document.ts, placeid.ts, calibrate.ts · cs.json archive.held, ui.mode.*, ui.archive.refuse · CHANGELOG 1.15.0, 1.20.0 · switchMode od v1.12.0 -->
+
+<a id="R7.8.1"></a>
+### R7.8.1 Badanie czeka na agenta
+
+Badanie, którego agenta nie ma na tym komputerze (niezainstalowany albo badanie przeniesione z innego komputera), czeka
+na niego. Do tego czasu zachowuje się jak Archiwum Strom.
+
+- **Pilnuje kod:**
+  - to, co wyśle aplikacja, zapisuje się jak w archiwum; dla agenta nic nie powstaje, a praca agenta jest odrzucana
+    ze zdaniem, że badanie czeka na agenta, i gdzie go zainstalować albo wybrać innego;
+  - zapisany tryb się nie zmienia, a zadania nie są odkładane. Po instalacji agenta badanie samo kontynuuje
+    z zadaniami, które miało;
+  - agent, który właśnie pracuje w badaniu (także inny niż ustawiony), czyni je badaniem.
+- **Obsługa:** terminal: menu, pierwsza pozycja (**Zostaw tylko jako Archiwum Strom: przechowywanie danych z aplikacji
+  Strom** albo instalacja agenta); `strom mode` pokazuje stan. Aplikacja pokazuje takie badanie jako **Archiwum**
+  ([S1.3](S1-connecting-app-and-research.md#S1.3)).
+- **Obowiązuje od:** badanie 1.15.0
+
+<!-- zdroj: research:src/core/state.ts (hlavička, stateOf, actsAsArchive, kindOf, refuseInArchive agent.missing) · cs.json ui.mode.is.waiting, ui.waiting.refuse, ui.menu.keeparchive · CHANGELOG 1.15.0 -->

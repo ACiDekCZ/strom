@@ -27,7 +27,8 @@ nesahá, jde až po práci na liniích.
 - Úkoly mají druhy v pořadí, v jakém jdou při jinak stejném místě ve frontě: podklady od uživatele, kde jsou
   záznamy, doložení vazby, ověření, obohacení osoby, žádost do archivu, vyprávění.
 - **Nejdřív strom, pak nad ním:** rodina nalezená v záznamech, kterou se stromem nespojuje žádná doložená vazba, se
-  dál nezkoumá, dokud se vazba nedoloží.
+  dál nezkoumá, dokud se vazba nedoloží ([R10.4](R10-people-and-hypotheses.md#R10.4)).
+- Co výzkum udělá s podklady od uživatele: [R11](R11-material-from-the-user.md).
 - Podrobně: [R2](R2-lines-and-queue.md).
 
 <!-- zdroj: research:src/core/queue.ts LEVEL_ORDER · assets/method/core.md „The tree first, then above it“ -->
@@ -39,6 +40,7 @@ Agent pracuje po **sezeních**. Jedno sezení je jeden úkol s časovým limitem
 a co má přijít dál, a sezení zavře. Při samostatné práci jde sezení za sezením, dokud je práce a dovolí to
 podmínka, kterou nastavil člověk (například tempo týdenního limitu předplatného).
 
+- Výzkum může být i jen **Archiv Stromu**, na kterém agent nepracuje: [R7.8](R7-when-the-agent-works.md#R7.8).
 - Podrobně: [R7](R7-when-the-agent-works.md).
 
 <!-- zdroj: research:src/commands/run.ts · assets/method/core.md „The time is strom's to say“ -->
@@ -52,7 +54,8 @@ a srovnání důkazů, řešení rozporů a sepsaný závěr, kterému další b
 - Každý údaj má stupeň jistoty: **Vodítko**, **Možné**, **Pravděpodobné**, **Doložené**. Rodokmen a rodinná paměť
   jsou vždy jen vodítko, rejstřík slouží k nalezení zápisu. Podrobně: [R3](R3-verification-and-citation.md).
 - Jmenovec není hledaná osoba. Osobu určuje rok, místo, dům, povolání, manžel nebo manželka a rodiče. Dva záznamy se
-  stejným jménem a jinými rodiči jsou dvě osoby.
+  stejným jménem a jinými rodiči jsou dvě osoby. Ztotožnění osob, jejich jména a soupeřící hypotézy:
+  [R10](R10-people-and-hypotheses.md).
 - Neúspěšné hledání je výsledek. Zapíše se, co přesně se prohledalo, aby se stejná kniha neprohledávala dvakrát.
 - Když se záznamy liší, agent nevybírá potichu: zapíše **rozpor**. Podrobně: [R5](R5-conflicts.md).
 - Místo dostane polohu na mapě, jen když je jisté, které místo to je. Podrobně: [R4](R4-places.md).

@@ -20,6 +20,8 @@ jde odkazovat (např. R2.3). Pojmy vysvětluje [rejstřík pojmů](../REJSTRIK.m
 - [R7 Kdy a jak dlouho agent pracuje](R7-when-the-agent-works.md): sezení, časový limit, podmínka běhu, limit předplatného
 - [R8 Hledání a čtení záznamů ve skenech](R8-reading-scans.md): kniha, snímky přes stahovač, čtenáři, vlastní čtení, zápis nálezu a jistota
 - [R9 Archivy: co smí agent a co udělá člověk](R9-archives.md): druhy archivů, svolení, prohlížeč agenta, čekání na snímky, co udělá člověk
+- [R10 Osoby: ztotožnění, jména a hypotézy](R10-people-and-hypotheses.md): jmenovci, sloučení dvou záznamů, hypotézy, rodina mimo strom, jména osoby
+- [R11 Podklady od uživatele](R11-material-from-the-user.md): soubory a texty od uživatele, doklad a vodítko, převzatý rodokmen, dávka z aplikace
 
 ## A Aplikace Strom
 

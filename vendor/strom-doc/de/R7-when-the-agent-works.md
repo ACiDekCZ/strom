@@ -253,3 +253,55 @@ nicht angemeldet – einmal {command} starten und anmelden**.
 - **Gilt seit:** Forschung 1.25.2; das Anhalten nach einer Sitzung mit einem Fehler der Anmeldung seit 1.0.0
 
 <!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+
+<a id="R7.8"></a>
+## R7.8 Strom-Archiv: eine Forschung, an der kein Agent arbeitet
+
+Eine Forschung kann nur ein **Strom-Archiv** sein: die Daten werden in der Strom-App eingegeben, und die Forschung hält
+sie mit Quellen, Originalen und Historie. Kein Agent arbeitet daran, und nichts wird erforscht. Das Archiv schaltet nur
+der Mensch ein und aus, in beide Richtungen; dabei wird nichts gelöscht.
+
+- **Prüft der Code:**
+  - die Arbeit des Agenten wird im Archiv abgelehnt: Chat (`strom chat`), Arbeit allein, neue Linie, Durchsicht einer
+    Person, Lesen von Scans (`strom read`, `strom clips`, `strom transcripts`), Lesen eines Dokuments, Bestimmung von
+    Orten. Die Ablehnung sagt in einem Satz, wo die Forschung eingeschaltet wird;
+  - das Umschalten auf das Archiv stellt offene, begonnene und wartende Aufgaben zurück, mit dem Grund
+    „zurückgestellt: die Forschung ist ein Strom-Archiv“. Eine neue Aufgabe im Archiv wartet zurückgestellt. Nach dem
+    Einschalten der Forschung kehren die Aufgaben dorthin zurück, wo sie waren: in die Warteschlange oder zurück zum
+    Warten auf den Menschen;
+  - auf das Archiv lässt sich nicht umschalten, solange jemand an der Forschung arbeitet. Die Sitzung wird zuerst
+    abgeschlossen;
+  - das Einschalten der Forschung ohne Agenten auf dem Computer bietet an, einen Agenten zu installieren. Ohne Agenten
+    bleibt das Archiv, wie es war;
+  - das Umschalten bestätigt der Mensch; der Agent tut es nicht.
+- Was die App an das Archiv sendet, wird erfasst, wie es kommt: [S2.4](S2-edits-from-the-app.md#S2.4). Wie die App
+  das Archiv zeigt: [S1.3](S1-connecting-app-and-research.md#S1.3).
+- **Warum:** das Archiv ist für einen Stammbaum ohne KI-Agenten: die Daten aus der App haben ihre Historie, Quellen und
+  eine Sicherung (`strom pack`), und für das Lesen wird nichts bezahlt (Code, CHANGELOG 1.20.0).
+- **Bedienung:** Terminal: Menü der Forschung, erster Punkt; `strom mode` (zeigt es an), `strom mode archive`,
+  `strom mode research`. Bei neuen Forschungen fragt `strom setup` (**Was soll eine neue Forschung auf diesem Computer
+  sein?**); geändert wird das über **Einstellungen → Neue Forschungen: Forschung oder nur ein Strom-Archiv**.
+- **Gilt seit:** Forschung 1.12.0; Wahl für neue Forschungen auch mit einem Agenten auf dem Computer 1.15.0;
+  abgelehntes Lesen von Scans 1.20.0
+
+<!-- zdroj: research:src/core/mode.ts (hlavička, switchMode, holdForArchive, heldInArchive) · research:src/core/state.ts refuseInArchive · research:src/commands/trees.ts strom mode (liveWorkers, agentReady, requireHuman "mode") · refuseInArchive v session.ts:805 (run), start.ts (chat), research.ts (research new, review), document.ts, placeid.ts, calibrate.ts · cs.json archive.held, ui.mode.*, ui.archive.refuse · CHANGELOG 1.15.0, 1.20.0 · switchMode od v1.12.0 -->
+
+<a id="R7.8.1"></a>
+### R7.8.1 Eine Forschung wartet auf einen Agenten
+
+Eine Forschung, deren Agent auf diesem Computer nicht ist (nicht installiert, oder die Forschung wurde von einem
+anderen Computer übertragen), wartet auf ihn. Bis dahin verhält sie sich wie ein Strom-Archiv.
+
+- **Prüft der Code:**
+  - was die App sendet, wird wie im Archiv erfasst; für den Agenten entsteht nichts, und die Arbeit des Agenten wird
+    mit einem Satz abgelehnt, dass die Forschung auf einen Agenten wartet und wo er installiert oder ein anderer
+    gewählt wird;
+  - der gespeicherte Modus ändert sich nicht, und die Aufgaben werden nicht zurückgestellt. Nach der Installation des
+    Agenten macht die Forschung von selbst mit den Aufgaben weiter, die sie hatte;
+  - ein Agent, der gerade in der Forschung arbeitet (auch ein anderer als der eingestellte), macht sie zur Forschung.
+- **Bedienung:** Terminal: Menü, erster Punkt (**Nur als Strom-Archiv behalten: die Daten aus der Strom-App
+  speichern** oder die Installation des Agenten); `strom mode` zeigt den Zustand. Die App zeigt eine solche Forschung
+  als **Archiv** ([S1.3](S1-connecting-app-and-research.md#S1.3)).
+- **Gilt seit:** Forschung 1.15.0
+
+<!-- zdroj: research:src/core/state.ts (hlavička, stateOf, actsAsArchive, kindOf, refuseInArchive agent.missing) · cs.json ui.mode.is.waiting, ui.waiting.refuse, ui.menu.keeparchive · CHANGELOG 1.15.0 -->

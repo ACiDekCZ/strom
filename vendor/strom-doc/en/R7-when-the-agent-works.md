@@ -238,3 +238,52 @@ in — run {command} once and log in**.
 - **Since:** research 1.25.2; stopping after a session with a login error from 1.0.0
 
 <!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+
+<a id="R7.8"></a>
+## R7.8 Strom archive: a research the agent does not work on
+
+A research can be only a **Strom archive**: the data are entered in the Strom app, and the research keeps them with
+their sources, originals and history. The agent does not work on it and researches nothing. Only a person switches
+the archive on and off, either way; nothing is deleted in doing so.
+
+- **Enforced by the code:**
+  - the agent's work is refused in an archive: a chat (`strom chat`), working alone, a new line, a person review,
+    reading scans (`strom read`, `strom clips`, `strom transcripts`), reading a document, identifying places. The
+    refusal says in one sentence where research is switched on;
+  - switching to an archive parks the open, started and waiting tasks with the reason “kept for later: the research
+    is a Strom archive”. A new task in an archive waits parked. When research is switched on, the tasks return to
+    where they were: to the queue, or back to waiting for a person;
+  - the research cannot be switched to an archive while someone is working on it. The session finishes first;
+  - switching research on without an agent on the computer offers to install one. Without an agent the archive stays
+    as it was;
+  - a person confirms the switch; the agent does not make it.
+- What the app sends to an archive is entered as it comes: [S2.4](S2-edits-from-the-app.md#S2.4). How the app shows
+  an archive: [S1.3](S1-connecting-app-and-research.md#S1.3).
+- **Why:** an archive is for a family tree without an AI agent: the data from the app have their history, sources and
+  a backup (`strom pack`), and nothing is paid for reading (the code, CHANGELOG 1.20.0).
+- **Controls:** terminal: the research's menu, the first item; `strom mode` (shows it), `strom mode archive`, `strom mode
+  research`. For new researches `strom setup` asks (**What should a new research on this computer be?**); it is changed
+  by **Settings → New researches: research, or only a Strom archive**.
+- **Since:** research 1.12.0; the choice for new researches also with an agent on the computer 1.15.0; reading scans
+  refused 1.20.0
+
+<!-- zdroj: research:src/core/mode.ts (hlavička, switchMode, holdForArchive, heldInArchive) · research:src/core/state.ts refuseInArchive · research:src/commands/trees.ts strom mode (liveWorkers, agentReady, requireHuman "mode") · refuseInArchive v session.ts:805 (run), start.ts (chat), research.ts (research new, review), document.ts, placeid.ts, calibrate.ts · cs.json archive.held, ui.mode.*, ui.archive.refuse · CHANGELOG 1.15.0, 1.20.0 · switchMode od v1.12.0 -->
+
+<a id="R7.8.1"></a>
+### R7.8.1 A research waiting for an agent
+
+A research whose agent is not on this computer (not installed, or the research was moved from another computer) waits
+for it. Until then it behaves as a Strom archive.
+
+- **Enforced by the code:**
+  - what the app sends is entered as in an archive; nothing is made for the agent, and the agent's work is refused
+    with a sentence saying that the research waits for an agent and where to install it or choose another;
+  - the saved mode does not change and the tasks are not parked. Once the agent is installed, the research goes on by
+    itself with the tasks it had;
+  - an agent that is working in the research right now (even one other than the one set) makes it a research.
+- **Controls:** terminal: the menu, the first item (**Keep it only as a Strom archive: keeping the data from the Strom
+  app**, or installing the agent); `strom mode` shows the state. The app shows such a research as **Archive**
+  ([S1.3](S1-connecting-app-and-research.md#S1.3)).
+- **Since:** research 1.15.0
+
+<!-- zdroj: research:src/core/state.ts (hlavička, stateOf, actsAsArchive, kindOf, refuseInArchive agent.missing) · cs.json ui.mode.is.waiting, ui.waiting.refuse, ui.menu.keeparchive · CHANGELOG 1.15.0 -->

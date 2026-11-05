@@ -17,8 +17,8 @@ Postup v kostce:
    ([R9.3](#R9.3)) a prohlížeč agenta v Chrome ([R9.4](#R9.4), [R9.5](#R9.5)) se řídí stejnými pravidly.
 4. **Čekání:** kam agent nesmí, tam snímky uloží člověk. Úkol čeká na snímky a vrátí se sám, až jsou ve výzkumu
    všechny ([R9.6](#R9.6)).
-5. **Rozhodnutí:** tabulka a průběh úkolu jsou v [R9.8](#R9.8), kroky člověka v [R9.9](#R9.9), příklady v
-   [R9.10](#R9.10), časté otázky v [R9.11](#R9.11).
+5. **Rozhodnutí:** tabulka a průběh úkolu jsou v [R9.8](#R9.8), kroky člověka v [R9.9](#R9.9) a příklady v
+   [R9.10](#R9.10).
 
 > **Poznámka: kde přesně platí prohlížeč agenta.** Prohlížeč agenta hlídá strom jen u **Claude Code** s rozšířením
 > **Claude in Chrome**. Prohlížeč nebo ovládání počítače jiného agenta (Codex, Antigravity a další) strom hlídat
@@ -464,28 +464,3 @@ Kroky u úkolu, který čeká na snímky archivu, kam agent nesmí:
 - **Platí od:** výzkum 1.27.0
 
 <!-- zdroj: research:assets/archives.json szukajwarchiwach.gov.pl (restricted, browserOnly) -->
-
-<a id="R9.11"></a>
-## R9.11 Časté otázky
-
-- **Proč agent do archivu „nejde“?** Podmínky archivu nebo jeho robots.txt automatické nástroje nedovolují, nebo
-  chybí svolení. Strom to hlídá u stahovače, stažení webu i prohlížeče agenta ([R9.1](#R9.1), [R9.3](#R9.3),
-  [R9.4](#R9.4)).
-- **Proč úkol čeká na snímky od člověka?** Tam, kam smí jen člověk, snímky uloží člověk. Agent řekne knihu a čísla snímků; úkol
-  se vrátí sám, až jsou snímky ve výzkumu ([R9.6](#R9.6)).
-- **Je to vůči podmínkám archivu bezpečné?** Strom jde vždy podle nejpřísnější známé úrovně, tempem člověka nebo
-  pomaleji, a svolení dává jen člověk. Prohlížeč agenta otevře archiv jen po jedné stránce a stažení počítá spolu
-  ([R9.2](#R9.2), [R9.4](#R9.4)).
-- **Proč to neudělá Codex nebo jiný agent?** Jen u Claude Code s rozšířením Claude in Chrome může strom hlídat každé
-  otevření stránky. Jiný agent do archivu jen přes prohlížeč sám nejde ([R9.4](#R9.4), [R9.4.2](#R9.4.2)).
-- **Co CAPTCHA a kontrola, zda je u počítače člověk?** Agent ji nikdy neprochází ani neobchází. Archiv s takovou
-  kontrolou otevře člověk ve svém prohlížeči.
-- **Proč Chrome chce dovolit víc stažení?** Chrome uloží z jedné stránky jen jeden soubor; další stažení dovolí člověk
-  v adresním řádku. Agent nastavení Chrome nemění ([R9.5](#R9.5)).
-- **Co když je uložená jen část snímků?** Úkol čeká dál a Co čeká řekne, které chybí ([R9.6](#R9.6)).
-- **Proč u některého archivu jen přes prohlížeč není Svolení…?** Archiv je v seznamu jen ručně: jeho prohlížeč snímků
-  bere obrázky ze serveru zavřeného všem robotům, nebo to říkají jeho podmínky. Snímky uloží člověk
-  ([R9.1](#R9.1), [R9.10.2](#R9.10.2)).
-- **Platí od:** výzkum 1.27.0
-
-<!-- zdroj: research:CHANGELOG.cs.md 1.27.0 · src/core/browserhelp.ts · src/core/chromehook.ts:1-25 · src/commands/media.ts media save · assets/method/locate.md -->

@@ -27,7 +27,9 @@ do których nie sięga żadna linia, przychodzi dopiero po pracy nad liniami.
 - Zadania mają rodzaje w kolejności, w jakiej idą przy poza tym równym miejscu w kolejce: materiały od użytkownika,
   gdzie są akty, potwierdzenie powiązania, weryfikacja, wzbogacenie osoby, wniosek do archiwum, opowieść.
 - **Najpierw drzewo, potem ponad nim:** rodziny znalezionej w aktach, której z drzewem nie łączy żadne udokumentowane
-  powiązanie, nie bada się dalej, dopóki powiązanie nie zostanie udokumentowane.
+  powiązanie, nie bada się dalej, dopóki powiązanie nie zostanie udokumentowane
+  ([R10.4](R10-people-and-hypotheses.md#R10.4)).
+- Co badanie robi z materiałami od użytkownika: [R11](R11-material-from-the-user.md).
 - Szczegółowo: [R2](R2-lines-and-queue.md).
 
 <!-- zdroj: research:src/core/queue.ts LEVEL_ORDER · assets/method/core.md „The tree first, then above it“ -->
@@ -39,6 +41,7 @@ Agent pracuje w **sesjach**. Jedna sesja to jedno zadanie z limitem czasu. Na ko
 i co ma przyjść dalej, i zamyka sesję. Przy samodzielnej pracy idzie sesja za sesją, dopóki jest praca i pozwala
 na to warunek ustawiony przez człowieka (na przykład tempo tygodniowego limitu subskrypcji).
 
+- Badanie może być też tylko **Archiwum Strom**, nad którym agent nie pracuje: [R7.8](R7-when-the-agent-works.md#R7.8).
 - Szczegółowo: [R7](R7-when-the-agent-works.md).
 
 <!-- zdroj: research:src/commands/run.ts · assets/method/core.md „The time is strom's to say“ -->
@@ -53,7 +56,8 @@ i porównanie dowodów, rozwiązywanie sprzeczności i spisany wniosek, który z
   genealogiczne i pamięć rodzinna są zawsze tylko wskazówką, indeks służy do odnalezienia wpisu. Szczegółowo:
   [R3](R3-verification-and-citation.md).
 - Imiennik nie jest szukaną osobą. Osobę wyznacza rok, miejsce, dom, zawód, mąż lub żona i rodzice. Dwa akty
-  z tym samym imieniem i innymi rodzicami to dwie osoby.
+  z tym samym imieniem i innymi rodzicami to dwie osoby. Identyfikacja osób, ich imiona i nazwiska oraz konkurujące
+  hipotezy: [R10](R10-people-and-hypotheses.md).
 - Nieudane wyszukiwanie to wynik. Zapisuje się, co dokładnie przeszukano, aby tej samej księgi nie przeszukiwać
   dwa razy.
 - Gdy akty się różnią, agent nie wybiera po cichu: zapisuje **sprzeczność**. Szczegółowo: [R5](R5-conflicts.md).

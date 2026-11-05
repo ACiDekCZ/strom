@@ -20,6 +20,8 @@ Parts R (the research), A (the app) and S (the app and the research together) ar
 - [R7 When and how long the agent works](R7-when-the-agent-works.md): sessions, the time limit, the run condition, the subscription limit
 - [R8 Finding and reading entries in scans](R8-reading-scans.md): the book, images through a downloader, readers, own reading, recording a find and certainty
 - [R9 Archives: what the agent may do and what a person does](R9-archives.md): kinds of archives, permission, the agent's browser, waiting for images, what a person does
+- [R10 People: identification, names and hypotheses](R10-people-and-hypotheses.md): namesakes, merging two records, hypotheses, a family outside the tree, a person's names
+- [R11 Material from the user](R11-material-from-the-user.md): files and texts from the user, a document and a lead, an imported family tree, a batch from the app
 
 ## A The Strom app
 

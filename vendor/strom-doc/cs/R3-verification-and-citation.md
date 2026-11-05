@@ -87,14 +87,11 @@ Rodokmen, vzpomínka, rejstřík, katalog a online strom říkají, kde hledat. 
 Vodítko, dokud ho nedoloží záznam.
 
 - **Hlídá kód:** rodokmen, vzpomínka a autorské dílo jsou slabé prameny: údaj jen z nich nikdy není Pravděpodobné
-  ani Doložené ([R3.2](#R3.2)). Převzatý rodokmen (GEDCOM, soubor aplikace) se zapíše celý jako Vodítko s citací
-  jednoho pramene druhu rodokmen (`--form authored`).
+  ani Doložené ([R3.2](#R3.2)). Převzatý rodokmen: [R11.3](R11-material-from-the-user.md#R11.3).
 - **Jen metodika:** rejstřík. Kód ho za slabý nepovažuje: s jeho citací dostane údaj bez `--status` stupeň
   Pravděpodobné a s `--information primary` projde i Doložené. Metodika chce rejstřík jen k nalezení stránky;
   zápis se čte v matrice. I chybějící zápis v rejstříku je jen vodítko: podobný tvar příjmení je kandidát.
-- **Jen metodika:** materiál od uživatele. Úřední nebo církevní doklad (rodný, oddací, úmrtní list, výpis z matriky,
-  vojenské papíry) je pramen (`--form original --information primary`). Fotka, dopis, rodokmen a vzpomínka jsou
-  vodítko; co řekne uživatel: `--kind family-memory --form authored --information secondary`.
+- Materiál od uživatele (doklad, fotka, dopis, co řekne): [R11.2](R11-material-from-the-user.md#R11.2).
 - **Platí od:** výzkum 1.0.0
 
 <!-- zdroj: research:assets/method/core.md:8-12 · locate.md:22-24 · link.md:6-12 · intake.md:9-16 · src/core/evidence.ts:27 isWeak · src/core/import.ts:1-7, :113-117 · src/commands/sources.ts:221 -->
@@ -258,3 +255,24 @@ Vyprávění říká, o které prameny se opírá. Nová verze vyprávění nic 
 - **Platí od:** výzkum 1.26.0
 
 <!-- zdroj: research:src/core/storykeep.ts StoryVersion, StoryDrop, StorySource, storySources · src/commands/story.ts:104 --drop, :151 told from a lead, :231 story show · assets/method/narrate.md · CHANGELOG.cs.md 1.26.0 -->
+
+<a id="R3.9.1"></a>
+### R3.9.1 Co vyprávění tvrdí
+
+Vyprávění se píše z údajů pro rodinu. Co se nedoložilo, se nedomýšlí.
+
+- **Jen metodika:**
+  - každé tvrzení stojí na zapsaném údaji; co je odvozené, je označené jako odvození; co se neví, se řekne;
+  - pozadí místa a doby (válka, epidemie, požár, čím vesnice žila) jen z pramene zapsaného ve výzkumu a jen jako
+    pozadí, nikdy jako příčina toho, co osoba udělala, pokud to neříká záznam;
+  - vyprávění páru vypráví společný život: sňatek, domácnost, domovy, děti, ovdovění. Život každého před ním a po něm
+    patří jeho vlastnímu vyprávění a zmíní se jednou větou;
+  - staré povolání a pojem, kterému čtenář nerozumí, se vysvětlí; píše se v jazyce výzkumu;
+  - formát textu: jen odstavce, podnadpisy, odrážky, tučné písmo a kurzíva. Ostatní (odkazy, tabulky, citace,
+    číslované seznamy) aplikace podle metodiky ukáže jako prostý text.
+- Schválení a nová verze schváleného vyprávění: [R6.3.2](R6-awaiting-action.md#R6.3.2).
+- **Ovládání:** terminál: `strom story set P… --text @notes/… --fact E… --source S… --note "co je odvozené"`
+  (vyprávění páru na rodině F…).
+- **Platí od:** výzkum 1.0.0; pozadí místa a doby 1.10.0; formát textu 1.8.0; vyprávění páru 1.23.0
+
+<!-- zdroj: research:assets/method/narrate.md (celé; formát od v1.8.0, pozadí od v1.10.0, pár od v1.23.0) · research:src/commands/story.ts --note -->

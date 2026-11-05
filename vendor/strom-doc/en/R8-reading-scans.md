@@ -82,6 +82,26 @@ place at the time, the archive and the particular book (record set) with access:
 
 <!-- zdroj: research:src/core/indexfirst.ts:1-28 INDEX_FIRST_DEFAULT · src/commands/read.ts:217 --no-index, :265 guardIndexFirst -->
 
+<a id="R8.1.2"></a>
+### R8.1.2 A lesson about a book
+
+A peculiarity of a book, an archive or a place is recorded on it as a lesson. Whoever works with the book next time
+sees it.
+
+- **Enforced by the code:**
+  - a lesson is one sentence, at most 200 characters; of a longer text the beginning forms the lesson and the rest
+    goes into the details (at most 2000 characters);
+  - a lesson belongs to a book, an archive or a place that exists in the research (`--on B…|R…|L…`);
+  - a task shows the lessons of the books it searches in (`strom task show`).
+- **Method only:** this is where a book's calibration belongs, two years per page, a hand that writes 7 like 1. A note
+  in a task or in the diary is not such a place: nobody would see it at the book.
+- **Why:** a book's peculiarity should be seen by everyone who opens it next time (the method “Lessons belong where
+  they apply”).
+- **Controls:** terminal: `strom lesson add "<poučení>" --on B…`, `strom lesson list`, `strom lesson edit`.
+- **Since:** research 1.0.0
+
+<!-- zdroj: research:src/commands/analysis.ts lesson add (LESSON_MAX, --on repository|recordset|place) · research:src/core/model.ts:732 LESSON_MAX=200, LESSON_DETAIL_MAX=2000 · research:src/commands/tasks.ts:354 taskDetail lessons · research:assets/method/core.md "Lessons belong where they apply" -->
+
 <a id="R8.2"></a>
 ## R8.2 Images only through a downloader
 

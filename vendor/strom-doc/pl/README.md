@@ -20,6 +20,8 @@ Części R (badanie), A (aplikacja) i S (aplikacja i badanie razem) są zatwierd
 - [R7 Kiedy i jak długo agent pracuje](R7-when-the-agent-works.md): sesje, limit czasu, warunek przebiegu, limit subskrypcji
 - [R8 Wyszukiwanie i odczyt wpisów w skanach](R8-reading-scans.md): księga, skany przez program pobierający, czytelnicy, własny odczyt, zapis znaleziska i pewność
 - [R9 Archiwa: co wolno agentowi, a co robi człowiek](R9-archives.md): rodzaje archiwów, zgoda, przeglądarka agenta, oczekiwanie na skany, co robi człowiek
+- [R10 Osoby: identyfikacja, imiona i hipotezy](R10-people-and-hypotheses.md): imiennicy, scalenie dwóch wpisów, hipotezy, rodzina poza drzewem, imiona i nazwiska osoby
+- [R11 Materiały od użytkownika](R11-material-from-the-user.md): pliki i teksty od użytkownika, dokument i wskazówka, przejęte drzewo genealogiczne, partia z aplikacji
 
 ## A Aplikacja Strom
 

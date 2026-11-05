@@ -84,6 +84,26 @@ Signatur.
 
 <!-- zdroj: research:src/core/indexfirst.ts:1-28 INDEX_FIRST_DEFAULT · src/commands/read.ts:217 --no-index, :265 guardIndexFirst -->
 
+<a id="R8.1.2"></a>
+### R8.1.2 Eine Lehre zu einem Buch
+
+Eine Besonderheit eines Buches, eines Archivs oder eines Ortes wird dort als Lehre vermerkt. Wer das nächste Mal mit
+dem Buch arbeitet, sieht sie.
+
+- **Prüft der Code:**
+  - eine Lehre ist ein Satz, höchstens 200 Zeichen; bei einem längeren Text bildet der Anfang die Lehre, und der Rest
+    geht in die Einzelheiten (höchstens 2000 Zeichen);
+  - eine Lehre gehört zu einem Buch, einem Archiv oder einem Ort, die es in der Forschung gibt (`--on B…|R…|L…`);
+  - eine Aufgabe zeigt die Lehren der Bücher, in denen sie sucht (`strom task show`).
+- **Nur Methodik:** hierher gehören die Kalibrierung eines Buches, zwei Jahre je Seite, eine Hand, die die 7 wie eine
+  1 schreibt. Eine Notiz in der Aufgabe oder im Tagebuch ist dafür nicht der Ort: dort sieht sie beim Buch niemand.
+- **Warum:** die Besonderheit eines Buches soll jeder sehen, der es das nächste Mal öffnet (Methodik „Lessons belong
+  where they apply“).
+- **Bedienung:** Terminal: `strom lesson add "<poučení>" --on B…`, `strom lesson list`, `strom lesson edit`.
+- **Gilt seit:** Forschung 1.0.0
+
+<!-- zdroj: research:src/commands/analysis.ts lesson add (LESSON_MAX, --on repository|recordset|place) · research:src/core/model.ts:732 LESSON_MAX=200, LESSON_DETAIL_MAX=2000 · research:src/commands/tasks.ts:354 taskDetail lessons · research:assets/method/core.md "Lessons belong where they apply" -->
+
 <a id="R8.2"></a>
 ## R8.2 Bilder nur über einen Downloader
 

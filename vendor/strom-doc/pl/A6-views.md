@@ -130,6 +130,35 @@ Mapa pokazuje miejsca zdarzeń osób.
 
 <!-- zdroj: app:src/places.ts collectPlaces, groupTownPoints · src/ui/map-ui.ts (localStorage strom.map.kinds) · strings.ts map.scopeView, map.scopeTree, map.kinds · CHANGELOG.cs.md 3.21.0 -->
 
+<a id="A6.5.1"></a>
+### A6.5.1 Skąd mapa bierze położenie miejsca
+
+We własnym drzewie (bez badania) położenie miejsc odszukuje sama aplikacja, w usłudze OpenStreetMap (Nominatim).
+Wysyła tylko nazwę miejsca tak, jak jest zapisana w drzewie, i tylko za zgodą. W drzewie z badania miejsca identyfikuje
+badanie ([R4](R4-places.md)).
+
+- **Granice:**
+  - przed pierwszym wyszukiwaniem aplikacja pyta (**Odszukać współrzędne online?**). Wychodzą tylko nazwy miejsc,
+    żadne imiona, daty ani relacje. Najwyżej jedno zapytanie mniej więcej na sekundę;
+  - współrzędne zapisują się w drzewie: każde miejsce wyszukuje się raz, a mapa działa potem także bez połączenia;
+  - automatyczne wyszukiwanie bierze **pierwszy wynik** usługi dla zapisanej nazwy. Miejscowości o tej samej nazwie
+    przy tym nie rozróżnia: miejsce może więc trafić do miejscowości o tej samej nazwie gdzie indziej. Takie położenie
+    oznacza potem **Do sprawdzenia** ([R4.4.1](R4-places.md#R4.4.1));
+  - tylko miejsce z numerem domu, którego usługa nie znalazła, wyszukuje się według miejscowości. Spośród miejscowości
+    o tej nazwie wybiera się tę najbliższą innym miejscom drzewa („Miejscowość o tej nazwie występuje kilka razy;
+    wybrano tę najbliższą innym miejscom drzewa.”); przy miejscu stoi **Położenie według miejscowości**;
+  - czego się nie znajdzie, zostaje bez położenia. Aplikacja niczego nie zgaduje: „pomoże poprawienie zapisu lub
+    dodanie kraju”.
+- **Obsługa:** aplikacja: **Ustawienia → Wyszukiwanie miejsc online**; w oknie miejsc **Złe miejsce? Popraw**,
+  **Znajdź to miejsce pod inną nazwą** (dołącza się tylko położenie, zapis w drzewie się nie zmienia), **Użyj też dla
+  innych numerów domów w miejscowości …**, **Wyczyść osierocone miejsca (n)**.
+- **Dlaczego:** wyszukiwanie miejsc to jedyna część aplikacji, która coś wysyła na zewnątrz; dlatego tylko za zgodą,
+  tylko nazwy i każde miejsce raz (komentarz w kodzie). Limit jednego zapytania na sekundę to warunek usługi.
+- **Obowiązuje od:** aplikacja 1.10.0; **Złe miejsce? Popraw** 1.10.1; **Wyczyść osierocone miejsca** 2.1.0; położenie
+  według miejscowości 3.21.0
+
+<!-- zdroj: app:src/geocode.ts hlavička, REQUEST_INTERVAL_MS=1100, geocodePlace (limit 1, parseGeocodeResponse první výsledek), geocodeTown/pickTownHit nearestTo (od v3.21.0), geocodePlaces townFallback · app:src/strings.ts map.consentTitle, consentBody, settingLabel, wrongSpot (v1.10.1), searchLabel, attachOnly, useForOthers, cleanOrphans (v2.1.0), nearestTown, byTown, doneWithMisses · FB podnět 2026-11-04 (stejnojmenná obec) -->
+
 <a id="A6.6"></a>
 ## A6.6 Ród w widoku
 
