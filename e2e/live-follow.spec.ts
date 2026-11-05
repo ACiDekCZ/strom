@@ -1216,21 +1216,25 @@ test.describe('follow the agent in the fan (spec 043)', () => {
 
 test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
     const work = (page: Page) => page.locator('#map-container .map-marker-work');
-    /** Count the signals (pulses) started on the map from now on. */
+    /** Count the signals (pulses) started on the map from now on (one per start and ring: a pan or a zoom
+     *  during a signal carries it on, and one started before the count, e.g. the arrival, is not counted). */
     const countMapPulses = (page: Page) => page.evaluate(() => {
-        const w = window as unknown as { __mapPulses: number; __mapPulseWrap?: boolean };
-        w.__mapPulses = 0;
+        const w = window as unknown as { __mapPulses: Set<string>; __mapPulseWrap?: boolean; __mapPulseFrom: number };
+        w.__mapPulses = new Set();
+        w.__mapPulseFrom = performance.now();
         if (w.__mapPulseWrap) return;
         w.__mapPulseWrap = true;
         const ui = window.Strom.UI as unknown as { applyMapFollowMarks: (p?: Set<number>) => void };
         const draw = ui.applyMapFollowMarks;
         ui.applyMapFollowMarks = function (this: unknown, p?: Set<number>) {
-            const before = document.querySelectorAll('#map-container .map-marker-work.is-pulse').length;
             draw.call(this, p);
-            if (document.querySelectorAll('#map-container .map-marker-work.is-pulse').length > before) w.__mapPulses++;
+            for (const el of document.querySelectorAll<HTMLElement>('#map-container .map-marker-work.is-pulse')) {
+                if (Number(el.dataset.pulseAt) < w.__mapPulseFrom) continue;
+                w.__mapPulses.add(`${el.dataset.pulseAt}|${el.dataset.key}`);
+            }
         };
     });
-    const mapPulses = (page: Page) => page.evaluate(() => (window as unknown as { __mapPulses: number }).__mapPulses);
+    const mapPulses = (page: Page) => page.evaluate(() => (window as unknown as { __mapPulses: Set<string> }).__mapPulses.size);
     /** Where an element's middle is, from the map's middle (px). */
     const offMapCentre = (page: Page, sel: string) => page.evaluate((s) => {
         const el = document.querySelector(s)!.getBoundingClientRect();
@@ -1383,6 +1387,79 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         await expect(page.locator('#live-follow-pill')).toHaveCount(0);
         await expect(btn(page)).not.toHaveClass(/is-paused/);
         await expect.poll(() => offMapCentre(page, '#map-container .map-marker-work .map-work-ring')).toBeLessThan(40);
+    });
+
+    test('arriving on the map signals once where the agent works: following on, the map chosen, Back to the agent (after a pause and after the map moved by hand); a zoom does not; none with reduced motion (1105)', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await stubTiles(page);
+        await follow(page, { idle: 60_000, quick: true });
+        await seedMapPlaces(page);
+        await page.evaluate(() => localStorage.setItem('strom-live-follow-view', 'map'));
+        await countMapPulses(page);
+        // Following on: onto the map, its ring signals once.
+        await btn(page).click();
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
+        await expect(work(page)).toHaveCount(1);
+        await expect(work(page).locator('.map-work-label b')).toHaveText('Rybná');
+        await expect.poll(() => mapPulses(page)).toBe(1);
+        // A zoom redraws the map: nothing new.
+        await page.locator('#map-container .map-zoom-in').click();
+        await page.waitForTimeout(400);
+        expect(await mapPulses(page)).toBe(1);
+        // Family and the map chosen again: once more.
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('family'));
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(work(page)).toHaveCount(1);
+        await expect.poll(() => mapPulses(page)).toBe(2);
+        // The map moved by hand pauses its panning; Back to the agent: once more.
+        const box = (await page.locator('#map-container').boundingBox())!;
+        const x = box.x + box.width * 0.3, y = box.y + box.height * 0.65;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x + 300, y - 150, { steps: 6 });
+        await page.mouse.up();
+        const pill = page.locator('#live-follow-pill');
+        await expect(pill).toContainText('Map panning paused');
+        await page.waitForTimeout(300);
+        expect(await mapPulses(page)).toBe(2);
+        await pill.locator('.live-follow-back').click();
+        await expect(pill).toHaveCount(0);
+        await expect.poll(() => mapPulses(page)).toBe(3);
+        // The descendants view pauses following; Back to the agent returns to the map: once more.
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+        await expect(pill).toBeVisible();
+        await pill.locator('.live-follow-back').click();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
+        await expect(work(page)).toHaveCount(1);
+        await expect.poll(() => mapPulses(page)).toBe(4);
+        // Reduced motion: marked, no signal.
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await countMapPulses(page);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('family'));
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(work(page)).toHaveCount(1);
+        await page.waitForTimeout(300);
+        expect(await mapPulses(page)).toBe(0);
+        await expect(page.locator('#map-container .map-marker-work.is-pulse')).toHaveCount(0);
+    });
+
+    test('arriving on the map with the place worked on without a position: the notice alone, no signal (1105)', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.person = 'P0013';
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await countMapPulses(page);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(page.locator('#map-container .map-follow-notice b')).toHaveText('Lhota u Habrova');
+        await expect(work(page)).toHaveCount(0);
+        await page.waitForTimeout(400);
+        expect(await mapPulses(page)).toBe(0);
+        await expect(page.locator('#map-container .is-pulse')).toHaveCount(0);
     });
 
     test('the fan keeps a trail of the people worked on before, older fainter; the legend\'s switch hides it', async ({ page }) => {

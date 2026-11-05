@@ -4,7 +4,8 @@
  * the research's place record; dashed: a place of the person from the tree;
  * a hollow dot inside when the place is outside the map's scope or kinds),
  * with its name to the right and the session's number when two or more run.
- * A run that moves to another place signals once (two pulses); the map pans
+ * A run that moves to another place signals once (two pulses), and so do
+ * the rings once on arriving on the map (not on a zoom or a pan); the map pans
  * only when the place of session 1 is outside the view and the map is not
  * paused (moved by hand: live-follow-ui.ts). A place without a position, or
  * a person without a place, gets a line at the top instead. The trail of
@@ -31,6 +32,7 @@ import { uiModule } from './module.js';
 import { liveSession, timeEl } from './research-ui.js';
 import {
     currentFollowTargets, currentWorkPlaces, followBusy, followMapPaused, followNumbered, followTiming, followTrail,
+    takeMapArrival,
 } from './live-follow-ui.js';
 
 /** A place this close to the view's edge counts as outside it (px). */
@@ -150,6 +152,10 @@ export const mapFollowMethods = uiModule({
         }
         // A redraw of the map may take the legend along: put it back.
         if (!document.getElementById('follow-legend')) this.renderFollowLegend();
+        // The signals due now: the rows whose place changed, and every ring once on arriving on the map
+        // (following on, the map chosen, the app opened again, Back to the agent). A zoom or a pan does not.
+        const due = new Set<number>(pulse ?? []);
+        if (takeMapArrival()) for (const t of targets) due.add(t.row);
         const places = currentWorkPlaces(targets);
         const points = this.mapPoints();
         const byId = new Map<string, WorkMark>();
@@ -224,10 +230,11 @@ export const mapFollowMethods = uiModule({
                 el.innerHTML = html;
                 el.dataset.html = html;
             }
-            if (motion && w.targets.some(t => pulse?.has(t.row))) {
+            if (motion && w.targets.some(t => due.has(t.row))) {
                 el.classList.remove('is-pulse');
                 void el.offsetWidth;
                 el.classList.add('is-pulse');
+                el.dataset.pulseAt = String(Math.round(performance.now()));
                 const box = el;
                 const done = (): void => { box.classList.remove('is-pulse'); };
                 box.addEventListener('animationend', done, { once: true });

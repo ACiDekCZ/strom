@@ -102,6 +102,8 @@ interface FollowSession {
      * opened again, the fan chosen, Back to the agent (Milan 5 Nov 2026).
      */
     fanArrive: boolean;
+    /** The same once on arriving on the map: its work rings pulse once (Milan 5 Nov 2026). */
+    mapArrive: boolean;
 }
 
 let session: FollowSession | null = null;
@@ -166,7 +168,7 @@ function followSession(): FollowSession | null {
         session = {
             view: getFollowView(), focusBefore, fanPinned: null,
             mapPaused: false, trail: [], cardTrail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
-            fanArrive: true,
+            fanArrive: true, mapArrive: true,
         };
         seenMode = TreeRenderer.getViewMode();
     }
@@ -301,6 +303,14 @@ export function takeFanArrival(): boolean {
     return true;
 }
 
+/** The map is drawn while following: true once after it is opened (the arrival's signal is due). */
+export function takeMapArrival(): boolean {
+    const fs = followSession();
+    if (!fs?.mapArrive) return false;
+    fs.mapArrive = false;
+    return true;
+}
+
 /** The pinned fan centre (null: none, or not following). */
 export function followPinned(): PersonId | null {
     return followActive() ? session?.fanPinned ?? null : null;
@@ -406,6 +416,7 @@ export const liveFollowMethods = uiModule({
         seenMode = view;
         lastTarget = null;
         if (view === 'fan') fs.fanArrive = true;
+        if (view === 'map') fs.mapArrive = true;
         if (view === 'family') {
             // Paused or nothing to jump to: the family view all the same.
             if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.setViewMode('family');
@@ -585,6 +596,7 @@ export const liveFollowMethods = uiModule({
         }
         fs.view = mode;
         if (mode === 'fan') fs.fanArrive = true;
+        if (mode === 'map') fs.mapArrive = true;
         lastTarget = null;
         this.renderLivePanel();
         this.refreshFollowMarks(new Set());
@@ -687,9 +699,9 @@ export const liveFollowMethods = uiModule({
         this.renderLiveFollowPill();
         this.renderLivePanel();
         const fsNow = followSession();
-        if (fsNow?.view === 'fan') {
-            fsNow.fanArrive = true;
-            if (TreeRenderer.getViewMode() === 'fan') this.refreshFollowMarks(new Set());
+        if (fsNow?.view === 'fan' || fsNow?.view === 'map') {
+            if (fsNow.view === 'fan') fsNow.fanArrive = true; else fsNow.mapArrive = true;
+            if (TreeRenderer.getViewMode() === fsNow.view) this.refreshFollowMarks(new Set());
         }
         const view = fsNow?.view ?? 'family';
         if (view !== 'family' && TreeRenderer.getViewMode() !== view) {
@@ -722,6 +734,11 @@ export const liveFollowMethods = uiModule({
     /** Back to the agent on the map: panning on again, the map goes to the place worked on now. */
     resumeMapFollow(): void {
         this.endMapPause();
+        // Back on the map: its rings signal once where the agent works, as on arriving.
+        if (session && TreeRenderer.getViewMode() === 'map') {
+            session.mapArrive = true;
+            this.applyMapFollowMarks(new Set());
+        }
         this.mapFollowPan(true, true);
     },
 
