@@ -156,6 +156,71 @@ export function researchPersonRef(refn: unknown): string | null {
     return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
 }
 
+/** A family's id in the research (its record, e.g. "F0054"), or null. */
+export function researchFamilyRef(id: unknown): string | null {
+    return typeof id === 'string' && /^F\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/**
+ * The partners of each family of the research's GEDCOM, by the family's id
+ * ("F0054" from `0 @F0054@ FAM`, and its REFN when it has one): the REFN of
+ * the husband first, then of the wife (those without a REFN left out). A
+ * quick read of the lines, no parse: what a row of `working[]` about a couple
+ * needs to name a person of the tree.
+ */
+export function researchFamilyPartners(gedcom: string): Map<string, string[]> {
+    const refnOf = new Map<string, string>();
+    const families: Array<{ keys: string[]; partners: string[] }> = [];
+    let indi: string | null = null;
+    let fam: { keys: string[]; partners: string[] } | null = null;
+    for (const raw of gedcom.split(/\r\n|\r|\n/)) {
+        const line = raw.trim();
+        const head = /^0\s+@([^@]+)@\s+(\S+)/.exec(line);
+        if (line.startsWith('0')) {
+            indi = null;
+            fam = null;
+            if (head?.[2] === 'INDI') indi = head[1];
+            else if (head?.[2] === 'FAM') {
+                fam = { keys: [head[1]], partners: [] };
+                families.push(fam);
+            }
+            continue;
+        }
+        const one = /^1\s+(\S+)\s*(.*)$/.exec(line);
+        if (!one) continue;
+        const [, tag, value] = one;
+        if (indi && tag === 'REFN' && !refnOf.has(indi)) refnOf.set(indi, value.trim());
+        if (fam && tag === 'REFN') fam.keys.push(value.trim());
+        if (fam && (tag === 'HUSB' || tag === 'WIFE')) {
+            const xref = /^@([^@]+)@$/.exec(value.trim())?.[1];
+            if (xref) {
+                if (tag === 'HUSB') fam.partners.unshift(xref);
+                else fam.partners.push(xref);
+            }
+        }
+    }
+    const out = new Map<string, string[]>();
+    for (const f of families) {
+        const partners = f.partners.map(x => refnOf.get(x)).filter((r): r is string => !!researchPersonRef(r));
+        if (!partners.length) continue;
+        for (const key of f.keys) if (researchFamilyRef(key) && !out.has(key)) out.set(key, partners);
+    }
+    return out;
+}
+
+/**
+ * Rows of `working[]` about a couple (`family`, no `person`) get the person
+ * to follow: the first partner the family names (the husband, else the
+ * wife). Rows naming a person stay as they are.
+ */
+export function workingWithFamilyPersons<T extends { person?: string; family?: string }>(working: readonly T[], partners: ReadonlyMap<string, readonly string[]> | null): T[] {
+    return working.map(w => {
+        if (w.person || !w.family) return w;
+        const first = partners?.get(w.family)?.[0];
+        return first ? { ...w, person: first } : w;
+    });
+}
+
 /** A task's id in the research ("T0003"), or null. */
 export function researchTaskRef(id: unknown): string | null {
     return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
@@ -1445,6 +1510,8 @@ export interface LiveWorker {
     task: string;
     /** The person the work is about (REFN "P12"), when the research says. */
     person?: string;
+    /** The couple the work is about (the research's family "F0054"), when it names a family instead of a person. */
+    family?: string;
     /** The run waits between sessions (its gate said wait, e.g. the usage limit). */
     paused?: { until: string; reason: string };
     /** The research direction of the task ("G0002"; a newer research). */
@@ -2347,6 +2414,8 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const who = cleanText(r.who, 80);
         if (!who) continue;
         const person = researchPersonRef(r.person);
+        // A couple's task: the bridge may name the family, in its own field or as the person.
+        const family = person ? null : (researchFamilyRef(r.family) ?? researchFamilyRef(r.person));
         const p = asRecord(r.paused);
         const until = p ? cleanText(p.until, 40) : '';
         const paused = p ? { until: Number.isFinite(Date.parse(until)) ? until : '', reason: cleanText(p.reason, 200) } : null;
@@ -2354,7 +2423,7 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const session = researchSessionRef(r.session);
         const place = isPlaceRecordId(r.place) ? r.place : null;
         out.push({
-            who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(paused ? { paused } : {}),
+            who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(family ? { family } : {}), ...(paused ? { paused } : {}),
             ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
         });
     }

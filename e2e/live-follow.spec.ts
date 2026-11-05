@@ -36,6 +36,8 @@ const LINE_GED = GED.replace(/\/Fíšek\/|\/Fíšková\//g, '/Brandvold-Ekhammar
 
 interface Bridge {
     person: string; paused: boolean;
+    /** The family the first run works on (`working[].family`: a couple's task, e.g. a pair's narrative). */
+    family?: string;
     /** The research's place record the first run works on (`working[].place`, read with `working.place`). */
     place?: string;
     /** `/status.features`. */
@@ -44,6 +46,10 @@ interface Bridge {
     more: Array<{ person: string; task: string; paused?: boolean; place?: string }>;
     /** The asks of the reconnect chain so far (/events, /status): each comes after the one before it was read. */
     chain: number;
+    /** The research's head: a new one makes the app load the tree again (a live load). */
+    head: string;
+    /** The tree the bridge gives now (the `ged` option until changed). */
+    ged: string;
 }
 
 /**
@@ -60,12 +66,13 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
         if (on) localStorage.setItem('strom-live-follow', '1');
     }, [LINKS, o.gap ?? 1200, o.idle ?? 2500, !!o.on, !!o.quick] as const);
-    const bridge: Bridge = { person: 'P0012', paused: false, more: [], chain: 0 };
+    const bridge: Bridge = { person: 'P0012', paused: false, more: [], chain: 0, head: 'h1', ged: o.ged ?? GED };
     const status = () => ({
-        tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 5,
+        tree: { id: UUID, name: 'Fíškovi' }, head: bridge.head, persons: 5,
         ...(bridge.features ? { features: bridge.features } : {}),
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 60_000).toISOString(), task: 'T0101 Matriky',
             ...(bridge.person ? { person: bridge.person } : {}),
+            ...(bridge.family ? { family: bridge.family } : {}),
             ...(bridge.place ? { place: bridge.place } : {}),
             ...(bridge.paused ? { paused: { until: new Date(Date.now() + 3600_000).toISOString(), reason: 'limit' } } : {}) },
         ...bridge.more.map((m, i) => ({ who: `agent-${i + 2}`, since: new Date(Date.now() - 30_000).toISOString(), task: m.task, person: m.person,
@@ -77,7 +84,7 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/status') || path.endsWith('/events')) bridge.chain++;
         if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
-        if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: o.ged ?? GED });
+        if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: bridge.ged });
         if (path.endsWith('/events')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
         }
@@ -260,6 +267,60 @@ test.describe('follow the agent in the tree', () => {
         await page.locator('#live-follow-pill .evidence-pill-close').click();
         await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');
         await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+    });
+
+    test('a person the agent adds and works on: the live load brings the card, the focus goes to it (1105)', async ({ page }) => {
+        const bridge = await follow(page, { on: true, gap: 0, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        // The agent works on a person not in the app's tree yet: nothing to jump to.
+        bridge.person = 'P0014';
+        await nextStatus(bridge);
+        expect(await focusRefn(page)).toBe('P0012');
+        // The live load brings the new person: the focus goes there and the card is centred.
+        bridge.ged = GED.replace('0 @F0000@ FAM', ['0 @P0014@ INDI', '1 NAME Karel /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1871', '1 REFN P0014', '1 FAMC @F0001@', '0 @F0000@ FAM'].join('\n'))
+            .replace('1 CHIL @P0013@', '1 CHIL @P0013@\n1 CHIL @P0014@');
+        bridge.head = 'h2';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0014');
+        await expect.poll(() => offCentre(page, 'P0014')).toBeLessThan(3);
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        // Another person of the tree next: the jump goes on as before.
+        bridge.person = 'P0001';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0001');
+    });
+
+    test('a live load while following keeps the focus on the person worked on (1105)', async ({ page }) => {
+        const bridge = await follow(page, { on: true, gap: 0, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        bridge.person = 'P0013';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0013');
+        // The agent writes (a new head, the same person worked on): the load does not take the focus away.
+        bridge.ged = GED.replace('1 NAME Eva /Fíšková/', '1 NAME Eva Marie /Fíšková/');
+        bridge.head = 'h2';
+        await expect(page.locator('#tree-canvas .person-card', { hasText: 'Eva Marie' })).toBeVisible({ timeout: 10000 });
+        await nextStatus(bridge);
+        expect(await focusRefn(page)).toBe('P0013');
+        await expect.poll(() => offCentre(page, 'P0013')).toBeLessThan(3);
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+    });
+
+    test('a run about a couple (a pair\'s narrative, the family and no person): the husband focused, the Now row names him (1105)', async ({ page }) => {
+        const bridge = await follow(page, { on: true, gap: 0, quick: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        bridge.person = '';
+        bridge.family = 'F0001';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0001');
+        await expect.poll(() => offCentre(page, 'P0001')).toBeLessThan(3);
+        await expect(page.locator('#live-panel .live-working__person')).toContainText('Josef');
+        // An older bridge naming the family in the person field: the same.
+        bridge.family = undefined;
+        bridge.person = 'P0013';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0013');
+        bridge.person = 'F0001';
+        await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0001');
+        // A family the tree does not know: the tree stays where it is.
+        bridge.person = 'F0777';
+        await nextStatus(bridge);
+        expect(await focusRefn(page)).toBe('P0001');
     });
 
     test('focusing someone else pauses too', async ({ page }) => {

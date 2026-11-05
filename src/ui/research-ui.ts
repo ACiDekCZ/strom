@@ -38,7 +38,7 @@ import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
-    sanitizeLiveEnd, sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
+    sanitizeLiveEnd, sanitizeWorking, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
@@ -868,7 +868,29 @@ export async function readStatusPart(url: string): Promise<unknown> {
 export async function fetchGedcomText(url: string): Promise<string> {
     const res = await fetchWithTimeout(url, 30000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return decodeGedcomFile(await res.arrayBuffer());
+    const text = decodeGedcomFile(await res.arrayBuffer());
+    noteFamilyPartners(url, text);
+    return text;
+}
+
+/** The partners of the research's families by the tree's address (its last read), for rows of `working[]` about a couple. */
+const familyPartners = new Map<string, Map<string, string[]>>();
+
+function noteFamilyPartners(url: string, text: string): void {
+    familyPartners.delete(url);
+    // The trees of a few researches at most (an old one goes first).
+    while (familyPartners.size >= 4) familyPartners.delete(familyPartners.keys().next().value!);
+    familyPartners.set(url, researchFamilyPartners(text));
+    // The live session's rows about a couple get their person now that the families are known.
+    if (live && live.bridge.ged === url) live.working = workingWithFamilyPersons(live.working, familyPartners.get(url)!);
+}
+
+/** Bridges whose tree is being read only for its families (a row about a couple came before the tree). */
+const familiesReading = new Set<string>();
+
+/** `working[]` of a bridge with the person of a couple's row filled in (see workingWithFamilyPersons). */
+function withFamilyPersons(working: LiveWorker[], bridge: LiveBridgeUrls): LiveWorker[] {
+    return workingWithFamilyPersons(working, familyPartners.get(bridge.ged) ?? null);
 }
 
 /** POST the tree to the send bridge; never sends cookies. */
@@ -2634,7 +2656,7 @@ export const researchUiMethods = uiModule({
                 name,
                 head: status.head,
                 headAt: status.headAt,
-                working: status.working,
+                working: withFamilyPersons(status.working, bridge),
                 waiting: status.waiting,
                 features: status.features,
                 accepts: status.accepts,
@@ -2737,7 +2759,7 @@ export const researchUiMethods = uiModule({
             this.noteQualityEvent(s.researchId, payload(e));
         });
         es.addEventListener('working', (e) => {
-            s.working = sanitizeWorking(payload(e));
+            s.working = withFamilyPersons(sanitizeWorking(payload(e)), s.bridge);
             this.renderLivePanel();
             // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
             this.liveStatusSoon(s);
@@ -2845,7 +2867,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (status.headAt) s.headAt = status.headAt;
-        s.working = status.working;
+        s.working = withFamilyPersons(status.working, s.bridge);
         s.features = status.features;
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
@@ -3391,8 +3413,25 @@ export const researchUiMethods = uiModule({
         }
     },
 
+    /**
+     * A row of `working[]` about a couple whose family the app does not know
+     * yet (the tree was not read from this bridge since it opened): read the
+     * tree once for its families, then draw again with the couple's person.
+     */
+    readWorkingFamilies(): void {
+        const s = live;
+        if (!s || s.ended || familyPartners.has(s.bridge.ged) || familiesReading.has(s.bridge.ged)) return;
+        if (!s.working.some(w => w.family && !w.person)) return;
+        const url = s.bridge.ged;
+        familiesReading.add(url);
+        void fetchGedcomText(url).then(() => {
+            if (live === s) this.renderLivePanel();
+        }, () => { /* the next status tries again */ }).finally(() => familiesReading.delete(url));
+    },
+
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
+        this.readWorkingFamilies();
         queueMicrotask(keepLineFocus());
         syncResearchCardInfo();
         // A selected line drops with the tree it was made in or the end of following.
