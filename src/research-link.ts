@@ -1417,7 +1417,12 @@ export interface LiveWorker {
     research?: string;
     /** The agent's session ("N0132"; a newer research): it can be finished. */
     session?: string;
+    /** The place record the work is about ("L0001"; with the feature `working.place`). */
+    place?: string;
 }
+
+/** The bridge names the place record of a row of `working` (`working[].place`, research 1.28). */
+export const WORKING_PLACE_FEATURE = 'working.place';
 
 /** Something the research waits for from the user. */
 /**
@@ -2313,9 +2318,10 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const paused = p ? { until: Number.isFinite(Date.parse(until)) ? until : '', reason: cleanText(p.reason, 200) } : null;
         const research = researchDirectionRef(r.research);
         const session = researchSessionRef(r.session);
+        const place = isPlaceRecordId(r.place) ? r.place : null;
         out.push({
             who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(paused ? { paused } : {}),
-            ...(research ? { research } : {}), ...(session ? { session } : {}),
+            ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
         });
     }
     return out;

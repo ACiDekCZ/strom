@@ -98,9 +98,12 @@ export function fanCenter(o: {
 
 export interface TrailEntry {
     personId: PersonId;
+    /** The place worked on (its key on the map), null when none. */
     placeKey: string | null;
     session: number;
     at: number;
+    /** The place's position, when it has one (the map's trail draws only those). */
+    geo?: { lat: number; lon: number } | null;
 }
 
 export const TRAIL_MAX = 8;
