@@ -6,7 +6,14 @@ import { getStringsForLang } from '../src/strings';
  * Interactive tour: offered once after the demo loads, walks through a few
  * spotlighted steps, and can be dismissed with Escape. A second demo load no
  * longer offers it (localStorage flag). Mobile smoke checks the bubble fits.
+ *
+ * The tour is hidden in the app for now (tourShown(), src/ui/tour.ts); these
+ * tests turn it on to keep its code working (tour-hidden.spec.ts: hidden).
  */
+test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => { (globalThis as { __STROM_TOUR?: boolean }).__STROM_TOUR = true; });
+});
+
 test('tour is offered, walks through steps, and Escape ends it', async ({ page }) => {
     await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();

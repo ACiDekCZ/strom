@@ -132,7 +132,7 @@ the table honest.
 | Trees: create / switch | `tree.spec.ts` | covered | tree switcher |
 | Trees: rename / delete | `tree.spec.ts` | covered | tree manager |
 | Demo tree loads | `demo.spec.ts` | covered | focus + hint toast |
-| Interactive tour (offer / steps / Escape / mobile) | `tour.spec.ts` | covered | offered once after demo; steps advance; Escape ends; second demo load doesn't re-offer; bubble fits mobile |
+| Interactive tour (offer / steps / Escape / mobile) | `tour.spec.ts`, `tour-hidden.spec.ts` | covered | hidden in the app for now (no offer, no help link: `tour-hidden.spec.ts`); turned on in `tour.spec.ts`: offered once after demo; steps advance; Escape ends; second demo load doesn't re-offer; bubble fits mobile |
 | Backups: create / restore / undo restore | `backups.spec.ts` | covered | manual snapshot survives a delete; restore is undoable |
 | About dialog version | `about.spec.ts`, `cs.spec.ts` | covered | matches `package.json`; What's new links the changelog of the UI language (en in `about.spec.ts`, cs / de in `cs.spec.ts` / `de.spec.ts`, every language × branch in `about-changelog.test.ts`) |
 | PWA offline indicator | `pwa.spec.ts` | covered | toolbar badge toggles with `context.setOffline` |

@@ -7,6 +7,10 @@
  * offered once after the sample tree and started from the contents of How
  * Strom works (src/ui/help-ui.ts).
  *
+ * Hidden for now (Milan, 5 Nov 2026): pointing at a few elements says too
+ * little, so neither the offer nor the link shows until the tour does more.
+ * The code stays; `tourShown()` brings it back (tests set `__STROM_TOUR`).
+ *
  * See src/ui/module.ts for the composition pattern.
  */
 
@@ -14,6 +18,11 @@ import { strings } from '../strings.js';
 import { uiModule } from './module.js';
 
 const TOUR_OFFERED_KEY = 'strom-tour-offered';
+
+/** Whether the tour is offered at all: hidden until it is worth it (tests turn it on). */
+export function tourShown(): boolean {
+    return (globalThis as { __STROM_TOUR?: boolean }).__STROM_TOUR === true;
+}
 
 export interface TourStepDef {
     key: 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'step6' | 'step7' | 'step8';
@@ -76,6 +85,8 @@ let lastPlacement = '';
 export const tourMethods = uiModule({
     /** Offer the tour once, unobtrusively, after the demo tree loads. */
     offerTourAfterDemo(): void {
+        // Hidden: not offered, and not marked as offered (it is offered once when it comes back).
+        if (!tourShown()) return;
         try {
             if (localStorage.getItem(TOUR_OFFERED_KEY) === '1') return;
             localStorage.setItem(TOUR_OFFERED_KEY, '1');

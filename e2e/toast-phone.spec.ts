@@ -174,6 +174,8 @@ test.describe('desktop', () => {
  * at its centre; once the toast is gone the offer is back.
  */
 async function offerAndToast(page: Page): Promise<void> {
+    // The tour is hidden in the app for now; turned on here to keep the offer's place tested.
+    await page.addInitScript(() => { (globalThis as { __STROM_TOUR?: boolean }).__STROM_TOUR = true; });
     await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     const offer = page.locator('.tour-offer');

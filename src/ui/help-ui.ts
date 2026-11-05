@@ -19,6 +19,7 @@
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
+import { tourShown } from './tour.js';
 import { APP_VERSION } from '../types.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { findRule, hasHelpData, helpDocInfo, helpLangOf, loadHelp } from '../help/help-data.js';
@@ -531,7 +532,7 @@ function drawHome(w: HelpWindow, col: HTMLElement): void {
     const info = el('div', 'help-home-info');
     info.appendChild(navButton('help-linkbtn help-index-link', s.index, () => openIndex(w)));
     const tour = startTourOf;
-    if (tour && !coveredByWindow(w)) {
+    if (tour && tourShown() && !coveredByWindow(w)) {
         info.appendChild(navButton('help-linkbtn help-tour-link', strings.tour.menu, () => {
             closeHelp();
             tour();
