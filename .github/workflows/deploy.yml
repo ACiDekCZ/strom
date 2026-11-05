@@ -63,6 +63,31 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  # The help marks' numbers (src/help/topics.ts) against strom-doc main, not
+  # the pinned copy: a number renamed or removed there shows before the next
+  # pin. Advisory only: no job needs it and its failure does not fail the run.
+  help-topics-main:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clone strom-doc main
+        run: git clone --depth 1 --branch main https://github.com/ACiDekCZ/strom-doc "$RUNNER_TEMP/strom-doc-main"
+
+      - name: Help topics against strom-doc main
+        run: npx vitest run src/help/__tests__/help-topics.test.ts
+        env:
+          STROM_DOC_MAIN_DIR: ${{ runner.temp }}/strom-doc-main
+
   # The browser suite against the very strom.html built above, in 4 parallel
   # shards (each with fewer workers than vCPUs: an overloaded runner flakes).
   # Not on a tag: a release tag is the commit main has just tested.

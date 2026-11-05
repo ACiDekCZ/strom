@@ -2,7 +2,8 @@
  * Build script - creates a single strom.html file with inlined JS
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { deflateRawSync } from 'zlib';
 import { buildSync } from 'esbuild';
 
 // Build the TypeScript bundle first. Inject the app version from package.json
@@ -26,6 +27,40 @@ for (const lang of CHANGELOG_LANGUAGES) {
 const releaseNotes = { version: pkgVersion, sections };
 console.log('What\'s new sections: ' + CHANGELOG_LANGUAGES.map(l => `${l} ${sections[l] ? 'yes' : 'none'}`).join(', '));
 
+// "How Strom works": strom-doc at the commit package.json "stromDoc" pins,
+// vendored in vendor/strom-doc (scripts/pin-strom-doc.mjs). Converted by the
+// code the tests check (src/help/help-convert.ts; it throws on a link to a
+// missing number or a chapter missing in a language), each language deflated
+// and embedded: the help needs no network and no file next to the app.
+const helpData = await buildHelpData();
+console.log('Help: strom-doc ' + helpData.docVersion.slice(0, 12) + ', '
+    + Object.entries(helpData.langs).map(([l, b64]) => `${l} ${Math.round(b64.length / 1024)}kb`).join(', '));
+
+async function buildHelpData() {
+    const pin = JSON.parse(readFileSync('package.json', 'utf-8')).stromDoc;
+    const dir = 'vendor/strom-doc';
+    const vendored = existsSync(`${dir}/PIN`) ? readFileSync(`${dir}/PIN`, 'utf-8').trim() : '';
+    if (!pin || vendored !== pin) {
+        throw new Error(`help: vendor/strom-doc is at "${vendored}", package.json "stromDoc" is "${pin}" (npm run help:pin)`);
+    }
+    const files = {};
+    const walk = (path, rel) => {
+        for (const name of readdirSync(path).sort()) {
+            const full = `${path}/${name}`;
+            const key = rel ? `${rel}/${name}` : name;
+            if (statSync(full).isDirectory()) walk(full, key);
+            else if (name.endsWith('.md')) files[key] = readFileSync(full, 'utf-8');
+        }
+    };
+    walk(dir, '');
+    const helper = buildSync({
+        entryPoints: ['src/help/help-convert.ts'], bundle: true, format: 'esm', platform: 'neutral', write: false,
+    });
+    const { convertHelp, embedHelp } = await import(
+        'data:text/javascript;base64,' + Buffer.from(helper.outputFiles[0].text).toString('base64'));
+    return embedHelp(convertHelp(files, pin), data => deflateRawSync(data, { level: 9 }));
+}
+
 buildSync({
     entryPoints: ['src/main.ts'],
     bundle: true,
@@ -34,6 +69,7 @@ buildSync({
     define: {
         __APP_VERSION__: JSON.stringify(pkgVersion),
         __RELEASE_NOTES__: JSON.stringify(releaseNotes),
+        __HELP_DATA__: JSON.stringify(helpData),
     },
     logLevel: 'warning',
 });
