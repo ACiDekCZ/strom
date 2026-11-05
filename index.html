@@ -10282,7 +10282,14 @@
                 top: auto; left: 8px; right: 8px; transform: none; width: auto; max-width: none;
                 bottom: calc(var(--map-status-reach, 60px) + 8px);
             }
-            .map-follow-locate { white-space: normal; }
+            .map-follow-locate { white-space: normal; min-height: 44px; }
+            /* The research's strip floats over the map's bottom: the status bar
+               stands above it, and the time bar, the notices and the legend,
+               measured from the status bar (--map-status-reach), follow. */
+            body:has(> #live-panel.phone-strip:not([hidden])) .map-status { bottom: calc(var(--live-strip-h, 0px) + 12px); }
+            /* Back / forward float at the bar's left end: its sentence and buttons keep clear of them. */
+            body.focus-nav-shown[data-view-mode="map"] .map-status { padding-left: 64px; }
+            body.focus-nav-shown[data-view-mode="map"]:has(#focus-forward-btn:not([style*="none"])) .map-status { padding-left: 116px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .map-follow-notices { left: auto; right: 56px; top: 8px; bottom: auto; transform: none; width: auto; max-width: min(320px, calc(100% - 120px)); }

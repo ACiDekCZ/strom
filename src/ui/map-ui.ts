@@ -285,7 +285,11 @@ export const mapMethods = uiModule({
         const ro = new ResizeObserver(update);
         bars.forEach(el => ro.observe(el));
         // The canvas can be rebuilt: one window listener, pointing at the latest.
-        if (!mapFloorUpdate) window.addEventListener('resize', () => mapFloorUpdate?.());
+        if (!mapFloorUpdate) {
+            window.addEventListener('resize', () => mapFloorUpdate?.());
+            // The phone's research strip moves the status bar without resizing it.
+            window.addEventListener('strom:live-strip', () => mapFloorUpdate?.());
+        }
         mapFloorUpdate = update;
     },
 

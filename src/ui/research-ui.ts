@@ -1156,7 +1156,10 @@ function publishLiveStrip(): void {
     const h = panel && !panel.hidden && phone ? panel.getBoundingClientRect().height : 0;
     const value = h > 0 ? `${Math.ceil(h) + 8}px` : '0px';
     const root = document.documentElement.style;
-    if (root.getPropertyValue('--live-strip-h') !== value) root.setProperty('--live-strip-h', value);
+    if (root.getPropertyValue('--live-strip-h') === value) return;
+    root.setProperty('--live-strip-h', value);
+    // The map lifts its bottom bars above the strip: it measures them again.
+    window.dispatchEvent(new Event('strom:live-strip'));
 }
 
 /**

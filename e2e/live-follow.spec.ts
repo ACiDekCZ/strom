@@ -1156,5 +1156,58 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
             expect(errs).toEqual([]);
         });
+
+        test('a place without a position: the notice and the map\'s status bar stand above the research strip, Find position a 44px target', async ({ page }) => {
+            const errs = errors(page);
+            await stubTiles(page);
+            const bridge = await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true, quick: true });
+            bridge.features = ['working.place'];
+            bridge.person = 'P0013';
+            await expect.poll(() => focusRefn(page)).toBe('P0013');
+            await seedMapPlaces(page);
+            await nextStatus(bridge);
+            await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+            const notice = page.locator('#map-container .map-follow-notice');
+            await expect(notice).toHaveCount(1);
+            await expect(page.locator('#live-panel.phone-strip')).toBeVisible();
+            /** What the strip (fixed, over the map) covers, and what is cut off by the window. */
+            const covered = () => page.evaluate(() => {
+                const strip = document.getElementById('live-panel')!.getBoundingClientRect();
+                const out: string[] = [];
+                const els = ['.map-follow-notice', '.map-follow-locate', '.map-status'].map(s => [s, document.querySelector(s)] as const);
+                for (const [sel, el] of els) {
+                    if (!el) { out.push(`missing ${sel}`); continue; }
+                    const r = el.getBoundingClientRect();
+                    if (r.height === 0) { out.push(`hidden ${sel}`); continue; }
+                    const w = Math.min(r.right, strip.right) - Math.max(r.left, strip.left);
+                    const h = Math.min(r.bottom, strip.bottom) - Math.max(r.top, strip.top);
+                    if (w > 0 && h > 0) out.push(`under the strip ${sel}`);
+                    if (r.left < 0 || r.right > window.innerWidth || r.top < 0) out.push(`cut ${sel}`);
+                }
+                const n = document.querySelector('.map-follow-notice')!.getBoundingClientRect();
+                const st = document.querySelector('.map-status')!.getBoundingClientRect();
+                if (n.bottom > st.top) out.push('notice over the status bar');
+                const b = document.querySelector('.map-follow-locate')!.getBoundingClientRect();
+                if (b.height < 44) out.push(`locate ${b.height}px`);
+                // Back / forward float over the status bar's left end, never over its sentence or buttons.
+                for (const nav of document.querySelectorAll<HTMLElement>('.focus-nav-btn')) {
+                    const v = nav.getBoundingClientRect();
+                    if (v.height === 0) continue;
+                    for (const c of document.querySelectorAll('.map-status > *')) {
+                        const r = c.getBoundingClientRect();
+                        if (r.height > 0 && r.left < v.right && r.right > v.left && r.top < v.bottom && r.bottom > v.top) out.push(`${nav.id} over ${c.className}`);
+                    }
+                }
+                if (document.documentElement.scrollWidth > window.innerWidth) out.push('scrollWidth');
+                return out;
+            });
+            for (const lang of ['cs', 'de', 'en']) {
+                await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+                await expect.poll(covered, { message: lang }).toEqual([]);
+            }
+            await notice.locator('.map-follow-locate').tap();
+            await expect(page.locator('#places-modal')).toBeVisible();
+            expect(errs).toEqual([]);
+        });
     });
 });
