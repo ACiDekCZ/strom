@@ -199,7 +199,8 @@ describe('Keep and the research’s confirmation', () => {
 
 describe('multi, district, label', () => {
     it('multi: the geocoder chose among more towns — not for a pick by hand', () => {
-        expect(checkPlaces(tree(2, { townChoices: 2 })).get('lhotinek')).toEqual([{ kind: 'multi' }]);
+        expect(checkPlaces(tree(2, { townChoices: 2 })).get('lhotinek')).toEqual([{ kind: 'multi', count: 2 }]);
+        expect(checkPlaces(tree(2, { townChoices: 4 })).get('lhotinek')).toEqual([{ kind: 'multi', count: 4 }]);
         expect(checkPlaces(tree(2, { townChoices: 2, origin: 'hand' })).has('lhotinek')).toBe(false);
     });
 

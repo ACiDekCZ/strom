@@ -207,6 +207,42 @@ test('the map offers to look up places after consent, plots them, never scrolls 
     await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
 });
 
+test('of several towns of the same name the lookup takes the one nearest the tree\'s other places, in one request; a location placed by hand stays', async ({ page }) => {
+    await stubTiles(page);
+    const urls: URL[] = [];
+    const village = (lat: number, lon: number, region: string) =>
+        ({ lat: String(lat), lon: String(lon), name: 'Lhota', display_name: `Lhota, ${region}`, category: 'boundary', type: 'administrative', addresstype: 'village' });
+    await page.route('**://nominatim.openstreetmap.org/**', route => {
+        const url = new URL(route.request().url());
+        urls.push(url);
+        // The geocoder ranks the Lhota 200 km away first.
+        const body = url.searchParams.get('q') === 'Lhota'
+            ? [village(49.7, 13.3, 'Plzeň'), village(49.3, 16.6, 'Brno'), village(50.1, 15.1, 'Kolín')] : [];
+        void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await setPlaces(page, { 'Johan': 'Lhota', 'Peter': 'Brno' });
+    // Brno was placed by hand: it is not looked up again, and it tells where the family lived.
+    const brno = { lat: 49.19, lon: 16.61, origin: 'hand', at: '2026-10-01' };
+    await page.evaluate(geo => { window.Strom.DataManager.getData().places = { brno: geo }; }, brno);
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
+    await page.getByRole('button', { name: /Look up 1 place/ }).click();
+    await page.getByRole('button', { name: 'Look them up' }).click();
+    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+
+    // One request for Lhota, with room for several hits.
+    expect(urls.map(u => u.searchParams.get('q'))).toEqual(['Lhota']);
+    expect(urls[0]!.searchParams.get('limit')).toBe('5');
+    const places = await page.evaluate(() => window.Strom.DataManager.getData().places);
+    expect(places?.lhota).toMatchObject({ lat: 49.3, lon: 16.6, townChoices: 3, origin: 'map' });
+    expect(places?.brno).toEqual(brno);
+});
+
 test('coordinates survive a reload — they are part of the tree', async ({ page }) => {
     await stubTiles(page);
     const asked = await stubGeocoder(page, { 'Kolín': [50.0281, 15.2003] });

@@ -133,6 +133,10 @@ describe('texts', () => {
         for (const lang of ['cs', 'de'] as const) {
             expect(checkFindingText({ kind: 'multi' }, lang)).not.toBe(checkFindingText({ kind: 'multi' }, 'en'));
         }
+        // The check says how many towns of the name the map found.
+        expect(checkFindingText({ kind: 'multi', count: 3 }, 'en')).toBe('The map found 3 towns with this name and took the one nearest the tree’s other places.');
+        expect(checkFindingText({ kind: 'multi', count: 5 }, 'cs')).toContain('5 obcí');
+        expect(checkFindingText({ kind: 'multi', count: 3 }, 'pl')).toContain('3 miejscowości');
     });
 
     it('a country code by the UI language, anything else as written', () => {

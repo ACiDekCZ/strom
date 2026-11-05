@@ -290,7 +290,7 @@ export function checkFindingText(f: CheckFinding, lang: Language): string {
         case 'far': return d.checkFar(f.km, f.family, f.years[0], f.years[1]);
         case 'district': return d.checkDistrict(f.expected, f.actual, f.jurisdiction === 'parish', districtNameHasTitle(f.expected));
         case 'label': return f.type === 'street' ? d.checkStreet : f.type === 'area' ? d.checkArea : d.checkOtherTown;
-        case 'multi': return d.checkMulti;
+        case 'multi': return d.checkMulti(f.count ?? 2);
     }
 }
 

@@ -256,3 +256,37 @@ describe('executeMerge per-match skip decision (Primitive 2)', () => {
         expect(calculateMergeStats(state).willAdd).toBe(0);
     });
 });
+
+describe('executeMerge keeps the tree\'s locations over a merged GEDCOM (A6.5.1)', () => {
+    it('a location placed by hand or kept stays; the file only adds places the tree has no location for', async () => {
+        const { parseGedcom, convertToStrom } = await import('../ged-parser.js');
+        const { exportToGedcom } = await import('../ged-exporter.js');
+        const J = P('J', 'Jan', 'Lhoták', { birthDate: '1850', birthPlace: 'Lhota', deathPlace: 'Brno' });
+        const existingData: StromData = {
+            ...tree([J]),
+            places: {
+                lhota: { lat: 49.3, lon: 16.6, origin: 'hand', at: '2026-10-01' },
+                brno: { lat: 49.19, lon: 16.61, origin: 'map', keptAt: 'abc' },
+            },
+        };
+        // The same man in a file whose Lhota lies 200 km away, with a place the tree has not located.
+        const other: StromData = {
+            ...tree([P('J', 'Jan', 'Lhoták', { birthDate: '1850', birthPlace: 'Lhota', deathPlace: 'Brno', events: [{ id: 'e1', type: 'residence', place: 'Kolín' }] as Person['events'] })]),
+            places: { lhota: { lat: 49.7, lon: 13.3 }, brno: { lat: 48, lon: 14 }, kolin: { lat: 50.03, lon: 15.2 } },
+        };
+        const incomingData = convertToStrom(parseGedcom(exportToGedcom(other).content)).data;
+        expect(incomingData.places?.lhota).toMatchObject({ lat: 49.7, lon: 13.3 });
+        const iJ = Object.values(incomingData.persons)[0]!;
+        const state: MergeState = {
+            existingData, incomingData,
+            matches: [confirmedMatch(J, iJ)],
+            unmatchedExisting: [], unmatchedIncoming: [],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.success).toBe(true);
+        expect(result.mergedData.places?.lhota).toEqual(existingData.places!.lhota);
+        expect(result.mergedData.places?.brno).toEqual(existingData.places!.brno);
+        expect(result.mergedData.places?.kolin).toMatchObject({ lat: 50.03, lon: 15.2 });
+    });
+});

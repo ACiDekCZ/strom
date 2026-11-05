@@ -16,6 +16,7 @@
 import { PlaceGeo } from './types.js';
 import { KnownStreets } from './streets.js';
 import { placeKey, townOfPlace } from './places.js';
+import { placeGeoHash } from './place-records.js';
 
 export const GEOCODER_NAME = 'OpenStreetMap Nominatim';
 export const GEOCODER_URL = 'https://nominatim.openstreetmap.org/search';
@@ -200,6 +201,39 @@ export function placesCentroid(places: Readonly<Record<string, PlaceGeo>> | unde
     };
 }
 
+/**
+ * Placed by hand or answered "Keep" (while it stays where it was kept): a
+ * location a person decided on.
+ */
+export function isPersonsGeo(geo: PlaceGeo): boolean {
+    return geo.origin === 'hand' || (!!geo.keptAt && geo.keptAt === placeGeoHash(geo));
+}
+
+/** With at least this many locations a person decided on, those alone make the tree's centre (treeCenter). */
+export const PERSONS_CENTER_MIN = 3;
+
+function median(values: number[]): number {
+    const s = [...values].sort((x, y) => x - y);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
+/**
+ * The centre that decides between towns of the same name in a lookup run:
+ * the median (each axis) of the locations a person decided on (isPersonsGeo)
+ * when there are PERSONS_CENTER_MIN of them, else of all the tree's located
+ * places together with `extra` (the places the run found without a doubt).
+ * A median, not a mean: a branch that emigrated overseas would drag a mean
+ * across the ocean. Null when there is no point at all.
+ */
+export function treeCenter(places: Readonly<Record<string, PlaceGeo>> | undefined, extra: readonly LatLon[] = []): LatLon | null {
+    const all = Object.values(places ?? {}).filter(g => Number.isFinite(g?.lat) && Number.isFinite(g?.lon));
+    const persons = all.filter(isPersonsGeo);
+    const points: LatLon[] = persons.length >= PERSONS_CENTER_MIN ? persons : [...all, ...extra];
+    if (points.length === 0) return null;
+    return { lat: median(points.map(p => p.lat)), lon: median(points.map(p => p.lon)) };
+}
+
 /** Squared distance on a flat map scaled by latitude — enough to pick the nearest of a few towns. */
 function distance2(a: LatLon, b: LatLon): number {
     const dLat = a.lat - b.lat;
@@ -240,6 +274,13 @@ export interface TownFallbackOptions {
 
 export interface GeocodePlacesOptions extends GeocodeOptions {
     /**
+     * The tree's located places: of several towns named as a place is written
+     * (sameNamedTowns), the one nearest to their centre (treeCenter, with the
+     * places the run found without a doubt) is taken, decided once the run's
+     * requests are done. Absent: the first hit, as without it.
+     */
+    treePlaces?: Readonly<Record<string, PlaceGeo>>;
+    /**
      * When set: a place not found under its full name that holds a house
      * (townOfPlace: a recognised house, or a number alone after a town whose
      * numbers are no parts of it) is looked up by its town — each town once a
@@ -250,19 +291,53 @@ export interface GeocodePlacesOptions extends GeocodeOptions {
 
 const defaultWait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Look one place up. Network and parse failures both mean "no coordinates". */
-export async function geocodePlace(place: string, options: GeocodeOptions = {}): Promise<PlaceGeo | null> {
+/**
+ * Of a place's lookup answer: the settlements named exactly as the place is
+ * written (placeKey of the hit's name, else of its label's first part) — the
+ * towns of the same name ("Lhota" in five districts). Empty for a place with
+ * more to it than a name ("Lhota u Kolína", "Lhota 16").
+ */
+export function sameNamedTowns(body: unknown, place: string): PlaceGeo[] {
+    const key = placeKey(place);
+    if (!key) return [];
+    return parseGeocodeCandidateDetails(body)
+        .filter(c => c.settlement && placeKey(c.place?.name ?? hitLabelParts(c.geo.label).name) === key)
+        .map(c => c.geo);
+}
+
+/**
+ * Of a place's lookup answer: with several towns of the place's name and a
+ * centre to compare with, the town nearest to it, with how many there were
+ * (`townChoices`); otherwise the first hit, as the geocoder ranks them.
+ */
+export function pickPlaceHit(body: unknown, place: string, center?: LatLon | null): PlaceGeo | null {
+    const towns = center ? sameNamedTowns(body, place) : [];
+    if (towns.length < 2) return parseGeocodeResponse(body);
+    return { ...nearestTo(towns, center)!, townChoices: towns.length };
+}
+
+/** One request for a place (CANDIDATE_LIMIT hits): the answer's body, or null on any failure. */
+async function lookUpPlace(place: string, options: GeocodeOptions): Promise<unknown> {
     const doFetch = options.fetchFn ?? fetch;
     try {
-        const response = await doFetch(buildGeocodeUrl(place), {
+        const response = await doFetch(buildGeocodeUrl(place, CANDIDATE_LIMIT), {
             headers: { Accept: 'application/json' },
             signal: options.signal,
         });
         if (!response.ok) return null;
-        return parseGeocodeResponse(await response.json());
+        return await response.json();
     } catch {
         return null;  // offline, blocked, rate-limited — all just "unknown"
     }
+}
+
+/**
+ * Look one place up (one request). Of several towns of its name, the one
+ * nearest to `center` (pickPlaceHit). Network and parse failures both mean
+ * "no coordinates".
+ */
+export async function geocodePlace(place: string, options: GeocodeOptions & { center?: LatLon | null } = {}): Promise<PlaceGeo | null> {
+    return pickPlaceHit(await lookUpPlace(place, options), place, options.center);
 }
 
 /**
@@ -357,10 +432,23 @@ export async function geocodePlaces(places: string[], options: GeocodePlacesOpti
         return true;
     };
 
+    // Places with several towns of their name wait for the end of the run, so the
+    // places found meanwhile without a doubt count towards the centre too.
+    const doubtful: { place: string; body: unknown }[] = [];
+    const sure: LatLon[] = [];
+
     for (let i = 0; i < places.length; i++) {
         if (!await turn()) break;
         const place = places[i];
-        let geo = await geocodePlace(place, options);
+        const body = await lookUpPlace(place, options);
+        if (options.treePlaces && sameNamedTowns(body, place).length > 1) {
+            doubtful.push({ place, body });
+            found.set(place, parseGeocodeResponse(body));
+            options.onProgress?.(i + 1, places.length, place);
+            continue;
+        }
+        let geo = parseGeocodeResponse(body);
+        if (geo) sure.push(geo);
         if (!geo && fallback) {
             const parsed = townOfPlace(place, fallback.known);
             const key = parsed ? placeKey(parsed.town) : '';
@@ -379,6 +467,10 @@ export async function geocodePlaces(places: string[], options: GeocodePlacesOpti
         }
         found.set(place, geo);
         options.onProgress?.(i + 1, places.length, place);
+    }
+    if (doubtful.length) {
+        const center = treeCenter(options.treePlaces, sure);
+        for (const d of doubtful) found.set(d.place, pickPlaceHit(d.body, d.place, center));
     }
     return found;
 }

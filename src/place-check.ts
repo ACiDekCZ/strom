@@ -34,7 +34,7 @@ export type CheckFinding =
     | { kind: 'far'; km: number; family: string; years: [number, number] }
     | { kind: 'district'; expected: string; actual: string; jurisdiction?: PlaceJurisdictionKind }
     | { kind: 'label'; type: 'street' | 'area' | 'other-town' }
-    | { kind: 'multi' };
+    | { kind: 'multi'; count?: number };
 
 /** Great-circle distance in km. */
 export function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -297,7 +297,7 @@ function findingsFor(
         const l = labelFinding(geo, namesOf(key, facts, data));
         if (l) out.push(l);
     }
-    if (geo.origin !== 'hand' && (geo.townChoices ?? 0) > 1) out.push({ kind: 'multi' });
+    if (geo.origin !== 'hand' && (geo.townChoices ?? 0) > 1) out.push({ kind: 'multi', count: geo.townChoices });
     return out;
 }
 

@@ -1464,6 +1464,8 @@ export const mapMethods = uiModule({
             signal: controller.signal,
             // A place with a house the geocoder does not know is looked up by its town (§4).
             townFallback: { centroid: placesCentroid(data.places), known: knownStreets(data) },
+            // Of several towns of a place's name, the one nearest the tree's other places (A6.5.1).
+            treePlaces: data.places,
             onProgress: (done, total) => {
                 this.mapGeocoding = { done, total, place: names[Math.min(done, total - 1)] };
                 this.renderMapStatus(this.mapPlaces());

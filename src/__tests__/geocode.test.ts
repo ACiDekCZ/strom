@@ -9,7 +9,10 @@ import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
     parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates, hitKind, hitLabelParts,
     CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS, parseHitAddress, searchPlaceForms,
+    pickPlaceHit, sameNamedTowns, treeCenter,
 } from '../geocode.js';
+import { placeGeoHash } from '../place-records.js';
+import type { PlaceGeo } from '../types.js';
 
 const hit = (lat: string, lon: string, name = 'Somewhere'): unknown =>
     [{ lat, lon, display_name: name }];
@@ -214,6 +217,82 @@ describe('geocodePlaces — a house not found is found by its town', () => {
         const found = await geocodePlaces(['Bělokamen čp. 4'], { fetchFn, waitFn });
         expect(queries(fetchFn)).toEqual(['Bělokamen čp. 4']);
         expect(found.get('Bělokamen čp. 4')).toBeNull();
+    });
+});
+
+describe('geocodePlaces — towns of the same name: the one nearest the tree\'s other places (A6.5.1)', () => {
+    const village = (lat: number, lon: number, name: string, region: string) =>
+        ({ lat: String(lat), lon: String(lon), name, display_name: `${name}, ${region}`, category: 'boundary', type: 'administrative', addresstype: 'village' });
+    // Three Lhotas: the geocoder ranks the one in western Bohemia first.
+    const lhotas = [village(49.7, 13.3, 'Lhota', 'Plzeň'), village(49.3, 16.6, 'Lhota', 'Brno'), village(50.1, 15.1, 'Lhota', 'Kolín')];
+    const geocoder = (answers: Record<string, unknown[]>) => vi.fn().mockImplementation(async (url: string) =>
+        okResponse(answers[new URL(url).searchParams.get('q')!] ?? []));
+    // The family's other places lie around Brno.
+    const moravia: Record<string, PlaceGeo> = {
+        brno: { lat: 49.19, lon: 16.61, origin: 'map' },
+        tisnov: { lat: 49.35, lon: 16.42, origin: 'map' },
+        boskovice: { lat: 49.49, lon: 16.66 },
+    };
+
+    it('takes the Lhota nearest the tree\'s places, says how many there were, in one request per place', async () => {
+        const fetchFn = geocoder({ Lhota: lhotas, Brno: [village(49.19, 16.61, 'Brno', 'Morava')] });
+        const waitFn = vi.fn().mockResolvedValue(undefined);
+        const found = await geocodePlaces(['Lhota', 'Brno'], { fetchFn, waitFn, treePlaces: moravia });
+        expect(found.get('Lhota')).toEqual({ lat: 49.3, lon: 16.6, label: 'Lhota, Brno', townChoices: 3 });
+        expect(found.get('Brno')).toEqual({ lat: 49.19, lon: 16.61, label: 'Brno, Morava' });
+        // The same one request per place, only with more hits; the rate limit between them.
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        for (const [url] of fetchFn.mock.calls) {
+            const u = new URL(url as string);
+            expect(u.searchParams.get('limit')).toBe(String(CANDIDATE_LIMIT));
+            expect(u.searchParams.get('email')).toBe(GEOCODER_CONTACT);
+        }
+        expect(waitFn).toHaveBeenCalledTimes(1);
+        expect(waitFn).toHaveBeenCalledWith(REQUEST_INTERVAL_MS);
+    });
+
+    it('a tree with no located place yet: the places the run found without a doubt decide, even found after the Lhota', async () => {
+        const fetchFn = geocoder({ Lhota: lhotas, Kolín: [village(50.03, 15.2, 'Kolín', 'Střední Čechy')] });
+        const found = await geocodePlaces(['Lhota', 'Kolín'], { fetchFn, waitFn: async () => {}, treePlaces: {} });
+        expect(found.get('Lhota')).toMatchObject({ lat: 50.1, lon: 15.1, townChoices: 3 });
+    });
+
+    it('nothing to compare with: the first hit, as before', async () => {
+        const fetchFn = geocoder({ Lhota: lhotas });
+        const found = await geocodePlaces(['Lhota'], { fetchFn, waitFn: async () => {}, treePlaces: {} });
+        expect(found.get('Lhota')).toEqual({ lat: 49.7, lon: 13.3, label: 'Lhota, Plzeň' });
+        expect(pickPlaceHit(lhotas, 'Lhota', null)).toEqual({ lat: 49.7, lon: 13.3, label: 'Lhota, Plzeň' });
+    });
+
+    it('hits not named as the place, or a single town of the name: the first hit, as before', async () => {
+        const center = { lat: 49.3, lon: 16.6 };
+        // "Lhota u Kolína" is more than the name: the geocoder's first answer stands.
+        expect(pickPlaceHit(lhotas, 'Lhota u Kolína', center)).toMatchObject({ lat: 49.7 });
+        expect(sameNamedTowns(lhotas, 'Lhota u Kolína')).toEqual([]);
+        // A street and a house of the name are no towns.
+        const street = { lat: '49.3', lon: '16.6', name: 'Lhota', display_name: 'Lhota, Brno', category: 'highway', type: 'residential', addresstype: 'road' };
+        expect(pickPlaceHit([lhotas[0], street], 'Lhota', center)).toEqual({ lat: 49.7, lon: 13.3, label: 'Lhota, Plzeň' });
+        // The name compares without case and accents.
+        expect(sameNamedTowns([village(1, 1, 'Lhota', 'x'), village(2, 2, 'LHOTA', 'y')], 'lhota')).toHaveLength(2);
+        // Without the tree's places the run does as before.
+        const fetchFn = geocoder({ Lhota: lhotas });
+        expect((await geocodePlaces(['Lhota'], { fetchFn, waitFn: async () => {} })).get('Lhota')).toMatchObject({ lat: 49.7 });
+    });
+
+    it('the centre: the locations a person decided on when there are three, else all with the run\'s finds; a median', () => {
+        const hand = (lat: number, lon: number): PlaceGeo => ({ lat, lon, origin: 'hand' });
+        const kept = (lat: number, lon: number): PlaceGeo => ({ lat, lon, keptAt: placeGeoHash({ lat, lon }) });
+        const bohemia: Record<string, PlaceGeo> = { a: { lat: 50, lon: 13 }, b: { lat: 50, lon: 13.2 }, c: { lat: 50.1, lon: 13.1 }, d: { lat: 50.2, lon: 13 } };
+        // Three decided by a person outweigh four from the geocoder.
+        expect(treeCenter({ ...bohemia, h1: hand(49.2, 16.6), h2: hand(49.3, 16.5), k: kept(49.4, 16.7) })).toEqual({ lat: 49.3, lon: 16.6 });
+        // A "Keep" of a location that moved since no longer counts as a person's.
+        const moved: PlaceGeo = { lat: 49.4, lon: 16.7, keptAt: placeGeoHash({ lat: 1, lon: 1 }) };
+        expect(treeCenter({ ...bohemia, h1: hand(49.2, 16.6), h2: hand(49.3, 16.5), k: moved })!.lat).toBeGreaterThan(49.9);
+        // A branch overseas does not drag the centre across the ocean.
+        const center = treeCenter({ ...bohemia, chicago: { lat: 41.9, lon: -87.6 } })!;
+        expect(center.lon).toBeGreaterThan(12.9);
+        expect(treeCenter({}, [{ lat: 1, lon: 2 }])).toEqual({ lat: 1, lon: 2 });
+        expect(treeCenter(undefined)).toBeNull();
     });
 });
 
