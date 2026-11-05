@@ -1468,6 +1468,46 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(chip('all')).toHaveAttribute('aria-checked', 'true');
     });
 
+    test('a lone task of its place has its own heading, open, not a row under the place above (1105)', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            grouped(b);
+            // Right after Archiv Vzorov's ten items: a browser-only archive's only task; and one task without a place.
+            const list = [...b.waiting];
+            list.splice(17, 0, { id: 'T0090', what: 'Kmenový list Josefa Horáka (ročník 1898)', kind: 'web', section: 'web',
+                group: { key: 'repo:R0002', name: 'Biskupský archiv Vzorov', kind: 'archive' }, url: 'https://archiv-vzorov.example/kmenove-listy', actions: ['answer'] });
+            list.push({ id: 'T0091', what: 'Rozmyslet další postup', kind: 'other', section: 'other' });
+            b.waiting = list.map((w, i) => ({ ...w, order: i }));
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        const todo = '.research-overview__phase[data-phase="todo"]';
+        const groups = ov.locator(`${todo} .research-overview__waiting-group`);
+        await expect(groups.locator('.research-overview__group-title'))
+            .toHaveText(['rodokmen.example', 'Archiv Vzorov', 'Biskupský archiv Vzorov', 'MěÚ Vzorov', 'Rodina', 'Other']);
+        await expect(groups.locator('.research-overview__group-span')).toHaveText(['7', '10', '1', '6', '7', '1']);
+        // A lone item's place is open (nothing hidden behind a click); the larger places stay folded.
+        await expect(groups.nth(2)).toHaveAttribute('aria-expanded', 'true');
+        await expect(groups.nth(5)).toHaveAttribute('aria-expanded', 'true');
+        await expect(groups.nth(1)).toHaveAttribute('aria-expanded', 'false');
+        const items = ov.locator(`${todo} .research-overview__waiting-item`);
+        await expect(items).toHaveCount(2);
+        // Each lone item stands right under its own place's heading, never bare under the place before it.
+        const headOf = (what: string) => ov.locator(`${todo} .research-overview__waiting-item`, { hasText: what }).evaluate(li =>
+            li.closest('ul')?.previousElementSibling?.querySelector('.research-overview__group-title')?.textContent ?? null);
+        expect(await headOf('Kmenový list Josefa Horáka')).toBe('Biskupský archiv Vzorov');
+        expect(await headOf('Rozmyslet další postup')).toBe('Other');
+
+        // Unfolding the place above keeps the lone task under its own heading.
+        await groups.nth(1).click();
+        await expect(items).toHaveCount(12);
+        expect(await headOf('Kmenový list Josefa Horáka')).toBe('Biskupský archiv Vzorov');
+        expect(await headOf('Uložit snímky matriky Vzorov 10')).toBe('Archiv Vzorov');
+        // Folded by hand, it stays folded.
+        await groups.nth(2).click();
+        await expect(groups.nth(2)).toHaveAttribute('aria-expanded', 'false');
+        await expect(ov.locator(`${todo} .research-overview__waiting-item`, { hasText: 'Kmenový list Josefa Horáka' })).toHaveCount(0);
+    });
+
     test('phone: the sheet has no ways into the research on the computer, only the website', async ({ page }) => {
         await follow(page, { width: 360, height: 780 }, grouped);
         const panel = page.locator('#live-panel');

@@ -106,6 +106,15 @@ export function waitingPhases<T extends LiveWaiting>(items: readonly T[], filter
     };
 }
 
+/**
+ * Whether a place's group in the overview is open until it is folded by hand:
+ * under a filter, with a new item, or a lone item (its heading is there to
+ * say its place, not to hide one row behind a click); else folded.
+ */
+export function waitingGroupOpenByDefault(items: readonly LiveWaiting[], filter: WaitingFilter, fresh: ReadonlySet<string>): boolean {
+    return items.length === 1 || filter !== 'all' || items.some(w => fresh.has(w.id));
+}
+
 /** The first `n` items to do, in order, and how many more there are (the small panel). */
 export function panelWaiting<T extends LiveWaiting>(items: readonly T[], n = PANEL_WAITING): { shown: T[]; more: number } {
     const todo = orderWaiting(todoWaiting(items));

@@ -301,7 +301,10 @@ test.describe('Waiting for images from a browser-only archive', () => {
             b.browser = { state: 'no-extension', url: STORE, archives: unpermitted.archives };
         });
         const ov = await openOverview(page);
-        await expect(groupHead(ov)).toHaveCount(0);
+        // Its place's heading (open, a lone item's) says no browser note: the item's detail does.
+        await expect(groupHead(ov)).toHaveCount(1);
+        await expect(groupHead(ov).locator('.research-overview__waiting-group')).toHaveAttribute('aria-expanded', 'true');
+        await expect(groupHead(ov).locator('.waiting-browser-note')).toHaveCount(0);
         const item = await openItem(ov, 'T0001');
         const note = item.locator('.waiting-browser-note');
         await expect(note.locator('.waiting-browser-note__text')).toHaveText('With the Claude in Chrome extension the agent would save the images itself.');

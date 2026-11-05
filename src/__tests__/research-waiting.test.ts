@@ -14,7 +14,7 @@ import {
 import { noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import {
     effectiveWaitingFilter, filterWaiting, groupWaiting, orderWaiting, panelWaiting, textWithLinks, todoWaiting, waitingActionDo,
-    waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask, waitingPhase, waitingPhases, waitingSection, waitingTaskActions,
+    waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask, waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions,
     waitingTodoCount,
 } from '../research-waiting.js';
 
@@ -198,6 +198,18 @@ describe('to do, sent, chips and groups', () => {
         // An item without a place joins "other".
         expect(groups[3].items.map(w => w.id)).toEqual(['T0003', 'T0007']);
         expect(groups[3].group?.name).toBe('Ostatní');
+    });
+
+    it('a lone item keeps its own group (its place\'s heading), open until folded by hand; larger groups folded', () => {
+        const groups = groupWaiting(todoWaiting(list));
+        const web = groups.find(g => g.key === 'host:badatelna.example')!;
+        expect(web.items.map(w => w.id)).toEqual(['T0001']);
+        expect(web.group?.name).toBe('badatelna.example');
+        expect(waitingGroupOpenByDefault(web.items, 'all', new Set())).toBe(true);
+        const archive = groups.find(g => g.key === 'repo:R0001')!;
+        expect(waitingGroupOpenByDefault(archive.items, 'all', new Set())).toBe(false);
+        expect(waitingGroupOpenByDefault(archive.items, 'images', new Set())).toBe(true);
+        expect(waitingGroupOpenByDefault(archive.items, 'all', new Set(['T0004']))).toBe(true);
     });
 
     it('splits the phases after the filter', () => {

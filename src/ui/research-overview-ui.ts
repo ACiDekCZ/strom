@@ -24,7 +24,7 @@ import { LiveChangeKind, LiveWaiting, ResearchActionMark, WAITING_SECTIONS, rese
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
-    waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
+    waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupMissing,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
@@ -674,13 +674,9 @@ export const researchOverviewMethods = uiModule({
             const wrap = el('div', 'research-overview__phase');
             wrap.dataset.phase = phase;
             for (const g of groups) {
-                // One item needs no heading.
-                if (g.items.length === 1) {
-                    wrap.appendChild(rows(g.items));
-                    continue;
-                }
+                // Every place has its heading, a lone item's too: a bare row would read as an item of the place above.
                 const key = `group:${phase}:${g.key}`;
-                const gOpen = view.open.get(key) ?? (filter !== 'all' || g.items.some(w => view.fresh.has(w.id)));
+                const gOpen = view.open.get(key) ?? waitingGroupOpenByDefault(g.items, filter, view.fresh);
                 wrap.appendChild(this.overviewWaitingGroupHead(s, g, phase, gOpen, () => {
                     view.open.set(key, !gOpen);
                     this.renderResearchOverview();
