@@ -1488,6 +1488,27 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
             expect(errs).toEqual([]);
         });
 
+        test('a toast on the map stands above the map\'s status bar ("without a position"), not over it (1105)', async ({ page }) => {
+            const errs = errors(page);
+            await stubTiles(page);
+            await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true });
+            await expect.poll(() => focusRefn(page)).toBe('P0012');
+            await seedMapPlaces(page);
+            await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+            const status = page.locator('#map-container .map-status');
+            await expect(status).toBeVisible();
+            await expect(page.locator('#live-panel.phone-strip')).toBeVisible();
+            await page.evaluate(() => window.Strom.UI.showToast('Fíškovi: 4 osoby, 1 rodina', 10000));
+            const toast = page.locator('body > .toast.show');
+            await expect(toast).toBeVisible();
+            await expect.poll(() => page.evaluate(() => {
+                const t = document.querySelector('body > .toast.show')!.getBoundingClientRect();
+                const s = document.querySelector('#map-container .map-status')!.getBoundingClientRect();
+                return Math.round(s.top - t.bottom);
+            })).toBeGreaterThanOrEqual(4);
+            expect(errs).toEqual([]);
+        });
+
         test('a place without a position: the notice and the map\'s status bar stand above the research strip, Find position a 44px target', async ({ page }) => {
             const errs = errors(page);
             await stubTiles(page);

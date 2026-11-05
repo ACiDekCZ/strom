@@ -18471,6 +18471,10 @@
             body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) > .toast,
             body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) > .undo-toast,
             body:has(> #live-panel.phone-strip:not([hidden])):has(> .evidence-pill ~ .live-follow-pill) .focus-toast { bottom: calc(var(--bottom-bar-h, 64px) + 128px + var(--live-strip-h, 0px)); }
+            /* The map: its status bar ("without a position", Look up, Places) and time bar stand on the strip; a toast rises above them (--map-floor) (1105). */
+            body[data-view-mode="map"]:has(> #live-panel.phone-strip:not([hidden])) > .toast,
+            body[data-view-mode="map"]:has(> #live-panel.phone-strip:not([hidden])) > .undo-toast,
+            body[data-view-mode="map"]:has(> #live-panel.phone-strip:not([hidden])) .focus-toast { bottom: max(calc(var(--bottom-bar-h, 64px) + 68px + var(--live-strip-h, 0px)), calc(var(--map-floor, 0px) + 12px)); }
         }
         /* Upright, a toast spans the phone's width: it stands above ↩ / ↪ where they stand on a pill. */
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
