@@ -8,11 +8,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildFanModel } from '../fan-chart.js';
 import { findFanAnchor } from '../fan-follow-anchor.js';
 import {
-    followTargets, sessionNumbers, changedTargets, fanCenter, pushTrail, trailOpacity, sessionTone, TrailEntry,
+    followTargets, sessionNumbers, changedTargets, fanCenter, startFocusBefore, pushTrail, trailOpacity, sessionTone, TrailEntry,
 } from '../live-follow-targets.js';
 import {
     getFollowView, setFollowView, getFanCenterSetting, setFanCenterSetting, getFanPerson, setFanPerson,
     fanPersonOtherTree, getFollowTrail, setFollowTrail, hasFollowPrefs, resetFollowPrefs, restoreFollowPrefs,
+    getFocusBefore, setFocusBefore,
 } from '../live-follow-prefs.js';
 import { StromData, Person, PersonId, Gender, Partnership, PartnershipId } from '../types.js';
 
@@ -67,6 +68,34 @@ describe('fanCenter', () => {
     it('a chosen person no longer in the tree falls back to the focus before', () => {
         expect(fanCenter({ ...base, setting: 'person', chosen: P('gone'), exists: id => id !== 'gone' })).toBe('petr');
         expect(fanCenter({ ...base, setting: 'person', chosen: null })).toBe('petr');
+    });
+});
+
+describe('startFocusBefore (1105)', () => {
+    const base = { focus: P('petr'), worked: new Set<PersonId>(), kept: null, defaultPerson: P('root'), exists: () => true };
+
+    it('the focus now when it is not the agent\'s person', () => {
+        expect(startFocusBefore(base)).toBe('petr');
+    });
+
+    it('the app opened again on the person the last jump focused: the focus kept for the tree, never the agent\'s person', () => {
+        expect(startFocusBefore({ ...base, focus: P('jan'), worked: new Set([P('jan')]), kept: P('petr') })).toBe('petr');
+        expect(startFocusBefore({ ...base, focus: P('jan'), worked: new Set([P('jan')]) })).toBe('root');
+        expect(startFocusBefore({ ...base, focus: P('jan'), worked: new Set([P('jan')]), kept: P('jan') })).toBe('root');
+    });
+
+    it('a kept person no longer in the tree: the default person', () => {
+        expect(startFocusBefore({ ...base, focus: null, kept: P('gone'), exists: id => id !== 'gone' })).toBe('root');
+    });
+
+    it('kept per tree', () => {
+        vi.stubGlobal('localStorage', memoryStorage());
+        setFocusBefore('t1', P('petr'));
+        setFocusBefore('t2', P('eva'));
+        expect(getFocusBefore('t1')).toBe('petr');
+        expect(getFocusBefore('t2')).toBe('eva');
+        setFocusBefore('t1', null);
+        expect(getFocusBefore('t1')).toBeNull();
     });
 });
 

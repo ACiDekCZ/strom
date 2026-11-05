@@ -94,6 +94,24 @@ export function fanCenter(o: {
         ?? ok(o.defaultPerson);
 }
 
+/**
+ * The focus before following when a run of following starts (spec 043 §2.1):
+ * the person focused now, unless following put them there (a person worked
+ * on now or the last jump's target: a tree opened again on the agent's
+ * person, Show in tree from Now) — then the one kept from before for this
+ * tree, else the tree's default person.
+ */
+export function startFocusBefore(o: {
+    focus: PersonId | null;
+    worked: ReadonlySet<PersonId>;
+    kept: PersonId | null;
+    defaultPerson: PersonId | null;
+    exists: (id: PersonId) => boolean;
+}): PersonId | null {
+    const own = (id: PersonId | null): PersonId | null => (id && o.exists(id) && !o.worked.has(id) ? id : null);
+    return own(o.focus) ?? own(o.kept) ?? o.defaultPerson;
+}
+
 // ------------------------------------------------------------ the session trail (memory only)
 
 export interface TrailEntry {

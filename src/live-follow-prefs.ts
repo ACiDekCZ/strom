@@ -19,6 +19,8 @@ export const FOLLOW_PREF_KEYS = {
     trail: 'strom-live-follow-trail',
     /** Motion when a live load brings changes (spec 055 §4): '0' off, missing or '1' on. */
     motion: 'strom-live-motion',
+    /** The focus before following, per tree (not a setting: what the fan centres on when following starts again). */
+    focusBeforePrefix: 'strom-live-follow-focus-before:',
 } as const;
 
 function read(key: string): string | null {
@@ -81,6 +83,20 @@ export function fanPersonOtherTree(treeId: string | null): string | null {
         if (id && id !== treeId) found = id;
     }
     return found;
+}
+
+/**
+ * The person focused before following, kept per tree over a reload: the tree
+ * opens again on the person the last jump focused, and the fan must not take
+ * that one for the user's own focus.
+ */
+export function getFocusBefore(treeId: string): PersonId | null {
+    const v = read(FOLLOW_PREF_KEYS.focusBeforePrefix + treeId);
+    return v ? v as PersonId : null;
+}
+
+export function setFocusBefore(treeId: string, personId: PersonId | null): void {
+    write(FOLLOW_PREF_KEYS.focusBeforePrefix + treeId, personId);
 }
 
 /** The session trail in the fan and on the map (on by default). */

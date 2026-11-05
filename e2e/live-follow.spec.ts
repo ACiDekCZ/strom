@@ -880,6 +880,70 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(page.locator('#live-follow-pill')).toHaveCount(0);
     });
 
+    test('the centre\'s rule (§2.5): the focus before following, the user\'s own focus replaces it, a pin outlives a switch, Release, a tap shows the original person, off drops the pin (1105)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const jan = await idOf(page, 'P0012'), eva = await idOf(page, 'P0013'), anna = await idOf(page, 'P0002');
+        const opened = await page.evaluate(() => window.Strom.UI.liveFollowFanCenter());
+        expect(opened).not.toBe(jan);
+        // The user focuses Eva in the family view: the fan centres on her from now on.
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), eva);
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        await page.locator('#live-follow-pill .live-follow-back').click();
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => centre(page)).toBe(eva);
+        // Pin Anna from her sector's menu: the fan re-centres there, the label names her.
+        const annaSector = sector(page, anna);
+        await annaSector.click({ button: 'right' });
+        await page.locator('.fan-menu [data-fan-menu="pin"]').click();
+        await expect.poll(() => centre(page)).toBe(anna);
+        await expect(page.locator('#fan-center-pin .fan-center-pin-name')).toHaveText('Anna Svobodová');
+        // Family and back: still Anna.
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('family'));
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => centre(page)).toBe(anna);
+        // Release: back to Eva.
+        await page.locator('#fan-center-pin .fan-center-pin-release').click();
+        await expect.poll(() => centre(page)).toBe(eva);
+        await expect(page.locator('#fan-center-pin')).toBeHidden();
+        // A tap on Josef: a while there, the original person pill leads back to Eva.
+        await page.locator('#fan-chart .fan-sector[data-fan-ahnentafel="2"]').click();
+        await expect(page.locator('#fan-origin-pill')).toHaveAttribute('aria-label', 'Original person: Eva Fíšková');
+        // Pin again, then following off: the pin is gone.
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), anna);
+        expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBe(anna);
+        await btn(page).click();
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');
+        expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBeNull();
+        await expect(page.locator('#fan-center-pin')).toBeHidden();
+    });
+
+    test('the app opened again on the person the jump focused: the fan centres on the focus from before following, not on the agent\'s person (1105)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const jan = await idOf(page, 'P0012');
+        const opened = await page.evaluate(() => window.Strom.UI.liveFollowFanCenter());
+        expect(opened).not.toBe(jan);
+        // The tree opens again on Jan, the person the last jump focused.
+        await page.reload();
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => centre(page)).toBe(opened);
+        // Jan is not drawn in a fan around his grandfather's line: the chip names him.
+        await expect(page.locator('.fan-follow-overlay .fan-follow-chip')).toContainText('Jan');
+        // Nothing kept for the tree: the tree's default person, never the agent's.
+        await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('strom-live-follow-focus-before:')) localStorage.removeItem(k); });
+        await page.reload();
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect.poll(() => centre(page)).not.toBe(jan);
+        await expect.poll(() => centre(page)).not.toBeNull();
+    });
+
     test('a person the fan does not draw (the centre\'s sister): a chip above the fan names her and the relation, no leader line across the rings; a click opens the family view there', async ({ page }) => {
         const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');

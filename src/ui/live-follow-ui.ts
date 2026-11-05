@@ -25,10 +25,10 @@ import { PersonId, ViewMode, LAST_FOCUSED } from '../types.js';
 import { uiModule } from './module.js';
 import { el, liveSession } from './research-ui.js';
 import { segmentArrowTarget } from './live-section-edit.js';
-import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson, getFollowTrail } from '../live-follow-prefs.js';
+import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson, getFollowTrail, getFocusBefore, setFocusBefore } from '../live-follow-prefs.js';
 import {
     FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
-    CardTrailEntry, pushCardTrail, sessionTone,
+    CardTrailEntry, pushCardTrail, sessionTone, startFocusBefore,
 } from '../live-follow-targets.js';
 import type { LiveDiff } from '../live-diff.js';
 import { isPhoneBar } from '../breakpoints.js';
@@ -131,6 +131,14 @@ function followTarget(): PersonId | null {
     return null;
 }
 
+/** The people following puts the focus on: those worked on now and the last jump's target. */
+function workedNow(): Set<PersonId> {
+    const s = liveSession();
+    const out = new Set<PersonId>(s ? followTargets(s.working, personOfRefn()).map(t => t.personId) : []);
+    if (lastTarget) out.add(lastTarget);
+    return out;
+}
+
 /** Following applies: on, live, on the research's own tree, not read-only. */
 function followActive(): boolean {
     const s = liveSession();
@@ -144,8 +152,14 @@ function followSession(): FollowSession | null {
         return null;
     }
     if (!session) {
+        const treeId = DataManager.getCurrentTreeId();
+        const focusBefore = startFocusBefore({
+            focus: TreeRenderer.getFocusPersonId(), worked: workedNow(), kept: treeId ? getFocusBefore(treeId) : null,
+            defaultPerson: defaultPerson(), exists: id => !!DataManager.getPerson(id),
+        });
+        if (treeId) setFocusBefore(treeId, focusBefore);
         session = {
-            view: getFollowView(), focusBefore: TreeRenderer.getFocusPersonId(), fanPinned: null,
+            view: getFollowView(), focusBefore, fanPinned: null,
             mapPaused: false, trail: [], cardTrail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
         };
         seenMode = TreeRenderer.getViewMode();
@@ -348,6 +362,8 @@ export const liveFollowMethods = uiModule({
         this.renderLiveFollowPill();
         this.renderLivePanel();
         this.refreshFollowMarks(new Set());
+        // Off drops the pin: the fan's "Centre: … · Release" label goes with it.
+        if (!on) TreeRenderer.getFanView()?.refreshPill();
         if (on) this.followJump(true);
     },
 
@@ -567,8 +583,13 @@ export const liveFollowMethods = uiModule({
         if (!fs || !lastTarget || TreeRenderer.getViewMode() !== 'family') return false;
         const focus = TreeRenderer.getFocusPersonId();
         if (!focus || focus === lastTarget) return false;
-        // The user's own focus: the fan centres on it from now on.
-        fs.focusBefore = focus;
+        // The user's own focus: the fan centres on it from now on — not a person worked on now
+        // (Show in tree from Now while the jump waits for its brake).
+        if (!workedNow().has(focus)) {
+            fs.focusBefore = focus;
+            const treeId = DataManager.getCurrentTreeId();
+            if (treeId) setFocusBefore(treeId, focus);
+        }
         if (pausedByUser) return false;
         this.pauseLiveFollow();
         return true;
