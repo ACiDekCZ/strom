@@ -262,11 +262,14 @@ test.describe('switching trees follows the research where an agent works', () =>
         expect(await liveTree(page)).toBeNull();
         expect(await page.evaluate(() => window.Strom.DataManager.isReadOnly())).toBe(false);
         await expect(panel.locator('.live-panel-follow')).toHaveCount(0);
-        // Follow live: followed now, the line says it.
+        // Follow live: followed now.
         await started.getByRole('button', { name: 'Follow live' }).click();
         await expect.poll(() => liveTree(page)).toBe(ids[N_TREE]);
         await expect(panel).not.toHaveClass(/idle/);
-        await expect(panel.locator('.live-follow-note')).toHaveText(`Now following “${N_TREE}”.`);
+        // The open tree followed, nothing else changes: no line, the name not lit (1105).
+        await expect(panel.locator('.live-panel-title')).toBeVisible();
+        await expect(panel.locator('.live-follow-note')).toHaveCount(0);
+        await expect(panel.locator('.live-panel-title.is-fresh')).toHaveCount(0);
         await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
     });
 

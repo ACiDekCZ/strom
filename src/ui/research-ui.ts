@@ -2390,7 +2390,10 @@ export const researchUiMethods = uiModule({
         return TreeManager.getTreeMetadata(treeId)?.name || fallback;
     },
 
-    /** Following began: the panel says which tree is followed now (and which stays), and lights its name. */
+    /**
+     * Following began: the panel says which tree is followed now and which stays (or is editable again), and
+     * lights its name; following the open tree with nothing else changing says nothing and lights nothing.
+     */
     noteLiveFollowStarted(s: LiveSession, from: { followed: TreeId | null; open: TreeId | null }): void {
         clearFollowNote();
         const ref = (id: TreeId | null): FollowTreeRef | null => {

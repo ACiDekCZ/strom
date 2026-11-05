@@ -75,10 +75,14 @@ describe('followNotice', () => {
     const novak = { id: 't1', name: 'Novákovi z Kolína' };
     const dvorak = { id: 't2', name: 'Dvořákovi (Morava)' };
 
-    it('says following began, naming the research tree open before', () => {
-        expect(followNotice({ tree: novak })).toEqual({ kind: 'started', tree: 'Novákovi z Kolína' });
+    it('says following began only when another research tree open before stays editable', () => {
         expect(followNotice({ tree: novak, prevOpen: dvorak })).toEqual({ kind: 'started', tree: 'Novákovi z Kolína', prev: 'Dvořákovi (Morava)' });
-        expect(followNotice({ tree: novak, prevOpen: novak })).toEqual({ kind: 'started', tree: 'Novákovi z Kolína' });
+    });
+
+    it('says nothing when the open tree is followed and nothing else changes (1105)', () => {
+        expect(followNotice({ tree: novak })).toBeNull();
+        expect(followNotice({ tree: novak, prevOpen: novak })).toBeNull();
+        expect(followNotice({ tree: novak, prevFollowed: null, prevOpen: null })).toBeNull();
     });
 
     it('says following moved from the tree followed before', () => {

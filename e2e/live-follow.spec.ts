@@ -1158,7 +1158,9 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         // The line (said anew, its time counted from now) under "Follow in", over the summary.
         await page.evaluate(() => {
             const ui = window.Strom.UI as unknown as { noteLiveFollowStarted(s: unknown, from: unknown): void; renderResearchOverview(): void };
-            ui.noteLiveFollowStarted({ treeId: window.Strom.DataManager.getCurrentTreeId(), name: 'Fíškovi' }, { followed: null, open: null });
+            // Following moved here from another tree (the open tree followed alone says nothing).
+            const other = window.Strom.TreeManager.createTree('Vlkovi');
+            ui.noteLiveFollowStarted({ treeId: window.Strom.DataManager.getCurrentTreeId(), name: 'Fíškovi' }, { followed: other, open: null });
             ui.renderResearchOverview();
         });
         const note = page.locator('.research-overview .live-follow-note');

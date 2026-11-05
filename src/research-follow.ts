@@ -61,13 +61,18 @@ export interface FollowNotice {
 /**
  * What the panel says once following began. `prevFollowed`: the tree
  * followed until now; `prevOpen`: the research tree open before (named only
- * when nothing was followed). Following the same tree again says nothing.
+ * when nothing was followed). Said only when it tells something new: following
+ * moved from another tree, or another research tree open before stays
+ * editable. Following the tree that is open (or the same tree again) says
+ * nothing: which tree is shown and that following was switched on are known
+ * (Milan 5 Nov 2026).
  */
 export function followNotice(o: { tree: FollowTreeRef; prevFollowed?: FollowTreeRef | null; prevOpen?: FollowTreeRef | null }): FollowNotice | null {
     const { tree, prevFollowed, prevOpen } = o;
     if (prevFollowed && prevFollowed.id === tree.id) return null;
     if (prevFollowed) return { kind: 'moved', tree: tree.name, prev: prevFollowed.name };
-    return { kind: 'started', tree: tree.name, ...(prevOpen && prevOpen.id !== tree.id ? { prev: prevOpen.name } : {}) };
+    if (!prevOpen || prevOpen.id === tree.id) return null;
+    return { kind: 'started', tree: tree.name, prev: prevOpen.name };
 }
 
 /** The research's name beside the tree's only when it says something else (compared trimmed, any case). */
