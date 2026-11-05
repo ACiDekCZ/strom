@@ -12,6 +12,7 @@
  * the first match in the text.
  */
 
+import { letterAtStart } from '../index-letter.js';
 import type { HelpBlock, HelpChapter, HelpInline, HelpLangData, HelpList, HelpTerm } from './help-types.js';
 
 /** A piece of text for display: `m` marks the part that matched the query. */
@@ -153,6 +154,33 @@ export function helpTermLabel(term: string): string {
     const cleaned = term.replace(/\s*\(([^()]*)\)/g, (whole, inner: string) =>
         /[a-z]\.[a-z]|[a-z][A-Z]|`/.test(inner) ? '' : whole);
     return cleaned.trim() || term;
+}
+
+/** A glossary label without what stands before its first letter ("↻ repeats" → "repeats"). */
+function helpTermLetterText(label: string): string {
+    const t = label.normalize('NFC');
+    const i = t.search(/\p{L}/u);
+    return i < 0 ? t : t.slice(i);
+}
+
+/**
+ * The letter a glossary term stands under: the label's first letter as an
+ * index of the language groups it (Ä with A in German, Č apart and "Ch" after
+ * H in Czech), so a term starting with a sign ("↻ repeats") files under its
+ * word. '' when the label has no letter at all.
+ */
+export function helpTermLetter(label: string, lang: string): string {
+    const t = helpTermLetterText(label);
+    return /^\p{L}/u.test(t) ? letterAtStart(t, lang) : '';
+}
+
+/** The glossary in its order with each term's letter (sorted by the label from its first letter on). */
+export function helpGlossaryRows<T>(terms: { term: T; label: string }[], lang: string): { term: T; label: string; letter: string }[] {
+    const collator = new Intl.Collator(lang);
+    return terms
+        .map(t => ({ ...t, key: helpTermLetterText(t.label), letter: helpTermLetter(t.label, lang) }))
+        .sort((a, b) => collator.compare(a.key, b.key) || collator.compare(a.label, b.label))
+        .map(({ term, label, letter }) => ({ term, label, letter }));
 }
 
 /** Build the index of one language (the chapters in the order of the documentation). */

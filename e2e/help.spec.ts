@@ -113,6 +113,17 @@ test.describe('How Strom works on a computer', () => {
         await expect(page.locator('.help-index .help-h1')).toHaveText('Glossary');
         await expect(page.locator('.help-letter').first()).toBeVisible();
         await expect(page.locator('.help-term').first().locator('.help-chip').first()).toBeVisible();
+        // Only letters in the letter bar; "↻ repeats" stands under R (1105).
+        for (const t of await page.locator('.help-letters .help-letter').allTextContents()) expect(t).toMatch(/^\p{Lu}$/u);
+        const underLetter = await page.locator('.help-term').evaluateAll(rows => {
+            let letter = '';
+            for (const r of rows as HTMLElement[]) {
+                letter = r.dataset.letter ?? letter;
+                if (r.querySelector('.help-term-label')?.textContent?.startsWith('↻')) return letter;
+            }
+            return null;
+        });
+        expect(underLetter).toBe('R');
     });
 
     test('an unknown number shows the contents with a note; Escape clears the field first, then closes the help alone', async ({ page }) => {

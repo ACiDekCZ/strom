@@ -23,7 +23,7 @@ import { APP_VERSION } from '../types.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { findRule, hasHelpData, helpDocInfo, helpLangOf, loadHelp } from '../help/help-data.js';
 import {
-    buildHelpIndex, helpTermLabel, searchHelp, type HelpSearchIndex, type HelpSeg,
+    buildHelpIndex, helpGlossaryRows, helpTermLabel, searchHelp, type HelpSearchIndex, type HelpSeg,
 } from '../help/help-search.js';
 import type {
     HelpBlock, HelpChapter, HelpHeading, HelpInline, HelpLang, HelpLangData, HelpList, HelpMeta, HelpTerm,
@@ -956,20 +956,16 @@ function drawIndex(w: HelpWindow, col: HTMLElement): void {
     head.appendChild(el('span', 'help-index-note', s.idxNote));
     box.appendChild(head);
 
-    const collator = new Intl.Collator(w.lang);
-    const terms = w.data.terms
-        .map(term => ({ term, label: helpTermLabel(term.term) }))
-        .sort((a, b) => collator.compare(a.label, b.label));
+    const terms = helpGlossaryRows(w.data.terms.map(term => ({ term, label: helpTermLabel(term.term) })), w.lang);
     const letters = el('div', 'help-letters');
     letters.setAttribute('role', 'navigation');
     letters.setAttribute('aria-label', s.letters);
     const rows = el('div', 'help-terms');
     const seen = new Set<string>();
-    for (const { term, label } of terms) {
-        const letter = label.charAt(0).toLocaleUpperCase(w.lang);
+    for (const { term, label, letter } of terms) {
         const row = el('div', 'help-term');
         row.dataset.term = term.id;
-        if (!seen.has(letter)) {
+        if (letter && !seen.has(letter)) {
             seen.add(letter);
             row.dataset.letter = letter;
             const chip = navButton('help-chip help-letter', letter, () => {

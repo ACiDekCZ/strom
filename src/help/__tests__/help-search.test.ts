@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { convertHelp } from '../help-convert.js';
 import {
-    buildHelpIndex, foldHelpText, helpHighlight, helpSnippet, helpTermLabel, isHelpNumber, searchHelp,
+    buildHelpIndex, foldHelpText, helpGlossaryRows, helpHighlight, helpSnippet, helpTermLabel, helpTermLetter,
+    isHelpNumber, searchHelp,
     HELP_RULE_LIMIT, HELP_TERM_LIMIT, type HelpSearchIndex,
 } from '../help-search.js';
 import type { HelpBundle, HelpLangData } from '../help-types.js';
@@ -61,6 +62,36 @@ describe('help search: folding', () => {
         expect(helpTermLabel('Waiting for a reply (terminal) · Awaiting a reply (app)'))
             .toBe('Waiting for a reply (terminal) · Awaiting a reply (app)');
         expect(helpTermLabel('Načtení rodokmenu (GEDCOM)')).toBe('Načtení rodokmenu (GEDCOM)');
+    });
+});
+
+describe('help search: the glossary letters', () => {
+    it('files a term under its first letter, a sign before it left out', () => {
+        expect(helpTermLetter('↻ repeats (pedigree collapse)', 'en')).toBe('R');
+        expect(helpTermLetter('↻ opakuje se (implex)', 'cs')).toBe('O');
+        expect(helpTermLetter('`strom read --until-found`', 'en')).toBe('S');
+        expect(helpTermLetter('čas', 'cs')).toBe('Č');
+        expect(helpTermLetter('chyba', 'cs')).toBe('Ch');
+        expect(helpTermLetter('Ähnlich', 'de')).toBe('A');
+        // A decomposed accent stays with its letter (NFC).
+        expect(helpTermLetter('c\u030Cas', 'cs')).toBe('Č');
+        expect(helpTermLetter('→ 42', 'en')).toBe('');
+    });
+
+    it('shows only letters in every language, the ↻ term under its letter and in its order', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const data = bundle.langs[lang];
+            const rows = helpGlossaryRows(data.terms.map(term => ({ term, label: helpTermLabel(term.term) })), lang);
+            const letters: string[] = [];
+            for (const r of rows) if (r.letter && !letters.includes(r.letter)) letters.push(r.letter);
+            for (const l of letters) expect(l, `${lang}: ${l}`).toMatch(/^(\p{Lu}|Ch)$/u);
+            // Every letter is one run of rows: the chip jumps to all its terms.
+            const runs = rows.map(r => r.letter).filter((l, i, a) => i === 0 || a[i - 1] !== l);
+            expect(runs, lang).toEqual(letters);
+            const i = rows.findIndex(r => r.label.startsWith('↻'));
+            expect(i, lang).toBeGreaterThanOrEqual(0);
+            expect(rows[i].letter, lang).toBe(helpTermLetter(rows[i].label.replace(/^↻\s*/, ''), lang));
+        }
     });
 });
 

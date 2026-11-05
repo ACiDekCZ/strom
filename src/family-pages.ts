@@ -15,6 +15,7 @@ import { Partnership, PartnershipId, Person, PersonId, StromData, personSourceId
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
 import { yearOf } from './dates.js';
+import { letterAtStart } from './index-letter.js';
 import { placeAliasMap, variantGroupKey } from './place-groups.js';
 import { placeKey } from './places.js';
 import { shownNameOrEmpty, shownNameParts } from './person-name.js';
@@ -216,9 +217,6 @@ export const TRANSCRIPTION_GAP = /\[[^\]]*\]/gu;
 /** The index key of the names that start with an unreadable place ("[?]a[?]har"): after the letters, before those without a surname (1102). */
 export const INDEX_UNCERTAIN = '?';
 
-/** Letters with a stroke that NFD does not split, and their base letter (1102). */
-const STROKED_BASE: Record<string, string> = { 'Ł': 'L', 'Ø': 'O', 'Đ': 'D' };
-
 /**
  * The letter an index groups a name under (§3.5): Czech "Ch" is a letter of its own
  * (after H); a letter the language does not tell from its base letter goes
@@ -232,14 +230,7 @@ export function indexLetter(text: string, lang: Language): string {
     if (!t0) return '';
     const t = t0.replace(/^[^\p{L}[]+/u, '');
     if (!t || t.startsWith('[')) return INDEX_UNCERTAIN;
-    if (lang === 'cs' && /^ch/i.test(t)) return 'Ch';
-    const ch = Array.from(t)[0].toLocaleUpperCase(lang);
-    // Ł, Ø, Đ carry their stroke in the letter itself (no NFD mark): their base letter
-    // in every language but Polish, where Ł is a letter of its own alphabet.
-    const stroked = STROKED_BASE[ch];
-    if (stroked) return lang === 'pl' && ch === 'Ł' ? ch : stroked;
-    const base = ch.normalize('NFD').replace(/\p{M}/gu, '');
-    return base && base !== ch && new Intl.Collator(lang, { sensitivity: 'base' }).compare(ch, base) === 0 ? base : ch;
+    return letterAtStart(t, lang);
 }
 
 /** A person's surname for the index: '' for one of unreadable places only ("[?]", 1102). */
