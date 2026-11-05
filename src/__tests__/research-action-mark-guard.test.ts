@@ -357,6 +357,7 @@ describe('the marks of research actions come from the one map', () => {
             'ui/context-menu.ts': 1, // a jump to the person in another tree (the menu's meta, not the research)
             'ui/history-card-ui.ts': 1, // a history event's source on the web (its <a target="_blank"> a line above)
             'ui/help-ui.ts': 1, // How Strom works: outLink, https only, target _blank (the web, the licence, the source)
+            'ui/fan-follow-ui.ts': 1, // the eight direction arrows of the fan's edge hint (toward a sector outside the view), no link
         };
         const found: Record<string, number> = {};
         for (const f of UI) {
