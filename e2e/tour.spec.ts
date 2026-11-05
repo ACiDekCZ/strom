@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
+import { getStringsForLang } from '../src/strings';
 
 /**
  * Interactive tour: offered once after the demo loads, walks through a few
@@ -33,9 +34,11 @@ test('tour is offered, walks through steps, and Escape ends it', async ({ page }
     }
     await expect(overlay).toBeHidden();
 
-    // Re-open from the About dialog and end it with Escape.
-    await page.evaluate(() => window.Strom.UI.showAboutDialog());
-    await page.getByRole('button', { name: 'Take a tour' }).click();
+    // Re-open from the contents of How Strom works and end it with Escape.
+    await page.locator('.actions-menu-btn').click();
+    await page.locator('#actions-help-row').click();
+    await page.locator('.help-tour-link').click();
+    await expect(page.locator('.help-overlay')).toHaveCount(0);
     await expect(overlay).toHaveClass(/active/);
     await page.keyboard.press('Escape');
     await expect(overlay).toBeHidden();
@@ -150,7 +153,7 @@ for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const
                 && g.bubble.top < g.hole.bottom && g.bubble.bottom > g.hole.top;
             expect(overlaps, `bubble covers the spotlight at ${g.step}`).toBe(false);
             if (i === total - 1) {
-                await expect(page.locator('#tour-text')).toHaveText(/^Anniversaries, export and settings are here\./);
+                await expect(page.locator('#tour-text')).toHaveText(/^Anniversaries, export, things for the family, settings and How Strom works are here\./);
                 // The spotlight sits on the menu that holds them (not on the tree switcher).
                 const target = LAST_TARGET[w];
                 if (target) {
@@ -189,4 +192,102 @@ test('the spotlight follows its card when the canvas is panned or zoomed', async
 
     await page.mouse.wheel(0, -300);
     await expect.poll(offset).toBe(0);
+});
+
+/**
+ * The tour starts from the contents of How Strom works (no longer from About):
+ * the help closes with its history, and every step shows its own text at a
+ * visible target of that step (none is skipped for a missing element).
+ */
+const STEP_TARGETS: Record<string, string[]> = {
+    step1: ['.person-card.focused', '.person-card'],
+    step2: ['.person-card.focused', '.person-card'],
+    step3: ['.toolbar-buttons button', '.bottom-bar-fab'],
+    step4: ['#focus-controls', '.toolbar .toolbar-focus'],
+    step5: ['#view-mode-segment', '.bottom-bar'],
+    step5Bar: ['#view-mode-segment', '.bottom-bar'],
+    step6: ['.zoom-controls'],
+    step6Touch: ['.zoom-controls'],
+    step7: ['#toolbar-search-picker', '#search-open-btn'],
+    step8: ['.actions-menu-btn', '.bottom-bar-more'],
+};
+
+async function walkTourFromHelp(page: import('@playwright/test').Page, keys: string[]): Promise<void> {
+    const overlay = page.locator('#tour-overlay');
+    await expect(overlay).toHaveClass(/active/);
+    const texts = getStringsForLang('en').tour as unknown as Record<string, string>;
+    await expect(page.locator('#tour-step')).toHaveText(`1/${keys.length}`);
+    for (let i = 0; i < keys.length; i++) {
+        await expect(page.locator('#tour-step')).toHaveText(`${i + 1}/${keys.length}`);
+        await expect(page.locator('#tour-text')).toHaveText(texts[keys[i]]);
+        await tourGeometry(page);
+        // The spotlight holds a visible element of this step.
+        await expect.poll(() => page.evaluate((sels) => {
+            const hole = document.getElementById('tour-hole')!.getBoundingClientRect();
+            return sels.some((sel) => Array.from(document.querySelectorAll(sel)).some((el) => {
+                const r = el.getBoundingClientRect();
+                return r.width >= 24 && Math.abs(r.left - hole.left) <= 20 && Math.abs(r.right - hole.right) <= 20
+                    && Math.abs(r.top - hole.top) <= 20 && Math.abs(r.bottom - hole.bottom) <= 20;
+            }));
+        }, STEP_TARGETS[keys[i]]), keys[i]).toBe(true);
+        await page.locator('#tour-next').click();
+    }
+    await expect(overlay).toBeHidden();
+}
+
+test.describe('the tour from How Strom works, computer', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the contents offer the app tour next to the glossary; it closes the help and shows all eight steps', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        // About no longer starts it: Close is its only button.
+        await page.locator('.app-logo').click();
+        await expect(page.locator('#about-modal .about-footer button')).toHaveText(['Close']);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#about-modal')).not.toHaveClass(/active/);
+
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-help-row').click();
+        const link = page.locator('.help-home-info .help-tour-link');
+        await expect(link).toHaveText('App tour');
+        // Right after the glossary link, the same kind of link.
+        expect(await page.locator('.help-home-info > *').evaluateAll((els) => els.map((el) => el.className)))
+            .toEqual(['help-linkbtn help-index-link', 'help-linkbtn help-tour-link', 'help-docver']);
+        await link.click();
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        // The help's history entry is gone with it.
+        await expect.poll(() => page.evaluate(() => (history.state as { stromHelp?: number } | null)?.stromHelp ?? 0)).toBe(0);
+        await walkTourFromHelp(page, ['step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8']);
+    });
+
+    test('over another window the help does not offer the tour', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => { window.Strom.UI.showSettingsDialog(); window.Strom.UI.showHelp(); });
+        await expect(page.locator('.help-home')).toBeVisible();
+        await expect(page.locator('.help-index-link')).toBeVisible();
+        await expect(page.locator('.help-tour-link')).toHaveCount(0);
+    });
+});
+
+test.describe('the tour from How Strom works, phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('More → How Strom works → App tour: every step but the hover-only card buttons, each at its target', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.locator('#bb-view-more').tap();
+        await page.locator('#sheet-help').tap();
+        await expect(page.locator('.help-modal')).toBeVisible();
+        const link = page.locator('.help-tour-link');
+        const box = (await link.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        await link.tap();
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        // Touch has no hover: the quick-add step is left out by design; the
+        // bottom bar holds only some of the views (its own wording).
+        await walkTourFromHelp(page, ['step1', 'step3', 'step4', 'step5Bar', 'step6Touch', 'step7', 'step8']);
+    });
 });

@@ -1,9 +1,11 @@
 /**
- * Interactive tour: a lightweight five-step guide over the demo tree (no
+ * Interactive tour: a lightweight eight-step guide over the demo tree (no
  * external library). Each step spotlights a real UI element with a dimmed
  * overlay "hole" and a bubble of text; the tour never clicks for the user, it
  * only points. Steps whose target isn't visible (e.g. the toolbar search on
- * mobile) are skipped, so it degrades gracefully across breakpoints.
+ * mobile) are skipped, so it degrades gracefully across breakpoints. It is
+ * offered once after the sample tree and started from the contents of How
+ * Strom works (src/ui/help-ui.ts).
  *
  * See src/ui/module.ts for the composition pattern.
  */
@@ -93,10 +95,9 @@ export const tourMethods = uiModule({
         setTimeout(() => el.remove(), 15000);
     },
 
-    /** Start the tour (from the offer or the About dialog). */
+    /** Start the tour (from the offer or the contents of How Strom works). */
     startTour(): void {
         this.closeMobileMenu?.();
-        document.getElementById('about-modal')?.classList.remove('active');
         // Keep only the steps whose target is currently visible (and skip
         // hover-affordance steps on touch devices).
         this.tourSteps = TOUR_STEPS.filter(s =>
@@ -149,8 +150,13 @@ export const tourMethods = uiModule({
         const textEl = document.getElementById('tour-text');
         const stepEl = document.getElementById('tour-step');
         const nextEl = document.getElementById('tour-next');
-        // Mouse wording (drag, wheel, 0 key) has a touch variant.
-        if (textEl) textEl.textContent = step.key === 'step6' && isCoarse() ? t.step6Touch : t[step.key];
+        // Mouse wording (drag, wheel, 0 key) has a touch variant; the bottom bar
+        // holds only some of the views (the rest are under More).
+        const onBar = step.key === 'step5' && !!firstVisible(step.selectors)?.matches('.bottom-bar');
+        if (textEl) {
+            textEl.textContent = step.key === 'step6' && isCoarse() ? t.step6Touch
+                : onBar ? t.step5Bar : t[step.key];
+        }
         if (stepEl) stepEl.textContent = `${this.tourIndex + 1}/${this.tourSteps.length}`;
         if (nextEl) nextEl.textContent = (this.tourIndex === this.tourSteps.length - 1) ? t.done : t.next;
         this.positionTourStep();

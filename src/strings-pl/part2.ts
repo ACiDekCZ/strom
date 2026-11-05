@@ -124,21 +124,22 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
 
     // Interactive tour
     tour: {
-        menu: 'Uruchom przewodnik',
+        menu: 'Przewodnik po aplikacji',
         offer: 'Krótki przewodnik pokazuje najważniejsze rzeczy.',
         offerYes: 'Uruchom przewodnik',
         next: 'Dalej',
         skip: 'Pomiń',
         done: 'Gotowe',
-        step1: 'To jest karta osoby. Kliknięcie otwiera akcje – edycję, dodawanie krewnych, ustawienie w centrum lub usunięcie.',
-        step2: 'Po najechaniu na kartę pojawiają się przyciski szybkiego dodawania: u góry rodzic, po prawej partner, u dołu dziecko. Uszko z łańcuszkiem na górnej krawędzi zarządza związkami i rodzicami; dodawanie rodzeństwa jest w menu karty.',
-        step3: 'Tutaj też można dodawać osoby: jedną albo całą rodzinę naraz kreatorem rodziny.',
-        step4: 'Panel centrum pokazuje, na kim skupia się drzewo. Strzałki zmieniają, ile pokoleń przodków i potomków jest widocznych.',
-        step5: 'Przełączanie widoków: Rodzina, Potomkowie, Oś czasu lub Wachlarz przodków.',
-        step6: 'Sterowanie powiększeniem i przesuwaniem – obszar drzewa można też przeciągać myszą i powiększać kółkiem; 0 przywraca widok domyślny.',
-        step6Touch: 'Sterowanie powiększeniem – obszar drzewa można też przesuwać palcem i powiększać, rozsuwając dwa palce.',
+        step1: 'To jest karta osoby. Kliknięcie otwiera menu osoby – ustawienie w centrum, edycję, dodawanie krewnych, ustalenie pokrewieństwa i więcej.',
+        step2: 'Po najechaniu na kartę pojawiają się przyciski szybkiego dodawania: u góry rodzic, po prawej partner, u dołu dziecko. Uszko „relacje” z łańcuszkiem na górnej krawędzi zarządza wszystkimi relacjami osoby; dodawanie rodzeństwa jest w menu karty.',
+        step3: 'Tutaj dodaje się nową osobę. Całą rodzinę naraz (rodziców, partnera, dzieci) dodaje menu karty: Dodaj → Rodzinę…',
+        step4: 'Panel centrum pokazuje, na kim skupia się drzewo i ile pokoleń przodków (↑) i potomków (↓) jest widocznych; − i + to zmieniają.',
+        step5: 'Przełączanie widoków: Rodzina, Potomkowie, Oś czasu, Wachlarz przodków lub Mapa.',
+        step5Bar: 'Przełączanie widoków: Rodzina, Potomkowie i Oś czasu są tutaj; Wachlarz przodków i Mapa są w Więcej.',
+        step6: 'Powiększanie, pomniejszanie, widok domyślny lub całe drzewo na ekranie – obszar drzewa można też przeciągać myszą i powiększać kółkiem; klawisz 0 przywraca widok domyślny.',
+        step6Touch: 'Powiększanie, pomniejszanie, widok domyślny lub całe drzewo na ekranie – obszar drzewa można też przesuwać palcem i powiększać, rozsuwając dwa palce.',
         step7: 'Wyszukiwanie dowolnej osoby po imieniu i nazwisku; lejek filtruje według nazwiska, miejsca, lat urodzenia, płci lub statusu żyjący/zmarły.',
-        step8: 'Tutaj są rocznice, eksport i ustawienia. Strom eksportuje drzewo jako jeden samodzielny plik, który można wysłać rodzinie.',
+        step8: 'Tutaj są rocznice, eksport, rzeczy dla rodziny, ustawienia i Jak działa Strom. Strom eksportuje drzewo jako jeden samodzielny plik, który można wysłać rodzinie.',
     },
 
     // Anniversaries + "on this day"

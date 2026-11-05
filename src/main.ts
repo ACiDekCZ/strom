@@ -15,7 +15,7 @@ import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
-import { setHelpResearchVersion } from './ui/help-ui.js';
+import { setHelpResearchVersion, setHelpTour } from './ui/help-ui.js';
 import { activeResearchId } from './ui/history-ui.js';
 import { initToolbarFit } from './ui/toolbar-fit.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
@@ -359,6 +359,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rid = activeResearchId();
         return rid ? UI.researchBridgeVersion(rid) : '';
     });
+    // Its contents start the app tour.
+    setHelpTour(() => UI.startTour());
     // The startup tree is in memory: editing may begin (see .app-loading).
     document.documentElement.classList.remove('app-loading');
     document.getElementById('storage-blocked-notice')?.remove();

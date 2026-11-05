@@ -94,10 +94,25 @@ let win: HelpWindow | null = null;
 let pendingPops = 0;
 let popListening = false;
 let researchVersionOf: () => string = () => '';
+let startTourOf: (() => void) | null = null;
 
 /** How the window learns the version of the research connected to the tree ('' = none). */
 export function setHelpResearchVersion(fn: () => string): void {
     researchVersionOf = fn;
+}
+
+/** How the contents start the app tour (the window closes first). */
+export function setHelpTour(fn: () => void): void {
+    startTourOf = fn;
+}
+
+/**
+ * Another window or sheet is open under the help (it was opened from a "?"
+ * there): the tour would point at controls covered by it, so it is not offered.
+ */
+function coveredByWindow(w: HelpWindow): boolean {
+    return Array.from(document.querySelectorAll('.modal-overlay.active, .bottom-sheet-overlay.active'))
+        .some(o => o !== w.overlay);
 }
 
 /** The help window is open. */
@@ -515,6 +530,13 @@ function drawHome(w: HelpWindow, col: HTMLElement): void {
 
     const info = el('div', 'help-home-info');
     info.appendChild(navButton('help-linkbtn help-index-link', s.index, () => openIndex(w)));
+    const tour = startTourOf;
+    if (tour && !coveredByWindow(w)) {
+        info.appendChild(navButton('help-linkbtn help-tour-link', strings.tour.menu, () => {
+            closeHelp();
+            tour();
+        }));
+    }
     const { describes } = helpDocInfo();
     info.appendChild(el('span', 'help-docver', s.docVer(plainVersion(describes.app), plainVersion(describes.research))));
     home.appendChild(info);
