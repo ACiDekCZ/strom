@@ -109,6 +109,52 @@ test('fan: a tap re-centres with an animation, the focus disc steps back (1031)'
     await expect(pill(page)).toBeHidden();
 });
 
+test('fan: re-centring is the same short cross-fade both ways, without any change of size (1105)', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openImplexFan(page);
+    // Note every animation of the swap: its keyframes and duration.
+    await page.evaluate(() => {
+        const w = window as unknown as { __anims: { transform: boolean; ms: number }[] };
+        w.__anims = [];
+        const orig = Element.prototype.animate;
+        Element.prototype.animate = function (this: Element, frames: Keyframe[] | PropertyIndexedKeyframes | null, opts?: number | KeyframeAnimationOptions) {
+            if (this.id === 'fan-chart' || this.classList.contains('fan-swap-old')) {
+                const list = Array.isArray(frames) ? frames : [];
+                w.__anims.push({ transform: list.some(f => 'transform' in f), ms: typeof opts === 'number' ? opts : Number(opts?.duration ?? 0) });
+            }
+            return orig.call(this, frames, opts);
+        };
+    });
+    const count = () => page.evaluate(() => (window as unknown as { __anims: unknown[] }).__anims.length);
+    const take = async () => {
+        // A tap is decided after a short wait: wait for the swap's two animations.
+        await expect.poll(count).toBeGreaterThanOrEqual(2);
+        await settled(page);
+        return page.evaluate(() => {
+            const w = window as unknown as { __anims: { transform: boolean; ms: number }[] };
+            const out = w.__anims; w.__anims = []; return out;
+        });
+    };
+    const fade = [{ transform: false, ms: 150 }, { transform: false, ms: 150 }];
+    // A sector, twice.
+    await tapKey(page, 'a2');
+    expect(await take()).toEqual(fade);
+    await expect(focusDisc(page)).toContainText('Emil');
+    await tapKey(page, 'a2');
+    expect(await take()).toEqual(fade);
+    await expect(focusDisc(page)).toContainText('Kaspar');
+    // Back.
+    await tapKey(page, 'f');
+    expect(await take()).toEqual(fade);
+    await expect(focusDisc(page).locator('title')).toContainText('Back: Oskar Velden');
+    // The original person.
+    await pill(page).click();
+    expect(await take()).toEqual(fade);
+    await expect(focusDisc(page)).toContainText('Oskar');
+    await expect(pill(page)).toBeHidden();
+});
+
 test('fan: the original person pill returns and clears the way back; leaving the view forgets it (1031)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openImplexFan(page);

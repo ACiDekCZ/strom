@@ -92,8 +92,11 @@ export interface FanMenuSpec {
 
 export type FanMenuItemId = 'recenter' | 'pin' | 'unpin' | 'detail' | 'page' | 'first' | 'add';
 
-/** §5.5: the re-centring swap. */
-const SWAP_MS = 320;
+/**
+ * The re-centring swap: a short cross-fade without any change of size, the
+ * same both ways (a sector, Back, the original person, pin and release).
+ */
+const SWAP_MS = 150;
 const FADE_MS = 200;
 const FLASH_MS = 1800;
 
@@ -108,8 +111,6 @@ function coarsePointer(): boolean {
 /** The pending swap: the old drawing (a copy over the stage) waits for the new focus. */
 interface Swap {
     layer: HTMLElement;
-    kind: 'zoom' | 'fade';
-    point: FanZoomPoint;
     timer: ReturnType<typeof setTimeout>;
 }
 
@@ -312,8 +313,8 @@ export class FanViewController {
     }
 
     /** A sector of a person: re-centre on them. */
-    protected onSectorTap(person: PersonId, _sector: Element, point: FanZoomPoint): void {
-        this.recenter(person, point);
+    protected onSectorTap(person: PersonId, _sector: Element, _point: FanZoomPoint): void {
+        this.recenter(person);
     }
 
     /** The focus disc: a step back when there is one. */
@@ -407,7 +408,7 @@ export class FanViewController {
         }
         if (this.busy()) return;
         this.originNext = id;
-        this.beginSwap('zoom', this.pointOfPerson(id) ?? undefined);
+        this.beginSwap();
         this.host.setFocus(id);
     }
 
@@ -429,9 +430,9 @@ export class FanViewController {
         return !!this.swap || this.swapAnims.length > 0;
     }
 
-    private recenter(id: PersonId, point?: FanZoomPoint): void {
+    private recenter(id: PersonId): void {
         if (this.busy() || id === this.host.focusId()) return;
-        this.beginSwap('zoom', point);
+        this.beginSwap();
         this.host.setFocus(id);
     }
 
@@ -440,7 +441,7 @@ export class FanViewController {
         if (!prev || this.busy()) return;
         this.history.pop();
         this.pendingNav = 'back';
-        this.beginSwap('fade');
+        this.beginSwap();
         this.host.setFocus(prev);
     }
 
@@ -448,7 +449,7 @@ export class FanViewController {
         const origin = this.origin;
         if (!origin || origin === this.host.focusId() || this.busy()) return;
         this.pendingNav = 'origin';
-        this.beginSwap('fade');
+        this.beginSwap();
         this.host.setFocus(origin);
     }
 
@@ -457,7 +458,7 @@ export class FanViewController {
      * (reduced motion: none — the fans swap at once). The copy carries no
      * sector attributes, classes or ids of the live drawing.
      */
-    private beginSwap(kind: Swap['kind'], point?: FanZoomPoint): void {
+    private beginSwap(): void {
         this.endSwap();
         const chart = this.chart;
         const svg = chart?.querySelector('svg.fan-svg');
@@ -467,10 +468,9 @@ export class FanViewController {
         layer.setAttribute('aria-hidden', 'true');
         layer.appendChild(this.ghostOf(svg as SVGSVGElement));
         chart.after(layer);
-        const { W, H } = this.zoom?.size() ?? { W: chart.clientWidth, H: chart.clientHeight };
         // Taps wait for the swap; a focus that never comes (refused) lets them go again.
         const timer = setTimeout(() => this.endSwap(), 1500);
-        this.swap = { layer, kind, point: point ?? { x: W / 2, y: H / 2 }, timer };
+        this.swap = { layer, timer };
     }
 
     /** A copy of the drawing for the swap: nothing in it answers to the live fan's selectors. */
@@ -501,19 +501,8 @@ export class FanViewController {
         this.swap = null;
         const { layer } = swap;
         const done = () => { layer.remove(); this.swapAnims = []; };
-        let out: Animation, inn: Animation;
-        if (swap.kind === 'zoom') {
-            const vb = this.zoom!.viewBox();
-            layer.style.transformOrigin = `${swap.point.x}px ${swap.point.y}px`;
-            chart.style.transformOrigin = `${(0 - vb.x) * vb.ppu}px ${(0 - vb.y) * vb.ppu}px`;
-            out = layer.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.5)' }],
-                { duration: SWAP_MS, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
-            inn = chart.animate([{ opacity: 0, transform: 'scale(0.85)' }, { opacity: 1, transform: 'scale(1)' }],
-                { duration: SWAP_MS, easing: 'cubic-bezier(.2,.7,.3,1)' });
-        } else {
-            out = layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE_MS, easing: 'ease', fill: 'forwards' });
-            inn = chart.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_MS, easing: 'ease' });
-        }
+        const out = layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_MS, easing: 'ease', fill: 'forwards' });
+        const inn = chart.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_MS, easing: 'ease' });
         this.swapAnims = [out, inn];
         out.onfinish = done;
         out.oncancel = done;
@@ -691,7 +680,7 @@ export class FanViewController {
             const p = this.host.data().persons[pid];
             if (!p) return null;
             const items: FanMenuSpec['items'] = [];
-            if (kind !== 'focus') items.push({ id: 'recenter', label: S.recenter, kbd: 'Enter', run: () => this.recenter(pid, this.sectorPoint(key) ?? undefined) });
+            if (kind !== 'focus') items.push({ id: 'recenter', label: S.recenter, kbd: 'Enter', run: () => this.recenter(pid) });
             items.push(...(this.host.menuExtra?.(pid, kind === 'focus') ?? []));
             items.push({ id: 'detail', label: S.personDetail, run: () => this.host.personDetail(pid) });
             items.push({ id: 'page', label: S.personPage, run: () => this.host.personPage(pid) });
@@ -994,7 +983,7 @@ export class FanViewController {
             if (this.busy()) return;
             const pid = el.getAttribute('data-fan-person') as PersonId | null;
             if (el.getAttribute('data-fan-kind') === 'focus') { this.goBack(); return; }
-            if (pid) { this.recenter(pid, this.sectorPoint(key) ?? undefined); return; }
+            if (pid) { this.recenter(pid); return; }
             if (el.getAttribute('data-fan-add')) this.openMenu(el, this.sectorPoint(key) ?? { x: 0, y: 0 }, coarsePointer() || isMobile() ? 'sheet' : 'context');
         }
     }
