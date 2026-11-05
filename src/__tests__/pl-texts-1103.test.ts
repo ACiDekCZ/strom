@@ -46,4 +46,13 @@ describe('the help mark of "Awaiting action" (1105)', () => {
         expect(pl.help.topics.waiting).toBe(pl.research.waiting);
         expect(pl.help.topics.waiting).toBe('Czeka na decyzję');
     });
+
+    it('every language names the section as the overview\'s heading does', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const t = getStringsForLang(lang);
+            expect(t.help.topics.waiting, lang).toBe(t.research.waiting);
+        }
+        expect(getStringsForLang('en').help.topics.waiting).toBe('Awaiting action');
+        expect(getStringsForLang('de').help.topics.waiting).toBe('Wartet auf Bearbeitung');
+    });
 });

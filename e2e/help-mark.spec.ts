@@ -112,7 +112,7 @@ test.describe('the help mark on a computer', () => {
 
         const waiting = rowOf(live, /Awaiting action/);
         await lastOnTheRight(waiting, waiting.locator('.help-mark'));
-        await expect(waiting.locator('.help-mark')).toHaveAttribute('title', 'How it works: Waiting to be handled (R6.4)');
+        await expect(waiting.locator('.help-mark')).toHaveAttribute('title', 'How it works: Awaiting action (R6.4)');
         await opensAt(page, waiting.locator('.help-mark'), 'R6.4', live);
 
         const queue = rowOf(live, 'Up next');
