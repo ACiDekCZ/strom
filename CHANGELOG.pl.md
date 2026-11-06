@@ -19,6 +19,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Sprzeczności**: wartość zapisana przez badanie z pozostałością etykiety źródła na początku (np. *@s:*) pokazuje się bez etykiety.
 - **Edycja podczas śledzenia badania**: podczas śledzenia badania menu osoby pokazuje wyszarzone *Edytuj* z powodem (*Podczas śledzenia badania tylko do odczytu.*) i tuż pod nim *Zakończ śledzenie*. Po zakończeniu śledzenia jednorazowe pytanie *Jak wysyłać zmiany do badania?* pojawia się od razu, a nie dopiero później.
 - **Czytniki ekranu**: zamknięte okna dialogowe i menu nie są już odczytywane, przyciski z ikonami (powiększenie, filtry, wstecz i dalej, obrót zdjęcia i inne) mają czytelną nazwę, dolny panel podczas wysuwania nie przyjmuje dotknięć, a przy ograniczonym ruchu menu, powiadomienia i dolny panel pojawiają się bez animacji.
+- **Sprawdzanie położenia miejsca**: miejsce oznaczone *Do sprawdzenia* w *Miejscach* oferuje obok *Zachowaj* i *Zmień* także *Pokaż na mapie*. Mała mapa pokazuje obecne położenie wśród pozostałych miejsc drzewa, zanim cokolwiek zostanie rozstrzygnięte, a ostrzeżenie przy położeniu daleko od miejsc rodziny albo w innym powiecie, niż podają zapisy, uzupełnia zdanie *Możliwe, że to inne miejsce o tej samej nazwie.*
 
 ## 3.24.0
 

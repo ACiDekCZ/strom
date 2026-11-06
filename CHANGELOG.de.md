@@ -17,6 +17,7 @@
 - **Widersprüche**: Ein Wert, den die Forschung mit einem übrig gebliebenen Quellen-Etikett davor geschrieben hat (etwa *@s:*), erscheint ohne das Etikett.
 - **Bearbeiten beim Verfolgen der Forschung**: Beim Verfolgen der Forschung zeigt das Personenmenü *Bearbeiten* ausgegraut mit dem Grund (*Beim Verfolgen der Forschung nur zum Lesen.*) und direkt darunter *Verfolgung beenden*. Nach dem Beenden des Verfolgens kommt die einmalige Frage *Wie sollen Änderungen an die Forschung gehen?* sofort statt erst später.
 - **Bildschirmleser**: Geschlossene Dialoge und Menüs werden nicht mehr vorgelesen, Symbolschaltflächen (Zoom, Filter, Zurück und Vor, Drehen von Fotos und weitere) haben einen lesbaren Namen, ein unteres Fenster nimmt beim Hereingleiten kein Tippen an, und mit reduzierter Bewegung erscheinen Menüs, Hinweise und das untere Fenster ohne Animation.
+- **Lage eines Orts prüfen**: Ein Ort mit der Markierung *Prüfen* in *Orte* bietet neben *Beibehalten* und *Ändern* auch *Auf der Karte zeigen*. Die kleine Karte zeigt die jetzige Lage zwischen den übrigen Orten des Stammbaums, noch bevor etwas entschieden ist, und die Warnung bei einer Lage weit weg von den Orten der Familie oder in einem anderen Bezirk, als die Einträge nennen, ergänzt der Satz *Möglicherweise ein anderer Ort gleichen Namens.*
 
 ## 3.24.0
 

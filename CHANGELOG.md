@@ -17,6 +17,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Conflicts**: a value the research wrote with a leftover source label in front of it (such as *@s:*) is shown without the label.
 - **Editing while following the research**: while the research is followed, the person menu shows *Edit* greyed with why (*Read-only while following the research.*) and *Stop following* right under it. Once following stops, the one-time question *How should changes go to the research?* comes right away instead of later.
 - **Screen readers**: closed dialogs and menus are no longer read out, icon buttons (zoom, filters, back and forward, photo rotation and others) have a readable name, a bottom sheet takes no taps while it slides in, and with reduced motion menus, notices and the bottom sheet appear without animation.
+- **Checking a place's location**: a place marked *Check* in *Places* offers *Show on the map* beside *Keep* and *Change*. The small map shows the location as it stands among the tree's other places before anything is decided, and the warning of a location far from the family's places, or in another district than the records name, adds *Possibly another place of the same name.*
 
 ## 3.24.0
 

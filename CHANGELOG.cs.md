@@ -17,6 +17,7 @@
 - **Rozpory**: hodnota, kterou výzkum zapsal se zbytkem štítku pramene na začátku (třeba *@s:*), se ukáže bez štítku.
 - **Úpravy během sledování výzkumu**: během sledování výzkumu ukáže menu osoby zašedlé *Upravit* s důvodem (*Během sledování výzkumu jen ke čtení.*) a hned pod ním *Ukončit sledování*. Po ukončení sledování přijde jednorázová otázka *Jak posílat úpravy do výzkumu?* hned, ne až později.
 - **Čtečky obrazovky**: zavřené dialogy a menu se už nečtou, ikonová tlačítka (zvětšení, filtry, zpět a vpřed, otočení fotky a další) mají čitelný název, spodní panel během vysouvání nebere ťuknutí a s omezeným pohybem se menu, oznámení a spodní panel ukážou bez animace.
+- **Ověření polohy místa**: místo se značkou *Ověřit* v *Místech* nabízí vedle *Ponechat* a *Změnit* i *Ukázat na mapě*. Malá mapa ukáže současnou polohu mezi ostatními místy stromu ještě před rozhodnutím a varování u polohy daleko od míst rodiny nebo v jiném okrese, než uvádějí záznamy, doplní věta *Možná jiné místo stejného jména.*
 
 ## 3.24.0
 
