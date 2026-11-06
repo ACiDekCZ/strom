@@ -2923,6 +2923,8 @@ const stringsEN = {
     // Context menu
     contextMenu: {
         edit: 'Edit',
+        // Following a research (read-only): the greyed "Edit" and why (063 U3).
+        editFollowing: 'Read-only while following the research.',
         view: 'View',
         focus: 'Focus',
         showDescendants: 'Show descendants',
@@ -10349,6 +10351,7 @@ const stringsCZ: StringsType = {
     // Context menu
     contextMenu: {
         edit: 'Upravit',
+        editFollowing: 'Během sledování výzkumu jen ke čtení.',
         view: 'Zobrazit',
         focus: 'Zaměřit',
         showDescendants: 'Zobrazit potomky',
@@ -17701,6 +17704,7 @@ const stringsDE: StringsType = {
     // Context menu
     contextMenu: {
         edit: 'Bearbeiten',
+        editFollowing: 'Beim Verfolgen der Forschung nur zum Lesen.',
         view: 'Anzeigen',
         focus: 'Fokussieren',
         showDescendants: 'Nachkommen anzeigen',

@@ -64,6 +64,10 @@ export interface PersonMenuAction {
     caption?: boolean;
     /** The row's label in a stronger weight (a ghost's "Unlink"). */
     strong?: boolean;
+    /** Greyed and not run, still read out (`aria-disabled`): "Edit" while following a research. */
+    disabled?: boolean;
+    /** Looks like a link (the "Stop following" under a greyed "Edit"). */
+    link?: boolean;
     /** Above everything else, also above the bottom sheet's tiles (a ghost's own block). */
     lead?: boolean;
     /** In the bottom sheet right under the tiles (where "Focus" is), not with the rows below "Add". */
@@ -289,6 +293,11 @@ export const contextMenuMethods = uiModule({
                 ...children,
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: c.view },
+                // Following a research: "Edit" greyed with why, and the way out (063 U3 A5).
+                ...(DataManager.isLiveFollowing() ? [
+                    { action: 'edit-following', label: c.edit, note: c.editFollowing, disabled: true, sheetTop: true },
+                    { action: 'live-stop', label: strings.research.stop, link: true, sheetTop: true },
+                ] : []),
                 ...readItems(false),
                 ...rodRows,
                 ...group([
@@ -473,6 +482,10 @@ export const contextMenuMethods = uiModule({
             case 'page':
                 this.showPersonPage(personId);
                 break;
+            // "Stop following" under the greyed "Edit" (063 U3 A5): the same stop as the live panel's.
+            case 'live-stop':
+                this.stopLiveFollow();
+                break;
             case 'focus':
                 // "Focus" always returns to the family view so the user is not
                 // stranded inside the descendants chart. Mode first (no render),
@@ -593,7 +606,10 @@ export const contextMenuMethods = uiModule({
             // NB: keep the class value out of the attribute as a whole variable —
             // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
             // confuses the self-export HTML cleaner's regex once minified.
-            const cls = a.danger ? 'context-menu-item danger' : a.strong ? 'context-menu-item is-strong' : 'context-menu-item';
+            const cls = a.danger ? 'context-menu-item danger' : a.strong ? 'context-menu-item is-strong'
+                : a.disabled ? 'context-menu-item is-disabled' : a.link ? 'context-menu-item is-link' : 'context-menu-item';
+            // Greyed: reached by the arrows and read out, nothing to run (no data-action).
+            if (a.disabled) return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
             return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
     },

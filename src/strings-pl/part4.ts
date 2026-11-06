@@ -123,6 +123,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
     // Context menu
     contextMenu: {
         edit: 'Edytuj',
+        editFollowing: 'Podczas śledzenia badania tylko do odczytu.',
         view: 'Wyświetl',
         focus: 'Ustaw w centrum',
         showDescendants: 'Pokaż potomków',

@@ -131,8 +131,11 @@ export const bottomSheetMethods = uiModule({
                 return `${divider}${header}<button type="button" class="bottom-sheet-item sheet-submenu-row" role="menuitem" aria-haspopup="menu" data-submenu="${index}" data-menu="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
             }
             // Keep the class out of the attribute (see context-menu.ts note).
-            const cls = a.danger ? 'bottom-sheet-item danger' : a.strong ? 'bottom-sheet-item is-strong' : 'bottom-sheet-item';
+            const cls = a.danger ? 'bottom-sheet-item danger' : a.strong ? 'bottom-sheet-item is-strong'
+                : a.disabled ? 'bottom-sheet-item is-disabled' : a.link ? 'bottom-sheet-item is-link' : 'bottom-sheet-item';
             const note = a.sheetNote ? `<p class="bottom-sheet-row-note">${esc(a.sheetNote)}</p>` : '';
+            // Greyed: read out, a tap runs nothing and the sheet stays (no data-action).
+            if (a.disabled) return `${divider}${header}<button type="button" class="${cls}" role="menuitem" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
             return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
         };
         const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`

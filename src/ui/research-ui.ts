@@ -3092,7 +3092,10 @@ export const researchUiMethods = uiModule({
         const s = live;
         if (!s) return;
         this.endLiveFollow(s, 'stopped');
-        if (!silent) this.showToast(strings.research.stopped);
+        if (silent) return;
+        this.showToast(strings.research.stopped);
+        // The one-time "How should changes go?" right away, not at a later click (063 U3 A7).
+        this.researchAskSendModeAfterFollow();
     },
 
     /** End a session: close the stream, lift read-only, keep the last state. */

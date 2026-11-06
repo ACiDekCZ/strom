@@ -1520,6 +1520,18 @@ export const researchSyncMethods = uiModule({
         await this.postResearchSend(treeId, { auto: true, keepalive: why === 'leave' });
     },
 
+    /**
+     * Following stopped by the user: "How should changes go to the research?" comes now, not at the next
+     * answer of the bridge (063 U3 A7) — under the same conditions (its research running and taking sends,
+     * asked once). The bridge not heard from yet: it is asked now, and its answer asks.
+     */
+    researchAskSendModeAfterFollow(): void {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return;
+        if (runtime.get(ctx.link.id)?.up && this.researchSyncCapable(ctx.link.id)) this.maybeAskResearchSendMode(ctx.treeId);
+        else void this.pollResearchBridge();
+    },
+
     /** After an answer from the bridge: what waited for it goes now (the research's version loads only when asked). */
     async researchAutoCheck(): Promise<void> {
         const ctx = this.researchSyncLink();

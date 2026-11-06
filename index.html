@@ -11901,6 +11901,18 @@
             padding: 8px 16px 4px; font-size: 13px; color: var(--ghost-text); cursor: default; user-select: none;
         }
         .context-menu-item.is-strong, .bottom-sheet-item.is-strong { font-weight: 500; }
+        /* Following a research (063 U3 A5): "Edit" greyed with why (read out, nothing runs) and
+           "Stop following" as a link right under it. */
+        :is(.context-menu-item, .bottom-sheet-item).is-disabled { cursor: default; color: var(--text-light); }
+        :is(.context-menu-item, .bottom-sheet-item).is-disabled .menu-item-label { min-width: 0; }
+        :is(.context-menu-item, .bottom-sheet-item).is-disabled .menu-item-note { max-width: 260px; overflow-wrap: anywhere; }
+        .context-menu-item.is-disabled:active, .bottom-sheet-item.is-disabled:active { background: none; }
+        @media (hover: hover) { .context-menu-item.is-disabled:hover { background: none; } }
+        :is(.context-menu-item, .bottom-sheet-item).is-link {
+            color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px;
+        }
+        .context-menu-item.is-disabled + .context-menu-item.is-link { padding-top: 2px; }
+        .bottom-sheet-item.is-disabled + .bottom-sheet-item.is-link { min-height: 44px; padding-top: 0; }
         .bottom-sheet-caption {
             display: flex; align-items: center; gap: 8px;
             padding: 6px 16px 2px; font-size: 14px; color: var(--ghost-text);
