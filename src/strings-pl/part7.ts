@@ -717,7 +717,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         bySettings: 'według ustawień agenta',
         refine: 'Dostosuj odczyt',
         reset: 'Domyślne',
-        changed: 'tylko dla tego odczytu',
+        changed: 'zostanie zapamiętane dla kolejnych odczytów',
         rowOnly: 'Czytelnik',
         row1: 'Czytelnik 1',
         row2: 'Czytelnik 2 (niezależny)',

@@ -145,7 +145,7 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect(d.locator('.read-refine-row[data-at="1"] .read-refine-noeffort')).toHaveText('no effort');
         await expect(d.locator('.read-refine-row[data-at="1"] .read-refine-note')).toHaveText('uses the Codex subscription or credit');
         await expect(d.locator('.read-refine-row[data-at="0"] .read-refine-note')).toHaveCount(0);
-        await expect(d.locator('.read-who-tag')).toHaveText('for this reading only');
+        await expect(d.locator('.read-who-tag')).toHaveText('kept for the next readings');
         // The focus stays on the select just changed.
         await expect(select(d, 1, 'agent')).toBeFocused();
 
@@ -175,6 +175,21 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await d2.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.posts.length).toBe(2);
         expect(b.read!.posts[1].with).toEqual([{}, { agent: 'claude', model: 'sonnet', effort: 'high' }]);
+    });
+
+    test('Default forgets the kept choice at once, even when the dialog closes without reading', async ({ page }) => {
+        await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'codex', model: 'gpt-5', effort: '' }] });
+        const d = await openWithPage(page);
+        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · Opus · high', 'Reader 2: Codex · GPT-5']);
+        await expect(d.locator('.read-who-tag')).toHaveText('kept for the next readings');
+        await d.locator('[data-act="reset-with"]').click();
+        await expect(d.locator('.read-who-from')).toHaveText('as set in the research');
+        expect(await page.evaluate(() => localStorage.getItem('read.with'))).toBeNull();
+        await d.locator('.read-footer [data-act="close"]').last().click();
+        await expect(d).toHaveCount(0);
+        const d2 = await openWithPage(page);
+        await expect(d2.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus · high']);
+        await expect(d2.locator('.read-who-from')).toHaveText('as set in the research');
     });
 
     test('one reader: "Read by"; switching to two keeps reader 1 and starts reader 2 as by default', async ({ page }) => {

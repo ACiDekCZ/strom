@@ -240,6 +240,11 @@ function storedWith(): unknown {
     try { return JSON.parse(localStorage.getItem(WITH_KEY) ?? 'null'); } catch { return null; }
 }
 
+/** The readers' choice kept forgotten ("Default" in the dialog: at once, read or not). */
+function forgetWith(): void {
+    try { localStorage.removeItem(WITH_KEY); } catch { /* nothing kept */ }
+}
+
 /** The readers' choice kept for the next reading; as by default it is forgotten. */
 function storeWith(choices: ReadChoices, chosen: readonly ReaderChoice[], readers: number): void {
     try {
@@ -2275,7 +2280,7 @@ export const readDocumentMethods = uiModule({
             case 'refine': if (st) { st.refineOpen = !st.refineOpen; this.readRedrawChoose(); } break;
             case 'reset-with': {
                 const choices = this.readChoicesNow();
-                if (st && choices) { st.with = [readerDefault(choices, 0), readerDefault(choices, 1)]; this.readRedrawChoose(); }
+                if (st && choices) { st.with = [readerDefault(choices, 0), readerDefault(choices, 1)]; forgetWith(); this.readRedrawChoose(); }
                 break;
             }
             case 'cancel': void this.cancelReadDocument(); break;
