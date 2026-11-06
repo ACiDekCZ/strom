@@ -18,6 +18,7 @@
 - **Úpravy během sledování výzkumu**: během sledování výzkumu ukáže menu osoby zašedlé *Upravit* s důvodem (*Během sledování výzkumu jen ke čtení.*) a hned pod ním *Ukončit sledování*. Po ukončení sledování přijde jednorázová otázka *Jak posílat úpravy do výzkumu?* hned, ne až později.
 - **Čtečky obrazovky**: zavřené dialogy a menu se už nečtou, ikonová tlačítka (zvětšení, filtry, zpět a vpřed, otočení fotky a další) mají čitelný název, spodní panel během vysouvání nebere ťuknutí a s omezeným pohybem se menu, oznámení a spodní panel ukážou bez animace.
 - **Ověření polohy místa**: místo se značkou *Ověřit* v *Místech* nabízí vedle *Ponechat* a *Změnit* i *Ukázat na mapě*. Malá mapa ukáže současnou polohu mezi ostatními místy stromu ještě před rozhodnutím a varování u polohy daleko od míst rodiny nebo v jiném okrese, než uvádějí záznamy, doplní věta *Možná jiné místo stejného jména.*
+- **Hledání místa na mapě**: výsledky *Najít na mapě* drží u stromu. Malá mapa se přizpůsobí výsledkům v zemi stromu a výsledky v jiné zemi stovky km daleko jsou na konci, sbalené pod *Další vzdálené (N)*, a na okraji mapy je naznačen jen jejich směr (klik otevře jejich řádek). Vzdálenost výsledku a *blízko ostatních míst* se měří k místům rodiny z toho místa, stejně jako při ověření, a krátká legenda vysvětlí šedá, zelená a okrová písmena. Varování o vzdálenosti nebo jiném okrese doplní věta *Možná jiné místo stejného jména.* a zbytek věty ze záznamu (třeba *v Lučici v*) se už nehledá ani neukazuje mezi *Hledáno i jako*.
 
 ## 3.24.0
 
