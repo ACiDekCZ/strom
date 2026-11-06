@@ -556,6 +556,12 @@ export const researchTreeSettingsMethods = uiModule({
             </fieldset>`;
         host.querySelectorAll<HTMLInputElement>('input[name="research-hypos-decide"]').forEach(input => {
             input.addEventListener('change', () => { if (input.checked) void this.setResearchHypothesesDecide(input.value as ResearchHypothesesDecide); });
+            // The choice as it stands taken again (no change): the answer to another choice under the row goes.
+            input.addEventListener('click', () => {
+                if (input.value !== value || !hypos.note || hypos.busy) return;
+                delete hypos.note;
+                this.renderResearchHypothesesRow();
+            });
             if (focused && input.value === focused) input.focus({ preventScroll: true });
         });
         host.querySelector<HTMLButtonElement>('#research-hypos-note-link')?.addEventListener('click', () => hypos.note?.link?.run());

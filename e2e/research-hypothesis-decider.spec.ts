@@ -167,6 +167,11 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
         await expect(choice(page, 'person')).toBeChecked();
         await confirm.click();
         expect(await links(page)).toContain(`strom-research://hypotheses?tree=${UUID}&decide=agent`);
+        // The user decides taken again (it stayed checked): the sentence goes, nothing written.
+        await option(page, 'person').click();
+        await expect(hyposNote(page)).toHaveCount(0);
+        await expect(choice(page, 'person')).toBeChecked();
+        expect(bridge.hypotheses!.writes).toEqual([{ decide: 'agent' }]);
         // Confirmed in the terminal: the next status says it.
         bridge.hypotheses!.decide = 'agent';
         await poll(page);
