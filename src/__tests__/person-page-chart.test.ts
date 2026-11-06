@@ -69,6 +69,57 @@ describe('lifeChartInput', () => {
         expect(input.marks.some(m => m.kind === 'divorce')).toBe(true);
     });
 
+    it("a dated divorce or separation ends the former partner's line there, faded out; a widowhood or an undated divorce does not (1106)", () => {
+        // A living woman divorced in 2015 from a living man: his line no longer runs on to today.
+        const living = (status: Partnership['status'], endDate?: string): StromData => {
+            const t = tree();
+            const jan = t.persons[JAN];
+            jan.birthDate = '1980-03-12';
+            delete jan.deathDate;
+            delete jan.deathPlace;
+            jan.events = [];
+            jan.childIds = [];
+            jan.partnerships = ['u1'] as PartnershipId[];
+            Object.assign(t.persons['roza' as PersonId], { birthDate: '1979-01-01', deathDate: undefined, isDeceased: false });
+            t.partnerships['u1' as PartnershipId] = u('u1', 'jan', 'roza', { startDate: '2009-05-01', status, ...(endDate ? { endDate } : {}) });
+            return t;
+        };
+        for (const status of ['divorced', 'separated'] as const) {
+            const input = lifeChartInput(living(status, '2015-03-01'), JAN, { now: NOW })!;
+            const line = input.lines.find(l => l.kind === 'partner')!;
+            expect(Math.floor(line.to!)).toBe(2015);
+            expect(line.fadeEnd).toBe(true);
+            expect(line.deathYear).toBeUndefined();
+            const html = lifeChartHtml(input, { lang: 'cs', mode: 'file' });
+            const a = html.match(/<a class="pp-ch-ln pp-ch-ln--partner[^"]*"[^>]*>.*?<\/a>/)![0];
+            expect(a).toContain('pp-ch-ln--fe');
+            expect(a).not.toContain('pp-ch-ln--on');
+            expect(a).not.toContain('→');
+            // The line spans 2009 to 2015 of the axis, not up to its right edge.
+            const left = Number(a.match(/left:([\d.]+)%/)![1]);
+            const width = Number(a.match(/width:([\d.]+)%/)![1]);
+            const at = (y: number): number => ((8 + ((y - input.start) / (input.end - input.start)) * (CHART_WIDE - 16)) / CHART_WIDE) * 100;
+            expect(left + width).toBeCloseTo(at(line.to!), 1);
+            expect(left + width).toBeLessThan(at(input.end) - 10);
+        }
+        // A divorce without a date: as before, the line goes on to today.
+        const undated = lifeChartInput(living('divorced'), JAN, { now: NOW })!.lines.find(l => l.kind === 'partner')!;
+        expect(undated.to).toBeUndefined();
+        expect(undated.fadeEnd).toBeUndefined();
+        // A marriage ended by the partner's death: the line ends at the death, unchanged.
+        const t = tree();
+        const roza = tree().persons['roza' as PersonId];
+        const widow = lifeChartInput(t, JAN, { now: NOW })!.lines.find(l => l.kind === 'partner' && l.name === 'Rozálie')!;
+        expect(widow.fadeEnd).toBeUndefined();
+        expect(widow.deathYear).toBe(Number(roza.deathDate!.slice(0, 4)));
+        // A partner who died before the date of the divorce: the death ends the line.
+        const early = living('divorced', '2015-03-01');
+        early.persons['roza' as PersonId].deathDate = '2012-01-01';
+        const died = lifeChartInput(early, JAN, { now: NOW })!.lines.find(l => l.kind === 'partner')!;
+        expect(died.fadeEnd).toBeUndefined();
+        expect(died.deathYear).toBe(2012);
+    });
+
     it('no marriage: one bar of the whole life', () => {
         const t = tree();
         t.persons[JAN].partnerships = [];

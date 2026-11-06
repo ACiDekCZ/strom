@@ -836,6 +836,42 @@ test.describe('person page 2: places of life and the life chart', () => {
         expect(fits).toBe(true);
     });
 
+    test('the life chart: the line of a former partner ends at the dated divorce, faded out, not at today (1106)', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(async () => {
+            const P = (id: string, firstName: string, lastName: string, gender: string, extra: Record<string, unknown> = {}) =>
+                ({ id, firstName, lastName, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...extra });
+            const persons = {
+                leo: P('leo', 'Leopoldine', 'Tvrdonova', 'female', { birthDate: '1980-04-04', partnerships: ['u1'] }),
+                rad: P('rad', 'Radomil', 'Quastek', 'male', { birthDate: '1978-02-02', partnerships: ['u1'] }),
+            };
+            const partnerships = {
+                u1: { id: 'u1', person1Id: 'rad', person2Id: 'leo', childIds: [], status: 'divorced', startDate: '2009-06-06', endDate: '2015-03-03' },
+            };
+            await window.Strom.DataManager.importAsNewTree({ persons, partnerships } as never, 'Tvrdonova');
+            await window.Strom.TreeRenderer.setFocus('leo' as never);
+            window.Strom.UI.showPersonPage('leo' as never);
+        });
+        const chart = win(page).locator('.pp-chart-set:visible');
+        const line = chart.locator('.pp-ch-ln--partner');
+        await expect(line).toHaveCount(1);
+        await line.scrollIntoViewIfNeeded();
+        await expect(line).toHaveClass(/pp-ch-ln--fe/);
+        await expect(line).not.toHaveClass(/pp-ch-ln--on/);
+        await expect(line.locator('.pp-ch-lb')).toHaveText('Radomil');
+        const geo = await chart.evaluate((c) => {
+            const r = (s: string) => c.querySelector(s)!.getBoundingClientRect();
+            const ln = c.querySelector('.pp-ch-ln--partner')!;
+            const mid = (s: string) => (r(s).left + r(s).right) / 2;
+            return { end: r('.pp-ch-ln--partner').right, today: mid('.pp-ch-end--today .pp-ch-tick'), divorce: mid('.pp-ch-mk--divorce .pp-ch-tick'),
+                bg: getComputedStyle(ln).backgroundImage };
+        });
+        // The line stops at the divorce mark, well short of "today", and fades out there.
+        expect(Math.abs(geo.end - geo.divorce)).toBeLessThan(4);
+        expect(geo.today - geo.end).toBeGreaterThan(100);
+        expect(geo.bg).toContain('linear-gradient');
+    });
+
     test('the map with its list, Children’s places and selection; a place in the header scrolls to it; the chart leads to the timeline', async ({ page }) => {
         await openApp(page);
         await seedTraveller(page);

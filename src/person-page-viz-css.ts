@@ -282,6 +282,9 @@ export const PERSON_PAGE_CHART_CSS = `
 /* An undated union: the partner's line starts at the first known point (the first common child), faded in. */
 .pp-ch-ln--fs.pp-ch-ln--partner { background: linear-gradient(90deg, transparent, var(--accent) 30%); }
 .pp-ch-ln--fs.pp-ch-ln--on.pp-ch-ln--partner { background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 80%, transparent); }
+/* A former partner: the line stops at the dated divorce or separation, faded out there. */
+.pp-ch-ln--fe.pp-ch-ln--partner { background: linear-gradient(90deg, var(--accent) 80%, transparent); }
+.pp-ch-ln--fs.pp-ch-ln--fe.pp-ch-ln--partner { background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 80%, transparent); }
 .pp-ch-lb { position: absolute; left: 0; bottom: 5px; color: var(--text-light); font-size: 10.5px; line-height: 12px; white-space: nowrap; }
 .pp-ch-lb--end { left: auto; right: 0; }
 .pp-ch-axis { height: 18px; border-top: 1px solid var(--divider); }
