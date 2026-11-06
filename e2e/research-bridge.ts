@@ -1105,6 +1105,8 @@ export interface FakeReading {
     expectSecs?: number;
     /** Who reads it (spec 059: agent, name, model, effort; absent: a reading before it). */
     who?: Record<string, unknown>[];
+    /** A source read again from its original (`POST sources/read`): the research's source (S…). */
+    source?: string;
 }
 
 /** The research's reading of documents, state by state (set `state`/`done` on a reading, then poll). */
@@ -1137,6 +1139,10 @@ export interface FakeRead {
     historyReply?: { status: number; body: unknown };
     /** Every `GET /reads`. */
     historyAsks?: number;
+    /** Every `POST /sources/read` body (with `read.source` in `features`). */
+    sourcePosts?: Record<string, unknown>[];
+    /** `POST /sources/read` turned down: this status and body. */
+    sourceReply?: { status: number; body: unknown };
 }
 
 export const READ_ID = 'D20261019153012-a1b2';
@@ -1680,6 +1686,19 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             rd.historyAsks = (rd.historyAsks ?? 0) + 1;
             if (rd.historyReply) return json(rd.historyReply.status, rd.historyReply.body);
             return json(200, { reads: rd.history });
+        }
+        // A source read again from its original (spec 059): a reading like any other, with its source.
+        if (rd && method === 'POST' && /\/sources\/read$/.test(url.pathname) && b.features?.includes('read.source')) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            (rd.sourcePosts ??= []).push(body);
+            if (rd.sourceReply) return json(rd.sourceReply.status, rd.sourceReply.body);
+            const now = new Date().toISOString();
+            const source = String(body.source ?? '');
+            const reading: FakeReading = { id: rd.nextId, state: 'queued', version: 1, at: now, since: now, files: 1, pages: 1,
+                readers: body.readers === 2 ? 2 : 1, done: 0, entries: 0, name: source, person: '', from: 'app', source };
+            rd.reads = [reading, ...rd.reads.filter(r => r.id !== reading.id)];
+            return json(202, { read: reading.id, state: 'queued', version: 1, source });
         }
         const readPath = /\/read(?:\/([^/]+)(?:\/(cancel|again))?)?$/.exec(url.pathname);
         if (rd && readPath) {
