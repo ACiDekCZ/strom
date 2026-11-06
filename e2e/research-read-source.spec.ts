@@ -23,12 +23,13 @@ const RUNNING_ID = 'D20261106101500-c3d4';
 const excerpt = (clip: string): string[] => ['1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', `2 _STROM_CLIP ${clip}`, `2 FILE ${PNG}`];
 
 /** The research's file: S0001 with its original in the research (`orig`) and its excerpts. */
-function ged(opts: { orig?: boolean; clips?: string[] } = {}): string {
+function ged(opts: { orig?: boolean; clips?: string[]; text?: string } = {}): string {
     const extra = [...(opts.orig === false ? [] : ['1 _STROM_ORIG Y']), ...(opts.clips ?? [CLIP]).flatMap(excerpt)];
-    return researchGed().replace('1 _STROM_READ research', ['1 _STROM_READ research', ...extra].join('\n'));
+    const file = researchGed().replace('1 _STROM_READ research', ['1 _STROM_READ research', ...extra].join('\n'));
+    return opts.text ? file.replace('1 TEXT Josef Fíšek a Anna', `1 TEXT ${opts.text}`) : file;
 }
 
-async function setup(page: Page, opts: { orig?: boolean; clips?: string[]; features?: string[]; ready?: boolean; links?: string[] } = {}): Promise<FakeBridge> {
+async function setup(page: Page, opts: { orig?: boolean; clips?: string[]; features?: string[]; ready?: boolean; links?: string[]; text?: string } = {}): Promise<FakeBridge> {
     const file = ged(opts);
     const b = await fakeBridge(page, {
         treeGed: file,
@@ -196,8 +197,8 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-result-who')).toContainText('New reading:');
         const note = d.locator('.read-source-note');
         await expect(note).toHaveAttribute('data-agree', 'same');
-        await expect(note).toContainText('The source’s transcript has not changed.');
-        await expect(note).toContainText('The match supports today’s transcript.');
+        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; the match supports today’s transcript.');
+        await expect(note.locator('.read-source-vs')).toHaveCount(0);
         await expect(note.locator('.read-source-variants')).toHaveCount(0);
         // Nothing to propose to the tree, nothing to read anew here: Close alone, the main button.
         await expect(d.locator('.read-footer button')).toHaveText(['Close']);
@@ -244,9 +245,111 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-frame')).toHaveCount(1);
         await expect(d.locator('.read-scan-var')).toHaveCount(2);
         // The new reading is reader 1's text; reader 2 (independent) differed in the places marked amber.
-        await expect(d.locator('.read-source-variants .read-legend-who-line').last()).toContainText('New reading · Claude Code');
+        await expect(d.locator('.read-source-sides')).toHaveText(/^left the transcript so far, right the new reading · Claude Code/);
         await expect(d.locator('.read-transcript .read-variant')).toHaveCount(2);
-        await expect(d.locator('.read-source-second')).toHaveText(/^Reader 2 \(independent, Codex · GPT-6-Astra.*\) differed in 2 places – marked in the transcript\.$/);
+        await expect(d.locator('.read-source-readers .read-source-head')).toHaveText('Between the readers');
+        await expect(d.locator('.read-source-second')).toHaveText('The readers differ in 2 places, marked in the transcript below.');
+    });
+
+    /**
+     * A register entry as one line of cells (like S1383): the places the readers differ in, found in the line
+     * however the research composed them (cells, `[?]`, `[...]`, "Joan.Martinus"), each one row of the legend
+     * with its words around it; the data places apart, a duplicate of a text place dropped.
+     */
+    const CELLS = '1774 | 12 | Martinus Zvonařík [?] | Joan.Martinus Klabouch | Catharina [...] filia | Adalbertus Mlhovský | Zálesíčko';
+    const OLD_TRANSCRIPT = '1774 | 12 | Martinus Zvonářík | Joan. Martinus Klabouch | Catharina Mlhovská | Zálesíčky';
+    const CELL_VARIANTS = [
+        { at: '12 Martinus', other: '12 Martin' },
+        { at: 'Zvonařík[?]', other: 'Zvonářík' },
+        { at: 'Joan. Martinus', other: 'Joannes Martinus' },
+        { at: 'Catharina […]', other: 'Catharina Mlhovská' },
+        { at: 'Mlhovský', other: 'Mlhovsky' },
+        { at: 'Zálesíčko', other: 'Zálesíčky' },
+        { at: '', other: 'sponsus' },
+        { field: 'p1.surname', at: 'Zvonařík', other: 'Zvonářík' },
+        { field: 'BIRT.date', at: '12 Martii 1774', other: '13 Martii 1774' },
+    ];
+    async function readCells(page: Page, variants: Record<string, string>[]): Promise<Locator> {
+        const b = await setup(page, { text: OLD_TRANSCRIPT });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
+        b.read!.reads[0].state = 'done';
+        b.read!.results.set(READ_ID, {
+            ...result({ id: 'S0001', agree: 'differ', task: 'T1369', variants: [
+                { at: 'Zvonářík', other: 'Zvonařík [?]' }, { at: 'Zálesíčky', other: 'Zálesíčko' }, { at: 'Klabouch', other: '' },
+            ] }),
+            readers: { asked: 2, ran: 2, agree: 'differ', who: [
+                { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
+                { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', modelName: 'GPT-6-Astra', effort: 'xhigh', ran: true },
+            ] },
+            entries: [{ id: 'e1', page: 1, transcript: CELLS, variants, events: [], relations: [],
+                persons: [{ ref: 'p1', role: 'child', given: 'Martinus', surname: 'Zvonařík', written: 'Martinus Zvonařík' }] }],
+        });
+        await poll(page);
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        return d;
+    }
+
+    test('a register line of cells (S1383): every place marked in the text and one row of the legend; the data apart; both parts of the note', async ({ page }) => {
+        const d = await readCells(page, CELL_VARIANTS);
+        const legend = d.locator('.read-legend:not(.read-source-variants)');
+        const rows = legend.locator('.read-legend-place');
+        // 7 places in the text (6 in the line, 1 only at reader 2) and 1 in the data (the other one repeats a text place).
+        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(6);
+        await expect(rows).toHaveCount(8);
+        await expect(legend.locator('.read-legend-place--data')).toHaveCount(1);
+        await expect(legend.locator('.read-legend-differ')).toHaveText('/The readers differ in 8 places: Claude Code · Opus, Codex · GPT-6-Astra');
+        await expect(d.locator('.read-source-second')).toHaveText('The readers differ in 8 places, marked in the transcript below.');
+        // The rows: the words around each place, its marks as in the text; nothing said with an ellipsis or empty quotes.
+        await expect(rows.nth(0)).toHaveText(/^1774 \| 12 Martinus\/12 Martin Zvonařík/);
+        await expect(rows.nth(0).locator('.read-place-ctx').last()).toHaveClass(/is-cut-after/);
+        await expect(rows.nth(6)).toHaveText('missing/sponsus');
+        const text = await legend.evaluate(el => el.textContent ?? '');
+        expect(text).not.toContain('…');
+        expect(text).not.toMatch(/“\s*”|""/);
+        expect(text.split('Codex').length).toBe(2);
+        const unsure = legend.locator('.read-legend-place mark.uncertain').first();
+        await expect(unsure).toBeVisible();
+        expect(await unsure.evaluate(el => getComputedStyle(el).borderBottomStyle)).toBe('dotted');
+        await expect(legend.locator('.read-legend-place .read-variant .illegible')).toHaveCount(1);
+        await expect(legend.locator('.read-legend-place .read-place-missing')).toHaveText(['missing']);
+        await expect(legend.locator('.read-legend-sub')).toHaveText('Only in the data (the text matches):');
+        await expect(legend.locator('.read-legend-place--data')).toHaveText('Birth · date: 12 Martii 1774/13 Martii 1774');
+        await expect(legend.locator('.read-places-more')).toHaveCount(0);
+        // The titles say an illegible spot and a missing side in words.
+        const titles = await legend.locator('.read-legend-place .read-variant').evaluateAll(els => els.map(el => el.getAttribute('title') ?? ''));
+        expect(titles.join('\n')).not.toMatch(/“\s*”|…/);
+        expect(titles.join('\n')).toContain('“Catharina illegible”');
+        expect(titles.join('\n')).toContain('“missing”');
+        // The note: one sentence, the part against the transcript so far, the part between the readers.
+        const note = d.locator('.read-source-note');
+        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; task T1369 in the research decides where they differ.');
+        await expect(d.locator('[data-pill="source"]')).toHaveText('3 places differ from the transcript');
+        const vs = note.locator('.read-source-vs .read-legend-place');
+        await expect(vs).toHaveCount(3);
+        await expect(note.locator('.read-source-vs .read-source-head')).toHaveText('Compared with the transcript so far · 3 places');
+        await expect(vs.nth(0)).toContainText('Martinus Zvonářík→Zvonařík');
+        await expect(vs.nth(2).locator('.read-place-missing')).toHaveText('missing');
+        await expect(note.locator('.read-source-readers')).toHaveCount(1);
+        expect(await note.evaluate(el => el.textContent ?? '')).not.toContain('…');
+    });
+
+    test('more than 8 places: the first 8 and "and N more", unfolded in place', async ({ page }) => {
+        const d = await readCells(page, [...CELL_VARIANTS,
+            { at: '1774', other: '1775' }, { at: 'filia', other: 'filius' }, { at: 'Adalbertus', other: 'Vojtěch' }]);
+        const legend = d.locator('.read-legend:not(.read-source-variants)');
+        const rows = legend.locator('.read-legend-place');
+        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(9);
+        await expect(rows).toHaveCount(11);
+        await expect(legend.locator('.read-legend-place:visible')).toHaveCount(8);
+        const more = legend.locator('.read-places-more');
+        await expect(more).toHaveText('and 3 more');
+        await more.click();
+        await expect(legend.locator('.read-legend-place:visible')).toHaveCount(11);
+        await expect(more).toHaveCount(0);
+        await expect(legend.locator('.read-legend-sub')).toBeVisible();
     });
 
     test('reader 2 read as reader 1, or no reader 2: nothing said of it', async ({ page }) => {
@@ -269,13 +372,18 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('[data-pill="source"]')).toHaveClass(/is-warn/);
         const note = d.locator('.read-source-note');
         await expect(note).toHaveAttribute('data-agree', 'differ');
-        await expect(note).toContainText('The difference is a task to check in the research, not a conflict; nothing is overwritten.');
-        await expect(note.locator('.read-source-task')).toHaveText('Task T0042');
-        const lines = note.locator('.read-legend-who-line');
-        await expect(lines).toHaveText(['Today’s transcript of the source: “Anna”', 'New reading · Claude Code · Opus: “Anně”']);
-        await expect(lines.locator('.read-variant-mk')).toHaveCount(2);
-        expect(await lines.first().locator('.read-variant-mk').getAttribute('data-mk')).toBe('transcript');
-        expect(await lines.last().locator('.read-variant-mk').getAttribute('data-mk')).toBe('new');
+        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; task T0042 in the research decides where they differ.');
+        // One part against the transcript so far: the count and the sides once, then the place with the words before it.
+        await expect(note.locator('.read-source-vs .read-source-head')).toHaveText('Compared with the transcript so far · 1 place');
+        await expect(note.locator('.read-source-sides')).toHaveText('left the transcript so far, right the new reading · Claude Code · Opus');
+        const rows = note.locator('.read-source-vs .read-legend-place');
+        await expect(rows).toHaveText(['Josef Fíšek a Anna→Anně']);
+        const mks = rows.locator('.read-variant-mk');
+        await expect(mks).toHaveCount(2);
+        expect(await mks.first().getAttribute('data-mk')).toBe('transcript');
+        expect(await mks.last().getAttribute('data-mk')).toBe('new');
+        // One reader ran: nothing between the readers.
+        await expect(note.locator('.read-source-readers')).toHaveCount(0);
         // The task opens in the research's terminal: its mark, not the AI badge.
         const open = d.locator('[data-act="open-task"]');
         await expect(open).toHaveText(/Open the task/);

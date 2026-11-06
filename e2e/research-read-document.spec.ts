@@ -565,8 +565,9 @@ test.describe('Read a document: the result', () => {
         await expect(variant.locator('.read-variant-b')).toHaveText('Nowak');
         await expect(tr).toContainText('|');
         const legend = d.locator('.read-legend li');
-        await expect(legend).toHaveCount(3);
-        await expect(legend.nth(1)).toContainText('the first reads “Novák”, the second “Nowak”');
+        await expect(legend).toHaveCount(4);
+        await expect(legend.nth(1)).toHaveText('/The readers differ in 1 place');
+        await expect(legend.nth(2).locator('.read-variant')).toHaveAttribute('title', /the first reads “Novák”, the second “Nowak”/);
         // Translation (Latin ≠ English), with its marks.
         const translation = d.locator('.read-section--translation');
         await expect(translation).toContainText('legitimate son');

@@ -330,8 +330,18 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect(variant.locator('.read-variant-mk')).toHaveCount(2);
         expect(await variant.locator('.read-variant-mk').nth(1).evaluate(el => getComputedStyle(el, '::after').content)).toBe('"2"');
         await expect(variant).toHaveAttribute('title', 'Reader 1 · Claude Code · Opus 4: “Novák”\nReader 2 · Codex · GPT-5: “Nowak”');
-        await expect(d.locator('.read-legend-differ')).toHaveText('/The readers differ here:');
-        await expect(d.locator('.read-legend-who-line')).toHaveText(['Reader 1 · Claude Code · Opus 4: “Novák”', 'Reader 2 · Codex · GPT-5: “Nowak”']);
+        // The legend says the count and the readers once, then one row per place with its words around it.
+        const differ = d.locator('.read-legend-differ');
+        await expect(differ).toContainText('The readers differ in 1 place: ');
+        await expect(differ).toContainText('Claude Code · Opus 4');
+        await expect(differ).toContainText('Codex · GPT-5');
+        await expect(differ.locator('.read-variant-mk')).toHaveCount(2);
+        const place = d.locator('.read-legend-place');
+        await expect(place).toHaveCount(1);
+        await expect(place).toContainText('Antonii');
+        await expect(place).toContainText('Lhota');
+        await expect(place.locator('.read-variant')).toHaveAttribute('title', 'Reader 1 · Claude Code · Opus 4: “Novák”\nReader 2 · Codex · GPT-5: “Nowak”');
+        await expect(place.locator('.read-variant-mk')).toHaveCount(2);
     });
 
     test('as by default: no readers in the progress; one line for both readers in the result', async ({ page }) => {
@@ -378,7 +388,8 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect(d.locator('.read-result-who')).toHaveCount(0);
         await expect(d.locator('.read-variant-mk')).toHaveCount(0);
         await expect(d.locator('.read-legend-who')).toHaveCount(0);
-        await expect(d.locator('.read-legend')).toContainText('readers differ: the first reads “Novák”, the second “Nowak”');
+        await expect(d.locator('.read-legend-differ')).toHaveText('/The readers differ in 1 place');
+        await expect(d.locator('.read-legend-place .read-variant')).toHaveAttribute('title', /readers differ: the first reads “Novák”, the second “Nowak”/);
     });
 
     test('a research without the choice (no read.choose): no who reads, nothing sent as `with`', async ({ page }) => {

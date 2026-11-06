@@ -28,7 +28,7 @@ export interface ParsedTranscript {
     marks: { uncertain: boolean; illegible: boolean; variant: boolean };
 }
 
-const MARK_RE = /\[\?\]|\[(?:\.{2,}|…)\]|\s*\|\s*/g;
+const MARK_RE = /\[\?\]|\[\s*(?:\.{2,}|…)\s*\]|\s*\|\s*/g;
 
 /** The transcription's lines (empty lines dropped). */
 export function transcriptLines(text: string): string[] {
@@ -74,38 +74,168 @@ export function parseMarks(text: string): MarkSeg[] {
     return out;
 }
 
+const ILLEGIBLE_AT = /\[\s*(?:\.{2,}|…)\s*\]/y;
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u;
+const COMBINING = /\p{M}/u;
+
+/** A text folded for finding a span in it: no white space nor `|`, NFC, every illegible mark as `[...]`; each folded unit's span in the text. */
+interface Folded { s: string; from: number[]; to: number[] }
+
+function fold(text: string): Folded {
+    let s = '';
+    const from: number[] = [];
+    const to: number[] = [];
+    const put = (unit: string, a: number, b: number): void => {
+        for (let k = 0; k < unit.length; k++) { from.push(a); to.push(b); }
+        s += unit;
+    };
+    let i = 0;
+    while (i < text.length) {
+        ILLEGIBLE_AT.lastIndex = i;
+        const m = ILLEGIBLE_AT.exec(text);
+        if (m) { put('[...]', i, i + m[0].length); i += m[0].length; continue; }
+        const ch = text[i];
+        if (/\s/.test(ch) || ch === '|') { i++; continue; }
+        // A character with its combining marks (decomposed diacritics) is one unit.
+        let j = i + ((text.codePointAt(i) ?? 0) > 0xffff ? 2 : 1);
+        while (j < text.length && COMBINING.test(text[j])) j++;
+        put(text.slice(i, j).normalize('NFC'), i, j);
+        i = j;
+    }
+    return { s, from, to };
+}
+
 /**
- * One line with the readers' differing spans (`at` found literally in the line, each variant once). Only the
+ * Where `at` (a reader's span, as the research composes it from words) lies in `line`: compared without
+ * white space and `|` (cells, line marks), NFC, `[…]` / `[ ... ]` as `[...]`; both ends on a word boundary of the
+ * line (no "an" inside "Johann"); the first occurrence not overlapping `taken`. The span in the line, or null.
+ */
+export function locateSpan(line: string, at: string, taken: readonly (readonly [number, number])[] = []): [number, number] | null {
+    const needle = fold(at).s;
+    if (!needle) return null;
+    const hay = fold(line);
+    let from = 0;
+    for (;;) {
+        const k = hay.s.indexOf(needle, from);
+        if (k < 0) return null;
+        from = k + 1;
+        const start = hay.from[k];
+        const end = hay.to[k + needle.length - 1];
+        if (start > 0 && WORD_CHAR.test(line[start]) && WORD_CHAR.test(line[start - 1])) continue;
+        if (end < line.length && WORD_CHAR.test(line[end - 1]) && WORD_CHAR.test(line[end])) continue;
+        if (taken.some(([a, b]) => start < b && end > a)) continue;
+        return [start, end];
+    }
+}
+
+/** A variant of the transcription's text (not of a person's field, a role or an event). */
+export function textVariant(v: ReadVariant): boolean {
+    return !v.field || v.field === 'transcript';
+}
+
+/** The text variants of `variants` found in `line` (each variant once over the lines: `used`), by index. */
+function placeInLine(line: string, variants: readonly ReadVariant[], used: Set<number>): { start: number; end: number; i: number }[] {
+    const hits: { start: number; end: number; i: number }[] = [];
+    variants.forEach((v, i) => {
+        if (used.has(i) || !v.at || !textVariant(v)) return;
+        const span = locateSpan(line, v.at, hits.map(h => [h.start, h.end] as const));
+        if (!span) return;
+        hits.push({ start: span[0], end: span[1], i });
+        used.add(i);
+    });
+    return hits.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * One line with the readers' differing spans (`at` found in the line by `locateSpan`, each variant once). Only the
  * transcription's own variants: a role, a name field or an event ("p2.role" father / witness) is no text of the
  * line ("other" would light up in "mother"); those show at the person.
  */
 export function parseTranscriptLine(line: string, variants: readonly ReadVariant[], used: Set<number>): TranscriptLine {
-    const hits: { start: number; end: number; v: ReadVariant }[] = [];
-    variants.forEach((v, i) => {
-        if (used.has(i) || !v.at || (v.field && v.field !== 'transcript')) return;
-        let from = 0;
-        while (from <= line.length) {
-            const start = line.indexOf(v.at, from);
-            if (start < 0) return;
-            const end = start + v.at.length;
-            if (!hits.some(h => start < h.end && end > h.start)) {
-                hits.push({ start, end, v });
-                used.add(i);
-                return;
-            }
-            from = start + 1;
-        }
-    });
-    hits.sort((a, b) => a.start - b.start);
+    const hits = placeInLine(line, variants, used);
     const segs: LineSeg[] = [];
     let at = 0;
     for (const h of hits) {
+        const v = variants[h.i];
         segs.push(...parseMarks(line.slice(at, h.start)));
-        segs.push({ t: 'variant', a: parseMarks(h.v.at), b: parseMarks(h.v.other), at: h.v.at, other: h.v.other });
+        segs.push({ t: 'variant', a: parseMarks(v.at), b: parseMarks(v.other), at: v.at, other: v.other });
         at = h.end;
     }
     segs.push(...parseMarks(line.slice(at)));
     return { text: line, segs, variant: hits.length > 0 };
+}
+
+/** A place where the readers differ: its variant, and for one in the text its line and span there. */
+export interface ReadPlace {
+    v: ReadVariant;
+    /** The transcription line it lies on; -1: not placed in the text (no `at`, not found, or a data place). */
+    line: number;
+    span: [number, number] | null;
+}
+
+/** An entry's places: those of the text (placed first, in reading order) and those only in the data. */
+export interface ReaderPlaces { text: ReadPlace[]; data: ReadPlace[] }
+
+/** A span without its marks, for comparing (case and white space aside). */
+function markless(text: string): string {
+    return text.normalize('NFC').replace(/\[\?\]/g, '').replace(/\[\s*(?:\.{2,}|…)\s*\]/g, '…').replace(/\s*\|\s*/g, ' ')
+        .replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+}
+
+/**
+ * The places an entry's readers differ in: the transcription's variants (placed in the text where `at` is
+ * found, the same way the text marks them), then the variants of the data (a person's name, a date, a place,
+ * a person or the entry read by one reader only). A data variant that says the same as a place of the text
+ * is that place (left out).
+ */
+export function readerPlaces(entry: Pick<ReadEntry, 'transcript' | 'variants'>): ReaderPlaces {
+    const used = new Set<number>();
+    const placed: ReadPlace[] = [];
+    transcriptLines(entry.transcript).forEach((line, j) => {
+        for (const h of placeInLine(line, entry.variants, used)) placed.push({ v: entry.variants[h.i], line: j, span: [h.start, h.end] });
+    });
+    const text = [...placed, ...entry.variants.filter((v, i) => textVariant(v) && !used.has(i)).map(v => ({ v, line: -1, span: null }))];
+    const seen = new Set(text.map(p => `${markless(p.v.at)}\u0000${markless(p.v.other)}`));
+    const data = entry.variants.filter(v => !textVariant(v) && !seen.has(`${markless(v.at)}\u0000${markless(v.other)}`))
+        .map(v => ({ v, line: -1, span: null }));
+    return { text, data };
+}
+
+/** The number of places an entry's readers differ in (as its legend lists them). */
+export function placeCount(entry: Pick<ReadEntry, 'transcript' | 'variants'>): number {
+    const p = readerPlaces(entry);
+    return p.text.length + p.data.length;
+}
+
+/** The number of places the readers differ in over all entries. */
+export function placeCountAll(entries: readonly Pick<ReadEntry, 'transcript' | 'variants'>[]): number {
+    return entries.reduce((sum, e) => sum + placeCount(e), 0);
+}
+
+/** The words around a span of a text: up to `words` before and after (`|` and a lone `[?]` not counted), and whether the text goes on. */
+export interface PlaceContext { before: string; after: string; moreBefore: boolean; moreAfter: boolean }
+
+export function placeContext(text: string, start: number, end: number, words = 3): PlaceContext {
+    const counts = (tok: string): boolean => tok !== '|' && tok !== '[?]';
+    const rest = (s: string): boolean => s.replace(/[\s|]/g, '') !== '';
+    const head = text.slice(0, start);
+    const tail = text.slice(end);
+    let from = 0;
+    let n = 0;
+    const before = [...head.matchAll(/\S+/g)];
+    for (let k = before.length - 1; k >= 0; k--) {
+        if (counts(before[k][0]) && ++n === words) { from = before[k].index ?? 0; break; }
+    }
+    let to = tail.length;
+    n = 0;
+    for (const m of tail.matchAll(/\S+/g)) {
+        if (counts(m[0]) && ++n === words) { to = (m.index ?? 0) + m[0].length; break; }
+    }
+    const flat = (s: string): string => s.replace(/\s+/g, ' ');
+    return {
+        before: flat(head.slice(from)), after: flat(tail.slice(0, to)),
+        moreBefore: rest(head.slice(0, from)), moreAfter: rest(tail.slice(to)),
+    };
 }
 
 function hasMark(segs: readonly LineSeg[], kind: 'uncertain' | 'illegible'): boolean {
@@ -131,8 +261,10 @@ export function parseBlock(text: string): MarkSeg[][] {
     return transcriptLines(text).map(parseMarks);
 }
 
-/** Line `i` of `n` within an entry's region, split evenly (until the research gives lines). */
-export function lineRegion(region: ReadRegion, i: number, n: number): ReadRegion {
+/** Line `i` of `n` within an entry's region: the line's own region when given (`lines`), else the region split evenly. */
+export function lineRegion(region: ReadRegion, i: number, n: number, lines?: readonly ReadRegion[]): ReadRegion {
+    const own = lines?.[i];
+    if (own) return own;
     const [x, y, w, h] = region;
     const count = Math.max(1, n);
     const k = Math.min(count - 1, Math.max(0, i));
@@ -210,11 +342,6 @@ export function resultSections(res: Pick<ReadResult, 'doc' | 'context'>, entry: 
 export function entryName(entry: Pick<ReadEntry, 'persons'>): string {
     const p = entry.persons.find(x => x.role !== 'mentioned' && (x.given || x.surname)) ?? entry.persons.find(x => x.given || x.surname);
     return p ? [p.given, p.surname].filter(Boolean).join(' ') : '';
-}
-
-/** The number of places the readers differ in (all entries). */
-export function variantCount(entries: readonly Pick<ReadEntry, 'variants'>[]): number {
-    return entries.reduce((sum, e) => sum + e.variants.length, 0);
 }
 
 /** Where a page sheet goes so that a region fills a box: its size and offset in the box (px). */

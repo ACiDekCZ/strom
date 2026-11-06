@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     parseMarks, parseTranscript, transcriptLines, lineRegion, lineAt, defaultEntryIndex, canPropose,
-    sameLanguage, resultSections, glossFlavor, entryName, variantCount, cropLayout,
+    sameLanguage, resultSections, glossFlavor, entryName, cropLayout, locateSpan, readerPlaces, placeCount, placeCountAll, placeContext,
 } from '../read-result.js';
 import type { ReadEntry, ReadPerson, ReadResult } from '../research-read.js';
 
@@ -87,11 +87,118 @@ describe('transcription', () => {
     });
 
     it('counts the places that differ over all entries', () => {
-        expect(variantCount([entry({ variants: [{ at: 'a', other: 'b' }] }), entry({ variants: [{ at: 'c', other: 'd' }, { at: 'e', other: 'f' }] })])).toBe(3);
+        expect(placeCountAll([
+            entry({ transcript: 'a x', variants: [{ at: 'a', other: 'b' }] }),
+            entry({ transcript: 'c e', variants: [{ at: 'c', other: 'd' }, { at: 'e', other: 'f' }] }),
+        ])).toBe(3);
+    });
+});
+
+describe('a reader\'s span in a line', () => {
+    const at = (line: string, span: string, taken: [number, number][] = []): string | null => {
+        const r = locateSpan(line, span, taken);
+        return r ? line.slice(r[0], r[1]) : null;
+    };
+
+    it('finds a span over the cells of a one-line entry ( | )', () => {
+        const line = 'Qem Zul | 8. | Tavrinus | Zorvak | Quintel | vort.';
+        expect(at(line, 'Zorvak Quintel')).toBe('Zorvak | Quintel');
+        expect(at(line, '8. Tavrinus')).toBe('8. | Tavrinus');
+        // A cell mark without spaces ("Gotth|ardä") folds to one word.
+        expect(at('Anton | Gotth|ardä[?] | Krebs', 'Gotth ardä[?]')).toBe('Gotth|ardä[?]');
+    });
+
+    it('takes [?] with or without the space before it', () => {
+        expect(at('Josephi Druvin [?] In-', 'Druvin[?]')).toBe('Druvin [?]');
+        expect(at('Josephi Druvin[?] In-', 'Druvin [?]')).toBe('Druvin[?]');
+    });
+
+    it('takes every illegible mark as [...]', () => {
+        expect(at('Mariae […] Lhota', 'Mariae [...]')).toBe('Mariae […]');
+        expect(at('Mariae [ ... ] Lhota', '[...] Lhota')).toBe('[ ... ] Lhota');
+        expect(at('Mariae [....] Lhota', 'Mariae [...]')).toBe('Mariae [....]');
+    });
+
+    it('finds "Brel. Plosk" in "Brel.Plosk" and back', () => {
+        expect(at('Hon: Brel.Plosk kelvo', 'Brel. Plosk')).toBe('Brel.Plosk');
+        expect(at('Hon: Brel. Plosk kelvo', 'Brel.Plosk')).toBe('Brel. Plosk');
+    });
+
+    it('starts and ends on a word boundary', () => {
+        expect(at('Johann Anton', 'an')).toBeNull();
+        expect(at('Johann an der Mühle', 'an')).toBe('an');
+        expect(at('Novákova', 'Novák')).toBeNull();
+    });
+
+    it('gives the second place the second occurrence', () => {
+        const line = 'Anna filia | Anna mater';
+        const first = locateSpan(line, 'Anna')!;
+        expect(first).toEqual([0, 4]);
+        expect(locateSpan(line, 'Anna', [first])).toEqual([13, 17]);
+        const parsed = parseTranscript(entry({ transcript: line, variants: [{ at: 'Anna', other: 'Anny' }, { at: 'Anna', other: 'Hana' }] }));
+        expect(parsed.lines[0].segs.filter(s => s.t === 'variant')).toHaveLength(2);
+    });
+
+    it('compares NFD with NFC', () => {
+        const nfd = 'Wawr\u030Cine Nova\u0301k';
+        expect(at(nfd, 'Wawřine')).toBe('Wawr\u030Cine');
+        expect(at('Wawřine Novák', 'Novák'.normalize('NFD'))).toBe('Novák');
+    });
+
+    it('finds nothing for an empty span', () => {
+        expect(locateSpan('Anna', '')).toBeNull();
+        expect(locateSpan('Anna', ' | ')).toBeNull();
+    });
+});
+
+describe('the places of an entry', () => {
+    const line = 'Qem Zul | 8. | Zorvak | Quintel | Hon: Mervak | Brel.Plosk | Druvin [?] | yxtalli [...] | Wexol';
+    const e = entry({
+        transcript: line,
+        variants: [
+            { field: 'transcript', at: 'Zorvak Quintel', other: '[...] Zorvic [...] Quintelor' },
+            { field: 'transcript', at: 'Hon: Mervak', other: 'Brel: Plosk' },
+            { field: 'transcript', at: '', other: 'i[?]' },
+            { field: 'transcript', at: 'Brel. Plosk', other: 'Fendra' },
+            { field: 'transcript', at: 'gone word', other: 'other' },
+            { field: 'transcript', at: 'Wexol', other: 'Wexof' },
+            { field: 'p5.surname', at: 'wexol', other: 'WEXOF' },
+            { field: 'MARR.date', at: '10.1.', other: '10.1' },
+        ],
+    });
+
+    it('places the text\'s variants in reading order, the unplaced after them; the data apart, a duplicate left out', () => {
+        const p = readerPlaces(e);
+        expect(p.text.map(x => x.v.at)).toEqual(['Zorvak Quintel', 'Hon: Mervak', 'Brel. Plosk', 'Wexol', '', 'gone word']);
+        expect(p.text.slice(0, 4).every(x => x.line === 0 && x.span)).toBe(true);
+        expect(p.text.slice(4).every(x => x.line === -1 && x.span === null)).toBe(true);
+        expect(p.data.map(x => x.v.field)).toEqual(['MARR.date']);
+        expect(placeCount(e)).toBe(7);
+        // As many marked in the text as placed.
+        expect(parseTranscript(e).lines[0].segs.filter(s => s.t === 'variant')).toHaveLength(4);
+    });
+
+    it('the words around a place, and whether the line goes on', () => {
+        const [s, t] = locateSpan(line, 'Brel. Plosk')!;
+        const c = placeContext(line, s, t);
+        expect(c.before).toBe('Quintel | Hon: Mervak | ');
+        expect(c.after).toBe(' | Druvin [?] | yxtalli [...]');
+        expect(c.moreBefore).toBe(true);
+        expect(c.moreAfter).toBe(true);
+        const [s2, t2] = locateSpan(line, 'yxtalli')!;
+        expect(placeContext(line, s2, t2).moreAfter).toBe(false);
+        const first = placeContext(line, 0, 2);
+        expect(first.before).toBe('');
+        expect(first.moreBefore).toBe(false);
     });
 });
 
 describe('lines on the scan', () => {
+    it('takes a line\'s own region when given', () => {
+        expect(lineRegion([0.1, 0.2, 0.8, 0.4], 1, 2, [[0, 0, 1, 0.1], [0.1, 0.3, 0.5, 0.05]])).toEqual([0.1, 0.3, 0.5, 0.05]);
+        expect(lineRegion([0.1, 0.2, 0.8, 0.4], 1, 2, [])[1]).toBeCloseTo(0.4);
+    });
+
     it('splits the entry\'s region evenly', () => {
         const r = lineRegion([0.1, 0.2, 0.8, 0.4], 1, 4);
         expect(r[0]).toBe(0.1);

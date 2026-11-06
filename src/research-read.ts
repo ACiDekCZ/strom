@@ -576,7 +576,9 @@ function sanitizeEntry(v: unknown, index: number): ReadEntry | null {
         const r = asRecord(item);
         const at = r ? cleanText(r.at, 300) : '';
         const field = r && typeof r.field === 'string' ? cleanText(r.field, 40) : '';
-        if (r && at) variants.push({ at, other: cleanText(r.other, 300), ...(field ? { field } : {}) });
+        const other = r ? cleanText(r.other, 300) : '';
+        // A side one reader left out stays a place (only reader 2 read something there: `at` empty).
+        if (r && (at || other)) variants.push({ at, other, ...(field ? { field } : {}) });
     }
     const glossary: ReadGloss[] = [];
     for (const item of Array.isArray(e.glossary) ? e.glossary.slice(0, 100) : []) {

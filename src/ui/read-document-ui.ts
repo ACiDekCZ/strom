@@ -31,9 +31,10 @@ import {
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import {
-    LineSeg, parseTranscript, parseBlock, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
-    entryName, variantCount, cropLayout,
+    LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
+    entryName, placeCount, placeCountAll, readerPlaces, placeContext, locateSpan, cropLayout, type PlaceContext,
 } from '../read-result.js';
+import { gedcomTagEventType } from '../ged-parser.js';
 import { openImageViewer } from './image-viewer.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, bridgeFailure } from './research-ui.js';
@@ -331,7 +332,7 @@ function agreeTone(res: ReadResult): { tone: 'is-ok' | 'is-warn' | 'is-muted'; t
     const n = res.readers.ran || res.readers.asked;
     if (n < 2) return { tone: 'is-muted', text: t.oneReader };
     if (res.readers.agree === 'differ' || res.readers.agree === 'fixed') {
-        return { tone: 'is-warn', text: t.differ(n, Math.max(1, variantCount(res.entries))) };
+        return { tone: 'is-warn', text: t.differ(n, Math.max(1, placeCountAll(res.entries))) };
     }
     return { tone: 'is-ok', text: t.agree };
 }
@@ -356,9 +357,12 @@ function langNames(codes: readonly string[]): string {
     return codes.map(langName).join(' / ');
 }
 
-/** A transcription's span without its marks (for a sentence): `[?]` dropped, `[...]` as an ellipsis. */
-function plainMarks(text: string): string {
-    return text.replace(/\[\?\]/g, '').replace(/\[(?:\.{2,}|…)\]/g, '…').replace(/\s+/g, ' ').trim();
+/** A transcription's span as plain text (a title): `[?]` dropped, an illegible spot and an empty side said in words. */
+function titleMarks(text: string): string {
+    const t = strings.read;
+    const plain = text.replace(/\[\?\]/g, '').replace(/\[\s*(?:\.{2,}|…)\s*\]/g, ` ${t.illegible} `).replace(/\s*\|\s*/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+    return plain || t.placeMissing;
 }
 
 /** The two readers of a reading that differ, as one line each without the effort (spec 059; null: not said). */
@@ -395,14 +399,89 @@ function segsHtml(segs: readonly LineSeg[], who: VariantWho | null = null): stri
             case 'variant': {
                 const mk = (n: 1 | 2): string => who ? `<span class="read-variant-mk" data-mk="${n}" aria-hidden="true"></span>` : '';
                 const title = who
-                    ? `${variantWhoLine(1, who.a, plainMarks(sg.at))}\n${variantWhoLine(2, who.b, plainMarks(sg.other))}`
-                    : t.variantNote(plainMarks(sg.at), plainMarks(sg.other));
+                    ? `${variantWhoLine(1, who.a, titleMarks(sg.at))}\n${variantWhoLine(2, who.b, titleMarks(sg.other))}`
+                    : t.variantNote(titleMarks(sg.at), titleMarks(sg.other));
                 return `<span class="read-variant" title="${esc(title)}">`
                     + `<span class="read-variant-a">${segsHtml(sg.a)}</span>${mk(1)}<span class="read-variant-slash" aria-hidden="true">/</span>`
                     + `<span class="read-variant-b">${segsHtml(sg.b)}</span>${mk(2)}</span>`;
             }
         }
     }).join('');
+}
+
+/** "word [?]" marks the word (as the research reads it): drawn on the word, not alone. */
+function attachUncertain(text: string): string {
+    return text.replace(/(\S)\s+\[\?\]/g, '$1[?]');
+}
+
+/** One side of a place where readers differ: its marks drawn as in the text; an empty side in words. */
+function placeSideHtml(text: string): string {
+    return text.trim() ? segsHtml(parseMarks(attachUncertain(text))) : `<span class="read-place-missing">${esc(strings.read.placeMissing)}</span>`;
+}
+
+/**
+ * A place's two versions as in the text (`a`, the separator, `b`), each with its mark (`marks`: the readers'
+ * 1 and 2, or the transcript so far and the new reading; none without them).
+ */
+function placeVariantHtml(a: string, b: string, marks: readonly [string, string] | null, sep: string, title: string): string {
+    const mk = (m: string | undefined): string => m ? `<span class="read-variant-mk" data-mk="${esc(m)}" aria-hidden="true"></span>` : '';
+    return `<span class="read-variant" title="${esc(title)}"><span class="read-variant-a">${placeSideHtml(a)}</span>${mk(marks?.[0])}`
+        + `<span class="read-variant-slash" aria-hidden="true">${esc(sep)}</span><span class="read-variant-b">${placeSideHtml(b)}</span>${mk(marks?.[1])}</span>`;
+}
+
+/** One place as a row: the words before it, its versions, the words after it (`…` where the text goes on, drawn by CSS). */
+function placeRowHtml(ctx: PlaceContext | null, variant: string, label = ''): string {
+    const part = (text: string, cut: string): string => text
+        ? `<span class="read-place-ctx${cut}">${segsHtml(parseMarks(attachUncertain(text)))}</span>` : '';
+    const before = ctx ? part(ctx.before, ctx.moreBefore ? ' is-cut-before' : '') : '';
+    const after = ctx ? part(ctx.after, ctx.moreAfter ? ' is-cut-after' : '') : '';
+    return `<span class="read-place">${label ? `<span class="read-place-label">${esc(label)}:</span> ` : ''}${before}${variant}${after}</span>`;
+}
+
+/** Rows of places: past `PLACES_SHOWN` folded behind "and N more" (unfolded in place). */
+const PLACES_SHOWN = 8;
+function placeRowsHtml(rows: readonly { html: string; cls: string; sub?: string }[]): string {
+    const out: string[] = [];
+    let subShown = false;
+    rows.forEach((r, i) => {
+        const more = i >= PLACES_SHOWN ? ' data-more hidden' : '';
+        if (r.sub && !subShown) {
+            subShown = true;
+            out.push(`<li class="read-legend-sub"${more}>${esc(r.sub)}</li>`);
+        }
+        out.push(`<li class="${r.cls}"${more}>${r.html}</li>`);
+    });
+    if (rows.length > PLACES_SHOWN) {
+        out.push(`<li class="read-legend-more"><button type="button" class="link-button read-places-more" data-act="places-more">${esc(strings.read.placesMore(rows.length - PLACES_SHOWN))}</button></li>`);
+    }
+    return out.join('');
+}
+
+/** An event's name by its GEDCOM tag ("MARR" → "Marriage"), else the tag. */
+function readEventName(tag: string): string {
+    const t = strings.read;
+    const up = tag.toUpperCase();
+    const type = up === 'BIRT' ? 'birth' : up === 'DEAT' ? 'death' : gedcomTagEventType(up);
+    return up === 'MARR' ? t.marriage : (type ? strings.events.types[type] : '') || tag;
+}
+
+/** What a place of the data is about ("Josef Secha · surname", "Marriage · date", "person only at reader 2"). */
+function dataPlaceLabel(field: string, at: string, entry: ReadEntry): string {
+    const t = strings.read;
+    const reader = at ? 1 : 2;
+    const person = /^(p\d+)(?:\.(\w+))?$/.exec(field);
+    if (person) {
+        if (!person[2]) return t.personOnly(reader);
+        const p = entry.persons.find(x => x.ref === person[1]);
+        const name = p ? [p.given, p.surname].filter(Boolean).join(' ') || p.written : '';
+        const what = person[2] === 'role' ? t.variantRole : t.uncertainFields[person[2]] ?? person[2];
+        return [name, what].filter(Boolean).join(' · ');
+    }
+    if (field === 'person') return t.personOnly(reader);
+    if (field === 'entry') return t.entryOnly(reader);
+    const ev = /^([A-Za-z_]+)(?:\.(date|place))?$/.exec(field);
+    if (ev) return [readEventName(ev[1]), ev[2] === 'date' ? t.fieldDate : ev[2] === 'place' ? t.fieldPlace : ''].filter(Boolean).join(' · ');
+    return field;
 }
 
 /** A region (fractions of the page) as absolute position in per cent. */
@@ -1727,18 +1806,7 @@ export const readDocumentMethods = uiModule({
                 `<div class="read-line${l.variant ? ' has-variant' : ''}${j === s.line ? ' is-active' : ''}" data-line="${j}"${focusable}>${segsHtml(l.segs, vwho)}</div>`).join('');
             const legend: string[] = [];
             if (parsed.marks.uncertain) legend.push(`<li><span class="read-key read-key--uncertain" aria-hidden="true">a</span>${esc(t.uncertain)}</li>`);
-            if (parsed.marks.variant && vwho) {
-                // Who read which version (spec 059): the readers' marks with their agent and model.
-                legend.push(`<li class="read-legend-differ"><span class="read-key read-key--variant" aria-hidden="true">/</span>${esc(t.differNote)}</li>`);
-                for (const v of entry.variants.slice(0, 6)) {
-                    legend.push(`<li class="read-legend-who"><span class="read-legend-who-line"><span class="read-variant-mk" data-mk="1" aria-hidden="true"></span>${esc(variantWhoLine(1, vwho.a, plainMarks(v.at)))}</span>`
-                        + `<span class="read-legend-who-line"><span class="read-variant-mk" data-mk="2" aria-hidden="true"></span>${esc(variantWhoLine(2, vwho.b, plainMarks(v.other)))}</span></li>`);
-                }
-            } else if (parsed.marks.variant) {
-                for (const v of entry.variants.slice(0, 6)) {
-                    legend.push(`<li><span class="read-key read-key--variant" aria-hidden="true">/</span>${esc(t.variantNote(plainMarks(v.at), plainMarks(v.other)))}</li>`);
-                }
-            }
+            legend.push(this.readPlacesLegendHtml(entry, parsed.lines.map(l => l.text), vwho));
             if (parsed.marks.illegible) legend.push(`<li><span class="read-key read-key--illegible" aria-hidden="true"></span>${esc(t.illegibleNote)}</li>`);
             const langs = langNames(res.doc.language);
             parts.push(`
@@ -1749,7 +1817,7 @@ export const readDocumentMethods = uiModule({
                         <button type="button" class="read-copy" data-act="copy">${esc(t.copy)}</button>
                     </div>
                     <div class="read-transcript" id="read-transcript">${lines}</div>
-                    ${legend.length ? `<ul class="read-legend">${legend.join('')}</ul>` : ''}
+                    ${legend.join('') ? `<ul class="read-legend">${legend.join('')}</ul>` : ''}
                 </section>`);
         }
         if (sec.translation) {
@@ -1796,8 +1864,42 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
-     * A source read again: what became of it (the transcript kept, the reading added, a difference
-     * a task to check, never a conflict), then each place the new reading differs from the transcript.
+     * The places the readers differ in (spec 059 K6.5), under the transcription: the count and the readers
+     * once, then one row per place with the words around it in its line (every placed one is marked in the
+     * text), those without a place in the text, then those only in the data. '' without any.
+     */
+    readPlacesLegendHtml(entry: ReadEntry, lines: readonly string[], vwho: VariantWho | null): string {
+        const t = strings.read;
+        const places = readerPlaces(entry);
+        const count = places.text.length + places.data.length;
+        if (!count) return '';
+        const mk = (n: 1 | 2): string => `<span class="read-variant-mk" data-mk="${n}" aria-hidden="true"></span>`;
+        const marks = vwho ? ['1', '2'] as const : null;
+        const title = (a: string, b: string): string => vwho
+            ? `${variantWhoLine(1, vwho.a, titleMarks(a))}\n${variantWhoLine(2, vwho.b, titleMarks(b))}`
+            : t.variantNote(titleMarks(a), titleMarks(b));
+        const head = `<li class="read-legend-differ"><span class="read-key read-key--variant" aria-hidden="true">/</span>`
+            + `<span class="read-legend-differ-text">${esc(t.differAt(count))}${vwho ? `: ${mk(1)}\u00a0${esc(vwho.a)}, ${mk(2)}\u00a0${esc(vwho.b)}` : ''}</span></li>`;
+        const rows: { html: string; cls: string; sub?: string }[] = places.text.map(p => {
+            const ctx = p.span && lines[p.line] !== undefined ? placeContext(lines[p.line], p.span[0], p.span[1]) : null;
+            return { cls: 'read-legend-place', html: placeRowHtml(ctx, placeVariantHtml(p.v.at, p.v.other, marks, '/', title(p.v.at, p.v.other))) };
+        });
+        for (const p of places.data) {
+            const role = p.v.field?.endsWith('.role');
+            const a = role && p.v.at ? t.roles[p.v.at] ?? p.v.at : p.v.at;
+            const b = role && p.v.other ? t.roles[p.v.other] ?? p.v.other : p.v.other;
+            rows.push({
+                cls: 'read-legend-place read-legend-place--data', sub: t.placesData,
+                html: placeRowHtml(null, placeVariantHtml(a, b, marks, '/', title(a, b)), dataPlaceLabel(p.v.field ?? '', p.v.at, entry)),
+            });
+        }
+        return head + placeRowsHtml(rows);
+    },
+
+    /**
+     * A source read again: one sentence on what became of it (the transcript stays, the new reading beside
+     * it, where they differ a task of the research decides), then the places it differs from the transcript
+     * so far, each with the words around it, then how the two readers compare (spec 059 K6.5).
      */
     readSourceNoteHtml(res: ReadResult): string {
         const t = strings.read;
@@ -1807,21 +1909,47 @@ export const readDocumentMethods = uiModule({
         const confirmed = src ? !!this.sourceConfirmState(src).conf : false;
         const choices = this.researchReadAcceptsAny()?.choices;
         const who = (res.readers.who ?? []).filter(w => w.ran);
-        const newBy = [t.newRead.replace(/:\s*$/, ''), who.length ? whoLabel(who[0], choices, false) : ''].filter(Boolean).join(' · ');
-        const variants = differ ? cmp.variants.slice(0, 6).map(v =>
-            `<li class="read-legend-who"><span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkOld)}" aria-hidden="true"></span>${esc(`${t.todayTr}: “${plainMarks(v.at)}”`)}</span>`
-            + `<span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkNew)}" aria-hidden="true"></span>${esc(`${newBy}: “${plainMarks(v.other)}”`)}</span></li>`).join('') : '';
-        const said = [t.srcAdded, differ ? t.srcTask : t.srcSupports, confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
-        // The new reading is reader 1's text; reader 2 (independent) checked it: where it read otherwise is amber in the transcript.
-        const vwho = this.readVariantWho(res);
+        const said = [t.srcStays(differ, cmp.task), confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
+        let vs = '';
+        if (differ && cmp.variants.length) {
+            // The words around each place: in the transcript so far, else (nothing there) around the new version in the new reading.
+            const old = src?.transcript ?? '';
+            const taken: [number, number][] = [];
+            const chosen = res.entries[st?.entry ?? 0];
+            const readTexts = [chosen, ...res.entries.filter(e => e !== chosen)].filter(Boolean).map(e => e!.transcript);
+            const rows = cmp.variants.map(v => {
+                let ctx: PlaceContext | null = null;
+                const span = v.at && old ? locateSpan(old, v.at, taken) : null;
+                if (span) {
+                    taken.push(span);
+                    ctx = placeContext(old, span[0], span[1]);
+                } else if (!v.at && v.other) {
+                    for (const text of readTexts) {
+                        const sp = locateSpan(text, v.other);
+                        if (sp) { ctx = placeContext(text, sp[0], sp[1]); break; }
+                    }
+                }
+                const title = `${t.mkOld}: “${titleMarks(v.at)}”\n${t.mkNew}: “${titleMarks(v.other)}”`;
+                return { cls: 'read-legend-place', html: placeRowHtml(ctx, placeVariantHtml(v.at, v.other, [t.mkOld, t.mkNew], '→', title)) };
+            });
+            vs = `
+                    <div class="read-source-part read-source-vs">
+                        <h4 class="read-source-head">${esc(t.srcVsTitle)}<span class="read-source-count"> · ${esc(t.placesN(rows.length))}</span></h4>
+                        <p class="read-source-sides">${esc(t.srcSides(who.length ? whoLabel(who[0], choices, false) : ''))}</p>
+                        <ul class="read-legend read-source-variants">${placeRowsHtml(rows)}</ul>
+                    </div>`;
+        }
+        // Two readers ran: how they compare (their places are marked in the transcript and listed under it).
         const entry = res.entries[st?.entry ?? 0];
-        const marked = vwho && entry ? parseTranscript(entry).lines.reduce((n, l) => n + l.segs.filter(g => g.t === 'variant').length, 0) : 0;
+        const n = entry ? placeCount(entry) : 0;
+        const readers = (res.readers.ran ?? 0) >= 2 ? `
+                    <div class="read-source-part read-source-readers">
+                        <h4 class="read-source-head">${esc(t.readersTitle)}</h4>
+                        <p class="read-source-second">${esc(n ? t.readersDiffer(n) : t.readersAgree)}</p>
+                    </div>` : '';
         return `
                 <div class="read-source-note" role="note" data-agree="${cmp.agree}">
-                    <p class="read-source-note-text"><strong>${esc(t.srcKept)}</strong> ${esc(said)}</p>
-                    ${differ && cmp.task ? `<p class="read-source-task">${esc(t.srcTaskId(cmp.task))}</p>` : ''}
-                    ${variants ? `<ul class="read-legend read-source-variants">${variants}</ul>` : ''}
-                    ${vwho && marked ? `<p class="read-source-second">${esc(t.secondDiffered(vwho.b, marked))}</p>` : ''}
+                    <p class="read-source-note-text">${esc(said)}</p>${vs}${readers}
                 </div>`;
     },
 
@@ -2373,6 +2501,12 @@ export const readDocumentMethods = uiModule({
             case 'copy': void this.copyReadTranscript(); break;
             case 'copy-source': void this.copySourceTranscript(); break;
             case 'gloss': this.toggleReadGloss(el); break;
+            case 'places-more': {
+                // The rest of the places, unfolded in place (nothing redrawn).
+                el.closest('ul')?.querySelectorAll<HTMLElement>('[data-more]').forEach(li => { li.hidden = false; li.removeAttribute('data-more'); });
+                el.closest('li')?.remove();
+                break;
+            }
             case 'propose': this.readDocumentPropose(); break;
             default: this.readProposeAct(el); break;
         }

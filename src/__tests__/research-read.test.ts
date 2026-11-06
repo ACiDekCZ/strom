@@ -230,6 +230,9 @@ describe('GET read/<id>', () => {
         // What differs (research 2026-10) is kept; a field that is no text is left out.
         const withField = sanitizeReadResult({ ...full, entries: [{ ...full.entries[0], variants: [{ field: 'p2.role', at: 'father', other: 'witness' }, { field: 7, at: 'a', other: 'b' }] }] })!;
         expect(withField.entries[0].variants).toEqual([{ at: 'father', other: 'witness', field: 'p2.role' }, { at: 'a', other: 'b' }]);
+        // A place only reader 2 read (`at` empty) stays; one with neither side does not.
+        const oneSide = sanitizeReadResult({ ...full, entries: [{ ...full.entries[0], variants: [{ at: '', other: 'sponsus' }, { at: '', other: '' }] }] })!;
+        expect(oneSide.entries[0].variants).toEqual([{ at: '', other: 'sponsus' }]);
         expect(e.glossary.map(g => g.kind)).toEqual(['term', 'abbr']);
         expect(e.persons[0]).toMatchObject({ ref: 'p1', role: 'child', roleText: 'pokřtěný', sex: 'M', age: '', uncertain: ['given'], match: [{ person: 'P0012', score: 0.82 }] });
         expect(e.persons[1].region).toBeNull();
