@@ -24,7 +24,7 @@ import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } f
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
-    readSameSheet, readViewNames,
+    readPaceSecs, readSameSheet, readViewNames, type ReadPaceReader,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, readEndsToAnnounce, readSuperseded, READ_FEATURE,
     startSourceRead, readSourceId,
 } from '../research-read.js';
@@ -1290,8 +1290,9 @@ export const readDocumentMethods = uiModule({
         const choices = this.readChoicesNow();
         const held = choices ? readerHeld(choices, this.readChosen(choices).slice(0, s.readers)) : null;
         const sum = !source ? t.footSum(taken, s.readers) : source.clip ? t.footSource(s.readers) : t.footSourceWhole(s.readers);
+        const usual = this.readUsualNow(null, s.readers);
         const note = taken > 0
-            ? `<strong>${esc(sum)}</strong> ${esc(t.usual(readUsualMinutes(s.readers, this.researchReadAcceptsAny()?.expectSecs)))}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
+            ? `<strong>${esc(sum)}</strong>${usual !== null ? ` ${esc(t.usual(usual))}` : ''}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
             : '';
         const down = held ? `<span class="read-foot-down">${esc(t.downFoot)}</span>` : '';
         return `
@@ -1305,6 +1306,30 @@ export const readDocumentMethods = uiModule({
         const link = this.researchOriginalsLink();
         if (!link || !id) return null;
         return readsByResearch.get(link.researchId)?.get(id) ?? historyReads.get(id) ?? null;
+    },
+
+    /**
+     * The minutes a reading is said to take: by its slowest reader (agent, model, effort; the research's
+     * measure of its own agent, else the readings of this research that ended). Null: a reader's pace is not
+     * known (another agent never read with here) — no time is said rather than one too short.
+     */
+    readUsualNow(live: LiveRead | null, readers: number): number | null {
+        const s = st;
+        const choices = this.readChoicesNow();
+        const n = Math.max(1, Math.min(2, readers));
+        const chosen: ReadPaceReader[] | null = live?.who?.length ? live.who
+            : !choices ? null
+                : s?.sentWith ?? s?.with ?? [readerDefault(choices, 0), readerDefault(choices, 1)];
+        const fromLive = live?.expectSecs !== undefined;
+        const who = chosen?.slice(0, n) ?? null;
+        const link = this.researchOriginalsLink();
+        const pace = readPaceSecs(who, {
+            expectSecs: this.readExpectSecs(live),
+            measured: fromLive ? who?.[0]?.agent ?? '' : choices?.agents[0]?.id ?? '',
+            history: link ? [...(readsByResearch.get(link.researchId)?.values() ?? [])] : [],
+            except: s?.readId ?? '',
+        });
+        return pace === null ? null : readUsualMinutes(n, pace);
     },
 
     /** How long a reading takes (seconds): the bridge's word for it, else what the research said before it started. */
@@ -1425,10 +1450,14 @@ export const readDocumentMethods = uiModule({
             const live = this.readLiveOf(s.readId);
             const since = Date.parse(live?.since ?? '') || s.startedAt;
             const secs = Math.max(0, Math.floor((Date.now() - since) / 1000));
-            const usual = readUsualMinutes(live?.readers || s.readers, this.readExpectSecs(live));
-            time.textContent = strings.read.running(usual, strings.read.elapsed(Math.floor(secs / 60), secs % 60));
+            const readers = live?.readers || s.readers;
+            const usual = this.readUsualNow(live, readers);
+            const elapsed = strings.read.elapsed(Math.floor(secs / 60), secs % 60);
+            // Past the time said, one reader done: the reading waits for the other one (which one the bridge does not say).
+            const waits = usual !== null && secs > usual * 60 && readers >= 2 && live?.state === 'reading' && live.done === readers - 1;
+            time.textContent = `${usual === null ? strings.read.runningOnly(elapsed) : strings.read.running(usual, elapsed)}${waits ? ` · ${strings.read.waitingOther}` : ''}`;
             const slow = document.getElementById('read-progress-slow');
-            if (slow) slow.hidden = secs < usual * 60 * 2;
+            if (slow) slow.hidden = usual === null || secs < usual * 60 * 2;
             // A new expected time from /status shows at once, not only at the next state.
             const expect = document.getElementById('read-progress-expect');
             if (expect) expect.hidden = !this.readSlowNow(live);

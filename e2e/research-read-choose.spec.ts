@@ -192,6 +192,39 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect(d2.locator('.read-who-from')).toHaveText('as set in the research');
     });
 
+    test('the time said is the slowest reader\'s; none for a reader never timed here; past it, the reading waits for the other reader', async ({ page }) => {
+        await page.clock.install();
+        const b = await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'codex', model: 'gpt-5', effort: '' }] });
+        const d = await openWithPage(page);
+        // Codex never read in this research: no time said rather than the research's own agent's.
+        await expect(d.locator('#read-foot-note strong')).toHaveText('1 page will be read · 2 readers');
+        await expect(d.locator('#read-foot-note')).not.toContainText('usually');
+        await d.locator('.read-footer [data-act="close"]').last().click();
+        await expect(d).toHaveCount(0);
+        // A reading of both ended here in 5 min 31 s: Codex's time comes from it.
+        const at = new Date(Date.now() - 3_600_000);
+        b.read!.reads = [reading('D20261106173422-86d4', 'done', {
+            from: 'research', at: at.toISOString(), since: new Date(at.getTime() + 331_000).toISOString(), done: 2, entries: 1, who: WHO_MIXED,
+        })];
+        await poll(page);
+        const d2 = await openWithPage(page);
+        await expect(d2.locator('#read-foot-note')).toContainText('usually within 6 minutes');
+        await d2.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        const r = b.read!.reads[0];
+        r.who = WHO_MIXED;
+        r.state = 'reading';
+        r.since = new Date(await page.evaluate(() => Date.now())).toISOString();
+        await poll(page);
+        await expect(d2.locator('#read-progress-time')).toContainText('Usually within 6 minutes · running');
+        await expect(d2.locator('#read-progress-time')).not.toContainText('waiting');
+        // Past the time said, one reader done: it says the reading waits for the other one.
+        r.done = 1;
+        await page.clock.fastForward(6 * 60_000 + 5_000);
+        await expect(d2.locator('#read-progress-time')).toContainText('· waiting for the other reader');
+        await expect(d2.locator('#read-progress-slow')).toBeHidden();
+    });
+
     test('one reader: "Read by"; switching to two keeps reader 1 and starts reader 2 as by default', async ({ page }) => {
         const b = await setup(page, { readers: 1 });
         const d = await openWithPage(page);

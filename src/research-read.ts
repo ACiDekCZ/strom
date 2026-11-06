@@ -1104,6 +1104,60 @@ export function readViewNames(pages: readonly Pick<ReadPage, 'n' | 'file' | 'sha
     });
 }
 
+/** One reader as the pace of a reading counts it ('' model / effort: as the agent itself is set). */
+export interface ReadPaceReader { agent: string; model: string; effort: string }
+
+/** The readings a pace is learned from: the last so many that ended with a reader alike. */
+const PACE_LAST = 9;
+/** A reading longer than this is no reader's pace (a clock gone wrong, a computer asleep). */
+const PACE_MAX_SECS = 86_400;
+
+const paceAlike = (a: ReadPaceReader, b: ReadPaceReader): boolean =>
+    a.agent === b.agent && (!a.model || !b.model || a.model === b.model) && (!a.effort || !b.effort || a.effort === b.effort);
+
+function median(list: number[]): number {
+    const v = [...list].sort((a, b) => a - b);
+    const mid = v.length >> 1;
+    return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+/**
+ * How long a reading is expected to take (seconds): its slowest reader's pace. Each reader by agent, model
+ * and effort: from the readings of this research that ended (`history`: from asking to done, so never too
+ * short) — those read by that reader alone first, else those it read with another (the slower one's time,
+ * an upper bound); the agent whose pace the research itself measures (`measured`, the first reader's) by the
+ * research's `expectSecs` before that (not said: the usual time). Null: a reader's pace is not known (another agent, never read here) —
+ * then no time is said rather than one too short. No readers said (an older research): the research's word
+ * (none: 0, the usual time).
+ */
+export function readPaceSecs(readers: readonly ReadPaceReader[] | null | undefined, o: {
+    expectSecs?: number | null;
+    measured?: string;
+    history?: readonly Pick<LiveRead, 'id' | 'state' | 'at' | 'since' | 'who'>[];
+    except?: string;
+}): number | null {
+    if (!readers?.length) return o.expectSecs ?? 0;
+    const ended = (o.history ?? [])
+        .filter(r => r.state === 'done' && r.id !== o.except && r.who?.length)
+        .map(r => ({ who: r.who!.filter(w => w.ran), secs: (Date.parse(r.since) - Date.parse(r.at)) / 1000, at: r.at }))
+        .filter(r => r.who.length && Number.isFinite(r.secs) && r.secs > 0 && r.secs <= PACE_MAX_SECS)
+        .sort((a, b) => b.at.localeCompare(a.at));
+    let slowest = 0;
+    for (const reader of readers) {
+        const alone = ended.filter(r => r.who.every(w => paceAlike(w, reader))).slice(0, PACE_LAST);
+        const along = ended.filter(r => r.who.some(w => paceAlike(w, reader))).slice(0, PACE_LAST);
+        const mine = reader.agent === o.measured;
+        const secs = mine && o.expectSecs ? o.expectSecs
+            : alone.length ? median(alone.map(r => r.secs))
+                : along.length ? median(along.map(r => r.secs))
+                    // the research's own agent, its pace not said (an older research): the usual time
+                    : mine ? 0 : null;
+        if (secs === null) return null;
+        slowest = Math.max(slowest, secs);
+    }
+    return Math.round(slowest);
+}
+
 /** The usual time a reading takes (minutes): 3 for one reader, 4 for two. */
 export function readUsualMinutes(readers: number, expect?: number | null): number {
     const usual = readers >= 2 ? 4 : 3;

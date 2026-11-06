@@ -629,6 +629,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         checking: 'Porównywanie odczytów',
         done: 'Gotowe',
         running: (usual: number, elapsed: string) => `Zwykle do ${usual} ${plPl(usual, 'minuty', 'minut', 'minut')} · trwa ${elapsed}`,
+        runningOnly: (elapsed: string) => `Trwa ${elapsed}`,
+        waitingOther: 'czeka jeszcze na pozostałego czytelnika',
         elapsed: (m: number, s: number) => m ? `${m} min ${s} s` : `${s} s`,
         closeNote: 'Okno można zamknąć, odczyt będzie trwał dalej, a wynik zostanie ogłoszony.',
         slow: 'Trwa dłużej niż zwykle. Odczyt trwa dalej.',

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     sanitizeReadAccepts, sanitizeReads, sanitizeLiveRead, sanitizeReadResult, readFailure, retryAfter,
     readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
-    readViewNames, readSameSheet,
+    readPaceSecs, readViewNames, readSameSheet,
     readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
@@ -353,6 +353,35 @@ describe('the files a reading takes', () => {
     it('usual time: 3 minutes for one reader, 4 for two', () => {
         expect(readUsualMinutes(1)).toBe(3);
         expect(readUsualMinutes(2)).toBe(4);
+    });
+
+    it('the time said is the slowest reader\'s: a reader of another agent counts, never one too short', () => {
+        const claude = { agent: 'claude', model: 'opus', effort: 'high' };
+        const codex = { agent: 'codex', model: 'gpt-6-astra', effort: 'xhigh' };
+        const who = (list: typeof claude[]) => list.map(w => ({ ...w, name: w.agent, modelName: '', ran: true }));
+        const ended = (id: string, secs: number, readers: typeof claude[]) => ({
+            id, state: 'done' as const, at: '2026-11-06T17:34:22.000Z', since: new Date(Date.parse('2026-11-06T17:34:22.000Z') + secs * 1000).toISOString(), who: who(readers),
+        });
+        // The research measures its own agent (Claude: about a minute); Codex never read here: no time rather than 4 minutes.
+        expect(readPaceSecs([claude, codex], { expectSecs: 63, measured: 'claude', history: [] })).toBeNull();
+        // Both readers the research's own: its measure, as before.
+        expect(readPaceSecs([claude, claude], { expectSecs: 63, measured: 'claude', history: [] })).toBe(63);
+        expect(readUsualMinutes(2, readPaceSecs([claude, claude], { expectSecs: 63, measured: 'claude' }))).toBe(4);
+        // A reading of both ended here (5 min 31 s, S1408): Codex's pace from it, the slowest reader wins.
+        const both = ended('D20261106173422-86d4', 331, [claude, codex]);
+        expect(readPaceSecs([claude, codex], { expectSecs: 63, measured: 'claude', history: [both] })).toBe(331);
+        expect(readUsualMinutes(2, 331)).toBe(6);
+        // A reading of Codex alone is its own measure, before one read with another.
+        expect(readPaceSecs([claude, codex], { expectSecs: 63, measured: 'claude', history: [both, ended('D20261105100000-0001', 200, [codex])] })).toBe(200);
+        // Another effort is another pace; the reading itself, one not done, or one of no readers said is not learned from.
+        expect(readPaceSecs([claude, { ...codex, effort: 'low' }], { expectSecs: 63, measured: 'claude', history: [both] })).toBeNull();
+        expect(readPaceSecs([claude, codex], { expectSecs: 63, measured: 'claude', history: [both], except: both.id })).toBeNull();
+        expect(readPaceSecs([claude, codex], { expectSecs: 63, measured: 'claude', history: [{ ...both, state: 'failed' }] })).toBeNull();
+        // No readers said (a research before 059): the research's word alone.
+        expect(readPaceSecs(undefined, { expectSecs: 240 })).toBe(240);
+        expect(readPaceSecs(null, {})).toBe(0);
+        // The research's agent, its pace not said: the usual time.
+        expect(readPaceSecs([claude], { measured: 'claude' })).toBe(0);
     });
 
     it('views of one page read in parts are excerpts, other pages pages', () => {
