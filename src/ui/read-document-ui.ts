@@ -25,7 +25,10 @@ import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, readEndsToAnnounce, readSuperseded, READ_FEATURE,
+    startSourceRead, readSourceId,
 } from '../research-read.js';
+import { shownExcerpts } from '../research-images.js';
+import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
     entryName, variantCount, cropLayout,
@@ -70,13 +73,31 @@ interface Page {
 }
 
 /** What stands in place of the dialog's content. */
-type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source' | 'held';
+type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source' | 'held' | 'source-again';
 
 /** Why a source's reading cannot be shown (the `source` error: the source's own transcription stands in). */
 export type SourceWhy = 'down' | 'older' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
 
-/** `document`: pages to read; `again`: the shown reading read again, its readers chosen first (spec 059). */
-export type InputMode = 'document' | 'again';
+/**
+ * `document`: pages to read; `again`: the shown reading read again, its readers chosen first;
+ * `source`: a source read again from its original in the research (spec 059).
+ */
+export type InputMode = 'document' | 'again' | 'source';
+
+/** A source to read again from its original (`POST sources/read`). */
+export interface SourceAgain {
+    /** The tree's source. */
+    id: string;
+    /** The research's source (S…). */
+    refn: string;
+    /** One excerpt alone (its `_STROM_CLIP`); '' the whole entry. */
+    clip: string;
+    /** The excerpt's number in the viewer (0: the whole entry). */
+    excerpt: number;
+    title: string;
+    /** A picture of the excerpt ('' none). */
+    thumb: string;
+}
 
 /** `propose`: the tree suggestion of the chosen entry; `written`: what the click wrote. */
 export type Phase = 'input' | 'progress' | 'result' | 'error' | 'propose' | 'written';
@@ -124,6 +145,8 @@ export interface DialogState {
     sentWith: ReaderChoice[] | null;
     /** The offer the input was drawn with (redrawn when the research's offer changes). */
     choicesKey: string;
+    /** The source read again (mode `source`, its progress and result). */
+    srcAgain: SourceAgain | null;
 }
 
 /**
@@ -332,6 +355,16 @@ interface VariantWho { a: string; b: string }
 /** "Reader 1 · Claude Code · Opus: “text”" — one version of a place where the readers differ. */
 function variantWhoLine(n: number, who: string, text: string): string {
     return `${strings.read.readerN(n)} · ${who}: “${text}”`;
+}
+
+/** "Baptisms 1846 · excerpt 1": a source read again, as the dialog's subtitle. */
+function sourceAgainSub(again: SourceAgain): string {
+    return [again.title, again.excerpt ? strings.read.sourceExcerpt(again.excerpt) : ''].filter(Boolean).join(' · ');
+}
+
+/** "Excerpt 1" from "excerpt 1". */
+function capitalized(text: string): string {
+    return text.charAt(0).toLocaleUpperCase() + text.slice(1);
 }
 
 /**
@@ -545,6 +578,7 @@ export const readDocumentMethods = uiModule({
         for (const r of announce) void this.announceReadEnd(researchId, r);
         this.watchReads();
         this.refreshReadSurfaces();
+        this.refreshReadSourceViewer();
     },
 
     /** Redraw the research menu, the panel strip and the button when what they show of the readings changed. */
@@ -667,7 +701,7 @@ export const readDocumentMethods = uiModule({
      * with a reading's id (the notice, the strip) on that reading; else on the
      * running reading, the one read and not opened, or a new input.
      */
-    showReadDocumentDialog(opts: { personId?: string; files?: File[]; readId?: string; read?: LiveRead; sourceId?: string; entryId?: string } = {}): void {
+    showReadDocumentDialog(opts: { personId?: string; files?: File[]; readId?: string; read?: LiveRead; sourceId?: string; entryId?: string; again?: SourceAgain } = {}): void {
         const link = this.researchOriginalsLink();
         // A source's reading opens without a research too: its transcription then stands in.
         const source = opts.sourceId ? DataManager.getData().sources?.[opts.sourceId] : undefined;
@@ -687,14 +721,15 @@ export const readDocumentMethods = uiModule({
         const target = !link ? null : readId
             // Not listed live any more (an older reading of the history): as the history said it.
             ? this.readsOfResearch(link.researchId).find(r => r.id === readId) ?? (opts.read?.id === readId ? opts.read : null)
-            : opts.files?.length || opts.personId ? null : this.readRunningNow() ?? this.readUnopenedNow();
+            : opts.files?.length || opts.personId || opts.again ? null : this.readRunningNow() ?? this.readUnopenedNow();
         if (!target && !readId && !this.readDocumentAccepts()) return;
         st = {
             phase: 'input', pages: [], personId: opts.personId ?? '', note: '', readers: storedReaders(), readId: '',
             sending: null, sawChecking: false, startedAt: Date.now(), error: null, result: results.get(readId) ?? null,
             notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1, second: false,
             sourceId: sourceRead ? opts.sourceId ?? '' : '', entryId: sourceRead ? source?.readingEntry ?? '' : opts.entryId ?? '',
-            mode: 'document', with: null, refineOpen: false, agentDown: {}, sentWith: null, choicesKey: '',
+            mode: opts.again ? 'source' : 'document', with: null, refineOpen: false, agentDown: {}, sentWith: null, choicesKey: '',
+            srcAgain: opts.again ?? null,
         };
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
@@ -734,6 +769,59 @@ export const readDocumentMethods = uiModule({
     /** A source's reading result (its link in the source's detail and a person's sources). */
     showReadingOfSource(sourceId: string): void {
         this.showReadDocumentDialog({ sourceId });
+    },
+
+    /**
+     * "Read again…" at a source (spec 059 §4): the source's input (readers, "Adjust reading"), or the
+     * progress of its reading when one runs. `clip`: one excerpt alone; '' the whole entry.
+     */
+    showReadSourceAgain(sourceId: string, clip = ''): void {
+        const link = this.researchOriginalsLink();
+        const again = this.readSourceAgainOf(sourceId, clip);
+        if (!link || !again) return;
+        const running = this.readSourceRunning(again.refn);
+        if (running) { this.showReadDocumentDialog({ readId: running.id }); return; }
+        this.showReadDocumentDialog({ again });
+    },
+
+    /** What reading a source again shows of it (null: no such source, no id of the research). */
+    readSourceAgainOf(sourceId: string, clip = ''): SourceAgain | null {
+        const src = DataManager.getData().sources?.[sourceId];
+        const refn = readSourceId(src?.refn?.trim());
+        if (!src || !refn) return null;
+        const excerpts = shownExcerpts(DataManager.getCurrentTreeId(), src);
+        const at = clip ? excerpts.findIndex(e => e.clip === clip) : -1;
+        const pic = excerpts[Math.max(0, at)];
+        return {
+            id: sourceId, refn, clip, excerpt: clip ? Math.max(0, at) + 1 : 0, title: src.title,
+            thumb: pic?.dataUrl ? excerptImageUrl(pic) : '',
+        };
+    },
+
+    /** The reading of a source (S…) running in the open tree's research, or null. */
+    readSourceRunning(refn: string): LiveRead | null {
+        const link = this.researchOriginalsLink();
+        if (!link || !refn) return null;
+        return this.readsOfResearch(link.researchId).find(r => r.source === refn && readRunning(r.state)) ?? null;
+    },
+
+    /** The source a reading reads again (the dialog's own, else as the bridge lists the reading), or null. */
+    readSourceAgainNow(): SourceAgain | null {
+        if (!st) return null;
+        if (st.srcAgain) return st.srcAgain;
+        const refn = this.readLiveOf(st.readId)?.source ?? results.get(st.readId)?.source?.id ?? '';
+        if (!refn) return null;
+        const id = Object.values(DataManager.getData().sources ?? {}).find(src => readSourceId(src.refn?.trim()) === refn)?.id;
+        const again = id ? this.readSourceAgainOf(id) : null;
+        if (again) st.srcAgain = again;
+        return again;
+    },
+
+    /** The newest result of a source read again known here (null: none). */
+    readSourceResultOf(refn: string): ReadResult | null {
+        let last: ReadResult | null = null;
+        for (const res of results.values()) if (res.source?.id === refn && res.state === 'done') last = res;
+        return last;
     },
 
     /** Why a source's reading cannot be fetched now at all (null: ask the research). */
@@ -878,12 +966,17 @@ export const readDocumentMethods = uiModule({
                 const live = this.readLiveOf(st.readId);
                 title = t.readAgain;
                 sub = live?.name ? t.progressSub(live.name, live.pages) : sub;
+            } else if (st.mode === 'source' && st.srcAgain) {
+                title = t.titleSource;
+                sub = sourceAgainSub(st.srcAgain);
             }
         } else if (st.phase === 'progress') {
             const live = this.readLiveOf(st.readId);
-            title = t.progressTitle;
+            const again = live?.source || st.srcAgain ? this.readSourceAgainNow() : null;
+            title = again ? t.readingAgain : t.progressTitle;
             // The dialog's own files name it first: a page the research already had comes back under its hash.
-            sub = t.progressSub(st.pages.find(p => !p.refused)?.file.name || live?.name || '', live?.pages || st.pages.filter(p => !p.refused).length);
+            sub = again ? sourceAgainSub(again)
+                : t.progressSub(st.pages.find(p => !p.refused)?.file.name || live?.name || '', live?.pages || st.pages.filter(p => !p.refused).length);
             body = this.readProgressHtml();
             foot = this.readProgressFootHtml();
         } else if ((st.phase === 'propose' || st.phase === 'written') && st.result) {
@@ -907,6 +1000,9 @@ export const readDocumentMethods = uiModule({
                 const src = DataManager.getData().sources?.[st.sourceId];
                 title = src?.title || t.sourceLink.replace(/…$/, '');
                 sub = tree;
+            } else if (st.srcAgain) {
+                title = t.titleSource;
+                sub = sourceAgainSub(st.srcAgain);
             }
         }
         overlay.innerHTML = `
@@ -972,6 +1068,7 @@ export const readDocumentMethods = uiModule({
         const choose = `<div id="read-choose" class="read-choose">${this.readChooseHtml()}</div>`;
         const slow = readSlow(accepts?.expectSecs) ? `<p class="read-slow-note">${esc(t.slowReader)}</p>` : '';
         if (s.mode === 'again') return `${readers}${choose}`;
+        if (s.mode === 'source' && s.srcAgain) return `${this.readSourcePreviewHtml(s.srcAgain)}${readers}${choose}`;
         return `
                 ${top}
                 ${slow}
@@ -984,6 +1081,20 @@ export const readDocumentMethods = uiModule({
                 </div>
                 ${readers}
                 ${choose}`;
+    },
+
+    /** In place of the pages: the excerpt (or the entry) read again and what reading it again does. */
+    readSourcePreviewHtml(again: SourceAgain): string {
+        const t = strings.read;
+        const what = [again.excerpt ? capitalized(t.sourceExcerpt(again.excerpt)) : '', again.title].filter(Boolean).join(' · ');
+        return `
+                <div class="read-source-preview">
+                    ${again.thumb ? `<img class="read-source-thumb" src="${esc(again.thumb)}" alt="">` : ''}
+                    <div class="read-source-preview-text">
+                        <span class="read-source-what">${esc(what)}</span>
+                        <p class="read-source-gloss"><strong>${esc(t.sourceStrong)}</strong> ${esc(t.sourceText)}</p>
+                    </div>
+                </div>`;
     },
 
     /** The research's offer of agents, models and efforts, with the agents it turned down here as not ready (null: no choice). */
@@ -1157,13 +1268,15 @@ export const readDocumentMethods = uiModule({
         const s = st!;
         const t = strings.read;
         const again = s.mode === 'again';
-        const refusals = again ? [] : this.readPageRefusals();
-        const taken = again ? this.readLiveOf(s.readId)?.pages || 1 : s.pages.filter((_, i) => !refusals[i]).length;
-        const refused = again ? 0 : s.pages.length - taken;
+        const source = s.mode === 'source' ? s.srcAgain : null;
+        const refusals = s.mode !== 'document' ? [] : this.readPageRefusals();
+        const taken = again ? this.readLiveOf(s.readId)?.pages || 1 : source ? 1 : s.pages.filter((_, i) => !refusals[i]).length;
+        const refused = s.mode !== 'document' ? 0 : s.pages.length - taken;
         const choices = this.readChoicesNow();
         const held = choices ? readerHeld(choices, this.readChosen(choices).slice(0, s.readers)) : null;
+        const sum = !source ? t.footSum(taken, s.readers) : source.clip ? t.footSource(s.readers) : t.footSourceWhole(s.readers);
         const note = taken > 0
-            ? `<strong>${esc(t.footSum(taken, s.readers))}</strong> ${esc(t.usual(readUsualMinutes(s.readers, this.researchReadAcceptsAny()?.expectSecs)))}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
+            ? `<strong>${esc(sum)}</strong> ${esc(t.usual(readUsualMinutes(s.readers, this.researchReadAcceptsAny()?.expectSecs)))}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
             : '';
         const down = held ? `<span class="read-foot-down">${esc(t.downFoot)}</span>` : '';
         return `
@@ -1201,8 +1314,10 @@ export const readDocumentMethods = uiModule({
         if (state === 'checking') s.sawChecking = true;
         const readers = live?.readers || s.readers;
         const first = s.pages.find(p => !p.refused);
-        const thumb = first?.preview
-            ? `<img src="${esc(first.preview)}" alt="">`
+        // A source read again: its excerpt, and its comparison with the transcript as a step even with one reader.
+        const again = live?.source || s.srcAgain ? this.readSourceAgainNow() : null;
+        const thumb = first?.preview || again?.thumb
+            ? `<img src="${esc(first?.preview || again!.thumb)}" alt="">`
             : `<span class="read-tile"><strong>${esc(first?.kind ?? '')}</strong></span>`;
         const step = (mark: 'done' | 'now' | 'wait', text: string, extra = ''): string =>
             `<li class="read-step is-${mark}"><span class="read-step-mark" aria-hidden="true">${mark === 'done' ? '✓' : ''}</span>`
@@ -1218,7 +1333,8 @@ export const readDocumentMethods = uiModule({
         const steps = [
             step(sendMark, sendingText),
             step(readMark, readMark === 'done' ? t.readDone : t.reading, bar + this.readProgressWhoHtml(live, state, readers)),
-            ...(s.sawChecking ? [step(state === 'checking' ? 'now' : 'done', t.checking)] : []),
+            ...(again ? [step(state === 'checking' ? 'now' : state === 'done' ? 'done' : 'wait', t.comparingSource)]
+                : s.sawChecking ? [step(state === 'checking' ? 'now' : 'done', t.checking)] : []),
         ].join('');
         return `
                 <div class="read-progress">
@@ -1408,6 +1524,7 @@ export const readDocumentMethods = uiModule({
         }
         this.renderReadDialog();
         this.refreshReadSurfaces();
+        if (res?.source) this.refreshReadSourceViewer();
     },
 
     // ==================== THE RESULT ====================
@@ -1415,6 +1532,7 @@ export const readDocumentMethods = uiModule({
     /** "Baptism entry, Latin, Kurrent, 1846": the document's kind, languages, script and year. */
     readResultTitle(res: ReadResult): string {
         const t = strings.read;
+        if (res.source) return t.resultSource;
         const kind = t.kindTitles[res.doc.kind] ?? t.kindTitles.other;
         return [kind, langNames(res.doc.language), t.scripts[res.doc.script] ?? '', readDocYear(res.doc.date)].filter(Boolean).join(', ');
     },
@@ -1422,19 +1540,23 @@ export const readDocumentMethods = uiModule({
     /** The result's subtitle (HTML): the file's name, then legibility and the readers as pills. */
     readResultSubtitle(res: ReadResult): string {
         const t = strings.read;
-        const name = res.pages[0]?.name ?? '';
+        const again = res.source ? this.readSourceAgainNow() : null;
+        const name = again ? sourceAgainSub(again) : res.pages[0]?.name ?? '';
         const file = name
-            ? `<span class="read-file" title="${esc(name)}">${esc(res.pages.length > 1 ? t.progressSub(middleName(name, 40), res.pages.length) : middleName(name, 48))}</span>` : '';
+            ? `<span class="read-file" title="${esc(name)}">${esc(res.pages.length > 1 && !again ? t.progressSub(middleName(name, 40), res.pages.length) : middleName(name, 48))}</span>` : '';
         const legible = res.doc.legible === 'yes' ? { tone: 'is-ok', text: t.legible }
             : { tone: 'is-warn', text: res.doc.legible === 'partly' ? t.partly : t.notLegible };
-        const agree = agreeTone(res);
+        // A source read again: how it compares with the transcript, in place of how the readers agree.
+        const agree = res.source
+            ? res.source.agree === 'same' ? { tone: 'is-ok', text: t.srcSame } : { tone: 'is-warn', text: t.srcDiffer(Math.max(1, res.source.variants.length)) }
+            : agreeTone(res);
         const choices = this.researchReadAcceptsAny()?.choices;
         const who = (res.readers.who ?? []).filter(w => w.ran);
         const whoRow = who.length
-            ? `<div class="read-result-who">${whoLinesHtml(who.map(w => ({ label: whoLabel(w, choices), same: readWhoSame(who) })), t.readBy, 'read-result-who-line')}</div>`
+            ? `<div class="read-result-who">${whoLinesHtml(who.map(w => ({ label: whoLabel(w, choices), same: readWhoSame(who) })), res.source ? t.newRead : t.readBy, 'read-result-who-line')}</div>`
             : '';
         return `${file}<span class="read-pills"><span class="read-pill ${legible.tone}" data-pill="legible">${esc(legible.text)}</span>`
-            + `<span class="read-pill ${agree.tone}" data-pill="readers">${esc(agree.text)}</span></span>${whoRow}`;
+            + `<span class="read-pill ${agree.tone}" data-pill="${res.source ? 'source' : 'readers'}">${esc(agree.text)}</span></span>${whoRow}`;
     },
 
     /** The two readers of a result, for its places where they differ (null: the reading says no two readers). */
@@ -1534,9 +1656,10 @@ export const readDocumentMethods = uiModule({
         const partial = res.doc.legible !== 'yes'
             ? `<div class="read-partial" role="note"><strong>${esc(t.partialLead)}</strong> ${esc(t.partialText(t.whyText[res.doc.why ?? 'other'] ?? t.whyText.other))}`
               + ` <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button></div>` : '';
-        if (!entry) return `${partial}<p class="read-empty">${esc(t.noEntries)}</p>`;
+        const note = res.source ? this.readSourceNoteHtml(res) : '';
+        if (!entry) return `${note}${partial}<p class="read-empty">${esc(t.noEntries)}</p>`;
         const sec = resultSections(res, entry, getCurrentLanguage());
-        const parts: string[] = [partial];
+        const parts: string[] = [note, partial];
         if (sec.transcript) {
             const parsed = parseTranscript(entry);
             const focusable = entry.region ? ' tabindex="0"' : '';
@@ -1613,9 +1736,41 @@ export const readDocumentMethods = uiModule({
         return parts.join('');
     },
 
+    /**
+     * A source read again: what became of it (the transcript kept, the reading added, a difference
+     * a task to check, never a conflict), then each place the new reading differs from the transcript.
+     */
+    readSourceNoteHtml(res: ReadResult): string {
+        const t = strings.read;
+        const cmp = res.source!;
+        const differ = cmp.agree === 'differ';
+        const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
+        const confirmed = src ? !!this.sourceConfirmState(src).conf : false;
+        const choices = this.researchReadAcceptsAny()?.choices;
+        const who = (res.readers.who ?? []).filter(w => w.ran);
+        const newBy = [t.newRead.replace(/:\s*$/, ''), who.length ? whoLabel(who[0], choices, false) : ''].filter(Boolean).join(' · ');
+        const variants = differ ? cmp.variants.slice(0, 6).map(v =>
+            `<li class="read-legend-who"><span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkOld)}" aria-hidden="true"></span>${esc(`${t.todayTr}: “${plainMarks(v.at)}”`)}</span>`
+            + `<span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkNew)}" aria-hidden="true"></span>${esc(`${newBy}: “${plainMarks(v.other)}”`)}</span></li>`).join('') : '';
+        const said = [t.srcAdded, differ ? t.srcTask : t.srcSupports, confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
+        return `
+                <div class="read-source-note" role="note" data-agree="${cmp.agree}">
+                    <p class="read-source-note-text"><strong>${esc(t.srcKept)}</strong> ${esc(said)}</p>
+                    ${differ && cmp.task ? `<p class="read-source-task">${esc(t.srcTaskId(cmp.task))}</p>` : ''}
+                    ${variants ? `<ul class="read-legend read-source-variants">${variants}</ul>` : ''}
+                </div>`;
+    },
+
     readResultFootHtml(): string {
         const t = strings.read;
         const res = st?.result;
+        if (res?.source) {
+            // A source read again: nothing to propose nor read anew here; a difference opens its task in the research.
+            const task = res.source.agree === 'differ' && res.source.task && this.researchLinkAvailable('task') ? res.source.task : '';
+            return `<span class="batch-foot-note read-kept">${esc(t.kept)}</span>
+                <button type="button" class="${task ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
+                ${task ? `<button type="button" class="primary" data-act="open-task" data-task="${esc(task)}">${researchActionLabel(t.openTask, researchLinkMark('task'))}</button>` : ''}`;
+        }
         const propose = canPropose(res?.entries[st?.entry ?? 0]);
         const another = this.readDocumentReady()
             ? `<button type="button" class="secondary" data-act="another">${esc(t.another)}</button>` : '';
@@ -1931,6 +2086,8 @@ export const readDocumentMethods = uiModule({
                 text = t.advice[why] ?? t.advice.other;
                 break;
             }
+            // A source the research cannot read again (no original here, no transcript, not known there).
+            case 'source-again': title = t.srcCannot; text = t.srcWhy[err.failure?.kind ?? ''] ?? ''; break;
         }
         return { title, text };
     },
@@ -1947,7 +2104,7 @@ export const readDocumentMethods = uiModule({
         };
         const btn = (act: string, label: string, primary = false): string =>
             `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${researchActionLabel(label, marks[act] ?? 'none')}</button>`;
-        const close = btn('close', t.close, kind === 'limit' || kind === 'cancelled');
+        const close = btn('close', t.close, kind === 'limit' || kind === 'cancelled' || kind === 'source-again');
         // A reading started in the research is not read again from here.
         const own = this.readLiveOf(s.readId)?.from !== 'research';
         switch (kind) {
@@ -2106,7 +2263,12 @@ export const readDocumentMethods = uiModule({
             case 'remove': this.moveReadPage(key, 0); break;
             case 'up': this.moveReadPage(key, -1); break;
             case 'down': this.moveReadPage(key, 1); break;
-            case 'read': void (st?.mode === 'again' ? this.readDocumentAgain() : this.submitReadDocument()); break;
+            case 'read': void (st?.mode === 'again' ? this.readDocumentAgain() : st?.mode === 'source' ? this.submitReadSourceAgain() : this.submitReadDocument()); break;
+            case 'open-task': {
+                const url = el.dataset.task ? this.activeResearchLink('task', { task: el.dataset.task }) : null;
+                if (url) this.launchResearchLink(url);
+                break;
+            }
             case 'refine': if (st) { st.refineOpen = !st.refineOpen; this.readRedrawChoose(); } break;
             case 'reset-with': {
                 const choices = this.readChoicesNow();
@@ -2188,11 +2350,25 @@ export const readDocumentMethods = uiModule({
     readAgainInput(): void {
         const s = st;
         if (!s?.readId) return;
+        if (this.readSourceAgainNow()) { this.readSourceAgainInput(); return; }
         if (!this.readChoicesNow()) { void this.readDocumentAgain(); return; }
         s.mode = 'again';
         s.phase = 'input';
         s.error = null;
         s.notice = '';
+        this.renderReadDialog();
+    },
+
+    /** A source read again, again: its input (it is started anew from the source, not from the reading). */
+    readSourceAgainInput(): void {
+        const s = st;
+        if (!s || !this.readSourceAgainNow()) return;
+        s.mode = 'source';
+        s.phase = 'input';
+        s.error = null;
+        s.notice = '';
+        s.result = null;
+        s.readId = '';
         this.renderReadDialog();
     },
 
@@ -2290,6 +2466,29 @@ export const readDocumentMethods = uiModule({
         this.readStarted(link.researchId, reply.value.read, reply.value.state, pages.length, pages[0]?.file.name ?? '', pages.map(p => p.sha).join(','));
     },
 
+    /** "Read" at a source: `POST sources/read` (its excerpt alone or the whole entry), then its progress. */
+    async submitReadSourceAgain(): Promise<void> {
+        const s = st;
+        const link = this.researchOriginalsLink();
+        const again = s?.srcAgain;
+        if (!s || !again || s.busy || !link) return;
+        const base = this.readBridgeBase(link.researchId);
+        if (!base) { this.readFailed({ kind: 'down', code: '', status: 0, retryAfterMs: 0 }); return; }
+        storeReaders(s.readers);
+        s.busy = true;
+        s.notice = '';
+        this.renderReadDialog();
+        const reply = await startSourceRead(base, {
+            source: again.refn, ...(again.clip ? { clip: again.clip } : {}), readers: s.readers, lang: getCurrentLanguage(),
+            with: this.readWithNow(),
+        });
+        if (st !== s) return;
+        s.busy = false;
+        if (!reply.ok) { this.readFailed(reply.failure); return; }
+        s.result = null;
+        this.readStarted(link.researchId, reply.value.read, reply.value.state, 1, again.title, `source:${again.refn}`, again.refn);
+    },
+
     /**
      * `with` for the reading about to start (undefined: every reader as by default, nothing sent);
      * the choice is kept for the next dialog. Only a choice made in this dialog's input is sent.
@@ -2328,7 +2527,7 @@ export const readDocumentMethods = uiModule({
     },
 
     /** A reading started (or started again): remembered, followed. */
-    readStarted(researchId: string, id: string, state: ReadState, pages: number, name: string, doc = ''): void {
+    readStarted(researchId: string, id: string, state: ReadState, pages: number, name: string, doc = '', source = ''): void {
         const s = st;
         rememberRead(id, researchId, doc);
         const now = new Date().toISOString();
@@ -2338,6 +2537,7 @@ export const readDocumentMethods = uiModule({
             id, state, version: (prev?.version ?? 0) + 1, at: now, since: now, files: pages, pages, readers: s?.readers ?? 1,
             done: 0, entries: 0, name: prev?.name ?? name, person: prev?.person ?? '', from: 'app',
             ...(this.researchReadAcceptsAny()?.expectSecs ? { expectSecs: this.researchReadAcceptsAny()!.expectSecs } : {}),
+            ...(source || prev?.source ? { source: source || prev!.source } : {}),
         });
         readsByResearch.set(researchId, reads);
         results.delete(id);
@@ -2365,10 +2565,21 @@ export const readDocumentMethods = uiModule({
             : f.kind === 'read-busy' ? 'busy'
             : f.kind === 'limit' ? 'limit'
             : f.kind === 'held' ? 'held'
+            : f.kind === 'source-none' || f.kind === 'source-notext' || f.kind === 'source-noscan' ? 'source-again'
             : 'failed';
         if ((f.kind === 'with' || f.kind === 'agent') && s.phase !== 'propose' && this.readChoicesNow()) {
             this.readBackToInput(f);
             return;
+        }
+        // The source is read again already: that reading's progress.
+        if (f.kind === 'source-running' && f.read) {
+            this.readFollowSourceRunning(f.read);
+            return;
+        }
+        // No original or no transcript in the research: the action goes away until the research's next file.
+        if (f.kind === 'source-noscan' || f.kind === 'source-notext') {
+            const refn = f.source || s.srcAgain?.refn;
+            if (refn) this.holdReadSourceAgain(refn);
         }
         s.error = { kind, failure: f };
         if (s.phase === 'propose') {
@@ -2418,9 +2629,34 @@ export const readDocumentMethods = uiModule({
         this.refreshReadSurfaces();
     },
 
-    /** "Try again": the same reading again when there is one, else the pages sent anew. */
+    /** 409 read.source.running: the dialog shows the reading of the source under way. */
+    readFollowSourceRunning(id: string): void {
+        const s = st;
+        const link = this.researchOriginalsLink();
+        if (!s) return;
+        s.readId = id;
+        s.error = null;
+        s.result = null;
+        s.phase = 'progress';
+        s.startedAt = Date.now();
+        s.sawChecking = false;
+        const live = this.readLiveOf(id);
+        if (live) this.followReadInDialog(live);
+        else this.renderReadDialog();
+        this.watchReads();
+        if (link) void this.askResearchBridge(link.researchId, POLL_MS);
+    },
+
+    /** "Try again": the same reading again when there is one, else the pages sent anew (a source: from the source). */
     async retryReadDocument(): Promise<void> {
         if (!st) return;
+        if (this.readSourceAgainNow()) {
+            st.mode = 'source';
+            st.phase = 'input';
+            st.error = null;
+            await this.submitReadSourceAgain();
+            return;
+        }
         if (st.readId) { await this.readDocumentAgain(); return; }
         st.phase = 'input';
         st.error = null;

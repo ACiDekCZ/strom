@@ -93,6 +93,7 @@ import { readDocumentMethods } from './read-document-ui.js';
 import { readProposeMethods } from './read-propose-ui.js';
 import { researchImagesMethods } from './research-images-ui.js';
 import { sourceConfirmMethods } from './source-confirm-ui.js';
+import { readSourceMethods } from './read-source-ui.js';
 import { readHistoryMethods } from './read-history-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { rodViewMethods } from './rod-view.js';
@@ -672,6 +673,10 @@ Object.assign(UIClass.prototype, researchImagesMethods);
 type SourceConfirmMethods = typeof sourceConfirmMethods;
 export interface UIClass extends SourceConfirmMethods {}
 Object.assign(UIClass.prototype, sourceConfirmMethods);
+
+type ReadSourceMethods = typeof readSourceMethods;
+export interface UIClass extends ReadSourceMethods {}
+Object.assign(UIClass.prototype, readSourceMethods);
 
 type ReadProposeMethods = typeof readProposeMethods;
 export interface UIClass extends ReadProposeMethods {}

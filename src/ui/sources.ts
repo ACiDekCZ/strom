@@ -404,12 +404,14 @@ export const sourcesMethods = uiModule({
                 ? `<button type="button" class="link-button viewer-full-quality" data-full-quality="${i}"
                     title="${esc(strings.research.fullQualityTitle)}">${researchActionLabel(strings.research.fullQuality, researchLinkMark('excerpt'))}</button>` : '';
             const loaded = fromResearch.has(exc.id);
+            // Read this excerpt again from its original (spec 059): beside "Full quality".
+            const again = this.readSourceExcerptHtml(src, excerpts, i);
             chunks.push(`
                 <figure class="viewer-excerpt${loaded ? ' is-from-research' : ''}">
                     <img src="${esc(excerptImageUrl(exc))}" alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
                     ${loaded ? this.researchExcerptExtrasHtml(exc, src) : exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
-                </figure>${full}`);
+                </figure>${again ? `<div class="viewer-excerpt-links">${full}${again}</div>` : full}`);
         });
         // What is only in the research: loading slots, one line with a button, or why not here.
         chunks.push(this.researchImagesViewerHtml(src));
@@ -422,8 +424,9 @@ export const sourcesMethods = uiModule({
         }
         // Written from a reading ("Read a document"): its whole result is a click away, beside the transcript
         // (not in an archive: it has no reading results to give).
-        const reading = src.reading && !this.activeResearchAgentless()
-            ? `<p class="viewer-reading"><button type="button" class="link-button viewer-reading-open" id="source-viewer-reading">${esc(strings.read.sourceLink)}</button></p>` : '';
+        // With "Read again…" from the source's original in one row (spec 059).
+        const reading = this.readSourceLinksHtml(src, src.reading && !this.activeResearchAgentless()
+            ? `<button type="button" class="link-button viewer-reading-open" id="source-viewer-reading">${esc(strings.read.sourceLink)}</button>` : '');
         // The research's translation of the transcript (a section of the note): folded under it.
         const translationText = sourceTranslation(src.note);
         const translation = translationText
@@ -485,6 +488,7 @@ export const sourcesMethods = uiModule({
         body.querySelector('#source-viewer-reading')?.addEventListener('click', () => this.showReadingOfSource(src.id));
         this.wireResearchImagesViewer(body, src);
         this.wireSourceConfirm(body, src);
+        this.wireReadSourceAgain(body, src, excerpts);
 
         const editBtn = document.getElementById('source-viewer-edit');
         if (editBtn) editBtn.hidden = !editable;
