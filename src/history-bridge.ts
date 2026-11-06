@@ -12,7 +12,9 @@
  * JSON, no cookies) like the other writes; replies typed; never throws.
  */
 
-import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment } from './research-link.js';
+import {
+    cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
+} from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import {
     HISTORY_ALIGN_PLAN_RE, HISTORY_ALIGN_UNDO_RE, HISTORY_KINDS, HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE,
@@ -533,6 +535,71 @@ export async function postBridgeStories(base: string, history: boolean, features
     check?: LinkCheck): Promise<HistoryWriteResult> {
     const res = await postWrite(base, '/stories', { history });
     return res ? storiesReply(res.status, res.body, features, check) : NETWORK;
+}
+
+// ==================== WHO DECIDES HYPOTHESES (spec 060) ====================
+
+/**
+ * Why `POST /hypotheses {decide}` did not go:
+ * - `link`: 403 `hypotheses.link` — the research confirms the choice in its terminal (`link`, the agent);
+ * - `archive`: 409 `hypotheses.archive`; `invalid`: 400; `busy`: 503 research.busy;
+ * - `held`: sealed elsewhere / not downloaded / disk full; `network`: no answer; `unknown`: anything else.
+ */
+export type HypothesesDecideError = 'link' | 'archive' | 'invalid' | 'busy' | 'held' | 'network' | 'unknown';
+
+export type HypothesesDecideResult =
+    | { ok: true; decide?: ResearchHypothesesDecide }
+    | { ok: false; code: HypothesesDecideError; status: number; reason: string; bridgeCode: string; link?: string; held?: ResearchWriteHeld };
+
+/**
+ * The research's `hypotheses` link when it is the one the app would build for this tree (the same scheme
+ * and tree, `decide` one of the fixed values, nothing else); rebuilt from those parameters, else null.
+ */
+function saidHypothesesLink(said: string, tree: string, scheme?: string): string | null {
+    const m = /^([a-z0-9-]+):\/\/hypotheses\?([^#]*)$/.exec(said);
+    if (!m) return null;
+    const q = new URLSearchParams(m[2]);
+    if ([...q.keys()].sort().join() !== 'decide,tree' || q.get('tree') !== tree) return null;
+    const decide = q.get('decide');
+    if (decide !== 'person' && decide !== 'agent') return null;
+    const built = researchSchemeUrl('hypotheses', { tree, decide }, scheme);
+    return built && built.startsWith(`${m[1]}://`) ? built : null;
+}
+
+/** The reply to `POST /hypotheses {decide}`, typed (`check`: the tree and scheme its link is checked for). */
+export function hypothesesDecideReply(status: number, body: unknown, features: readonly string[] | null | undefined,
+    sent: ResearchHypothesesDecide, check: { tree: string; scheme?: string }): HypothesesDecideResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        return { ok: true, ...(r.decide === 'agent' || r.decide === 'person' ? { decide: r.decide } : {}) };
+    }
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    const out = (c: HypothesesDecideError, extra: { link?: string; held?: ResearchWriteHeld } = {}): HypothesesDecideResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    if (status === 403 && code === 'hypotheses.link') {
+        const params = asRecord(r.params);
+        const said = typeof r.link === 'string' ? r.link : typeof params?.link === 'string' ? params.link : '';
+        const url = (said && saidHypothesesLink(said, check.tree, check.scheme))
+            || researchSchemeUrl('hypotheses', { tree: check.tree, decide: sent }, check.scheme) || '';
+        return out('link', url ? { link: url } : {});
+    }
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && code === 'hypotheses.archive') return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    return out('unknown');
+}
+
+/**
+ * Who decides the research's hypotheses: `person` is written at once; `agent` the research confirms in its
+ * terminal (403 `hypotheses.link` with its link) — nothing written here.
+ */
+export async function postBridgeHypotheses(base: string, decide: ResearchHypothesesDecide, features: readonly string[] | null | undefined,
+    check: { tree: string; scheme?: string }): Promise<HypothesesDecideResult> {
+    const res = await postWrite(base, '/hypotheses', { decide });
+    return res ? hypothesesDecideReply(res.status, res.body, features, decide, check) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

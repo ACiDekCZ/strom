@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
-import { dropFile } from './research-bridge.js';
+import { dropFile, fakeBridge, openResearch, poll, links, touchScreenNow, FakeBridge } from './research-bridge.js';
 
 /**
  * Who decided a hypothesis (spec 060) in "What the research knows": the
@@ -8,6 +8,10 @@ import { dropFile } from './research-bridge.js';
  * person's decision with its reason and no mark; the way into the research —
  * "Decide in the research" (open) or "Change in the research" (decided) —
  * with the terminal mark, only where the research announced `hypothesis`.
+ * Research for this tree → "Who decides hypotheses": only with
+ * `hypotheses.decide` and a value in `/status`; the person written at once
+ * (`POST /hypotheses`), the agent confirmed in the research's terminal (403
+ * `hypotheses.link`: the sentence and its link under the row).
  * Invented people only; handing a link to the system is recorded instead.
  */
 
@@ -120,6 +124,136 @@ test.describe('Who decided a hypothesis: What the research knows', () => {
             await expect(hypo(page, 'H0022').locator('.person-research-hypo-meta')).toHaveText('H0022 · rozhodnutá pro B · rozhodl agent · 6. 11. 2026');
             await expect(hypo(page, 'H0022').locator('.person-research-hypo-link')).toContainText('Změnit ve výzkumu');
             await expect(hypo(page, 'H0024').locator('.person-research-hypo-link')).toContainText('Rozhodnout ve výzkumu');
+        });
+    });
+});
+
+const SETTINGS_LINKS = ['send', 'open', 'live', 'app', 'setup', 'hypotheses'];
+
+async function settingsSetup(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
+    const bridge = await fakeBridge(page, { features: ['hypotheses.decide'], hypotheses: { decide: 'person', writes: [] }, links: SETTINGS_LINKS, ...init });
+    await openResearch(page);
+    await poll(page);
+    return bridge;
+}
+
+async function openTreeSettings(page: Page): Promise<void> {
+    await page.evaluate(() => window.Strom.UI.showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()!));
+    await expect(page.locator('#research-tree-settings-modal')).toBeVisible();
+}
+
+const row = (page: Page) => page.locator('#research-tree-settings-modal .research-hypos');
+const choice = (page: Page, v: 'person' | 'agent') => page.locator(`input[name="research-hypos-decide"][value="${v}"]`);
+const hyposNote = (page: Page) => page.locator('#research-hypos-note');
+const option = (page: Page, v: 'person' | 'agent') => row(page).locator('label').filter({ has: choice(page, v) });
+
+test.describe('Who decides hypotheses: Research for this tree', () => {
+    test('as the research says; AI decides: the research confirms it in its terminal, the choice stays', async ({ page }) => {
+        const bridge = await settingsSetup(page);
+        await openTreeSettings(page);
+        await expect(row(page).locator('legend')).toHaveText('Who decides hypotheses');
+        await expect(option(page, 'person')).toHaveText('I decide');
+        await expect(option(page, 'agent')).toContainText('AI decides');
+        await expect(row(page)).toContainText('Switching does not change hypotheses already decided.');
+        await expect(option(page, 'agent').locator('.research-ai-badge')).toHaveCount(1);
+        await expect(option(page, 'person').locator('.research-ai-badge')).toHaveCount(0);
+        await expect(choice(page, 'person')).toBeChecked();
+        await option(page, 'agent').click();
+        await expect.poll(() => bridge.hypotheses!.writes).toEqual([{ decide: 'agent' }]);
+        await expect(hyposNote(page)).toContainText('The research confirms this choice in its terminal.');
+        const confirm = page.locator('#research-hypos-note-link');
+        await expect(confirm).toContainText('Confirm in the research');
+        await expect(confirm.locator('.research-open-mark')).toHaveCount(1);
+        await expect(choice(page, 'person')).toBeChecked();
+        await confirm.click();
+        expect(await links(page)).toContain(`strom-research://hypotheses?tree=${UUID}&decide=agent`);
+        // Confirmed in the terminal: the next status says it.
+        bridge.hypotheses!.decide = 'agent';
+        await poll(page);
+        await expect(choice(page, 'agent')).toBeChecked();
+    });
+
+    test('a link not the research\'s own is not used: the app builds it', async ({ page }) => {
+        await settingsSetup(page, { hypotheses: { decide: 'person', writes: [], link: 'https://example.org/hypotheses?tree=x' } });
+        await openTreeSettings(page);
+        await option(page, 'agent').click();
+        await page.locator('#research-hypos-note-link').click();
+        expect(await links(page)).toContain(`strom-research://hypotheses?tree=${UUID}&decide=agent`);
+        expect((await links(page)).some(u => u.startsWith('https:'))).toBe(false);
+    });
+
+    test('I decide: written at once', async ({ page }) => {
+        const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [] } });
+        await openTreeSettings(page);
+        await expect(choice(page, 'agent')).toBeChecked();
+        await option(page, 'person').click();
+        await expect.poll(() => bridge.hypotheses!.writes).toEqual([{ decide: 'person' }]);
+        await expect(choice(page, 'person')).toBeChecked();
+        await expect(hyposNote(page)).toHaveCount(0);
+        await poll(page);
+        await expect(choice(page, 'person')).toBeChecked();
+        await expect(choice(page, 'person')).toBeEnabled();
+    });
+
+    test('busy: the sentence under the row, the choice as it was', async ({ page }) => {
+        const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [], reply: { status: 503, body: { error: 'Busy.', code: 'research.busy', text: 'Busy.' } } } });
+        await openTreeSettings(page);
+        await option(page, 'person').click();
+        await expect(hyposNote(page)).toHaveText('The research is busy. It will work again shortly.');
+        await expect(choice(page, 'agent')).toBeChecked();
+        expect(bridge.hypotheses!.writes).toEqual([{ decide: 'person' }]);
+    });
+
+    test('without the bridge the choice rests with the sentence', async ({ page }) => {
+        const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [] } });
+        bridge.down = true;
+        await poll(page);
+        await openTreeSettings(page);
+        await expect(choice(page, 'agent')).toBeChecked();
+        await expect(choice(page, 'agent')).toBeDisabled();
+        await expect(choice(page, 'person')).toBeDisabled();
+        await expect(hyposNote(page)).toHaveText("The research isn't running. This can be changed once it runs.");
+    });
+
+    test('an unknown value reads as I decide, nothing written', async ({ page }) => {
+        const bridge = await settingsSetup(page, { hypotheses: { decide: 'committee', writes: [] } });
+        await openTreeSettings(page);
+        await expect(choice(page, 'person')).toBeChecked();
+        await poll(page);
+        expect(bridge.hypotheses!.writes).toEqual([]);
+    });
+
+    test('no row: an older research, a research not saying it, an archive', async ({ page }) => {
+        const bridge = await settingsSetup(page, { features: [] });
+        await openTreeSettings(page);
+        await expect(page.locator('#research-tree-settings-modal .research-tree-settings')).toBeVisible();
+        await expect(row(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        bridge.features = ['hypotheses.decide'];
+        delete bridge.hypotheses!.decide;
+        await poll(page);
+        await openTreeSettings(page);
+        await expect(row(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        bridge.hypotheses!.decide = 'person';
+        bridge.accepts = { ...(bridge.accepts as object), mode: 'archive', sync: { auto: 'mirror' } };
+        await poll(page);
+        await openTreeSettings(page);
+        await expect(page.locator('#research-tree-settings-modal .research-tree-settings')).toBeVisible();
+        await expect(row(page)).toHaveCount(0);
+    });
+
+    test.describe('German', () => {
+        test.use({ locale: 'de-DE' });
+        test('phone with a touch screen: the row fits', async ({ page }) => {
+            await page.setViewportSize({ width: 390, height: 844 });
+            await settingsSetup(page);
+            await touchScreenNow(page);
+            await openTreeSettings(page);
+            await expect(row(page).locator('legend')).toHaveText('Wer über Hypothesen entscheidet');
+            await row(page).scrollIntoViewIfNeeded();
+            expect(await row(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         });
     });
 });

@@ -21690,6 +21690,15 @@
         .modal .research-stories .settings-checkbox.research-stories-row { padding: 4px 0; margin: 0; clear: both; }
         .research-stories-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         @media (pointer: coarse) { .research-stories-note .link-button { min-height: 44px; } }
+        .research-hypos-host:empty { display: none; }
+        .research-hypos { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); }
+        .research-hypos legend { float: left; width: 100%; }
+        .modal .research-hypos .settings-checkbox.research-hypos-row { padding: 4px 0; margin: 0; clear: both; align-items: center; }
+        .research-hypos-row .research-ai-badge { margin-left: 4px; vertical-align: 1px; }
+        .research-hypos-desc { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .research-hypos .research-not-retroactive { margin-top: 8px; }
+        .research-hypos-note { margin-top: 6px; }
+        @media (pointer: coarse) { .modal .research-hypos .settings-checkbox.research-hypos-row { min-height: 44px; } }
         /* Work outside the directions (spec 038 §9.5, research-offline-ui.ts): the tree's choice as cards, the growing
            branches' question, branches with their own choice and tasks with a manual place; a refusal under its card. */
         .research-offline-host:empty { display: none; }

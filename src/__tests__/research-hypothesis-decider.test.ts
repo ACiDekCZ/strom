@@ -10,6 +10,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { researchHypothesisDecision, researchHypothesisLinkLabel } from '../research-hypotheses.js';
 import { researchSchemeUrl, researchUrlMark, sanitizeLiveStatus } from '../research-link.js';
 import { setLanguage } from '../strings.js';
+import { hypothesesDecideReply } from '../history-bridge.js';
 import type { ResearchHypothesis } from '../types.js';
 
 const TREE = '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10';
@@ -171,5 +172,36 @@ describe('who decides in /status (spec 060)', () => {
         expect(sanitizeLiveStatus({ ...raw, hypotheses: { decide: 'committee' }, features: ['hypotheses.decide'] })!.hypothesesDecide).toBe('person');
         expect(sanitizeLiveStatus({ tree: { id: TREE }, features: ['hypotheses.decide'] })!.hypothesesDecide).toBeUndefined();
         expect(sanitizeLiveStatus({ ...raw, hypotheses: {}, features: ['hypotheses.decide'] })!.hypothesesDecide).toBeUndefined();
+    });
+});
+
+describe('the answer to POST /hypotheses (spec 060)', () => {
+    const check = { tree: TREE };
+    const F = ['hypotheses.decide'];
+
+    it('the person written: ok, with the value the research says', () => {
+        expect(hypothesesDecideReply(200, { ok: true, decide: 'person' }, F, 'person', check)).toEqual({ ok: true, decide: 'person' });
+        expect(hypothesesDecideReply(200, { ok: true }, F, 'person', check)).toEqual({ ok: true });
+    });
+
+    it('the agent: 403 hypotheses.link with the research\'s link, used only when it is its own for this tree', () => {
+        const own = `strom-research://hypotheses?tree=${TREE}&decide=agent`;
+        const said = (link: unknown) => hypothesesDecideReply(403, { code: 'hypotheses.link', error: 'Confirm.', link }, F, 'agent', check);
+        expect(said(own)).toMatchObject({ ok: false, code: 'link', link: own });
+        // Not the research's own (another scheme, tree, parameter): the app builds its own.
+        for (const bad of ['https://example.org/hypotheses?tree=x', `strom-research://hypotheses?tree=${TREE}&decide=agent&run=rm`,
+            'strom-research://hypotheses?tree=00000000-0000-0000-0000-000000000000&decide=agent', `strom-research://setup?tree=${TREE}`, 42]) {
+            expect(said(bad)).toMatchObject({ code: 'link', link: own });
+        }
+        expect(hypothesesDecideReply(403, { code: 'hypotheses.link', link: `strom-research-beta://hypotheses?tree=${TREE}&decide=agent` }, F, 'agent',
+            { tree: TREE, scheme: 'strom-research-beta' })).toMatchObject({ link: `strom-research-beta://hypotheses?tree=${TREE}&decide=agent` });
+    });
+
+    it('the other refusals typed', () => {
+        expect(hypothesesDecideReply(409, { code: 'hypotheses.archive', error: 'An archive.' }, F, 'person', check))
+            .toMatchObject({ ok: false, code: 'archive', reason: 'An archive.' });
+        expect(hypothesesDecideReply(400, { code: 'hypotheses.invalid' }, F, 'person', check)).toMatchObject({ code: 'invalid' });
+        expect(hypothesesDecideReply(503, { code: 'research.busy' }, F, 'person', check)).toMatchObject({ code: 'busy' });
+        expect(hypothesesDecideReply(500, {}, F, 'person', check)).toMatchObject({ code: 'unknown' });
     });
 });

@@ -15,8 +15,11 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
-import { researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, researchLinkMark } from '../research-link.js';
-import { postBridgeStories } from '../history-bridge.js';
+import {
+    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, researchLinkMark, researchUrlMark,
+    type ResearchHypothesesDecide,
+} from '../research-link.js';
+import { postBridgeStories, postBridgeHypotheses } from '../history-bridge.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -40,6 +43,20 @@ const askLater = new Set<TreeId>();
  */
 const stories: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: boolean; busy?: boolean } = { rid: '' };
 let storiesListening = false;
+
+/**
+ * "Who decides hypotheses" (spec 060): the same parts as `stories` — the
+ * research's answer under the row (`link`: its terminal confirms the agent),
+ * the value asked until the status says it (`want`), a write on its way (`busy`).
+ */
+const hypos: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: ResearchHypothesesDecide; busy?: boolean } = { rid: '' };
+/** Who decides as each research last said it in this page: the row at rest while its bridge is down. */
+const lastDecide = new Map<string, ResearchHypothesesDecide>();
+// After every module is evaluated (the listener list lives in a module this one imports).
+queueMicrotask(() => onBridgeStatus((rid, status) => {
+    if (status.hypothesesDecide) lastDecide.set(rid.toLowerCase(), status.hypothesesDecide);
+    else lastDecide.delete(rid.toLowerCase());
+}));
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -276,6 +293,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${originalsHtml}
                 <div class="research-images-host" id="research-images-host"></div>
                 <div class="research-stories-host" id="research-stories-host"></div>
+                ${archive || agentAway ? '' : `<div class="research-hypos-host" id="research-hypos-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>`}
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
@@ -407,6 +425,9 @@ export const researchTreeSettingsMethods = uiModule({
         stories.rid = link.id;
         delete stories.note; delete stories.want; delete stories.busy;
         this.renderResearchStoriesRow();
+        hypos.rid = link.id;
+        delete hypos.note; delete hypos.want; delete hypos.busy;
+        this.renderResearchHypothesesRow();
         // Work outside the directions (§9.5): the same condition as the transcripts, with the research's branches.
         this.startOffLineSettings(link.id);
         if (!storiesListening) {
@@ -414,6 +435,7 @@ export const researchTreeSettingsMethods = uiModule({
             onBridgeStatus((rid) => {
                 if (rid !== stories.rid) return;
                 this.renderResearchStoriesRow();
+                this.renderResearchHypothesesRow();
                 this.renderOffLineSettings();
             });
         }
@@ -495,6 +517,88 @@ export const researchTreeSettingsMethods = uiModule({
             stories.note = { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) };
         }
         this.renderResearchStoriesRow();
+    },
+
+    /**
+     * Spec 060: "Who decides hypotheses" — only with `hypotheses.decide` and a
+     * value in `/status` (not in an archive nor a research waiting for its
+     * agent: no host there); the choice follows the research's status; without
+     * the bridge at rest with its sentence.
+     */
+    renderResearchHypothesesRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-hypos-host`);
+        if (!host) return;
+        const rid = hypos.rid;
+        const ctx = this.historyManageContext();
+        const last = ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        const up = this.researchBridgeUp(rid);
+        const said = up && last ? last.hypothesesDecide : last?.hypothesesDecide ?? lastDecide.get(rid.toLowerCase());
+        if (!features.includes(HYPOTHESES_DECIDE_FEATURE) || !said) {
+            host.innerHTML = '';
+            return;
+        }
+        const r = strings.research;
+        if (hypos.want !== undefined && said === hypos.want) delete hypos.want;
+        const value = hypos.want ?? said;
+        const note = !up ? { text: strings.history.storiesBridgeDown } : hypos.note;
+        const focused = (document.activeElement as HTMLInputElement | null)?.name === 'research-hypos-decide'
+            ? (document.activeElement as HTMLInputElement).value : '';
+        const off = up && !hypos.busy ? '' : ' disabled';
+        const option = (v: ResearchHypothesesDecide, label: string, ai: boolean): string => `
+                <label class="settings-checkbox research-hypos-row">
+                    <input type="radio" name="research-hypos-decide" value="${v}"${v === value ? ' checked' : ''}${off}>
+                    <span class="settings-text"><span class="settings-name">${esc(label)}${ai
+                        ? ` <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : ''}</span></span>
+                </label>`;
+        host.innerHTML = `
+            <fieldset class="research-transcripts research-hypos" id="research-hypos">
+                <legend>${esc(r.hypoDecideTitle)}</legend>
+                ${option('person', r.hypoDecidePerson, false)}
+                ${option('agent', r.hypoDecideAgent, true)}
+                <p class="research-hypos-desc">${esc(r.hypoDecideDesc)}</p>
+                <p class="research-not-retroactive"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(r.hypoDecideNotRetro)}</span></p>
+                ${note ? `<p class="research-stories-note research-hypos-note" id="research-hypos-note"><span>${esc(note.text)}</span>${'link' in note && note.link
+                    ? ` <button type="button" class="link-button" id="research-hypos-note-link">${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}</button>` : ''}</p>` : ''}
+            </fieldset>`;
+        host.querySelectorAll<HTMLInputElement>('input[name="research-hypos-decide"]').forEach(input => {
+            input.addEventListener('change', () => { if (input.checked) void this.setResearchHypothesesDecide(input.value as ResearchHypothesesDecide); });
+            if (focused && input.value === focused) input.focus({ preventScroll: true });
+        });
+        host.querySelector<HTMLButtonElement>('#research-hypos-note-link')?.addEventListener('click', () => hypos.note?.link?.run());
+    },
+
+    /**
+     * Spec 060: `POST /hypotheses {decide}` — the person at once; the agent the research confirms in its
+     * terminal (the sentence and its link under the row); the choice stays as the research says.
+     */
+    async setResearchHypothesesDecide(decide: ResearchHypothesesDecide): Promise<void> {
+        const rid = hypos.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || hypos.busy) { this.renderResearchHypothesesRow(); return; }
+        const r = strings.research;
+        hypos.busy = true;
+        delete hypos.note;
+        this.renderResearchHypothesesRow();
+        const scheme = announcedResearchScheme();
+        const res = await postBridgeHypotheses(base, decide, ctx!.features, { tree: rid, ...(scheme ? { scheme } : {}) });
+        if (hypos.rid !== rid) return;
+        delete hypos.busy;
+        if (res.ok) {
+            hypos.want = res.decide ?? decide;
+        } else if (res.code === 'link') {
+            const url = res.link;
+            hypos.note = {
+                text: r.hypoDecideConfirm,
+                ...(url ? { link: { label: r.hypoDecideConfirmLink, run: () => this.launchResearchLink(url, 'terminal'), mark: researchUrlMark(url) ?? 'terminal' } } : {}),
+            };
+        } else if (res.code === 'busy') {
+            hypos.note = { text: strings.history.errBusy };
+        } else {
+            hypos.note = { text: res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed) };
+        }
+        this.renderResearchHypothesesRow();
     },
 
     /** Save the choice at once (it goes with the next send). */

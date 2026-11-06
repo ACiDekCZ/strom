@@ -92,6 +92,12 @@ export interface FakeBridge {
     features?: string[];
     /** More fields of `/status` (e.g. `channel`, `linkScheme`). */
     statusExtra?: Record<string, unknown>;
+    /**
+     * Who decides hypotheses (spec 060, `hypotheses.decide`): `/status.hypotheses.decide` (`decide`, not said
+     * when unset); `POST /hypotheses` bodies (`writes`); `person` written at once, `agent` 403
+     * `hypotheses.link` (the terminal confirms; a test does it by changing `decide`); `reply` answers instead.
+     */
+    hypotheses?: { decide?: string; writes: Record<string, unknown>[]; reply?: { status: number; body: unknown }; link?: string };
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /** Slow (a big research): `/status` answers after this many ms of real time. */
@@ -362,6 +368,25 @@ async function serveDuplicates(b: FakeBridge, method: string, url: URL, posted: 
 }
 
 /** The answer to `/quality*` (null: not one of them; 404 when not said in `features`). */
+/** `POST /hypotheses {decide}` (spec 060; 404 without `hypotheses.decide` in `features`). */
+function serveHypotheses(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
+    const hy = b.hypotheses;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!hy || rest !== '/hypotheses') return null;
+    if (method !== 'POST' || !(b.features ?? []).includes('hypotheses.decide')) return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(posted ?? '{}'); } catch { /* keep empty */ }
+    hy.writes.push(body);
+    if (hy.reply) return hy.reply;
+    if (body.decide === 'agent') {
+        const error = 'The research confirms this choice in its terminal.';
+        return { status: 403, body: { error, text: error, code: 'hypotheses.link', link: hy.link ?? `strom-research://hypotheses?tree=${UUID}&decide=agent` } };
+    }
+    if (body.decide !== 'person') return { status: 400, body: { error: 'The request is not one the research reads.', code: 'hypotheses.invalid' } };
+    hy.decide = 'person';
+    return { status: 200, body: { ok: true, decide: 'person' } };
+}
+
 function serveQuality(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
     const q = b.quality;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
@@ -1572,6 +1597,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (hist) return json(hist.status, hist.body);
         const dups = await serveDuplicates(b, method, url, route.request().postData());
         if (dups) return json(dups.status, dups.body);
+        const hyp = serveHypotheses(b, method, url, route.request().postData());
+        if (hyp) return json(hyp.status, hyp.body);
         const qual = serveQuality(b, method, url, route.request().postData());
         if (qual) return json(qual.status, qual.body);
         const names = await serveSurnames(b, method, url);
@@ -1679,6 +1706,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                     ...(b.history.stories !== undefined ? { stories: { history: b.history.searching && b.history.stories } } : {}),
                 } : {}),
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
+                ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }
