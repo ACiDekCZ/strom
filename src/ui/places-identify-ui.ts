@@ -121,10 +121,12 @@ export const placesIdentifyMethods = uiModule({
      * Read the research's places when its bridge here announces them (also
      * with the dialog closed: the map and the person card show the states).
      * One read at a time, none when the last one is younger than `maxAgeMs`;
-     * true when what the research says changed.
+     * true when what the research says changed. `fresh`: a read that starts
+     * now (after a write), not one already on its way, which may have been
+     * answered before the write.
      */
-    loadPlacesLive(maxAgeMs = 0): Promise<boolean> {
-        if (liveLoading) return liveLoading;
+    loadPlacesLive(maxAgeMs = 0, fresh = false): Promise<boolean> {
+        if (liveLoading) return fresh ? liveLoading.then(() => this.loadPlacesLive(0, true)) : liveLoading;
         const ctx = this.placesResearchContext();
         const { researchId, base } = ctx;
         if (!researchId || !base || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return Promise.resolve(false);
@@ -133,12 +135,14 @@ export const placesIdentifyMethods = uiModule({
         }
         liveLoading = (async () => {
             const prev = placesView.live?.researchId === researchId ? placesView.live.payload : null;
+            // Only what was queued before this read asked is in its answer: a place queued meanwhile stays queued here.
+            const queuedBefore = [...placesView.queuedLocal];
             const res = await fetchBridgePlaces(base, { rev: prev?.rev });
             if (!res.ok) return false;
             liveReadAt = { researchId, at: Date.now() };
-            const hadLocal = placesView.queuedLocal.size > 0;
+            const hadLocal = queuedBefore.some(k => placesView.queuedLocal.has(k));
             placesView.live = { researchId, payload: res.payload };
-            placesView.queuedLocal = new Set();
+            for (const k of queuedBefore) placesView.queuedLocal.delete(k);
             return hadLocal || JSON.stringify(prev) !== JSON.stringify(res.payload);
         })().finally(() => { liveLoading = null; });
         return liveLoading;
@@ -150,10 +154,10 @@ export const placesIdentifyMethods = uiModule({
      * stays otherwise), the open map and person card. Without a bridge
      * everything keeps what the tree knows.
      */
-    async refreshPlacesLive(maxAgeMs = 0): Promise<void> {
+    async refreshPlacesLive(maxAgeMs = 0, fresh = false): Promise<void> {
         const before = JSON.stringify([...placesView.ids]);
         const prevCounts = JSON.stringify(this.placesLivePayload()?.counts);
-        const changed = await this.loadPlacesLive(maxAgeMs);
+        const changed = await this.loadPlacesLive(maxAgeMs, fresh);
         if (!changed) return;
         if (document.getElementById('places-modal')) {
             const after = JSON.stringify([...this.computePlaceIdentities(placesView.usages.keys())]);
@@ -538,7 +542,8 @@ export const placesIdentifyMethods = uiModule({
         } else if (sub) {
             this.showToast(sub, TOAST_MS);
         }
-        void this.refreshPlacesLive();
+        // A read after the step (one on its way may have been answered before it).
+        void this.refreshPlacesLive(0, true);
         return true;
     },
 
@@ -566,7 +571,7 @@ export const placesIdentifyMethods = uiModule({
             case 'archive': text = res.reason || r.errArchive; break;
             case 'network': text = r.errNetwork; break;
             case 'later': text = r.errUndoLater; break;
-            case 'changed': text = r.errChanged; void this.refreshPlacesLive(); break;
+            case 'changed': text = r.errChanged; void this.refreshPlacesLive(0, true); break;
             default: text = res.reason || r.errFailed;
         }
         const link = res.code === 'link' ? res.link : undefined;
@@ -584,7 +589,7 @@ export const placesIdentifyMethods = uiModule({
         }
         for (const k of keys) placesView.queuedLocal.delete(k);
         this.showToast(strings.places.research.unqueued, TOAST_MS);
-        await this.refreshPlacesLive();
+        await this.refreshPlacesLive(0, true);
         this.redrawPlacesKeepingSearch();
         this.placesLiveChanged();
     },

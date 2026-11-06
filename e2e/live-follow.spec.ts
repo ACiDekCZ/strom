@@ -150,6 +150,56 @@ async function seedMapPlaces(page: Page): Promise<void> {
 }
 
 /**
+ * The research's places as its bridge answers them (spec 058): a queueing
+ * step's forms come back as queued in every read asked after it (as the
+ * research's own bridge says them). `hold()` keeps the next read unanswered
+ * until its release is called; it then answers what the research had when
+ * it was asked.
+ */
+async function queueingPlaces(page: Page) {
+    const queued = new Set<string>();
+    let gate: Promise<void> | null = null;
+    const places = {
+        posted: [] as Record<string, unknown>[],
+        /** Reads answered. */
+        answered: 0,
+        /** Reads asked after the first step and answered. */
+        readAfterPost: 0,
+        /** A held read is waiting. */
+        holding: false,
+        hold(): () => void {
+            let open!: () => void;
+            gate = new Promise<void>(resolve => { open = resolve; });
+            return () => open();
+        },
+    };
+    await page.route(`${BRIDGE}/places**`, async (route) => {
+        const req = route.request();
+        if (req.method() === 'POST') {
+            const body = JSON.parse(req.postData() ?? '{}') as { forms?: string[] };
+            places.posted.push(body);
+            for (const f of body.forms ?? []) queued.add(f);
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                body: JSON.stringify({ ok: true, queued: body.forms?.length ?? 0, skipped: [] }) });
+        }
+        const after = places.posted.length > 0;
+        const forms = Object.fromEntries([...queued].map(f => [f, { state: 'queued' }]));
+        const payload = JSON.stringify({ rev: `p${queued.size + 1}`, places: {}, forms });
+        if (gate) {
+            const wait = gate;
+            gate = null;
+            places.holding = true;
+            await wait;
+            places.holding = false;
+        }
+        await route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: payload });
+        places.answered++;
+        if (after) places.readAfterPost++;
+    });
+    return places;
+}
+
+/**
  * The bridge's next status, read by the app: two asks of the reconnect chain
  * after now (the first answers with what the bridge has now, the second is
  * asked only after the app read it).
@@ -1376,18 +1426,7 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
         bridge.features = ['working.place', 'places.identify'];
         bridge.person = 'P0013';
-        const posted: Record<string, unknown>[] = [];
-        await page.route(`${BRIDGE}/places**`, async (route) => {
-            const req = route.request();
-            if (req.method() === 'POST') {
-                const body = JSON.parse(req.postData() ?? '{}') as { forms?: string[] };
-                posted.push(body);
-                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ ok: true, queued: body.forms?.length ?? 0, skipped: [] }) });
-            }
-            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                body: JSON.stringify({ rev: 'p1', places: {}, forms: {} }) });
-        });
+        const places = await queueingPlaces(page);
         await expect.poll(() => focusRefn(page)).toBe('P0013');
         await seedMapPlaces(page);
         await nextStatus(bridge);
@@ -1395,11 +1434,45 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         const notice = page.locator('#map-container .map-follow-notice');
         await expect(notice.locator('b')).toHaveText('Lhota u Habrova');
         await notice.locator('.map-follow-research').click();
-        await expect.poll(() => posted.length).toBe(1);
-        expect(posted[0]).toMatchObject({ do: 'queue', forms: ['Lhota u Habrova'] });
+        await expect.poll(() => places.posted.length).toBe(1);
+        expect(places.posted[0]).toMatchObject({ do: 'queue', forms: ['Lhota u Habrova'] });
         await expect(page.locator('.toast')).toContainText('1 place queued for the research.');
+        // The research's places read after the step (they say it queued) are in: still not offered.
+        await expect.poll(() => places.readAfterPost).toBeGreaterThan(0);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
         await expect(notice.locator('.map-follow-research')).toHaveCount(0);
         await expect(notice.locator('.map-follow-locate')).toBeVisible();
+    });
+
+    test('Look up in the research: a read of the research\'s places answered before the step does not offer it again (spec 058)', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place', 'places.identify'];
+        bridge.person = 'P0013';
+        const places = await queueingPlaces(page);
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        const notice = page.locator('#map-container .map-follow-notice');
+        await expect(notice.locator('b')).toHaveText('Lhota u Habrova');
+        // A read on its way, answered (as before the step) only after the step went.
+        const held = places.hold();
+        await page.evaluate(() => { void window.Strom.UI.refreshPlacesLive(); });
+        await expect.poll(() => places.holding).toBe(true);
+        await notice.locator('.map-follow-research').click();
+        await expect.poll(() => places.posted.length).toBe(1);
+        await expect(page.locator('.toast')).toContainText('1 place queued for the research.');
+        const answered = places.answered;
+        held();
+        // The answer from before the step is in: the place stays queued here.
+        await expect.poll(() => places.answered).toBeGreaterThan(answered);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        await expect(notice.locator('.map-follow-research')).toHaveCount(0);
+        // A read after the step follows it (it says the place queued).
+        await expect.poll(() => places.readAfterPost).toBeGreaterThan(0);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        await expect(notice.locator('.map-follow-research')).toHaveCount(0);
     });
 
     test('moving the map pauses its panning (pill, ◎ paused); marks keep coming; Back to the agent centres the place', async ({ page }) => {
