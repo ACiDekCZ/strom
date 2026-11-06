@@ -1119,6 +1119,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (read.conf) lines.push(`2 _CONF ${read.conf}`);
             if (read.txt) lines.push(`2 _TXT ${read.txt}`);
         }
+        // The research can read the source again from its original here: back as it came.
+        if (source.originalInResearch) lines.push('1 _STROM_ORIG Y');
         // An entry of a research's reading: which reading and entry, and the page when no excerpt says it.
         if (writeReadings && source.reading && /^D\d{14}-[0-9a-f]{4}$/.test(source.reading)) {
             lines.push(`1 _STROM_READING ${source.reading}`);

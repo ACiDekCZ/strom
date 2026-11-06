@@ -891,6 +891,8 @@ interface RawSource {
     readConfirmed?: string;
     /** 2 _TXT under _STROM_READ: the research's mark of the transcript's wording. */
     readMark?: string;
+    /** _STROM_ORIG Y: the research has the source's original and can read it again. */
+    original?: boolean;
     /** _STROM_READING (+ 2 _STROM_ENTRY): the research's reading the entry was written from. */
     reading?: string;
     readingEntry?: string;
@@ -2225,6 +2227,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     const who = value.trim().toLowerCase();
                     if (who === 'user' || who === 'research' || who === 'both') src.readBy = who;
                 }
+                else if (tag === '_STROM_ORIG') { if (value.trim().toUpperCase() === 'Y') src.original = true; }
                 else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
                 else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
@@ -3189,6 +3192,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             if (raw.readingEntry) src.readingEntry = raw.readingEntry;
         }
         if (raw.readingSha) src.readingSha = raw.readingSha;
+        if (raw.original) src.originalInResearch = true;
         if (raw.imageHeld) {
             src.imageHeld = raw.imageHeld;
             if (raw.heldClips?.length) src.heldClips = raw.heldClips;

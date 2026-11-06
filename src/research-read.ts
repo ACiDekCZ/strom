@@ -13,9 +13,14 @@
 import { cleanText, researchPersonRef, withAppVersion } from './research-link.js';
 import { clipText } from './text-clip.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
+import type { Source } from './types.js';
+import { cleanWith, ReadChoices, ReadWho, ReadWithItem, sanitizeReadChoices, sanitizeReadWho } from './read-choices.js';
 
 /** `/status.features`: the research reads a document for the app now (`POST read`). */
 export const READ_FEATURE = 'read.now';
+
+/** `/status.features`: the research reads a source again from its original (`POST sources/read`, spec 059). */
+export const READ_SOURCE_FEATURE = 'read.source';
 
 /** The states of one reading, as the bridge says them. */
 export type ReadState = 'queued' | 'reading' | 'checking' | 'done' | 'unreadable' | 'failed' | 'cancelled';
@@ -46,6 +51,8 @@ export interface ReadAccepts {
     langs: string[];
     /** How long one reading of one document usually takes here, in seconds (only when ready; absent: an older research). */
     expectSecs?: number;
+    /** The readers one may choose (spec 059, only when ready and the bridge says `read.choose`; absent: as before). */
+    choices?: ReadChoices;
 }
 
 /** Defaults when the research leaves a limit out (the bridge's own: 50 MB, 10 pages). */
@@ -103,6 +110,7 @@ export function sanitizeReadAccepts(value: unknown): ReadAccepts | null {
         pages: Math.min(50, asCount(r.pages) || DEFAULT_PAGES),
         langs,
         ...(ready && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
+        ...(ready && sanitizeReadChoices(r.choices) ? { choices: sanitizeReadChoices(r.choices)! } : {}),
     };
 }
 
@@ -145,6 +153,15 @@ export interface LiveRead {
     from: 'app' | 'research';
     /** How long it takes from its start, in seconds (only while running; absent: not said). */
     expectSecs?: number;
+    /** Who reads it (spec 059; absent: a reading before the research kept it, nothing shown). */
+    who?: ReadWho[];
+    /** A source read again from its original (`POST sources/read`): the research's source (S…). */
+    source?: string;
+}
+
+/** The research's id of a source (`S0042`), or null. */
+export function readSourceId(value: unknown): string | null {
+    return typeof value === 'string' && /^S\d{1,9}$/.test(value) ? value : null;
 }
 
 /** A reading's id, or null. */
@@ -174,6 +191,8 @@ export function sanitizeLiveRead(value: unknown): LiveRead | null {
         person: researchPersonRef(r.person) ?? '',
         from: r.from === 'research' ? 'research' : 'app',
         ...(readRunning(state) && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
+        ...(sanitizeReadWho(r.who) ? { who: sanitizeReadWho(r.who)! } : {}),
+        ...(readSourceId(r.source) ? { source: readSourceId(r.source)! } : {}),
     };
 }
 
@@ -330,6 +349,22 @@ export interface ReadReaders {
     asked: number;
     ran: number;
     agree: 'same' | 'differ' | 'fixed' | null;
+    /** Who read, in the readers' order (spec 059; absent: a reading before it, nothing shown). */
+    who?: ReadWho[];
+}
+
+/**
+ * A source read again from its original (`POST sources/read`): the new
+ * reading held against the source's transcript. `variants`: `at` the
+ * transcript's words, `other` the new reading's. A difference is a task of
+ * the research (`task`, T…), never a conflict: the transcript does not change.
+ */
+export interface ReadSourceResult {
+    id: string;
+    agree: 'same' | 'differ';
+    variants: ReadVariant[];
+    /** The task where they differ ('' none). */
+    task: string;
 }
 
 export interface ReadPage {
@@ -421,6 +456,25 @@ export interface ReadResult {
     context: string;
     cost: { amount: number; currency: string; partial: boolean } | null;
     version: number;
+    /** A source read again: how the new reading compares with its transcript (only once it is compared). */
+    source?: ReadSourceResult;
+}
+
+/** `source` of a result: the comparison with the source's transcript, or null. Untrusted. */
+function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
+    const s = asRecord(v);
+    const id = s ? readSourceId(s.id) : null;
+    if (!s || !id || (s.agree !== 'same' && s.agree !== 'differ')) return null;
+    const variants: ReadVariant[] = [];
+    for (const item of Array.isArray(s.variants) ? s.variants.slice(0, 200) : []) {
+        const x = asRecord(item);
+        if (!x) continue;
+        const at = cleanText(x.at, 500);
+        const other = cleanText(x.other, 500);
+        if (at || other) variants.push({ at, other });
+    }
+    const task = typeof s.task === 'string' && /^T\d{1,9}$/.test(s.task) ? s.task : '';
+    return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '' };
 }
 
 function region(v: unknown): ReadRegion | null {
@@ -594,11 +648,13 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
             asked,
             ran: Math.min(asked, asCount(rd.ran) ?? 0),
             agree: rd.agree === 'same' || rd.agree === 'differ' || rd.agree === 'fixed' ? rd.agree : null,
+            ...(sanitizeReadWho(rd.who) ? { who: sanitizeReadWho(rd.who)! } : {}),
         },
         pages, entries,
         context: cleanBlock(r.context, 5000),
         cost: amount !== null && currency ? { amount, currency, partial: c!.partial === true } : null,
         version: asCount(r.version) || 1,
+        ...(sanitizeSourceResult(r.source) ? { source: sanitizeSourceResult(r.source)! } : {}),
     };
 }
 
@@ -648,6 +704,18 @@ export type ReadFailureKind =
     | 'refused'
     /** 409 seal.foreign / tree.not-downloaded, 507 disk.full: held until it is settled in the research (`held`, 017 U7). */
     | 'held'
+    /** 400 read.with: a reader's choice the research does not offer (any more): reader `at`, `field`. */
+    | 'with'
+    /** 409 read.agent: reader `at`'s agent cannot read now (`agent`, `why` limit | auth, `resets`); nothing started. */
+    | 'agent'
+    /** 404 read.source.none: the research has no such source (`source`). */
+    | 'source-none'
+    /** 409 read.source.notext: the source has no transcript to compare a new reading with. */
+    | 'source-notext'
+    /** 409 read.source.noscan: no original of the source (or of its excerpt `clip`) on the research's computer. */
+    | 'source-noscan'
+    /** 409 read.source.running: the source is being read again now (`read`: that reading). */
+    | 'source-running'
     /** 500 read.failed and anything else. */
     | 'failed';
 
@@ -668,6 +736,18 @@ export interface ReadFailure {
     mb?: number;
     /** `held`: what holds it, with the research's sentence (its language, shown as it is). */
     held?: ResearchWriteHeld;
+    /** `with` / `agent`: the reader (0 the first, 1 the blind one). */
+    at?: number;
+    /** `with`: what of the reader is not offered. */
+    field?: 'agent' | 'model' | 'effort';
+    /** `agent`: the agent that cannot read now. */
+    agent?: string;
+    /** `source-*`: the source (S…). */
+    source?: string;
+    /** `source-noscan`: the excerpt without an original. */
+    clip?: string;
+    /** `source-running`: the reading of the source under way. */
+    read?: string;
 }
 
 /** `Retry-After` in ms (seconds or an HTTP date), capped at a day; 0 when absent or bad. */
@@ -678,6 +758,20 @@ export function retryAfter(value: string | null, now = Date.now()): number {
     const t = Date.parse(value);
     return Number.isFinite(t) ? Math.max(0, Math.min(86_400_000, t - now)) : 0;
 }
+
+/** A reader's index in a refusal (`at`: "0" | "1", or a number). */
+function readerAt(v: unknown): { at?: number } {
+    const n = typeof v === 'string' && /^[01]$/.test(v) ? Number(v) : v === 0 || v === 1 ? v : null;
+    return n === null ? {} : { at: n };
+}
+
+function sourceOf(p: Record<string, unknown>): { source?: string } {
+    const source = readSourceId(p.source);
+    return source ? { source } : {};
+}
+
+/** An excerpt's mark the research reads again by (`_STROM_CLIP`: `c` + 10 hex, or `input`). */
+export const READ_CLIP = /^(?:c[0-9a-f]{10}|input)$/;
 
 /** A refusal (HTTP status, its JSON body, `Retry-After`) as the app's state. Status 0: no answer. Untrusted. */
 export function readFailure(status: number, body: unknown, retryAfterHeader: string | null = null): ReadFailure {
@@ -709,6 +803,24 @@ export function readFailure(status: number, body: unknown, retryAfterHeader: str
         case 'read.no-page': case 'read.page-gone': return { ...base, kind: 'no-page' };
         case 'locked': return { ...base, kind: 'locked' };
         case 'app.only': case 'read.bad-body': case 'read.lang': case 'read.region': return { ...base, kind: 'refused' };
+        case 'read.with': {
+            const field = p.field === 'agent' || p.field === 'model' || p.field === 'effort' ? { field: p.field as 'agent' | 'model' | 'effort' } : {};
+            return { ...base, kind: 'with', ...readerAt(p.at), ...field };
+        }
+        case 'read.agent': {
+            const agent = typeof p.agent === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(p.agent) ? { agent: p.agent } : {};
+            return { ...base, kind: 'agent', ...readerAt(p.at), ...agent, why: code(p.why) || 'other', resets: isoTime(p.resets) };
+        }
+        case 'read.source.none': return { ...base, kind: 'source-none', ...sourceOf(p) };
+        case 'read.source.notext': return { ...base, kind: 'source-notext', ...sourceOf(p) };
+        case 'read.source.noscan': {
+            const clip = typeof p.clip === 'string' && READ_CLIP.test(p.clip) ? { clip: p.clip } : {};
+            return { ...base, kind: 'source-noscan', ...sourceOf(p), ...clip };
+        }
+        case 'read.source.running': {
+            const read = readId(p.read) ?? readId(b?.read);
+            return { ...base, kind: 'source-running', ...sourceOf(p), ...(read ? { read } : {}) };
+        }
         case 'read.failed': return base;
     }
     // Without a code of its own: a bridge turning an unknown token down (404 without a body) is not reachable here.
@@ -775,16 +887,25 @@ export interface ReadRequest {
     /** The person it is about (REFN), when known. */
     person?: string;
     note?: string;
+    /** Who reads (spec 059, `readWith`): only when a reader differs from the default. */
+    with?: ReadWithItem[];
 }
 
-/** The answer to a start, again or cancel: the reading, its state, its version. */
-export interface ReadStarted { read: string; state: ReadState; version: number }
+/** The answer to a start, again or cancel: the reading, its state, its version (and a source read again: its id). */
+export interface ReadStarted { read: string; state: ReadState; version: number; source?: string }
 
 function started(body: unknown): ReadStarted | null {
     const b = asRecord(body);
     const read = b ? readId(b.read ?? b.id) : null;
     if (!b || !read) return null;
-    return { read, state: READ_STATES.includes(b.state as ReadState) ? b.state as ReadState : 'queued', version: asCount(b.version) || 1 };
+    const source = readSourceId(b.source);
+    return { read, state: READ_STATES.includes(b.state as ReadState) ? b.state as ReadState : 'queued', version: asCount(b.version) || 1, ...(source ? { source } : {}) };
+}
+
+/** `with` into a request body (nothing when every reader reads as by default). */
+function putWith(body: Record<string, unknown>, value: readonly ReadWithItem[] | undefined, readers: number): void {
+    const w = cleanWith(value, readers);
+    if (w) body.with = w;
 }
 
 const postJson = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -795,6 +916,7 @@ export async function startRead(base: string, req: ReadRequest): Promise<ReadRep
     if (req.person && researchPersonRef(req.person)) body.person = req.person;
     const note = req.note === undefined ? undefined : clipText(req.note.trim(), 500);
     if (note) body.note = note;
+    putWith(body, req.with, req.readers);
     const r = await call(`${base}/read`, postJson(body), JSON_TIMEOUT_MS);
     const s = ok(r.status) ? started(r.body) : null;
     return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
@@ -817,11 +939,69 @@ export async function fetchReads(base: string): Promise<ReadReply<ReadHistoryIte
     return list ? { ok: true, value: list } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
 }
 
-/** Read the same pages again, blind (`POST read/<id>/again`). */
-export async function readAgain(base: string, id: string, readers?: 1 | 2): Promise<ReadReply<ReadStarted>> {
-    const r = await call(`${base}/read/${encodeURIComponent(id)}/again`, postJson(readers ? { readers } : {}), JSON_TIMEOUT_MS);
+/** Read the same pages again, blind (`POST read/<id>/again`); `withReaders` only when a reader differs from the default. */
+export async function readAgain(base: string, id: string, readers?: 1 | 2, withReaders?: ReadWithItem[]): Promise<ReadReply<ReadStarted>> {
+    const body: Record<string, unknown> = readers ? { readers } : {};
+    putWith(body, withReaders, readers ?? 2);
+    const r = await call(`${base}/read/${encodeURIComponent(id)}/again`, postJson(body), JSON_TIMEOUT_MS);
     const s = ok(r.status) ? started(r.body) : null;
     return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+}
+
+/** What `POST sources/read` takes: a source of the research read again from its original. */
+export interface ReadSourceRequest {
+    /** The research's source (S…). */
+    source: string;
+    /** One excerpt of it alone (`_STROM_CLIP`); none: the whole entry. */
+    clip?: string;
+    readers: 1 | 2;
+    /** The language of translation and explanation; none: the research's. */
+    lang?: string;
+    with?: ReadWithItem[];
+}
+
+/**
+ * Read a source again from its original (`POST sources/read`, feature
+ * `read.source`): 202 → the reading, followed like any other. Its result
+ * says how it compares with the transcript (`ReadResult.source`).
+ */
+export async function startSourceRead(base: string, req: ReadSourceRequest): Promise<ReadReply<ReadStarted>> {
+    const source = readSourceId(req.source);
+    if (!source) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
+    const body: Record<string, unknown> = { source, readers: req.readers };
+    if (req.clip && READ_CLIP.test(req.clip)) body.clip = req.clip;
+    if (req.lang && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(req.lang)) body.lang = req.lang;
+    putWith(body, req.with, req.readers);
+    const r = await call(`${base}/sources/read`, postJson(body), JSON_TIMEOUT_MS);
+    const s = ok(r.status) ? started(r.body) : null;
+    return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+}
+
+/**
+ * Whether "Read again…" is offered for a source: the bridge reads sources
+ * again (`read.source`) and reads now (`accepts.read.ready`), and the
+ * research's file says it has the source's original (`_STROM_ORIG Y`) — with
+ * the source's id there (REFN S…) and a transcript to compare with.
+ */
+export function readSourceAgainOffered(
+    status: { features: readonly string[] | null; accepts: { read?: Pick<ReadAccepts, 'ready'> } | null } | null | undefined,
+    src: Pick<Source, 'originalInResearch' | 'refn' | 'transcript'> | null | undefined,
+): boolean {
+    if (!status?.features?.includes(READ_SOURCE_FEATURE) || status.accepts?.read?.ready !== true) return false;
+    return !!src?.originalInResearch && !!readSourceId(src.refn?.trim()) && !!src.transcript?.trim();
+}
+
+/**
+ * The excerpt mark to read again by: the excerpt's own `clip` when the source
+ * has no other excerpt of the research; a source of several excerpts is read
+ * whole (a single excerpt would be compared with the whole transcript, so
+ * the words of the others would come out as differences). None: whole.
+ */
+export function readSourceAgainClip(src: Pick<Source, 'excerpts'>, excerptId?: string): string | undefined {
+    if (!excerptId) return undefined;
+    const clipped = (src.excerpts ?? []).filter(e => !!e.clip && READ_CLIP.test(e.clip));
+    const one = clipped.find(e => e.id === excerptId);
+    return one && clipped.length === 1 ? one.clip : undefined;
 }
 
 /**

@@ -75,6 +75,26 @@ describe('GEDCOM: a source from a reading', () => {
     });
 });
 
+describe('GEDCOM: a source the research can read again (_STROM_ORIG)', () => {
+    it('1 _STROM_ORIG Y comes in and goes out as it came', () => {
+        const ged = '0 HEAD\n1 CHAR UTF-8\n0 @S1@ SOUR\n1 TITL Křest\n1 TEXT Joannes\n1 REFN S0042\n1 _STROM_READ research\n1 _STROM_ORIG Y\n0 TRLR\n';
+        const src = back(ged);
+        expect(src.originalInResearch).toBe(true);
+        const out = exportToGedcom(data({ originalInResearch: true }), 'T').content;
+        expect(out).toMatch(/^1 _STROM_ORIG Y$/m);
+        expect(back(out).originalInResearch).toBe(true);
+        // Twice round: still once.
+        const again = exportToGedcom({ ...data({}), sources: { s1: back(out) } } as StromData, 'T').content;
+        expect(again.match(/_STROM_ORIG/g)).toHaveLength(1);
+    });
+
+    it('absent or not Y: nothing, and nothing written', () => {
+        expect(back('0 HEAD\n0 @S1@ SOUR\n1 TITL X\n1 _STROM_ORIG N\n0 TRLR\n').originalInResearch).toBeUndefined();
+        expect(back('0 HEAD\n0 @S1@ SOUR\n1 TITL X\n0 TRLR\n').originalInResearch).toBeUndefined();
+        expect(exportToGedcom(data({}), 'T').content).not.toContain('_STROM_ORIG');
+    });
+});
+
 describe('the sync answer: readings', () => {
     it('kept, checked, codes as said', () => {
         const r = sanitizeSyncReply({

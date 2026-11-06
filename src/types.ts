@@ -329,6 +329,14 @@ export interface Source {
     /** That reading's entry (`entries[].id`, e.g. "e1"). GEDCOM `2 _STROM_ENTRY` under `_STROM_READING`. */
     readingEntry?: string;
     /**
+     * The research has this source's original on its computer (an excerpt, an
+     * image or the input scan) and a transcript to compare a new reading with:
+     * it can read the source again from the original (spec 059, `POST
+     * sources/read`). GEDCOM `1 _STROM_ORIG Y` on the record; from the
+     * research only, written back as it came.
+     */
+    originalInResearch?: boolean;
+    /**
      * The SHA-256 of the page the entry is on, when no excerpt carries it
      * (`excerpts[].originalSha`). GEDCOM `1 _STROM_SHA` on the record.
      */

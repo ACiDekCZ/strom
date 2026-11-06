@@ -14,6 +14,7 @@ import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.
 import { keepPlaceOrigins, placesWithoutMeta, isPlaceRecordId, cleanCoords } from './place-records.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
+import { READ_CHOOSE_FEATURE } from './read-choices.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -3068,7 +3069,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
         lastIntake: sanitizeIntake(r.lastIntake),
         researches: sanitizeDirections(r.researches),
-        accepts: readAcceptsGated(sanitizeAccepts(r.accepts), !!features?.includes(READ_FEATURE)),
+        accepts: readAcceptsGated(sanitizeAccepts(r.accepts), !!features?.includes(READ_FEATURE), !!features?.includes(READ_CHOOSE_FEATURE)),
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
         version: researchVersion(r.strom),
@@ -3211,10 +3212,16 @@ function treeSaid(tree: Record<string, unknown> | null, features: string[] | nul
 }
 
 /** `accepts.read` stays only from a bridge that says it reads now (`read.now` in `features`). */
-function readAcceptsGated(accepts: ResearchAccepts | null, reads: boolean): ResearchAccepts | null {
-    if (!accepts?.read || reads) return accepts;
-    const { read: _read, ...rest } = accepts;
-    return rest;
+function readAcceptsGated(accepts: ResearchAccepts | null, reads: boolean, choose: boolean): ResearchAccepts | null {
+    if (!accepts?.read) return accepts;
+    if (!reads) {
+        const { read: _read, ...rest } = accepts;
+        return rest;
+    }
+    // The readers to choose from only from a bridge that takes the choice (read.choose).
+    if (choose || !accepts.read.choices) return accepts;
+    const { choices: _choices, ...read } = accepts.read;
+    return { ...accepts, read };
 }
 
 /** A version as the research names itself ("1.11.0", "1.12.0-beta.2"), or ''. Untrusted. */
