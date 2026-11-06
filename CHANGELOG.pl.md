@@ -17,6 +17,8 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Pomoc w formularzach**: *?* przy *Inne formy imienia i nazwiska*, *Chrzestni i świadkowie* i przy tekście opowieści otwiera *Jak działa Strom* na regule tego pola zamiast okienka z długim tekstem. *?* do swojej reguły mają też *Odczyt dokumentu*, *Hipotezy* w *Co wie badanie*, podgląd wyszukiwania w badaniu miejsc spoza mapy i legenda śledzenia.
 - **Odczyt dokumentu**: gdy aplikacja agenta badania jest na komputerze, ale brak jego programu terminalowego, powód to mówi zamiast ogólnego *odczytu nie można teraz uruchomić*.
 - **Sprzeczności**: wartość zapisana przez badanie z pozostałością etykiety źródła na początku (np. *@s:*) pokazuje się bez etykiety.
+- **Edycja podczas śledzenia badania**: podczas śledzenia badania menu osoby pokazuje wyszarzone *Edytuj* z powodem (*Podczas śledzenia badania tylko do odczytu.*) i tuż pod nim *Zakończ śledzenie*. Po zakończeniu śledzenia jednorazowe pytanie *Jak wysyłać zmiany do badania?* pojawia się od razu, a nie dopiero później.
+- **Czytniki ekranu**: zamknięte okna dialogowe i menu nie są już odczytywane, przyciski z ikonami (powiększenie, filtry, wstecz i dalej, obrót zdjęcia i inne) mają czytelną nazwę, dolny panel podczas wysuwania nie przyjmuje dotknięć, a przy ograniczonym ruchu menu, powiadomienia i dolny panel pojawiają się bez animacji.
 
 ## 3.24.0
 

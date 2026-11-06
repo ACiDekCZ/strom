@@ -15,6 +15,8 @@
 - **Nápověda ve formulářích**: *?* u *Další tvary jména*, *Kmotři a svědci* a u textu vyprávění otevře *Jak Strom funguje* u pravidla toho pole místo okénka s dlouhým textem. *?* k pravidlu mají i *Přečíst dokument*, *Hypotézy* v *Co ví výzkum*, náhled dohledání míst mimo mapu ve výzkumu a legenda sledování.
 - **Přečíst dokument**: když je na počítači aplikace agenta výzkumu, ale chybí jeho program pro terminál, důvod to řekne místo obecného *čtení teď nejde spustit*.
 - **Rozpory**: hodnota, kterou výzkum zapsal se zbytkem štítku pramene na začátku (třeba *@s:*), se ukáže bez štítku.
+- **Úpravy během sledování výzkumu**: během sledování výzkumu ukáže menu osoby zašedlé *Upravit* s důvodem (*Během sledování výzkumu jen ke čtení.*) a hned pod ním *Ukončit sledování*. Po ukončení sledování přijde jednorázová otázka *Jak posílat úpravy do výzkumu?* hned, ne až později.
+- **Čtečky obrazovky**: zavřené dialogy a menu se už nečtou, ikonová tlačítka (zvětšení, filtry, zpět a vpřed, otočení fotky a další) mají čitelný název, spodní panel během vysouvání nebere ťuknutí a s omezeným pohybem se menu, oznámení a spodní panel ukážou bez animace.
 
 ## 3.24.0
 

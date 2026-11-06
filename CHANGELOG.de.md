@@ -15,6 +15,8 @@
 - **Hilfe in Formularen**: Das *?* bei *Andere Schreibweisen des Namens*, *Paten & Zeugen* und beim Text der Erzählung öffnet *So funktioniert Strom* bei der Regel des Felds statt eines Fensters mit langem Text. Auch *Dokument lesen*, *Hypothesen* in *Was die Forschung weiß*, die Vorschau zum Nachschlagen von Orten ohne Kartenposition in der Forschung und die Legende des Verfolgens haben ein *?* zu ihrer Regel.
 - **Dokument lesen**: Ist die App des Agenten der Forschung auf dem Computer, sein Terminalprogramm aber nicht, sagt der Grund das statt des allgemeinen *Lesen kann gerade nicht starten*.
 - **Widersprüche**: Ein Wert, den die Forschung mit einem übrig gebliebenen Quellen-Etikett davor geschrieben hat (etwa *@s:*), erscheint ohne das Etikett.
+- **Bearbeiten beim Verfolgen der Forschung**: Beim Verfolgen der Forschung zeigt das Personenmenü *Bearbeiten* ausgegraut mit dem Grund (*Beim Verfolgen der Forschung nur zum Lesen.*) und direkt darunter *Verfolgung beenden*. Nach dem Beenden des Verfolgens kommt die einmalige Frage *Wie sollen Änderungen an die Forschung gehen?* sofort statt erst später.
+- **Bildschirmleser**: Geschlossene Dialoge und Menüs werden nicht mehr vorgelesen, Symbolschaltflächen (Zoom, Filter, Zurück und Vor, Drehen von Fotos und weitere) haben einen lesbaren Namen, ein unteres Fenster nimmt beim Hereingleiten kein Tippen an, und mit reduzierter Bewegung erscheinen Menüs, Hinweise und das untere Fenster ohne Animation.
 
 ## 3.24.0
 

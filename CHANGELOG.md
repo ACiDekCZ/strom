@@ -15,6 +15,8 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Help in forms**: the *?* at *Other spellings of the name*, *Godparents & witnesses* and the story's text opens *How Strom works* at the rule of that field instead of a popup with a long text. *Read a document*, *Hypotheses* in *What the research knows*, the preview of looking up places not on the map in the research and the follow legend have a *?* that opens their rule too.
 - **Read a document**: when the research agent's app is on the computer but its terminal program is not, the reason says so instead of the general *reading can’t start right now*.
 - **Conflicts**: a value the research wrote with a leftover source label in front of it (such as *@s:*) is shown without the label.
+- **Editing while following the research**: while the research is followed, the person menu shows *Edit* greyed with why (*Read-only while following the research.*) and *Stop following* right under it. Once following stops, the one-time question *How should changes go to the research?* comes right away instead of later.
+- **Screen readers**: closed dialogs and menus are no longer read out, icon buttons (zoom, filters, back and forward, photo rotation and others) have a readable name, a bottom sheet takes no taps while it slides in, and with reduced motion menus, notices and the bottom sheet appear without animation.
 
 ## 3.24.0
 
