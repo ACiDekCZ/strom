@@ -1168,9 +1168,12 @@ export const readDocumentMethods = uiModule({
         };
         const agents = choices.agents.map(x => ({ value: x.id, text: x.ready ? x.name : `${x.name} – ${agentWhyText(x.why, x.resets)}`, disabled: !x.ready }));
         const models = (a?.models ?? []).map(m => ({ value: m.id, text: m.id ? m.name || m.id : t.bySettings }));
+        // On a phone each choice is a full-width field with its column's name inside, on the left (spec 059 §2).
+        const field = (col: string, inner: string, none = false): string =>
+            `<span class="read-refine-field${none ? ' read-refine-field--none' : ''}"><span class="read-refine-field-key" aria-hidden="true">${esc(col)}</span>${inner}</span>`;
         const effort = a?.efforts.length
-            ? select('effort', t.colEffort, a.efforts.map(e => ({ value: e, text: e || t.bySettings })), r.effort)
-            : `<span class="read-refine-noeffort">${esc(t.noEffort)}</span>`;
+            ? field(t.colEffort, select('effort', t.colEffort, a.efforts.map(e => ({ value: e, text: e || t.bySettings })), r.effort))
+            : field(t.colEffort, `<span class="read-refine-noeffort">${esc(t.noEffort)}</span>`, true);
         let note = '';
         if (a && !a.ready) {
             const why = agentWhyText(a.why, a.resets);
@@ -1181,8 +1184,8 @@ export const readDocumentMethods = uiModule({
         return `
                     <div class="read-refine-row" data-at="${at}">
                         <span class="read-refine-label">${esc(label)}</span>
-                        ${select('agent', t.colAgent, agents, r.agent)}
-                        ${select('model', t.colModel, models, r.model)}
+                        ${field(t.colAgent, select('agent', t.colAgent, agents, r.agent))}
+                        ${field(t.colModel, select('model', t.colModel, models, r.model))}
                         ${effort}
                         ${note}
                     </div>`;

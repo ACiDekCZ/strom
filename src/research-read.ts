@@ -988,6 +988,16 @@ export function readSourceAgainOffered(
     src: Pick<Source, 'originalInResearch' | 'refn' | 'transcript'> | null | undefined,
 ): boolean {
     if (!status?.features?.includes(READ_SOURCE_FEATURE) || status.accepts?.read?.ready !== true) return false;
+    return readSourceAgainCandidate(src);
+}
+
+/**
+ * The source itself could be read again: the research's file says it has its
+ * original (`_STROM_ORIG Y`), with the source's id there (REFN S…) and a
+ * transcript to compare with. On a phone, where the bridge is not reached,
+ * this alone decides the sentence saying where reading again works.
+ */
+export function readSourceAgainCandidate(src: Pick<Source, 'originalInResearch' | 'refn' | 'transcript'> | null | undefined): boolean {
     return !!src?.originalInResearch && !!readSourceId(src.refn?.trim()) && !!src.transcript?.trim();
 }
 

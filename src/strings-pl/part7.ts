@@ -715,6 +715,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         // Źródło przeczytane ponownie z oryginału w badaniu (spec 059 §4).
         sourceAgain: 'Przeczytaj ponownie…',
         sourceAgainTitle: 'Oryginał w badaniu zostanie przeczytany ponownie i porównany z transkrypcją; transkrypcja się nie zmieni.',
+        againPhone: 'Ponowne czytanie działa w aplikacji na komputerze z badaniem.',
         titleSource: 'Przeczytaj źródło ponownie',
         sourceExcerpt: (n: number) => `wycinek ${n}`,
         sourceStrong: 'Czytany jest oryginał w badaniu',

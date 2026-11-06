@@ -384,5 +384,62 @@ test.describe('Read a document: the readers on a phone', () => {
             expect(r.x).toBeGreaterThanOrEqual(box.x - 1);
             expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 1);
         }
+        // Each choice a full-width field of 44 px with its name inside, on the left; the fields under each other.
+        await select(d, 1, 'agent').selectOption('codex');
+        const row = d.locator('.read-refine-row[data-at="1"]');
+        const fields = row.locator('.read-refine-field');
+        await expect(fields.locator('.read-refine-field-key')).toHaveText(['Agent', 'Model', 'Effort']);
+        const rowBox = (await row.boundingBox())!;
+        let lastBottom = 0;
+        for (const f of await fields.all()) {
+            const r = (await f.boundingBox())!;
+            expect(Math.round(r.height)).toBeGreaterThanOrEqual(44);
+            expect(r.width).toBeGreaterThan(rowBox.width - 30);
+            expect(r.y).toBeGreaterThanOrEqual(lastBottom);
+            lastBottom = r.y + r.height;
+            const key = (await f.locator('.read-refine-field-key').boundingBox())!;
+            expect(key.x).toBeLessThan(r.x + 20);
+        }
+        // An agent without effort keeps the third field, so the height does not jump.
+        await expect(fields.nth(2).locator('.read-refine-noeffort')).toHaveText('no effort');
+        // The links have a target of 44 px.
+        expect(Math.round((await d.locator('[data-act="refine"]').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        expect(Math.round((await d.locator('[data-act="reset-with"]').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        expect(await content.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    });
+
+    test('who read in the result: one line per reader, within the width', async ({ page }) => {
+        const b = await setup(page);
+        b.read!.reads = [reading(READ_ID, 'done', { who: WHO_MIXED, done: 2, entries: 1 })];
+        b.read!.results.set(READ_ID, result(WHO_MIXED));
+        await poll(page);
+        await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
+        const d = dialog(page);
+        await expect(d.locator('#read-result')).toBeVisible();
+        const lines = d.locator('.read-result-who-line');
+        await expect(lines).toHaveText(['Reader 1: Claude Code · Opus 4 · high', 'Reader 2: Codex · GPT-5']);
+        const [a, c] = [(await lines.nth(0).boundingBox())!, (await lines.nth(1).boundingBox())!];
+        expect(c.y).toBeGreaterThanOrEqual(a.y + a.height - 1);
+        expect(await d.locator('.read-dialog').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    });
+});
+
+test.describe('Read a document: the readers on a phone held sideways', () => {
+    test.use({ viewport: { width: 844, height: 390 } });
+
+    test('the computer\'s rows of readers, nothing sideways', async ({ page }) => {
+        await setup(page);
+        const d = await openWithPage(page);
+        await d.locator('[data-act="refine"]').click();
+        await expect(d.locator('.read-refine-cols')).toBeVisible();
+        await expect(d.locator('.read-refine-field-key').first()).toBeHidden();
+        const row = (await d.locator('.read-refine-row[data-at="0"]').boundingBox())!;
+        const agent = (await select(d, 0, 'agent').boundingBox())!;
+        const model = (await select(d, 0, 'model').boundingBox())!;
+        // Agent, model and effort side by side in one row.
+        expect(Math.abs(agent.y - model.y)).toBeLessThan(2);
+        expect(model.x).toBeGreaterThan(agent.x + agent.width - 1);
+        expect(model.x + model.width).toBeLessThanOrEqual(row.x + row.width + 1);
+        expect(await d.locator('.read-content').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
 });

@@ -332,3 +332,39 @@ test.describe('Read a source again on a narrow screen', () => {
         expect(over).toBeLessThanOrEqual(1);
     });
 });
+
+test.describe('Read a source again on a phone', () => {
+    // A touch phone reaches no bridge: the research's file alone says where reading again works.
+    test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+    test('no action, a sentence where it works; none at an excerpt; none without the original', async ({ page }) => {
+        await setup(page);
+        await view(page);
+        const phone = viewer(page).locator('#source-viewer-read-again-phone');
+        await expect(phone).toHaveText('Reading again works in the app on the computer with the research.');
+        await expect(again(page)).toHaveCount(0);
+        await expect(excerptAgain(page)).toHaveCount(0);
+        // Under the transcript, in its section.
+        await expect(viewer(page).locator('section:has(.viewer-transcript) #source-viewer-read-again-phone')).toHaveCount(1);
+        const over = await viewer(page).locator('.source-viewer-body').evaluate(el => el.scrollWidth - el.clientWidth);
+        expect(over).toBeLessThanOrEqual(1);
+    });
+
+    test('a source without its original in the research: no sentence', async ({ page }) => {
+        await setup(page, { orig: false });
+        await view(page);
+        await expect(viewer(page).locator('.viewer-transcript')).toBeVisible();
+        await expect(viewer(page).locator('#source-viewer-read-again-phone')).toHaveCount(0);
+    });
+});
+
+test.describe('Read a source again on a phone held sideways', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('the sentence in place of the action', async ({ page }) => {
+        await setup(page);
+        await view(page);
+        await expect(viewer(page).locator('#source-viewer-read-again-phone')).toBeVisible();
+        await expect(again(page)).toHaveCount(0);
+    });
+});

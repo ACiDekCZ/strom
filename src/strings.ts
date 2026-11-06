@@ -6434,6 +6434,7 @@ const stringsEN = {
         // A source read again from its original in the research (spec 059 §4).
         sourceAgain: 'Read again…',
         sourceAgainTitle: 'The original in the research is read again and compared with the transcript; the transcript does not change.',
+        againPhone: 'Reading again works in the app on the computer with the research.',
         titleSource: 'Read the source again',
         sourceExcerpt: (n: number) => `excerpt ${n}`,
         sourceStrong: 'The original in the research is read',
@@ -13902,6 +13903,7 @@ const stringsCZ: StringsType = {
         // Pramen přečtený znovu z originálu ve výzkumu (spec 059 §4).
         sourceAgain: 'Přečíst znovu…',
         sourceAgainTitle: 'Originál ve výzkumu se přečte znovu a porovná s přepisem; přepis se nezmění.',
+        againPhone: 'Znovu přečíst jde v aplikaci na počítači s výzkumem.',
         titleSource: 'Přečíst pramen znovu',
         sourceExcerpt: (n: number) => `výřez ${n}`,
         sourceStrong: 'Čte se z originálu ve výzkumu',
@@ -21276,6 +21278,7 @@ const stringsDE: StringsType = {
         // Eine Quelle erneut aus ihrem Original in der Forschung gelesen (Spec 059 §4).
         sourceAgain: 'Erneut lesen…',
         sourceAgainTitle: 'Das Original in der Forschung wird erneut gelesen und mit der Abschrift verglichen; die Abschrift ändert sich nicht.',
+        againPhone: 'Erneut lesen geht in der App am Computer mit der Forschung.',
         titleSource: 'Quelle erneut lesen',
         sourceExcerpt: (n: number) => `Ausschnitt ${n}`,
         sourceStrong: 'Gelesen wird das Original in der Forschung',

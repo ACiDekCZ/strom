@@ -9,7 +9,8 @@
  * the source's original (`_STROM_ORIG Y`). The action goes through the bridge
  * and an agent reads: the AI badge alone. A source whose original or
  * transcript the research turned down (409 noscan / notext) loses the action
- * until the research's next file.
+ * until the research's next file. On a phone (touch, no bridge) a sentence
+ * says where reading again works, for a source the computer would offer it at.
  */
 
 import { DataManager } from '../data.js';
@@ -17,7 +18,9 @@ import { Source, SourceExcerpt } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { uiModule } from './module.js';
 import { researchBridgeAgentLabel } from './research-open-mark.js';
-import { readSourceAgainOffered, readSourceAgainClip, readSourceId, LiveRead, ReadResult } from '../research-read.js';
+import { readSourceAgainOffered, readSourceAgainCandidate, readSourceAgainClip, readSourceId, LiveRead, ReadResult } from '../research-read.js';
+import { onComputer } from './research-ui.js';
+import { researchLinksEnabled } from '../research-device.js';
 
 function esc(text: string): string {
     return text
@@ -40,6 +43,8 @@ interface SourceAgainView {
     running: LiveRead | null;
     /** The last reading of it known here that differs from the transcript. */
     after: ReadResult | null;
+    /** A phone: the sentence saying reading again works on the computer with the research. */
+    phone: boolean;
 }
 
 export const readSourceMethods = uiModule({
@@ -65,8 +70,14 @@ export const readSourceMethods = uiModule({
     },
 
     readSourceAgainView(src: Source): SourceAgainView {
-        const none: SourceAgainView = { refn: '', offered: false, running: null, after: null };
+        const none: SourceAgainView = { refn: '', offered: false, running: null, after: null, phone: false };
         const refn = readSourceId(src.refn?.trim());
+        if (!onComputer()) {
+            // The bridge is on the computer: the research's file alone says the source could be read again there.
+            const phone = !!refn && !this.sourceViewerReadOnly && !!this.researchSyncLink() && researchLinksEnabled()
+                && !this.activeResearchAgentless() && readSourceAgainCandidate(src);
+            return { ...none, refn: phone ? refn : '', phone };
+        }
         const link = this.researchOriginalsLink();
         if (!refn || !link || this.sourceViewerReadOnly || !this.readDocumentAccepts()) return none;
         const up = this.researchBridgeUp(link.researchId);
@@ -74,7 +85,7 @@ export const readSourceMethods = uiModule({
         const offered = up && !running && !this.readSourceAgainHeld(refn)
             && readSourceAgainOffered(this.researchStatusOf(link.researchId), src);
         const last = this.readSourceResultOf(refn);
-        return { refn, offered, running, after: last?.source?.agree === 'differ' ? last : null };
+        return { refn, offered, running, after: last?.source?.agree === 'differ' ? last : null, phone: false };
     },
 
     /**
@@ -93,7 +104,9 @@ export const readSourceMethods = uiModule({
                 : '';
         const row = reading || action ? `<p class="viewer-reading">${reading}${action}</p>` : '';
         const after = view.after && !view.running ? this.readSourceAfterHtml(view.after) : '';
-        return `${row}${after}`;
+        // A phone: no action, a quiet sentence where it works (spec 059 §5); nothing at an excerpt.
+        const phone = view.phone ? `<p class="viewer-read-again-phone" id="source-viewer-read-again-phone">${esc(t.againPhone)}</p>` : '';
+        return `${row}${after}${phone}`;
     },
 
     /** "Read again 6 Nov 2026 · 2 places differ from the transcript · Result ›". */
@@ -141,7 +154,7 @@ export const readSourceMethods = uiModule({
     },
 
     readSourceViewKey(src: Source, view: SourceAgainView): string {
-        return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? ''].join('|');
+        return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? '', view.phone].join('|');
     },
 
     /** After readings, a refusal or a status: the open viewer redrawn when what it shows of reading again changed. */
