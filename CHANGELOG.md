@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 ## 3.24.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 6 November 2026.*
 
 - **How Strom works in the app**: the whole documentation of the app and the research, in English, Czech, German and Polish, is part of the single file and opens without a connection, from *Actions*, *More* on a phone and *About Strom*. Contents by part (A · R · S), search by a word or a rule number (*R4.3*), a *Glossary*, links between rules with *Back*, and *On the web ↗* for the same page on the website. A rule newer than the research connected to the tree says so.
 - **Help right at the rule**: a quiet *?* in the headings of *Queue*, *Awaiting action* and the agent's work in the *Research overview* and its small panel, of *Places*, *Places in the tree*, the conflicts panel and a person's *Conflicts* opens *How Strom works* at the rule that part follows.

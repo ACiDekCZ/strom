@@ -4,7 +4,7 @@
 
 ## 3.24.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 6. November 2026.*
 
 - **So funktioniert Strom in der App**: Die ganze Dokumentation der App und der Forschung, auf Deutsch, Englisch, Tschechisch und Polnisch, ist Teil der einen Datei und öffnet sich auch ohne Verbindung, aus *Aktionen*, auf dem Telefon aus *Mehr* und aus *Über Strom*. Inhalt nach Teilen (A · R · S), Suche nach einem Wort oder einer Regelnummer (*R4.3*), ein *Begriffsverzeichnis*, Verweise zwischen Regeln mit *Zurück* und *Im Web ↗* für dieselbe Seite auf der Website. Eine Regel, die neuer ist als die mit dem Stammbaum verbundene Forschung, sagt das.
 - **Hilfe direkt bei der Regel**: Ein unauffälliges *?* in den Überschriften von *Warteschlange*, *Wartet auf Bearbeitung* und der Arbeit des Agenten in der *Forschungsübersicht* und ihrem kleinen Feld, im Fenster *Orte*, in *Orte im Baum*, im Feld der Widersprüche und in den *Widersprüchen* einer Person öffnet *So funktioniert Strom* bei der Regel, nach der sich dieser Teil richtet.

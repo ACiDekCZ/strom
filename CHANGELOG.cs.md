@@ -4,7 +4,7 @@
 
 ## 3.24.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 6. listopadu 2026.*
 
 - **Jak Strom funguje přímo v aplikaci**: celá dokumentace aplikace a výzkumu, česky, anglicky, německy a polsky, je součástí jediného souboru a otevře se i bez připojení, z *Akce*, na telefonu z *Více* a z *O aplikaci Strom*. Obsah po částech (A · R · S), hledání slova nebo čísla pravidla (*R4.3*), *Rejstřík pojmů*, odkazy mezi pravidly se *Zpět* a *Na webu ↗* pro tutéž stránku na webu. Pravidlo novější než výzkum připojený ke stromu to řekne.
 - **Nápověda přímo u pravidla**: nenápadný *?* v záhlavích *Fronta*, *Čeká na vyřízení* a práce agenta v *Přehledu výzkumu* a jeho malém panelu, v okně *Místa*, v *Místech ve stromu*, v panelu rozporů a v *Rozporech* osoby otevře *Jak Strom funguje* na pravidle, kterým se ta část řídí.

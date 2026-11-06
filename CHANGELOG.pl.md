@@ -6,7 +6,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 ## 3.24.0
 
-*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+*Wydano 6 listopada 2026.*
 
 - **Jak działa Strom w aplikacji**: cała dokumentacja aplikacji i badania, po polsku, angielsku, czesku i niemiecku, jest częścią jednego pliku i otwiera się także bez połączenia, z *Akcje*, na telefonie z *Więcej* i z *O aplikacji Strom*. Spis treści według części (A · R · S), wyszukiwanie słowa albo numeru reguły (*R4.3*), *Słowniczek pojęć*, odnośniki między regułami z *Wstecz* i *W sieci ↗* dla tej samej strony w internecie. Reguła nowsza niż badanie połączone z drzewem mówi o tym.
 - **Pomoc od razu przy regule**: dyskretny *?* w nagłówkach *Kolejka*, *Czeka na decyzję* i pracy agenta w *Przeglądzie badania* i jego małym panelu, w oknie *Miejsca*, w *Miejscach w drzewie*, w panelu sprzeczności i w *Sprzecznościach* osoby otwiera *Jak działa Strom* na regule, według której działa ta część.
