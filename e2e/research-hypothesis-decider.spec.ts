@@ -148,12 +148,12 @@ const hyposNote = (page: Page) => page.locator('#research-hypos-note');
 const option = (page: Page, v: 'person' | 'agent') => row(page).locator('label').filter({ has: choice(page, v) });
 
 test.describe('Who decides hypotheses: Research for this tree', () => {
-    test('as the research says; AI decides: the research confirms it in its terminal, the choice stays', async ({ page }) => {
+    test('as the research says; The AI decides: the research confirms it in its terminal, the choice stays', async ({ page }) => {
         const bridge = await settingsSetup(page);
         await openTreeSettings(page);
         await expect(row(page).locator('legend')).toHaveText('Who decides hypotheses');
-        await expect(option(page, 'person')).toHaveText('I decide');
-        await expect(option(page, 'agent')).toContainText('AI decides');
+        await expect(option(page, 'person')).toHaveText('The user decides');
+        await expect(option(page, 'agent')).toContainText('The AI decides');
         await expect(row(page)).toContainText('Switching does not change hypotheses already decided.');
         await expect(option(page, 'agent').locator('.research-ai-badge')).toHaveCount(1);
         await expect(option(page, 'person').locator('.research-ai-badge')).toHaveCount(0);
@@ -182,7 +182,7 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
         expect((await links(page)).some(u => u.startsWith('https:'))).toBe(false);
     });
 
-    test('I decide: written at once', async ({ page }) => {
+    test('The user decides: written at once', async ({ page }) => {
         const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [] } });
         await openTreeSettings(page);
         await expect(choice(page, 'agent')).toBeChecked();
@@ -215,7 +215,7 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
         await expect(hyposNote(page)).toHaveText("The research isn't running. This can be changed once it runs.");
     });
 
-    test('an unknown value reads as I decide, nothing written', async ({ page }) => {
+    test('an unknown value reads as the user decides, nothing written', async ({ page }) => {
         const bridge = await settingsSetup(page, { hypotheses: { decide: 'committee', writes: [] } });
         await openTreeSettings(page);
         await expect(choice(page, 'person')).toBeChecked();
