@@ -605,6 +605,36 @@ test.describe('Read a document: the result', () => {
         await expect(line).not.toHaveClass(/is-variant/);
     });
 
+    test('an entry of one line (cells): no strip of a line on the scan, the frame lights up; a click into the frame picks no line', async ({ page }) => {
+        const { d } = await showResult(page, baptismPage({
+            entries: [{
+                id: 'e1', page: 1, region: [0.08, 0.3, 0.84, 0.08],
+                transcript: '1846 | 12 | Joannes Novák | Antonius Novák | Lhota', variants: [{ at: 'Novák', other: 'Nowak' }],
+                persons: [{ ref: 'p1', role: 'child', given: 'Joannes', surname: 'Novák', match: [{ person: 'P0003', why: 'name', score: 0.8 }] }],
+            }],
+        }), 'P0003');
+        const strip = d.locator('#read-scan-line');
+        const frame = d.locator('.read-frame.is-selected');
+        await expect(d.locator('.read-scan-var')).toHaveCount(0);
+        await expect(frame).not.toHaveClass(/is-lit/);
+        const text = d.locator('.read-line[data-line="0"]');
+        await text.hover();
+        await expect(frame).toHaveClass(/is-lit/);
+        await expect(strip).toBeHidden();
+        await text.click();
+        await expect(text).toHaveClass(/is-active/);
+        await expect(strip).toBeHidden();
+        await expect(frame).toHaveClass(/is-lit/);
+        await expect(d.locator('.read-scan-var')).toHaveCount(0);
+        // A click into the frame keeps the line as it was (one line: the whole entry).
+        await text.click();
+        await expect(text).not.toHaveClass(/is-active/);
+        const box = (await frame.boundingBox())!;
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(d.locator('.read-line.is-active')).toHaveCount(0);
+        await expect(strip).toBeHidden();
+    });
+
     test('several entries: a pill or a frame chooses one; the text and the suggestion follow', async ({ page }) => {
         const { d } = await showResult(page, baptismPage());
         // Without a person: the first entry.

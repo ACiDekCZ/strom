@@ -1764,7 +1764,8 @@ export const readDocumentMethods = uiModule({
         const frames = res.entries.map((e, k) => {
             if (!this.readEntryOnView(res, e, page) || !e.region) return '';
             const name = entryName(e);
-            return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
+            const one = k === s.entry && parseTranscript(e).lines.length < 2 ? ' is-one-line' : '';
+            return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}${one}" data-entry="${k}" style="${regionStyle(e.region)}"`
                 + ` aria-label="${esc(t.entrySr(k + 1, name))}" aria-pressed="${k === s.entry}">`
                 + `${many ? `<span class="read-frame-n" aria-hidden="true">${k + 1}</span>` : ''}</button>`;
         }).join('');
@@ -1773,7 +1774,8 @@ export const readDocumentMethods = uiModule({
         if (entry?.region && this.readEntryOnView(res, entry, page)) {
             const parsed = parseTranscript(entry);
             const n = parsed.lines.length;
-            lines = parsed.lines.map((l, j) => l.variant
+            // One line (a register entry of cells): its strip would be the whole frame, so no strips at all.
+            lines = n < 2 ? '' : parsed.lines.map((l, j) => l.variant
                 ? `<span class="read-scan-var" data-line="${j}" style="${regionStyle(lineRegion(entry.region!, j, n))}"></span>` : '').join('');
         }
         return `${view}${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
@@ -2047,6 +2049,8 @@ export const readDocumentMethods = uiModule({
             const rect = sheet.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) return;
             const n = parseTranscript(entry).lines.length;
+            // One line: a click into the frame picks no line (it is the whole entry).
+            if (n < 2) return;
             const j = lineAt(entry.region, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, n);
             if (j >= 0) this.readSelectLine(j, true);
         }));
@@ -2073,15 +2077,25 @@ export const readDocumentMethods = uiModule({
         }
     },
 
-    /** The highlight of line `j` of the chosen entry on the scan (its region split evenly); -1 hides it. */
+    /**
+     * The highlight of line `j` of the chosen entry on the scan (its region split evenly); -1 hides it. An entry
+     * of one line has no strip: its frame lights up instead.
+     */
     showReadScanLine(j: number): void {
         const el = document.getElementById('read-scan-line');
         const s = st;
         if (!el || !s?.result) return;
         const entry = s.result.entries[s.entry];
         const page = this.readShownPage(s.result);
+        const frame = document.querySelector<HTMLElement>(`#${DIALOG_ID} .read-frame.is-selected`);
+        frame?.classList.remove('is-lit');
         if (j < 0 || !entry?.region || (page && !this.readEntryOnView(s.result, entry, page))) { el.hidden = true; return; }
         const parsed = parseTranscript(entry);
+        if (parsed.lines.length < 2) {
+            el.hidden = true;
+            frame?.classList.add('is-lit');
+            return;
+        }
         el.hidden = false;
         el.setAttribute('style', regionStyle(lineRegion(entry.region, j, parsed.lines.length)));
         el.classList.toggle('is-variant', !!parsed.lines[j]?.variant);
