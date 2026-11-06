@@ -704,12 +704,20 @@ test.describe('Customize panel on a touch screen (spec 044)', () => {
         await expect(menu).toHaveCount(0);
         await expect(queue).toHaveAttribute('aria-expanded', 'false');
         // The head's icons: 44px tall to a finger, from a margin around 28px buttons.
-        for (const b of await panel.locator('.live-panel-icons > button').all()) {
-            const r = (await b.boundingBox())!;
-            expect(r.width).toBeLessThan(44);
-            const hit = await page.evaluate(([x, y1, y2]) => [document.elementFromPoint(x, y1), document.elementFromPoint(x, y2)].map(n => n?.className ?? ''), [r.x + r.width / 2, r.y + r.height / 2 - 21, r.y + r.height / 2 + 21]);
-            const cls = (await b.getAttribute('class'))!;
-            expect(hit).toEqual([cls, cls]);
+        // The panel may redraw (a status poll) between finding a button and measuring it: each check retries on a fresh element.
+        const icons = panel.locator('.live-panel-icons > button');
+        const iconCount = await icons.count();
+        expect(iconCount).toBeGreaterThan(0);
+        for (let i = 0; i < iconCount; i++) {
+            await expect(async () => {
+                const b = icons.nth(i);
+                const r = await b.boundingBox();
+                expect(r).not.toBeNull();
+                expect(r!.width).toBeLessThan(44);
+                const hit = await page.evaluate(([x, y1, y2]) => [document.elementFromPoint(x, y1), document.elementFromPoint(x, y2)].map(n => n?.className ?? ''), [r!.x + r!.width / 2, r!.y + r!.height / 2 - 21, r!.y + r!.height / 2 + 21]);
+                const cls = await b.getAttribute('class');
+                expect(hit).toEqual([cls, cls]);
+            }).toPass({ timeout: 5000 });
         }
         await panel.locator('.live-panel-more').click();
         const pop = page.locator('.live-sec-edit');
