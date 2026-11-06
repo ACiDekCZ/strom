@@ -394,6 +394,8 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             checkArea: 'Mapa znalazła obszar, nie miejscowość.',
             checkOtherTown: 'Etykieta położenia podaje inną miejscowość.',
             checkMulti: (n: number) => `Mapa znalazła ${n} miejscowości o tej nazwie i wybrała tę najbliższą innym miejscom drzewa.`,
+            checkSameName: 'Możliwe, że to inne miejsce o tej samej nazwie.',
+            checkMapLabel: 'Położenie na mapie',
             selected: (n: number) => `Wybrano ${n}`,
             lookSelected: (n: number) => `Odszukaj wybrane (${n})`,
             checkSelected: (n: number) => `Sprawdź wybrane (${n})`,

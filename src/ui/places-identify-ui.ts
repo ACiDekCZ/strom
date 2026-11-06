@@ -68,6 +68,8 @@ export const placesView = {
     bulk: null as 'look' | 'check' | null,
     /** Rows with "Why here" open. */
     why: new Set<string>(),
+    /** Rows in Check with their location shown on the small map. */
+    checkMap: new Set<string>(),
 };
 
 /** A fresh open: no selection, menu, preview or open "Why here". */
@@ -77,6 +79,7 @@ export function resetPlacesView(): void {
     placesView.menu = false;
     placesView.bulk = null;
     placesView.why = new Set();
+    placesView.checkMap = new Set();
 }
 
 /** The texts of a place as the facts write them (what the bridge's `forms` take). */

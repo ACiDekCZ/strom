@@ -36,6 +36,7 @@ import {
 import { SettingsManager } from '../settings.js';
 import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
 import { managerKnownStreets, managerPlaceUsage, managerResearchActions } from './places-manager-ui.js';
+import { placesView } from './places-identify-ui.js';
 import { uiModule } from './module.js';
 
 /** The small map beside the results (CSS px; on a phone it takes the panel's width). */
@@ -263,6 +264,59 @@ export const placesFindMethods = uiModule({
         marks.querySelectorAll<HTMLButtonElement>('.place-mini-pin').forEach(b => {
             b.onclick = () => this.pickPlaceResult(key, list[Number(b.dataset.index)]!);
         });
+    },
+
+    /** Check: "Show on the map" beside Keep / Change (only for a place with a location). */
+    placeCheckMapToggleHtml(open: boolean): string {
+        const d = strings.places.dialog;
+        return `<button type="button" class="place-checkmap-toggle place-link-btn" aria-expanded="${open}">⌖ ${this.escapeHtml(open ? d.hideMap : d.showOnMap)}</button>`;
+    },
+
+    /** Check: the small map of the location as it stands (drawn once laid out), the point named in its legend. */
+    placeCheckMapHtml(label: string): string {
+        const d = strings.places.dialog;
+        const esc = (s: string): string => this.escapeHtml(s);
+        return `
+            <div class="place-check-map" role="group" aria-label="${esc(d.checkMapLabel)}">
+                <div class="place-mini-map"><div class="place-mini-tiles"></div><div class="place-mini-marks"></div>
+                    ${tilesAllowed() ? `<span class="place-hand-attr">${esc(TILE_ATTRIBUTION)}</span>` : ''}</div>
+                <span class="place-mini-legend"><span class="place-mini-pin is-now is-legend" aria-hidden="true">•</span>${esc(label)}</span>
+                <span class="place-mini-legend"><span class="place-mini-dot is-legend" aria-hidden="true"></span>${esc(d.miniLegend)}</span>
+            </div>`;
+    },
+
+    /** Check: the small map opened or closed in place (the toggle keeps the focus; a redraw keeps the choice). */
+    togglePlaceCheckMap(row: HTMLElement, key: string): void {
+        const pin = row.querySelector<HTMLElement>(':scope > .place-line .place-pin');
+        const toggle = pin?.querySelector<HTMLButtonElement>('.place-checkmap-toggle');
+        if (!pin || !toggle) return;
+        const d = strings.places.dialog;
+        const open = !placesView.checkMap.has(key);
+        if (open) placesView.checkMap.add(key);
+        else placesView.checkMap.delete(key);
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.textContent = `⌖ ${open ? d.hideMap : d.showOnMap}`;
+        pin.querySelector('.place-check-map')?.remove();
+        if (!open) return;
+        const label = pin.querySelector('.place-pin-label')?.textContent?.replace('⌖', '').trim() || managerPlaceUsage(key)?.display || '';
+        pin.insertAdjacentHTML('beforeend', this.placeCheckMapHtml(label));
+        this.drawPlaceCheckMap(pin.querySelector('.place-check-map .place-mini-map') as HTMLElement, key);
+    },
+
+    /** Check's small map: the location now as the ochre point, the tree's other places grey, the view around them all. */
+    drawPlaceCheckMap(el: HTMLElement, key: string): void {
+        const geo = DataManager.getData().places?.[key];
+        if (!geo) return;
+        const tree = this.placeFindTree(key);
+        const { width, height } = mapSize(el, MINI_W, MINI_H);
+        const fit = fitBounds([geo, ...tree], width, height, 22);
+        const view: SmallMapView = { center: fit.center, zoom: Math.min(fit.zoom, MINI_MAX_ZOOM) };
+        drawTiles(el.querySelector('.place-mini-tiles') as HTMLElement, view, width, height);
+        const esc = (s: string): string => this.escapeHtml(s);
+        const at = pointInViewport(geo, view.center, view.zoom, width, height);
+        const name = geo.label ?? managerPlaceUsage(key)?.display ?? '';
+        (el.querySelector('.place-mini-marks') as HTMLElement).innerHTML = dotsHtml(tree, view, width, height, esc)
+            + `<span class="place-mini-pin is-now" data-tone="current" style="left:${at.x.toFixed(1)}px;top:${at.y.toFixed(1)}px" title="${esc(name)}" aria-hidden="true">•</span>`;
     },
 
     /**
