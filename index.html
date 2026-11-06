@@ -15530,6 +15530,52 @@
         .read-reader input { margin-top: 2px; }
         .read-reader-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .read-reader-text span { color: var(--text-light); font-size: 12.5px; }
+        /* Who reads and "Adjust reading" (spec 059): agent, model and effort of each reader. */
+        .read-readers legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+        .read-readers-gloss { font-size: 12.5px; color: var(--text-light); font-weight: 400; }
+        .read-choose:empty { display: none; }
+        .read-choose { margin-top: 10px; }
+        .read-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: 13px; }
+        .read-who-main { flex: 1 1 300px; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 2px; }
+        .read-who-key { color: var(--text); font-weight: 500; }
+        .read-who-val { color: var(--text-light); }
+        .read-who-down { color: var(--error-text); }
+        .read-who-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+        .read-who-from { font-size: 12px; color: var(--text-faint); }
+        .read-who-tag {
+            display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px;
+            background: var(--primary-soft); color: var(--follow-note-text); font-size: 11.5px; font-weight: 600;
+        }
+        .read-who--open { justify-content: space-between; }
+        .read-refine { margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+        .read-refine-cols, .read-refine-row {
+            display: grid; grid-template-columns: 132px minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, .9fr); gap: 8px 10px; padding: 10px 14px;
+        }
+        .read-refine-cols {
+            padding-bottom: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint);
+        }
+        .read-refine-row + .read-refine-row { border-top: 1px solid var(--divider); }
+        .read-refine-row > * { min-width: 0; }
+        .read-refine-label { align-self: center; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+        .modal select.read-refine-select {
+            height: 36px; padding: 0 8px; background: var(--surface); font-size: 13.5px; text-overflow: ellipsis; min-width: 0;
+        }
+        .read-refine-noeffort {
+            display: flex; align-items: center; height: 36px; box-sizing: border-box; padding: 0 8px; border: 1px dashed var(--border);
+            border-radius: 8px; color: var(--text-faint); font-size: 12.5px;
+        }
+        .read-refine-note { grid-column: 2 / -1; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .read-refine-note.is-down { color: var(--error-text); }
+        .read-foot-down { display: block; color: var(--error-text); }
+        @media (max-width: 640px) {
+            .read-refine-cols { display: none; }
+            .read-refine-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px; }
+            .read-refine-note { grid-column: 1; }
+        }
+        @media (pointer: coarse) {
+            .read-refine-toggle, .read-reset { min-height: 44px; }
+            .modal select.read-refine-select, .read-refine-noeffort { height: 44px; }
+        }
         .read-progress { display: flex; gap: 18px; align-items: flex-start; }
         .read-progress-thumb { flex: none; width: 88px; height: 112px; border-radius: 6px; overflow: hidden; background: var(--surface-2); display: flex; }
         .read-progress-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -15637,6 +15683,22 @@
         .read-variant { padding: 0 3px; border: 1px solid var(--read-amber-line); border-radius: 4px; background: var(--read-amber-bg); }
         .read-variant-slash { margin: 0 3px; color: var(--read-amber-text); font-weight: 600; }
         .read-variant-b { color: var(--read-amber-text); }
+        /* Who read (spec 059): the reader's mark after each version of a difference, the readers under the pills and in the progress. */
+        .read-variant-mk {
+            display: inline-flex; align-items: center; justify-content: center; min-width: 14px; height: 14px; box-sizing: border-box; margin-left: 2px;
+            padding: 0 3px; border: 1px solid var(--read-amber-line); border-radius: 999px; background: var(--surface);
+            color: var(--read-amber-text); font-size: 10.5px; font-weight: 600; line-height: 1; vertical-align: 2px;
+        }
+        .read-variant-mk::after { content: attr(data-mk); }
+        .read-legend-who { display: flex; flex-direction: column; gap: 2px; }
+        .read-legend-who-line { display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; min-width: 0; }
+        .read-legend-who-line .read-variant-mk { flex: none; margin-left: 0; }
+        .read-result-who { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 12.5px; color: var(--text-light); min-width: 0; }
+        .read-result-who-line { overflow-wrap: anywhere; min-width: 0; }
+        .read-result-who .read-who-key { color: var(--text-light); font-weight: 500; }
+        .read-progress-who { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; overflow-wrap: anywhere; }
+        .read-progress-who-state.is-done { color: var(--follow-note-text); }
+        .read-progress-who-state.is-now { color: var(--text-faint); }
         .read-legend { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-light); }
         .read-legend li { display: flex; align-items: baseline; gap: 8px; }
         .read-key { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 15px; padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 1; }

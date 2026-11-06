@@ -79,6 +79,8 @@ export const readHistoryMethods = uiModule({
                 whenText(item.at),
                 person,
                 item.entries > 0 || item.state === 'done' ? t.historyEntries(item.entries) : '',
+                // Read with another agent than the research's own (spec 059).
+                this.readOtherAgents(item),
             ].filter(Boolean);
             const tags = [
                 `<span class="read-pill ${stateTone(item)}" data-tag="state">${esc(t.historyState[item.state] ?? item.state)}</span>`,

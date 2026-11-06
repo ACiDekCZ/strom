@@ -1103,6 +1103,8 @@ export interface FakeReading {
     readers: number; done: number; entries: number; name: string; person: string; from: 'app' | 'research';
     /** How long it takes from its start, in seconds (only while running). */
     expectSecs?: number;
+    /** Who reads it (spec 059: agent, name, model, effort; absent: a reading before it). */
+    who?: Record<string, unknown>[];
 }
 
 /** The research's reading of documents, state by state (set `state`/`done` on a reading, then poll). */
@@ -1123,6 +1125,8 @@ export interface FakeRead {
     startReply?: { status: number; body: unknown; retryAfter?: string };
     /** `POST /read/<id>/cancel` answers this instead of cancelling. */
     cancelReply?: { status: number; body: unknown };
+    /** `POST /read/<id>/again` turned down: this status and body. */
+    againReply?: { status: number; body: unknown };
     /** Every page image asked for ("<id>/<n>"). */
     pageAsks: string[];
     /** The name a new reading gets in `/status.reads` (default zapis.jpg; a page the research already had: its hash). */
@@ -1707,6 +1711,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             }
             if (method === 'POST' && verb === 'again') {
                 rd.agains.push({ id, body });
+                if (rd.againReply) return json(rd.againReply.status, rd.againReply.body);
                 if (!reading) return json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
                 reading.state = 'queued';
                 reading.version += 1;
