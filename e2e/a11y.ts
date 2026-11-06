@@ -63,3 +63,25 @@ export async function axDialogsAndMenus(page: Page): Promise<AxItem[]> {
     }
     return out;
 }
+
+/**
+ * The dialogs and menus a page reader that walks the DOM still finds: every
+ * `.modal-overlay` and `[role=dialog|alertdialog|menu]` with no `hidden`,
+ * `inert` or `aria-hidden="true"` on itself or an ancestor, outermost only
+ * (a dialog box inside its overlay counts once). CSS alone (display: none,
+ * visibility, opacity) does not count as out: such a reader does not see it.
+ */
+export function domExposedPopups(page: Page): Promise<string[]> {
+    return page.evaluate(() => {
+        const sel = '.modal-overlay, [role="dialog"], [role="alertdialog"], [role="menu"]';
+        const out = (el: Element): boolean => !!el.closest('[hidden], [inert], [aria-hidden="true"]');
+        const exposed = Array.from(document.querySelectorAll(sel)).filter(el => !out(el));
+        return exposed
+            .filter(el => !exposed.some(o => o !== el && o.contains(el)))
+            .map(el => {
+                const id = el.id ? `#${el.id}` : '';
+                const cls = typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).join('.')}` : '';
+                return `${el.tagName.toLowerCase()}${id}${cls}`;
+            });
+    });
+}
