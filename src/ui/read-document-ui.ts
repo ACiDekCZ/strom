@@ -1826,7 +1826,7 @@ export const readDocumentMethods = uiModule({
      * Where the scan goes on (spec 059 K6.8): the original in full quality in the research (a source read
      * again: its excerpt; a page of the research's media: the original) and the source's page in the archive.
      */
-    readScanLinks(page: ReadPage | null): { full: { url: string; label: string; title: string } | null; archive: string | null } {
+    readScanLinks(page: ReadPage | null): { full: { url: string; text: string; mark: ResearchActionMark; title: string } | null; archive: string | null } {
         const again = this.readSourceAgainNow();
         if (again) {
             const src = DataManager.getData().sources?.[again.id];
@@ -1835,7 +1835,7 @@ export const readDocumentMethods = uiModule({
             const exc = (again.clip ? excerpts.find(e => e.clip === again.clip) : undefined) ?? excerpts.find(e => !!e.clip);
             const url = exc ? this.excerptResearchUrl(src.id, exc) : null;
             return {
-                full: url ? { url, label: researchActionLabel(strings.research.fullQuality, researchLinkMark('excerpt')), title: strings.research.fullQualityTitle } : null,
+                full: url ? { url, text: strings.research.fullQuality, mark: researchLinkMark('excerpt'), title: strings.research.fullQualityTitle } : null,
                 archive: safeHttpUrl((exc ?? excerpts[0])?.pageUrl) ?? safeHttpUrl(src.url),
             };
         }
@@ -1845,7 +1845,7 @@ export const readDocumentMethods = uiModule({
         const url = sha && link && this.researchLinkAvailable('media')
             ? researchSchemeUrl('media', { tree: link.researchId, sha }, announcedResearchScheme()) : null;
         return {
-            full: url ? { url, label: researchActionLabel(strings.research.fullQualityExternal, researchLinkMark('media')), title: strings.research.fullQualityTitle } : null,
+            full: url ? { url, text: strings.research.fullQualityExternal, mark: researchLinkMark('media'), title: strings.research.fullQualityTitle } : null,
             archive: null,
         };
     },
@@ -1853,7 +1853,7 @@ export const readDocumentMethods = uiModule({
     readScanLinksHtml(page: ReadPage | null): string {
         const { full, archive } = this.readScanLinks(page);
         const parts = [
-            full ? `<button type="button" class="link-button read-scan-full" data-act="full-quality" title="${esc(full.title)}">${full.label}</button>` : '',
+            full ? `<button type="button" class="link-button read-scan-full" data-act="full-quality" title="${esc(full.title)}">${researchActionLabel(full.text, full.mark)}</button>` : '',
             archive ? `<a class="read-scan-archive" href="${esc(archive)}" target="_blank" rel="noopener noreferrer">${esc(strings.sources.viewerOpenPage)} ↗</a>` : '',
         ].filter(Boolean);
         return parts.length ? `<div class="read-scan-links">${parts.join('')}</div>` : '';
