@@ -207,6 +207,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         onMap: {
             notFound: (shown: number, missing: number) => `${placeCountPl(shown)} na mapie · mapa nie znalazła ${missing}`,
             lookResearch: (n: number) => `Odszukaj w badaniu (${n})`,
+            lookResearchShort: 'W badaniu',
             lookResearchTitle: 'Otwiera Miejsca z miejscami bez położenia i podglądem wyszukiwania w badaniu.',
             confirm: (n: number) => `${n} do potwierdzenia ›`,
             confirmTitle: 'Otwiera zakładkę Czeka w panelu badania.',

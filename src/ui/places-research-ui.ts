@@ -7,6 +7,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { strings } from '../strings.js';
 import { TreeManager } from '../tree-manager.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { parseLiveBridge } from '../research-link.js';
@@ -49,6 +50,21 @@ export const placesResearchMethods = uiModule({
             researchId, base, features, access, canResearch: access === 'ok',
             linkCheck: researchId ? { tree: researchId, scheme: announcedResearchScheme() } : null,
         };
+    },
+
+    /**
+     * Where the research's place steps go when they do not go here ('' when they do, or without a
+     * research): its computer, the computer (a phone), a newer research. The Places dialog's context
+     * line says the same.
+     */
+    placesResearchNote(access: PlacesResearchAccess): string {
+        const d = strings.places.dialog;
+        switch (access) {
+            case 'elsewhere': return d.elsewhere;
+            case 'phone': return d.phoneLine;
+            case 'old': return strings.places.research.oldResearch;
+            default: return '';
+        }
     },
 
     /** The research terminal's link that runs the place queue (one place with `place`); null when links do not go. */

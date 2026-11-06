@@ -22,6 +22,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { placeOriginBadge, type PlaceIdentity } from '../place-identity.js';
 import { checkFindingText, placeFormerLine, placeLocationLabel } from '../places-dialog.js';
 import { mapBarState, mapBubbleResearch, type MapBarAction } from '../place-actions.js';
+import { researchBridgeAgentLabel } from './research-open-mark.js';
 import { placeGeoHash } from '../place-records.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
@@ -253,6 +254,11 @@ export const mapMethods = uiModule({
     mapBarAction(action: MapBarAction): void {
         if (action === 'geocode') { void this.startGeocoding(); return; }
         if (action === 'confirm') { this.openWaitingPlaces(); return; }
+        if (action === 'research') {
+            // Where its steps do not go here (another computer, a phone, an older research): say where they go.
+            const note = this.placesResearchNote(this.placesResearchContext().access);
+            if (note) { this.showToast(note, 8000); return; }
+        }
         this.showPlacesManager(undefined, undefined, undefined, { unplaced: action === 'research' });
         if (action === 'research' && document.getElementById('places-modal')) this.openPlacesBulk('look');
     },
@@ -534,12 +540,15 @@ export const mapMethods = uiModule({
         const research = this.placesResearchContext();
         const input = {
             shown: places.length, missing: missing.length, missingTried: missing.filter(p => missed.has(p.key)).length,
-            access: research.access, confirm: 0,
+            access: research.access, confirm: 0, look: 0,
         };
-        // "N to confirm" counts only after the lookup, with a research.
-        if (input.missing > 0 && input.missingTried >= input.missing && research.access !== 'none') {
-            const ids = this.placeIdentitiesNow([...places.map(p => p.key), ...missing.map(p => p.key)]);
-            input.confirm = [...ids.values()].filter(id => id.state === 'confirm').length;
+        // With a research: what it could look up (as Places' preview: no location or not identified,
+        // nothing queued twice, spec 058); "N to confirm" counts only after the lookup.
+        if (input.missing > 0 && research.access !== 'none') {
+            const after = input.missingTried >= input.missing;
+            const ids = this.placeIdentitiesNow([...(after ? places.map(p => p.key) : []), ...missing.map(p => p.key)]);
+            input.look = missing.filter(p => { const st = ids.get(p.key)?.state; return st === 'none' || st === 'undet'; }).length;
+            if (after) input.confirm = [...ids.values()].filter(id => id.state === 'confirm').length;
         }
         const bar = mapBarState(input);
         const confirm = input.confirm;
@@ -551,7 +560,8 @@ export const mapMethods = uiModule({
             const go = `onclick="window.Strom.UI.mapBarAction('${a}')"`;
             switch (a) {
                 case 'geocode': return `<button type="button" ${go}>${strings.map.lookUp(missing.length)}</button>`;
-                case 'research': return `<button type="button" class="map-status-research" ${go} title="${this.escapeHtml(om.lookResearchTitle)}">${this.escapeHtml(om.lookResearch(missing.length))}</button>`;
+                // An agent's work asked through the bridge (queued, nothing runs yet): the AI badge alone.
+                case 'research': return `<button type="button" class="map-status-research" ${go} title="${this.escapeHtml(om.lookResearchTitle)}">${researchBridgeAgentLabel(bar.after ? om.lookResearch(input.look) : om.lookResearchShort)}</button>`;
                 case 'confirm': return `<button type="button" class="secondary map-status-confirm" ${go} title="${this.escapeHtml(om.confirmTitle)}"><span aria-hidden="true">?</span> ${this.escapeHtml(om.confirm(confirm))}</button>`;
                 case 'places': return `<button type="button" class="secondary" ${go}>${strings.map.managePlaces}</button>`;
             }

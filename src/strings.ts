@@ -2981,6 +2981,7 @@ const stringsEN = {
         onMap: {
             notFound: (shown: number, missing: number) => `${strings.map.placeCount(shown)} on the map · ${missing} not found by the map`,
             lookResearch: (n: number) => `Look up in the research (${n})`,
+            lookResearchShort: 'In the research',
             lookResearchTitle: 'Opens Places with the places without a location and the preview of looking them up in the research.',
             confirm: (n: number) => `${n} to confirm ›`,
             confirmTitle: 'Opens Waiting in the research panel.',
@@ -10385,6 +10386,7 @@ const stringsCZ: StringsType = {
         onMap: {
             notFound: (shown: number, missing: number) => `${strings.map.placeCount(shown)} na mapě · ${missing} mapa nenašla`,
             lookResearch: (n: number) => `Dohledat ve výzkumu (${n})`,
+            lookResearchShort: 'Ve výzkumu',
             lookResearchTitle: 'Otevře Místa s místy bez polohy a náhledem dohledání ve výzkumu.',
             confirm: (n: number) => `${n} k potvrzení ›`,
             confirmTitle: 'Otevře Čeká v panelu výzkumu.',
@@ -17709,6 +17711,7 @@ const stringsDE: StringsType = {
         onMap: {
             notFound: (shown: number, missing: number) => `${strings.map.placeCount(shown)} auf der Karte · ${missing} nicht gefunden`,
             lookResearch: (n: number) => `In der Forschung suchen (${n})`,
+            lookResearchShort: 'In der Forschung',
             lookResearchTitle: 'Öffnet Orte mit den Orten ohne Lage und der Vorschau der Suche in der Forschung.',
             confirm: (n: number) => `${n} zu bestätigen ›`,
             confirmTitle: 'Öffnet Offen im Forschungsbereich.',

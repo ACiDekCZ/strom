@@ -61,9 +61,13 @@ function livePlaces(): FakePlaces {
     const p = fakePlaces({ reply: placesReply() });
     p.identifyReply = (body) => {
         const forms = (p.reply.forms ?? {}) as Record<string, unknown>;
-        const asked = Array.isArray(body.forms) ? body.forms as string[] : [];
+        // Everything off the map: what the research would take (no location, not identified).
+        const asked = Array.isArray(body.forms) ? body.forms as string[] : body.all === 'offmap' ? ['Horní Lhota', 'Łotów'] : [];
         for (const f of asked) forms[f] = { state: 'queued' };
-        p.reply = { ...p.reply, rev: `p${p.identify.length + 1}`, forms };
+        // A place the research keeps a record of (Łotów, not determined) goes back into its queue as a whole.
+        const places = Object.fromEntries(Object.entries((p.reply.places ?? {}) as Record<string, { forms?: string[] }>)
+            .map(([id, rec]) => [id, (rec.forms ?? []).some(f => asked.includes(f)) ? { ...rec, state: 'queued' } : rec]));
+        p.reply = { ...p.reply, rev: `p${p.identify.length + 1}`, forms, places };
         return { status: 200, body: { ok: true, queued: asked.length, skipped: [] } };
     };
     return p;
@@ -156,18 +160,23 @@ test.describe('places on the map with the research here', () => {
         await expect.poll(() => b.places!.reads).toBeGreaterThan(0);
         await clearToasts(page);
         const bar = page.locator('#map-status');
-        // Before the lookup: as it was.
+        // Before the lookup: the map's lookup, the research's beside it (spec 058), Places.
         await expect(bar).toContainText('4 places on the map, 3 without coordinates.');
         await expect(bar.getByRole('button', { name: 'Look up 3 places' })).toBeVisible();
-        await expect(bar.locator('.map-status-research, .map-status-confirm')).toHaveCount(0);
+        await expect(bar.getByRole('button', { name: 'In the research, AI' })).toBeVisible();
+        await expect(bar.locator('.map-status-confirm')).toHaveCount(0);
 
         await bar.getByRole('button', { name: 'Look up 3 places' }).click();
         await page.getByRole('button', { name: 'Look them up' }).click();
         await expect(bar).toContainText('4 places on the map · 3 not found by the map', { timeout: 20000 });
         expect(asked.length).toBeGreaterThan(0);
         await clearToasts(page);
-        const buttons = await bar.locator('button').allTextContents();
-        expect(buttons.map(t => t.replace(/\s+/g, ' ').trim())).toEqual(['Look up in the research (3)', '? 1 to confirm ›', 'Places']);
+        // What the map did not find goes on to the research (spec 058 K1.4): the two it can look up
+        // (Lhoták čp. 3 waits for an answer), with the AI badge alone (queued through the bridge, no terminal).
+        const names = await bar.locator('button').evaluateAll(bs => bs.map(b => (b.textContent ?? '').replace(/\s+/g, ' ').trim()));
+        expect(names).toEqual(['Look up in the research (2), AIAI', '? 1 to confirm ›', 'Places']);
+        await expect(bar.locator('.map-status-research .research-ai-badge')).toHaveText('AI');
+        await expect(bar.locator('.map-status-research .research-open-mark')).toHaveCount(0);
 
         // Look up: Places with the "No location" chip and the preview of looking them up.
         await bar.locator('.map-status-research').click();
@@ -187,6 +196,47 @@ test.describe('places on the map with the research here', () => {
         await clearToasts(page);
         await bar.locator('.map-status-confirm').click();
         expect(await page.evaluate(() => (window.Strom.UI as unknown as { __waiting: number }).__waiting)).toBe(1);
+    });
+
+    test('before the map\'s lookup "In the research" (AI) opens Places with the preview; nothing goes before Queue, nothing twice after it (spec 058)', async ({ page }) => {
+        await stubMap(page);
+        const b = await research(page);
+        await mapOn(page, 'Lhota');
+        await page.evaluate(() => { window.Strom.UI.closeMapPopup(); window.Strom.UI.setMapScope('tree'); });
+        await expect.poll(() => b.places!.reads).toBeGreaterThan(0);
+        await clearToasts(page);
+        const bar = page.locator('#map-status');
+        const look = bar.locator('.map-status-research');
+        await expect(look).toHaveAccessibleName('In the research, AI');
+        await expect(look.locator('.research-ai-badge')).toBeVisible();
+        await expect(look.locator('.research-open-mark')).toHaveCount(0);
+        await look.click();
+        const modal = page.locator('#places-modal');
+        await expect(modal).toBeVisible();
+        await expect(modal.locator('.places-chip[data-filter="none"]')).toHaveAttribute('aria-pressed', 'true');
+        const preview = modal.locator('.places-bulk');
+        await expect(preview.locator('.places-bulk-head')).toHaveText('Look up 2 places not on the map in the research');
+        expect(b.places!.identify).toEqual([]);
+        await preview.locator('.places-bulk-go').click();
+        await expect.poll(() => b.places!.identify.length).toBe(1);
+        expect(b.places!.identify[0]).toMatchObject({ do: 'queue', all: 'offmap' });
+        await page.evaluate(() => window.Strom.UI.closePlacesManager());
+        // Queued in the research now: the bar does not offer them again.
+        await expect(bar.getByRole('button', { name: 'Look up 3 places' })).toBeVisible();
+        await expect(look).toHaveCount(0);
+    });
+
+    test('the research on another computer: "In the research" stays, a click says where it goes, nothing opens (spec 058)', async ({ page }) => {
+        await stubMap(page);
+        await openResearch(page, { ged: GED, bridge: false });
+        await setGeos(page);
+        await mapOn(page, 'Lhota');
+        await page.evaluate(() => { window.Strom.UI.closeMapPopup(); window.Strom.UI.setMapScope('tree'); });
+        await clearToasts(page);
+        const bar = page.locator('#map-status');
+        await bar.locator('.map-status-research').click();
+        await expect(page.locator('.toast')).toContainText('Look up and check work in the research on the computer where it runs.');
+        await expect(page.locator('#places-modal')).toBeHidden();
     });
 
     test('a point to check: "!" with its reason; Keep in its bubble takes the mark away, the location stays', async ({ page }) => {
@@ -315,6 +365,22 @@ test('a tree without a research: the badge and Find on the map, no ◆ and no wo
     await expect(row.locator('.place-search')).toBeVisible();
 });
 
+test('a tree without a research: the map\'s bar as before, no step of the research (spec 058)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubMap(page);
+    await openApp(page);
+    await seedTree(page, {
+        a: { firstName: 'Yarek', lastName: 'Brindak', birthDate: '1870', birthPlace: 'Horní Lhota', deathDate: '1880', deathPlace: 'Lhota' },
+    } as never, 'Brindak');
+    await page.evaluate(({ lhota }) => { window.Strom.DataManager.getData().places = { lhota: { ...lhota, label: 'Lhota' } }; }, { lhota: LHOTA });
+    await mapOn(page, 'Lhota');
+    await page.evaluate(() => { window.Strom.UI.closeMapPopup(); window.Strom.UI.setMapScope('tree'); });
+    const bar = page.locator('#map-status');
+    await expect(bar).toContainText('1 place on the map, 1 without coordinates.');
+    expect((await bar.locator('button').allTextContents()).map(t => t.trim())).toEqual(['Look up 1 place', 'Places']);
+    await expect(bar).not.toContainText('research');
+});
+
 test.describe('on a phone', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
@@ -346,5 +412,20 @@ test.describe('on a phone', () => {
         await popup(page).locator('.map-popup-close').click();
         await expect(page.locator('#map-status')).toBeVisible();
         expect(b.places!.identify).toEqual([]);
+    });
+
+    test('the map\'s bar: "In the research" only says where looking up goes, nothing is queued (spec 058)', async ({ page }) => {
+        await stubMap(page);
+        const b = await research(page);
+        await mapOn(page, 'Lhota');
+        await popup(page).locator('.map-popup-close').click();
+        await page.evaluate(() => window.Strom.UI.setMapScope('tree'));
+        await clearToasts(page);
+        const bar = page.locator('#map-status');
+        await bar.locator('.map-status-research').click();
+        await expect(page.locator('.toast')).toContainText('Look up and check work on the computer with the research.');
+        await expect(page.locator('#places-modal')).toBeHidden();
+        expect(b.places!.identify).toEqual([]);
+        await noSideScroll(page);
     });
 });

@@ -29,6 +29,7 @@ import { FollowTarget, sessionTone } from '../live-follow-targets.js';
 import { GeoPoint, WorkPlace, mapTrailDots, mapTrailLines, workPlaceId } from '../live-follow-map.js';
 import { getFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
+import { researchBridgeAgentLabel } from './research-open-mark.js';
 import { liveSession, timeEl } from './research-ui.js';
 import {
     currentFollowTargets, currentWorkPlaces, followBusy, followMapPaused, followNumbered, followTiming, followTrail,
@@ -276,12 +277,20 @@ export const mapFollowMethods = uiModule({
             host.setAttribute('role', 'status');
             container.appendChild(host);
             host.addEventListener('click', (e) => {
+                const look = (e.target as HTMLElement).closest('.map-follow-research') as HTMLElement | null;
+                if (look?.dataset.key) { this.lookUpFollowPlace(look.dataset.key); return; }
                 const b = (e.target as HTMLElement).closest('.map-follow-locate') as HTMLElement | null;
                 if (b?.dataset.key) this.showPlacesManager(b.dataset.key, undefined, 'tree');
             });
         }
         const m = strings.map;
         const readOnly = DataManager.isViewMode();
+        // With a research, a place it could look up (no location or not identified, not queued
+        // twice) also offers Look up in the research (spec 058).
+        const access = readOnly ? 'none' : this.placesResearchContext().access;
+        const keys = missing.flatMap(({ place }) => place.kind === 'noCoords' && place.key ? [place.key] : []);
+        const ids = access !== 'none' && keys.length ? this.placeIdentitiesNow(keys) : null;
+        const lookable = (key: string): boolean => { const st = ids?.get(key)?.state; return st === 'none' || st === 'undet'; };
         const html = missing.map(({ target, place }) => {
             const name = place.kind === 'noPlace' ? personName(target.personId) : place.name;
             const full = place.kind === 'noPlace' ? m.noPlace(name) : m.noCoords(name);
@@ -291,6 +300,9 @@ export const mapFollowMethods = uiModule({
                 + `<span class="map-follow-notice-mark" aria-hidden="true">${numbered ? target.session : ''}</span>`
                 + `<span class="map-follow-notice-text"><b>${esc(name)}</b>${esc(rest)}</span>`
                 + (known ? `<button type="button" class="map-follow-locate" data-key="${esc(known)}">${esc(m.locate)}</button>` : '')
+                + (known && lookable(known)
+                    ? `<button type="button" class="map-follow-research" data-key="${esc(known)}" title="${esc(strings.places.research.lookTitle)}">${researchBridgeAgentLabel(strings.places.research.look)}</button>`
+                    : '')
                 + '</div>';
         }).join('');
         if (host.dataset.html !== html) {
@@ -298,6 +310,17 @@ export const mapFollowMethods = uiModule({
             host.dataset.html = html;
         }
         placeMapChrome(container);
+    },
+
+    /**
+     * Look up in the research from a notice: the place queued as from its menu on the person card
+     * (nothing runs yet, Undo in the toast); where the research's steps do not go here, where they go.
+     */
+    lookUpFollowPlace(key: string): void {
+        const note = this.placesResearchNote(this.placesResearchContext().access);
+        if (note) { this.showToast(note, 8000); return; }
+        // Queued: the notice draws again without the step (not offered twice).
+        void this.queuePlaces([key], false).then(() => this.applyMapFollowMarks());
     },
 
     /** Place the map's pause pill and notices again (the pill came or went). */

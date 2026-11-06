@@ -93,6 +93,22 @@ export function researchActionLabel(label: string, mark: ResearchActionMark, opt
     return o ? researchOpenLabel(label, o) : esc(researchLabelText(label));
 }
 
+/**
+ * A label for an agent's work asked through the research's bridge, no terminal (Milan, 2 Nov 2026:
+ * the AI badge alone, as the person menu's research-read): e.g. places queued for the research to
+ * identify. The badge stays with the last word; the hidden words say ", AI".
+ */
+export function researchBridgeAgentLabel(label: string): string {
+    const r = strings.research;
+    const text = researchLabelText(label);
+    const cut = text.lastIndexOf(' ');
+    const head = cut >= 0 ? text.slice(0, cut + 1) : '';
+    const last = cut >= 0 ? text.slice(cut + 1) : text;
+    const badge = `<span class="research-open-sr">${esc(`, ${r.aiBadge}`)}</span>`
+        + `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>`;
+    return `<span class="research-open-text">${esc(head)}<span class="research-open-nowrap">${esc(last)}${badge}</span></span>`;
+}
+
 /** The same for an element built in the DOM: its text replaced by the label with the mark of its group. */
 export function setResearchActionLabel<T extends HTMLElement>(el: T, label: string, mark: ResearchActionMark, opts: Omit<ResearchOpenMarkOptions, 'ai'> = {}): T {
     el.innerHTML = researchActionLabel(label, mark, opts);

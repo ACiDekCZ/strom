@@ -10262,6 +10262,13 @@
             position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 4;
             display: flex; flex-direction: column; gap: 6px; width: max-content; max-width: min(520px, calc(100% - 32px));
         }
+        /* The research's card top right: the notices stand in the middle of the room left of it, never under it (058). */
+        @media (min-width: 641px) and (min-height: 501px), (min-width: 1025px) {
+            body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-follow-notices {
+                left: calc((100% - var(--live-card-right) - var(--live-card-w) - 8px) / 2);
+                max-width: min(520px, calc(100% - var(--live-card-right) - var(--live-card-w) - 32px));
+            }
+        }
         .map-follow-notice {
             display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-width: 0;
             padding: 6px 6px 6px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--follow-c) 55%, var(--border));
@@ -10274,21 +10281,25 @@
         }
         .map-follow-notice-mark:not(:empty) { border-width: 0; background: var(--follow-c); color: var(--surface); }
         .map-follow-notice-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+        /* Two steps (Find position, Look up in the research): the text keeps its width, the steps go under it when short of room. */
+        .map-follow-notice:has(.map-follow-research) { flex-wrap: wrap; row-gap: 6px; }
+        .map-follow-notice:has(.map-follow-research) .map-follow-notice-text { flex-basis: 150px; }
+        .map-follow-notice:has(.map-follow-research) .map-follow-locate { margin-left: auto; }
         .map-follow-notice:not(:has(.map-follow-locate)) { padding-right: 12px; }
-        .map-follow-locate {
+        .map-follow-locate, .map-follow-research {
             flex: none; margin: 0; padding: 5px 10px; min-height: 30px; border-radius: 8px;
             border: 1px solid var(--border); background: var(--surface); color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 600;
             cursor: pointer; white-space: nowrap;
         }
-        .map-follow-locate:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        @media (hover: hover) { .map-follow-locate:hover { background: var(--hover-bg); } }
-        @media (pointer: coarse) { .map-follow-locate { min-height: 44px; } }
+        .map-follow-locate:focus-visible, .map-follow-research:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { .map-follow-locate:hover, .map-follow-research:hover { background: var(--hover-bg); } }
+        @media (pointer: coarse) { .map-follow-locate, .map-follow-research { min-height: 44px; } }
         @media (max-width: 640px) {
             .map-follow-notices {
                 top: auto; left: 8px; right: 8px; transform: none; width: auto; max-width: none;
                 bottom: calc(var(--map-status-reach, 60px) + 8px);
             }
-            .map-follow-locate { white-space: normal; min-height: 44px; }
+            .map-follow-locate, .map-follow-research { white-space: normal; min-height: 44px; }
             /* The research's strip floats over the map's bottom: the status bar
                stands above it, and the time bar, the notices and the legend,
                measured from the status bar (--map-status-reach), follow. */

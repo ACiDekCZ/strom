@@ -9,7 +9,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
 } from '../research-link.js';
-import { researchActionLabel, researchLinkFlags } from '../ui/research-open-mark.js';
+import { researchActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
 import { strings, setLanguage, type Language } from '../strings.js';
 
@@ -83,6 +83,14 @@ describe('the map of research actions to their marks', () => {
         expect(agent).toContain('research-open-mark');
         expect(agent).toContain('research-ai-badge');
         expect(agent).not.toContain('↗');
+    });
+
+    it('draws an agent\'s work asked through the bridge with the AI badge alone, no terminal mark (spec 058)', () => {
+        const label = researchBridgeAgentLabel('In the research');
+        expect(label).toContain('research-ai-badge');
+        expect(label).not.toContain('research-open-mark');
+        // The badge stays with the last word; the hidden words name it.
+        expect(label).toContain('<span class="research-open-nowrap">research<span class="research-open-sr">, AI</span>');
     });
 });
 

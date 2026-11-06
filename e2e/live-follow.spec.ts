@@ -1355,13 +1355,51 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
             });
         });
         expect(overlap).toBe(false);
+        // The research beside it (spec 058): this one does not look places up yet, it says so.
+        const look = notice.locator('.map-follow-research');
+        await expect(look).toHaveAccessibleName('Look up in the research, AI');
+        await expect(look.locator('.research-open-mark')).toHaveCount(0);
+        await look.click();
+        await expect(page.locator('.toast')).toContainText('This version of the research does not look up places yet.');
+        await expect(page.locator('#places-modal')).toBeHidden();
         await notice.locator('.map-follow-locate').click();
         await expect(page.locator('#places-modal')).toBeVisible();
         await page.locator('#places-close-x').click();
         bridge.place = 'L0009';
         await nextStatus(bridge);
         await expect(notice.locator('b')).toHaveText('Horní Mez');
-        await expect(notice.locator('.map-follow-locate')).toHaveCount(0);
+        await expect(notice.locator('.map-follow-locate, .map-follow-research')).toHaveCount(0);
+    });
+
+    test('a place without a position, the research looking places up: Look up in the research queues it (nothing runs), then is not offered again (spec 058)', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place', 'places.identify'];
+        bridge.person = 'P0013';
+        const posted: Record<string, unknown>[] = [];
+        await page.route(`${BRIDGE}/places**`, async (route) => {
+            const req = route.request();
+            if (req.method() === 'POST') {
+                const body = JSON.parse(req.postData() ?? '{}') as { forms?: string[] };
+                posted.push(body);
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ ok: true, queued: body.forms?.length ?? 0, skipped: [] }) });
+            }
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                body: JSON.stringify({ rev: 'p1', places: {}, forms: {} }) });
+        });
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        const notice = page.locator('#map-container .map-follow-notice');
+        await expect(notice.locator('b')).toHaveText('Lhota u Habrova');
+        await notice.locator('.map-follow-research').click();
+        await expect.poll(() => posted.length).toBe(1);
+        expect(posted[0]).toMatchObject({ do: 'queue', forms: ['Lhota u Habrova'] });
+        await expect(page.locator('.toast')).toContainText('1 place queued for the research.');
+        await expect(notice.locator('.map-follow-research')).toHaveCount(0);
+        await expect(notice.locator('.map-follow-locate')).toBeVisible();
     });
 
     test('moving the map pauses its panning (pill, ◎ paused); marks keep coming; Back to the agent centres the place', async ({ page }) => {

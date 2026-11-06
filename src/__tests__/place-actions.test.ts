@@ -7,33 +7,47 @@ const id = (state: PlaceState, extra: Partial<PlaceIdentity> = {}): PlaceIdentit
 const actions = (m: ReturnType<typeof placeMenu>): string[] => m.items.map(i => i.action);
 
 describe('mapBarState', () => {
-    it('before the lookup: look up on the map and Places', () => {
-        expect(mapBarState({ shown: 10, missing: 4, missingTried: 0, access: 'ok', confirm: 2 }))
-            .toEqual({ after: false, actions: ['geocode', 'places'] });
+    it('before the lookup: look up on the map, in the research (spec 058) and Places', () => {
+        expect(mapBarState({ shown: 10, missing: 4, missingTried: 0, access: 'ok', confirm: 2, look: 3 }))
+            .toEqual({ after: false, actions: ['geocode', 'research', 'places'] });
         // A new place the lookup did not try yet keeps the map's own lookup.
-        expect(mapBarState({ shown: 10, missing: 4, missingTried: 3, access: 'ok', confirm: 0 }).after).toBe(false);
+        expect(mapBarState({ shown: 10, missing: 4, missingTried: 3, access: 'ok', confirm: 0, look: 4 }).after).toBe(false);
+    });
+
+    it('before the lookup: the research\'s step stands with any research, not without one or with nothing to look up', () => {
+        for (const access of ['phone', 'elsewhere', 'old'] as const) {
+            expect(mapBarState({ shown: 10, missing: 4, missingTried: 0, access, confirm: 0, look: 2 }).actions)
+                .toEqual(['geocode', 'research', 'places']);
+        }
+        expect(mapBarState({ shown: 10, missing: 4, missingTried: 0, access: 'none', confirm: 0, look: 4 }).actions)
+            .toEqual(['geocode', 'places']);
+        // Every place without a location is queued, worked on or waiting for an answer: nothing to queue twice.
+        expect(mapBarState({ shown: 10, missing: 4, missingTried: 0, access: 'ok', confirm: 1, look: 0 }).actions)
+            .toEqual(['geocode', 'places']);
     });
 
     it('everything placed: Places only', () => {
-        expect(mapBarState({ shown: 10, missing: 0, missingTried: 0, access: 'ok', confirm: 0 }))
+        expect(mapBarState({ shown: 10, missing: 0, missingTried: 0, access: 'ok', confirm: 0, look: 0 }))
             .toEqual({ after: false, actions: ['places'] });
     });
 
-    it('after the lookup with the research here: ◆, to confirm, Places (three at most)', () => {
-        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'ok', confirm: 2 }))
+    it('after the lookup with the research here: in the research, to confirm, Places (three at most)', () => {
+        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'ok', confirm: 2, look: 2 }))
             .toEqual({ after: true, actions: ['research', 'confirm', 'places'] });
-        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'ok', confirm: 0 }).actions)
+        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'ok', confirm: 0, look: 4 }).actions)
             .toEqual(['research', 'places']);
+        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'ok', confirm: 4, look: 0 }).actions)
+            .toEqual(['confirm', 'places']);
     });
 
-    it('after the lookup with the research elsewhere: no ◆, to confirm stays', () => {
+    it('after the lookup with the research elsewhere: the step stays (it says where it goes), to confirm stays', () => {
         for (const access of ['phone', 'elsewhere', 'old'] as const) {
-            expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access, confirm: 3 }).actions).toEqual(['confirm', 'places']);
+            expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access, confirm: 3, look: 1 }).actions).toEqual(['research', 'confirm', 'places']);
         }
     });
 
     it('after the lookup without a research: Places only', () => {
-        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'none', confirm: 3 }))
+        expect(mapBarState({ shown: 14, missing: 4, missingTried: 4, access: 'none', confirm: 3, look: 4 }))
             .toEqual({ after: true, actions: ['places'] });
     });
 });

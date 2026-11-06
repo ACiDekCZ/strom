@@ -24,6 +24,11 @@ export interface MapBarInput {
     access: PlacesResearchAccess;
     /** Places the research waits to have confirmed. */
     confirm: number;
+    /**
+     * Of the places without a location, those the research could look up (no
+     * location or not identified; not queued, worked on or waiting for an answer).
+     */
+    look: number;
 }
 
 export interface MapBarState {
@@ -34,15 +39,18 @@ export interface MapBarState {
 }
 
 /**
- * The bar's actions. Before the map's lookup: look them up on the map and
- * Places. After it, with places it did not find: Look up in the research
- * (the research here), "? N to confirm" (any research), Places.
+ * The bar's actions. Before the map's lookup: look them up on the map, in the
+ * research (spec 058) and Places. After it, with places it did not find: Look
+ * up in the research, "? N to confirm", Places. The research's step stands
+ * with any research that has places to look up; where its steps do not go
+ * (another computer, a phone, an older research) it says where they go.
  */
 export function mapBarState(i: MapBarInput): MapBarState {
     const after = i.missing > 0 && i.missingTried >= i.missing;
-    if (!after) return { after, actions: i.missing > 0 ? ['geocode', 'places'] : ['places'] };
+    const research = i.access !== 'none' && i.look > 0;
+    if (!after) return { after, actions: i.missing > 0 ? ['geocode', ...(research ? ['research' as const] : []), 'places'] : ['places'] };
     const actions: MapBarAction[] = [];
-    if (i.access === 'ok') actions.push('research');
+    if (research) actions.push('research');
     if (i.access !== 'none' && i.confirm > 0) actions.push('confirm');
     actions.push('places');
     return { after, actions };
