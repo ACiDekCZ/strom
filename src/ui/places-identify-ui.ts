@@ -620,7 +620,7 @@ export const placesIdentifyMethods = uiModule({
                 const date = row.at ? ` <span class="place-why-date">${this.escapeHtml(formatPlaceDate(row.at, lang))}</span>` : '';
                 value = `${placeOriginBadge(row.origin, lang, row.origin === 'research' ? row.at : undefined)}${row.origin === 'research' ? '' : date}`;
             } else if (row.url) {
-                value = `${this.escapeHtml(row.text)} <a class="place-why-link" href="${this.escapeHtml(row.url)}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">↗</span></a>`;
+                value = `${this.escapeHtml(row.text)} <a class="place-why-link" href="${this.escapeHtml(row.url)}" target="_blank" rel="noopener noreferrer" aria-label="${this.escapeHtml(strings.places.dialog.dSourceOpen)}"><span aria-hidden="true">↗</span></a>`;
             } else {
                 value = this.escapeHtml(row.text);
             }

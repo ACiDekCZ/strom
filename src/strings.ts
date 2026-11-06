@@ -3183,6 +3183,7 @@ const stringsEN = {
             dDecide: 'What would decide',
             dCheck: 'Check',
             dSource: 'Source',
+            dSourceOpen: 'Open the source',
             whoHand: 'The research never changes a hand-placed location; it asks in Waiting if it finds a conflict.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `${km} km from the other places of the ${family} family in ${a === b ? a : `${a}–${b}`}.`,
@@ -4250,7 +4251,8 @@ const stringsEN = {
     // Person picker
     personPicker: {
         placeholder: 'Search person...',
-        noResults: 'No matching people'
+        noResults: 'No matching people',
+        showList: 'Show list'
     },
 
     // Errors
@@ -10613,6 +10615,7 @@ const stringsCZ: StringsType = {
             dDecide: 'Co by rozhodlo',
             dCheck: 'Ověřit',
             dSource: 'Zdroj',
+            dSourceOpen: 'Otevřít zdroj',
             whoHand: 'Ruční polohu výzkum nemění, jen se zeptá v Čeká, když najde rozpor.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `Leží ${km} km od ostatních míst rodiny ${family} ${a === b ? `v roce ${a}` : `v letech ${a}–${b}`}.`,
@@ -11648,7 +11651,8 @@ const stringsCZ: StringsType = {
     // Person picker
     personPicker: {
         placeholder: 'Hledat osobu...',
-        noResults: 'Žádné odpovídající osoby'
+        noResults: 'Žádné odpovídající osoby',
+        showList: 'Zobrazit seznam'
     },
 
     // Errors
@@ -17962,6 +17966,7 @@ const stringsDE: StringsType = {
             dDecide: 'Was entscheiden würde',
             dCheck: 'Prüfen',
             dSource: 'Quelle',
+            dSourceOpen: 'Quelle öffnen',
             whoHand: 'Eine von Hand gesetzte Lage ändert die Forschung nicht, bei Widerspruch fragt sie in Offen.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `${km} km von den übrigen Orten der Familie ${family} ${a === b ? a : `${a}–${b}`}.`,
@@ -18989,7 +18994,8 @@ const stringsDE: StringsType = {
     // Person picker
     personPicker: {
         placeholder: 'Person suchen...',
-        noResults: 'Keine passenden Personen'
+        noResults: 'Keine passenden Personen',
+        showList: 'Liste anzeigen'
     },
 
     // Errors

@@ -381,6 +381,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             dDecide: 'Co by rozstrzygnęło',
             dCheck: 'Do sprawdzenia',
             dSource: 'Źródło',
+            dSourceOpen: 'Otwórz źródło',
             whoHand: 'Ręcznego położenia badanie nie zmienia; pyta tylko w zakładce Czeka, gdy znajdzie sprzeczność.',
             checkFar: (km: number, family: string, a: number, b: number) =>
                 `Leży ${km} km od innych miejsc rodziny ${familyGenitivePl(family)} ${a === b ? `w ${a} r.` : `w latach ${a}–${b}`}.`,

@@ -622,7 +622,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
     // Person picker
     personPicker: {
         placeholder: 'Szukaj osoby...',
-        noResults: 'Brak pasujących osób'
+        noResults: 'Brak pasujących osób',
+        showList: 'Pokaż listę'
     },
 
     // Errors

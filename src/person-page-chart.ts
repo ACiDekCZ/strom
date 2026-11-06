@@ -475,7 +475,9 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
         const fits = !single && !!text && wpx(p.from, p.to) > text.length * CH_PX;
         const cls = single ? 'pp-ch-p--life' : `pp-ch-p--${p.kind === 'partnership' ? 'marriage' : p.kind}`;
         const href = p.anchor ? ` href="#${p.anchor}" data-pp-osa="${p.anchor}"` : '';
-        barParts.push(`<a class="pp-ch-p ${cls}"${href} style="left:${x(p.from)};width:${wpc(p.from, p.to)}"${title ? ` title="${esc(title)}"` : ''}></a>`);
+        // The whole life with no known periods has no title: its legend's words name the link.
+        const name = title || (p.kind === 'life' ? S.personPage.chart.legend.life : '');
+        barParts.push(`<a class="pp-ch-p ${cls}"${href} style="left:${x(p.from)};width:${wpc(p.from, p.to)}"${title ? ` title="${esc(title)}"` : ''}${name ? ` aria-label="${esc(name)}"` : ''}></a>`);
         if (fits) labelParts.push(`<span class="pp-ch-pl" style="left:${x(p.from)};width:${wpc(p.from, p.to)}">${esc(text)}</span>`);
     }
     rows.push(`<div class="pp-ch-row pp-ch-plabels" aria-hidden="true">${labelParts.join('')}</div>`);

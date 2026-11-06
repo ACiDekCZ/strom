@@ -23487,7 +23487,7 @@
         <button type="button" class="toolbar-tree-icon" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title" data-i18n-aria-label="about.title"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/></svg></button>
         <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button><div id="research-sync-pill" class="storage-pill research-sync-pill" style="display:none;"></div></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
-        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile" data-i18n-aria-label="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
 
         <!-- Tree Switcher (responsive - compact on mobile/tablet) -->
         <div class="tree-switcher">
@@ -23510,7 +23510,7 @@
                 <!-- Phone, the query stays with the keyboard closed: its count and × (clears the text only) -->
                 <span id="search-query-count" class="search-query-count"></span>
                 <button type="button" id="search-clear-btn" class="search-clear-btn" onclick="window.Strom.UI.clearSearchText()" data-i18n-aria-label="search.clear" data-i18n-title="search.clear">&times;</button>
-                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle"><span id="search-filter-badge" class="search-filter-badge" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
+                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle" data-i18n-aria-label="searchFilters.toggle"><span id="search-filter-badge" class="search-filter-badge" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
             </div>
             <div id="search-filters" class="search-filters" style="display:none;">
                 <!-- Phone: the filter is a sheet from below (head, fields, fixed foot) -->
@@ -23718,7 +23718,7 @@
 
         <!-- Tablet add person (round +) — superseded by the bottom-bar FAB in
              the mobile regime; kept hidden as the desktop-hidden default. -->
-        <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add person" data-i18n-title="toolbar.addPerson">+</button>
+        <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add person" data-i18n-title="toolbar.addPerson" data-i18n-aria-label="toolbar.addPerson">+</button>
 
         <!-- Mobile actions (⋯) — opens the "More" bottom sheet (≤1024px) -->
         <button class="mobile-more-btn" onclick="window.Strom.UI.showMoreMenuSheet()" data-i18n-title="mobileMenu.more" data-i18n-aria-label="mobileMenu.more"><span class="mobile-more-glyph" aria-hidden="true">⋯</span><span class="mobile-more-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
@@ -23888,9 +23888,9 @@
     </div>
 
     <button id="focus-back-btn" class="focus-nav-btn focus-back-btn" style="display:none;"
-        onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back">↩</button>
+        onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back" data-i18n-aria-label="focus.back">↩</button>
     <button id="focus-forward-btn" class="focus-nav-btn focus-forward-btn" style="display:none;"
-        onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward">↪</button>
+        onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward" data-i18n-aria-label="focus.forward">↪</button>
     <div id="focus-toast" class="focus-toast" role="status" aria-live="polite"></div>
 
     <div id="slideshow-overlay" class="slideshow-overlay">
@@ -23911,10 +23911,10 @@
             <canvas id="minimap-canvas" width="180" height="120"></canvas>
         </div>
         <div class="zoom-controls">
-            <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>
-            <button onclick="window.Strom.ZoomPan.zoomOut()" data-i18n-title="zoomControls.zoomOut">−</button>
-            <button onclick="window.Strom.ZoomPan.reset()" data-i18n-title="zoomControls.reset">⟲</button>
-            <button onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="zoomControls.fitToScreen">⛶</button>
+            <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn" data-i18n-aria-label="zoomControls.zoomIn">+</button>
+            <button onclick="window.Strom.ZoomPan.zoomOut()" data-i18n-title="zoomControls.zoomOut" data-i18n-aria-label="zoomControls.zoomOut">−</button>
+            <button onclick="window.Strom.ZoomPan.reset()" data-i18n-title="zoomControls.reset" data-i18n-aria-label="zoomControls.reset">⟲</button>
+            <button onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="zoomControls.fitToScreen" data-i18n-aria-label="zoomControls.fitToScreen">⛶</button>
         </div>
     </div>
 
@@ -24287,8 +24287,8 @@
                             <div class="photo-actions">
                                 <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
                                 <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
-                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft">↺</button>
-                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight">↻</button>
+                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft" data-i18n-aria-label="labels.photoRotateLeft">↺</button>
+                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight" data-i18n-aria-label="labels.photoRotateRight">↻</button>
                                 <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
                                 <span class="photo-size" id="photo-size"></span>
                             </div>
@@ -25681,7 +25681,7 @@
                 <div id="merge-manual-picker"></div>
             </div>
             <div class="buttons">
-                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview">👁</button>
+                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview">👁</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
             </div>
@@ -25774,7 +25774,7 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview">👁</button>
+                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview">👁</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closePersonMergeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" id="person-merge-btn" onclick="window.Strom.UI.executePersonMerge()" data-i18n="personMerge.confirmMerge" disabled>Merge people</button>
             </div>

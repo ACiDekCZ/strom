@@ -130,6 +130,7 @@ export const fileAccessMethods = uiModule({
         if (handle) {
             indicator.style.display = 'inline-flex';
             indicator.title = strings.fileAccess.linkedTo(handle.name);
+            indicator.setAttribute('aria-label', indicator.title);
         } else {
             indicator.style.display = 'none';
         }

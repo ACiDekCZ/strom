@@ -199,6 +199,7 @@ export class PersonPicker {
         this.toggleBtn.type = 'button';
         this.toggleBtn.className = 'person-picker-toggle';
         this.toggleBtn.innerHTML = '&#9662;';  // Down arrow
+        this.toggleBtn.setAttribute('aria-label', strings.personPicker.showList);
         this.container.appendChild(this.toggleBtn);
 
         // Dropdown

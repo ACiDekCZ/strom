@@ -10,6 +10,7 @@ import {
 } from './layout/pipeline/debug-types.js';
 import { BranchModel } from './layout/pipeline/types.js';
 import { LayoutConfig } from './types.js';
+import { strings } from './strings.js';
 
 /**
  * Debug panel class for displaying layout pipeline statistics.
@@ -29,7 +30,7 @@ export class DebugPanel {
         this.element.innerHTML = `
             <div class="debug-panel-header">
                 <span class="debug-panel-title">Layout Debug</span>
-                <button class="debug-panel-close">&times;</button>
+                <button class="debug-panel-close" aria-label="${strings.buttons.close}">&times;</button>
             </div>
             <div class="debug-panel-content"></div>
         `;
