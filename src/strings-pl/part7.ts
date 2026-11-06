@@ -295,7 +295,6 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         section: 'Opowieść',
         titleField: 'Podtytuł rozdziału',
         text: 'Tekst opowieści',
-        hint: 'Spójny tekst zbudowany na faktach – w Księdze rodu jest umieszczany dopiero po nich. Nie jest źródłem. Tekst między parami gwiazdek jest w księdze składany pogrubioną czcionką.',
         status: 'Stan',
         statusDraft: 'Szkic',
         facts: 'Opiera się na',

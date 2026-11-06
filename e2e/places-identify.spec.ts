@@ -265,6 +265,14 @@ test.describe('place identification in the Places dialog', () => {
 
         const preview = modal(page).locator('.places-bulk[data-bulk="look"]');
         await expect(preview.locator('.places-bulk-head')).toHaveText('Look up 5 places not on the map in the research');
+        // "?" ends the preview's heading row: looking up places off the map in the research (A6.5.2).
+        const mark = preview.locator('.places-bulk-headrow > .help-mark');
+        await expect(mark).toHaveAttribute('title', 'How it works: Looking up places in the research (A6.5.2)');
+        await mark.click();
+        await expect(page.locator('.help-rule[data-rule="A6.5.2"]')).toHaveClass(/is-target/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        await expect(preview).toBeVisible();
         await expect(preview.locator('.places-bulk-line > span:last-child')).toHaveText([
             'Queued: 4 without location, 1 not identified, again.',
             'Skipped: 1 already in the research.',

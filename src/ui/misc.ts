@@ -50,6 +50,8 @@ import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
 import { setResearchOpenLabel } from './research-open-mark.js';
+import { helpMark, setHelpMarkTopic } from './help-mark.js';
+import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 
@@ -1546,57 +1548,31 @@ export const miscMethods = uiModule({
             }
         });
 
-        this.installFieldHints();
+        this.installFieldHelpMarks();
     },
 
     /**
-     * Move long field explanations off the form and behind a "?" on the label.
-     *
-     * These paragraphs run to three or four lines and sat open permanently, so
-     * on a phone a single explained field pushed the rest of the form off the
-     * screen — and the text is read once, when someone first meets the field.
-     * Pressing the "?" opens it as a popup the reader dismisses, rather than
-     * unfolding it in place: an explanation that grows the form as you read it
-     * moves the field you were about to fill in.
-     *
-     * Folded only when all three hold, so nothing useful is hidden:
-     * - the text is static (carries data-i18n) — a hint written by code, like
-     *   the birth-date estimate, is a live result and keeps showing itself;
-     * - it is long enough to be in the way (a line of date formats is quicker
-     *   to read than to open);
-     * - it has a label to hang the "?" on. A note explaining a whole section
-     *   has nowhere to attach and stays where it is.
+     * A field whose rule "How Strom works" explains carries the help mark "?"
+     * right after its label (061; the mark of 1105 §9): `label[data-help]`
+     * names its topic in HELP_TOPICS. The mark stands beside the label, never
+     * inside it (the label stays the field's name, its words free to change),
+     * in a row made once; again on a change of language it only takes the new
+     * name and title.
      */
-    installFieldHints(): void {
-        /** Below this a hint costs less to read than to open. */
-        const LONG_HINT = 80;
-
-        document.querySelectorAll('.field-hint[data-i18n]').forEach(hint => {
-            if (!(hint instanceof HTMLElement)) return;
-            const text = hint.textContent?.trim() ?? '';
-            if (text.length < LONG_HINT) return;
-
-            const group = hint.closest('.form-group');
-            const label = group?.querySelector('label');
-            if (!label || label.querySelector('.hint-toggle')) return;
-
-            hint.classList.add('is-folded');
-
-            const toggle = document.createElement('button');
-            toggle.type = 'button';
-            toggle.className = 'hint-toggle';
-            toggle.textContent = '?';
-            toggle.setAttribute('aria-label', strings.labels.showHint);
-            toggle.title = strings.labels.showHint;
-            toggle.onclick = () => {
-                // Read at click time: the language can change under us, and the
-                // hint element keeps being refreshed by initializeStrings.
-                const title = (label.cloneNode(true) as HTMLElement);
-                title.querySelector('.hint-toggle')?.remove();
-                void this.showAlert(hint.textContent?.trim() ?? '', 'info',
-                    title.textContent?.trim() || undefined);
-            };
-            label.appendChild(toggle);
+    installFieldHelpMarks(): void {
+        document.querySelectorAll<HTMLElement>('label[data-help]').forEach(label => {
+            const topic = label.dataset.help ?? '';
+            if (!Object.prototype.hasOwnProperty.call(HELP_TOPICS, topic)) return;
+            let row = label.parentElement;
+            if (!row?.classList.contains('field-label-row')) {
+                row = document.createElement('div');
+                row.className = 'field-label-row';
+                label.before(row);
+                row.append(label);
+            }
+            const mark = row.querySelector<HTMLButtonElement>(':scope > .help-mark');
+            if (mark) setHelpMarkTopic(mark, topic as HelpTopic);
+            else row.append(helpMark(topic as HelpTopic));
         });
     },
 

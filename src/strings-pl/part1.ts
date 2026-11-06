@@ -654,7 +654,6 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         religionLabel: 'Wyznanie',
         religionHint: 'Tylko samo wyznanie – „rzymskokatolickie”, „ewangelicko-augsburskie”. Zmiana wyznania to osobne zdarzenie, z miejscem i datą, kiedy do niej doszło.',
         participants: 'Chrzestni i świadkowie',
-        participantsHint: 'Kogo jeszcze wymienia zapis. Chrzestny, który się powtarza, bywa krewnym.',
         addParticipant: '+ Dodaj',
         participantName: 'Imię i nazwisko, jak zapisano',
         participantNote: 'Bliższe określenie (rzemiosło, „sąsiad”…)',

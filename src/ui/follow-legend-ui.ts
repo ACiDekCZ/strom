@@ -14,6 +14,7 @@ import { strings } from '../strings.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { getFollowTrail, setFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
+import { helpMark } from './help-mark.js';
 import {
     currentFollowTargets, followLegendOpen, followNumbered, followTrail, setFollowLegendOpen,
 } from './live-follow-ui.js';
@@ -112,6 +113,8 @@ export const followLegendMethods = uiModule({
             const focused = host.contains(document.activeElement);
             host.innerHTML = html;
             host.dataset.html = html;
+            // What the highlights mean: its rule (S4.1.3), "?" before × in the open legend's heading.
+            host.querySelector('.follow-legend-close')?.before(helpMark('following'));
             // Folding or opening keeps the keyboard where it was.
             if (focused) host.querySelector<HTMLElement>(open ? '.follow-legend-close' : '.follow-legend')?.focus();
         }

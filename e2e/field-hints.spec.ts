@@ -2,36 +2,69 @@ import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, cardAction, personModal } from './helpers.js';
 
 /**
- * Explanatory field texts run to three or four lines. Left open permanently,
- * a single explained field pushed the rest of the form off a phone screen —
- * and the text is read once, when someone first meets the field. The label
- * carries a "?" that opens it as a popup: unfolding it in place would grow the
- * form under the reader and move the field they were about to fill in.
+ * A form field that needs explaining has a "?" right after its label, and the
+ * "?" opens How Strom works at that field's rule (spec 061: name variants A4.7,
+ * godparents and witnesses A5.5, stories A7.8). The old "?" that showed a
+ * long hint text in a popup is gone in every language (K1.3).
  */
-test('a long field explanation opens as a popup from the "?"', async ({ page }) => {
+test('the "?" of a form field opens the help at its rule, no old hint popup is left', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await cardAction(page, 'Jan', 'edit');
 
     const modal = personModal(page);
-    const group = modal.locator('#name-variants-group');
-    const toggle = group.locator('.hint-toggle');
+    const noOldHints = async (): Promise<void> => {
+        await expect(page.locator('.hint-toggle')).toHaveCount(0);
+        await expect(page.locator('.field-hint.is-folded')).toHaveCount(0);
+    };
+    await noOldHints();
 
-    await expect(group).toBeVisible();
-    await expect(toggle).toBeVisible();
-    // The text never takes room in the form itself.
-    await expect(group.locator('.field-hint')).toBeHidden();
+    // Name variants: the mark stands beside the label (the label keeps only its words) and ends the row.
+    const variants = modal.locator('#name-variants-group .field-label-row');
+    const mark = variants.locator('> .help-mark');
+    await expect(variants.locator('> label')).toHaveText(/^\S/);
+    await expect(variants.locator('> label .help-mark')).toHaveCount(0);
+    await expect(mark).toHaveAttribute('title', 'How it works: Other spellings of the name (A4.7)');
+    expect(await variants.evaluate(el => el.lastElementChild?.classList.contains('help-mark'))).toBe(true);
+    await mark.click();
+    await expect(page.locator('.help-rule[data-rule="A4.7"]')).toHaveClass(/is-target/);
+    // No popup with the old text: the help opened over the form.
+    await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.help-overlay')).toHaveCount(0);
+    await expect(modal).toBeVisible();
+    await expect(mark).toBeFocused();
 
-    await toggle.click();
-    const popup = page.locator('#confirmation-modal');
-    await expect(popup).toHaveClass(/active/);
-    await expect(popup.locator('#confirm-message')).toContainText('How the registers actually write it');
+    // Stories.
+    const story = modal.locator('label[for="input-story"]').locator('xpath=..').locator('> .help-mark');
+    await expect(story).toHaveAttribute('title', 'How it works: Stories (A7.8)');
+    await story.click();
+    await expect(page.locator('.help-rule[data-rule="A7.8"]')).toHaveClass(/is-target/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.help-overlay')).toHaveCount(0);
 
-    await popup.locator('#confirm-ok-btn').click();
-    await expect(popup).not.toHaveClass(/active/);
-    // Closing it leaves the form as it was — nothing unfolded into it.
-    await expect(group.locator('.field-hint')).toBeHidden();
+    // Godparents and witnesses in the event editor.
+    await modal.locator('#btn-add-event').click();
+    const editor = page.locator('#event-editor-modal');
+    await editor.locator('#input-event-type').selectOption('baptism');
+    const people = editor.locator('#event-participants-section .field-label-row > .help-mark');
+    await expect(people).toHaveCount(1);
+    await expect(people).toHaveAttribute('title', 'How it works: Godparents and witnesses (A5.5)');
+    await people.click();
+    await expect(page.locator('.help-rule[data-rule="A5.5"]')).toHaveClass(/is-target/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.help-overlay')).toHaveCount(0);
+    await expect(editor).toBeVisible();
+
+    // The other languages: still no old "?", one mark per field, named in that language.
+    for (const [lang, name] of [['cs', 'Další tvary jména'], ['de', 'Andere Schreibweisen des Namens'], ['pl', 'Inne formy imienia i nazwiska']] as const) {
+        await page.evaluate(l => window.Strom.UI.setLanguage(l as never), lang);
+        await noOldHints();
+        await expect(page.locator('#name-variants-group .field-label-row > .help-mark')).toHaveCount(1);
+        await expect(page.locator('#name-variants-group .field-label-row > .help-mark')).toHaveAttribute('aria-label', new RegExp(name));
+        await expect(page.locator('label[data-help] .help-mark')).toHaveCount(0);
+    }
 });
 
 // A short hint keeps showing itself (the date formats): advanced-fields.spec.ts,

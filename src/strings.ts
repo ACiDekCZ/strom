@@ -856,7 +856,6 @@ const stringsEN = {
         religionLabel: 'Denomination',
         religionHint: 'The denomination itself — "Roman Catholic", "Lutheran". A conversion is an event of its own, so record each one where it happened.',
         participants: 'Godparents & witnesses',
-        participantsHint: 'Who else the record names. A godparent who keeps turning up is usually a relative.',
         addParticipant: '+ Add',
         participantName: 'Name as written',
         participantNote: 'Detail (trade, "neighbour"…)',
@@ -2836,8 +2835,6 @@ const stringsEN = {
         titleBefore: 'Title before name',
         titleAfter: 'Title after name',
         marriedSurname: 'Married surname',
-        showHint: 'Show help for this field',
-        nameVariantsHint: 'How the registers actually write it (Brauschek, Prousek), an alias, or the farm the family was known by. Separated by commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Actions → Tree → Surname spellings.',
         firstName: 'First name',
         lastName: 'Last name',
         gender: 'Gender',
@@ -6008,7 +6005,6 @@ const stringsEN = {
         section: 'Story',
         titleField: 'Chapter subheading',
         text: 'The story',
-        hint: 'Prose written on top of the facts — it goes into the family book after them. Not a source. Text wrapped in double asterisks is set in bold in the book.',
         status: 'State',
         statusDraft: 'Draft',
         facts: 'Built on',
@@ -7656,7 +7652,7 @@ const stringsEN = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `How it works: ${topic}`,
         markTitle: (topic: string, id: string) => `How it works: ${topic} (${id})`,
-        topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Awaiting action', now: 'Agent at work', nowPaused: 'Pause', imagesHeld: 'Image only in the research' },
+        topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Awaiting action', now: 'Agent at work', nowPaused: 'Pause', imagesHeld: 'Image only in the research', readDocument: 'Reading a document', hypotheses: 'Who decides the hypotheses', mapLookup: 'Looking up places in the research', following: 'Following in the fan and on the map', nameVariants: 'Other spellings of the name', eventParticipants: 'Godparents and witnesses', story: 'Stories' },
     },
 };
 
@@ -8312,7 +8308,6 @@ const stringsCZ: StringsType = {
         religionLabel: 'Vyznání',
         religionHint: 'Jen samo vyznání — „římskokatolické“, „evangelické augsburského vyznání“. Přestup je samostatná událost, patří tam, kde k němu došlo.',
         participants: 'Kmotři a svědci',
-        participantsHint: 'Koho ještě zápis jmenuje. Kmotr, který se opakuje, bývá příbuzný.',
         addParticipant: '+ Přidat',
         participantName: 'Jméno, jak je zapsáno',
         participantNote: 'Bližší určení (řemeslo, „soused“…)',
@@ -10265,8 +10260,6 @@ const stringsCZ: StringsType = {
         titleBefore: 'Titul před jménem',
         titleAfter: 'Titul za jménem',
         marriedSurname: 'Příjmení po sňatku',
-        showHint: 'Zobrazit nápovědu k poli',
-        nameVariantsHint: 'Jak to píší matriky (Brauschek, Prousek), alias, nebo jméno po chalupě. Více tvarů se odděluje čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Akce → Strom → Tvary příjmení.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         gender: 'Pohlaví',
@@ -13404,7 +13397,6 @@ const stringsCZ: StringsType = {
         section: 'Vyprávění',
         titleField: 'Podnadpis kapitoly',
         text: 'Text vyprávění',
-        hint: 'Souvislý text sestavený nad fakty — v knize rodu stojí až za nimi. Není to pramen. Text mezi dvojicemi hvězdiček se v knize vysází tučně.',
         status: 'Stav',
         statusDraft: 'Návrh',
         facts: 'Opírá se o',
@@ -15033,7 +15025,7 @@ const stringsCZ: StringsType = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `Jak to funguje: ${topic}`,
         markTitle: (topic: string, id: string) => `Jak to funguje: ${topic} (${id})`,
-        topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení', imagesHeld: 'Obraz jen ve výzkumu' },
+        topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení', imagesHeld: 'Obraz jen ve výzkumu', readDocument: 'Přečtení dokumentu', hypotheses: 'Kdo rozhoduje hypotézy', mapLookup: 'Dohledání míst ve výzkumu', following: 'Sledování ve vějíři a na mapě', nameVariants: 'Další tvary jména', eventParticipants: 'Kmotři a svědci', story: 'Vyprávění' },
     },
 };
 
@@ -15675,7 +15667,6 @@ const stringsDE: StringsType = {
         religionLabel: 'Konfession',
         religionHint: 'Nur die Konfession selbst — „römisch-katholisch“, „evangelisch A.B.“. Ein Übertritt ist ein eigenes Ereignis; er wird dort eingetragen, wo er stattfand.',
         participants: 'Paten & Zeugen',
-        participantsHint: 'Wen der Eintrag sonst noch nennt. Ein Pate, der immer wieder auftaucht, ist meist ein Verwandter.',
         addParticipant: '+ Hinzufügen',
         participantName: 'Name wie geschrieben',
         participantNote: 'Detail (Gewerbe, „Nachbar“…)',
@@ -17626,8 +17617,6 @@ const stringsDE: StringsType = {
         titleBefore: 'Titel vor dem Namen',
         titleAfter: 'Titel nach dem Namen',
         marriedSurname: 'Ehename',
-        showHint: 'Hilfe zu diesem Feld anzeigen',
-        nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Brauschek, Prousek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Durch Kommas getrennt. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Aktionen → Stammbaum → Namensschreibweisen.',
         firstName: 'Vorname',
         lastName: 'Nachname',
         gender: 'Geschlecht',
@@ -20705,7 +20694,6 @@ const stringsDE: StringsType = {
         section: 'Erzählung',
         titleField: 'Untertitel des Kapitels',
         text: 'Der Text',
-        hint: 'Zusammenhängender Text über den Fakten — im Familienbuch steht er hinter ihnen. Keine Quelle. Text zwischen doppelten Sternchen wird im Buch fett gesetzt.',
         status: 'Stand',
         statusDraft: 'Entwurf',
         facts: 'Stützt sich auf',
@@ -22330,7 +22318,7 @@ const stringsDE: StringsType = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `So funktioniert es: ${topic}`,
         markTitle: (topic: string, id: string) => `So funktioniert es: ${topic} (${id})`,
-        topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Bearbeitung', now: 'Arbeit des Agenten', nowPaused: 'Pause', imagesHeld: 'Bild nur in der Forschung' },
+        topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Bearbeitung', now: 'Arbeit des Agenten', nowPaused: 'Pause', imagesHeld: 'Bild nur in der Forschung', readDocument: 'Ein Dokument lesen', hypotheses: 'Wer die Hypothesen entscheidet', mapLookup: 'Orte in der Forschung suchen', following: 'Folgen im Fächer und auf der Karte', nameVariants: 'Andere Schreibweisen des Namens', eventParticipants: 'Paten und Zeugen', story: 'Erzählungen' },
     },
 };
 

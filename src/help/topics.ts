@@ -15,6 +15,14 @@ export const HELP_TOPICS = {
     now: 'R7',               // Overview → Now (appendOverviewNow), small panel Now
     nowPaused: 'R7.6',       // the same heading while some working[].paused
     imagesHeld: 'A3.8',      // Sources → the line under the filter "Image only in the research" (renderResearchImagesBulk)
+    readDocument: 'R8.8',    // the Read a document window (renderReadDialog, #read-title)
+    hypotheses: 'R10.3.2',   // What the research knows of a person, section Hypotheses (showPersonResearchDialog)
+    mapLookup: 'A6.5.2',     // the preview "Look up N places not on the map in the research" (placesBulkHtml, look)
+    following: 'S4.1.3',     // the follow legend "What the highlights mean" (renderFollowLegend, open)
+    // Fields of a form: "?" right after the field's label (label[data-help], installFieldHelpMarks; 061)
+    nameVariants: 'A4.7',    // Edit person → Other spellings of the name
+    eventParticipants: 'A5.5', // the event editor → Godparents & witnesses (a couple's event: Witnesses and others)
+    story: 'A7.8',           // Edit person → The story
 } as const;
 
 export type HelpTopic = keyof typeof HELP_TOPICS;

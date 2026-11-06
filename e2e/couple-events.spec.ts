@@ -126,8 +126,8 @@ test.describe("couple's events", () => {
         await expect(page.locator('#event-editor-title')).toHaveText('Edit couple event');
         await expect(page.locator('#event-editor-subtitle')).toHaveText('Jan Vlk & Marie Dvořáková');
         await expect(page.locator('#event-participants-label')).toHaveText(/^Witnesses and others/);
-        // Its long hint still folds into the label's "?".
-        await expect(page.locator('#event-participants-label .hint-toggle')).toHaveCount(1);
+        // Its "?" stands beside the label and opens the help (061; field-hints.spec.ts).
+        await expect(page.locator('#event-participants-section .field-label-row > .help-mark')).toHaveCount(1);
         await expect(page.locator('#btn-delete-event')).toBeVisible();
         const more = page.locator('#event-details .detail-more');
         await expect(more).toHaveText('+ age, address');

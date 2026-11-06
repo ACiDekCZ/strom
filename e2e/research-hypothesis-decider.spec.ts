@@ -70,6 +70,14 @@ test.describe('Who decided a hypothesis: What the research knows', () => {
     test('the agent\'s decision marked with its day and reason; a person\'s without the mark; the links by state', async ({ page }) => {
         await setup(page, ['send', 'open', 'conflict', 'hypothesis']);
         await openKnows(page);
+        // The Hypotheses heading ends with its help mark: who decides the hypotheses (R10.3.2).
+        const mark = page.locator('#person-research-modal [data-section-help="hypotheses"] > .person-research-section-head > .help-mark');
+        await expect(mark).toHaveAttribute('title', 'How it works: Who decides the hypotheses (R10.3.2)');
+        await mark.click();
+        await expect(page.locator('.help-rule[data-rule="R10.3.2"]')).toHaveClass(/is-target/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        await expect(mark).toBeFocused();
         const agent = hypo(page, 'H0022');
         await expect(agent.locator('.person-research-hypo-meta')).toHaveText('H0022 · decided for B · decided by the agent · 6 Nov 2026');
         await expect(agent.locator('.person-research-hypo-by')).toHaveText('decided by the agent');

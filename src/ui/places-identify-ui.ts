@@ -30,6 +30,7 @@ import { placeAliasMap, placeVariantGroups } from '../place-groups.js';
 import { researchLinkMark, type ResearchActionMark } from '../research-link.js';
 import { researchActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { uiModule } from './module.js';
+import { helpMark } from './help-mark.js';
 
 /** How long the toasts of the research's steps stand. */
 const TOAST_MS = 6000;
@@ -363,7 +364,7 @@ export const placesIdentifyMethods = uiModule({
         }
         return `
             <div class="places-bulk" role="group" data-bulk="${kind}" aria-label="${this.escapeHtml(head)}">
-                <p class="places-bulk-head">${this.escapeHtml(head)}</p>
+                <div class="places-bulk-headrow"><p class="places-bulk-head">${this.escapeHtml(head)}</p></div>
                 <div class="places-bulk-lines">
                     ${lines.map(l => `<p class="places-bulk-line"><span class="places-bulk-icon" data-tone="${l.tone}" aria-hidden="true">${l.icon}</span><span>${this.escapeHtml(l.text)}</span></p>`).join('')}
                 </div>
@@ -388,6 +389,8 @@ export const placesIdentifyMethods = uiModule({
         if (ctxHost) ctxHost.innerHTML = this.placesContextHtml(summary);
         const bulkHost = top.querySelector<HTMLElement>('.places-bulk-host');
         if (bulkHost) bulkHost.innerHTML = this.placesBulkHtml();
+        // Looking up places off the map in the research: its rule (A6.5.2), "?" last in the preview's heading row.
+        bulkHost?.querySelector('.places-bulk[data-bulk="look"] .places-bulk-headrow')?.append(helpMark('mapLookup'));
         this.bindPlacesTopDynamic(top);
     },
 

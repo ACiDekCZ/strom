@@ -100,6 +100,20 @@ test.describe('Read a document', () => {
         await item(page).click();
         await expect(dialog(page).locator('#read-title')).toHaveText('Read a document');
         await expect(dialog(page).locator('#read-drop')).toBeVisible();
+        // Its help mark stands right before × and opens How Strom works at reading from the app (R8.8).
+        const mark = dialog(page).locator('.modal-header > .help-mark');
+        await expect(mark).toHaveAttribute('title', 'How it works: Reading a document (R8.8)');
+        expect(await dialog(page).locator('.modal-header').evaluate(h => [...h.children].slice(-2).map(c => c.className))).toEqual(['help-mark', 'close-btn']);
+        const m = (await mark.boundingBox())!;
+        const x = (await dialog(page).locator('.modal-header > .close-btn').boundingBox())!;
+        expect(Math.round(x.x - (m.x + m.width))).toBe(8);
+        expect(Math.abs((m.y + m.height / 2) - (x.y + x.height / 2))).toBeLessThanOrEqual(1);
+        await mark.click();
+        await expect(page.locator('.help-rule[data-rule="R8.8"]')).toHaveClass(/is-target/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        await expect(dialog(page)).toBeVisible();
+        await expect(mark).toBeFocused();
         // Taking a photo with the phone does not exist yet: no row promises it.
         await expect(dialog(page)).not.toContainText('Take a photo with the phone');
         await page.keyboard.press('Escape');

@@ -38,12 +38,9 @@ function esc(text: string): string {
 
 const fullName = (p: Person | null): string => p ? shownName(p) : '?';
 
-/** Change a label's words, keeping the "?" a long field hint hangs on it (installFieldHints). */
+/** Change a label's words (a field's help mark stands beside the label, installFieldHelpMarks). */
 function setLabelText(label: HTMLElement | null, text: string): void {
-    if (!label) return;
-    const words = [...label.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
-    if (words) words.nodeValue = text;
-    else label.prepend(document.createTextNode(text));
+    if (label) label.textContent = text;
 }
 
 /** The detail keys of the shared detail group a couple event type offers ('ages' rides on the age field). */
@@ -212,8 +209,6 @@ export const coupleEventsMethods = uiModule({
         }
         document.getElementById('event-editor-modal')?.classList.toggle('is-couple-event', couple);
         setLabelText(document.getElementById('event-participants-label'), couple ? pe.participants : strings.events.participants);
-        const hint = document.getElementById('event-participants-hint');
-        if (hint) hint.textContent = couple ? pe.participantsHint : strings.events.participantsHint;
         const personAge = document.querySelector<HTMLElement>('#event-details .event-person-age');
         const coupleAges = document.querySelector<HTMLElement>('#event-details .event-couple-ages');
         if (personAge) personAge.hidden = couple;

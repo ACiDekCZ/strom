@@ -1790,31 +1790,10 @@
             background: none; border: none; padding: 0 0 0 4px; cursor: pointer;
             color: var(--primary, #4a7c59); font: inherit; text-decoration: underline;
         }
-        /* Long explanations move off the form and into a popup opened from the
-           "?" on their label. Deliberately quiet: a soft disc that reads as
-           punctuation next to the label, not as a second control competing
-           with the field itself. */
-        .field-hint.is-folded { display: none; }
-        .hint-toggle {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 15px; height: 15px; margin-left: 5px; padding: 0;
-            border: none; border-radius: 50%;
-            background: var(--divider, rgba(0, 0, 0, 0.07));
-            color: var(--text-light, #888);
-            font-size: 10px; font-weight: 600; line-height: 1; cursor: pointer;
-            vertical-align: middle; opacity: 0.6;
-            transition: opacity 0.12s ease, color 0.12s ease;
-        }
-        .hint-toggle:focus-visible {
-            opacity: 1; color: var(--primary, #4a7c59);
-        }
-        @media (hover: hover) { .hint-toggle:hover {
-            opacity: 1; color: var(--primary, #4a7c59);
-        } }
-        /* Touch targets: a 15px disc is fine to read but not to hit. */
-        @media (max-width: 1024px) {
-            .hint-toggle { width: 20px; height: 20px; font-size: 12px; margin-left: 7px; }
-        }
+        /* A field's help mark "?" (061, installFieldHelpMarks): right after its label, in one row;
+           the row keeps the label's own space under it. */
+        .field-label-row { display: flex; align-items: center; min-width: 0; margin-bottom: 6px; }
+        .modal .field-label-row > label { margin-bottom: 0; min-width: 0; }
 
         /* Row 1: full name, Strom Serif 15px/600. Staged fitting (JS measures
            once per render, see fitCardNames): step 0 = 15px; step 1 shrinks to
@@ -23056,6 +23035,19 @@
         /* A window: right before ×, 8 px. */
         .modal-header > button.help-mark { margin-left: auto; margin-right: 8px; }
         .prc-panel-head > button.help-mark { margin: 0 0 0 auto; }
+        /* Read a document: the header aligns to its top, so "?" sits level with × (32 px, 44 px on
+           touch); the header's 14 px gap less 6 px leaves the window's 8 px before ×. */
+        .read-dialog > .batch-header > button.help-mark { margin: 7px -6px 0 auto; }
+        @media (pointer: coarse), (max-width: 1024px) {
+            .read-dialog > .batch-header > button.help-mark { margin-top: 13px; }
+        }
+        /* The places preview "look up in the research": the heading wraps, "?" stays last on its row. */
+        .places-bulk-headrow { display: flex; align-items: flex-start; min-width: 0; }
+        .places-bulk-headrow > .places-bulk-head { flex: 1 1 auto; min-width: 0; }
+        .places-bulk-headrow > button.help-mark { margin-top: 1px; }
+        /* The follow legend: the title takes the room, "?" then × at its right. */
+        .follow-legend-head > b { flex: 1 1 auto; min-width: 0; }
+        .follow-legend-head > button.help-mark { margin-left: 0; }
         /* A section of the Research overview or the small panel: beside the folding heading
            (never inside its button), the heading takes the room and wraps its title. */
         .live-section__headrow > button.help-mark, .live-section__tail > button.help-mark { margin-left: 0; }
@@ -24210,9 +24202,8 @@
                         <span class="pm-section-summary" id="pm-sum-sources"></span>
                     </div>
                     <div class="form-group" id="name-variants-group">
-                        <label for="input-name-variants" data-i18n="labels.nameVariants"></label>
+                        <label for="input-name-variants" data-i18n="labels.nameVariants" data-help="nameVariants"></label>
                         <input type="text" id="input-name-variants" autocomplete="off" data-i18n-placeholder="placeholders.nameVariants">
-                        <p class="field-hint" data-i18n="labels.nameVariantsHint"></p>
                     </div>
                     <div class="form-group" id="refn-group">
                         <label for="input-refn" data-i18n="labels.refn"></label>
@@ -24251,9 +24242,8 @@
                         <input type="text" id="input-story-title" autocomplete="off">
                     </div>
                     <div class="form-group">
-                        <label for="input-story" data-i18n="story.text"></label>
+                        <label for="input-story" data-i18n="story.text" data-help="story"></label>
                         <textarea id="input-story" rows="10" autocomplete="off"></textarea>
-                        <div class="field-hint" data-i18n="story.hint"></div>
                     </div>
                     <div class="form-group" id="story-facts-group" style="display:none">
                         <label data-i18n="story.facts"></label>
@@ -24360,8 +24350,7 @@
                 <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
             </div>
             <div class="form-group" id="event-participants-section">
-                <label id="event-participants-label" data-i18n="events.participants"></label>
-                <p class="field-hint" id="event-participants-hint" data-i18n="events.participantsHint"></p>
+                <label id="event-participants-label" data-i18n="events.participants" data-help="eventParticipants"></label>
                 <div id="event-participants-list" class="participants-list"></div>
                 <button type="button" class="secondary" onclick="window.Strom.UI.addEventParticipantRow()" data-i18n="events.addParticipant"></button>
             </div>

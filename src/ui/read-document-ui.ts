@@ -34,6 +34,7 @@ import { formatBytesShort } from './originals-ui.js';
 import { onComputer, bridgeFailure } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
+import { helpMark } from './help-mark.js';
 
 const DIALOG_ID = 'read-document-modal';
 const RECENT_KEY = 'read.recent';
@@ -807,6 +808,7 @@ export const readDocumentMethods = uiModule({
                 <div class="modal-content batch-content read-content${wide ? ' read-content--result' : ''}">${body}</div>
                 <div class="buttons batch-footer read-footer${wide || st.phase === 'written' ? ' read-footer--result' : ''}">${foot}</div>
             </div>`;
+        overlay.querySelector('.read-dialog > .modal-header > [data-act="close"]')?.before(helpMark('readDocument'));
         this.wireReadDialog(overlay);
         this.tickReadProgress();
     },

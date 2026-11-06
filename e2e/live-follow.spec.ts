@@ -1610,6 +1610,15 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         await expect(legend.locator('li')).toHaveCount(2);
         await legend.locator('.follow-legend-switch input').click();
         await expect(trail).toHaveCount(0);
+        // "?" before × in the legend's heading: following in the fan and on the map (S4.1.3).
+        const mark = legend.locator('.follow-legend-head > .help-mark');
+        await expect(mark).toHaveAttribute('title', 'How it works: Following in the fan and on the map (S4.1.3)');
+        expect(await legend.locator('.follow-legend-head').evaluate(h => [...h.children].map(c => c.className))).toEqual(['', 'help-mark', 'follow-legend-close']);
+        await mark.click();
+        await expect(page.locator('.help-rule[data-rule="S4.1.3"]')).toHaveClass(/is-target/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        await expect(legend).toBeVisible();
         await legend.locator('.follow-legend-close').click();
         await expect(page.locator('#follow-legend button.follow-legend')).toBeVisible();
     });

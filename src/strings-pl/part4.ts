@@ -35,8 +35,6 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         titleBefore: 'Tytuł przed imieniem',
         titleAfter: 'Tytuł po nazwisku',
         marriedSurname: 'Nazwisko po ślubie',
-        showHint: 'Pokaż pomoc do pola',
-        nameVariantsHint: 'Jak zapisują je księgi metrykalne (Brzuska, Brzoska), alias albo przydomek od gospodarstwa. Kilka form oddziela się przecinkami. Wyszukiwanie i scalanie znajdą wtedy osobę pod każdą z nich. Dotyczy tylko tej osoby – formy nazwiska wspólne dla całej rodziny należą do Akcje → Drzewo → Formy nazwiska.',
         firstName: 'Imię',
         lastName: 'Nazwisko',
         gender: 'Płeć',
