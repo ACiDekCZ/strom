@@ -108,11 +108,41 @@ function recordNames(q: string, data: StromData | undefined): string[] {
 }
 
 /**
+ * Small words that stand around a name in a sentence of a record ("narozen
+ * v Lučici v čp. 46"), written small: in, at, by, of… in Czech, German,
+ * Polish and English. A name never begins or ends with one of them written
+ * small ("Lhota u Lípy" holds one in the middle, "U Tří lip" writes it big).
+ */
+const SENTENCE_WORDS: ReadonlySet<string> = new Set([
+    // cs
+    'v', 've', 'na', 'z', 'ze', 'do', 'od', 'u', 'k', 'ke', 's', 'se', 'při', 'pod', 'nad', 'za', 'před', 'čp', 'č',
+    // de
+    'in', 'im', 'bei', 'zu', 'zum', 'zur', 'von', 'vom', 'aus', 'nach', 'am', 'an',
+    // pl
+    'w', 'we', 'przy', 'koło',
+    // en
+    'at', 'of', 'near', 'from', 'by',
+]);
+
+/**
+ * Is this a form of a name, not the rest of a sentence of a record? A form
+ * that begins or ends with a small word of a sentence ("v Lučici v", what a
+ * record's "v Lučici v čp. 46" leaves without its house) is not asked, nor
+ * shown among the forms asked.
+ */
+export function isNameForm(form: string): boolean {
+    const words = form.normalize('NFC').trim().split(/[\s,]+/).filter(Boolean).map(w => w.replace(/\.$/, ''));
+    if (words.length < 2) return true;
+    return !SENTENCE_WORDS.has(words[0]!) && !SENTENCE_WORDS.has(words[words.length - 1]!);
+}
+
+/**
  * The queries for one place search, at most MAX_PLACE_QUERIES, no two alike
  * (case and Unicode form aside): the original, its abbreviations spelled
  * out, the place's other names (the research's record; `also` = the names
  * the history of places knows for it, from the caller) and the text without
- * diacritics.
+ * diacritics. The other names are only forms of a name (isNameForm): the
+ * rest of a sentence a record wrote the place in is never asked.
  */
 export function expandPlaceQuery(q: string, lang: Language, data?: StromData, also: readonly string[] = []): string[] {
     const original = q.normalize('NFC').replace(/\s+/g, ' ').trim();
@@ -128,8 +158,8 @@ export function expandPlaceQuery(q: string, lang: Language, data?: StromData, al
     };
     add(original);
     expandAbbreviations(original, lang).forEach(add);
-    recordNames(original, data).forEach(add);
-    also.forEach(add);
+    recordNames(original, data).filter(isNameForm).forEach(add);
+    also.filter(isNameForm).forEach(add);
     add(withoutDiacritics(original));
     return out;
 }
