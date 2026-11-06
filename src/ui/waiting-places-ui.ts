@@ -692,8 +692,9 @@ export const waitingPlacesMethods = uiModule({
             const s = liveSession();
             if (s && !s.ended && s.researchId === ctx.researchId) {
                 try {
+                    const asked = s.workingEvents ?? 0;
                     const status = await fetchStatus(`${ctx.base}/status?poll=1`);
-                    if (status && !s.ended) this.onLiveStatus(s, status);
+                    if (status && !s.ended) this.onLiveStatus(s, status, asked);
                 } catch { /* not answering: what is known stays */ }
             } else {
                 // Not followed live: the remembered list is what the research says now.

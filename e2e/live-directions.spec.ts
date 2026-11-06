@@ -49,6 +49,11 @@ interface Bridge {
     statusAsks: number;
     /** What the research takes (`/status.accepts`); absent: an older research that does not say. */
     accepts?: Record<string, unknown>;
+    /** The next `/status` is answered as it was when asked, but only once this settles. */
+    hold?: Promise<void>;
+    /** Asks held so far, and those answered after their hold. */
+    held?: number;
+    heldSent?: number;
 }
 
 const AGENT = { who: 'agent-matriky', since: ago(16), task: 'T0101 Matriky Chlumy', person: 'P0012', research: 'G0001', session: 'N0132' };
@@ -80,6 +85,16 @@ async function follow(page: Page, researches: Record<string, unknown>[] = DIRECT
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/status')) bridge.statusAsks++;
+        if (path.endsWith('/status') && bridge.hold) {
+            const hold = bridge.hold;
+            delete bridge.hold;
+            bridge.held = (bridge.held ?? 0) + 1;
+            const body = JSON.stringify(status());
+            await hold;
+            await route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body });
+            bridge.heldSent = (bridge.heldSent ?? 0) + 1;
+            return;
+        }
         if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
         if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
         if (path.endsWith('/events')) {
@@ -388,6 +403,32 @@ test.describe('research directions', () => {
         // One status for the burst, not one per event.
         await page.waitForTimeout(1500);
         expect(bridge.statusAsks - before).toBe(1);
+    });
+
+    test('a status asked before the agent stopped answers late: the arc outside the directions and in Now stays off (1106)', async ({ page }) => {
+        await openStream(page);
+        const bridge = await follow(page, DIRECTIONS.map(d => ({ ...d, working: false })), undefined, [OUTSIDE]);
+        await openOverview(page);
+        const arc = ov(page).locator('.research-direction--outside .agent-mark--spin');
+        await expect(arc).toHaveCount(1);
+        // Someone works outside the directions: the status asked soon after is held, as a slow bridge answers it,
+        // with what it said when asked (the run still at work).
+        let release!: () => void;
+        bridge.hold = new Promise<void>((r) => { release = r; });
+        await emit(page, 'working', [OUTSIDE]);
+        await expect.poll(() => bridge.held ?? 0).toBe(1);
+        // The run ends: the event says nobody works.
+        bridge.working = [];
+        await emit(page, 'working', []);
+        await expect(ov(page)).toContainText('Nobody is working');
+        await expect(arc).toHaveCount(0);
+        // The old answer comes now: it does not bring the run back.
+        release();
+        await expect.poll(() => bridge.heldSent ?? 0).toBe(1);
+        await page.waitForTimeout(300);
+        expect(await arc.count()).toBe(0);
+        await expect(ov(page)).toContainText('Nobody is working');
+        await expect(ov(page).locator('.research-overview__now-row', { hasText: 'agent-scitani' })).toHaveCount(0);
     });
 
     // K5.2 (A2): switched to an archive while followed, or the agent gone from this computer: nobody to follow.

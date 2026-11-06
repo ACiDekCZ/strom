@@ -206,6 +206,12 @@ export interface LiveSession {
     statusSoon?: ReturnType<typeof setTimeout> | null;
     /** When that status was last asked (ms). */
     statusAskedAt?: number;
+    /**
+     * How many `working` events came (absent: none). A status asked before
+     * the last one answers with who worked then: its `working` is older than
+     * the event's and is not taken (the bridge's status carries no sequence).
+     */
+    workingEvents?: number;
     failures: number;
     /** Since when the bridge does not answer (null: it does); it may come back (a restart). */
     lostSince: number | null;
@@ -2762,6 +2768,7 @@ export const researchUiMethods = uiModule({
             this.noteQualityEvent(s.researchId, payload(e));
         });
         es.addEventListener('working', (e) => {
+            s.workingEvents = (s.workingEvents ?? 0) + 1;
             s.working = withFamilyPersons(sanitizeWorking(payload(e)), s.bridge);
             this.renderLivePanel();
             // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
@@ -2796,10 +2803,11 @@ export const researchUiMethods = uiModule({
     async probeLive(s: LiveSession): Promise<void> {
         if (s.ended || live !== s) return;
         try {
+            const asked = s.workingEvents ?? 0;
             const status = await fetchStatus(s.bridge.status);
             if (!status) throw new Error('bad status');
             this.liveBridgeBack(s);
-            this.onLiveStatus(s, status);
+            this.onLiveStatus(s, status, asked);
             if (s.ended) return;
             if (typeof EventSource === 'function') this.scheduleLive(s, () => this.connectLiveEvents(s), reconnectMs());
             else this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
@@ -2833,8 +2841,9 @@ export const researchUiMethods = uiModule({
             s.statusSoon = null;
             if (s.ended || live !== s) return;
             s.statusAskedAt = Date.now();
+            const asked = s.workingEvents ?? 0;
             fetchStatus(`${s.bridge.status}?poll=1`).then((status) => {
-                if (status && !s.ended && live === s) this.onLiveStatus(s, status);
+                if (status && !s.ended && live === s) this.onLiveStatus(s, status, asked);
             }).catch(() => { /* the event stream says when the bridge is gone */ });
         }, wait);
     },
@@ -2859,8 +2868,12 @@ export const researchUiMethods = uiModule({
         s.chain = s.chain.then(job).catch((err) => console.warn('Live update failed', err));
     },
 
-    /** A status (hello or probe): lists for the panel; a new head means a missed change. */
-    onLiveStatus(s: LiveSession, status: LiveStatus): void {
+    /**
+     * A status (hello or probe): lists for the panel; a new head means a missed change.
+     * `workingAsked`: how many `working` events had come when it was asked (absent: it came
+     * on the stream, in order with them); a `working` event after that is newer than its `working`.
+     */
+    onLiveStatus(s: LiveSession, status: LiveStatus, workingAsked?: number): void {
         if (status.treeId && status.treeId !== s.researchId) {
             this.endLiveFollow(s, 'other');
             return;
@@ -2870,7 +2883,9 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (status.headAt) s.headAt = status.headAt;
-        s.working = withFamilyPersons(status.working, s.bridge);
+        if (workingAsked === undefined || workingAsked === (s.workingEvents ?? 0)) s.working = withFamilyPersons(status.working, s.bridge);
+        // Asked before the last `working` event: who works comes from the event; a fresh status is asked for the rest.
+        else this.liveStatusSoon(s);
         s.features = status.features;
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
