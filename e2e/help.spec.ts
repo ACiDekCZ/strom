@@ -87,6 +87,25 @@ test.describe('How Strom works on a computer', () => {
         await expect(copy).toContainText('Copied');
     });
 
+    test('Using the app (A9) is in the contents of the app part; A9.4 by its number, nothing in it recommends computer use', async ({ page }) => {
+        await openApp(page);
+        await openFromMenu(page);
+        const chapter = page.locator('.help-ch[data-chapter="A9"]');
+        await expect(chapter.locator('.help-ch-title')).toHaveText('Using the app');
+        // The last chapter of part A.
+        await expect(page.locator('.help-part').first().locator('.help-ch').last()).toHaveAttribute('data-chapter', 'A9');
+        await chapter.click();
+        await expect(page.locator('.help-h1')).toContainText('A9');
+        for (const id of ['A9.1', 'A9.2', 'A9.3', 'A9.4']) await expect(page.locator(`.help-rule[data-rule="${id}"]`)).toHaveCount(1);
+        await search(page, 'a9.4');
+        await expect(page.locator('.help-num-hit')).toContainText('A9.4');
+        await page.locator('.help-search-input').press('Enter');
+        const rule = page.locator('.help-rule[data-rule="A9.4"]');
+        await expect(rule).toHaveClass(/is-target/);
+        await expect(rule.locator('.help-rule-title')).toContainText('The agent in the app');
+        await expect(page.locator('.help-article')).toContainText('strom nowhere recommends turning computer use on');
+    });
+
     test('search: a number and Enter jump to the rule; a word lists terms and rules with the match marked; nothing found says so', async ({ page }) => {
         await openApp(page);
         await openFromMenu(page);
