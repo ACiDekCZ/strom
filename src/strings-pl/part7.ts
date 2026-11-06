@@ -540,6 +540,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
             'agent.none': 'w badaniu nie ustawiono agenta',
             'agent.untested': 'odczyt z agentem badania nie jest jeszcze sprawdzony',
             'agent.sandbox': 'badanie działa w piaskownicy',
+            'agent.cli-missing': 'program terminalowy agenta badania nie jest tu zainstalowany – odczyt go potrzebuje (rozmowa w aplikacji agenta trwa dalej)',
             'shared.none': 'badaniu brakuje folderu współdzielonego',
             limit: 'agent badania nie może teraz czytać (limit subskrypcji)',
             auth: 'agent badania nie jest zalogowany',

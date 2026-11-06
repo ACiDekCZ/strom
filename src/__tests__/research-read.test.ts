@@ -11,11 +11,31 @@ import {
     readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
+import { strings, setLanguage, type Language } from '../strings.js';
 
 const ID = 'D20261019153012-a1b2';
 const SHA = 'a'.repeat(64);
 
 describe('accepts.read', () => {
+    it('has its own words for every reason the research gives, in every language (agent.cli-missing too)', () => {
+        expect(sanitizeReadAccepts({ ready: false, why: 'agent.cli-missing' })?.why).toBe('agent.cli-missing');
+        const whys = ['agent.none', 'agent.untested', 'agent.sandbox', 'agent.cli-missing', 'shared.none', 'limit', 'auth'];
+        try {
+            for (const lang of ['en', 'cs', 'de', 'pl'] as Language[]) {
+                setLanguage(lang);
+                for (const why of whys) {
+                    const text = strings.read.why[why];
+                    expect(text, `${lang} ${why}`).toBeTruthy();
+                    expect(text, `${lang} ${why}`).not.toBe(strings.read.why.other);
+                }
+                // Impersonal: never addressing the reader.
+                expect(strings.read.why['agent.cli-missing']).not.toMatch(/\b(you|your|vy|váš|Sie|Ihr|Pan|Pani)\b/iu);
+            }
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     it('takes a ready reader with its limits', () => {
         expect(sanitizeReadAccepts({
             ready: true, why: null, readers: 2, types: ['image/jpeg', 'image/png', 'application/pdf'], max: 52428800, pages: 10, langs: ['cs', 'de', 'en'],

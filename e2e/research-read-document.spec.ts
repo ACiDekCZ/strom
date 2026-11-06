@@ -174,6 +174,15 @@ test.describe('Read a document', () => {
         expect(await page.locator('#live-panel').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     });
 
+    test('not ready because the agent has its app here but not its terminal program: its own reason, not "can’t start"', async ({ page }) => {
+        await setup(page, { read: readAccepts({ ready: false, why: 'agent.cli-missing' }) });
+        await openResearchMenu(page, { expandMore: true });
+        await expect(item(page)).toHaveAttribute('aria-disabled', 'true');
+        await expect(item(page)).toContainText('not possible now: the research agent’s terminal program is not installed here');
+        await expect(item(page)).not.toContainText('reading can’t start right now');
+        // Its words in the other languages: research-read.test.ts.
+    });
+
     test('not ready: shown greyed with the reason and the way to the research; not in the person menu', async ({ page }) => {
         await setup(page, { read: readAccepts({ ready: false, why: 'auth' }) });
         await openResearchMenu(page, { expandMore: true });
