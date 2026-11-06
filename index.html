@@ -16343,6 +16343,31 @@
             background: var(--surface-2); font-size: 13px; line-height: 1.45;
         }
         .viewer-read-by { margin: 4px 0 0; font-size: 12px; color: var(--text-light); }
+        /* Who read it, and "Confirm transcription" / "Undo confirmation" at the line's end (spec 022). */
+        .viewer-read-by-row { margin: 4px 0 0; }
+        .viewer-read-by-line {
+            display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 0;
+            margin: 0; font-size: 12px; color: var(--text-light); min-width: 0;
+        }
+        .viewer-read-by-line .viewer-read-by { margin: 0; overflow-wrap: anywhere; }
+        .modal .viewer-read-by-line .viewer-confirm {
+            padding: 2px 0; margin: 0; min-height: 0; font-size: 12px; text-align: left; white-space: normal;
+        }
+        .modal .viewer-read-by-line .viewer-confirm:disabled { opacity: 0.55; cursor: default; }
+        .viewer-confirm-note { margin: 4px 0 0; font-size: 12px; color: var(--text-light); line-height: 1.45; overflow-wrap: anywhere; }
+        /* Touch: a target of its own size. */
+        @media (pointer: coarse) {
+            .modal .viewer-read-by-line .viewer-confirm { min-height: 44px; padding: 0; font-size: 13px; }
+        }
+        @media (max-width: 640px) {
+            .viewer-read-by-line { font-size: 13px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .modal .viewer-read-by-line .viewer-confirm { font-size: 13px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal .viewer-read-by-line .viewer-confirm { min-height: 36px; }
+        }
         .sources-filter { display: flex; gap: 6px; margin: 0 0 8px; }
         .sources-filter[hidden] { display: none; }
 

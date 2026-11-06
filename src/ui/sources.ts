@@ -430,10 +430,10 @@ export const sourcesMethods = uiModule({
             ? `<details class="viewer-translation"><summary class="viewer-section-title">${esc(s.viewerTranslation)}</summary>
                 <p class="viewer-translation-text">${esc(translationText)}</p></details>` : '';
         if (src.transcript) {
-            // Who read the entry, as the research says (nothing when it does not).
-            const readBy = src.readBy === 'user' || src.readBy === 'research' || src.readBy === 'both' ? s.readBy[src.readBy] : '';
+            // Who read the entry, as the research says (nothing when it does not), and its confirmation (spec 022).
+            const readBy = this.sourceReadByHtml(src);
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerTranscript)}</h3>
-                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}${translation}${reading}</section>`);
+                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy}${translation}${reading}</section>`);
         } else if (translation || reading) {
             chunks.push(translation ? `<section>${translation}${reading}</section>` : reading);
         }
@@ -484,6 +484,7 @@ export const sourcesMethods = uiModule({
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));
         body.querySelector('#source-viewer-reading')?.addEventListener('click', () => this.showReadingOfSource(src.id));
         this.wireResearchImagesViewer(body, src);
+        this.wireSourceConfirm(body, src);
 
         const editBtn = document.getElementById('source-viewer-edit');
         if (editBtn) editBtn.hidden = !editable;
@@ -800,9 +801,14 @@ export const sourcesMethods = uiModule({
             });
             if (excerpts.length > 0) payload.excerpts = excerpts;
             if (editingId) {
+                // A confirmation of the research's transcript holds for its wording only (spec 022):
+                // another wording here is a reading of its own, the research says the rest.
+                const before = DataManager.getData().sources?.[editingId];
+                const reworded = (before?.transcript ?? '').trim() !== transcript;
                 // Emptied optional fields go as explicit undefined, or the old
                 // value would survive the save (updateSource drops these keys).
                 DataManager.updateSource(editingId, {
+                    ...(reworded ? { readConfirmed: undefined, readMark: undefined } : {}),
                     ...payload,
                     repository: repository || undefined,
                     reference: reference || undefined,

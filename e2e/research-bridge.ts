@@ -164,6 +164,20 @@ export interface FakeBridge {
     fixes?: FakeFixes;
     /** Place identification (spec 034): `GET /places`, `POST /places/identify` with `places.identify` in `features`. */
     places?: FakePlaces;
+    /** Confirming the research's transcript (spec 022): `POST /sources/confirm` with `sources.confirm` in `features`. */
+    sourcesConfirm?: FakeSourcesConfirm;
+}
+
+/**
+ * The research's sources as it holds who read them (`_STROM_READ`, `_CONF`, `_TXT`), the bodies
+ * of `POST /sources/confirm` (`writes`) and, with `reply`, an answer instead (ZADANI 022 "Odpověď výzkumu").
+ */
+export interface FakeSourcesConfirm {
+    writes: Record<string, unknown>[];
+    sources: Record<string, { read: string; conf?: string; txt: string }>;
+    reply?: { status: number; body: unknown };
+    /** The day a confirmation is written with. */
+    day?: string;
 }
 
 /** The research's places (ZADANI_VYZKUM ztotozneni-mist, "Odpověď výzkumu"). */
@@ -385,6 +399,43 @@ function serveHypotheses(b: FakeBridge, method: string, url: URL, posted: string
     if (body.decide !== 'person') return { status: 400, body: { error: 'The request is not one the research reads.', code: 'hypotheses.invalid' } };
     hy.decide = 'person';
     return { status: 200, body: { ok: true, decide: 'person' } };
+}
+
+/**
+ * `POST /sources/confirm {source, txt, confirm}` as the research answers it (core/live.ts confirmWrite):
+ * 404 without `sources.confirm`; the write moves the head and the tree's file says the new reading.
+ */
+function serveSourcesConfirm(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
+    const sc = b.sourcesConfirm;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!sc || rest !== '/sources/confirm') return null;
+    if (method !== 'POST' || !(b.features ?? []).includes('sources.confirm')) return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(posted ?? '{}'); } catch { /* keep empty */ }
+    sc.writes.push(body);
+    if (sc.reply) return sc.reply;
+    const id = String(body.source ?? '');
+    if (!/^S\d+$/.test(id) || typeof body.txt !== 'string' || typeof body.confirm !== 'boolean') {
+        return { status: 400, body: { error: 'The request is not one the research reads.', code: 'confirm.invalid' } };
+    }
+    const s = sc.sources[id];
+    if (!s) return { status: 404, body: { error: 'No such source.', code: 'confirm.none' } };
+    if (s.txt !== body.txt) {
+        const error = 'The transcription changed in the research meanwhile.';
+        return { status: 409, body: { error, text: error, code: 'confirm.changed', txt: s.txt } };
+    }
+    const confirmed = s.read === 'both' && !!s.conf;
+    const said = () => ({ ok: true, source: id, read: s.read, ...(s.conf ? { conf: s.conf } : {}), txt: s.txt });
+    if (body.confirm ? confirmed : s.read === 'research') return { status: 200, body: { ...said(), head: b.head, parent: b.head } };
+    if (body.confirm ? s.read !== 'research' : !confirmed) {
+        return { status: 409, body: { error: 'Not the research\'s reading.', code: 'confirm.reader' } };
+    }
+    if (body.confirm) { s.read = 'both'; s.conf = sc.day ?? '2026-11-06'; } else { s.read = 'research'; delete s.conf; }
+    const parent = b.head;
+    const head = moveHead(b);
+    const tags = [`1 _STROM_READ ${s.read}`, ...(s.conf ? [`2 _CONF ${s.conf}`] : []), `2 _TXT ${s.txt}`].join('\n');
+    b.treeGed = b.treeGed.replace(new RegExp(`(0 @${id}@ SOUR[\\s\\S]*?)1 _STROM_READ \\S+(?:\\n2 _(?:CONF|TXT) \\S+)*`), `$1${tags}`);
+    return { status: 200, body: { ...said(), head, parent } };
 }
 
 function serveQuality(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
@@ -1599,6 +1650,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (dups) return json(dups.status, dups.body);
         const hyp = serveHypotheses(b, method, url, route.request().postData());
         if (hyp) return json(hyp.status, hyp.body);
+        const conf = serveSourcesConfirm(b, method, url, route.request().postData());
+        if (conf) return json(conf.status, conf.body);
         const qual = serveQuality(b, method, url, route.request().postData());
         if (qual) return json(qual.status, qual.body);
         const names = await serveSurnames(b, method, url);

@@ -307,6 +307,19 @@ export interface Source {
      */
     readBy?: SourceReadBy;
     /**
+     * The day the user confirmed the research's transcript in the app (ISO
+     * `YYYY-MM-DD`, GEDCOM `2 _CONF` under `_STROM_READ`): the user's part of
+     * `readBy: both` comes from that confirmation and can be taken back. Only
+     * while it holds for the wording the research has; from the research only.
+     */
+    readConfirmed?: string;
+    /**
+     * The research's mark of the transcript's wording (GEDCOM `2 _TXT` under
+     * `_STROM_READ`): opaque, never computed here — only given back with a
+     * confirmation (POST /sources/confirm), so it applies to that wording.
+     */
+    readMark?: string;
+    /**
      * The research's reading this entry was written from ("Read a document":
      * its id, `D…`). With it the research takes the source as that reading's
      * entry. GEDCOM `1 _STROM_READING` on the record (only to a research that

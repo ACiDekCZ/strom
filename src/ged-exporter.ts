@@ -26,6 +26,7 @@ import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './resea
 import { isPurePlaceholder } from './single-parent.js';
 import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
+import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
@@ -1111,6 +1112,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
         // The user read the transcript from the record (Strom Research: the first reading).
         if (source.transcriptVerified && source.transcript) lines.push('1 _STROM_VERIFIED Y');
+        // Who read the entry, as the research said it (and the confirmation of its wording): back as it came.
+        const read = sourceReadState(source);
+        if (read.read) {
+            lines.push(`1 _STROM_READ ${read.read}`);
+            if (read.conf) lines.push(`2 _CONF ${read.conf}`);
+            if (read.txt) lines.push(`2 _TXT ${read.txt}`);
+        }
         // An entry of a research's reading: which reading and entry, and the page when no excerpt says it.
         if (writeReadings && source.reading && /^D\d{14}-[0-9a-f]{4}$/.test(source.reading)) {
             lines.push(`1 _STROM_READING ${source.reading}`);

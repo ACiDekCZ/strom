@@ -85,6 +85,7 @@ function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
 }
 import { excerptFromDataUrl } from './excerpts';
 import { normalizeSha256 } from './sha256';
+import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
@@ -884,6 +885,10 @@ interface RawSource {
     verified?: boolean;
     /** _STROM_READ: who read the entry (a Strom Research file). */
     readBy?: SourceReadBy;
+    /** 2 _CONF under _STROM_READ: the day the user confirmed the transcript. */
+    readConfirmed?: string;
+    /** 2 _TXT under _STROM_READ: the research's mark of the transcript's wording. */
+    readMark?: string;
     /** _STROM_READING (+ 2 _STROM_ENTRY): the research's reading the entry was written from. */
     reading?: string;
     readingEntry?: string;
@@ -2251,6 +2256,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                     if (/^[A-Za-z0-9-]{1,32}$/.test(mark) && !src.heldClips?.includes(mark)) {
                         (src.heldClips ??= []).push(mark);
                     }
+                } else if (currentSubTag === '_STROM_READ' && tag === '_CONF') {
+                    const day = value.trim();
+                    if (src.readBy && isConfirmDay(day)) src.readConfirmed = day;
+                } else if (currentSubTag === '_STROM_READ' && tag === '_TXT') {
+                    const mark = value.trim();
+                    if (src.readBy && isTranscriptMark(mark)) src.readMark = mark;
                 } else if (currentSubTag === '_STROM_READING' && tag === '_STROM_ENTRY') {
                     if (src.reading && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(value.trim())) src.readingEntry = value.trim();
                 } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
@@ -3166,7 +3177,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (raw.transcript?.trim()) src.transcript = raw.transcript.trim();
         if (raw.refn) src.refn = raw.refn;
         if (raw.verified && src.transcript) src.transcriptVerified = true;
-        if (raw.readBy) src.readBy = raw.readBy;
+        if (raw.readBy) {
+            src.readBy = raw.readBy;
+            if (raw.readConfirmed) src.readConfirmed = raw.readConfirmed;
+            if (raw.readMark) src.readMark = raw.readMark;
+        }
         if (raw.reading) {
             src.reading = raw.reading;
             if (raw.readingEntry) src.readingEntry = raw.readingEntry;
