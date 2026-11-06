@@ -1031,7 +1031,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         legendTrail: 'Ślad sesji: ostatnie 8 zmian, starsze bledsze',
         legendRecord: 'Pełny pierścień: miejsce wpisu',
         legendPerson: 'Przerywany pierścień: miejsce osoby z drzewa',
-        legendOut: 'Pusty znacznik: poza zakresem mapy',
+        legendOut: 'Pusty znacznik: miejsce bez osoby wśród pokazanych miejsc',
         trailToggle: 'Ślad sesji',
         showInTree: 'Pokaż w drzewie',
         personNotInApp: 'Tej osoby nie ma w drzewie w aplikacji',

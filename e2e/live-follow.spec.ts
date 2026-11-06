@@ -1283,6 +1283,8 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         // A place no fact of the tree names: outside the map's scope, a hollow dot in the ring.
         await expect(work(page)).toHaveClass(/is-outscope/);
         await expect(work(page).locator('.map-work-hollow')).toHaveCount(1);
+        // Said as what it is, not as outside the map's view (1106).
+        await expect(work(page).locator('.map-work-label small')).toContainText('no person on the map yet');
         await nextStatus(bridge);
         expect(await mapPulses(page)).toBe(1);
         // The trail: Habrov before; the person's own place (Rybná) before that is fainter.
@@ -1303,6 +1305,7 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         // The legend opened by itself with the trail; its switch hides the trail.
         const legend = page.locator('#map-container #follow-legend .follow-legend-card');
         await expect(legend).toBeVisible();
+        await expect(legend).toContainText('Hollow marker: a place without a person among the places shown');
         await legend.locator('.follow-legend-switch input').click();
         await expect(dots).toHaveCount(0);
         await expect(page.locator('#map-container svg.map-trail-line')).toHaveCount(0);

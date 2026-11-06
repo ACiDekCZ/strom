@@ -462,7 +462,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         workRecordSrc: 'miejsce wpisu (z badań)',
         workPerson: (event: string) => `miejsce osoby · ${event}`,
         workEvents: { birth: 'urodzenie', residence: 'zamieszkanie', wedding: 'ślub', death: 'zgon' },
-        outScope: 'poza zakresem mapy',
+        outScope: 'na razie bez osoby na mapie',
         noCoords: (place: string) => `${place} – bez położenia na mapie`,
         noPlace: (name: string) => `${name} – bez miejsca`,
         locate: 'Wyszukać położenie',
