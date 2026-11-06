@@ -1548,6 +1548,43 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         expect(errs).toEqual([]);
     });
 
+    test('the legend stands above Back (↩) before the map\'s background is agreed to and after it, at 1440 and 1024 (1106)', async ({ page }) => {
+        const errs = errors(page);
+        // Tiles answered locally, the one-time notice not acknowledged yet.
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+        await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place'];
+        bridge.place = 'L0003';
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        await expect(page.locator('#map-container .map-tiles-notice')).toBeVisible();
+        const back = page.locator('#focus-back-btn');
+        const legend = page.locator('#map-container #follow-legend');
+        const clash = () => page.evaluate(() => {
+            const a = document.getElementById('focus-back-btn')!.getBoundingClientRect();
+            const b = document.getElementById('follow-legend')!.getBoundingClientRect();
+            return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        });
+        for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+            await page.setViewportSize(size);
+            await expect(back).toBeVisible();
+            await expect(legend).toBeVisible();
+            await expect.poll(clash, { message: `before, ${size.width}` }).toBe(false);
+        }
+        await page.locator('#map-container .map-tiles-notice button').first().click();
+        await expect(page.locator('#map-container .map-tiles-notice')).toHaveCount(0);
+        for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+            await page.setViewportSize(size);
+            await expect(back).toBeVisible();
+            await expect(legend).toBeVisible();
+            await expect.poll(clash, { message: `after, ${size.width}` }).toBe(false);
+        }
+        expect(errs).toEqual([]);
+    });
+
     test.describe('a phone (spec 043 §8)', () => {
         test.use({ hasTouch: true });
 

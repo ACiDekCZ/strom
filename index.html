@@ -10322,6 +10322,9 @@
         /* The legend of the marks: bottom left of the fan and of the map, not on a phone. */
         .follow-legend-host { position: absolute; left: 14px; bottom: 14px; z-index: 4; max-width: calc(100% - 28px); }
         #map-container > .follow-legend-host { bottom: calc(var(--map-status-reach, 0px) + 12px); }
+        /* Back / forward (fixed, 24px from the bottom, 44px high) share the bottom left corner: the legend
+           stands above them, also before the map's background is agreed to (no status bar yet, 1106). */
+        body.focus-nav-shown #map-container > .follow-legend-host { bottom: max(calc(var(--map-status-reach, 0px) + 12px), 76px); }
         #map-container:has(.map-timebar:not([hidden])) > .follow-legend-host { bottom: calc(max(62px, calc(var(--map-status-reach, 0px) + 8px)) + 76px); }
         .follow-legend {
             display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; margin: 0; min-height: 34px; max-width: 100%;
