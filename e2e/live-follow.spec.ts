@@ -815,6 +815,69 @@ test.describe('follow the agent in the tree', () => {
     });
 });
 
+test.describe('following: the person menu says why it does not edit (063 U3 A5)', () => {
+    const cardOf = async (page: Page, refn: string) => page.locator(`.person-card[data-id="${await idOf(page, refn)}"]`);
+
+    test('Edit greyed with why (read out, nothing runs), Stop following under it ends following; then Edit as usual', async ({ page }) => {
+        await follow(page, { idle: 60_000 });
+        expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+        await (await cardOf(page, 'P0013')).click();
+        const menu = page.locator('.context-menu');
+        await expect(menu).toBeVisible();
+        const edit = menu.getByRole('menuitem', { name: /^Edit/ });
+        await expect(edit).toHaveAttribute('aria-disabled', 'true');
+        await expect(edit).toContainText('Read-only while following the research.');
+        await expect(edit).not.toHaveAttribute('data-action', /.*/);
+        await expect(menu.locator('[data-action="edit"]')).toHaveCount(0);
+        // Reached by the arrows like the other rows.
+        await expect(edit).toHaveAttribute('tabindex', '-1');
+        // Nothing runs, the menu stays (aria-disabled: Playwright would wait for it to be enabled).
+        await edit.click({ force: true });
+        await expect(menu).toBeVisible();
+        await expect(page.locator('#person-modal.active, .modal-overlay.active')).toHaveCount(0);
+        // The way out, right under it.
+        const stop = menu.locator('[data-action="live-stop"]');
+        await expect(stop).toHaveText('Stop following');
+        expect(await menu.locator('[role="menuitem"]').evaluateAll((els) => {
+            const i = els.findIndex(e => e.getAttribute('aria-disabled') === 'true');
+            return (els[i + 1] as HTMLElement | undefined)?.dataset.action ?? null;
+        })).toBe('live-stop');
+        await stop.click();
+        await expect(page.locator('.toast', { hasText: 'Stopped following the research.' })).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+        await expect(page.locator('#live-panel')).toHaveCount(0);
+        // Editable again: Edit as usual, nothing greyed.
+        await (await cardOf(page, 'P0013')).click();
+        await expect(menu).toBeVisible();
+        await expect(menu.locator('[data-action="edit"]')).toBeVisible();
+        await expect(menu.locator('[aria-disabled="true"], [data-action="live-stop"]')).toHaveCount(0);
+    });
+
+    test.describe('a phone, touch', () => {
+        test.use({ hasTouch: true });
+
+        test('the sheet: Edit greyed with why, a tap keeps the sheet; Stop following ends following', async ({ page }) => {
+            await follow(page, { size: { width: 390, height: 844 }, idle: 60_000 });
+            await (await cardOf(page, 'P0013')).tap();
+            const sheet = page.locator('.bottom-sheet-overlay');
+            const edit = sheet.locator('.bottom-sheet-item.is-disabled');
+            await expect(edit).toBeVisible();
+            await expect(edit).toHaveAttribute('aria-disabled', 'true');
+            await expect(edit).toContainText('Edit');
+            await expect(edit).toContainText('Read-only while following the research.');
+            await edit.tap({ force: true });
+            await expect(edit).toBeVisible();
+            await expect(page.locator('#person-modal.active')).toHaveCount(0);
+            const stop = sheet.locator('.bottom-sheet-item.is-link[data-action="live-stop"]');
+            await expect(stop).toHaveText('Stop following');
+            const box = (await stop.boundingBox())!;
+            expect(box.height).toBeGreaterThanOrEqual(44);
+            await stop.tap();
+            await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+        });
+    });
+});
+
 test.describe('follow the agent in the fan (spec 043)', () => {
     const view = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.getViewMode());
     const followView = (page: Page) => page.evaluate(() => window.Strom.UI.liveFollowView());

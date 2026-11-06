@@ -2146,6 +2146,49 @@ test.describe('the one-time question: how should changes go', () => {
         await expect(ask(page)).toHaveCount(0);
         expect(await asked()).toBe(false);
     });
+
+    test('following the research: not asked meanwhile; asked right when following stops, not at a later answer of the bridge; once (063 U3 A7)', async ({ page }) => {
+        await autoTree(page);
+        // Following live; the research's events stay quiet (nothing else asks the bridge meanwhile).
+        await page.route(`${BRIDGE}/events`, () => new Promise<void>(() => { /* never answers */ }));
+        await page.evaluate(base => window.Strom.UI.startLiveFollow(base, { follow: true }), BRIDGE);
+        await expect(page.locator('#live-panel')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(true);
+        await forget(page);
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+        // Stopped from the person menu's link: the question comes now.
+        await page.evaluate(() => {
+            const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+            window.Strom.UI.runPersonMenuAction(jan.id, 'live-stop');
+        });
+        await expect(ask(page)).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+        await ask(page).getByRole('button', { name: 'Keep' }).click();
+        await expect(ask(page)).toHaveCount(0);
+        // Answered: following and stopping again asks nothing.
+        await page.evaluate(base => window.Strom.UI.startLiveFollow(base, { follow: true }), BRIDGE);
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.stopLiveFollow());
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+    });
+
+    test('following stops while the research does not run: not asked then, asked once it answers (063 U3 A7)', async ({ page }) => {
+        const bridge = await autoTree(page);
+        await page.route(`${BRIDGE}/events`, () => new Promise<void>(() => { /* never answers */ }));
+        await page.evaluate(base => window.Strom.UI.startLiveFollow(base, { follow: true }), BRIDGE);
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await forget(page);
+        bridge.down = true;
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.stopLiveFollow());
+        await expect(page.locator('.toast', { hasText: 'Stopped following the research.' })).toBeVisible();
+        await expect(ask(page)).toHaveCount(0);
+        bridge.down = false;
+        await poll(page);
+        await expect(ask(page)).toBeVisible();
+    });
 });
 
 test.describe('"What will be sent" before sending by hand', () => {
