@@ -172,10 +172,10 @@ test.describe('source images from the research', () => {
         await expect(modal.locator('.sources-bulk-line')).toContainText('3 images for 2 sources are stored only in the research on this computer; they show in the app once loaded.');
         // The help mark at the end of the line opens How Strom works at the rule of images kept in the research.
         const mark = modal.locator('.sources-bulk-line .help-mark');
-        await expect(mark).toHaveAttribute('title', 'How it works: Image only in the research (A3.3)');
+        await expect(mark).toHaveAttribute('title', 'How it works: Image only in the research (A3.8)');
         expect(await modal.locator('.sources-bulk-line').evaluate(el => el.lastElementChild?.classList.contains('help-mark'))).toBe(true);
         await mark.click();
-        await expect(page.locator('.help-rule[data-rule="A3.3"]')).toHaveClass(/is-target/);
+        await expect(page.locator('.help-rule[data-rule="A3.8"]')).toHaveClass(/is-target/);
         await page.keyboard.press('Escape');
         await expect(page.locator('.help-overlay')).toHaveCount(0);
         await expect(modal).toBeVisible();

@@ -14,7 +14,7 @@ export const HELP_TOPICS = {
     waiting: 'R6.4',         // Overview → Awaiting action (appendOverviewWaiting), small panel (appendWaitingSection)
     now: 'R7',               // Overview → Now (appendOverviewNow), small panel Now
     nowPaused: 'R7.6',       // the same heading while some working[].paused
-    imagesHeld: 'A3.3',      // Sources → the line under the filter "Image only in the research" (renderResearchImagesBulk)
+    imagesHeld: 'A3.8',      // Sources → the line under the filter "Image only in the research" (renderResearchImagesBulk)
 } as const;
 
 export type HelpTopic = keyof typeof HELP_TOPICS;
