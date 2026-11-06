@@ -18524,6 +18524,16 @@
         .person-research-hypo-actions:empty { display: none; }
         .person-research-hypo-actions .person-research-hypo-link { padding: 0; font-weight: 600; text-align: left; }
         @media (pointer: coarse) { .person-research-hypo-actions .person-research-hypo-link { min-height: 44px; } }
+        /* Spec 060 K1.8: the offer of "The AI decides" above the hypotheses (the person decides, 10 or more open). */
+        .person-research-hypo-offer {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 10px; padding: 8px 10px;
+            border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; line-height: 1.45; color: var(--text);
+            overflow-wrap: anywhere; min-width: 0;
+        }
+        .person-research-hypo-offer-text { flex: 1 1 100%; min-width: 0; }
+        .person-research-hypo-offer .link-button { padding: 0; font-weight: 600; text-align: left; }
+        .person-research-hypo-offer .person-research-hypo-offer-hide { font-weight: 400; color: var(--text-light); }
+        @media (pointer: coarse) { .person-research-hypo-offer .link-button { min-height: 44px; } }
         /* Who decided (spec 060): the agent's decision marked in the meta line; its reason under the heading. */
         .person-research-hypo-by { font-weight: 600; color: var(--text); }
         .person-research-hypo-reason { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }

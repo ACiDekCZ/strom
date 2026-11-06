@@ -12,13 +12,14 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis } from '../types.js';
-import { isOpenHypothesis, loadViewLinks } from '../view-links.js';
+import { isOpenHypothesis, loadViewLinks, researchHypotheses } from '../view-links.js';
 import {
     researchHypothesisNote, researchHypothesisState, researchHypothesisDecision, researchHypothesisLinkLabel, HYPOTHESIS_REASON_FOLD,
 } from '../research-hypotheses.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
-import { researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
+import { HYPOTHESES_DECIDE_FEATURE, researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
+import { lastBridgeStatus } from './research-sync-ui.js';
 import { canDecideInApp, conflictFromEdit } from '../research-decide.js';
 import { ConflictScope } from '../research-conflict-card.js';
 import { uiModule } from './module.js';
@@ -34,6 +35,24 @@ const DIALOG_ID = 'person-research-modal';
 export const CONFLICT_HIGHLIGHT_MS = 1500;
 /** What had the keyboard when the dialog opened (a line's label, a stub): it gets it back on close. */
 let dialogOpener: HTMLElement | null = null;
+
+/** Spec 060 K1.8: from this many open hypotheses (the person deciding) the switch to the AI deciding is offered. */
+export const HYPOTHESES_OFFER_MIN = 10;
+const HYPOTHESES_OFFER_HIDDEN_KEY = 'strom-research-hypos-offer-hidden:';
+
+function hypothesesOfferHidden(researchId: string): boolean {
+    try {
+        return localStorage.getItem(HYPOTHESES_OFFER_HIDDEN_KEY + researchId.toLowerCase()) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function hideHypothesesOffer(researchId: string): void {
+    try {
+        localStorage.setItem(HYPOTHESES_OFFER_HIDDEN_KEY + researchId.toLowerCase(), '1');
+    } catch { /* no storage: hidden until the dialog is opened again */ }
+}
 
 /** HTML-escape a string for innerHTML (text and attribute values). */
 function esc(text: string): string {
@@ -244,7 +263,7 @@ export const personResearchMethods = uiModule({
                 <div class="person-research-body">
                     ${this.researchEdgeSectionHtml(personId)}
                     ${section(r.conflicts, openHtml + decidedHtml, 'personConflicts')}
-                    ${section(r.hypotheses, hypotheses.length > 0 ? `<div class="person-research-hypos">${this.researchHypothesesHtml(personId, hypotheses)}</div>` : '', 'hypotheses')}
+                    ${section(r.hypotheses, hypotheses.length > 0 ? `${this.researchHypothesesOfferHtml()}<div class="person-research-hypos">${this.researchHypothesesHtml(personId, hypotheses)}</div>` : '', 'hypotheses')}
                     ${section(r.searched, searched.length > 0 ? `
                         <table class="person-research-searched">
                             <thead><tr><th scope="col">${esc(r.searchedBook)}</th><th scope="col">${esc(r.searchedYears)}</th><th scope="col">${esc(r.searchedResult)}</th></tr></thead>
@@ -299,6 +318,7 @@ export const personResearchMethods = uiModule({
         });
         this.bindResearchEdgeSection(overlay, personId);
         this.bindResearchHypotheses(overlay, personId);
+        this.bindResearchHypothesesOffer(overlay);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         const edgeHead = opts.edge ? overlay.querySelector<HTMLElement>('#research-edge-section summary') : null;
         const conflictCard = opts.conflict ? overlay.querySelector<HTMLElement>(`[data-conflict-card="${CSS.escape(opts.conflict)}"]`) : null;
@@ -405,6 +425,58 @@ export const personResearchMethods = uiModule({
                     <div class="person-research-hypo-actions">${linkHtml}</div>
                 </details>`;
         }).join('');
+    },
+
+    /**
+     * Spec 060 K1.8: the person decides and the tree has 10 or more open
+     * hypotheses — one sentence offers "The AI decides", a link into the
+     * research that confirms it in its terminal (nothing switched here). Only
+     * where its bridge takes the choice (`hypotheses.decide`, the value said)
+     * and the `hypotheses` link is announced; hidden for this research once
+     * hidden. The link and its count, or null.
+     */
+    researchHypothesesOffer(): { url: string; open: number } | null {
+        const rid = this.activeResearchId();
+        if (!rid || hypothesesOfferHidden(rid)) return null;
+        const status = this.researchStatusOf(rid) ?? lastBridgeStatus(rid);
+        if (!status?.features?.includes(HYPOTHESES_DECIDE_FEATURE) || status.hypothesesDecide !== 'person') return null;
+        const open = [...researchHypotheses(DataManager.getData()).values()].filter(isOpenHypothesis).length;
+        if (open < HYPOTHESES_OFFER_MIN) return null;
+        const url = this.activeResearchLink('hypotheses', { decide: 'agent' });
+        return url ? { url, open } : null;
+    },
+
+    researchHypothesesOfferHtml(): string {
+        const offer = this.researchHypothesesOffer();
+        if (!offer) return '';
+        const r = strings.research;
+        return `
+            <p class="person-research-hypo-offer" id="person-research-hypo-offer">
+                <span class="person-research-hypo-offer-text">${esc(r.hypoOfferAgent(offer.open))}</span>
+                <button type="button" class="link-button" data-offer="switch">${researchActionLabel(r.hypoOfferSwitch, researchLinkMark('hypotheses'))}</button>
+                <button type="button" class="link-button person-research-hypo-offer-hide" data-offer="hide" aria-label="${esc(r.hypoOfferHideSr)}">${esc(r.hypoOfferHide)}</button>
+            </p>`;
+    },
+
+    /** The offer's link (into the research's terminal) and its "Hide" (remembered for this research). */
+    bindResearchHypothesesOffer(root: HTMLElement): void {
+        const offer = root.querySelector<HTMLElement>('#person-research-hypo-offer');
+        if (!offer) return;
+        offer.addEventListener('click', (e) => {
+            const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-offer]');
+            if (!btn) return;
+            if (btn.dataset.offer === 'switch') {
+                const url = this.researchHypothesesOffer()?.url;
+                if (url) this.launchResearchLink(url, 'terminal');
+                return;
+            }
+            const rid = this.activeResearchId();
+            if (rid) hideHypothesesOffer(rid);
+            // The keyboard stays in the section: on its first hypothesis.
+            const next = offer.parentElement?.querySelector<HTMLElement>('.person-research-hypo > summary');
+            offer.remove();
+            next?.focus({ preventScroll: true });
+        });
     },
 
     /** Wire the hypotheses' switches, "Find" and the long claims (inside the dialog `root`). */

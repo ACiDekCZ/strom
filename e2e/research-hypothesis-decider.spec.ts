@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
-import { dropFile, fakeBridge, openResearch, poll, links, touchScreenNow, FakeBridge } from './research-bridge.js';
+import { dropFile, fakeBridge, openResearch, poll, links, touchScreenNow, researchGed, FakeBridge } from './research-bridge.js';
 
 /**
  * Who decided a hypothesis (spec 060) in "What the research knows": the
@@ -267,6 +267,110 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
             await row(page).scrollIntoViewIfNeeded();
             expect(await row(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        });
+    });
+});
+
+/** Jan with `open` open hypotheses (and one decided, not counted). */
+function hyposGed(open: number): string {
+    const extra: string[] = [];
+    for (let i = 1; i <= open; i++) {
+        const id = `H${String(100 + i).padStart(4, '0')}`;
+        extra.push(`1 _STROM_HYPO ${id}`, `2 TITL Otec Jana: Josef, nebo jeho bratr? (${i})`, '2 STAT open', '2 NOTE A: Josef', '3 CONT B: bratr');
+    }
+    extra.push('1 _STROM_HYPO H0099', '2 TITL Kmotr Jana: soused?', '2 STAT decided', '2 _CHOSEN A', '2 DECI Podpis kmotra.', '2 NOTE A: soused', '3 CONT B: strýc');
+    return researchGed(undefined, extra);
+}
+
+async function offerSetup(page: Page, open: number, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const bridge = await fakeBridge(page, { features: ['hypotheses.decide'], hypotheses: { decide: 'person', writes: [] }, links: SETTINGS_LINKS, ...init });
+    await openResearch(page, { ged: hyposGed(open) });
+    await poll(page);
+    return bridge;
+}
+
+async function openJanKnows(page: Page): Promise<void> {
+    await page.evaluate(() => document.getElementById('person-research-modal')?.remove());
+    const id = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find((p: { refn?: string }) => p.refn === 'P0003')!.id);
+    await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), id);
+    await expect(page.locator('#person-research-modal')).toBeVisible();
+}
+
+const offer = (page: Page) => page.locator('#person-research-modal #person-research-hypo-offer');
+
+test.describe('The AI decides offered at 10 open hypotheses (spec 060 K1.8)', () => {
+    test('10 open, the person decides: one sentence and the link into the research (terminal mark); nothing written here', async ({ page }) => {
+        const bridge = await offerSetup(page, 10);
+        await openJanKnows(page);
+        await expect(offer(page)).toBeVisible();
+        await expect(offer(page).locator('.person-research-hypo-offer-text')).toHaveText(
+            '10 open hypotheses wait for a person to decide; with “The AI decides” the agent decides them itself, each with its reason.');
+        // In the hypotheses' section, above the list.
+        await expect(page.locator('#person-research-modal [data-section-help="hypotheses"] #person-research-hypo-offer')).toHaveCount(1);
+        const go = offer(page).locator('[data-offer="switch"]');
+        await expect(go).toContainText('Switch to “The AI decides”');
+        await expect(go.locator('.research-open-mark')).toHaveCount(1);
+        await expect(go.locator('.research-ai-badge, .ai-badge')).toHaveCount(0);
+        await go.click();
+        expect(await links(page)).toContain(`strom-research://hypotheses?tree=${UUID}&decide=agent`);
+        expect(bridge.hypotheses!.writes).toEqual([]);
+    });
+
+    test('9 open: no offer', async ({ page }) => {
+        await offerSetup(page, 9);
+        await openJanKnows(page);
+        await expect(page.locator('#person-research-modal .person-research-hypo').first()).toBeVisible();
+        await expect(offer(page)).toHaveCount(0);
+    });
+
+    test('the AI decides already, or a research without the choice: no offer', async ({ page }) => {
+        const bridge = await offerSetup(page, 12, { hypotheses: { decide: 'agent', writes: [] } });
+        await openJanKnows(page);
+        await expect(page.locator('#person-research-modal .person-research-hypo').first()).toBeVisible();
+        await expect(offer(page)).toHaveCount(0);
+        // An older research: the feature not named (its value not read).
+        bridge.hypotheses!.decide = 'person';
+        bridge.features = [];
+        await poll(page);
+        await openJanKnows(page);
+        await expect(offer(page)).toHaveCount(0);
+        // The same research taking the choice: offered.
+        bridge.features = ['hypotheses.decide'];
+        await poll(page);
+        await openJanKnows(page);
+        await expect(offer(page)).toBeVisible();
+    });
+
+    test('hidden: it stays hidden for this research', async ({ page }) => {
+        await offerSetup(page, 10);
+        await openJanKnows(page);
+        await offer(page).getByRole('button', { name: 'Hide the offer' }).click();
+        await expect(offer(page)).toHaveCount(0);
+        await expect(page.locator('#person-research-modal .person-research-hypo > summary').first()).toBeFocused();
+        await openJanKnows(page);
+        await expect(page.locator('#person-research-modal .person-research-hypo').first()).toBeVisible();
+        await expect(offer(page)).toHaveCount(0);
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await poll(page);
+        await openJanKnows(page);
+        await expect(page.locator('#person-research-modal .person-research-hypo').first()).toBeVisible();
+        await expect(offer(page)).toHaveCount(0);
+        // What hides it is the remembered word (the research's status is known again).
+        await page.evaluate((id) => localStorage.removeItem(`strom-research-hypos-offer-hidden:${id}`), UUID);
+        await openJanKnows(page);
+        await expect(offer(page)).toBeVisible();
+    });
+
+    test.describe('Czech', () => {
+        test.use({ locale: 'cs-CZ' });
+        test('věta a odkaz česky', async ({ page }) => {
+            await offerSetup(page, 11);
+            await openJanKnows(page);
+            await expect(offer(page).locator('.person-research-hypo-offer-text')).toHaveText(
+                '11 otevřených hypotéz čeká na rozhodnutí člověka; při „Rozhoduje AI“ je agent rozhodne sám, každou s důvodem.');
+            await expect(offer(page).locator('[data-offer="switch"]')).toContainText('Přepnout na „Rozhoduje AI“');
         });
     });
 });
