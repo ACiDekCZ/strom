@@ -3,7 +3,7 @@ import { nPl, plPl } from './helpers.js';
 
 export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree' | 'embeddedMode' | 'importFromOffline'
     | 'lock' | 'auditLog' | 'undo' | 'actions' | 'privacy' | 'personSources' | 'story' | 'poster' | 'otherResearch'
-    | 'phone' | 'read'> = {
+    | 'phone' | 'read' | 'researchLive'> = {
     cardDensity: {
         cardShow: 'Na karcie pokazuj',
         cardGroupState: 'Stan osoby',
@@ -416,6 +416,32 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         lineIdle: (t: string) => t ? `Teraz nie pracuje · ostatnio ${t}` : 'Teraz nie pracuje',
         lineSelectSr: (name: string) => `Linia ${name}. Wybranie wyróżnia ją w drzewie i pokazuje tylko jej zmiany i zadania.`,
         lineQueueOf: (n: number, total: number, glyph: string) => `${n} z ${total} · ${glyph}`,
+    },
+    researchLive: {
+        switchLabel: 'Badanie włączone',
+        starting: 'Włącza się…',
+        stopping: 'Wyłącza się…',
+        offIdle: 'Wyłączyło się po czasie bez pracy. Nowa praca w drzewie włączy je ponownie.',
+        offStopped: 'Wyłączone. Pozostanie wyłączone, dopóki nie zostanie włączone ponownie.',
+        startHow: 'Włącza się je w terminalu, w folderze drzewa:',
+        stopHow: 'Ta wersja badania wyłącza się w terminalu, w folderze drzewa:',
+        startFailed: 'Badanie się nie włączyło. Można je włączyć także w terminalu, w folderze drzewa:',
+        stopFailed: (reason: string) => `Nie udało się wyłączyć badania${reason ? ` (${reason})` : ''}.`,
+        busy: 'Badanie zapisuje teraz coś innego. Za chwilę można spróbować ponownie.',
+        noAnswer: 'Badanie nie odpowiedziało.',
+        copy: 'Kopiuj',
+        copied: 'Polecenie skopiowane.',
+        groupTitle: 'Badania na tym komputerze',
+        idleName: 'Badanie wyłącza się',
+        idleNote: 'Dla wszystkich drzew na tym komputerze. Ustawienie przechowuje samo badanie.',
+        idleForever: 'Przy wyłączeniu komputera',
+        idleTwoHours: 'Po 2 godzinach bez pracy',
+        idleCustom: (n: number) => `Własna wartość (${n} min)`,
+        idleNoBridge: 'Wybór można zmienić, gdy na tym komputerze działa badanie. W terminalu:',
+        idleOlder: 'Ta wersja badania przyjmuje wybór tylko w terminalu:',
+        idleCommandForever: 'do wyłączenia komputera',
+        idleCommandTwoHours: 'po 2 godzinach bez pracy',
+        idleFailed: (reason: string) => `Wybór nie został zapisany${reason ? ` (${reason})` : ''}.`,
     },
     phone: {
         menuConnect: 'Połącz telefon…',

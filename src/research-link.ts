@@ -328,6 +328,11 @@ export interface ResearchLinkParams {
     hypothesisDo?: 'decide';
     /** `hypotheses` (spec 060): who decides the research's hypotheses (the research confirms it in its terminal). */
     decide?: ResearchHypothesesDecide;
+    /**
+     * `live` (spec 064, with `live.start` in the research's features): only start the bridge at its last
+     * address (`do=start`), no new window and no terminal; without it the link also opens the app followed live.
+     */
+    liveDo?: 'start';
 }
 
 /** Who decides the research's hypotheses (spec 060): the person (the default), or the agent on its own. */
@@ -417,10 +422,13 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'update':
         case 'sessions':
         case 'setup':
-        case 'live':
         case 'seal':
         case 'doctor':
             return base;
+        case 'live':
+            // spec 064: the fixed `do=start` only (the bridge starts quietly); anything else is the link as it was.
+            if (p.liveDo === undefined) return base;
+            return p.liveDo === 'start' ? `${base}&do=start` : null;
         case 'excerpt': {
             const source = researchSourceRef(p.source);
             const clip = researchClip(p.clip);
@@ -1875,6 +1883,43 @@ export interface LiveStatus {
     agentName?: string;
     /** `browser` (with `browser.state` in `features`, not for an archive): the agent's browser and its archives; absent: not said. */
     browser?: BrowserInfo;
+    /**
+     * `live` (with `live.idle` in `features`, spec 064): how long the bridge stays on without work
+     * (`idleMinutes`, 0 = until the computer shuts down or it is switched off) and the choices offered.
+     */
+    live?: LiveIdle;
+}
+
+/** `/status.features` (spec 064): `/status.live` and `POST /live {"idleMinutes"}`. */
+export const LIVE_IDLE_FEATURE = 'live.idle';
+/** `/status.features` (spec 064): `POST /live {"do": "stop"}` switches the bridge off as `strom live stop`. */
+export const LIVE_STOP_FEATURE = 'live.stop';
+/** `/status.features` (spec 064): the link `live?tree=…&do=start` starts the bridge quietly at its last address. */
+export const LIVE_START_FEATURE = 'live.start';
+/** The longest time without work the bridge takes (a week, in minutes). */
+export const LIVE_IDLE_MAX = 10080;
+
+/** `/status.live`: minutes without work before the bridge ends (0: never by itself) and the choices to offer. */
+export interface LiveIdle {
+    idleMinutes: number;
+    idleChoices: number[];
+}
+
+/** The two choices of Settings when the research names none: until the computer shuts down, after 2 hours idle. */
+export const LIVE_IDLE_DEFAULT_CHOICES: readonly number[] = [0, 120];
+
+function liveMinutes(v: unknown): number | null {
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= LIVE_IDLE_MAX ? v : null;
+}
+
+/** `/status.live` checked: `idleMinutes` a whole number of minutes (0–10080), the choices likewise (at most 8, no repeats). */
+export function sanitizeLiveIdle(value: unknown): LiveIdle | null {
+    const r = asRecord(value);
+    const idleMinutes = liveMinutes(r?.idleMinutes);
+    if (!r || idleMinutes === null) return null;
+    const said = Array.isArray(r.idleChoices) ? r.idleChoices.map(liveMinutes).filter((n): n is number => n !== null) : [];
+    const idleChoices = [...new Set(said)].slice(0, 8);
+    return { idleMinutes, idleChoices: idleChoices.length ? idleChoices : [...LIVE_IDLE_DEFAULT_CHOICES] };
 }
 
 /** `/status.features`: the bridge says the state of the agent's browser (`browser`, spec 048 §11). */
@@ -3093,6 +3138,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),
+        ...(features?.includes(LIVE_IDLE_FEATURE) && sanitizeLiveIdle(r.live) ? { live: sanitizeLiveIdle(r.live)! } : {}),
     };
 }
 
@@ -3319,11 +3365,13 @@ export function sanitizeLiveChange(value: unknown): LiveChange | null {
 }
 
 /** The bridge's `end` event (`live.end`): whether a bridge comes back on the same address (null: not said). Untrusted input. */
-export function sanitizeLiveEnd(value: unknown): { back: boolean | null; reason: string } {
+export function sanitizeLiveEnd(value: unknown): { back: boolean | null; reason: string; by?: 'app' } {
     const r = asRecord(value);
     return {
         back: typeof r?.back === 'boolean' ? r.back : null,
         reason: r ? cleanText(r.reason, 40) : '',
+        // spec 064: switched off from the app (`POST /live {"do": "stop"}`); without it from the terminal.
+        ...(r?.by === 'app' ? { by: 'app' as const } : {}),
     };
 }
 
