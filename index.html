@@ -18289,6 +18289,19 @@
         /* Phase 2 puts "Link for real" here, at the shown version; empty in phase 1. */
         .person-research-hypo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .person-research-hypo-actions:empty { display: none; }
+        .person-research-hypo-actions .person-research-hypo-link { padding: 0; font-weight: 600; text-align: left; }
+        @media (pointer: coarse) { .person-research-hypo-actions .person-research-hypo-link { min-height: 44px; } }
+        /* Who decided (spec 060): the agent's decision marked in the meta line; its reason under the heading. */
+        .person-research-hypo-by { font-weight: 600; color: var(--text); }
+        .person-research-hypo-reason { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .prh-reason-label { font-weight: 600; color: var(--text); }
+        .prh-reason-text { white-space: pre-line; }
+        button.prh-reason--more {
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+            margin-top: 2px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+        }
+        button.prh-reason--more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .person-research-hypo-reason.is-expanded .prh-reason--more { display: block; -webkit-line-clamp: none; overflow: visible; }
         .rep-hypo-go { padding: 0; font-weight: 600; text-align: left; }
         /* The links to a family outside the tree: inline in their line, the text's size. */
         .reb-hypo .reb-join, #research-edge-section .rep-join { padding: 0; min-height: 0; font-size: inherit; vertical-align: baseline; }

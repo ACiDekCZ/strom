@@ -193,7 +193,7 @@ function toStory(raw: RawStory | undefined, mapRefs: (refs?: string[]) => string
  */
 interface RawResearch {
     conflicts: { id: string; fact: string; title: string; stat: string; take: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
-    hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; variants: RawResearchVariant[] }[];
+    hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; by: string; deci: string; at: string; variants: RawResearchVariant[] }[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
     edge?: RawResearchBlock;
@@ -310,12 +310,19 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
             const status = researchWord(h.stat);
             const chosen = researchVariantLabel(h.chosen);
             const variants = researchVariants(h.variants, mapRefs, refs);
+            // Who decided, why and when: only of a decided or abandoned one.
+            const settled = status === 'decided' || status === 'abandoned';
+            const decision = settled ? h.deci.trim() : '';
+            const at = settled ? /^\d{4}-\d{2}-\d{2}$/.exec(h.at.trim())?.[0] : undefined;
             return {
                 ...(RESEARCH_ID.H.test(h.id.trim()) ? { id: h.id.trim() } : {}),
                 title: h.title.trim(),
                 ...(h.note.trim() ? { note: h.note.trim() } : {}),
                 ...(status ? { status } : {}),
                 ...(chosen && status === 'decided' ? { chosen } : {}),
+                ...(settled && h.by.trim().toLowerCase() === 'agent' ? { decidedBy: 'agent' as const } : {}),
+                ...(decision ? { decision } : {}),
+                ...(at ? { decidedAt: at } : {}),
                 ...(variants.length > 0 ? { variants } : {}),
             };
         });
@@ -2362,7 +2369,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', take: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
-                                research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', variants: [] });
+                                research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', by: '', deci: '', at: '', variants: [] });
                                 currentResearch = { kind: 'hypo', sub: null };
                             } else if (tag === '_STROM_EDGE' || tag === '_STROM_ISLAND') {
                                 // A snapshot: one per person (a second replaces the first).
@@ -2568,6 +2575,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'NOTE') h.note = h.note ? `${h.note}\n${value}` : value;
                         else if (tag === 'STAT') h.stat = value;
                         else if (tag === '_CHOSEN') h.chosen = value;
+                        // Who decided it, why and when (Strom Research 1.29, spec 060).
+                        else if (tag === '_BY') h.by = value;
+                        else if (tag === 'DECI') h.deci = value;
+                        else if (tag === '_AT') h.at = value;
                         else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], inTree: [], sourceRefs: [] });
                     } else if (level === 3 && variant) {
                         open.sub3 = tag;
@@ -2579,6 +2590,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         const glue = tag === 'CONT' ? '\n' + value : value;
                         if (open.sub === 'TITL') h.title += tag === 'CONT' ? ' ' + value : value;
                         else if (open.sub === 'NOTE') h.note += glue;
+                        else if (open.sub === 'DECI') h.deci += glue;
                     } else if (level === 4 && variant) {
                         const link = open.sub3 === '_LINK' ? variant.links[variant.links.length - 1]
                             : open.sub3 === '_INTREE' ? variant.inTree[variant.inTree.length - 1] : undefined;

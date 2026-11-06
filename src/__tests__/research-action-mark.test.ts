@@ -26,7 +26,9 @@ describe('the map of research actions to their marks', () => {
         for (const a of ['excerpt', 'media', 'app', 'live'] as const) expect(researchLinkMark(a)).toBe('none');
         // The terminal asks or writes tasks: nothing paid on the click (a kind of history added, its alignment,
         // a review, a new direction or its restart).
-        for (const a of ['open', 'history-kinds', 'history-align', 'review', 'research', 'direction', 'task', 'conflict', 'experiment'] as const) {
+        // A hypothesis decided or its decision changed there, who decides them confirmed there (spec 060).
+        for (const a of ['open', 'history-kinds', 'history-align', 'review', 'research', 'direction', 'task', 'conflict', 'experiment',
+            'hypothesis', 'hypotheses'] as const) {
             expect(researchLinkMark(a)).toBe('terminal');
         }
         // An agent at work: a conversation, a place's history or the places' identification started there.

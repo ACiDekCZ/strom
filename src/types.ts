@@ -694,6 +694,15 @@ export interface ResearchHypothesis {
     status?: string;
     /** The variant it was decided for (2 _CHOSEN, decided only): its letter. */
     chosen?: string;
+    /**
+     * Who decided it (2 _BY, decided or abandoned only): `agent` when the
+     * research's agent did; absent: the person (also every older record).
+     */
+    decidedBy?: 'agent';
+    /** Why it was decided so (2 DECI, CONC/CONT joined; decided or abandoned only). */
+    decision?: string;
+    /** The day it was decided (2 _AT, ISO "YYYY-MM-DD"; decided or abandoned only). */
+    decidedAt?: string;
     /** Its variants and what each would connect (2 _VAR), in the file's order. */
     variants?: ResearchHypothesisVariant[];
 }

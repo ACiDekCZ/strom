@@ -13,10 +13,12 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis } from '../types.js';
 import { isOpenHypothesis, loadViewLinks } from '../view-links.js';
-import { researchHypothesisNote, researchHypothesisState } from '../research-hypotheses.js';
+import {
+    researchHypothesisNote, researchHypothesisState, researchHypothesisDecision, researchHypothesisLinkLabel, HYPOTHESIS_REASON_FOLD,
+} from '../research-hypotheses.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
-import { researchConflictRef, researchLinkMark } from '../research-link.js';
+import { researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
 import { canDecideInApp, conflictFromEdit } from '../research-decide.js';
 import { ConflictScope } from '../research-conflict-card.js';
 import { uiModule } from './module.js';
@@ -322,19 +324,35 @@ export const personResearchMethods = uiModule({
      * 5 people · Find". No switch for a version without a link, one the
      * tree records already ("The tree records this already"), one only in
      * words (same, siblings: "Text only, cannot be shown.") or a decided or
-     * abandoned hypothesis. Under the box a row for its actions, empty in
-     * phase 1 (phase 2: "Link for real" at the shown version).
+     * abandoned hypothesis. A decided or abandoned one says who decided it
+     * when the agent did ("decided by the agent"), the day and, folded open,
+     * the reason (a long one its first lines, unfolded on a click). Under the
+     * box a row for its actions: the way into the research — "Decide in the
+     * research" (open) or "Change in the research" — only where the research
+     * on this computer announced the `hypothesis` link.
      */
     researchHypothesesHtml(personId: PersonId, hypotheses: readonly ResearchHypothesis[]): string {
         const r = strings.research;
         const v = strings.viewLinks;
         const offered = TreeRenderer.viewLinksOffered();
+        const canLink = this.researchLinkAvailable('hypothesis');
         return hypotheses.map(h => {
             const open = isOpenHypothesis(h);
             const variants = h.variants ?? [];
             const note = researchHypothesisNote(h);
-            const meta = [h.id ?? '', researchHypothesisState(h), variants.length > 0 ? r.hypoVersions(variants.length) : '',
-                variants.length > 0 ? note : ''].filter(Boolean).join(' · ');
+            const decision = researchHypothesisDecision(h);
+            const metaHtml = [
+                esc(h.id ?? ''), esc(researchHypothesisState(h)),
+                decision.by ? `<span class="person-research-hypo-by">${esc(decision.by)}</span>` : '',
+                esc(decision.day), esc(variants.length > 0 ? r.hypoVersions(variants.length) : ''), esc(variants.length > 0 ? note : ''),
+            ].filter(Boolean).join(' · ');
+            const reasonLong = decision.reason.length > HYPOTHESIS_REASON_FOLD;
+            const reasonHtml = !decision.reason ? '' : `
+                    <p class="person-research-hypo-reason${reasonLong ? ' is-long' : ''}"><span class="prh-reason-label">${esc(r.hypoReason)}:</span> ${reasonLong
+                        ? `<button type="button" class="prh-reason-text prh-reason--more" aria-expanded="false">${esc(decision.reason)}</button>`
+                        : `<span class="prh-reason-text">${esc(decision.reason)}</span>`}</p>`;
+            const hypoId = researchHypothesisRef(h.id);
+            const linkHtml = canLink && hypoId ? `<button type="button" class="link-button person-research-hypo-link" data-hypo-do="decide">${researchActionLabel(researchHypothesisLinkLabel(h), researchLinkMark('hypothesis'))}</button>` : '';
             const offers = h.id && offered ? this.viewLinkOffersFor(h.id) : [];
             const rows = variants.map(variant => {
                 const o = offers.find(x => x.variant === variant.id);
@@ -374,11 +392,11 @@ export const personResearchMethods = uiModule({
                 <details class="person-research-hypo${open ? '' : ' is-closed'}"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
                     <summary class="person-research-hypo-head">
                         <span class="person-research-hypo-title">${esc(h.title)}</span>
-                        ${meta ? `<span class="person-research-hypo-meta">${esc(meta)}</span>` : ''}
-                    </summary>
+                        ${metaHtml ? `<span class="person-research-hypo-meta">${metaHtml}</span>` : ''}
+                    </summary>${reasonHtml}
                     ${rows ? `<div class="person-research-variants" role="list" aria-label="${esc(h.title)}">${rows}</div>` : ''}
                     ${!rows && h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}
-                    <div class="person-research-hypo-actions"></div>
+                    <div class="person-research-hypo-actions">${linkHtml}</div>
                 </details>`;
         }).join('');
     },
@@ -412,7 +430,20 @@ export const personResearchMethods = uiModule({
                 more.setAttribute('aria-expanded', String(on));
                 return;
             }
+            const reason = target.closest<HTMLButtonElement>('.prh-reason--more');
+            if (reason) {
+                const on = reason.getAttribute('aria-expanded') !== 'true';
+                reason.closest('.person-research-hypo-reason')?.classList.toggle('is-expanded', on);
+                reason.setAttribute('aria-expanded', String(on));
+                return;
+            }
             if (!hypo) return;
+            // Into the research: decide the hypothesis there, or change its decision (its terminal).
+            if (target.closest('[data-hypo-do="decide"]')) {
+                const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: 'decide' });
+                if (url) this.launchResearchLink(url, 'terminal');
+                return;
+            }
             const find = target.closest<HTMLButtonElement>('.prv-find');
             if (find) {
                 const treeId = DataManager.getCurrentTreeId();

@@ -45,7 +45,7 @@ export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
     'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
-    'history-kinds', 'history-align',
+    'history-kinds', 'history-align', 'hypothesis', 'hypotheses',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -73,6 +73,8 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     'sync-undo': 'terminal', setup: 'terminal', direction: 'terminal', finish: 'terminal', archive: 'terminal',
     seal: 'terminal', experiment: 'terminal', fixes: 'terminal', doctor: 'terminal',
     'history-kinds': 'terminal', 'history-align': 'terminal',
+    // A hypothesis decided (or its decision changed) by a person there; who decides them, confirmed there.
+    hypothesis: 'terminal', hypotheses: 'terminal',
     // The agent's work: a conversation, or a session the terminal starts with its estimate.
     chat: 'agent', history: 'agent', places: 'agent',
 };
@@ -320,6 +322,20 @@ export interface ResearchLinkParams {
     inherit?: boolean;
     /** `history-align`: the terminal's alignment offers deleting from the shared catalogues too (`prune=1`). */
     prune?: boolean;
+    /** `hypothesis` (spec 060): the hypothesis ("H0022") to decide, or whose decision to change (`do=decide`). */
+    hypothesis?: string;
+    hypothesisDo?: 'decide';
+    /** `hypotheses` (spec 060): who decides the research's hypotheses (the research confirms it in its terminal). */
+    decide?: ResearchHypothesesDecide;
+}
+
+/** Who decides the research's hypotheses (spec 060): the person (the default), or the agent on its own. */
+export type ResearchHypothesesDecide = 'person' | 'agent';
+const HYPOTHESES_DECIDE: readonly string[] = ['person', 'agent'];
+
+/** A hypothesis's id in the research ("H0022"), or null. */
+export function researchHypothesisRef(id: unknown): string | null {
+    return typeof id === 'string' && /^H\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
 /** A value of `history.kinds` for the `history-kinds` link: `all`, `none`, kinds, or `all` without kinds — else null. */
@@ -447,6 +463,14 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             const kinds = typeof p.kinds === 'string' ? historyKindsLinkValue(p.kinds) : null;
             return kinds ? `${base}&scope=${p.kindsScope}&kinds=${kinds}` : null;
         }
+        case 'hypothesis': {
+            // spec 060: the hypothesis by its id and the fixed `do=decide` (open: decide it; decided: change it).
+            const id = researchHypothesisRef(p.hypothesis);
+            return id && p.hypothesisDo === 'decide' ? `${base}&id=${id}&do=decide` : null;
+        }
+        case 'hypotheses':
+            // spec 060: a fixed value only; the research confirms it in its terminal.
+            return p.decide && HYPOTHESES_DECIDE.includes(p.decide) ? `${base}&decide=${p.decide}` : null;
         case 'history-align':
             // spec 035: the research's terminal shows the preview and asks; `prune=1` leads to the shared catalogues (only there).
             return p.prune ? `${base}&prune=1` : base;
@@ -1832,6 +1856,12 @@ export interface LiveStatus {
     historyPlaceEstimate?: { minutes: [number, number]; usd?: [number, number] };
     /** `stories.history` (with `stories.history` in `features`): the research may use the history of places in stories. */
     storiesHistory?: boolean;
+    /**
+     * `hypotheses.decide` (with `hypotheses.decide` in `features`, spec 060): who decides the research's
+     * hypotheses; a value the app does not know reads as `person`. Absent: not said (an archive, a research
+     * waiting for its agent, an older research).
+     */
+    hypothesesDecide?: ResearchHypothesesDecide;
     /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
     busy?: LiveBusy;
     /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
@@ -1918,6 +1948,11 @@ export const HISTORY_KINDS_FEATURE = 'history.kinds';
 export const HISTORY_ALIGN_FEATURE = 'history.align';
 /** `/status.features` (R7): `/status.stories.history` and `POST /stories {history}`. */
 export const STORIES_HISTORY_FEATURE = 'stories.history';
+/**
+ * `/status.features` (spec 060): `/status.hypotheses.decide`, `POST /hypotheses {decide}` and who decided a
+ * hypothesis in the research's file (`_BY`, `DECI`, `_AT`).
+ */
+export const HYPOTHESES_DECIDE_FEATURE = 'hypotheses.decide';
 
 /** The tree's kind as the status said it, or null (an older research). */
 export function sanitizeTreeKind(value: unknown): ResearchTreeKind | null {
@@ -3049,6 +3084,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
         ...experimentsSaid(r, features),
+        ...hypothesesSaid(r, features),
         ...qualitySaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
@@ -3102,6 +3138,13 @@ function browserStoreUrl(value: unknown): string | null {
         const u = new URL(value);
         return u.protocol === 'https:' && u.hostname === 'chromewebstore.google.com' && !u.username && !u.password && !u.port ? u.href : null;
     } catch { return null; }
+}
+
+/** `hypotheses.decide`, read only when `features` names it: `agent`, else (any other word) `person`. */
+function hypothesesSaid(r: Record<string, unknown>, features: readonly string[] | null): Pick<LiveStatus, 'hypothesesDecide'> {
+    const h = features?.includes(HYPOTHESES_DECIDE_FEATURE) ? asRecord(r.hypotheses) : null;
+    if (!h || typeof h.decide !== 'string') return {};
+    return { hypothesesDecide: h.decide === 'agent' ? 'agent' : 'person' };
 }
 
 /** `quality.rev`, read only when `features` names `quality.read`. */
