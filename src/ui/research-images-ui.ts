@@ -17,6 +17,7 @@ import { onComputer } from './research-ui.js';
 import { heldReasonKey } from './sources.js';
 import { storedResearchBridge } from '../research-device.js';
 import { parseLiveBridge } from '../research-link.js';
+import { helpMark } from './help-mark.js';
 import { SourceImagesChoice } from '../privacy.js';
 import {
     RESEARCH_IMAGE_EVENT, HeldImageMode, LoadError, LoadErrorKind, MissingList, QueueSnapshot, ResearchImageQueue,
@@ -533,6 +534,7 @@ export const researchImagesMethods = uiModule({
         box.innerHTML = `<div class="sources-bulk-line"><span>${esc(r.bulkLine(images, held.length))}</span>
             <button type="button" class="link-button" id="sources-bulk-open">${esc(r.bulkLoad)}</button></div>`;
         box.querySelector('#sources-bulk-open')?.addEventListener('click', () => void this.openBulkImageWarning());
+        box.querySelector('.sources-bulk-line')?.append(helpMark('imagesHeld'));
     },
 
     /** "Load all from the research…": the warning with counts, size and free space. */

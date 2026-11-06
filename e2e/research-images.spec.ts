@@ -6,7 +6,7 @@ import { BRIDGE, FakeBridge, fakeBridge, openResearch, poll, researchGed, signal
 /**
  * Source images the research left out of its file (`_STROM_IMG_OMITTED`):
  * loaded from its bridge when a source opens, kept with the tree, the
- * "Image in research" filter with the bulk load, the settings section and the
+ * "Image only in the research" filter with the bulk load, the settings section and the
  * export choice. A mocked bridge, invented data.
  */
 
@@ -166,10 +166,20 @@ test.describe('source images from the research', () => {
         await page.evaluate(() => window.Strom.UI.showSourcesDialog());
         const modal = page.locator('#sources-modal');
         const filter = modal.locator('#sources-filter [data-filter="imageHeld"]');
-        await expect(filter).toHaveText('Image in research · 2');
+        await expect(filter).toHaveText('Image only in the research · 2');
         await expect(modal.locator('.source-held-tag')).toHaveCount(2);
         await filter.click();
-        await expect(modal.locator('.sources-bulk-line')).toContainText('3 images for 2 sources are only in the research.');
+        await expect(modal.locator('.sources-bulk-line')).toContainText('3 images for 2 sources are stored only in the research on this computer; they show in the app once loaded.');
+        // The help mark at the end of the line opens How Strom works at the rule of images kept in the research.
+        const mark = modal.locator('.sources-bulk-line .help-mark');
+        await expect(mark).toHaveAttribute('title', 'How it works: Image only in the research (A3.3)');
+        expect(await modal.locator('.sources-bulk-line').evaluate(el => el.lastElementChild?.classList.contains('help-mark'))).toBe(true);
+        await mark.click();
+        await expect(page.locator('.help-rule[data-rule="A3.3"]')).toHaveClass(/is-target/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.help-overlay')).toHaveCount(0);
+        await expect(modal).toBeVisible();
+        await expect(mark).toBeFocused();
         await modal.getByRole('button', { name: 'Load all from the research…' }).click();
         await expect(modal.locator('.sources-bulk-panel')).toContainText('2 sources, 3 images, about 900 kB.');
         await expect(modal.locator('.sources-bulk-panel')).toContainText('Free space in the browser');
@@ -178,7 +188,7 @@ test.describe('source images from the research', () => {
         expect(ex.asks.sort()).toEqual(['S0001/C0001', 'S0001/C0002', 'S0002/C0003']);
         // No badge in the toolbar: the Research menu's row says it ended (until Sources opens again).
         await expect(page.locator('#research-images-badge, .research-images-badge')).toHaveCount(0);
-        await expect(page.locator('#research-item-images')).toHaveAttribute('aria-label', 'Images in the research · 2 / 2 ✓');
+        await expect(page.locator('#research-item-images')).toHaveAttribute('aria-label', 'Images only in the research · 2 / 2 ✓');
         await modal.locator('#sources-bulk-done').click();
         await expect(modal.locator('.source-row-thumb:not(.is-held)')).toHaveCount(2);
     });
@@ -225,7 +235,7 @@ test.describe('source images from the research', () => {
 });
 
 /**
- * The Sources window's "Image in research" tag lines up with the title above
+ * The Sources window's "Image only in the research" tag lines up with the title above
  * it (the dialog's button padding used to push the title 18px right of it).
  */
 test('Sources: the tag at the left edge of its title', async ({ page }) => {
@@ -243,14 +253,14 @@ test('Sources: the tag at the left edge of its title', async ({ page }) => {
 });
 
 /**
- * The Research menu's row "Images in the research · N" (in place of the
+ * The Research menu's row "Images only in the research · N" (in place of the
  * toolbar badge the bulk load had): N sources whose image is only in the
  * research, offered while the research hands images out; the click opens
- * Sources on the "Image in research" filter; during the bulk load its
+ * Sources on the "Image only in the research" filter; during the bulk load its
  * progress, ✓ at its end until Sources opens. It never lights the Research
  * button's dot (D7).
  */
-test.describe('the Research menu: Images in the research', () => {
+test.describe('the Research menu: Images only in the research', () => {
     const row = (page: Page) => page.locator('#research-menu #research-item-images');
     const openMenu = async (page: Page) => {
         await page.locator('#research-menu-btn').click();
@@ -261,7 +271,7 @@ test.describe('the Research menu: Images in the research', () => {
         const { ex } = await setup(page, { auto: false });
         const before = await signal(page);
         await openMenu(page);
-        await expect(row(page)).toHaveText('Images in the research · 2');
+        await expect(row(page)).toHaveText('Images only in the research · 2');
         // Six at most on the first level, the row among them (above "Other actions").
         const first = page.locator('#research-menu > .research-menu-group > .tree-switcher-action:not(#research-item-more)');
         expect(await first.count()).toBeLessThanOrEqual(6);
@@ -281,10 +291,10 @@ test.describe('the Research menu: Images in the research', () => {
         await modal.locator('#sources-bulk-go').click();
         await page.evaluate(() => window.Strom.UI.closeSourcesDialog());
         await openMenu(page);
-        await expect(row(page)).toHaveText(/^Images in the research · [01] \/ 2$/);
+        await expect(row(page)).toHaveText(/^Images only in the research · [01] \/ 2$/);
         release();
         ex.hold = undefined;
-        await expect(row(page)).toHaveText('Images in the research · 2 / 2 ✓');
+        await expect(row(page)).toHaveText('Images only in the research · 2 / 2 ✓');
         expect(await signal(page)).toBe(before);
         // Sources opens from it; the finished row goes (nothing is left to load).
         await row(page).click();
@@ -305,7 +315,7 @@ test.describe('the Research menu: Images in the research', () => {
         b.down = false;
         await poll(page);
         await openMenu(page);
-        await expect(row(page)).toHaveText('Images in the research · 2');
+        await expect(row(page)).toHaveText('Images only in the research · 2');
     });
 
     test('an older research without excerpt.get: no row', async ({ page }) => {
@@ -321,10 +331,10 @@ test.describe('the Research menu: Images in the research', () => {
         await page.locator('#bb-view-more').click();
         const sheet = page.locator('.bottom-sheet-menu');
         await expect(sheet).toBeVisible();
-        await expect(sheet.locator('.bottom-sheet-items')).toContainText('Images in the research · 2');
+        await expect(sheet.locator('.bottom-sheet-items')).toContainText('Images only in the research · 2');
         await page.locator('#research-sheet-all').click();
         const body = page.locator('#research-sheet-menu');
-        await expect(body.locator('#research-item-images')).toHaveText('Images in the research · 2');
+        await expect(body.locator('#research-item-images')).toHaveText('Images only in the research · 2');
         await body.locator('#research-item-images').click();
         await expect(sheet).toHaveCount(0);
         await expect(page.locator('#sources-modal')).toBeVisible();
@@ -380,12 +390,12 @@ test.describe('the bulk load and the search field (de-DE)', () => {
             if (width === 1440) {
                 await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze/);
                 await page.locator('#research-menu-btn').click();
-                await expect(page.locator('#research-item-images')).toHaveText(/^Bilder in der Forschung · [01] \/ 2$/);
+                await expect(page.locator('#research-item-images')).toHaveText(/^Bilder nur in der Forschung · [01] \/ 2$/);
             }
             release();
             ex.hold = undefined;
-            if (width === 1440) await expect(page.locator('#research-item-images')).toHaveText('Bilder in der Forschung · 2 / 2 ✓');
-            else await expect.poll(() => page.evaluate(() => window.Strom.UI.researchImagesMenuItem()?.label)).toBe('Bilder in der Forschung · 2 / 2 ✓');
+            if (width === 1440) await expect(page.locator('#research-item-images')).toHaveText('Bilder nur in der Forschung · 2 / 2 ✓');
+            else await expect.poll(() => page.evaluate(() => window.Strom.UI.researchImagesMenuItem()?.label)).toBe('Bilder nur in der Forschung · 2 / 2 ✓');
             await expect.poll(fits).toBe(true);
             expect((await searchRoom(page)).width).toBe(idle);
         });
