@@ -394,6 +394,7 @@ export const miscMethods = uiModule({
         this.renderHistorySettings(true);
         this.syncExperimentsGroup();
         this.renderResearchFollowSettings();
+        this.renderResearchLiveSettings();
         modal.classList.add('active');
         this.fitSurnameDisplaySetting();
     },

@@ -478,6 +478,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initResearchSync();
         // The other research trees' state (switcher marks, "Elsewhere" in the panel).
         UI.initOtherResearch();
+        // The switches "Research on" of the research trees (spec 064).
+        UI.initResearchLive();
         // Originals waiting for a research (their state lines).
         void UI.initOriginalsQueue();
         // The family's materials from the research (cards' counts, the person's section).

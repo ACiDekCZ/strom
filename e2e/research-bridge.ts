@@ -166,6 +166,21 @@ export interface FakeBridge {
     places?: FakePlaces;
     /** Confirming the research's transcript (spec 022): `POST /sources/confirm` with `sources.confirm` in `features`. */
     sourcesConfirm?: FakeSourcesConfirm;
+    /**
+     * "Research on" (spec 064): `/status.live` and `POST /live {"idleMinutes"}` with `live.idle` in `features`,
+     * `POST /live {"do": "stop"}` with `live.stop` (202, then the bridge is down).
+     */
+    live?: FakeLive;
+}
+
+/** The bridge's live choice and what was posted to `/live` (ZADANI_VYZKUM vyzkum-zapnuty, "Odpověď výzkumu"). */
+export interface FakeLive {
+    idleMinutes: number;
+    idleChoices?: number[];
+    /** Every `POST /live` body, parsed. */
+    writes: Record<string, unknown>[];
+    /** An answer instead (e.g. 503 `research.busy`). */
+    reply?: { status: number; body: unknown };
 }
 
 /**
@@ -1743,6 +1758,23 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 return result ? json(200, result) : json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
             }
         }
+        // "Research on" (spec 064): the computer's choice written, or the bridge switched off (it goes once it answered).
+        if (b.live && method === 'POST' && /^\/[^/]+\/live$/.test(url.pathname)) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            b.live.writes.push(body);
+            if (b.live.reply) return json(b.live.reply.status, b.live.reply.body);
+            if (body.do === 'stop' && b.features?.includes('live.stop')) {
+                await json(202, { stopping: true });
+                b.down = true;
+                return;
+            }
+            if ((body.idleMinutes === 0 || body.idleMinutes === 120) && b.features?.includes('live.idle')) {
+                b.live.idleMinutes = body.idleMinutes;
+                return json(200, { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } });
+            }
+            return json(400, { error: 'Not a body /live takes.', code: 'live.body' });
+        }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
         if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
@@ -1784,6 +1816,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 } : {}),
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
                 ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
+                ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }

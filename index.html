@@ -11988,6 +11988,51 @@
             .view-link-switch__track, .view-link-switch__track::after { transition: none; }
         }
 
+        /* "Research on" (spec 064): a research tree's switch (panel, tree manager) and its word when off. */
+        .research-live[hidden] { display: none; }
+        .research-live { min-width: 0; }
+        .research-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+        .research-live-switch { color: var(--text); font-weight: 500; }
+        .research-live-switch[aria-disabled="true"] { cursor: default; }
+        .research-live-switch[aria-disabled="true"] .view-link-switch__track { opacity: 0.55; }
+        .research-live-switch[aria-busy="true"] { cursor: progress; }
+        .research-live-busy { font-size: 12px; color: var(--text-light); }
+        .research-live-note {
+            margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-light);
+            overflow-wrap: anywhere;
+        }
+        .research-live-command { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; }
+        .research-live-command code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em;
+            background: var(--surface-2); border-radius: 3px; padding: 0 3px; overflow-wrap: anywhere;
+        }
+        .research-live-command-label { color: var(--text-light); }
+        .research-live-copy { font-size: 12px; }
+        .live-panel-body > .research-live { margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .research-live--manager { margin: 4px 0 0 18px; }
+        .research-live--manager .research-live-switch { font-size: 13px; min-height: 28px; }
+        .research-live--manager .research-live-switch .view-link-switch__track { width: 34px; height: 20px; }
+        .research-live--manager .research-live-switch .view-link-switch__track::after { top: 2px; left: 2px; width: 16px; height: 16px; }
+        .research-live--manager .research-live-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(14px); }
+        .research-live-idle-options { flex-wrap: wrap; }
+        .research-live-idle-commands p { margin: 4px 0 0; }
+        .research-live-idle-said { margin: 6px 0 0; }
+        @media (max-width: 640px) {
+            .research-live--manager { margin-left: 0; }
+            .research-live-idle-options.settings-segment { flex-direction: column; }
+            .research-live-idle-options.settings-segment .settings-radio + .settings-radio { border-left: none; border-top: 1px solid var(--border); }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .live-panel-body > .research-live { margin-bottom: 6px; padding-bottom: 6px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .live-panel-body > .research-live { margin-bottom: 4px; padding-bottom: 4px; }
+            .research-live-note { font-size: 11px; }
+        }
+        @media (pointer: coarse) {
+            .research-live--manager .research-live-switch { min-height: 44px; }
+        }
+
         /* "Linked in the view only · n ×" over the view (the evidence pill's place, below it when both; JS sets --view-links-top). */
         .view-links-pill {
             position: fixed; top: var(--view-links-top, 64px); left: 50%; transform: translateX(-50%); z-index: 95;
@@ -25099,6 +25144,13 @@
                         </span>
                     </button>
                 </div>
+            </section>
+            <!-- How long a research's bridge stays on without work, for all trees on this computer (spec 064);
+                 shown only on a computer with a research tree (renderResearchLiveSettings). -->
+            <section class="settings-group" aria-labelledby="settings-group-research-live-title" id="settings-group-research-live" hidden>
+                <h3 class="settings-group-title" id="settings-group-research-live-title" data-i18n="researchLive.groupTitle"></h3>
+                <p class="settings-group-note" data-i18n="researchLive.idleNote"></p>
+                <div class="settings-group-body"></div>
             </section>
             <!-- How the sections of research following show (expanded, collapsed, hidden), for all trees on
                  this device; shown only when some tree has research or a choice was made (renderResearchFollowSettings). -->

@@ -948,6 +948,7 @@ export const treeManagementMethods = uiModule({
                         ${s.persons(tree.personCount)} • ${s.families(familyCount)}
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
                     </div>
+                    ${tree.research?.id && !tree.research.copy ? this.researchLiveSlotHtml(tree.id) : ''}
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         ${isActive ? `<span class="tree-opened-label">${s.opened}</span>` : ''}
@@ -1007,6 +1008,9 @@ export const treeManagementMethods = uiModule({
         }
 
         list.innerHTML = html || `<p class="tree-manager-empty">${strings.merge.noItems}</p>`;
+        // "Research on" (spec 064): each research tree's switch, as its bridge last answered; asked again now.
+        list.querySelectorAll<HTMLElement>('[data-research-live]').forEach(slot => this.fillResearchLiveSlot(slot));
+        this.kickOtherResearch();
         // Merge names come from file/tree names: no inline JS (a quote in the
         // name would break out of the handler string).
         list.querySelectorAll<HTMLElement>('.pending-merge-rename').forEach(btn => {

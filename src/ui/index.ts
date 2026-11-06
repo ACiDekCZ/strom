@@ -159,6 +159,7 @@ import { historyPlaceMethods } from './history-place-ui.js';
 import { historyCardMethods } from './history-card-ui.js';
 import { timelineHistoryMethods } from './timeline-history-ui.js';
 import { researchOthersMethods } from './research-others-ui.js';
+import { researchLiveMethods } from './research-live-ui.js';
 import { researchFollowMethods } from './research-follow-ui.js';
 import { originalsMethods } from './originals-ui.js';
 import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
@@ -921,6 +922,10 @@ Object.assign(UIClass.prototype, researchSyncMethods);
 type ResearchOthersMethods = typeof researchOthersMethods;
 export interface UIClass extends ResearchOthersMethods {}
 Object.assign(UIClass.prototype, researchOthersMethods);
+
+type ResearchLiveMethods = typeof researchLiveMethods;
+export interface UIClass extends ResearchLiveMethods {}
+Object.assign(UIClass.prototype, researchLiveMethods);
 type ResearchFollowMethods = typeof researchFollowMethods;
 export interface UIClass extends ResearchFollowMethods {}
 Object.assign(UIClass.prototype, researchFollowMethods);

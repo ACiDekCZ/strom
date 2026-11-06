@@ -433,6 +433,8 @@ export const researchOthersMethods = uiModule({
         if (document.getElementById('live-panel') || document.getElementById('research-overview')) {
             if (this.researchPanelMarksKey(this.researchElsewhere()) !== elsewhereDrawn) this.renderLivePanel();
         }
+        // The switches "Research on" (spec 064) follow the same answers.
+        this.refreshResearchLiveSwitches();
     },
 
     /** The panel is being drawn with the marks as they are now (a change later draws it again). */

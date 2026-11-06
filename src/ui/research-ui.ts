@@ -2780,6 +2780,8 @@ export const researchUiMethods = uiModule({
             es.close();
             s.es = null;
             const end = sanitizeLiveEnd(payload(e));
+            // Switched off (here or in the terminal) or after a time without work: kept for the switch's text (spec 064).
+            this.noteResearchLiveEnd(s.researchId, end.reason, end.by);
             if (end.back === false) {
                 this.endLiveFollow(s, 'ended');
             } else if (end.back === true) {
@@ -3598,6 +3600,9 @@ export const researchUiMethods = uiModule({
             stateLine.classList.add('is-lost');
             stateLine.setAttribute('role', 'status');
         }
+        // "Research on" (spec 064): once following ended, the tree's bridge can be switched on again here
+        // (while following, the panel's room is the agent's; the idle panel and the tree manager have the switch).
+        if (!phone && s.ended) body.appendChild(this.researchLiveSlot(s.treeId, 'panel'));
         const fold = (key: LiveSectionKey): LiveFold => ({
             id: `live-sec-${key}`,
             collapsed: panelSectionCollapsed(s, key),
@@ -4149,6 +4154,8 @@ export const researchUiMethods = uiModule({
         this.appendResearchElsewhere(panel, 'panel');
 
         const body = el('div', 'live-panel-body');
+        // "Research on" (spec 064): the open tree's bridge, first in the panel.
+        if (treeId) body.appendChild(this.researchLiveSlot(treeId, 'panel'));
         const o = strings.otherResearch;
         const answer = researchId && this.otherResearchEnabled() ? this.researchAnswerOf(researchId) : null;
         // Its bridge did not answer (not the browser's refusal): not running — no list to act on, how it reconnects (§5).
