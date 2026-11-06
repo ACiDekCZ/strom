@@ -221,7 +221,8 @@ export const readProposeMethods = uiModule({
         const t = strings.read;
         const data = DataManager.getData();
         const entry = sel.entry;
-        const parts: string[] = [];
+        // The readers read different kinds of entry (`read.kinds`): said over the suggestion, before anything is written.
+        const parts: string[] = [this.readKindsNoteHtml(sel.result)];
         if (s.second) {
             const live = this.readLiveOf(s.readId);
             // The second reader makes two (a bridge may still say one before it starts).

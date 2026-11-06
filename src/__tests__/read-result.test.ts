@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
     parseMarks, parseTranscript, transcriptLines, lineRegion, lineAt, defaultEntryIndex, canPropose,
     sameLanguage, resultSections, glossFlavor, entryName, cropLayout, locateSpan, readerPlaces, placeCount, placeCountAll, placeContext,
+    sourceEntryIndex, parseBlindTranscript,
 } from '../read-result.js';
 import type { ReadEntry, ReadPerson, ReadResult } from '../research-read.js';
 
@@ -226,6 +227,44 @@ describe('the entry shown first', () => {
     it('is the first without a person or a match', () => {
         expect(defaultEntryIndex(entries, '')).toBe(0);
         expect(defaultEntryIndex(entries, 'P77')).toBe(0);
+    });
+});
+
+describe('a source read again: its own entry first', () => {
+    const entries = [entry({ id: 'e1' }), entry({ id: 'e2' }), entry({ id: 'e3' })];
+    it('is the first of the source\'s entries found in the result', () => {
+        expect(sourceEntryIndex(entries, ['e2'])).toBe(1);
+        expect(sourceEntryIndex(entries, ['e9', 'e3', 'e1'])).toBe(2);
+    });
+    it('none said or none found: -1 (the usual choice)', () => {
+        expect(sourceEntryIndex(entries, [])).toBe(-1);
+        expect(sourceEntryIndex(entries, ['e9'])).toBe(-1);
+    });
+});
+
+describe('the second reader\'s text', () => {
+    const e = entry({
+        transcript: '1774 | Martinus Zvonařík [?] | Catharina [...] filia',
+        variants: [
+            { at: 'Zvonařík[?]', other: 'Zvonářík' }, { at: 'Catharina […]', other: 'Catharina Mlhovská' },
+            { at: '', other: 'sponsus' }, { field: 'p1.surname', at: 'Zvonařík', other: 'Zvonářík' },
+        ],
+    });
+    it('marks the same places from its side: its version first, reader 1\'s second; the data places not in the text', () => {
+        const p = parseBlindTranscript(e, '1774 | Martinus Zvonářík | Catharina Mlhovská filia | sponsus');
+        const vs = p.lines[0].segs.filter(sg => sg.t === 'variant');
+        expect(vs.map(v => v.t === 'variant' ? [v.at, v.other] : [])).toEqual([
+            ['Zvonářík', 'Zvonařík[?]'], ['Catharina Mlhovská', 'Catharina […]'], ['sponsus', ''],
+        ]);
+        expect(p.marks.variant).toBe(true);
+        // Reader 1's own marks show in its version of the place, not in reader 2's text.
+        expect(p.marks.uncertain).toBe(true);
+        expect(p.lines[0].segs.filter(sg => sg.t === 'uncertain')).toEqual([]);
+    });
+    it('keeps reader 2\'s own marks; a place it did not read stays unmarked', () => {
+        const p = parseBlindTranscript(e, 'Martinus Zvonar[?] | [...] filia');
+        expect(p.lines[0].segs.some(sg => sg.t === 'variant')).toBe(false);
+        expect(p.marks).toMatchObject({ uncertain: true, illegible: true, variant: false });
     });
 });
 

@@ -507,6 +507,155 @@ test.describe('Read a source again from its original', () => {
     });
 });
 
+/**
+ * A source read again with `read.sourceEntry` and `read.kinds` (spec 059 K6.4, K6.10): the source's own entry
+ * among the entries read (the neighbours at the excerpt's edge told apart), a comparison that did not succeed
+ * or was not written to the research, and readers that differ on the kind of entry. Without the features the
+ * same responses show as today.
+ */
+test.describe('Read a source again: its own entry, a failed comparison, the kinds', () => {
+    test.use({ viewport: DESKTOP });
+
+    const TWO_READERS = { asked: 2, ran: 2, agree: 'differ', who: [
+        { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
+        { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', modelName: 'GPT-6-Astra', effort: 'xhigh', ran: true },
+    ] };
+    /** Three entries of the excerpt: the source's own one in the middle (e2), its neighbours at the edges. */
+    const THREE = [
+        { id: 'e1', page: 1, region: [0.02, 0.02, 0.96, 0.2], transcript: '… Wenceslaus Zderadil', variants: [], events: [], relations: [],
+            persons: [{ ref: 'p1', role: 'child', given: 'Wenceslaus', surname: 'Zderadil', written: 'Wenceslaus Zderadil' }] },
+        { id: 'e2', page: 1, region: [0.02, 0.3, 0.96, 0.3], transcript: 'Josef Fíšek a Anně', variants: [], events: [], relations: [],
+            persons: [{ ref: 'p1', role: 'groom', given: 'Josef', surname: 'Fíšek', written: 'Josef Fíšek' }] },
+        { id: 'e3', page: 1, region: [0.02, 0.7, 0.96, 0.25], transcript: 'Ludmila Kortanová …', variants: [], events: [], relations: [],
+            persons: [{ ref: 'p1', role: 'child', given: 'Ludmila', surname: 'Kortanová', written: 'Ludmila Kortanová' }] },
+    ];
+
+    async function readWith(page: Page, features: string[], res: Record<string, unknown>): Promise<Locator> {
+        const b = await setup(page, { features: ['read.now', 'read.source', ...features] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
+        b.read!.reads[0].state = 'done';
+        b.read!.results.set(READ_ID, res);
+        await poll(page);
+        return d;
+    }
+    const neighbours = (source: Record<string, unknown>): Record<string, unknown> => ({ ...result(source), entries: THREE });
+
+    test('read.sourceEntry: its own entry chosen, the neighbours told apart, a neighbour says it is not compared', async ({ page }) => {
+        const d = await readWith(page, ['read.sourceEntry'], neighbours({ id: 'S0001', entries: ['e2'], agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' }));
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        const pills = d.locator('.read-entry-pill');
+        // The order stays; the source's entry is chosen, not the first one.
+        await expect(pills).toHaveCount(3);
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
+        await expect(d.locator('.read-entry-pill.is-source')).toHaveAttribute('data-entry', '1');
+        await expect(d.locator('.read-entry-pill.is-neighbour')).toHaveCount(2);
+        await expect(pills.locator('.read-entry-tag')).toHaveText(['neighbour at the edge', 'source entry', 'neighbour at the edge']);
+        await expect(pills.first()).toHaveAttribute('aria-label', /, neighbour at the edge$/);
+        await expect(d.locator('.read-frame.is-neighbour')).toHaveCount(2);
+        await expect(d.locator('.read-frame.is-selected')).not.toHaveClass(/is-neighbour/);
+        // The source's entry: its comparison, no neighbour note.
+        await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
+        await expect(d.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
+
+        // A neighbour: said at the top, and the comparison does not pose as its own.
+        await pills.first().click();
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '0');
+        await expect(d.locator('.read-neighbour-note')).toHaveText('A neighbouring entry at the edge of the excerpt – not compared with the source’s transcript.');
+        await expect(d.locator('.read-neighbour-note')).toHaveAttribute('role', 'note');
+        const vs = d.locator('.read-source-vs');
+        await expect(vs).toHaveClass(/is-elsewhere/);
+        await expect(vs.locator('.read-legend-place')).toHaveCount(0);
+        await expect(vs.locator('.read-source-sides')).toHaveText('The comparison belongs to the source’s entry, not to this neighbouring one.');
+        await vs.locator('[data-act="source-entry"]').click();
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
+        await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
+    });
+
+    test('without read.sourceEntry: the same result as today, the first entry chosen, nothing told apart', async ({ page }) => {
+        const d = await readWith(page, [], neighbours({ id: 'S0001', entries: ['e2'], agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' }));
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '0');
+        await expect(d.locator('.read-entry-pill.is-neighbour, .read-entry-pill.is-source, .read-entry-tag, .read-frame.is-neighbour')).toHaveCount(0);
+        await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
+        await expect(d.locator('.read-source-vs')).not.toHaveClass(/is-elsewhere/);
+        await expect(d.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
+    });
+
+    test('no entry of the source found: the comparison did not succeed, the transcript stays; never as if none were needed', async ({ page }) => {
+        const res = neighbours({ id: 'S0001', entries: [], failed: { code: 'no-entry', why: 'only neighbours read' } });
+        const d = await readWith(page, ['read.sourceEntry'], res);
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        const note = d.locator('.read-source-note');
+        await expect(note).toHaveAttribute('data-agree', 'failed');
+        await expect(note).toHaveAttribute('data-failed', 'no-entry');
+        await expect(note.locator('.read-source-note-text')).toHaveText('The reading found no entry of the source (only neighbouring entries or none), so nothing was compared with the transcript. The source’s transcript stays unchanged.');
+        await expect(note).not.toContainText('only neighbours read');
+        await expect(d.locator('[data-pill="source"]')).toHaveText('comparison did not succeed');
+        await expect(d.locator('[data-pill="source"]')).toHaveClass(/is-warn/);
+        // Nothing to propose here, as at any source read again.
+        await expect(d.locator('[data-act="propose"]')).toHaveCount(0);
+        await expect(d.locator('[data-act="open-task"]')).toHaveCount(0);
+    });
+
+    test('a source changed meanwhile, or another failure: their own sentence', async ({ page }) => {
+        const d = await readWith(page, ['read.sourceEntry'], result({ id: 'S0001', failed: { code: 'no-source', why: 'merged' } }));
+        await expect(d.locator('.read-source-note')).toHaveAttribute('data-failed', 'no-source');
+        await expect(d.locator('.read-source-note-text')).toHaveText(/^The source changed or was merged in the research meanwhile, so nothing was compared with the transcript\. The source’s transcript stays unchanged\.$/);
+        await expect(d.locator('[data-pill="source"]')).toHaveText('comparison did not succeed');
+    });
+
+    test('compared but not written to the research: the comparison, and nothing says it was saved', async ({ page }) => {
+        const d = await readWith(page, ['read.sourceEntry'], result({ id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], failed: { code: 'write', why: 'sealed elsewhere' } }));
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        const note = d.locator('.read-source-note');
+        await expect(note).toHaveAttribute('data-agree', 'differ');
+        await expect(note).toHaveAttribute('data-failed', 'write');
+        await expect(note.locator('.read-source-note-text')).toHaveText('The result was not written to the research (neither a task nor another reading at the source came of it); the source’s transcript stays.');
+        await expect(note.locator('.read-source-note-text')).not.toContainText('saved beside it');
+        await expect(note.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
+        await expect(d.locator('[data-pill="source"]')).toHaveText('1 place differs from the transcript');
+        await expect(d.locator('[data-act="open-task"]')).toHaveCount(0);
+    });
+
+    test('without read.sourceEntry: no comparison as today, a plain reading without the comparison note', async ({ page }) => {
+        const d = await readWith(page, [], result({ id: 'S0001', failed: { code: 'no-entry', why: 'x' } }));
+        // No `agree`: a plain reading, as today.
+        await expect(d.locator('.read-transcript')).toBeVisible();
+        await expect(d.locator('#read-title')).not.toHaveText('Source read again');
+        await expect(d.locator('.read-source-note')).toHaveCount(0);
+        await expect(d.locator('[data-pill="source"]')).toHaveCount(0);
+    });
+
+    test('without read.sourceEntry: a write failure compared as before', async ({ page }) => {
+        const d = await readWith(page, [], result({ id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], failed: { code: 'write', why: 'x' } }));
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await expect(d.locator('.read-source-note')).not.toHaveAttribute('data-failed', /./);
+        await expect(d.locator('.read-source-note-text')).toHaveText(/^The source’s transcript stays unchanged and the new reading is saved beside it/);
+    });
+
+    test('read.kinds: the readers differ on the kind of entry, said between the readers', async ({ page }) => {
+        const res = { ...result({ id: 'S0001', agree: 'same', variants: [] }), readers: { ...TWO_READERS, kinds: { first: 'register.marriage', blind: 'register.baptism' } } };
+        const d = await readWith(page, ['read.kinds'], res);
+        const kinds = d.locator('.read-source-readers .read-kinds-note');
+        await expect(kinds).toHaveText('The readers did not even agree on the kind of entry: reader 1 marriage, reader 2 baptism. To be checked against the scan before writing to the tree.');
+        await expect(kinds).toHaveAttribute('role', 'note');
+        // Said once, between the readers, not again above the text; never that the readers agree.
+        await expect(d.locator('.read-kinds-note')).toHaveCount(1);
+        await expect(d.locator('.read-source-second')).toHaveCount(0);
+    });
+
+    test('without read.kinds: nothing said of the kinds', async ({ page }) => {
+        const res = { ...result({ id: 'S0001', agree: 'same', variants: [] }), readers: { ...TWO_READERS, kinds: { first: 'register.marriage', blind: 'register.baptism' } } };
+        const d = await readWith(page, [], res);
+        await expect(d.locator('.read-source-readers')).toBeVisible();
+        await expect(d.locator('.read-source-second')).toHaveText('The readers agree.');
+        await expect(d.locator('.read-kinds-note')).toHaveCount(0);
+    });
+});
+
 test.describe('Read a source again on a narrow screen', () => {
     test.use({ viewport: PHONE });
 

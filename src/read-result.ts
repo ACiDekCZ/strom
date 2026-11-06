@@ -373,3 +373,21 @@ export function cropLayout(region: ReadRegion | null, boxW: number, boxH: number
         top: place(boxH, height, ry + rh / 2),
     };
 }
+
+/** The entry of a source read again shown first: the first of the source's own (`ids`) among `entries`, else -1. */
+export function sourceEntryIndex(entries: readonly Pick<ReadEntry, 'id'>[], ids: readonly string[]): number {
+    for (const id of ids) {
+        const k = entries.findIndex(e => e.id === id);
+        if (k >= 0) return k;
+    }
+    return -1;
+}
+
+/**
+ * The second reader's transcription of an entry, parsed: the same places marked from its side (`other` found
+ * in its text as `at` is in reader 1's), each place's `a` the second reader's version, `b` the first's.
+ */
+export function parseBlindTranscript(entry: Pick<ReadEntry, 'variants'>, transcript: string): ParsedTranscript {
+    const swapped = entry.variants.filter(textVariant).map(v => ({ ...v, at: v.other, other: v.at }));
+    return parseTranscript({ transcript, variants: swapped });
+}

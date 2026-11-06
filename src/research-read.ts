@@ -22,6 +22,15 @@ export const READ_FEATURE = 'read.now';
 /** `/status.features`: the research reads a source again from its original (`POST sources/read`, spec 059). */
 export const READ_SOURCE_FEATURE = 'read.source';
 
+/** `/status.features`: a source read again says which of its entries are the source's and when its comparison failed (spec 059 K6.4, K6.10). */
+export const READ_SOURCE_ENTRY_FEATURE = 'read.sourceEntry';
+
+/** `/status.features`: a reading of two readers carries the second (blind) reader's whole text (spec 059 K6.6). */
+export const READ_BLIND_TEXT_FEATURE = 'read.blindText';
+
+/** `/status.features`: a reading of two readers says when they read the document as different kinds (spec 059 K6.10). */
+export const READ_KINDS_FEATURE = 'read.kinds';
+
 /** The states of one reading, as the bridge says them. */
 export type ReadState = 'queued' | 'reading' | 'checking' | 'done' | 'unreadable' | 'failed' | 'cancelled';
 const READ_STATES: readonly ReadState[] = ['queued', 'reading', 'checking', 'done', 'unreadable', 'failed', 'cancelled'];
@@ -351,6 +360,8 @@ export interface ReadReaders {
     agree: 'same' | 'differ' | 'fixed' | null;
     /** Who read, in the readers' order (spec 059; absent: a reading before it, nothing shown). */
     who?: ReadWho[];
+    /** The two readers read the document as different kinds (`read.kinds`; absent: the same, or one said none). */
+    kinds?: { first: ReadDocKind; blind: ReadDocKind };
 }
 
 /**
@@ -365,6 +376,40 @@ export interface ReadSourceResult {
     variants: ReadVariant[];
     /** The task where they differ ('' none). */
     task: string;
+}
+
+/** Why a source read again was not compared or not written (`read.sourceEntry`). */
+export type ReadSourceFailCode = 'no-entry' | 'no-source' | 'write' | 'other';
+const SOURCE_FAIL_CODES: readonly ReadSourceFailCode[] = ['no-entry', 'no-source', 'write', 'other'];
+
+/**
+ * A source read again as the research says it since `read.sourceEntry`, beside `source` (which keeps its
+ * meaning: only a comparison made): the entries of the result that are the source's own (the others are
+ * neighbours at the excerpt's edge) and why the comparison failed (`write`: compared, not written; the
+ * others: not compared, `source` then absent).
+ */
+export interface ReadSourceRead {
+    id: string;
+    /** Ids of `entries` that are the source's entry (at most one per view); [] none said. */
+    entries: string[];
+    failed: ReadSourceFailCode | null;
+}
+
+/** The second (blind) reader's entry (`read.blindText`): its whole transcription, and which entry of reader 1 it was compared with. */
+export interface ReadBlindEntry {
+    id: string;
+    page: number;
+    region: ReadRegion | null;
+    /** Literal, with the same marks as reader 1's. */
+    transcript: string;
+    /** The id of reader 1's entry it was compared with ('' an entry only reader 2 read). */
+    of: string;
+}
+
+/** What the second reader read (`read.blindText`): how it saw the document, its entries in its order. */
+export interface ReadBlind {
+    doc: { kind: ReadDocKind | null };
+    entries: ReadBlindEntry[];
 }
 
 export interface ReadPage {
@@ -460,6 +505,10 @@ export interface ReadResult {
     version: number;
     /** A source read again: how the new reading compares with its transcript (only once it is compared). */
     source?: ReadSourceResult;
+    /** A source read again: its own entries and a failed comparison (`read.sourceEntry`; absent: none said). */
+    sourceRead?: ReadSourceRead;
+    /** The second reader's own text (`read.blindText`; absent: none). */
+    blind?: ReadBlind;
 }
 
 /** `source` of a result: the comparison with the source's transcript, or null. Untrusted. */
@@ -477,6 +526,51 @@ function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
     }
     const task = typeof s.task === 'string' && /^T\d{1,9}$/.test(s.task) ? s.task : '';
     return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '' };
+}
+
+/** `source.entries` and `source.failed` (`read.sourceEntry`): only entries of the result, a known code; null when neither. Untrusted. */
+function sanitizeSourceRead(v: unknown, entryIds: ReadonlySet<string>): ReadSourceRead | null {
+    const s = asRecord(v);
+    const id = s ? readSourceId(s.id) : null;
+    if (!s || !id) return null;
+    const entries: string[] = [];
+    for (const e of Array.isArray(s.entries) ? s.entries.slice(0, 50) : []) {
+        const ref = localRef(e);
+        if (ref && entryIds.has(ref) && !entries.includes(ref)) entries.push(ref);
+    }
+    const f = asRecord(s.failed);
+    const failed = f ? SOURCE_FAIL_CODES.includes(f.code as ReadSourceFailCode) ? f.code as ReadSourceFailCode : 'other' : null;
+    return entries.length || failed ? { id, entries, failed } : null;
+}
+
+/** `blind` (`read.blindText`): reader 2's entries, `of` only an entry of the result. Null without any. Untrusted. */
+function sanitizeBlind(v: unknown, entryIds: ReadonlySet<string>): ReadBlind | null {
+    const b = asRecord(v);
+    if (!b) return null;
+    const d = asRecord(b.doc);
+    const entries: ReadBlindEntry[] = [];
+    const ids = new Set<string>();
+    for (const [i, item] of (Array.isArray(b.entries) ? b.entries.slice(0, 200) : []).entries()) {
+        const e = asRecord(item);
+        const transcript = e ? cleanBlock(e.transcript) : '';
+        if (!e || !transcript) continue;
+        let id = localRef(e.id) || `b${i + 1}`;
+        if (ids.has(id)) id = `b${i + 1}`;
+        if (ids.has(id)) continue;
+        ids.add(id);
+        const of = localRef(e.of);
+        entries.push({ id, page: Math.max(1, asCount(e.page) ?? 1), region: region(e.region), transcript, of: of && entryIds.has(of) ? of : '' });
+    }
+    if (!entries.length) return null;
+    return { doc: { kind: d && DOC_KINDS.includes(d.kind as ReadDocKind) ? d.kind as ReadDocKind : null }, entries };
+}
+
+/** `readers.kinds` (`read.kinds`): two known kinds that differ, else null. Untrusted. */
+function sanitizeKinds(v: unknown): { first: ReadDocKind; blind: ReadDocKind } | null {
+    const k = asRecord(v);
+    const first = k && DOC_KINDS.includes(k.first as ReadDocKind) ? k.first as ReadDocKind : null;
+    const blind = k && DOC_KINDS.includes(k.blind as ReadDocKind) ? k.blind as ReadDocKind : null;
+    return first && blind && first !== blind ? { first, blind } : null;
 }
 
 function region(v: unknown): ReadRegion | null {
@@ -636,6 +730,10 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
     }
     const entries = (Array.isArray(r.entries) ? r.entries.slice(0, 200) : [])
         .map((e, i) => sanitizeEntry(e, i)).filter((e): e is ReadEntry => !!e);
+    const entryIds = new Set(entries.map(e => e.id));
+    const sourceRead = sanitizeSourceRead(r.source, entryIds);
+    const blind = sanitizeBlind(r.blind, entryIds);
+    const kinds = asked === 2 ? sanitizeKinds(rd.kinds) : null;
     const c = asRecord(r.cost);
     const amount = c && typeof c.amount === 'number' && Number.isFinite(c.amount) && c.amount >= 0 ? c.amount : null;
     const currency = c && typeof c.currency === 'string' && /^[A-Z]{3}$/.test(c.currency) ? c.currency : '';
@@ -654,12 +752,15 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
             ran: Math.min(asked, asCount(rd.ran) ?? 0),
             agree: rd.agree === 'same' || rd.agree === 'differ' || rd.agree === 'fixed' ? rd.agree : null,
             ...(sanitizeReadWho(rd.who) ? { who: sanitizeReadWho(rd.who)! } : {}),
+            ...(kinds ? { kinds } : {}),
         },
         pages, entries,
         context: cleanBlock(r.context, 5000),
         cost: amount !== null && currency ? { amount, currency, partial: c!.partial === true } : null,
         version: asCount(r.version) || 1,
         ...(sanitizeSourceResult(r.source) ? { source: sanitizeSourceResult(r.source)! } : {}),
+        ...(sourceRead ? { sourceRead } : {}),
+        ...(blind ? { blind } : {}),
     };
 }
 

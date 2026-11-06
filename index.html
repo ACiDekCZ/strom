@@ -15706,6 +15706,15 @@
         .read-entry-n { font-weight: 700; }
         .read-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .read-entry-name::before { content: '· '; }
+        /* A source read again (spec 059 K6.4): its own entry tagged, the neighbours at the excerpt's edge muted and dashed. */
+        .read-entry-tag { font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
+        .read-entry-tag::before { content: '· '; }
+        .read-entry-pill.is-source .read-entry-tag { color: var(--primary); font-weight: 600; }
+        .read-entry-pill.is-neighbour { border-style: dashed; background: var(--surface-2); color: var(--text-light); }
+        .read-entry-pill.is-neighbour.is-selected { border-color: var(--primary); background: var(--surface); box-shadow: none; color: var(--text); }
+        .read-frame.is-neighbour { border-color: var(--text-faint); }
+        .read-frame.is-neighbour.is-selected { border: 2px dashed var(--primary); }
+        .read-frame.is-neighbour:not(.is-selected) .read-frame-n { border-color: var(--text-faint); color: var(--text-light); border-style: dashed; }
         .read-scan-box { flex: 1; min-height: 0; position: relative; display: flex; }
         .read-scan-view { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: auto; border-radius: var(--r-md); }
         .read-scan-sheet { position: relative; width: 100%; background: var(--surface); box-shadow: 0 1px 4px rgba(20, 16, 8, 0.18); }
@@ -15756,6 +15765,31 @@
             margin-left: auto; padding: 4px 10px !important; border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
             color: var(--text); font-size: 12.5px; cursor: pointer;
         }
+        /* Reader 1 / Reader 2 (spec 059 K6.6): whose transcription shows, on its own row of the section's head. */
+        .read-reader-seg { flex: 1 1 100%; order: 5; display: flex; min-width: 0; max-width: 560px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .read-reader-btn {
+            flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0;
+            padding: 5px 10px !important; border: 0 !important; border-radius: 0 !important; background: var(--surface) !important; color: var(--text-light) !important;
+            font-size: 12.5px; line-height: 1.3; box-shadow: none !important; min-height: 0; cursor: pointer;
+        }
+        .read-reader-btn + .read-reader-btn { border-left: 1px solid var(--border) !important; }
+        .read-reader-btn.is-on { background: var(--primary-soft) !important; color: var(--primary) !important; font-weight: 600; box-shadow: inset 0 -2px 0 var(--primary) !important; }
+        .read-reader-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+        .read-reader-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .read-reader-mk {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 14px; height: 14px; box-sizing: border-box; padding: 0 3px;
+            border: 1px solid var(--read-amber-line); border-radius: 999px; background: var(--surface); color: var(--read-amber-text); font-size: 10.5px; font-weight: 600; line-height: 1;
+        }
+        .read-reader-mk::after { content: attr(data-mk); }
+        .read-from-first { margin: -10px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .read-blind-extra { margin-top: 10px; font-size: 12.5px; color: var(--text-light); }
+        .read-blind-extra summary { cursor: pointer; overflow-wrap: anywhere; }
+        .read-blind-extra-text { margin-top: 6px; overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 16px; line-height: 1.7; color: var(--text); }
+        .read-blind-extra-text .read-line { margin: 0; padding: 0; }
+        /* Notes over the text: a neighbour shown (muted), the readers read different kinds of entry (amber, K6.10). */
+        .read-neighbour-note { margin: 0; padding: 8px 12px; border-radius: var(--r-md); border: 1px dashed var(--border); background: var(--surface-2); color: var(--text-light); font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+        .read-kinds-note { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--read-amber-bg); border: 1px solid var(--read-amber-line); color: var(--read-amber-text); font-size: 13.5px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+        .read-propose .read-kinds-note { margin-bottom: 4px; }
         .read-transcript { margin: 0; overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 18px; line-height: 1.75; color: var(--text); }
         .read-line { margin: 0 -6px; padding: 0 6px; border-radius: 4px; }
         .read-line[tabindex] { cursor: pointer; }
@@ -15898,6 +15932,10 @@
             background: var(--surface-2); border: 1px solid var(--border);
         }
         .read-source-note-text { margin: 0; }
+        /* Not compared (K6.10): amber, never as if no comparison were needed. */
+        .read-source-note.is-failed { background: var(--read-amber-bg); border-color: var(--read-amber-line); color: var(--read-amber-text); }
+        .read-source-readers .read-kinds-note { margin-top: 6px; }
+        .modal .read-source-note .read-to-source { margin: 4px 0 0; padding: 2px 0; font-size: 13px; }
         .read-source-part { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); min-width: 0; }
         .read-source-head { margin: 0; font-size: 13px; font-weight: 600; font-family: inherit; overflow-wrap: anywhere; }
         .read-source-count { font-weight: 400; color: var(--text-light); }
@@ -16039,6 +16077,7 @@
         @media (hover: hover) {
             .read-line[tabindex]:hover { background: var(--read-line-bg); }
             .read-entry-pill:hover, .read-page-tab:hover, .read-copy:hover, .read-scan-open:hover { border-color: var(--primary); }
+            .read-reader-btn:not(.is-on):not(:disabled):hover { color: var(--text) !important; background: var(--surface-2) !important; }
             .read-frame:not(.is-selected):hover { background: rgba(63, 107, 79, 0.08); }
         }
         @media (max-width: 1180px) {
@@ -16068,12 +16107,17 @@
             #read-document-modal .read-dialog--wide { width: calc(100vw - 16px); }
             .read-text { padding: 12px 14px 16px; }
             .read-transcript { font-size: 17px; }
+            /* The reader's name wraps under its number rather than being cut. */
+            .read-reader-label { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+            .read-blind-extra-text { font-size: 15px; }
             .read-gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; }
             .read-gloss dd { margin-bottom: 6px; }
         }
         @media (pointer: coarse) {
             .read-scan-links .read-scan-full, .read-scan-archive { min-height: 44px; display: inline-flex; align-items: center; }
             .read-entry-pill, .read-page-tab, .read-copy { min-height: 44px; }
+            .read-reader-btn { min-height: 44px; }
+            .modal .read-source-note .read-to-source, .read-blind-extra summary { min-height: 44px; display: inline-flex; align-items: center; }
             .read-scan-open { width: 44px; height: 44px; }
         }
         .drop-overlay--read { align-items: stretch; justify-content: stretch; padding: 24px; box-sizing: border-box; }

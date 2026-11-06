@@ -264,6 +264,55 @@ describe('GET read/<id>', () => {
         expect(sanitizeReadResult({ id: 'nope', state: 'done' })).toBeNull();
     });
 
+    it('a source read again: its entries (only those of the result) and a failed comparison beside `source` (read.sourceEntry)', () => {
+        const two = { ...full, entries: [full.entries[0], { ...full.entries[0], id: 'e2' }] };
+        const r = sanitizeReadResult({ ...two, source: { id: 'S0001', agree: 'same', variants: [], entries: ['e2', 'e9', 'e2', 7, '../x'] } })!;
+        expect(r.source).toEqual({ id: 'S0001', agree: 'same', variants: [], task: '' });
+        expect(r.sourceRead).toEqual({ id: 'S0001', entries: ['e2'], failed: null });
+        // Not compared: `source` stays absent as before (an app without the feature shows a usual reading); the failure is said beside it.
+        const none = sanitizeReadResult({ ...two, source: { id: 'S0001', failed: { code: 'no-entry', why: 'nothing read' } } })!;
+        expect(none.source).toBeUndefined();
+        expect(none.sourceRead).toEqual({ id: 'S0001', entries: [], failed: 'no-entry' });
+        // Compared, not written: the comparison stays, the failure beside it; an unknown code is "other".
+        const write = sanitizeReadResult({ ...two, source: { id: 'S0001', agree: 'differ', variants: [{ at: 'a', other: 'b' }], entries: ['e1'], failed: { code: 'write' } } })!;
+        expect(write.source).toMatchObject({ agree: 'differ', task: '' });
+        expect(write.sourceRead).toEqual({ id: 'S0001', entries: ['e1'], failed: 'write' });
+        expect(sanitizeReadResult({ ...two, source: { id: 'S0001', failed: { code: 'rm -rf' } } })!.sourceRead?.failed).toBe('other');
+        // Neither said (an older research), or no source id: nothing.
+        expect(sanitizeReadResult({ ...two, source: { id: 'S0001', agree: 'same', variants: [] } })!.sourceRead).toBeUndefined();
+        expect(sanitizeReadResult({ ...two, source: { id: 'x', failed: { code: 'write' }, entries: ['e1'] } })!.sourceRead).toBeUndefined();
+    });
+
+    it('the blind reader\'s text: entries with a transcript, `of` only an entry of the result, a region of fractions (read.blindText)', () => {
+        const r = sanitizeReadResult({ ...full, blind: {
+            doc: { kind: 'register.marriage', language: ['la'] },
+            entries: [
+                { id: 'b1', page: 1, region: [0.1, 0.2, 0.5, 0.1], transcript: 'Josephus filius\nAntonii', of: 'e1' },
+                { id: 'b2', page: 2, region: [0, 0, 2, 1], transcript: 'Maria', of: 'e7' },
+                { id: 'b3', transcript: '' },
+                { id: 'b1', transcript: 'again', of: 'e1' },
+                'nope',
+            ],
+        } })!;
+        expect(r.blind?.doc).toEqual({ kind: 'register.marriage' });
+        expect(r.blind?.entries).toEqual([
+            { id: 'b1', page: 1, region: [0.1, 0.2, 0.5, 0.1], transcript: 'Josephus filius\nAntonii', of: 'e1' },
+            { id: 'b2', page: 2, region: null, transcript: 'Maria', of: '' },
+            { id: 'b4', page: 1, region: null, transcript: 'again', of: 'e1' },
+        ]);
+        expect(sanitizeReadResult({ ...full, blind: { entries: [] } })!.blind).toBeUndefined();
+        expect(sanitizeReadResult({ ...full, blind: { doc: { kind: 'spaceship' }, entries: [{ transcript: 'x' }] } })!.blind?.doc.kind).toBeNull();
+    });
+
+    it('the readers\' kinds only when two known kinds differ (read.kinds)', () => {
+        const kinds = (k: unknown, asked = 2) => sanitizeReadResult({ ...full, readers: { asked, ran: asked, agree: 'differ', kinds: k } })!.readers.kinds;
+        expect(kinds({ first: 'register.marriage', blind: 'register.baptism' })).toEqual({ first: 'register.marriage', blind: 'register.baptism' });
+        expect(kinds({ first: 'register.marriage', blind: 'register.marriage' })).toBeUndefined();
+        expect(kinds({ first: 'register.marriage', blind: 'spaceship' })).toBeUndefined();
+        expect(kinds({ first: 'register.marriage' })).toBeUndefined();
+        expect(kinds({ first: 'register.marriage', blind: 'register.baptism' }, 1)).toBeUndefined();
+    });
+
     it('an unreadable document: no entries, the reason', () => {
         const r = sanitizeReadResult({ id: ID, state: 'unreadable', doc: { kind: 'other', legible: 'no', why: 'glare' }, entries: [] })!;
         expect(r.doc.why).toBe('glare');
