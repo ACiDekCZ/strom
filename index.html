@@ -15710,8 +15710,9 @@
         .read-entry-tag { font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
         .read-entry-tag::before { content: '· '; }
         .read-entry-pill.is-source .read-entry-tag { color: var(--primary); font-weight: 600; }
-        .read-entry-pill.is-neighbour { border-style: dashed; background: var(--surface-2); color: var(--text-light); }
-        .read-entry-pill.is-neighbour.is-selected { border-color: var(--primary); background: var(--surface); box-shadow: none; color: var(--text); }
+        /* .modal button clears a pill's border; a neighbour's thin dashed one is its own (padding 1px less keeps the size). */
+        .read-entries .read-entry-pill.is-neighbour { border: 1px dashed var(--text-faint); padding: 3px 9px; background: var(--surface-2); color: var(--text-light); }
+        .read-entries .read-entry-pill.is-neighbour.is-selected { border-color: var(--primary); background: var(--surface); box-shadow: none; color: var(--text); }
         .read-frame.is-neighbour { border-color: var(--text-faint); }
         .read-frame.is-neighbour.is-selected { border: 2px dashed var(--primary); }
         .read-frame.is-neighbour:not(.is-selected) .read-frame-n { border-color: var(--text-faint); color: var(--text-light); border-style: dashed; }
