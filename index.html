@@ -23439,6 +23439,14 @@
         @media (prefers-reduced-motion: reduce) {
             .help-rule, .help-term { transition: none; }
         }
+        /* Reduced motion: menus, choosers and notices that popped or slid in
+           without a guard of their own stand in place at once (063 U3 A3). */
+        @media (prefers-reduced-motion: reduce) {
+            .context-menu, .cross-tree-chooser, .tree-preview-overlay, .tree-compare-overlay,
+            .otd-card, .slideshow-caption { animation: none; }
+            .cross-tree-badge { animation: none; opacity: 1; }
+            .tour-offer, .pwa-update, .storage-notice { transition-property: opacity; }
+        }
 
         /* About → How Strom works: one row across the dialog. */
         .about-help {

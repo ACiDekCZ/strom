@@ -4,6 +4,8 @@
  */
 
 import { initDialogFocus } from './dialog-focus.js';
+import { initClosedPopups } from './closed-popups.js';
+import { initSheetSlide } from './sheet-slide.js';
 import { initKeyboardAccess } from './keyboard-access.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { announcedResearchLinks, researchLinksEnabled, setResearchLinksEnabled } from '../research-device.js';
@@ -674,6 +676,11 @@ export const miscMethods = uiModule({
         // Central dialog focus (open → into the dialog, Tab trapped, close →
         // back to the opener) and keyboard access for click-only controls.
         initDialogFocus();
+        // Closed dialogs and menus out of the accessibility tree (after the focus
+        // watcher: focus has returned before a closed dialog is hidden).
+        initClosedPopups();
+        // A bottom sheet hits nothing while it slides in.
+        initSheetSlide();
         initKeyboardAccess();
         // Every single user mutation raises the Undo toast (bulk import/merge
         // pass silent — they have their own UI). Registered once, at startup.
