@@ -23,6 +23,16 @@ async function noneExposed(page: Page, when: string): Promise<void> {
     await expect.poll(() => axRoles(page), { message: `accessibility tree: ${when}` }).toEqual([]);
 }
 
+// A guard set on an element that keeps focus is refused by the browser ("Blocked aria-hidden…").
+let blocked: string[] = [];
+test.beforeEach(({ page }) => {
+    blocked = [];
+    page.on('console', m => { if (/aria-hidden/i.test(m.text())) blocked.push(m.text()); });
+});
+test.afterEach(() => {
+    expect(blocked, 'no aria-hidden over a focused element').toEqual([]);
+});
+
 test.describe('computer', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
