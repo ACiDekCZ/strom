@@ -26,6 +26,11 @@ const FAR: Hit = {
     lat: '50.68', lon: '15.2', display_name: 'Horní Lhota, okres Jinov, Česko', addresstype: 'village',
     address: { village: 'Horní Lhota', county: 'okres Jinov', country: 'Česko' },
 };
+/** Horní Lhota in another country, hundreds of km away. */
+const CROATIA: Hit = {
+    lat: '45.3', lon: '14.4', display_name: 'Horní Lhota, Primorsko-goranska županija, Chorvatsko', addresstype: 'village',
+    address: { village: 'Horní Lhota', county: 'Primorsko-goranska županija', country: 'Chorvatsko' },
+};
 const JINOV: Hit = { lat: '49.654', lon: '15.2', display_name: 'Jinov, okres Jinov, Česko', addresstype: 'town' };
 
 /** Answer the geocoder by the query; anything else finds nothing. Returns what was asked. */
@@ -199,6 +204,58 @@ test.describe('Find on the map', () => {
         await expect(r.locator('.place-result-swatch[data-tone="plain"]')).toHaveCount(1);
     });
 
+    test('far away in another country: folded under More far away, only hinted at on the small map’s edge, the map fits the tree’s country (1106)', async ({ page }) => {
+        await stubGeocoder(page, { 'Horní Lhota': [CROATIA, FAR, NEAR] });
+        await seed(page);
+        const r = await search(page, 'H. Lhota');
+        const results = r.locator('.place-result');
+        await expect(results).toHaveCount(3, SEARCH);
+        // The two in Česko first, A and B; Croatia (the map's first) last, folded.
+        await expect(r.locator('.place-found-list > .place-result .place-candidate-sub')).toHaveText(['town · okres Lhotov, Česko', 'town · okres Jinov, Česko']);
+        const toggle = r.locator('.place-away-toggle');
+        await expect(toggle).toHaveText('More far away (1)');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        const far = r.locator('.place-away-list .place-result');
+        await expect(far).toBeHidden();
+
+        // The small map fits Česko: A and B well apart, Croatia a dashed hint on the edge.
+        const mini = r.locator('.place-mini-map');
+        const box = (await mini.boundingBox())!;
+        const pin = (l: string): Locator => r.locator('.place-mini-pin', { hasText: new RegExp(`^${l}$`) });
+        const [a, b, c] = [await pin('A').boundingBox(), await pin('B').boundingBox(), await pin('C').boundingBox()];
+        // A and B are 1.07° of latitude apart: about 75 px at the fitted zoom, under 40 px with Croatia in the view.
+        expect(Math.abs(b!.y - a!.y)).toBeGreaterThan(60);
+        await expect(pin('C')).toHaveClass(/is-away/);
+        await expect(pin('A')).not.toHaveClass(/is-away/);
+        expect(c!.x).toBeGreaterThanOrEqual(box.x);
+        expect(c!.y + c!.height).toBeLessThanOrEqual(box.y + box.height + 1);
+        // South-west of the tree: at the bottom edge.
+        expect(c!.y + c!.height / 2).toBeGreaterThan(box.y + box.height - 20);
+        await expect(pin('C')).toHaveAttribute('aria-label', /^C: Horní Lhota · \d+ km from the family’s other places$/);
+        await expect(r.locator('.place-mini-legend', { hasText: 'far results: only their direction at the edge' })).toBeVisible();
+
+        // The hint opens its row (not picked unseen); the row says why it is far.
+        await pin('C').click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(far).toBeVisible();
+        await expect(far).toBeFocused();
+        await expect(far.locator('.place-candidate-sub')).toHaveText('town · Primorsko-goranska županija, Chorvatsko');
+        await expect(far.locator('.place-result-warn')).toHaveText(/^! \d+ km from the other places of the Lhoták family in 1840–1860\. Possibly another place of the same name\.$/);
+        expect(await geoOf(page, 'H. Lhota')).toBeNull();
+        await toggle.click();
+        await expect(far).toBeHidden();
+    });
+
+    test('every result far away: nothing folded, the map shows them all (1106)', async ({ page }) => {
+        await stubGeocoder(page, { 'Horní Lhota': [CROATIA] });
+        await seed(page);
+        const r = await search(page, 'H. Lhota');
+        await expect(r.locator('.place-result')).toHaveCount(1, SEARCH);
+        await expect(r.locator('.place-result')).toBeVisible();
+        await expect(r.locator('.place-away-toggle')).toHaveCount(0);
+        await expect(r.locator('.place-mini-pin.is-away')).toHaveCount(0);
+    });
+
     test('a pick: the location by hand, a toast with Undo', async ({ page }) => {
         await stubGeocoder(page, { 'Horní Lhota': [NEAR] });
         await seed(page);
@@ -343,7 +400,7 @@ test('in German at 390px with touch: nothing in the search panel overflows', asy
     const page = await context.newPage();
     try {
         await seedSetting(page, 'language', 'de');
-        await stubGeocoder(page, { 'Horní Lhota': [FAR, NEAR] });
+        await stubGeocoder(page, { 'Horní Lhota': [FAR, NEAR, CROATIA] });
         await seed(page);
         const outside = (): Promise<string[]> => page.evaluate(() => {
             const panel = document.querySelector('#places-modal .place-row .place-search:not([hidden])') as HTMLElement;
@@ -355,9 +412,13 @@ test('in German at 390px with touch: nothing in the search panel overflows', asy
                 .map(el => `${el.className}: ${el.textContent?.slice(0, 40)}`);
         });
         const r = await search(page, 'H. Lhota');
-        await expect(r.locator('.place-result')).toHaveCount(2, SEARCH);
+        await expect(r.locator('.place-result')).toHaveCount(3, SEARCH);
         await r.locator('.place-mini-toggle').click();
+        await expect(r.locator('.place-away-toggle')).toHaveText('Weitere entfernte (1)');
+        await r.locator('.place-away-toggle').click();
+        await expect(r.locator('.place-away-list .place-result')).toBeVisible();
         expect(await outside()).toEqual([]);
+        expect((await r.locator('.place-away-toggle').boundingBox())!.height).toBeGreaterThanOrEqual(44);
         // 44 px on touch.
         expect((await r.locator('.place-result').first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
         expect((await r.locator('.place-none-fits').boundingBox())!.height).toBeGreaterThanOrEqual(44);

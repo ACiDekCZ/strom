@@ -27,7 +27,7 @@ import { knownStreets, townOfPlace } from '../places.js';
 import { geocodeTown, placesCentroid, searchPlaceForms } from '../geocode.js';
 import { expandPlaceQuery } from '../place-query.js';
 import {
-    crossDescription, findResults, findResultTexts, findTreePoints, otherForms, stampedGeo,
+    crossDescription, findResults, findResultTexts, findTreePoints, miniMapFit, otherForms, stampedGeo,
     type FindResult, type FindTreePoint,
 } from '../place-find.js';
 import {
@@ -130,6 +130,12 @@ export function dotsHtml(tree: readonly FindTreePoint[], view: SmallMapView, wid
 type PlaceResultTone = 'plain' | 'near' | 'warn';
 const placeResultTone = (r: FindResult): PlaceResultTone => (r.warnings.length ? 'warn' : r.near ? 'near' : 'plain');
 
+/** A far away result's hint stands this far inside the small map's edge (px). */
+const EDGE = 12;
+
+/** The far away results fold under "More far away": only when a result lies in the tree's country too. */
+const placeFindFoldsAway = (list: readonly FindResult[]): boolean => list.some(r => r.away) && list.some(r => !r.away);
+
 /** Today's date as a location is stamped with it. */
 const DATE_NOW = (): Date => new Date();
 
@@ -202,7 +208,7 @@ export const placesFindMethods = uiModule({
         const tried = also.length
             ? `<div class="place-tried"><span class="place-tried-label">${esc(d.tried)}</span>${also.map(f => `<span class="place-tried-chip">${esc(f)}</span>`).join('')}</div>`
             : '';
-        const rows = list.map((r, i) => {
+        const rowHtml = (r: FindResult, i: number): string => {
             const t = findResultTexts(r, lang);
             const tone = placeResultTone(r);
             return `
@@ -219,7 +225,15 @@ export const placesFindMethods = uiModule({
                         ${t.warning ? `<span class="place-result-warn">! ${esc(t.warning)}</span>` : ''}
                     </span>
                 </button>`;
-        }).join('');
+        };
+        // Results in the tree's country first; the far away ones folded under "More far away" when there are both.
+        const fold = placeFindFoldsAway(list);
+        const near = list.map((r, i) => (fold && r.away ? '' : rowHtml(r, i))).join('');
+        const away = fold ? list.map((r, i) => (r.away ? rowHtml(r, i) : '')).join('') : '';
+        const awayCount = fold ? list.filter(r => r.away).length : 0;
+        const rows = near + (fold ? `
+            <button type="button" class="link place-away-toggle" aria-expanded="false">${esc(d.awayMore(awayCount))}</button>
+            <div class="place-away-list" hidden>${away}</div>` : '');
         // What the colours of the letters say (the same on the small map), only those shown.
         const tones = new Set(list.map(placeResultTone));
         const legendText: Record<PlaceResultTone, string> = { plain: d.legendPlain, near: d.legendNear, warn: d.legendWarn };
@@ -234,6 +248,7 @@ export const placesFindMethods = uiModule({
                     <div class="place-mini" role="group" aria-label="${esc(d.miniLabel)}">
                         <div class="place-mini-map"><div class="place-mini-tiles"></div><div class="place-mini-marks"></div></div>
                         <span class="place-mini-legend"><span class="place-mini-dot is-legend" aria-hidden="true"></span>${esc(d.miniLegend)}</span>
+                        ${fold ? `<span class="place-mini-legend"><span class="place-mini-away is-legend" aria-hidden="true"></span>${esc(d.miniAway)}</span>` : ''}
                     </div>
                 </div>
                 <button type="button" class="link place-none-fits">${esc(d.noneFits)}</button>
@@ -241,6 +256,8 @@ export const placesFindMethods = uiModule({
         results.querySelectorAll<HTMLButtonElement>('.place-result').forEach(btn => {
             btn.onclick = () => this.pickPlaceResult(key, list[Number(btn.dataset.index)]!);
         });
+        const awayToggle = results.querySelector<HTMLButtonElement>('.place-away-toggle');
+        if (awayToggle) awayToggle.onclick = () => this.openPlaceFindAway(results, awayToggle.getAttribute('aria-expanded') !== 'true');
         const found = results.querySelector('.place-found') as HTMLElement;
         const mini = results.querySelector('.place-mini-map') as HTMLElement;
         const toggle = results.querySelector('.place-mini-toggle') as HTMLButtonElement;
@@ -255,23 +272,48 @@ export const placesFindMethods = uiModule({
         this.drawPlaceMini(mini, key, list, tree);
     },
 
-    /** The small map: the tree's places grey, the results lettered (near: primary, warned: ochre); a click picks. */
+    /** "More far away" opened or closed; opened for a result, its row gets the focus. */
+    openPlaceFindAway(results: HTMLElement, open: boolean, index?: number): void {
+        const toggle = results.querySelector<HTMLButtonElement>('.place-away-toggle');
+        const box = results.querySelector<HTMLElement>('.place-away-list');
+        if (!toggle || !box) return;
+        toggle.setAttribute('aria-expanded', String(open));
+        box.hidden = !open;
+        if (open && index !== undefined) box.querySelector<HTMLButtonElement>(`.place-result[data-index="${index}"]`)?.focus();
+    },
+
+    /**
+     * The small map: the tree's places grey, the results lettered (near:
+     * primary, warned: ochre); a click picks. The view fits the results in
+     * the tree's country (miniMapFit); a far away one outside it stands on
+     * the edge in its direction, and a click on it opens "More far away".
+     */
     drawPlaceMini(el: HTMLElement, key: string, list: readonly FindResult[], tree: readonly FindTreePoint[]): void {
         const { width, height } = mapSize(el, MINI_W, MINI_H);
-        const points = [...list.map(r => r.candidate.geo), ...tree];
-        const fit = fitBounds(points, width, height, 22);
+        const fold = placeFindFoldsAway(list);
+        const fit = fitBounds(fold ? miniMapFit(list, tree) : [...list.map(r => r.candidate.geo), ...tree], width, height, 22);
         const view: SmallMapView = { center: fit.center, zoom: Math.min(fit.zoom, MINI_MAX_ZOOM) };
         drawTiles(el.querySelector('.place-mini-tiles') as HTMLElement, view, width, height);
         const esc = (s: string): string => this.escapeHtml(s);
+        const lang = getCurrentLanguage();
         const pins = list.map((r, i) => {
-            const at = pointInViewport(r.candidate.geo, view.center, view.zoom, width, height);
+            let at = pointInViewport(r.candidate.geo, view.center, view.zoom, width, height);
             const tone = placeResultTone(r);
-            return `<button type="button" class="place-mini-pin" data-index="${i}" data-tone="${tone}" style="left:${at.x.toFixed(1)}px;top:${at.y.toFixed(1)}px" title="${esc(r.name)}" aria-label="${esc(`${r.letter}: ${r.name}`)}">${r.letter}</button>`;
+            const off = fold && r.away && (at.x < 0 || at.y < 0 || at.x > width || at.y > height);
+            if (off) at = { x: Math.max(EDGE, Math.min(width - EDGE, at.x)), y: Math.max(EDGE, Math.min(height - EDGE, at.y)) };
+            const dist = off ? findResultTexts(r, lang).distance : '';
+            const name = dist ? `${r.name} · ${dist}` : r.name;
+            return `<button type="button" class="place-mini-pin${off ? ' is-away' : ''}" data-index="${i}" data-tone="${tone}" style="left:${at.x.toFixed(1)}px;top:${at.y.toFixed(1)}px" title="${esc(name)}" aria-label="${esc(`${r.letter}: ${name}`)}">${r.letter}</button>`;
         }).join('');
         const marks = el.querySelector('.place-mini-marks') as HTMLElement;
         marks.innerHTML = dotsHtml(tree, view, width, height, esc) + pins;
+        const results = el.closest('.place-results') as HTMLElement | null;
         marks.querySelectorAll<HTMLButtonElement>('.place-mini-pin').forEach(b => {
-            b.onclick = () => this.pickPlaceResult(key, list[Number(b.dataset.index)]!);
+            const i = Number(b.dataset.index);
+            // A hint on the edge opens its row under "More far away"; it is not picked unseen.
+            b.onclick = () => (b.classList.contains('is-away') && results
+                ? this.openPlaceFindAway(results, true, i)
+                : this.pickPlaceResult(key, list[i]!));
         });
     },
 

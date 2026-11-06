@@ -24,6 +24,12 @@ import { getStringsForLang, type Language } from './strings.js';
 export const FIND_MAX = 5;
 /** Closer than this a result or the cross is "right at" a place of the tree (km). */
 export const AT_PLACE_KM = 0.5;
+/**
+ * Without a country to tell them by, a result farther than this from the
+ * places it is measured by lies far away (km), and a place of the tree this
+ * close to a result shown is in its view.
+ */
+export const FIND_AWAY_KM = 300;
 
 /** A located place of the tree, as the search compares with it. */
 export interface FindTreePoint {
@@ -31,6 +37,8 @@ export interface FindTreePoint {
     name: string;
     lat: number;
     lon: number;
+    /** The country its location's label names, when it names one. */
+    country?: string;
 }
 
 /** How far a result lies: from the nearest place of the tree, or from the family's places when it is far. */
@@ -55,6 +63,13 @@ export interface FindResult {
     distance?: FindDistance;
     /** Within PLACE_NEAR_KM of the tree's other places (nearOthers). */
     near: boolean;
+    /**
+     * Far away: in another country than the tree's places (awayFrom) and
+     * farther than PLACE_FAR_KM from the places it is measured by. Listed
+     * after the others; under "More far away" and only hinted at on the small
+     * map when a result lies in the tree's country.
+     */
+    away: boolean;
     /** The app's check of the result (§5), worst first; empty when nothing looks odd. */
     warnings: CheckFinding[];
 }
@@ -77,9 +92,63 @@ export function findTreePoints(data: StromData, key: string, nameOf: (k: string)
     for (const [k, g] of Object.entries(data.places ?? {})) {
         if (k === key || !Number.isFinite(g?.lat) || !Number.isFinite(g?.lon)) continue;
         const name = nameOf(k);
-        if (name) out.push({ key: k, name, lat: g.lat, lon: g.lon });
+        const country = labelCountry(g.label);
+        if (name) out.push({ key: k, name, lat: g.lat, lon: g.lon, ...(country ? { country } : {}) });
     }
     return out;
+}
+
+/** The country a geocoder's label names: its last part, when it has more than one. */
+export function labelCountry(label: string | undefined): string | undefined {
+    const parts = (label ?? '').split(',').map(p => p.trim()).filter(Boolean);
+    return parts.length >= 2 ? parts[parts.length - 1] : undefined;
+}
+
+/** A country's name compared: case and accents aside. */
+const foldCountry = (c: string): string => c.normalize('NFD').replace(/\p{M}+/gu, '').toLocaleLowerCase();
+
+/** The tree's country: the one most of its located places' labels name (ties: alphabetical); undefined when none names one. */
+export function treeCountry(tree: readonly FindTreePoint[]): string | undefined {
+    const counts = new Map<string, { name: string; n: number }>();
+    for (const p of tree) {
+        if (!p.country) continue;
+        const k = foldCountry(p.country);
+        const c = counts.get(k);
+        if (c) c.n++; else counts.set(k, { name: p.country, n: 1 });
+    }
+    return [...counts.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))[0]?.name;
+}
+
+/** Is a country the tree's (`home`)? Undefined when either is not known. */
+function inHome(country: string | undefined, home: string | undefined): boolean | undefined {
+    return country && home ? foldCountry(country) === foldCountry(home) : undefined;
+}
+
+/**
+ * Does a result lie far away: farther than PLACE_FAR_KM from the places it is
+ * measured by, and in another country than the tree's (`home`), or, with
+ * either country unknown, farther than FIND_AWAY_KM. A result with nothing
+ * to measure by is never far away.
+ */
+export function awayFrom(c: GeocodeCandidate, distance: FindDistance | undefined, home: string | undefined): boolean {
+    if (!distance || distance.kind === 'at') return false;
+    if (distance.km <= PLACE_FAR_KM) return false;
+    const same = inHome(c.place?.country ?? labelCountry(c.geo.label), home);
+    return same === undefined ? distance.km > FIND_AWAY_KM : !same;
+}
+
+/**
+ * What the small map fits its view to: the results that are not far away
+ * (all of them when every one is) and the tree's places of the tree's
+ * country — or, without one to tell them by, those within FIND_AWAY_KM of a
+ * result shown. A far result is only hinted at on the map's edge.
+ */
+export function miniMapFit(list: readonly FindResult[], tree: readonly FindTreePoint[]): { lat: number; lon: number }[] {
+    const shown = list.some(r => !r.away) ? list.filter(r => !r.away) : list;
+    const at = shown.map(r => ({ lat: r.candidate.geo.lat, lon: r.candidate.geo.lon }));
+    const home = treeCountry(tree);
+    const places = tree.filter(p => inHome(p.country, home) ?? at.some(g => distanceKm(g, p) <= FIND_AWAY_KM));
+    return [...at, ...places.map(p => ({ lat: p.lat, lon: p.lon }))];
 }
 
 /** The tree's place nearest to `at`, with the distance; null when the tree has none. */
@@ -157,12 +226,13 @@ export function measureTreePoints(data: StromData, key: string, tree: readonly F
 /**
  * The results: every candidate checked (§5) and measured (measureTreePoints), ordered near the
  * other places → towns → parts of towns → streets → the rest, the warned
- * ones last (each part in the order the map gave them), at most FIND_MAX,
- * lettered A–E.
+ * ones after them and the far away ones (awayFrom) last (each part in the
+ * order the map gave them), at most FIND_MAX, lettered A–E.
  */
 export function findResults(input: FindInput): FindResult[] {
     const typed = input.query.trim().toLocaleLowerCase();
     const by = measureTreePoints(input.data, input.key, input.tree);
+    const home = treeCountry(input.tree);
     const all = input.found.map((f, index) => {
         const c = f.candidate;
         const warnings = checkCandidate(input.data, input.key, c.geo);
@@ -177,11 +247,17 @@ export function findResults(input: FindInput): FindResult[] {
             where,
             distance: findDistance(c.geo, by, warnings),
             near: nearOthers(input.data, input.key, c.geo),
+            away: false,
             warnings,
         };
+        result.away = awayFrom(c, result.distance, home);
         return { result, index };
     });
     all.sort((a, b) => {
+        // The far away ones after all the others, so the country's results keep their letters and none is cut off.
+        const aa = a.result.away ? 1 : 0;
+        const ab = b.result.away ? 1 : 0;
+        if (aa !== ab) return aa - ab;
         const wa = a.result.warnings.length ? 1 : 0;
         const wb = b.result.warnings.length ? 1 : 0;
         if (wa !== wb) return wa - wb;

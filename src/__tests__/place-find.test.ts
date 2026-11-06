@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     findResults, findResultTexts, findTreePoints, crossDescription, compassDir, aboutKm, wholeKm, otherForms,
-    nearestTreePlace, stampedGeo, FIND_MAX, type FindTreePoint,
+    nearestTreePlace, stampedGeo, FIND_MAX, miniMapFit, treeCountry, labelCountry, type FindTreePoint,
 } from '../place-find.js';
 import type { FormCandidate } from '../geocode.js';
 import { StromData, Person, PersonId } from '../types.js';
@@ -155,6 +155,52 @@ describe('findResults', () => {
         lone.persons[loner.id] = loner;
         const [t] = findResults({ found: [hit('Lhotka', north(41.5), 'Lhotka, okres Bělov, Česko', 'village', true)], query: 'Lhotka', key: 'lhotka', data: lone, tree: findTreePoints(lone, 'lhotka', k => names[k as keyof typeof names]) });
         expect(findResultTexts(t!, 'en').distance).toBe('1 km from Bělov');
+    });
+
+    it('far away (another country, hundreds of km): after the others; the small map fits the tree’s country (1106)', () => {
+        // The Lhoták family around Lhota in Česko; one branch emigrated to Italia (Lhotaro, 700 km south-west).
+        const data = tree();
+        const em = person('Lhoták', 'Lhotaro', '1856');
+        data.persons[em.id] = em;
+        data.places!['lhotaro'] = { ...offset(BASE, -500, -500), label: 'Lhotaro, Veneto, Italia' };
+        const names = { ...NAMES, lhotaro: 'Lhotaro' };
+        const points = findTreePoints(data, 'h lhota', k => names[k as keyof typeof names]);
+        expect(treeCountry(points)).toBe('Česko');
+        expect(points.find(p => p.key === 'lhotaro')?.country).toBe('Italia');
+        const cz = (n: number, at: { lat: number; lon: number }) => hit('H. Lhota', at, `Horní Lhota, okres L${n}, Česko`, 'village', true, { name: 'Horní Lhota', district: `okres L${n}`, country: 'Česko' });
+        const hr = hit('H. Lhota', offset(BASE, -520, 120), 'Horní Lhota, Primorska, Chorvatsko', 'village', true, { name: 'Horní Lhota', district: 'Primorska', country: 'Chorvatsko' });
+        const list = findResults({ found: [hr, cz(1, north(120)), cz(2, north(-1))], query: 'H. Lhota', key: 'h lhota', data, tree: points });
+        // Croatia: far away, last, though the map gave it first; Česko's 120 km one is warned, not far away.
+        expect(list.map(r => [r.letter, r.where, r.away])).toEqual([
+            ['A', 'okres L2, Česko', false],
+            ['B', 'okres L1, Česko', false],
+            ['C', 'Primorska, Chorvatsko', true],
+        ]);
+        expect(list[1]!.warnings[0]?.kind).toBe('far');
+        // The small map: the results in Česko and the tree's places there; neither Croatia nor Italia.
+        const fit = miniMapFit(list, points);
+        expect(fit).toHaveLength(2 + 4);
+        expect(fit.every(g => g.lat > 49)).toBe(true);
+        // Every result far away: the map shows them all.
+        const abroad = findResults({ found: [hr], query: 'H. Lhota', key: 'h lhota', data, tree: points });
+        expect(abroad[0]!.away).toBe(true);
+        expect(miniMapFit(abroad, points)[0]).toMatchObject({ lat: hr.candidate.geo.lat });
+    });
+
+    it('far away without a country to tell it by: farther than 300 km; a border village near the family is not (1106)', () => {
+        const data = tree();
+        const bare = Object.fromEntries(Object.entries(data.places!).map(([k, g]) => [k, { lat: g.lat, lon: g.lon }]));
+        data.places = bare;
+        const points = findTreePoints(data, 'h lhota', k => NAMES[k]);
+        expect(treeCountry(points)).toBeUndefined();
+        const at = (lbl: string, p: { lat: number; lon: number }) => hit('H. Lhota', p, lbl, 'village', true);
+        const list = findResults({ found: [at('Horní Lhota', north(-400)), at('Horní Lhota', north(200)), at('Horní Lhota', north(-1))], query: 'H. Lhota', key: 'h lhota', data, tree: points });
+        expect(list.map(r => r.away)).toEqual([false, false, true]);
+        // Another country but beside the family's places: not far away.
+        const border = findResults({ found: [hit('H. Lhota', north(-10), 'Horní Lhota, Lhotland', 'village', true, { country: 'Lhotland' })], query: 'H. Lhota', key: 'h lhota', data: tree(), tree: findTreePoints(tree(), 'h lhota', k => NAMES[k]) });
+        expect(border[0]!.away).toBe(false);
+        expect(labelCountry('Lhota')).toBeUndefined();
+        expect(labelCountry('Lhota, okres Jinov, Česko')).toBe('Česko');
     });
 
     it('findTreePoints leaves the place itself out', () => {

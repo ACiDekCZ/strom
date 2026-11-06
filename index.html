@@ -5704,11 +5704,23 @@
         }
         .places-modal button.place-mini-pin[data-tone="near"] { background: var(--primary); }
         .places-modal button.place-mini-pin[data-tone="warn"] { background: var(--map-check); }
-        .places-modal button.place-mini-toggle, .places-modal button.place-none-fits, .places-modal button.place-empty-more {
+        .places-modal button.place-mini-toggle, .places-modal button.place-none-fits, .places-modal button.place-empty-more,
+        .places-modal button.place-away-toggle {
             align-self: flex-start; min-height: 0; padding: 2px 0; border: 0; background: none; color: var(--primary-dark);
             font: inherit; font-size: 13px; text-align: left; white-space: normal; cursor: pointer;
         }
         .places-modal button.place-mini-toggle { display: none; }
+        /* Far away results (another country): folded under "More far away", only hinted at on the small map's edge. */
+        .places-modal button.place-away-toggle { margin-top: 6px; }
+        .places-modal button.place-away-toggle::before { content: '▸ '; }
+        .places-modal button.place-away-toggle[aria-expanded="true"]::before { content: '▾ '; }
+        .place-away-list { display: flex; flex-direction: column; min-width: 0; }
+        .place-away-list[hidden] { display: none; }
+        .places-modal button.place-mini-pin.is-away { border-style: dashed; border-color: var(--text); opacity: 0.85; }
+        .place-mini-away.is-legend {
+            display: inline-block; width: 10px; height: 10px; margin: 0 6px 0 0; vertical-align: middle; box-sizing: border-box;
+            border: 1px dashed var(--text); border-radius: 50%;
+        }
         .place-empty-head { font-size: 13.5px; overflow-wrap: anywhere; }
         .place-near { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); }
         .places-modal input.place-near-town { flex: 1 1 auto; min-width: 0; }
@@ -5950,7 +5962,7 @@
         @media (hover: hover) {
             .places-modal button.place-candidate:hover { background: var(--surface-2); }
             .places-modal button.place-mini-toggle:hover, .places-modal button.place-none-fits:hover,
-            .places-modal button.place-empty-more:hover { text-decoration: underline; }
+            .places-modal button.place-empty-more:hover, .places-modal button.place-away-toggle:hover { text-decoration: underline; }
             .places-modal button.place-mini-pin:hover { box-shadow: 0 0 0 2px var(--primary-dark); }
             .places-modal .place-hand-zoom button:hover { background: var(--surface-2); }
             .places-modal button.place-act:hover, .places-modal button.place-link-btn:hover,
@@ -6047,7 +6059,7 @@
             .places-modal button.place-search-go, .place-card-buttons button { min-height: 44px; }
             .places-modal button.place-candidate { min-height: 44px; }
             .places-modal button.place-mini-toggle, .places-modal button.place-none-fits, .places-modal button.place-empty-more,
-            .places-modal button.place-near-go, .places-modal button.place-empty-look { min-height: 44px; }
+            .places-modal button.place-away-toggle, .places-modal button.place-near-go, .places-modal button.place-empty-look { min-height: 44px; }
             .places-modal input.place-near-town { height: 44px; font-size: 16px; }
             .places-modal .place-hand-zoom button { width: 44px; height: 44px; }
             .places-modal button.places-chip, .places-modal button.places-select-btn, .places-modal button.places-more-btn,
