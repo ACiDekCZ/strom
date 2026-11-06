@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { Person } from '../types.js';
+import { researchClaimValue } from '../research-claim.js';
 
 const head = (research: boolean): string => `0 HEAD
 1 CHAR UTF-8
@@ -93,6 +94,37 @@ describe('Strom Research knowledge in GEDCOM', () => {
             { title: 'Oddací matrika Chlumy', from: 1890, to: 1900, result: 'none', at: '2026-09-18' },
             { title: 'Křestní matrika Chlumy', from: 1871, to: 1871, result: 'found' },
         ]);
+    });
+
+    // A batch of the research can leave its source's label in front of a claim ("--claim '@s: 59 let…'"
+    // stored as written): GEDCOM "2 VAL @@s:59 …" with no SOUR. The label goes; the source stays unknown.
+    it('drops a batch source label left in front of a claim (raw "@s:" token)', () => {
+        const ged = head(true) + BODY.replace('0 TRLR\n', `1 _STROM_CONFLICT X0011
+2 TYPE DEAT
+2 TITL Věk při úmrtí Anny
+2 STAT decided
+2 VAL @@s:59 let při úmrtí 1883
+2 VAL @@src: 61 let
+3 SOUR @S31@
+2 VAL @@S12@: 1883
+2 DECI @@s:59 let
+0 TRLR
+`);
+        const data = convertToStrom(parseGedcom(ged)).data;
+        const c = Object.values(data.persons).find(p => p.refn === 'P0012')!.research!.conflicts!.find(x => x.id === 'X0011')!;
+        expect(c.values.map(v => v.value)).toEqual(['59 let při úmrtí 1883', '61 let', '1883']);
+        expect(c.values[0].sourceIds).toBeUndefined();
+        expect(data.sources![c.values[1].sourceIds![0]].title).toBe('Sčítání lidu 1880');
+        expect(c.decision?.value).toBe('59 let');
+    });
+
+    it('keeps a claim that only starts like a label as written', () => {
+        expect(researchClaimValue('@s:59 let')).toBe('59 let');
+        expect(researchClaimValue('@s:')).toBe('@s:');
+        expect(researchClaimValue('S12: 1883')).toBe('S12: 1883');
+        expect(researchClaimValue('1945 (S0031)')).toBe('1945 (S0031)');
+        expect(researchClaimValue('e-mail a@b.cz: 1883')).toBe('e-mail a@b.cz: 1883');
+        expect(researchClaimValue('12 MAR 1865, Týnec')).toBe('12 MAR 1865, Týnec');
     });
 
     it('ignores the tags in any other GEDCOM', () => {

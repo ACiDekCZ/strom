@@ -27,6 +27,7 @@ import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
+import { researchClaimValue } from '../research-claim.js';
 
 const DIALOG_ID = 'person-research-modal';
 /** How long a conflict's card opened at stays lit up (DEV §6.2). */
@@ -64,7 +65,9 @@ export function researchConflictTitle(c: ResearchConflict): string {
 }
 
 /** A value as people read it: a GEDCOM date in the app's date style, a sex as a word, else as written. */
-export function researchValueText(fact: string, value: string): string {
+export function researchValueText(fact: string, said: string): string {
+    // A conflict kept from before the parser dropped a batch's source label ("@s:59 let…").
+    const value = researchClaimValue(said);
     if (fact.toUpperCase() === 'SEX') {
         const v = value.trim().toUpperCase();
         if (v === 'M') return strings.gender.male;
@@ -95,7 +98,7 @@ export function conflictValueHtml(text: string): string {
 /** A conflict about a date (not a place or a name): the values read as dates (an empty side says nothing). */
 export function isDateConflict(c: ResearchConflict): boolean {
     const said = c.values.filter(v => typeof v.value === 'string' && v.value.trim());
-    return said.length > 0 && said.every(v => researchValueText(c.fact, v.value) !== v.value || /^\s*\d{3,4}\s*\??\s*$/.test(v.value));
+    return said.length > 0 && said.every(v => researchValueText(c.fact, v.value) !== researchClaimValue(v.value) || /^\s*\d{3,4}\s*\??\s*$/.test(v.value));
 }
 
 /** A year in a value said in words ("23. 10. 1865, Žďár nad Sázavou", "tkadlec, 1865"). */

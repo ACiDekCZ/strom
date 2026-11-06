@@ -90,6 +90,7 @@ import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
+import { researchClaimValue } from './research-claim';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -270,7 +271,8 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
     if (!raw) return undefined;
     const value = (v: RawResearchValue): ResearchConflictValue => {
         const ids = mapRefs(v.sourceRefs);
-        return { value: v.value, ...(ids.length > 0 ? { sourceIds: ids } : {}) };
+        // A batch's source label left in front of the claim goes (researchClaimValue).
+        return { value: researchClaimValue(v.value), ...(ids.length > 0 ? { sourceIds: ids } : {}) };
     };
     const sideOf = (v: RawResearchValue): 'user' | 'research' | undefined => {
         const side = v.side?.trim().toLowerCase();

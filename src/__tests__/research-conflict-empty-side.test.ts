@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { conflictValueHtml, conflictValueSaid, isDateConflict } from '../ui/person-research-ui.js';
+import { conflictValueHtml, conflictValueSaid, isDateConflict, researchValueText } from '../ui/person-research-ui.js';
 import { strings } from '../strings.js';
 import { ResearchConflict } from '../types.js';
 
@@ -30,5 +30,14 @@ describe('an empty side of a conflict', () => {
         // Both said: as before.
         expect(isDateConflict(conflict('BIRT', '3 FEB 1865', '1865'))).toBe(true);
         expect(isDateConflict(conflict('BIRT', 'Chlumy', '1865'))).toBe(false);
+    });
+});
+
+describe('a conflict kept with a batch source label in front of a claim', () => {
+    // Stored before the parser dropped it (person.research from an earlier sync): shown without the "@s:".
+    it('shows the claim, not the label, and is no date conflict because of it', () => {
+        expect(researchValueText('DEAT', '@s:59 let při úmrtí 1883')).toBe('59 let při úmrtí 1883');
+        expect(researchValueText('EVEN', '@src: 61 let')).toBe('61 let');
+        expect(isDateConflict(conflict('DEAT', '@s:59 let při úmrtí 1883', '1883'))).toBe(false);
     });
 });
