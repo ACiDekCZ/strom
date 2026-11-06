@@ -15739,6 +15739,10 @@
             box-shadow: 0 1px 3px rgba(20, 16, 8, 0.15);
         }
         .read-scan-hint { flex: none; margin: 0; font-size: 12px; color: var(--text-light); }
+        /* Where the scan goes on (spec 059 K6.8): full quality in the research, the page in the archive. */
+        .read-scan-links { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; min-width: 0; font-size: 13px; }
+        .modal .read-scan-links .read-scan-full { margin: 0; padding: 2px 0; font-size: 13px; }
+        .read-scan-archive { color: var(--primary); overflow-wrap: anywhere; }
         .read-text { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; padding: 18px 24px 28px; }
         .read-partial { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--read-amber-bg); border: 1px solid var(--read-amber-line); color: var(--read-amber-text); font-size: 13.5px; line-height: 1.5; }
         .read-link {
@@ -16049,6 +16053,7 @@
             .read-page-tabs { order: 3; flex-wrap: nowrap; overflow-x: auto; }
             .read-entry-pill, .read-page-tab { flex: none; }
             .read-scan-hint { display: none; }
+            .read-scan-links { order: 4; }
             .read-scan-view { overflow: hidden; }
             .read-scan-view.is-strip .read-scan-sheet { position: absolute; }
             .read-text { flex: 1; padding: 14px 16px 18px; gap: 18px; }
@@ -16067,6 +16072,7 @@
             .read-gloss dd { margin-bottom: 6px; }
         }
         @media (pointer: coarse) {
+            .read-scan-links .read-scan-full, .read-scan-archive { min-height: 44px; display: inline-flex; align-items: center; }
             .read-entry-pill, .read-page-tab, .read-copy { min-height: 44px; }
             .read-scan-open { width: 44px; height: 44px; }
         }

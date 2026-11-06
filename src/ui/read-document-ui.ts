@@ -17,7 +17,8 @@ import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
-import { sha256OfBlob } from '../sha256.js';
+import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
+import { safeHttpUrl } from '../validation.js';
 import { originalTargets } from '../originals.js';
 import { parseLiveBridge, researchSchemeUrl, researchLinkMark, LiveStatus, type ResearchActionMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
@@ -1748,7 +1749,44 @@ export const readDocumentMethods = uiModule({
                         </div>
                         ${url ? `<button type="button" class="read-scan-open" data-act="open-page" aria-label="${esc(t.openPage)}" title="${esc(t.openPage)}"><span aria-hidden="true">⤢</span></button>` : ''}
                     </div>
-                    ${hint}`;
+                    ${hint}${s.phase === 'result' ? this.readScanLinksHtml(page) : ''}`;
+    },
+
+    /**
+     * Where the scan goes on (spec 059 K6.8): the original in full quality in the research (a source read
+     * again: its excerpt; a page of the research's media: the original) and the source's page in the archive.
+     */
+    readScanLinks(page: ReadPage | null): { full: { url: string; label: string; title: string } | null; archive: string | null } {
+        const again = this.readSourceAgainNow();
+        if (again) {
+            const src = DataManager.getData().sources?.[again.id];
+            if (!src) return { full: null, archive: null };
+            const excerpts = shownExcerpts(DataManager.getCurrentTreeId(), src);
+            const exc = (again.clip ? excerpts.find(e => e.clip === again.clip) : undefined) ?? excerpts.find(e => !!e.clip);
+            const url = exc ? this.excerptResearchUrl(src.id, exc) : null;
+            return {
+                full: url ? { url, label: researchActionLabel(strings.research.fullQuality, researchLinkMark('excerpt')), title: strings.research.fullQualityTitle } : null,
+                archive: safeHttpUrl((exc ?? excerpts[0])?.pageUrl) ?? safeHttpUrl(src.url),
+            };
+        }
+        // A page of the research's media (M…): its original opens in the research.
+        const sha = page && /^M\d/.test(page.file) ? normalizeSha256(page.sha) : null;
+        const link = this.researchOriginalsLink();
+        const url = sha && link && this.researchLinkAvailable('media')
+            ? researchSchemeUrl('media', { tree: link.researchId, sha }, announcedResearchScheme()) : null;
+        return {
+            full: url ? { url, label: researchActionLabel(strings.research.fullQualityExternal, researchLinkMark('media')), title: strings.research.fullQualityTitle } : null,
+            archive: null,
+        };
+    },
+
+    readScanLinksHtml(page: ReadPage | null): string {
+        const { full, archive } = this.readScanLinks(page);
+        const parts = [
+            full ? `<button type="button" class="link-button read-scan-full" data-act="full-quality" title="${esc(full.title)}">${full.label}</button>` : '',
+            archive ? `<a class="read-scan-archive" href="${esc(archive)}" target="_blank" rel="noopener noreferrer">${esc(strings.sources.viewerOpenPage)} ↗</a>` : '',
+        ].filter(Boolean);
+        return parts.length ? `<div class="read-scan-links">${parts.join('')}</div>` : '';
     },
 
     /**
@@ -2512,6 +2550,12 @@ export const readDocumentMethods = uiModule({
             case 'entry': this.readSelectEntry(Number(el.dataset.entry)); break;
             case 'page': this.readSelectPage(Number(el.dataset.page)); break;
             case 'open-page': this.openReadPage(); break;
+            case 'full-quality': {
+                const res = st?.result;
+                const url = res ? this.readScanLinks(this.readShownPage(res)).full?.url : null;
+                if (url) this.launchResearchLink(url);
+                break;
+            }
             case 'copy': void this.copyReadTranscript(); break;
             case 'copy-source': void this.copySourceTranscript(); break;
             case 'gloss': this.toggleReadGloss(el); break;

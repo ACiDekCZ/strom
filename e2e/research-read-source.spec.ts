@@ -20,16 +20,16 @@ const CLIP = 'c0a1b2c3d4e';
 const CLIP2 = 'c5f6a7b8c9d';
 const RUNNING_ID = 'D20261106101500-c3d4';
 
-const excerpt = (clip: string): string[] => ['1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', `2 _STROM_CLIP ${clip}`, `2 FILE ${PNG}`];
+const excerpt = (clip: string, url = ''): string[] => ['1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', `2 _STROM_CLIP ${clip}`, ...(url ? [`2 _URL ${url}`] : []), `2 FILE ${PNG}`];
 
 /** The research's file: S0001 with its original in the research (`orig`) and its excerpts. */
-function ged(opts: { orig?: boolean; clips?: string[]; text?: string } = {}): string {
-    const extra = [...(opts.orig === false ? [] : ['1 _STROM_ORIG Y']), ...(opts.clips ?? [CLIP]).flatMap(excerpt)];
+function ged(opts: { orig?: boolean; clips?: string[]; text?: string; pageUrl?: string } = {}): string {
+    const extra = [...(opts.orig === false ? [] : ['1 _STROM_ORIG Y']), ...(opts.clips ?? [CLIP]).flatMap((c, i) => excerpt(c, i === 0 ? opts.pageUrl : ''))];
     const file = researchGed().replace('1 _STROM_READ research', ['1 _STROM_READ research', ...extra].join('\n'));
     return opts.text ? file.replace('1 TEXT Josef Fíšek a Anna', `1 TEXT ${opts.text}`) : file;
 }
 
-async function setup(page: Page, opts: { orig?: boolean; clips?: string[]; features?: string[]; ready?: boolean; links?: string[]; text?: string } = {}): Promise<FakeBridge> {
+async function setup(page: Page, opts: { orig?: boolean; clips?: string[]; features?: string[]; ready?: boolean; links?: string[]; text?: string; pageUrl?: string } = {}): Promise<FakeBridge> {
     const file = ged(opts);
     const b = await fakeBridge(page, {
         treeGed: file,
@@ -350,6 +350,37 @@ test.describe('Read a source again from its original', () => {
         await expect(legend.locator('.read-legend-place:visible')).toHaveCount(11);
         await expect(more).toHaveCount(0);
         await expect(legend.locator('.read-legend-sub')).toBeVisible();
+    });
+
+    test('under the scan: Full quality opens the excerpt in the research, the page opens in the archive', async ({ page }) => {
+        const PAGE_URL = 'https://archive.example/register/41';
+        const b = await setup(page, { links: ['send', 'open', 'live', 'app', 'setup', 'task', 'excerpt'], pageUrl: PAGE_URL });
+        await view(page);
+        const d = await openAgain(page, excerptAgain(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'same', variants: [] });
+        const links = d.locator('.read-scan-links');
+        await expect(links).toBeVisible();
+        const archive = links.locator('.read-scan-archive');
+        await expect(archive).toHaveText('Open the page in the archive ↗');
+        await expect(archive).toHaveAttribute('href', PAGE_URL);
+        await expect(archive).toHaveAttribute('target', '_blank');
+        const full = links.locator('.read-scan-full');
+        await expect(full).toHaveText('Full quality');
+        // The excerpt opens in the system's viewer through the research, no terminal: no mark.
+        await expect(full.locator('.research-open-mark')).toHaveCount(0);
+        await expect(d.locator('.read-scan-open')).toHaveCount(1);
+        await full.click();
+        await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links))
+            .toEqual([expect.stringMatching(new RegExp(`^strom-research://excerpt\\?tree=.+&source=S0001&clip=${CLIP}$`))]);
+    });
+
+    test('under the scan: no excerpt link announced and no page address, no links', async ({ page }) => {
+        const b = await setup(page);
+        await view(page);
+        const d = await openAgain(page, excerptAgain(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'same', variants: [] });
+        await expect(d.locator('.read-scan-box')).toBeVisible();
+        await expect(d.locator('.read-scan-links')).toHaveCount(0);
     });
 
     test('reader 2 read as reader 1, or no reader 2: nothing said of it', async ({ page }) => {
