@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, seedTree } from './helpers.js';
+import { openApp, seedSetting, seedTree } from './helpers.js';
 import { fakeBridge, fakePlaces, openResearch, poll, researchGed, HEAD, FakeBridge, FakePlaces } from './research-bridge.js';
 
 /**
@@ -153,7 +153,8 @@ test.describe('place identification in the Places dialog', () => {
         // The app's own check: Jinov lies far from the family's other places.
         await expect(row(page, 'Jinov')).toHaveAttribute('data-state', 'check');
         await expect(row(page, 'Jinov')).toHaveClass(/is-check/);
-        await expect(row(page, 'Jinov').locator('.place-pin-text')).toHaveText(/^\d+ km from the other places of the Brindak family in 1860–1878\.$/);
+        await expect(row(page, 'Jinov').locator('.place-pin-text'))
+            .toHaveText(/^\d+ km from the other places of the Brindak family in 1860–1878\. Possibly another place of the same name\.$/);
         await expect(row(page, 'Horní Lhota')).toHaveAttribute('data-state', 'none');
 
         // By state: Check first, then not identified, without a location, queued, placed.
@@ -342,6 +343,69 @@ test.describe('place identification in the Places dialog', () => {
         await expect(chip(page, 'check').locator('.places-chip-n')).toHaveText('1');
     });
 
+    test('Check: the location as it stands on the small map among the tree\'s places, before Keep or Change; only a place with a location', async ({ page }) => {
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+        await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+        await seedSetting(page, 'mapTiles', true);
+        const b = await research(page);
+        await openLive(page, b);
+        const r = row(page, 'Jinov');
+        // Only Jinov is in Check with a location: the one toggle, beside Keep and Change.
+        await expect(modal(page).locator('.place-checkmap-toggle')).toHaveCount(1);
+        await expect(row(page, 'Horní Lhota').locator('.place-checkmap-toggle')).toHaveCount(0);
+        await expect(row(page, 'Lhota').locator('.place-checkmap-toggle')).toHaveCount(0);
+        const toggle = r.locator('.place-pin-acts .place-checkmap-toggle');
+        await expect(r.locator('.place-pin-acts button').first()).toHaveText('Keep');
+        await expect(r.locator('.place-pin-acts button').last()).toHaveText('⌖ Show on the map');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(r.locator('.place-check-map')).toHaveCount(0);
+
+        await toggle.click();
+        await expect(toggle).toHaveText('⌖ Hide the map');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(toggle).toBeFocused();
+        const map = r.locator('.place-check-map');
+        await expect(map).toBeVisible();
+        await expect(map).toHaveAttribute('aria-label', 'The location on a map');
+        await expect(map.locator('.place-mini-legend')).toHaveText([/Jinov/, 'the tree’s other places']);
+        // The location now (ochre point) and the tree's other located places (Lhota, Lhotínek, Lhotov) as grey dots.
+        const now = map.locator('.place-mini-marks .place-mini-pin.is-now');
+        await expect(now).toHaveCount(1);
+        await expect(now).toHaveAttribute('title', 'Jinov');
+        await expect(map.locator('.place-mini-marks .place-mini-dot')).toHaveCount(3);
+        await expect.poll(() => map.locator('.map-tile').count()).toBeGreaterThan(0);
+        // Jinov lies east and north of the family's places: the point stands right of every dot, inside the map.
+        const at = await map.evaluate(el => {
+            const box = el.querySelector('.place-mini-map')!.getBoundingClientRect();
+            const c = (e: Element): { x: number; y: number } => { const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
+            return { box: { l: box.left, r: box.right, t: box.top, b: box.bottom }, now: c(el.querySelector('.is-now')!), dots: [...el.querySelectorAll('.place-mini-dot:not(.is-legend)')].map(c) };
+        });
+        expect(at.now.x).toBeGreaterThan(Math.max(...at.dots.map(d => d.x)));
+        expect(at.now.y).toBeLessThan(Math.min(...at.dots.map(d => d.y)));
+        for (const p of [at.now, ...at.dots]) {
+            expect(p.x).toBeGreaterThanOrEqual(at.box.l);
+            expect(p.x).toBeLessThanOrEqual(at.box.r);
+            expect(p.y).toBeGreaterThanOrEqual(at.box.t);
+            expect(p.y).toBeLessThanOrEqual(at.box.b);
+        }
+        // Nothing decided by opening it: still Check, the location unchanged.
+        await expect(r).toHaveAttribute('data-state', 'check');
+        expect(await page.evaluate(() => window.Strom.DataManager.getData().places?.jinov)).toMatchObject({ lat: 50.3, lon: 16.9 });
+
+        // A redraw of the dialog keeps it open; Hide closes it.
+        await page.evaluate(() => window.Strom.UI.refreshPlacesManager());
+        await expect(row(page, 'Jinov').locator('.place-check-map .place-mini-marks .place-mini-pin.is-now')).toHaveCount(1);
+        await row(page, 'Jinov').locator('.place-checkmap-toggle').click();
+        await expect(row(page, 'Jinov').locator('.place-check-map')).toHaveCount(0);
+        await expect(row(page, 'Jinov').locator('.place-checkmap-toggle')).toHaveText('⌖ Show on the map');
+
+        // Keep after looking: the mark goes and the toggle with it.
+        await row(page, 'Jinov').locator('.place-checkmap-toggle').click();
+        await row(page, 'Jinov').locator('.place-keep').click();
+        await expect(row(page, 'Jinov')).toHaveAttribute('data-state', 'placed');
+        await expect(modal(page).locator('.place-checkmap-toggle, .place-check-map')).toHaveCount(0);
+    });
+
     test('a place the research confirmed live at the same spot: Verified, no Check mark; a district named with its title gets no second one', async ({ page }) => {
         const b = await research(page);
         const reply = b.places!.reply;
@@ -416,6 +480,9 @@ for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
         // Why here opens inside the row.
         await row(page, 'Lhota').locator('.place-why-toggle').click();
         await expect(row(page, 'Lhota').locator('.place-why')).toBeVisible();
+        // The location to check on the small map, inside the row.
+        await row(page, 'Jinov').locator('.place-checkmap-toggle').click();
+        await expect(row(page, 'Jinov').locator('.place-check-map .place-mini-marks .place-mini-pin.is-now')).toBeVisible();
         const box = await page.evaluate(() => {
             const content = document.querySelector('#places-modal .modal-content') as HTMLElement;
             const rows = [...document.querySelectorAll<HTMLElement>('#places-modal .place-row[data-key]')].filter(r => r.offsetParent !== null);
