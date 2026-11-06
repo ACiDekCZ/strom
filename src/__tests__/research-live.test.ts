@@ -11,7 +11,7 @@ import {
 } from '../research-link.js';
 import {
     liveIdleBody, LIVE_STOP_BODY, liveIdleReply, liveStopReply, postLiveIdle, postLiveStop,
-    storedLiveState, noteLiveStatus, noteLiveEnded, liveEndKind,
+    storedLiveState, noteLiveStatus, noteLiveEnded, liveEndKind, liveFeaturesWord, newestLiveVersion,
 } from '../research-live.js';
 
 const UUID = '6f1d2c3b-4a5e-4f60-8172-93a4b5c6d7e8';
@@ -175,6 +175,43 @@ describe('what is remembered while the bridge is off', () => {
         expect(storedLiveState(UUID)!.ended).toEqual({ kind: 'idle', at: 2000 });
         noteLiveStatus(UUID, { features: ['live.stop'] });
         expect(storedLiveState(UUID)!.ended).toBeUndefined();
+    });
+
+    it('keeps the version that said the features, only when the status named its features', () => {
+        noteLiveStatus(UUID, { features: ['live.stop'], version: '1.28.0', update: { version: '1.29.0' } });
+        expect(storedLiveState(UUID)).toEqual({ features: ['live.stop'], version: '1.28.0', newer: '1.29.0' });
+        // An older research that names no features: its version says nothing about them.
+        noteLiveStatus(UUID, { features: null, version: '1.11.0', update: null });
+        expect(storedLiveState(UUID)).toEqual({ features: [] });
+        noteLiveStatus(UUID, { features: ['live.stop'], version: 'not a version' });
+        expect(storedLiveState(UUID)).toEqual({ features: ['live.stop'] });
+    });
+
+    it('the features are the research\'s word only with its version and nothing newer known (an update since: out of date)', () => {
+        const OTHER = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+        // Remembered before versions were (the store of 3.25.0-beta.2), or never said: not known.
+        localStorage.setItem(`strom-research-live:${UUID}`, JSON.stringify({ features: ['live.stop'] }));
+        expect(liveFeaturesWord(UUID)).toBe('unknown');
+        expect(liveFeaturesWord(OTHER)).toBe('unknown');
+        // Said by 1.28.0, nothing newer: a missing live.start is missing.
+        noteLiveStatus(UUID, { features: ['live.idle', 'live.stop'], version: '1.28.0', update: null });
+        expect(liveFeaturesWord(UUID)).toBe('said');
+        // Its own status said a newer research is out: it may have been updated since.
+        noteLiveStatus(UUID, { features: ['live.idle', 'live.stop'], version: '1.28.0', update: { version: '1.29.0' } });
+        expect(liveFeaturesWord(UUID)).toBe('stale');
+        // Another tree's bridge of the same install answered with a newer version.
+        noteLiveStatus(UUID, { features: ['live.idle', 'live.stop'], version: '1.28.0', update: null });
+        noteLiveStatus(OTHER, { features: ['live.idle', 'live.stop', 'live.start'], version: '1.29.0' });
+        expect(newestLiveVersion()).toBe('1.29.0');
+        expect(liveFeaturesWord(UUID)).toBe('stale');
+        expect(liveFeaturesWord(OTHER)).toBe('said');
+        // A second install (its own scheme) says nothing about this one.
+        noteLiveStatus(OTHER, { features: ['live.start'], version: '1.30.0-beta.1', linkScheme: 'strom-research-beta' });
+        expect(liveFeaturesWord(UUID)).toBe('said');
+        expect(newestLiveVersion('strom-research-beta')).toBe('1.30.0-beta.1');
+        // Its own answer after the update: the word again.
+        noteLiveStatus(UUID, { features: ['live.idle', 'live.stop', 'live.start'], version: '1.29.0' });
+        expect(liveFeaturesWord(UUID)).toBe('said');
     });
 
     it('reads nothing broken', () => {

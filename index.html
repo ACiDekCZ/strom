@@ -12017,6 +12017,9 @@
         .research-live-command button.research-live-copy { font-size: 12px; padding: 0 2px; margin: 0; min-height: 0; min-width: 0; width: auto; }
         @media (pointer: coarse) { .research-live-command button.research-live-copy { min-height: 44px; } }
         .live-panel-body > .research-live { margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        /* The idle panel while the research is off: "Switch on" and the command under it, after the panel's state line. */
+        .live-panel-body > .research-live--start { margin: 8px 0 0; padding-bottom: 0; border-bottom: 0; }
+        .research-live--start .research-live-row + .research-live-note { margin-top: 6px; }
         .research-live--manager { margin: 4px 0 0 18px; }
         .research-live--manager button.research-live-switch { font-size: 13px; min-height: 28px; }
         .research-live--manager .research-live-switch .view-link-switch__track { width: 34px; height: 20px; }
@@ -12042,7 +12045,7 @@
             .research-live-note { font-size: 11px; }
         }
         @media (pointer: coarse) {
-            .research-live--manager .research-live-switch { min-height: 44px; }
+            .research-live--manager .research-live-switch, .research-live-start { min-height: 44px; }
         }
 
         /* "Linked in the view only · n ×" over the view (the evidence pill's place, below it when both; JS sets --view-links-top). */

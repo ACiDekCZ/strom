@@ -4154,24 +4154,20 @@ export const researchUiMethods = uiModule({
         this.appendResearchElsewhere(panel, 'panel');
 
         const body = el('div', 'live-panel-body');
-        // "Research on" (spec 064): the open tree's bridge, first in the panel.
-        if (treeId) body.appendChild(this.researchLiveSlot(treeId, 'panel'));
         const o = strings.otherResearch;
         const answer = researchId && this.otherResearchEnabled() ? this.researchAnswerOf(researchId) : null;
         // Its bridge did not answer (not the browser's refusal): not running — no list to act on, how it reconnects (§5).
         const off = !!researchId && answer?.result === 'off' && this.researchModeOf(researchId) !== 'archive';
         panel.classList.toggle('is-off', off);
+        // "Research on" (spec 064): the open tree's bridge, first in the panel while it runs.
+        if (treeId && !off) body.appendChild(this.researchLiveSlot(treeId, 'idle'));
         if (off) {
             body.appendChild(el('p', 'live-panel-state', o.offPanel));
             const last = state ? waitingTodoCount(state.items) : 0;
-            const hint = el('p', 'live-panel-hint rs-off-hint');
-            if (last > 0) hint.appendChild(document.createTextNode(`${o.offLast(last, agoShort(state!.at, Date.now(), getCurrentLanguage()))} `));
-            const parts = o.offReconnect.split('strom app');
-            parts.forEach((part, i) => {
-                if (part) hint.appendChild(document.createTextNode(part));
-                if (i < parts.length - 1) hint.appendChild(el('code', undefined, 'strom app'));
-            });
-            body.appendChild(hint);
+            if (last > 0) body.appendChild(el('p', 'live-panel-hint rs-off-hint', o.offLast(last, agoShort(state!.at, Date.now(), getCurrentLanguage()))));
+            // Off: only "Switch on" (the quiet link) and under it the one command, in case the link does nothing.
+            if (treeId && this.researchLiveState(treeId)) body.appendChild(this.researchLiveSlot(treeId, 'start'));
+            else body.appendChild(this.researchLiveStartHow());
         } else {
             // Connected, nobody at work: how edits reach it follows the tree's send mode.
             const status = answer?.result === 'up' ? answer.status : null;

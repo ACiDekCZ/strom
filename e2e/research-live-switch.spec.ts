@@ -8,7 +8,11 @@ import { fakeBridge, openResearch, poll, links, UUID, type FakeBridge } from './
  * link `live?tree=…&do=start` (feature `live.start`, no mark); without the
  * features only the state and the command (nothing sent). Settings › Research
  * on this computer writes the choice (`POST /live {"idleMinutes"}`, feature
- * `live.idle`) or names the commands. A phone has no switch. Invented data.
+ * `live.idle`) or names the commands. A phone has no switch. The idle panel
+ * while the research is off has no switch: "Switch on" (the same link) and one
+ * command under it. Off, a missing `live.start` leaves only the command when
+ * the research said so as it is now (its version, nothing newer known); after
+ * an update the link is offered. Invented data.
  */
 
 const ALL = ['live.idle', 'live.stop', 'live.start'];
@@ -44,37 +48,63 @@ test.describe('Research on: the switch', () => {
         await expect(sw).not.toHaveAttribute('aria-disabled', 'true');
         await sw.click();
         await expect.poll(() => liveWrites(b)).toEqual([{ do: 'stop' }]);
-        await expect(panel.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'false');
-        await expect(panel.locator('.research-live-note')).toContainText('Switched off. It stays off until switched on again.', { timeout: 15_000 });
-        await expect(panel.locator('.research-live-busy')).toHaveCount(0);
-        // Its start link is known (live.start, links announced): no command, the switch does it.
-        await expect(panel.locator('.research-live-note code')).toHaveCount(0);
+        const off = page.locator('#live-panel.idle');
+        await expect(off.locator('.research-live-note')).toContainText('Switched off. It stays off until switched on again.', { timeout: 15_000 });
+        await expect(off.locator('.research-live-busy')).toHaveCount(0);
+        // Off in the idle panel: no switch, "Switch on" (live.start, links announced) and the one command under it.
+        await expect(off.getByRole('switch')).toHaveCount(0);
+        await expect(off.getByRole('button', { name: 'Switch on' })).toBeVisible();
+        await expect(off.locator('.research-live-note code')).toHaveText('strom live start');
         expect(await links(page)).toEqual([]);
     });
 
-    test('off: switched on by the quiet link (no mark), on once the bridge answers', async ({ page }) => {
+    test('off: the idle panel has "Switch on" and one command (no strom app); the quiet link (no mark), on once the bridge answers', async ({ page }) => {
         // It ran before (its status said the features and the links), then went.
         const b = await setup(page);
         b.down = true;
         await poll(page);
         const panel = await idlePanel(page);
-        const sw = panel.getByRole('switch', { name: 'Research on' });
-        await expect(sw).toHaveAttribute('aria-checked', 'false');
-        await sw.click();
-        expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
-        await expect(panel.locator('.research-live-busy')).toHaveText('Switching on…');
-        await expect(panel.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'true');
-        b.down = false;
-        await expect(panel.locator('.research-live-busy')).toHaveCount(0, { timeout: 15_000 });
-        await expect(panel.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'true');
-        // No terminal, no window: no mark on the switch.
+        await expect(panel).toHaveClass(/is-off/);
+        await expect(panel.getByRole('switch')).toHaveCount(0);
+        const on = panel.getByRole('button', { name: 'Switch on' });
+        await expect(on).toBeVisible();
+        await expect(panel.locator('.research-live-note')).toHaveText(/If nothing happens, in the terminal, in the tree’s folder: ?strom live start ?Copy$/);
+        await expect(panel.locator('.live-panel-body code')).toHaveText(['strom live start']);
+        await expect(panel).not.toContainText('strom app');
+        // No terminal, no window: no mark on the button.
         await expect(panel.locator('.research-live .research-open-mark, .research-live .ai-badge')).toHaveCount(0);
+        await on.click();
+        expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
+        await expect(panel.locator('.research-live-start')).toHaveText('Switching on…');
+        await expect(panel.locator('.research-live-start')).toBeDisabled();
+        b.down = false;
+        await expect(page.locator('#live-panel.idle').getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
+        await expect(page.locator('#live-panel.idle .research-live-busy')).toHaveCount(0);
+        await expect(page.locator('#live-panel.idle')).not.toHaveClass(/is-off/);
+    });
+
+    test('the command copied from the idle panel', async ({ page }) => {
+        const b = await setup(page);
+        // The clipboard recorded (granting it would take the page's other permissions away).
+        await page.evaluate(() => {
+            const w = window as unknown as { __copied: string[] };
+            w.__copied = [];
+            Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (t: string) => { w.__copied.push(t); return Promise.resolve(); } } });
+        });
+        b.down = true;
+        await poll(page);
+        const panel = await idlePanel(page);
+        await expect(panel).toHaveClass(/is-off/);
+        await panel.locator('.research-live-copy').click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual(['strom live start']);
+        await expect(page.locator('.toast', { hasText: 'Command copied.' })).toBeVisible();
     });
 
     test('off after a time without work vs. switched off: each its own word', async ({ page }) => {
         await setup(page, { down: true });
         await remember(page, { features: ALL, ended: { kind: 'idle', at: Date.now() } });
         const panel = await idlePanel(page);
+        await expect(panel).toHaveClass(/is-off/);
         await expect(panel.locator('.research-live-note')).toHaveText(/^Switched off after a time without work\. New work in the tree switches it on again\./);
         await remember(page, { features: ALL, ended: { kind: 'stopped', by: 'app', at: Date.now() } });
         await page.evaluate(() => window.Strom.UI.renderLivePanel());
@@ -82,7 +112,8 @@ test.describe('Research on: the switch', () => {
     });
 
     test('an older research: the state and the command only, nothing sent', async ({ page }) => {
-        const b = await setup(page, { features: [] });
+        // It says its version: its features are its word as it is now.
+        const b = await setup(page, { features: [], strom: '1.28.0' });
         const panel = await idlePanel(page);
         const sw = panel.getByRole('switch', { name: 'Research on' });
         await expect(sw).toHaveAttribute('aria-checked', 'true');
@@ -92,14 +123,70 @@ test.describe('Research on: the switch', () => {
         await expect(panel.locator('.research-live-note')).toContainText('switched off in the terminal');
         await expect(panel.locator('.research-live-note code')).toHaveText('strom live stop');
         await expect(sw).toHaveAttribute('aria-checked', 'true');
-        // Off, without live.start: how to switch it on, nothing handed over.
+        // Off, without live.start: how to switch it on, nothing to click in the panel.
         b.down = true;
         await poll(page);
-        await expect(panel.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'false');
-        await expect(panel.locator('.research-live-note code')).toHaveText('strom live start');
-        await panel.getByRole('switch', { name: 'Research on' }).click({ force: true });
+        await expect(page.locator('#live-panel.idle')).toHaveClass(/is-off/);
+        const off = page.locator('#live-panel.idle');
+        await expect(off.getByRole('button', { name: 'Switch on' })).toHaveCount(0);
+        await expect(off.locator('.research-live-note')).toContainText('Switched on in the terminal, in the tree’s folder:');
+        await expect(off.locator('.research-live-note code')).toHaveText('strom live start');
+        // The manager's switch: read-only, a click says the command, nothing handed over.
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = page.locator('#tree-manager-list .tree-manager-item').first();
+        const rowSwitch = row.getByRole('switch', { name: 'Research on' });
+        await expect(rowSwitch).toHaveAttribute('aria-checked', 'false');
+        await expect(rowSwitch).toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.research-live-note code')).toHaveText('strom live start');
+        await rowSwitch.click({ force: true });
         expect(await links(page)).toEqual([]);
         expect(livePosts(b)).toEqual([]);
+    });
+
+    test('after an update of the research: the old word without live.start offers the link; the answer says the features', async ({ page }) => {
+        // Its bridge last ran on 1.28.0 (no live.start), which said 1.29.0 is out; off since.
+        const b = await setup(page);
+        b.down = true;
+        await poll(page);
+        await remember(page, { features: ['live.idle', 'live.stop'], version: '1.28.0', newer: '1.29.0' });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = page.locator('#tree-manager-list .tree-manager-item').first();
+        const sw = row.getByRole('switch', { name: 'Research on' });
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await expect(sw).not.toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.research-live-note code')).toHaveCount(0);
+        await sw.click();
+        expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
+        await expect(row.locator('.research-live-busy')).toHaveText('Switching on…');
+        // The updated research answers: on, its features (and version) remembered for the next time it is off.
+        b.strom = '1.29.0';
+        b.down = false;
+        await expect(row.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
+        await expect(row.locator('.research-live-busy')).toHaveCount(0);
+        const kept = await page.evaluate((id) => JSON.parse(localStorage.getItem(`strom-research-live:${id}`) ?? '{}'), UUID);
+        expect(kept).toMatchObject({ features: ['live.idle', 'live.stop', 'live.start'], version: '1.29.0' });
+    });
+
+    test('off with the features remembered before versions were, or another tree\'s bridge newer: the link, not the command', async ({ page }) => {
+        const b = await setup(page);
+        b.down = true;
+        await poll(page);
+        // Remembered by 3.25.0-beta.2 (no version): not the research's word.
+        await remember(page, { features: ['live.idle', 'live.stop'] });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = page.locator('#tree-manager-list .tree-manager-item').first();
+        await expect(row.getByRole('switch', { name: 'Research on' })).not.toHaveAttribute('aria-disabled', 'true');
+        // Said by 1.28.0 and nothing newer known: read-only with the command.
+        await remember(page, { features: ['live.idle', 'live.stop'], version: '1.28.0' });
+        await page.evaluate(() => window.Strom.UI.refreshResearchLiveSwitches());
+        await expect(row.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.research-live-note code')).toHaveText('strom live start');
+        // Another tree's bridge (the same install) answered with 1.29.0: the research was updated.
+        await page.evaluate(() => localStorage.setItem('strom-research-live:0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+            JSON.stringify({ features: ['live.idle', 'live.stop', 'live.start'], version: '1.29.0' })));
+        await page.evaluate(() => window.Strom.UI.refreshResearchLiveSwitches());
+        await expect(row.getByRole('switch', { name: 'Research on' })).not.toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.research-live-note code')).toHaveCount(0);
     });
 
     test('a refusal of the bridge is said and the switch stays on', async ({ page }) => {

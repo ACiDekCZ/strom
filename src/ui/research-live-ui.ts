@@ -7,9 +7,18 @@
  * without work (`POST /live {"idleMinutes"}`, feature `live.idle`).
  *
  * Without a feature the switch only shows the state and says the command for
- * the terminal; nothing is sent. Phones and tablets have no switch (the
+ * the terminal; nothing is sent. While the bridge is off its features are
+ * those it last said: only when they are the research's word as it is now
+ * (`liveFeaturesWord`: said with its version, nothing newer known) does a
+ * missing `live.start` leave only the command; unknown or out of date (an
+ * update since), the start link is offered (an older research knows `live`
+ * as well) and its answer says the features. Phones and tablets have no switch (the
  * research runs on a computer). The state is the bridge's real one: it answers
  * (on) or not (off); how it ended is remembered per research for the text.
+ *
+ * The idle panel's slot while the research is off (`start`) has no switch:
+ * a "Switch on" button (the same link) and under it the one command for the
+ * terminal, in case the link does nothing.
  *
  * Every switch is drawn into a slot (`[data-research-live]`): the panels and
  * the manager place one, and each answer of a bridge redraws the slots whose
@@ -24,7 +33,7 @@ import {
     LIVE_IDLE_FEATURE, LIVE_START_FEATURE, LIVE_STOP_FEATURE, parseLiveBridge, researchSchemeUrl, type LiveStatus,
 } from '../research-link.js';
 import {
-    LIVE_IDLE_FOREVER, LIVE_IDLE_TWO_HOURS, liveEndKind, noteLiveEnded, noteLiveStatus, postLiveIdle, postLiveStop,
+    LIVE_IDLE_FOREVER, LIVE_IDLE_TWO_HOURS, liveEndKind, liveFeaturesWord, noteLiveEnded, noteLiveStatus, postLiveIdle, postLiveStop,
     storedLiveState, type LiveWriteRefusal,
 } from '../research-live.js';
 import { el, onComputer } from './research-ui.js';
@@ -106,6 +115,7 @@ export const researchLiveMethods = uiModule({
     /** Keep what a bridge says for its switch while it is off, and redraw the switches (once, at start). */
     initResearchLive(): void {
         onBridgeStatus((researchId: string, status: LiveStatus) => {
+            // With its version and a newer research out: the remembered features are its word only while nothing newer is known.
             noteLiveStatus(researchId, status);
             const p = pending.get(key(researchId));
             if (p?.kind === 'starting') pending.delete(key(researchId));
@@ -142,7 +152,9 @@ export const researchLiveMethods = uiModule({
         const stored = storedLiveState(rid);
         const features = on ? (answer?.status?.features ?? []) : (stored?.features ?? []);
         const canStop = features.includes(LIVE_STOP_FEATURE);
-        const canStart = features.includes(LIVE_START_FEATURE) && this.researchLinkAvailable('live');
+        // Off: the start link unless the research said, as it is now, that it has none (an update since may have brought it).
+        const startSaid = features.includes(LIVE_START_FEATURE) || (!on && liveFeaturesWord(rid) !== 'said');
+        const canStart = startSaid && this.researchLinkAvailable('live');
         return {
             on,
             pending: live?.kind ?? null,
@@ -153,10 +165,17 @@ export const researchLiveMethods = uiModule({
         };
     },
 
-    /** A slot for a tree's switch (filled now and on each answer). */
-    researchLiveSlot(treeId: string, where: 'panel' | 'manager'): HTMLElement {
-        const slot = el('div', `research-live research-live--${where}`);
+    /**
+     * A slot for a tree's switch (filled now and on each answer). `idle`: the
+     * idle panel's (first in it while the research runs), `start`: the same
+     * after the panel's state line while it is off; in both, off is a button and
+     * the command instead of the switch (also when it goes off in place).
+     */
+    researchLiveSlot(treeId: string, where: 'panel' | 'manager' | 'idle' | 'start'): HTMLElement {
+        const slot = el('div', where === 'manager' ? 'research-live research-live--manager'
+            : `research-live research-live--panel${where === 'start' ? ' research-live--start' : ''}`);
         slot.dataset.researchLive = treeId;
+        if (where === 'idle' || where === 'start') slot.dataset.variant = 'start';
         this.fillResearchLiveSlot(slot);
         return slot;
     },
@@ -180,6 +199,11 @@ export const researchLiveMethods = uiModule({
         slot.classList.toggle('is-on', !!state?.on);
         if (!state) return;
         const L = strings.researchLive;
+        if (slot.dataset.variant === 'start' && (!state.on || state.pending === 'starting')) {
+            this.fillResearchLiveStart(slot, treeId, state);
+            if (hadFocus) slot.querySelector<HTMLElement>('.research-live-start, .research-live-copy')?.focus({ preventScroll: true });
+            return;
+        }
         const checked = state.pending ? state.pending === 'starting' : state.on;
         const canAct = !state.pending && (state.on ? state.canStop : state.canStart);
         const row = slot.appendChild(el('div', 'research-live-row'));
@@ -217,6 +241,44 @@ export const researchLiveMethods = uiModule({
         }
         if (note.childNodes.length) slot.appendChild(note);
         if (hadFocus) slot.querySelector<HTMLElement>('.research-live-switch')?.focus({ preventScroll: true });
+    },
+
+    /**
+     * The idle panel while the research is off: "Switch on" (the quiet link) where the research
+     * can take it, and under it one command for the terminal (the failure's own word when it said one).
+     */
+    fillResearchLiveStart(slot: HTMLElement, treeId: string, state: SwitchState): void {
+        const L = strings.researchLive;
+        if (state.canStart || state.pending) {
+            const row = slot.appendChild(el('div', 'research-live-row'));
+            const btn = el('button', 'live-panel-action research-live-start', state.pending ? L.starting : L.startButton);
+            btn.type = 'button';
+            if (state.pending) {
+                btn.disabled = true;
+                btn.setAttribute('aria-busy', 'true');
+            }
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                void this.toggleResearchLive(treeId);
+            };
+            row.appendChild(btn);
+        }
+        const note = slot.appendChild(el('p', 'research-live-note'));
+        if (!state.pending) {
+            if (state.ended === 'idle') note.append(el('span', undefined, L.offIdle), ' ');
+            else if (state.ended === 'stopped') note.append(el('span', undefined, L.offStopped), ' ');
+        }
+        const said = state.note && !state.note.on ? state.note : null;
+        const text = said?.text ?? (state.canStart || state.pending ? L.startIfNothing : L.startHow);
+        note.append(el('span', said ? 'research-live-said' : undefined, text), ' ',
+            commandLine(said?.command ?? COMMAND_START, c => this.copyResearchLiveCommand(c)));
+    },
+
+    /** The command that switches a research on, as a line with its "Copy" (where no switch can show). */
+    researchLiveStartHow(): HTMLElement {
+        const p = el('p', 'research-live-note');
+        p.append(el('span', undefined, strings.researchLive.startHow), ' ', commandLine(COMMAND_START, c => this.copyResearchLiveCommand(c)));
+        return p;
     },
 
     /** Redraw the switches where they show, and Settings' choice when it is open. */

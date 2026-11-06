@@ -10,7 +10,12 @@
  *
  * A bridge that is off cannot be asked: what its research could do and how it
  * ended (switched off, or after a time without work) is remembered here per
- * research, on this device, from its last status and its `end` event.
+ * research, on this device, from its last status and its `end` event. The
+ * features remembered are the research's word only with the version that said
+ * them, and only while no newer research is known on this computer (a newer
+ * one out, or another bridge of the same install answering with a newer
+ * version): after an update the old word is out of date (see
+ * `liveFeaturesWord`).
  * Simple requests (text/plain JSON, no cookies) like the other writes; replies
  * typed; never throws.
  */
@@ -19,6 +24,7 @@ import {
     LIVE_IDLE_FEATURE, LIVE_START_FEATURE, LIVE_STOP_FEATURE, LIVE_IDLE_MAX, cleanText, researchLinkScheme, sanitizeLiveIdle,
     withAppVersion, DEFAULT_RESEARCH_SCHEME, type LiveIdle, type LiveStatus,
 } from './research-link.js';
+import { compareAppVersions, isAppVersion } from './app-version.js';
 
 export const LIVE_WRITE_TIMEOUT_MS = 15_000;
 /** The features of the switch, the only ones remembered. */
@@ -143,6 +149,10 @@ export interface LiveEnded {
 export interface StoredLiveState {
     /** The switch's features its last status named (`live.idle`, `live.stop`, `live.start`). */
     features: string[];
+    /** The research's version that named them (absent: not said — an older store, or a status without `features`). */
+    version?: string;
+    /** A newer research out, as that status said (`update.version`). */
+    newer?: string;
     /** Its link scheme (a second install); absent: the default. */
     scheme?: string;
     /** Its last `/status.live`. */
@@ -169,7 +179,12 @@ export function storedLiveState(researchId: string): StoredLiveState | null {
         const scheme = researchLinkScheme(r.scheme);
         const idle = sanitizeLiveIdle(r.idle);
         const ended = sanitizeEnded(r.ended);
-        return { features, ...(scheme !== DEFAULT_RESEARCH_SCHEME ? { scheme } : {}), ...(idle ? { idle } : {}), ...(ended ? { ended } : {}) };
+        const version = typeof r.version === 'string' && isAppVersion(r.version) ? r.version : '';
+        const newer = typeof r.newer === 'string' && isAppVersion(r.newer) ? r.newer : '';
+        return {
+            features, ...(version ? { version } : {}), ...(newer ? { newer } : {}),
+            ...(scheme !== DEFAULT_RESEARCH_SCHEME ? { scheme } : {}), ...(idle ? { idle } : {}), ...(ended ? { ended } : {}),
+        };
     } catch {
         return null;
     }
@@ -182,14 +197,22 @@ function writeLiveState(researchId: string, state: StoredLiveState): void {
 }
 
 /**
- * A status of the research's bridge: it runs. Its switch features, scheme and
- * idle choice are kept; how it ended before is forgotten (it is on again).
- * True: something remembered changed.
+ * A status of the research's bridge: it runs. Its switch features (with the
+ * version that said them, when it named its features at all), a newer
+ * research out, its scheme and idle choice are kept; how it ended before is
+ * forgotten (it is on again). True: something remembered changed.
  */
-export function noteLiveStatus(researchId: string, status: Pick<LiveStatus, 'features' | 'linkScheme' | 'live'>): boolean {
+export function noteLiveStatus(
+    researchId: string,
+    status: Pick<LiveStatus, 'features' | 'linkScheme' | 'live'> & Partial<Pick<LiveStatus, 'version' | 'update'>>,
+): boolean {
     const prev = storedLiveState(researchId);
+    const version = status.features && status.version && isAppVersion(status.version) ? status.version : '';
+    const newer = status.update?.version && isAppVersion(status.update.version) ? status.update.version : '';
     const next: StoredLiveState = {
         features: (status.features ?? []).filter(f => LIVE_FEATURES.includes(f)),
+        ...(version ? { version } : {}),
+        ...(newer ? { newer } : {}),
         ...(status.linkScheme && status.linkScheme !== DEFAULT_RESEARCH_SCHEME ? { scheme: status.linkScheme } : {}),
         ...(status.live ? { idle: status.live } : {}),
     };
@@ -207,4 +230,44 @@ export function noteLiveEnded(researchId: string, kind: LiveEnded['kind'], by?: 
 /** The `end` event's reason as the switch keeps it (`stopped` / `idle`); any other reason (a restart, gone) is not an end of this kind. */
 export function liveEndKind(reason: string): LiveEnded['kind'] | null {
     return reason === 'stopped' || reason === 'idle' ? reason : null;
+}
+
+/**
+ * How far the remembered features of a research's bridge (off now) are its word:
+ * - `said`: its last status named them with its version and nothing newer is
+ *   known — a feature missing there is missing (the switch only says the command);
+ * - `unknown`: no version said them (an older store, a status without `features`);
+ * - `stale`: a newer version is known on this computer for the same install
+ *   (its scheme): a newer research out as its status said, or another research's
+ *   bridge that answered with a newer version — it may have been updated since.
+ * Unknown and stale: the switch offers the start link (an older research knows
+ * `live` too and starts the bridge) and learns the features from its answer.
+ */
+export type LiveFeaturesWord = 'said' | 'unknown' | 'stale';
+
+export function liveFeaturesWord(researchId: string): LiveFeaturesWord {
+    const own = storedLiveState(researchId);
+    if (!own?.version) return 'unknown';
+    const scheme = own.scheme ?? DEFAULT_RESEARCH_SCHEME;
+    const newest = newestLiveVersion(scheme);
+    return newest && compareAppVersions(newest, own.version) > 0 ? 'stale' : 'said';
+}
+
+/** The newest research version this device knows for an install (its scheme): every bridge's status remembered, and a newer one out. */
+export function newestLiveVersion(scheme: string = DEFAULT_RESEARCH_SCHEME): string {
+    let newest = '';
+    const consider = (v: string | undefined): void => {
+        if (v && (!newest || compareAppVersions(v, newest) > 0)) newest = v;
+    };
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (!k?.startsWith(STORE_KEY)) continue;
+            const s = storedLiveState(k.slice(STORE_KEY.length));
+            if (!s || (s.scheme ?? DEFAULT_RESEARCH_SCHEME) !== scheme) continue;
+            consider(s.version);
+            consider(s.newer);
+        }
+    } catch { /* no storage: nothing newer known */ }
+    return newest;
 }

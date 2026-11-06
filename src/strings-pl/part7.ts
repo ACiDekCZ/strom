@@ -424,6 +424,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         offIdle: 'Wyłączyło się po czasie bez pracy. Nowa praca w drzewie włączy je ponownie.',
         offStopped: 'Wyłączone. Pozostanie wyłączone, dopóki nie zostanie włączone ponownie.',
         startHow: 'Włącza się je w terminalu, w folderze drzewa:',
+        startButton: 'Włącz',
+        startIfNothing: 'Jeśli nic się nie stanie, w terminalu, w folderze drzewa:',
         stopHow: 'Ta wersja badania wyłącza się w terminalu, w folderze drzewa:',
         startFailed: 'Badanie się nie włączyło. Można je włączyć także w terminalu, w folderze drzewa:',
         stopFailed: (reason: string) => `Nie udało się wyłączyć badania${reason ? ` (${reason})` : ''}.`,

@@ -194,7 +194,10 @@ test.describe('other research trees', () => {
         await expect(panel).toHaveClass(/is-off/);
         await expect(panel.locator('.live-panel-state')).toHaveText('Research not running right now. The tree can be edited; edits are sent once the research reconnects.');
         await expect(panel.locator('.rs-off-hint')).toContainText('Last time 2 items were waiting');
-        await expect(panel.locator('.rs-off-hint code')).toHaveText('strom app');
+        // How it comes back: "Switch on" and one command, no `strom app` (spec 064).
+        await expect(panel.locator('.rs-off-hint code')).toHaveCount(0);
+        await expect(panel.locator('.live-panel-body code')).toHaveText(['strom live start']);
+        await expect(panel.locator('.live-panel-body')).not.toContainText('strom app');
         await expect(panel.locator('.live-panel-heading-waiting')).toHaveCount(0);
         // Two other trees: "Other trees: 2", folded; waiting first, then by name.
         const sum = panel.locator('.rs-elsewhere__sum');
