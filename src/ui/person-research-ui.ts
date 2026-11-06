@@ -542,8 +542,10 @@ export const personResearchMethods = uiModule({
         const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('#person-modal .pm-conflict-tag')?.dataset.field ?? '';
         document.querySelectorAll('#person-modal .pm-conflict-tag').forEach(n => n.remove());
         const r = strings.research;
+        // Folded away is the titles' own group, not a closed dialog around it
+        // (a closed dialog is hidden too, and the form is marked before it shows).
         const titleInput = (id: string): string =>
-            document.getElementById(id)?.closest('[hidden]') ? 'input-firstname' : id;
+            document.getElementById(id)?.closest<HTMLElement>('.name-titles')?.hidden ? 'input-firstname' : id;
         const byInput = new Map<string, ResearchConflict[]>();
         for (const c of this.personOpenConflicts(personId)) {
             const fact = c.fact.toUpperCase();
