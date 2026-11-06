@@ -14,6 +14,9 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Obraz tylko w badaniu**: filtr i etykieta w *Źródłach* nazywają się *Obraz tylko w badaniu*, wiersz pod filtrem mówi, że obrazy są zapisane tylko w badaniu na tym komputerze i pokażą się w aplikacji po wczytaniu, a *?* otwiera *Jak działa Strom* na jego regule.
 - **Oś czasu życia**: linia byłego partnera kończy się przy rozwodzie albo rozstaniu ze znaną datą, zamiast biec do dziś. Owdowienie i rozwód bez daty zostają jak dotąd.
 - **Śledzenie badania**: pusty znacznik na mapie nazywa się *na razie bez osoby na mapie* zamiast *poza zakresem mapy*, legenda śledzenia stoi nad *Wstecz* także przed zgodą na podkład mapy, a późna odpowiedź badania po zakończeniu pracy agenta nie przywraca już znaku pracy.
+- **Pomoc w formularzach**: *?* przy *Inne formy imienia i nazwiska*, *Chrzestni i świadkowie* i przy tekście opowieści otwiera *Jak działa Strom* na regule tego pola zamiast okienka z długim tekstem. *?* do swojej reguły mają też *Odczyt dokumentu*, *Hipotezy* w *Co wie badanie*, podgląd wyszukiwania w badaniu miejsc spoza mapy i legenda śledzenia.
+- **Odczyt dokumentu**: gdy aplikacja agenta badania jest na komputerze, ale brak jego programu terminalowego, powód to mówi zamiast ogólnego *odczytu nie można teraz uruchomić*.
+- **Sprzeczności**: wartość zapisana przez badanie z pozostałością etykiety źródła na początku (np. *@s:*) pokazuje się bez etykiety.
 
 ## 3.24.0
 

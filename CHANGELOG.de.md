@@ -12,6 +12,9 @@
 - **Bild nur in der Forschung**: Filter und Etikett in *Quellen* heißen *Bild nur in der Forschung*, die Zeile unter dem Filter sagt, dass die Bilder nur in der Forschung auf diesem Computer gespeichert sind und in der App nach dem Laden erscheinen, und ein *?* öffnet *So funktioniert Strom* bei der Regel dazu.
 - **Lebenszeitleiste**: Die Linie eines früheren Partners endet bei einer datierten Scheidung oder Trennung, statt bis heute zu laufen. Verwitwung und eine Scheidung ohne Datum bleiben wie bisher.
 - **Forschung verfolgen**: Die hohle Markierung auf der Karte heißt *noch ohne Person auf der Karte* statt *außerhalb des Kartenumfangs*, die Legende des Verfolgens steht auch vor der Zustimmung zum Kartenhintergrund über *Zurück*, und eine späte Antwort der Forschung bringt nach dem Ende der Arbeit des Agenten das Arbeitszeichen nicht mehr zurück.
+- **Hilfe in Formularen**: Das *?* bei *Andere Schreibweisen des Namens*, *Paten & Zeugen* und beim Text der Erzählung öffnet *So funktioniert Strom* bei der Regel des Felds statt eines Fensters mit langem Text. Auch *Dokument lesen*, *Hypothesen* in *Was die Forschung weiß*, die Vorschau zum Nachschlagen von Orten ohne Kartenposition in der Forschung und die Legende des Verfolgens haben ein *?* zu ihrer Regel.
+- **Dokument lesen**: Ist die App des Agenten der Forschung auf dem Computer, sein Terminalprogramm aber nicht, sagt der Grund das statt des allgemeinen *Lesen kann gerade nicht starten*.
+- **Widersprüche**: Ein Wert, den die Forschung mit einem übrig gebliebenen Quellen-Etikett davor geschrieben hat (etwa *@s:*), erscheint ohne das Etikett.
 
 ## 3.24.0
 

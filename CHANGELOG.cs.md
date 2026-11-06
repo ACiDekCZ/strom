@@ -12,6 +12,9 @@
 - **Obraz jen ve výzkumu**: filtr a štítek v *Pramenech* se jmenují *Obraz jen ve výzkumu*, řádek pod filtrem říká, že obrazy jsou uložené jen ve výzkumu na tomto počítači a v aplikaci se ukážou po načtení, a *?* otevře *Jak Strom funguje* u jeho pravidla.
 - **Časová osa života**: čára bývalého partnera končí u rozvodu nebo rozchodu se známým datem a nevede až do dneška. Ovdovění a rozvod bez data zůstávají jako dřív.
 - **Sledování výzkumu**: dutá značka na mapě se jmenuje *zatím bez osoby na mapě* místo *mimo rozsah mapy*, legenda sledování stojí nad *Zpět* i před souhlasem s podkladem mapy a pozdní odpověď výzkumu po skončení práce agenta už nevrátí značku práce.
+- **Nápověda ve formulářích**: *?* u *Další tvary jména*, *Kmotři a svědci* a u textu vyprávění otevře *Jak Strom funguje* u pravidla toho pole místo okénka s dlouhým textem. *?* k pravidlu mají i *Přečíst dokument*, *Hypotézy* v *Co ví výzkum*, náhled dohledání míst mimo mapu ve výzkumu a legenda sledování.
+- **Přečíst dokument**: když je na počítači aplikace agenta výzkumu, ale chybí jeho program pro terminál, důvod to řekne místo obecného *čtení teď nejde spustit*.
+- **Rozpory**: hodnota, kterou výzkum zapsal se zbytkem štítku pramene na začátku (třeba *@s:*), se ukáže bez štítku.
 
 ## 3.24.0
 

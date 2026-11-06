@@ -12,6 +12,9 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Image only in the research**: the filter and the tag in *Sources* read *Image only in the research*, the line under the filter says the images are stored only in the research on this computer and show in the app once loaded, and a *?* opens *How Strom works* at its rule.
 - **Life timeline**: the line of a former partner ends at a dated divorce or separation instead of running on to today. A widowhood and a divorce without a date stay as they were.
 - **Following the research**: the hollow marker on the map is named *no person on the map yet* instead of *outside the map scope*, the follow legend stands above *Back* also before the map's background is agreed to, and a late answer of the research no longer brings back the working mark after the agent's work has ended.
+- **Help in forms**: the *?* at *Other spellings of the name*, *Godparents & witnesses* and the story's text opens *How Strom works* at the rule of that field instead of a popup with a long text. *Read a document*, *Hypotheses* in *What the research knows*, the preview of looking up places not on the map in the research and the follow legend have a *?* that opens their rule too.
+- **Read a document**: when the research agent's app is on the computer but its terminal program is not, the reason says so instead of the general *reading can’t start right now*.
+- **Conflicts**: a value the research wrote with a leftover source label in front of it (such as *@s:*) is shown without the label.
 
 ## 3.24.0
 
