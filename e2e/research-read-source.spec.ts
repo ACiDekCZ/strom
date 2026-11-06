@@ -210,6 +210,56 @@ test.describe('Read a source again from its original', () => {
         await expect(viewer(page).locator('.viewer-read-again-after')).toHaveCount(0);
     });
 
+    test('two parts of one page read (S1408): "Excerpt 1 / 2", each part framed with the entry on it; reader 2 says where it differed', async ({ page }) => {
+        const b = await setup(page);
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
+        const part = (n: number, region: number[]) => ({ n, file: 'M0001', sha: 'c'.repeat(64), name: 'S0001', page: 1, w: 600, h: 800, region, image: `read/${READ_ID}/page/${n}.jpg` });
+        b.read!.reads[0].state = 'done';
+        b.read!.results.set(READ_ID, {
+            ...result({ id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' }),
+            readers: { asked: 2, ran: 2, agree: 'differ', who: [
+                { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
+                { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', modelName: 'GPT-6-Astra', effort: 'xhigh', ran: true },
+            ] },
+            pages: [part(1, [0.03, 0.72, 0.45, 0.15]), part(2, [0.05, 0.77, 0.32, 0.17])],
+            entries: [{ id: 'e1', page: 1, region: [0.03, 0.72, 0.45, 0.2], transcript: 'Josef Fíšek a Anně\nAnno 1774', persons: [], events: [], relations: [],
+                variants: [{ at: 'Fíšek', other: 'Fišek' }, { at: 'Anno 1774', other: '' }] }],
+        });
+        await poll(page);
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        // Two parts of the same page: excerpts, not pages.
+        await expect(d.locator('.read-page-tab')).toHaveText(['Excerpt 1', 'Excerpt 2']);
+        await expect(d.locator('.read-scan-img')).toHaveAttribute('alt', 'Excerpt 1');
+        const region = d.locator('.read-view-region');
+        await expect(region).toHaveCount(1);
+        await expect(region).toHaveAttribute('style', /left:3%/);
+        await expect(d.locator('.read-frame')).toHaveCount(1);
+        // The second part: its own part framed, and the entry read on the same page still there.
+        await d.locator('.read-page-tab').nth(1).click();
+        await expect(d.locator('.read-page-tab.is-selected')).toHaveText('Excerpt 2');
+        await expect(region).toHaveAttribute('style', /left:5%/);
+        await expect(d.locator('.read-frame')).toHaveCount(1);
+        await expect(d.locator('.read-scan-var')).toHaveCount(2);
+        // The new reading is reader 1's text; reader 2 (independent) differed in the places marked amber.
+        await expect(d.locator('.read-source-variants .read-legend-who-line').last()).toContainText('New reading · Claude Code');
+        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(2);
+        await expect(d.locator('.read-source-second')).toHaveText(/^Reader 2 \(independent, Codex · GPT-6-Astra.*\) differed in 2 places – marked in the transcript\.$/);
+    });
+
+    test('reader 2 read as reader 1, or no reader 2: nothing said of it', async ({ page }) => {
+        const b = await setup(page);
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' });
+        await expect(d.locator('.read-source-note')).toBeVisible();
+        await expect(d.locator('.read-source-second')).toHaveCount(0);
+        await expect(d.locator('.read-page-tabs')).toHaveCount(0);
+        await expect(d.locator('.read-view-region')).toHaveCount(0);
+    });
+
     test('it differs: a task to check, not a conflict; its places with the marks; Open the task in the research', async ({ page }) => {
         const b = await setup(page);
         await view(page);

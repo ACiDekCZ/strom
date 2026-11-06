@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     sanitizeReadAccepts, sanitizeReads, sanitizeLiveRead, sanitizeReadResult, readFailure, retryAfter,
     readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
+    readViewNames, readSameSheet,
     readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
@@ -222,7 +223,7 @@ describe('GET read/<id>', () => {
         expect(r.id).toBe(ID);
         expect(r.doc).toEqual({ kind: 'register.baptism', language: ['la'], script: 'kurrent', date: '3. 4. 1846', legible: 'yes', why: null });
         expect(r.readers).toEqual({ asked: 2, ran: 2, agree: 'differ' });
-        expect(r.pages[0]).toEqual({ n: 1, file: 'I0042', sha: SHA, name: 'lhota.jpg', page: 1, w: 3024, h: 4032, image: `read/${ID}/page/1.jpg` });
+        expect(r.pages[0]).toEqual({ n: 1, file: 'I0042', sha: SHA, name: 'lhota.jpg', page: 1, w: 3024, h: 4032, region: null, image: `read/${ID}/page/1.jpg` });
         const e = r.entries[0];
         expect(e.transcript).toBe('Joannes[?] filius legitimus\nAntonii Nowak [...] Lhota');
         expect(e.variants).toEqual([{ at: 'Joannes[?]', other: 'Josephus' }]);
@@ -352,6 +353,29 @@ describe('the files a reading takes', () => {
     it('usual time: 3 minutes for one reader, 4 for two', () => {
         expect(readUsualMinutes(1)).toBe(3);
         expect(readUsualMinutes(2)).toBe(4);
+    });
+
+    it('views of one page read in parts are excerpts, other pages pages', () => {
+        const v = (n: number, sha: string, page: number, region: [number, number, number, number] | null) => ({ n, file: 'M1', sha, page, region });
+        const A = 'a'.repeat(64), B = 'b'.repeat(64);
+        // S1408: two parts of M29553's one page.
+        expect(readViewNames([v(1, A, 1, [0.03, 0.73, 0.45, 0.15]), v(2, A, 1, [0.05, 0.77, 0.32, 0.17])]))
+            .toEqual([{ sheet: 1, part: 1, sheets: 1 }, { sheet: 1, part: 2, sheets: 1 }]);
+        // Two parts of page 1 and page 2.
+        expect(readViewNames([v(1, A, 1, [0, 0, 1, 0.5]), v(2, A, 1, [0, 0.5, 1, 0.5]), v(3, B, 1, null)]))
+            .toEqual([{ sheet: 1, part: 1, sheets: 2 }, { sheet: 1, part: 2, sheets: 2 }, { sheet: 2, part: 0, sheets: 2 }]);
+        // A PDF's pages, a single part: pages.
+        expect(readViewNames([v(1, A, 1, null), v(2, A, 2, null), v(3, A, 3, [0, 0, 1, 1])]).map(x => x.part)).toEqual([0, 0, 0]);
+        expect(readSameSheet(v(1, A, 1, null), v(2, A, 1, null))).toBe(true);
+        expect(readSameSheet(v(1, A, 1, null), v(2, A, 2, null))).toBe(false);
+    });
+
+    it('a page read in part keeps its region', () => {
+        const r = sanitizeReadResult({ id: ID, state: 'done', pages: [
+            { n: 1, sha: SHA, file: 'M29553', page: 1, w: 5545, h: 4453, region: [0.027, 0.727, 0.445, 0.145] },
+            { n: 2, sha: SHA, file: 'M29553', page: 1, region: [2, 0, 1, 1] },
+        ] });
+        expect(r?.pages.map(p => p.region)).toEqual([[0.027, 0.727, 0.445, 0.145], null]);
     });
 
     it('a slow reader: its own time, and the several-minutes line from 120 s', () => {

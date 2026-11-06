@@ -378,6 +378,8 @@ export interface ReadPage {
     /** Size after rotation (px); 0 = not said. */
     w: number;
     h: number;
+    /** Only this part of the page was read (fractions of the whole page); null = the whole page. */
+    region: ReadRegion | null;
     /** The page as JPEG, relative to the bridge's `<base>/` ("read/<id>/page/<n>.jpg"); '' = none. */
     image: string;
 }
@@ -626,6 +628,7 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
             page: asCount(p.page) || 1,
             w: asCount(p.w) ?? 0,
             h: asCount(p.h) ?? 0,
+            region: region(p.region),
             image: pageImage(p.image),
         });
     }
@@ -1060,6 +1063,44 @@ export function readFileRefusals(files: { type: string; name: string; size: numb
         if (taken >= accepts.pages) return { kind: 'pages', pages: accepts.pages };
         taken++;
         return null;
+    });
+}
+
+/**
+ * The sheet a view of a reading shows: its file (sha, else the research's id) and the page within it.
+ * Two views of one sheet are two parts (regions) of the same picture.
+ */
+function readSheetKey(p: Pick<ReadPage, 'n' | 'file' | 'sha' | 'page'>): string {
+    return `${p.sha || p.file || `#${p.n}`}:${p.page}`;
+}
+
+/** Whether two views of a reading show the same picture (the same file and page). */
+export function readSameSheet(a: Pick<ReadPage, 'n' | 'file' | 'sha' | 'page'>, b: Pick<ReadPage, 'n' | 'file' | 'sha' | 'page'>): boolean {
+    return readSheetKey(a) === readSheetKey(b);
+}
+
+/**
+ * What each view of a reading is called: `sheet` its page among the document's different pictures (1-based),
+ * `part` its number among the parts (regions) read of that same picture, 0 when it is the only view of it
+ * or shows the whole picture. Two parts of one page are "Excerpt 1 / 2", not "Page 1 / 2".
+ */
+export function readViewNames(pages: readonly Pick<ReadPage, 'n' | 'file' | 'sha' | 'page' | 'region'>[]): { sheet: number; part: number; sheets: number }[] {
+    const sheets: string[] = [];
+    const parts = new Map<string, number>();
+    for (const p of pages) {
+        const key = readSheetKey(p);
+        if (!sheets.includes(key)) sheets.push(key);
+        if (p.region) parts.set(key, (parts.get(key) ?? 0) + 1);
+    }
+    const seen = new Map<string, number>();
+    return pages.map(p => {
+        const key = readSheetKey(p);
+        let part = 0;
+        if (p.region && (parts.get(key) ?? 0) >= 2) {
+            part = (seen.get(key) ?? 0) + 1;
+            seen.set(key, part);
+        }
+        return { sheet: sheets.indexOf(key) + 1, part, sheets: sheets.length };
     });
 }
 

@@ -24,6 +24,7 @@ import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } f
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
+    readSameSheet, readViewNames,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, readEndsToAnnounce, readSuperseded, READ_FEATURE,
     startSourceRead, readSourceId,
 } from '../research-read.js';
@@ -178,6 +179,12 @@ let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
 let drawnKey = '';
 /** Lays the result's scan out again when its box changes size. */
 let scanObserver: ResizeObserver | null = null;
+
+/** Each view's name on its tab: "Page 2", "Excerpt 1" (parts of the one page read), "Page 1 · excerpt 2" (mixed). */
+function readViewLabels(pages: readonly ReadPage[]): string[] {
+    const t = strings.read;
+    return readViewNames(pages).map(v => !v.part ? t.pageAlt(v.sheet) : v.sheets === 1 ? t.viewExcerpt(v.part) : t.pageExcerpt(v.sheet, v.part));
+}
 
 function esc(text: string): string {
     return text
@@ -1610,14 +1617,16 @@ export const readDocumentMethods = uiModule({
                     + ` aria-pressed="${k === s.entry}" aria-label="${esc(t.entrySr(k + 1, name))}"><span class="read-entry-n">${k + 1}</span>`
                     + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}</button>`;
             }).join('')}</div>` : '';
+        const names = readViewLabels(res.pages);
         const tabs = res.pages.length >= 2
-            ? `<div class="read-page-tabs" role="group">${res.pages.map(p =>
-                `<button type="button" class="read-page-tab${p.n === pageN ? ' is-selected' : ''}" data-act="page" data-page="${p.n}" aria-pressed="${p.n === pageN}">${esc(t.pageAlt(p.n))}</button>`).join('')}</div>`
+            ? `<div class="read-page-tabs" role="group">${res.pages.map((p, i) =>
+                `<button type="button" class="read-page-tab${p.n === pageN ? ' is-selected' : ''}" data-act="page" data-page="${p.n}" aria-pressed="${p.n === pageN}">${esc(names[i])}</button>`).join('')}</div>`
             : '';
+        const shownName = names[res.pages.findIndex(p => p.n === pageN)] ?? t.pageAlt(pageN);
         const url = page && base ? readPageImageUrl(base, page) : '';
         const ratio = page && page.w > 0 && page.h > 0 ? `${page.w} / ${page.h}` : '3 / 4';
         const img = url
-            ? `<img class="read-scan-img" src="${esc(url)}" alt="${esc(t.pageAlt(pageN))}" draggable="false">`
+            ? `<img class="read-scan-img" src="${esc(url)}" alt="${esc(shownName)}" draggable="false">`
             : `<span class="read-scan-noimg">${esc(t.noImage)}</span>`;
         const variants = (entries[s.entry]?.variants.length ?? 0) > 0;
         const hint = s.phase === 'result' && (entries.length >= 2 || variants) ? `<p class="read-scan-hint">${esc(t.scanHint(variants))}</p>` : '';
@@ -1626,7 +1635,7 @@ export const readDocumentMethods = uiModule({
                         <div class="read-scan-view" id="read-scan-view">
                             <div class="read-scan-sheet" id="read-scan-sheet" style="aspect-ratio: ${ratio}">
                                 ${img}
-                                <div class="read-scan-marks" id="read-scan-marks">${this.readScanMarksHtml(res, pageN)}</div>
+                                <div class="read-scan-marks" id="read-scan-marks">${this.readScanMarksHtml(res, page)}</div>
                             </div>
                         </div>
                         ${url ? `<button type="button" class="read-scan-open" data-act="open-page" aria-label="${esc(t.openPage)}" title="${esc(t.openPage)}"><span aria-hidden="true">⤢</span></button>` : ''}
@@ -1634,13 +1643,18 @@ export const readDocumentMethods = uiModule({
                     ${hint}`;
     },
 
-    /** The frames of the entries on a page (the chosen one solid), the lines that differ (amber), the shown line. */
-    readScanMarksHtml(res: ReadResult, pageN: number): string {
+    /**
+     * The part of the page this view read (its region, the rest dimmed), the frames of the entries on its
+     * picture (the chosen one solid; an entry of another part of the same page too), the lines that differ
+     * (amber), the shown line.
+     */
+    readScanMarksHtml(res: ReadResult, page: ReadPage | null): string {
         const s = st!;
         const t = strings.read;
         const many = res.entries.length >= 2;
+        const view = page?.region ? `<span class="read-view-clip" aria-hidden="true"><span class="read-view-region" style="${regionStyle(page.region)}"></span></span>` : '';
         const frames = res.entries.map((e, k) => {
-            if (e.page !== pageN || !e.region) return '';
+            if (!this.readEntryOnView(res, e, page) || !e.region) return '';
             const name = entryName(e);
             return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
                 + ` aria-label="${esc(t.entrySr(k + 1, name))}" aria-pressed="${k === s.entry}">`
@@ -1648,13 +1662,21 @@ export const readDocumentMethods = uiModule({
         }).join('');
         const entry = res.entries[s.entry];
         let lines = '';
-        if (entry?.region && entry.page === pageN) {
+        if (entry?.region && this.readEntryOnView(res, entry, page)) {
             const parsed = parseTranscript(entry);
             const n = parsed.lines.length;
             lines = parsed.lines.map((l, j) => l.variant
                 ? `<span class="read-scan-var" data-line="${j}" style="${regionStyle(lineRegion(entry.region!, j, n))}"></span>` : '').join('');
         }
-        return `${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
+        return `${view}${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
+    },
+
+    /** Whether an entry stands on the picture a view shows (its own view, or another part of the same page). */
+    readEntryOnView(res: ReadResult, e: ReadEntry, page: ReadPage | null): boolean {
+        if (!page) return false;
+        if (e.page === page.n) return true;
+        const own = res.pages.find(p => p.n === e.page);
+        return !!own && readSameSheet(own, page);
     },
 
     /** The text column: a partly legible note, then the sections the document's kind and its data give. */
@@ -1761,11 +1783,16 @@ export const readDocumentMethods = uiModule({
             `<li class="read-legend-who"><span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkOld)}" aria-hidden="true"></span>${esc(`${t.todayTr}: “${plainMarks(v.at)}”`)}</span>`
             + `<span class="read-legend-who-line"><span class="read-variant-mk" data-mk="${esc(t.mkNew)}" aria-hidden="true"></span>${esc(`${newBy}: “${plainMarks(v.other)}”`)}</span></li>`).join('') : '';
         const said = [t.srcAdded, differ ? t.srcTask : t.srcSupports, confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
+        // The new reading is reader 1's text; reader 2 (independent) checked it: where it read otherwise is amber in the transcript.
+        const vwho = this.readVariantWho(res);
+        const entry = res.entries[st?.entry ?? 0];
+        const marked = vwho && entry ? parseTranscript(entry).lines.reduce((n, l) => n + l.segs.filter(g => g.t === 'variant').length, 0) : 0;
         return `
                 <div class="read-source-note" role="note" data-agree="${cmp.agree}">
                     <p class="read-source-note-text"><strong>${esc(t.srcKept)}</strong> ${esc(said)}</p>
                     ${differ && cmp.task ? `<p class="read-source-task">${esc(t.srcTaskId(cmp.task))}</p>` : ''}
                     ${variants ? `<ul class="read-legend read-source-variants">${variants}</ul>` : ''}
+                    ${vwho && marked ? `<p class="read-source-second">${esc(t.secondDiffered(vwho.b, marked))}</p>` : ''}
                 </div>`;
     },
 
@@ -1896,7 +1923,7 @@ export const readDocumentMethods = uiModule({
         if (!el || !s?.result) return;
         const entry = s.result.entries[s.entry];
         const page = this.readShownPage(s.result);
-        if (j < 0 || !entry?.region || entry.page !== (page?.n ?? entry.page)) { el.hidden = true; return; }
+        if (j < 0 || !entry?.region || (page && !this.readEntryOnView(s.result, entry, page))) { el.hidden = true; return; }
         const parsed = parseTranscript(entry);
         el.hidden = false;
         el.setAttribute('style', regionStyle(lineRegion(entry.region, j, parsed.lines.length)));
@@ -1923,7 +1950,9 @@ export const readDocumentMethods = uiModule({
             return;
         }
         const entry = s.result.entries[s.entry];
-        const region = entry && entry.page === page?.n ? entry.region : null;
+        // The chosen entry's crop on its own view; on another part of the page that part (it is what that view read).
+        const region = (entry && entry.page === page?.n ? entry.region : null)
+            ?? page?.region ?? (entry && this.readEntryOnView(s.result, entry, page) ? entry.region : null);
         const c = cropLayout(region, view.clientWidth, view.clientHeight, ratio || 0.75);
         sheet.style.width = `${c.width}px`;
         sheet.style.height = `${c.height}px`;
@@ -1931,10 +1960,14 @@ export const readDocumentMethods = uiModule({
         sheet.style.top = `${c.top}px`;
     },
 
-    /** Beside the text: scroll the page so the chosen entry's frame shows. */
+    /** Beside the text: scroll the page so the chosen entry's frame shows (on another part of its page: that part). */
     readScrollScanToEntry(): void {
         const view = document.getElementById('read-scan-view');
-        const frame = view?.querySelector<HTMLElement>('.read-frame.is-selected');
+        const res = st?.result;
+        const page = res ? this.readShownPage(res) : null;
+        const entry = res?.entries[st!.entry];
+        const part = entry && page && entry.page !== page.n ? view?.querySelector<HTMLElement>('.read-view-region') : null;
+        const frame = part ?? view?.querySelector<HTMLElement>('.read-frame.is-selected');
         if (!view || !frame || view.classList.contains('is-strip')) return;
         const v = view.getBoundingClientRect();
         const f = frame.getBoundingClientRect();

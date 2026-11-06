@@ -15709,6 +15709,9 @@
         .read-scan-img { display: block; width: 100%; height: 100%; user-select: none; }
         .read-scan-noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: center; font-size: 13px; color: var(--text-faint); }
         .read-scan-marks { position: absolute; inset: 0; }
+        /* The part of the page a view read (a reading of excerpts): the rest of the page dimmed. */
+        .read-view-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+        .read-view-region { position: absolute; border: 1.5px solid var(--text-light); border-radius: 3px; box-shadow: 0 0 0 100vmax rgba(20, 16, 8, 0.32); }
         .read-frame {
             position: absolute; margin: 0; padding: 0 !important; border: 1.5px dashed var(--primary); border-radius: 3px;
             background: transparent; box-shadow: none; cursor: pointer; min-height: 0; min-width: 0;
@@ -15867,6 +15870,7 @@
         }
         .read-source-note-text { margin: 0; }
         .read-source-task { margin: 4px 0 0; font-size: 12.5px; color: var(--text-light); }
+        .read-source-second { margin: 6px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
         .read-source-variants { margin: 8px 0 0; }
         @media (pointer: coarse) {
             .modal .viewer-read-again, .modal .viewer-read-again-show, .modal .viewer-read-again-result { min-height: 44px; }
