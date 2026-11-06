@@ -2,6 +2,15 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.25.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Dohledání míst ve výzkumu z mapy**: u stromu s výzkumem nabízí lišta mapy vedle dohledání mapou i *Ve výzkumu* (AI). Otevře stejný náhled a *Zařadit* jako *Místa*, pro místa bez polohy, na kterých výzkum ještě nepracuje, a před *Zařadit* se nic nezařadí. Když mapa některá místa nenajde, lišta to řekne a nabídne dohledání ve výzkumu; nabízí ho i sledované místo bez polohy. S výzkumem na jiném počítači nebo na telefonu tlačítko řekne, kde se to dělá.
+- **Obraz jen ve výzkumu**: filtr a štítek v *Pramenech* se jmenují *Obraz jen ve výzkumu*, řádek pod filtrem říká, že obrazy jsou uložené jen ve výzkumu na tomto počítači a v aplikaci se ukážou po načtení, a *?* otevře *Jak Strom funguje* u jeho pravidla.
+- **Časová osa života**: čára bývalého partnera končí u rozvodu nebo rozchodu se známým datem a nevede až do dneška. Ovdovění a rozvod bez data zůstávají jako dřív.
+- **Sledování výzkumu**: dutá značka na mapě se jmenuje *zatím bez osoby na mapě* místo *mimo rozsah mapy*, legenda sledování stojí nad *Zpět* i před souhlasem s podkladem mapy a pozdní odpověď výzkumu po skončení práce agenta už nevrátí značku práce.
+
 ## 3.24.0
 
 *Vydáno 6. listopadu 2026.*

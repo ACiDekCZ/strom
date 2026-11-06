@@ -2,6 +2,15 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.25.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Orte in der Forschung nachschlagen, von der Karte aus**: Bei einem Baum mit Forschung bietet die Statusleiste der Karte neben dem Nachschlagen der Karte auch *In der Forschung* (KI). Es öffnet dieselbe Vorschau und *Vormerken* wie *Orte*, für Orte ohne Position, an denen die Forschung noch nicht arbeitet, und vor *Vormerken* wird nichts vorgemerkt. Findet die Karte einige Orte nicht, sagt die Leiste das und bietet das Nachschlagen in der Forschung an; auch ein verfolgter Ort ohne Position bietet es an. Mit der Forschung auf einem anderen Computer oder auf einem Telefon sagt die Schaltfläche, wo es geht.
+- **Bild nur in der Forschung**: Filter und Etikett in *Quellen* heißen *Bild nur in der Forschung*, die Zeile unter dem Filter sagt, dass die Bilder nur in der Forschung auf diesem Computer gespeichert sind und in der App nach dem Laden erscheinen, und ein *?* öffnet *So funktioniert Strom* bei der Regel dazu.
+- **Lebenszeitleiste**: Die Linie eines früheren Partners endet bei einer datierten Scheidung oder Trennung, statt bis heute zu laufen. Verwitwung und eine Scheidung ohne Datum bleiben wie bisher.
+- **Forschung verfolgen**: Die hohle Markierung auf der Karte heißt *noch ohne Person auf der Karte* statt *außerhalb des Kartenumfangs*, die Legende des Verfolgens steht auch vor der Zustimmung zum Kartenhintergrund über *Zurück*, und eine späte Antwort der Forschung bringt nach dem Ende der Arbeit des Agenten das Arbeitszeichen nicht mehr zurück.
+
 ## 3.24.0
 
 *Veröffentlicht am 6. November 2026.*

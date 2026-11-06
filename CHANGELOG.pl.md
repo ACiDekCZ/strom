@@ -4,6 +4,15 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.25.0
+
+*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+
+- **Wyszukiwanie miejsc w badaniu z mapy**: przy drzewie z badaniem pasek mapy oferuje obok wyszukiwania mapą także *W badaniu* (AI). Otwiera ten sam podgląd i *Dodaj do kolejki* co *Miejsca*, dla miejsc bez położenia, nad którymi badanie jeszcze nie pracuje, a przed *Dodaj do kolejki* nic nie trafia do kolejki. Gdy mapa nie znajdzie niektórych miejsc, pasek to mówi i proponuje wyszukanie w badaniu; proponuje je też śledzone miejsce bez położenia. Z badaniem na innym komputerze albo na telefonie przycisk mówi, gdzie to zrobić.
+- **Obraz tylko w badaniu**: filtr i etykieta w *Źródłach* nazywają się *Obraz tylko w badaniu*, wiersz pod filtrem mówi, że obrazy są zapisane tylko w badaniu na tym komputerze i pokażą się w aplikacji po wczytaniu, a *?* otwiera *Jak działa Strom* na jego regule.
+- **Oś czasu życia**: linia byłego partnera kończy się przy rozwodzie albo rozstaniu ze znaną datą, zamiast biec do dziś. Owdowienie i rozwód bez daty zostają jak dotąd.
+- **Śledzenie badania**: pusty znacznik na mapie nazywa się *na razie bez osoby na mapie* zamiast *poza zakresem mapy*, legenda śledzenia stoi nad *Wstecz* także przed zgodą na podkład mapy, a późna odpowiedź badania po zakończeniu pracy agenta nie przywraca już znaku pracy.
+
 ## 3.24.0
 
 *Wydano 6 listopada 2026.*
