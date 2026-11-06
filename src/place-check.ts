@@ -143,6 +143,8 @@ interface FamilyContext {
     years: [number, number];
     /** The family's other located places counted (one point each). */
     points: { lat: number; lon: number }[];
+    /** Their placeKeys, in the order of `points`. */
+    keys: string[];
 }
 
 /** Needs at least this many other places of the family to say anything. */
@@ -162,11 +164,13 @@ function familyContexts(key: string, facts: FactIndex, places: Record<string, Pl
             && own.some(o => Math.abs(o.year! - f.year!) <= PLACE_YEARS));
         if (new Set(refs.map(r => r.key)).size < MIN_OTHER_PLACES) continue;
         const years = refs.map(r => r.year!);
+        const keys = [...new Set(refs.map(r => r.key))];
         out.push({
             family,
             median: { lat: median(refs.map(r => places[r.key].lat)), lon: median(refs.map(r => places[r.key].lon)) },
             years: [Math.min(...years), Math.max(...years)],
-            points: [...new Set(refs.map(r => r.key))].map(k => places[k]),
+            points: keys.map(k => places[k]),
+            keys,
         });
     }
     return out;
@@ -413,6 +417,18 @@ export function checkCandidate(
 ): CheckFinding[] {
     const places = data.places ?? {};
     return findingsFor(data, key, { ...candidate, origin: 'map' }, checkFacts(data), places);
+}
+
+/**
+ * The family's places of a place, as the check measures by them (§5): the
+ * other located places of each family with facts here, within ±PLACE_YEARS
+ * of those facts. Empty when no family has enough of them to say anything
+ * (the search then measures by the whole tree).
+ */
+export function familyPlaceKeys(data: StromData, key: string): Set<string> {
+    const out = new Set<string>();
+    for (const ctx of familyContexts(key, checkFacts(data), data.places ?? {})) for (const k of ctx.keys) out.add(k);
+    return out;
 }
 
 /**

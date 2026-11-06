@@ -126,6 +126,10 @@ export function dotsHtml(tree: readonly FindTreePoint[], view: SmallMapView, wid
     }).join('');
 }
 
+/** The colour of a result's letter: warned (ochre), near the other places (primary), else plain (grey). */
+type PlaceResultTone = 'plain' | 'near' | 'warn';
+const placeResultTone = (r: FindResult): PlaceResultTone => (r.warnings.length ? 'warn' : r.near ? 'near' : 'plain');
+
 /** Today's date as a location is stamped with it. */
 const DATE_NOW = (): Date => new Date();
 
@@ -200,7 +204,7 @@ export const placesFindMethods = uiModule({
             : '';
         const rows = list.map((r, i) => {
             const t = findResultTexts(r, lang);
-            const tone = r.warnings.length ? 'warn' : r.near ? 'near' : 'plain';
+            const tone = placeResultTone(r);
             return `
                 <button type="button" class="place-candidate place-result" data-index="${i}" data-tone="${tone}">
                     <span class="place-result-letter" aria-hidden="true">${r.letter}</span>
@@ -216,12 +220,17 @@ export const placesFindMethods = uiModule({
                     </span>
                 </button>`;
         }).join('');
+        // What the colours of the letters say (the same on the small map), only those shown.
+        const tones = new Set(list.map(placeResultTone));
+        const legendText: Record<PlaceResultTone, string> = { plain: d.legendPlain, near: d.legendNear, warn: d.legendWarn };
+        const legend = `<p class="place-result-legend">${(['plain', 'near', 'warn'] as const).filter(t => tones.has(t))
+            .map(t => `<span class="place-result-legend-item"><span class="place-result-swatch" data-tone="${t}" aria-hidden="true"></span>${esc(legendText[t])}</span>`).join('')}</p>`;
         results.innerHTML = `
             <div class="place-found">
                 ${tried}
                 <button type="button" class="link place-mini-toggle" aria-expanded="false">⌖ ${esc(d.showOnMap)}</button>
                 <div class="place-found-body">
-                    <div class="place-found-list">${rows}</div>
+                    <div class="place-found-list">${rows}${legend}</div>
                     <div class="place-mini" role="group" aria-label="${esc(d.miniLabel)}">
                         <div class="place-mini-map"><div class="place-mini-tiles"></div><div class="place-mini-marks"></div></div>
                         <span class="place-mini-legend"><span class="place-mini-dot is-legend" aria-hidden="true"></span>${esc(d.miniLegend)}</span>
@@ -256,7 +265,7 @@ export const placesFindMethods = uiModule({
         const esc = (s: string): string => this.escapeHtml(s);
         const pins = list.map((r, i) => {
             const at = pointInViewport(r.candidate.geo, view.center, view.zoom, width, height);
-            const tone = r.warnings.length ? 'warn' : r.near ? 'near' : 'plain';
+            const tone = placeResultTone(r);
             return `<button type="button" class="place-mini-pin" data-index="${i}" data-tone="${tone}" style="left:${at.x.toFixed(1)}px;top:${at.y.toFixed(1)}px" title="${esc(r.name)}" aria-label="${esc(`${r.letter}: ${r.name}`)}">${r.letter}</button>`;
         }).join('');
         const marks = el.querySelector('.place-mini-marks') as HTMLElement;

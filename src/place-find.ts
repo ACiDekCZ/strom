@@ -15,7 +15,7 @@
 import type { PlaceGeo, StromData } from './types.js';
 import type { FormCandidate, GeocodeCandidate, HitKind } from './geocode.js';
 import { hitKind, hitLabelParts } from './geocode.js';
-import { checkCandidate, distanceKm, nearOthers, PLACE_FAR_KM, type CheckFinding } from './place-check.js';
+import { checkCandidate, distanceKm, familyPlaceKeys, nearOthers, PLACE_FAR_KM, type CheckFinding } from './place-check.js';
 import { checkFindingText } from './places-dialog.js';
 import { placeGeoHash } from './place-records.js';
 import { getStringsForLang, type Language } from './strings.js';
@@ -115,7 +115,11 @@ export function compassDir(from: { lat: number; lon: number }, to: { lat: number
     return Math.round(deg / 45) % 8;
 }
 
-/** How far a result lies (undefined when the tree has no other located place). */
+/**
+ * How far a result lies (undefined when the tree has no other located
+ * place), from `tree`: the places it is measured by (the family's places of
+ * the place, else the whole tree; findResults picks them).
+ */
 export function findDistance(at: { lat: number; lon: number }, tree: readonly FindTreePoint[], warnings: readonly CheckFinding[]): FindDistance | undefined {
     const far = warnings.find((w): w is Extract<CheckFinding, { kind: 'far' }> => w.kind === 'far');
     if (far) return { kind: 'family', km: far.km };
@@ -140,13 +144,25 @@ function nameAndWhere(c: GeocodeCandidate): { name: string; where: string } {
 }
 
 /**
- * The results: every candidate checked (§5) and measured, ordered near the
+ * The places a result is measured by: the family's places of the place, as
+ * the check measures (§5) — a result beside another branch's village is not
+ * "near" for this family — else, with no family to say it by, the whole tree.
+ */
+export function measureTreePoints(data: StromData, key: string, tree: readonly FindTreePoint[]): readonly FindTreePoint[] {
+    const family = familyPlaceKeys(data, key);
+    const own = tree.filter(p => family.has(p.key));
+    return own.length ? own : tree;
+}
+
+/**
+ * The results: every candidate checked (§5) and measured (measureTreePoints), ordered near the
  * other places → towns → parts of towns → streets → the rest, the warned
  * ones last (each part in the order the map gave them), at most FIND_MAX,
  * lettered A–E.
  */
 export function findResults(input: FindInput): FindResult[] {
     const typed = input.query.trim().toLocaleLowerCase();
+    const by = measureTreePoints(input.data, input.key, input.tree);
     const all = input.found.map((f, index) => {
         const c = f.candidate;
         const warnings = checkCandidate(input.data, input.key, c.geo);
@@ -159,7 +175,7 @@ export function findResults(input: FindInput): FindResult[] {
             name,
             kind: hitKind(c),
             where,
-            distance: findDistance(c.geo, input.tree, warnings),
+            distance: findDistance(c.geo, by, warnings),
             near: nearOthers(input.data, input.key, c.geo),
             warnings,
         };
@@ -194,7 +210,10 @@ export interface FindResultTexts {
     distance: string;
     /** "found as Horní Lhota"; '' when found as typed. */
     foundAs: string;
-    /** The check's first reason; '' when nothing looks odd. */
+    /**
+     * The check's first reason; '' when nothing looks odd. Far from the family
+     * or in another district: it may be another place of the same name.
+     */
     warning: string;
 }
 
@@ -202,6 +221,7 @@ export function findResultTexts(r: FindResult, lang: Language): FindResultTexts 
     const s = getStringsForLang(lang);
     const d = s.places.dialog;
     const dist = r.distance;
+    const w = r.warnings[0];
     return {
         sub: [s.map.hitKind(r.kind), r.where].filter(Boolean).join(' · '),
         distance: !dist ? ''
@@ -209,7 +229,7 @@ export function findResultTexts(r: FindResult, lang: Language): FindResultTexts 
                 : dist.kind === 'at' ? d.kmAt(dist.to)
                     : d.kmFrom(dist.km, dist.to),
         foundAs: r.foundAs ? d.foundAs(r.foundAs) : '',
-        warning: r.warnings[0] ? checkFindingText(r.warnings[0], lang) : '',
+        warning: !w ? '' : w.kind === 'far' || w.kind === 'district' ? `${checkFindingText(w, lang)} ${d.checkSameName}` : checkFindingText(w, lang),
     };
 }
 

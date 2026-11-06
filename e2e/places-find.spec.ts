@@ -67,7 +67,7 @@ async function stubRefusedTiles(page: Page): Promise<void> {
 }
 
 /** The Lhoták family around Lhota: Lhota, Lhotov and Jinov on the map; H. Lhota and Lhotínek not. */
-async function seed(page: Page, opts: { refusedTiles?: boolean } = {}): Promise<void> {
+async function seed(page: Page, opts: { refusedTiles?: boolean; branch?: boolean } = {}): Promise<void> {
     await seedSetting(page, 'geocoding', true);
     if (opts.refusedTiles) {
         await stubRefusedTiles(page);
@@ -82,18 +82,27 @@ async function seed(page: Page, opts: { refusedTiles?: boolean } = {}): Promise<
         c: { firstName: 'Yarek', lastName: 'Lhoták', birthDate: '1850', birthPlace: 'H. Lhota' },
         d: { firstName: 'Orvel', lastName: 'Lhoták', birthDate: '1860', birthPlace: 'Jinov' },
         e: { firstName: 'Myrtan', lastName: 'Lhoták', birthDate: '1855', birthPlace: 'Lhotínek' },
+        // Another branch, 40 km north: the Zlamtek family at Hrubovec and Hrubovka.
+        ...(opts.branch ? {
+            f: { firstName: 'Kvetula', lastName: 'Zlamtek', gender: 'female', birthDate: '1850', birthPlace: 'Hrubovec' },
+            g: { firstName: 'Orvel', lastName: 'Zlamtek', birthDate: '1852', birthPlace: 'Hrubovka' },
+        } : {}),
     } as never, 'Lhoták');
-    await page.evaluate(() => {
+    await page.evaluate((branch) => {
         const S = window.Strom;
         S.DataManager.getData().places = {
             lhota: { lat: 49.6, lon: 15.2, label: 'Lhota, okres Jinov, Česko' },
             lhotov: { lat: 49.564, lon: 15.2, label: 'Lhotov, okres Jinov, Česko' },
             jinov: { lat: 49.654, lon: 15.2, label: 'Jinov, okres Jinov, Česko' },
+            ...(branch ? {
+                hrubovec: { lat: 50.0, lon: 15.2, label: 'Hrubovec, okres Brodnice, Česko' },
+                hrubovka: { lat: 50.02, lon: 15.2, label: 'Hrubovka, okres Brodnice, Česko' },
+            } : {}),
         };
         S.TreeRenderer.render();
         S.UI.dismissUndoToast();
         document.querySelectorAll('.toast').forEach(t => t.remove());
-    });
+    }, !!opts.branch);
 }
 
 const modal = (page: Page): Locator => page.locator('#places-modal');
@@ -138,14 +147,18 @@ test.describe('Find on the map', () => {
         await expect(a).toHaveAttribute('data-tone', 'near');
         await expect(a.locator('.place-result-letter')).toHaveText('A');
         await expect(a.locator('.place-candidate-sub')).toHaveText('town · okres Lhotov, Česko');
-        await expect(a.locator('.place-result-km')).toContainText('2 km from Lhota');
+        // Measured by the family's places around 1850 (Lhotov, Jinov), as the check measures.
+        await expect(a.locator('.place-result-km')).toContainText('5 km from Jinov');
         await expect(a.locator('.place-result-near')).toHaveText('⌖ near the other places');
         await expect(a.locator('.place-result-as')).toHaveText('found as Horní Lhota');
 
         // B: the far one, at the bottom with the check's reason.
         const b = results.nth(1);
         await expect(b).toHaveAttribute('data-tone', 'warn');
-        await expect(b.locator('.place-result-warn')).toHaveText(/^! 1\d\d km from the other places of the Lhoták family/);
+        await expect(b.locator('.place-result-warn')).toHaveText(/^! 1\d\d km from the other places of the Lhoták family in 1840–1860\. Possibly another place of the same name\.$/);
+        // What the colours say: the ones shown.
+        await expect(r.locator('.place-result-legend-item')).toHaveText(['no warning, near the other places', 'a warning, its reason under the result']);
+        await expect(r.locator('.place-result-swatch')).toHaveCount(2);
         await expect(b.locator('.place-result-near')).toHaveCount(0);
 
         // The small map: the tree's places grey, the results lettered.
@@ -165,6 +178,25 @@ test.describe('Find on the map', () => {
         expect(geo?.at).toMatch(/^\d{4}-\d\d-\d\d$/);
         await expect(row(page, 'H. Lhota')).not.toHaveAttribute('data-state', 'check');
         await expect(row(page, 'H. Lhota').locator('.place-pin-state')).toContainText('Placed by hand');
+    });
+
+    test('beside another branch’s village: measured by the family’s places, grey with its legend, not near (1106)', async ({ page }) => {
+        const BRANCH: Hit = {
+            lat: '50.01', lon: '15.2', display_name: 'Horní Lhota, okres Brodnice, Česko', addresstype: 'village',
+            address: { village: 'Horní Lhota', county: 'okres Brodnice', country: 'Česko' },
+        };
+        await stubGeocoder(page, { 'Horní Lhota': [BRANCH] });
+        await seed(page, { branch: true });
+        const r = await search(page, 'H. Lhota');
+        const a = r.locator('.place-result');
+        await expect(a).toHaveCount(1, SEARCH);
+        // 1 km from the Zlamtek family's Hrubovec, 40 km from the Lhoták family's Jinov: said by the family.
+        await expect(a.locator('.place-result-km')).toContainText('40 km from Jinov');
+        await expect(a.locator('.place-result-km')).not.toContainText('Hrubov');
+        await expect(a).toHaveAttribute('data-tone', 'plain');
+        await expect(a.locator('.place-result-near')).toHaveCount(0);
+        await expect(r.locator('.place-result-legend-item')).toHaveText(['no warning']);
+        await expect(r.locator('.place-result-swatch[data-tone="plain"]')).toHaveCount(1);
     });
 
     test('a pick: the location by hand, a toast with Undo', async ({ page }) => {
