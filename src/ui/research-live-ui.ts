@@ -90,8 +90,8 @@ function refusalText(r: LiveWriteRefusal): string {
 /** A command for the terminal with a small "Copy" beside it. */
 function commandLine(command: string, onCopy: (cmd: string) => void, label?: string): HTMLElement {
     const line = el('span', 'research-live-command');
-    line.appendChild(el('code', undefined, command));
     if (label) line.appendChild(el('span', 'research-live-command-label', label));
+    line.appendChild(el('code', undefined, command));
     const copy = el('button', 'link-button research-live-copy', strings.researchLive.copy);
     copy.type = 'button';
     copy.onclick = (e) => {
@@ -380,7 +380,7 @@ export const researchLiveMethods = uiModule({
             return;
         }
         // No research that takes the choice runs now: the commands for the terminal, nothing sent.
-        const how = body.appendChild(el('div', 'settings-desc research-live-idle-commands'));
+        const how = row.appendChild(el('div', 'settings-desc research-live-idle-commands'));
         how.appendChild(el('p', undefined, anyUp ? L.idleOlder : L.idleNoBridge));
         for (const [minutes, label] of [[LIVE_IDLE_FOREVER, L.idleCommandForever], [LIVE_IDLE_TWO_HOURS, L.idleCommandTwoHours]] as const) {
             how.appendChild(el('p', undefined)).appendChild(commandLine(idleCommand(minutes), c => this.copyResearchLiveCommand(c), label));

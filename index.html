@@ -11992,10 +11992,15 @@
         .research-live[hidden] { display: none; }
         .research-live { min-width: 0; }
         .research-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
-        .research-live-switch { color: var(--text); font-weight: 500; }
+        .research-live button.research-live-switch {
+            padding: 0 2px; margin: 0; border: 0; background: none; box-shadow: none;
+            color: var(--text); font-weight: 500;
+        }
         .research-live-switch[aria-disabled="true"] { cursor: default; }
         .research-live-switch[aria-disabled="true"] .view-link-switch__track { opacity: 0.55; }
         .research-live-switch[aria-busy="true"] { cursor: progress; }
+        /* The switch's name stays on a phone too (the view links' switches drop theirs there). */
+        .research-live .view-link-switch__label { display: inline; }
         .research-live-busy { font-size: 12px; color: var(--text-light); }
         .research-live-note {
             margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-light);
@@ -12004,21 +12009,28 @@
         .research-live-command { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; }
         .research-live-command code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em;
-            background: var(--surface-2); border-radius: 3px; padding: 0 3px; overflow-wrap: anywhere;
+            background: var(--surface-2); border-radius: 3px; padding: 0 3px;
         }
         .research-live-command-label { color: var(--text-light); }
-        .research-live-copy { font-size: 12px; }
+        .research-live-command-label::after { content: ':'; }
+        .research-live-command code { white-space: nowrap; }
+        .research-live-command button.research-live-copy { font-size: 12px; padding: 0 2px; margin: 0; min-height: 0; min-width: 0; width: auto; }
+        @media (pointer: coarse) { .research-live-command button.research-live-copy { min-height: 44px; } }
         .live-panel-body > .research-live { margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
         .research-live--manager { margin: 4px 0 0 18px; }
-        .research-live--manager .research-live-switch { font-size: 13px; min-height: 28px; }
+        .research-live--manager button.research-live-switch { font-size: 13px; min-height: 28px; }
         .research-live--manager .research-live-switch .view-link-switch__track { width: 34px; height: 20px; }
         .research-live--manager .research-live-switch .view-link-switch__track::after { top: 2px; left: 2px; width: 16px; height: 16px; }
         .research-live--manager .research-live-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(14px); }
         .research-live-idle-options { flex-wrap: wrap; }
         .research-live-idle-commands p { margin: 4px 0 0; }
+        .research-live-idle-commands .research-live-command { display: flex; }
         .research-live-idle-said { margin: 6px 0 0; }
+        /* A phone's manager row is a grid (name; counts with Open and ⋯): the switch is a row of its own under them. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tree-manager-item:not(.pending-merge) > .research-live--manager { grid-column: 1 / -1; order: 1; margin: 6px 0 0; }
+        }
         @media (max-width: 640px) {
-            .research-live--manager { margin-left: 0; }
             .research-live-idle-options.settings-segment { flex-direction: column; }
             .research-live-idle-options.settings-segment .settings-radio + .settings-radio { border-left: none; border-top: 1px solid var(--border); }
         }
