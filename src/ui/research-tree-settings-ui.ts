@@ -25,7 +25,7 @@ import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../re
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { onComputer, readTree } from './research-ui.js';
-import { researchDisplayName, researchSendMode, onBridgeStatus } from './research-sync-ui.js';
+import { researchDisplayName, researchSendMode, onBridgeStatus, lastBridgeStatus } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
 import { isBetaBuildHere } from '../pwa.js';
@@ -50,13 +50,6 @@ let storiesListening = false;
  * the value asked until the status says it (`want`), a write on its way (`busy`).
  */
 const hypos: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: ResearchHypothesesDecide; busy?: boolean } = { rid: '' };
-/** Who decides as each research last said it in this page: the row at rest while its bridge is down. */
-const lastDecide = new Map<string, ResearchHypothesesDecide>();
-// After every module is evaluated (the listener list lives in a module this one imports).
-queueMicrotask(() => onBridgeStatus((rid, status) => {
-    if (status.hypothesesDecide) lastDecide.set(rid.toLowerCase(), status.hypothesesDecide);
-    else lastDecide.delete(rid.toLowerCase());
-}));
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -533,7 +526,7 @@ export const researchTreeSettingsMethods = uiModule({
         const last = ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid);
         const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
         const up = this.researchBridgeUp(rid);
-        const said = up && last ? last.hypothesesDecide : last?.hypothesesDecide ?? lastDecide.get(rid.toLowerCase());
+        const said = up && last ? last.hypothesesDecide : last?.hypothesesDecide ?? lastBridgeStatus(rid)?.hypothesesDecide;
         if (!features.includes(HYPOTHESES_DECIDE_FEATURE) || !said) {
             host.innerHTML = '';
             return;

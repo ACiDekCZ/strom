@@ -353,7 +353,19 @@ export function onBridgeStatus(listener: BridgeStatusListener): void {
     if (!bridgeStatusListeners.includes(listener)) bridgeStatusListeners.push(listener);
 }
 
+/**
+ * The last status each research's bridge gave in this page, kept while the
+ * bridge is down (the runtime forgets it then): what a row at rest shows.
+ */
+const lastSaidStatus = new Map<string, LiveStatus>();
+
+/** What a research's bridge last said in this page (also while it is down now), or null. */
+export function lastBridgeStatus(researchId: string): LiveStatus | null {
+    return lastSaidStatus.get(researchId.toLowerCase()) ?? null;
+}
+
 function tellBridgeStatus(researchId: string, status: LiveStatus): void {
+    lastSaidStatus.set(researchId.toLowerCase(), status);
     for (const listener of bridgeStatusListeners) {
         try { listener(researchId, status); } catch (err) { console.warn('Bridge status listener failed', err); }
     }

@@ -205,3 +205,19 @@ describe('the answer to POST /hypotheses (spec 060)', () => {
         expect(hypothesesDecideReply(500, {}, F, 'person', check)).toMatchObject({ code: 'unknown' });
     });
 });
+
+describe('who decides as the research last said it (spec 060)', () => {
+    it('the settings module loads without touching the bridge listeners early, and the last word stays while the bridge is down', async () => {
+        // The whole UI module graph loads here (slow). research-sync-ui first: the settings module is then evaluated inside
+        // the cycle, before research-sync-ui is, and nothing of it may reach research-sync-ui's state that early.
+        const { rememberBridgeStatus, lastBridgeStatus } = await import('../ui/research-sync-ui.js');
+        await import('../ui/research-tree-settings-ui.js');
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const status = sanitizeLiveStatus({ treeId: TREE, features: ['hypotheses.decide'], hypotheses: { decide: 'agent' } });
+        expect(status?.hypothesesDecide).toBe('agent');
+        rememberBridgeStatus(TREE, status!);
+        expect(lastBridgeStatus(TREE.toUpperCase())?.hypothesesDecide).toBe('agent');
+        rememberBridgeStatus(TREE, sanitizeLiveStatus({ treeId: TREE, features: [] })!);
+        expect(lastBridgeStatus(TREE)?.hypothesesDecide).toBeUndefined();
+    }, 60_000);
+});
