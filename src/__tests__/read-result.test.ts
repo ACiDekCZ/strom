@@ -9,8 +9,10 @@ import { describe, it, expect } from 'vitest';
 import {
     parseMarks, parseTranscript, transcriptLines, lineRegion, lineAt, defaultEntryIndex, canPropose,
     sameLanguage, resultSections, glossFlavor, entryName, cropLayout, locateSpan, readerPlaces, placeCount, placeCountAll, placeContext,
-    sourceEntryIndex, parseBlindTranscript,
+    sourceEntryIndex, parseBlindTranscript, mergeAdjacent, classifyVariant, variantClass, composeVerdict, compareWithTranscript,
+    illegibleCount,
 } from '../read-result.js';
+import { getStringsForLang } from '../strings.js';
 import type { ReadEntry, ReadPerson, ReadResult } from '../research-read.js';
 
 function person(over: Partial<ReadPerson> = {}): ReadPerson {
@@ -337,5 +339,122 @@ describe('a region in a box', () => {
         const c = cropLayout([0, 0, 0.5, 0.1], 300, 100, 1, 0);
         expect(c.left).toBe(0);
         expect(c.top).toBe(0);
+    });
+});
+
+describe('result screen, round 2 (spec 059 P7)', () => {
+    it('classifyVariant: only punctuation, spaces or case are a minor detail; a diacritic or a letter is a change', () => {
+        expect(classifyVariant('Testes', 'Testes:')).toBe('minor');
+        expect(classifyVariant('Anna,', 'Anna')).toBe('minor');
+        expect(classifyVariant('vlk', 'Vlk')).toBe('minor');
+        expect(classifyVariant('„Otec“', 'Otec')).toBe('minor');
+        expect(classifyVariant('Tichopad', 'Tichopád')).toBe('change');
+        expect(classifyVariant('N. 4', 'N. 14')).toBe('change');
+        expect(classifyVariant('Novák[?]', 'Novák')).toBe('change');
+        expect(classifyVariant('Lukeš', '[…]')).toBe('change');
+    });
+
+    it('variantClass: the research\'s kind decides when given; without it, the heuristic', () => {
+        expect(variantClass({ at: 'Wlk', other: 'Vlk', kind: 'spelling' })).toEqual({ minor: true, kinds: ['spelling'] });
+        expect(variantClass({ at: 'N. 4', other: 'N. 14', kind: 'number' })).toEqual({ minor: false, kinds: ['number'] });
+        expect(variantClass({ at: 'Wlk', other: 'Vlk' })).toEqual({ minor: false, kinds: [] });
+        expect(variantClass({ at: 'Testes', other: 'Testes:' })).toEqual({ minor: true, kinds: [] });
+        // Merged: substantive when any part is.
+        expect(variantClass({ at: 'a', other: 'b', kinds: ['spelling', 'number'] }).minor).toBe(false);
+        expect(variantClass({ at: 'a', other: 'b', kinds: ['spelling', 'label'] }).minor).toBe(true);
+    });
+
+    it('mergeAdjacent: Svoboda + "Testes:" with only a space between them in the text as read become one place', () => {
+        const text = 'Jacobi Swoboda Testes: Matthias Hruby';
+        const variants = [
+            { at: 'Svoboda', other: 'Swoboda', kind: 'spelling' as const },
+            { at: 'Testes', other: 'Testes:', kind: 'label' as const },
+            { at: 'Hrubý', other: 'Hruby', kind: 'spelling' as const },
+        ];
+        const merged = mergeAdjacent(variants, text, 'other');
+        expect(merged).toHaveLength(2);
+        expect(merged[0]).toMatchObject({ at: 'Svoboda Testes', other: 'Swoboda Testes:', kinds: ['spelling', 'label'] });
+        expect(variantClass(merged[0]).minor).toBe(true);
+        expect(merged[1]).toEqual(variants[2]);
+    });
+
+    it('mergeAdjacent: a substantive part makes the merged place substantive; regions joined; words between keep them apart', () => {
+        const text = 'Josephus Fischek, inquilinus de Czapkow N. 14';
+        const merged = mergeAdjacent([
+            { at: 'Fischek', other: 'Fischer', kind: 'name', region: [0.1, 0.2, 0.1, 0.02] },
+            { at: 'inquilinus', other: 'inquilini', kind: 'spelling', region: [0.22, 0.2, 0.1, 0.02] },
+            { at: 'N. 14', other: 'N. 4', kind: 'number' },
+        ], text);
+        expect(merged).toHaveLength(2);
+        expect(merged[0].at).toBe('Fischek, inquilinus');
+        expect(merged[0].other).toBe('Fischer, inquilini');
+        expect(merged[0].kind).toBe('name');
+        expect(variantClass(merged[0]).minor).toBe(false);
+        expect(merged[0].region![0]).toBeCloseTo(0.1);
+        expect(merged[0].region![2]).toBeCloseTo(0.22);
+        // A part without a kind: the merged place has none (sorted by the heuristic).
+        const m2 = mergeAdjacent([{ at: 'Anna', other: 'Anna,' }, { at: 'filia', other: 'filiae', kind: 'spelling' }], 'Anna filia');
+        expect(m2).toHaveLength(1);
+        expect(m2[0].kinds).toBeUndefined();
+    });
+
+    it('mergeAdjacent: not across lines, and a place not in the text stays', () => {
+        const merged = mergeAdjacent([{ at: 'Vlk', other: 'Wlk' }, { at: 'Anna', other: 'Anny' }, { at: '', other: 'Testes' }], 'Josephus Vlk\nAnna filia');
+        expect(merged).toHaveLength(3);
+    });
+
+    it('compareWithTranscript: the runs of words that differ, as source.variants carry them', () => {
+        expect(compareWithTranscript('Josephus Vlk de Lhota N. 4', 'Josephus Wlk de Lhota N. 14')).toEqual([
+            { at: 'Vlk', other: 'Wlk' }, { at: '4', other: '14' },
+        ]);
+        expect(compareWithTranscript('Anna | filia Jacobi', 'Anna filia Jacobi')).toEqual([]);
+        expect(compareWithTranscript('Anna filia Jacobi Tichopad', 'Anna filia')).toEqual([{ at: 'Jacobi Tichopad', other: '' }]);
+        expect(compareWithTranscript('', 'Anna filia')).toEqual([{ at: '', other: 'Anna filia' }]);
+    });
+
+    it('illegibleCount', () => {
+        expect(illegibleCount('Joannes […] et [...] filius [ ... ]')).toBe(3);
+        expect(illegibleCount('Joannes[?]')).toBe(0);
+    });
+
+    describe('verdict', () => {
+        const b = (s: string): string => `*${s}*`;
+        const cs = getStringsForLang('cs').read;
+        const pl = getStringsForLang('pl').read;
+        const en = getStringsForLang('en').read;
+        const de = getStringsForLang('de').read;
+        const base = { partial: false, why: '', illegible: 0, source: null, disagree: null } as const;
+
+        it('cs: changes and minor details, readers, plurals', () => {
+            expect(composeVerdict({ ...base, illegible: 1, source: { compared: true, major: 2, minor: 5, kinded: true }, disagree: 4 }, cs, b))
+                .toBe('Přečteno, 1 slovo nečitelné. Proti dosavadnímu přepisu *2 věcné změny* a 5 drobností. Čtenáři se neshodli na *4 místech*.');
+            expect(composeVerdict({ ...base, illegible: 2, source: { compared: true, major: 6, minor: 1, kinded: false } }, cs, b))
+                .toBe('Přečteno, 2 slova nečitelná. Proti dosavadnímu přepisu *6 změn* a 1 drobnost.');
+            expect(composeVerdict({ ...base, illegible: 5, source: { compared: true, major: 1, minor: 0, kinded: true }, disagree: 1 }, cs, b))
+                .toBe('Přečteno, 5 slov nečitelných. Proti dosavadnímu přepisu *1 věcná změna*. Čtenáři se neshodli na *1 místě*.');
+            expect(composeVerdict({ ...base, source: { compared: true, major: 0, minor: 3, kinded: false }, disagree: 0 }, cs, b))
+                .toBe('Přečteno. Proti dosavadnímu přepisu jen 3 drobnosti. Čtenáři se shodli.');
+            expect(composeVerdict({ ...base, source: { compared: true, major: 0, minor: 0, kinded: true } }, cs, b))
+                .toBe('Přečteno. Shoduje se s dosavadním přepisem.');
+            expect(composeVerdict({ ...base, source: { compared: false } }, cs, b))
+                .toBe('Přečteno. Zápis pramene se v přečteném textu nenašel, s dosavadním přepisem se proto neporovnalo.');
+            expect(composeVerdict({ ...base, partial: true, illegible: 4, why: 'příliš malé písmo' }, cs, b))
+                .toBe('Přečteno jen zčásti: 4 slova nečitelná (příliš malé písmo).');
+        });
+
+        it('pl: plurals one / few / many', () => {
+            expect(composeVerdict({ ...base, illegible: 1, source: { compared: true, major: 2, minor: 5, kinded: true }, disagree: 4 }, pl, b))
+                .toBe('Odczytano, 1 słowo nieczytelne. Względem dotychczasowej transkrypcji *2 zmiany merytoryczne* i 5 drobiazgów. Czytelnicy różnią się w *4 miejscach*.');
+            expect(composeVerdict({ ...base, illegible: 22, source: { compared: true, major: 5, minor: 1, kinded: false }, disagree: 1 }, pl, b))
+                .toBe('Odczytano, 22 słowa nieczytelne. Względem dotychczasowej transkrypcji *5 zmian* i 1 drobiazg. Czytelnicy różnią się w *1 miejscu*.');
+            expect(composeVerdict({ ...base, illegible: 12 }, pl, b)).toBe('Odczytano, 12 słów nieczytelnych.');
+        });
+
+        it('en and de: the same composition', () => {
+            expect(composeVerdict({ ...base, illegible: 1, source: { compared: true, major: 2, minor: 5, kinded: true }, disagree: 4 }, en, b))
+                .toBe('Read, 1 word illegible. Against the existing transcript *2 substantive changes* and 5 minor details. The readers disagree in *4 places*.');
+            expect(composeVerdict({ ...base, illegible: 1, source: { compared: true, major: 2, minor: 5, kinded: true }, disagree: 4 }, de, b))
+                .toBe('Gelesen, 1 Wort unleserlich. Gegenüber der bisherigen Abschrift *2 inhaltliche Änderungen* und 5 Kleinigkeiten. Die Leser weichen an *4 Stellen* voneinander ab.');
+        });
     });
 });

@@ -31,6 +31,16 @@ export const READ_BLIND_TEXT_FEATURE = 'read.blindText';
 /** `/status.features`: a reading of two readers says when they read the document as different kinds (spec 059 K6.10). */
 export const READ_KINDS_FEATURE = 'read.kinds';
 
+/** `/status.features`: a difference says its kind (`variants[].kind`: a name, a number, a spelling…; spec 059 P7). */
+export const READ_VARIANT_KIND_FEATURE = 'read.variantKind';
+
+/** `/status.features`: a difference says where it lies on the page (`variants[].region`, fractions of the whole page; spec 059 P7). */
+export const READ_VARIANT_REGION_FEATURE = 'read.variantRegion';
+
+/** The kinds of a difference the research names (`read.variantKind`); an unknown one is as none. */
+export type ReadVariantKind = 'name' | 'number' | 'date' | 'person' | 'spelling' | 'punctuation' | 'label' | 'abbr' | 'case' | 'illegible' | 'other';
+export const READ_VARIANT_KINDS: readonly ReadVariantKind[] = ['name', 'number', 'date', 'person', 'spelling', 'punctuation', 'label', 'abbr', 'case', 'illegible', 'other'];
+
 /** The states of one reading, as the bridge says them. */
 export type ReadState = 'queued' | 'reading' | 'checking' | 'done' | 'unreadable' | 'failed' | 'cancelled';
 const READ_STATES: readonly ReadState[] = ['queued', 'reading', 'checking', 'done', 'unreadable', 'failed', 'cancelled'];
@@ -436,7 +446,15 @@ export interface ReadPage {
  * or role), "p2" (a person only the first reader has), "person" (one only the blind reader has), "entry", "birth.date"…;
  * none from an older research (then a transcription's words).
  */
-export interface ReadVariant { at: string; other: string; field?: string }
+export interface ReadVariant {
+    at: string;
+    other: string;
+    field?: string;
+    /** The kind of the difference (`read.variantKind`; absent: not said, the app classifies it). */
+    kind?: ReadVariantKind;
+    /** Where it lies on the page, fractions of the whole page (`read.variantRegion`; absent: not said). */
+    region?: ReadRegion;
+}
 
 export interface ReadGloss { term: string; meaning: string; kind: 'term' | 'occupation' | 'abbr' | 'symbol' }
 
@@ -541,7 +559,7 @@ function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
         if (!x) continue;
         const at = cleanText(x.at, 500);
         const other = cleanText(x.other, 500);
-        if (at || other) variants.push({ at, other });
+        if (at || other) variants.push({ at, other, ...variantExtras(x) });
     }
     const task = typeof s.task === 'string' && /^T\d{1,9}$/.test(s.task) ? s.task : '';
     return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '' };
@@ -590,6 +608,13 @@ function sanitizeKinds(v: unknown): { first: ReadDocKind; blind: ReadDocKind } |
     const first = k && DOC_KINDS.includes(k.first as ReadDocKind) ? k.first as ReadDocKind : null;
     const blind = k && DOC_KINDS.includes(k.blind as ReadDocKind) ? k.blind as ReadDocKind : null;
     return first && blind && first !== blind ? { first, blind } : null;
+}
+
+/** A difference's `kind` and `region`, where known and valid (an unknown kind, a broken region: left out). Untrusted. */
+function variantExtras(x: Record<string, unknown>): { kind?: ReadVariantKind; region?: ReadRegion } {
+    const kind = READ_VARIANT_KINDS.includes(x.kind as ReadVariantKind) ? x.kind as ReadVariantKind : null;
+    const r = region(x.region);
+    return { ...(kind ? { kind } : {}), ...(r && r[2] > 0 && r[3] > 0 ? { region: r } : {}) };
 }
 
 function region(v: unknown): ReadRegion | null {
@@ -691,7 +716,7 @@ function sanitizeEntry(v: unknown, index: number): ReadEntry | null {
         const field = r && typeof r.field === 'string' ? cleanText(r.field, 40) : '';
         const other = r ? cleanText(r.other, 300) : '';
         // A side one reader left out stays a place (only reader 2 read something there: `at` empty).
-        if (r && (at || other)) variants.push({ at, other, ...(field ? { field } : {}) });
+        if (r && (at || other)) variants.push({ at, other, ...(field ? { field } : {}), ...variantExtras(r) });
     }
     const glossary: ReadGloss[] = [];
     for (const item of Array.isArray(e.glossary) ? e.glossary.slice(0, 100) : []) {

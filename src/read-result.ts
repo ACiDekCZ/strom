@@ -5,7 +5,7 @@
  * Pure functions (no DOM); the dialog draws from them.
  */
 
-import type { ReadDocKind, ReadEntry, ReadRegion, ReadResult, ReadVariant } from './research-read.js';
+import type { ReadDocKind, ReadEntry, ReadRegion, ReadResult, ReadVariant, ReadVariantKind } from './research-read.js';
 
 /** A piece of a transcription line: plain text, an uncertain word (`[?]`), an illegible spot (`[...]`), a column/line mark (`|`). */
 export type MarkSeg =
@@ -390,4 +390,160 @@ export function sourceEntryIndex(entries: readonly Pick<ReadEntry, 'id'>[], ids:
 export function parseBlindTranscript(entry: Pick<ReadEntry, 'variants'>, transcript: string): ParsedTranscript {
     const swapped = entry.variants.filter(textVariant).map(v => ({ ...v, at: v.other, other: v.at }));
     return parseTranscript({ transcript, variants: swapped });
+}
+
+// ---- Result screen, round 2 (spec 059 P7): one place = one mark, kinds of a difference, the header's sentence ----
+
+/** The kinds of a difference that are minor details (folded under "and N minor details"); the rest are substantive. */
+export const MINOR_KINDS: ReadonlySet<ReadVariantKind> = new Set<ReadVariantKind>(['spelling', 'punctuation', 'label', 'abbr', 'case']);
+
+const MINOR_STRIP = /[\s.,;:!?„“"'()\-–|]/g;
+
+/**
+ * A difference told apart without the research's kind: only punctuation, white space and case differ → a minor
+ * detail; anything else (a letter, a diacritic, a mark) → a change.
+ */
+export function classifyVariant(at: string, other: string): 'minor' | 'change' {
+    const f = (s: string): string => s.normalize('NFC').toLocaleLowerCase().replace(MINOR_STRIP, '');
+    return f(at) === f(other) ? 'minor' : 'change';
+}
+
+/** A difference, merged from neighbours: the kinds of its parts when every part named one. */
+export interface MergedVariant extends ReadVariant { kinds?: ReadVariantKind[] }
+
+/** How a difference counts: a minor detail or not, and the kinds the research named (empty: none named, the app sorted it). */
+export interface VariantClass { minor: boolean; kinds: ReadVariantKind[] }
+
+export function variantClass(v: MergedVariant): VariantClass {
+    const kinds = v.kinds ?? (v.kind ? [v.kind] : []);
+    if (kinds.length) return { minor: kinds.every(k => MINOR_KINDS.has(k)), kinds };
+    return { minor: classifyVariant(v.at, v.other) === 'minor', kinds: [] };
+}
+
+const GAP_ONLY = /^[\s.,;:!?„“"'()\-–|]*$/;
+
+/**
+ * Differences next to each other merged into one: two variants whose spans in `text` (the text as read; `side` says
+ * which of `at` / `other` is its words) have only white space and punctuation between them on one line become one
+ * (both sides joined, the kinds of both, the region around both). Variants not found in the text stay as they are;
+ * the order is kept (a merged one where its first part was).
+ */
+export function mergeAdjacent(variants: readonly ReadVariant[], text: string, side: 'at' | 'other' = 'at'): MergedVariant[] {
+    const lines = transcriptLines(text);
+    const read = (v: ReadVariant): string => side === 'at' ? v.at : v.other;
+    const old = (v: ReadVariant): string => side === 'at' ? v.other : v.at;
+    const oriented = variants.map(v => ({ ...v, at: read(v), other: old(v) }));
+    const used = new Set<number>();
+    const hits: { line: number; start: number; end: number; i: number }[] = [];
+    lines.forEach((line, j) => { for (const h of placeInLine(line, oriented, used)) hits.push({ line: j, ...h }); });
+    const groups: (typeof hits)[] = [];
+    for (const h of hits) {
+        const g = groups[groups.length - 1];
+        const prev = g?.[g.length - 1];
+        if (prev && prev.line === h.line && GAP_ONLY.test(lines[h.line].slice(prev.end, h.start))) g.push(h);
+        else groups.push([h]);
+    }
+    const merged = new Map<number, MergedVariant>();
+    const dropped = new Set<number>();
+    for (const g of groups) {
+        if (g.length < 2) continue;
+        const line = lines[g[0].line];
+        const parts = g.map(h => variants[h.i]);
+        const readSide = line.slice(g[0].start, g[g.length - 1].end);
+        const oldSide = g.map((h, k) => (k ? line.slice(g[k - 1].end, h.start).replace(/\s+/g, ' ') : '') + old(variants[h.i])).join('').trim();
+        const kinds = parts.every(p => p.kind) ? [...new Set(parts.map(p => p.kind!))] : undefined;
+        const regions = parts.map(p => p.region);
+        const region = regions.every((r): r is ReadRegion => !!r) ? unionRegion(regions) : undefined;
+        const first = Math.min(...g.map(h => h.i));
+        const kind = kinds ? kinds.find(k => !MINOR_KINDS.has(k)) ?? kinds[0] : undefined;
+        merged.set(first, {
+            at: side === 'at' ? readSide : oldSide, other: side === 'at' ? oldSide : readSide,
+            ...(parts[0].field ? { field: parts[0].field } : {}),
+            ...(kind ? { kind } : {}), ...(kinds ? { kinds } : {}), ...(region ? { region } : {}),
+        });
+        for (const h of g) if (h.i !== first) dropped.add(h.i);
+    }
+    return variants.flatMap((v, i) => dropped.has(i) ? [] : [merged.get(i) ?? v]);
+}
+
+function unionRegion(rs: readonly ReadRegion[]): ReadRegion {
+    const x0 = Math.min(...rs.map(r => r[0])), y0 = Math.min(...rs.map(r => r[1]));
+    const x1 = Math.max(...rs.map(r => r[0] + r[2])), y1 = Math.max(...rs.map(r => r[1] + r[3]));
+    return [x0, y0, x1 - x0, y1 - y0];
+}
+
+/** The number of illegible spots (`[…]`) in a text. */
+export function illegibleCount(text: string): number {
+    return (text.match(/\[\s*(?:\.{2,}|…)\s*\]/g) ?? []).length;
+}
+
+/** Words of a text for comparing: white space and `|` aside, NFC. */
+function compareTokens(text: string): string[] {
+    return text.normalize('NFC').replace(/\s*\|\s*/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * A text compared with a source's existing transcript in the app (a source read again whose entry the research did
+ * not find, spec 059 P7 §6): the runs of words that differ, as `source.variants` carry them (`at` the transcript's
+ * words, `other` the text's). Word by word (longest common run); a very long text is compared as far as the cap.
+ */
+export function compareWithTranscript(transcript: string, text: string, cap = 1500): ReadVariant[] {
+    const a = compareTokens(transcript).slice(0, cap);
+    const b = compareTokens(text).slice(0, cap);
+    const n = a.length, m = b.length;
+    // Length of the common run from (i, j) on, row by row from the end.
+    const lcs: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        }
+    }
+    const out: ReadVariant[] = [];
+    let i = 0, j = 0;
+    let oldRun: string[] = [], newRun: string[] = [];
+    const flush = (): void => {
+        if (oldRun.length || newRun.length) out.push({ at: oldRun.join(' '), other: newRun.join(' ') });
+        oldRun = []; newRun = [];
+    };
+    while (i < n || j < m) {
+        if (i < n && j < m && a[i] === b[j]) { flush(); i++; j++; }
+        else if (j < m && (i >= n || lcs[i][j + 1] >= lcs[i + 1][j])) newRun.push(b[j++]);
+        else oldRun.push(a[i++]);
+    }
+    flush();
+    return out;
+}
+
+/** What the header's sentence says (spec 059 P7 §3), counted by the dialog. */
+export interface VerdictFacts {
+    /** Read only in part, with the reason in words ('' none). */
+    partial: boolean;
+    why: string;
+    illegible: number;
+    /** A source read again: compared (substantive changes, minor details, whether the research named the kinds), or not compared. */
+    source: { compared: true; major: number; minor: number; kinded: boolean } | { compared: false } | null;
+    /** Two readers on this entry: the places they disagree in (0: they agree); null: not both read it. */
+    disagree: number | null;
+}
+
+/** The strings the header's sentence is made of (`strings.read`). `b` makes a count bold. */
+export interface VerdictStrings {
+    vRead: string;
+    vIll: (n: number) => string;
+    vPartial: (n: number, why: string) => string;
+    vSrc: (major: number, minor: number, kinded: boolean, b: (s: string) => string) => string;
+    vSrcSame: string;
+    vNc: string;
+    vDis: (n: number, b: (s: string) => string) => string;
+    vAgree: string;
+}
+
+/** The header's sentence: legibility, then the comparison with the transcript, then the readers. */
+export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string) => string = s => s): string {
+    const out: string[] = [];
+    out.push(f.partial ? t.vPartial(f.illegible, f.why) : f.illegible > 0 ? t.vIll(f.illegible) : t.vRead);
+    if (f.source && !f.source.compared) out.push(t.vNc);
+    else if (f.source?.compared) out.push(f.source.major + f.source.minor ? t.vSrc(f.source.major, f.source.minor, f.source.kinded, b) : t.vSrcSame);
+    if (f.disagree !== null) out.push(f.disagree > 0 ? t.vDis(f.disagree, b) : t.vAgree);
+    return out.join(' ');
 }

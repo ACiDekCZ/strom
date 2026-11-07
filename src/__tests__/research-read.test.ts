@@ -283,6 +283,30 @@ describe('GET read/<id>', () => {
         expect(sanitizeReadResult({ ...two, source: { id: 'x', failed: { code: 'write' }, entries: ['e1'] } })!.sourceRead).toBeUndefined();
     });
 
+    it('a difference\'s kind and region (read.variantKind, read.variantRegion): a known kind, a region of fractions; else left out', () => {
+        const r = sanitizeReadResult({
+            ...full,
+            entries: [{ ...full.entries[0], variants: [
+                { at: 'Tichopad', other: 'Tichopád', kind: 'spelling', region: [0.4, 0.2, 0.06, 0.02] },
+                { at: 'Jan', other: 'Jakub', field: 'p2.given', kind: 'guess', region: [0.4, 0.2, 2, 0.02] },
+                { at: 'a', other: 'b', region: [0.4, 0.2, 0, 0.02] },
+            ] }],
+            source: { id: 'S0042', agree: 'differ', task: 'T0107', variants: [
+                { at: 'Nro. 14', other: 'N. 4', kind: 'number', region: [0.412, 0.233, 0.061, 0.018] },
+                { at: 'Wlk', other: 'Vlk', kind: 7, region: 'here' },
+            ] },
+        })!;
+        expect(r.entries[0].variants).toEqual([
+            { at: 'Tichopad', other: 'Tichopád', kind: 'spelling', region: [0.4, 0.2, 0.06, 0.02] },
+            { at: 'Jan', other: 'Jakub', field: 'p2.given' },
+            { at: 'a', other: 'b' },
+        ]);
+        expect(r.source!.variants).toEqual([
+            { at: 'Nro. 14', other: 'N. 4', kind: 'number', region: [0.412, 0.233, 0.061, 0.018] },
+            { at: 'Wlk', other: 'Vlk' },
+        ]);
+    });
+
     it('the blind reader\'s text: entries with a transcript, `of` only an entry of the result, a region of fractions (read.blindText)', () => {
         const r = sanitizeReadResult({ ...full, blind: {
             doc: { kind: 'register.marriage', language: ['la'] },
