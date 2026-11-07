@@ -245,7 +245,9 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-page-tab.is-selected')).toHaveText('Excerpt 2');
         await expect(region).toHaveAttribute('style', /left:5%/);
         await expect(d.locator('.read-frame')).toHaveCount(1);
-        await expect(d.locator('.read-scan-var')).toHaveCount(2);
+        // A line of the text shows on the other part too (the entry stands on the same page).
+        await d.locator('.read-line[data-line="1"]').click();
+        await expect(d.locator('#read-scan-line')).toBeVisible();
         // The text is reader 1's; reader 2 read independently and disagreed in the places marked; both named once, under the text.
         await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
         await expect(d.locator('.read-transcript .read-mk-dis')).toHaveCount(2);
@@ -479,7 +481,8 @@ test.describe('Read a source again from its original', () => {
         await expect(full).toHaveText('Full quality');
         // The excerpt opens in the system's viewer through the research, no terminal: no mark.
         await expect(full.locator('.research-open-mark')).toHaveCount(0);
-        await expect(d.locator('.read-scan-open')).toHaveCount(1);
+        // Enlarge beside the text, not an overlay.
+        await expect(d.locator('.read-scan-zoom')).toHaveCount(1);
         await full.click();
         await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links))
             .toEqual([expect.stringMatching(new RegExp(`^strom-research://excerpt\\?tree=.+&source=S0001&clip=${CLIP}$`))]);
@@ -709,11 +712,27 @@ test.describe('Read a source again: its own entry, a failed comparison, the kind
         const d = await readWith(page, ['read.sourceEntry'], neighbours({ id: 'S0001', entries: ['e2'], agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' }));
         await expect(d.locator('#read-title')).toHaveText('Source read again');
         const pills = d.locator('.read-entry-pill');
-        // The order stays; the source's entry is chosen, not the first one.
+        // The neighbours folded: the source's entry chosen, "+ 2 neighbouring entries".
+        await expect(pills).toHaveCount(1);
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
+        await expect(d.locator('.read-nb-toggle')).toHaveText('+ 2 neighbouring entries');
+        // A neighbour picked on the scan unfolds them; back on the source's entry they can fold again.
+        await d.locator('.read-frame[data-entry="2"]').click();
         await expect(pills).toHaveCount(3);
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '2');
+        await d.locator('.read-frame[data-entry="1"]').click();
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
+        await expect(d.locator('.read-nb-toggle')).toHaveText('hide neighbours');
+        await d.locator('.read-nb-toggle').click();
+        await expect(pills).toHaveCount(1);
+        await d.locator('.read-nb-toggle').click();
+        // Unfolded: the order stays, the neighbours dashed; "hide neighbours".
+        await expect(pills).toHaveCount(3);
+        await expect(d.locator('.read-nb-toggle')).toHaveText('hide neighbours');
         await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-entry-pill.is-source')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-entry-pill.is-neighbour')).toHaveCount(2);
+        expect(await d.locator('.read-entry-pill.is-neighbour').first().evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('dashed');
         await expect(pills.locator('.read-entry-n')).toHaveText(['Entry 1', 'Entry 2', 'Entry 3']);
         await expect(pills.locator('.read-entry-tag')).toHaveText(['neighbouring', 'source entry', 'neighbouring']);
         await expect(d.locator('.read-frame.is-neighbour')).toHaveCount(2);

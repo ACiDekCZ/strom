@@ -6612,11 +6612,7 @@ const stringsEN = {
         scripts: { kurrent: 'Kurrent', fraktur: 'Fraktur', cyrillic: 'Cyrillic' } as Record<string, string>,
         entriesLabel: 'Entries on the page',
         entrySr: (n: number, name: string) => `Entry ${n}${name ? `, ${name}` : ''}`,
-        openPage: 'Show the whole page',
         noImage: 'The page has no preview',
-        scanHint: (variants: boolean): string => variants
-            ? 'Green frame = chosen entry · amber = where the readers differ · a click on an entry chooses it'
-            : 'Green frame = chosen entry · a click on an entry chooses it',
         transcriptSub: (langs: string) => langs ? `literal, ${langs}` : 'literal',
         sInscription: 'Inscription',
         variantNote: (a: string, b: string) => `readers differ: the first reads “${a}”, the second “${b}”`,
@@ -14275,11 +14271,7 @@ const stringsCZ: StringsType = {
         scripts: { kurrent: 'kurent', fraktur: 'fraktura', cyrillic: 'cyrilice' } as Record<string, string>,
         entriesLabel: 'Zápisy na stránce',
         entrySr: (n: number, name: string) => `Zápis ${n}${name ? `, ${name}` : ''}`,
-        openPage: 'Ukázat celou stranu',
         noImage: 'Strana nemá náhled',
-        scanHint: (variants: boolean): string => variants
-            ? 'Zelený rámeček = vybraný zápis · jantarový = místo, kde se čtenáři liší · klik do zápisu ho vybere'
-            : 'Zelený rámeček = vybraný zápis · klik do zápisu ho vybere',
         transcriptSub: (langs: string) => langs ? `doslova, ${langs}` : 'doslova',
         sInscription: 'Nápis',
         variantNote: (a: string, b: string) => `čtenáři se liší: první čte „${a}“, druhý „${b}“`,
@@ -21844,11 +21836,7 @@ const stringsDE: StringsType = {
         scripts: { kurrent: 'Kurrent', fraktur: 'Fraktur', cyrillic: 'Kyrillisch' } as Record<string, string>,
         entriesLabel: 'Einträge auf der Seite',
         entrySr: (n: number, name: string) => `Eintrag ${n}${name ? `, ${name}` : ''}`,
-        openPage: 'Ganze Seite zeigen',
         noImage: 'Die Seite hat keine Vorschau',
-        scanHint: (variants: boolean): string => variants
-            ? 'Grüner Rahmen = gewählter Eintrag · bernsteinfarben = Stelle, an der die Leser abweichen · ein Klick auf einen Eintrag wählt ihn'
-            : 'Grüner Rahmen = gewählter Eintrag · ein Klick auf einen Eintrag wählt ihn',
         transcriptSub: (langs: string) => langs ? `wörtlich, ${langs}` : 'wörtlich',
         sInscription: 'Inschrift',
         variantNote: (a: string, b: string) => `Leser weichen ab: der erste liest „${a}“, der zweite „${b}“`,

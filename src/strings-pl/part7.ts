@@ -884,11 +884,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         scripts: { kurrent: 'kurrenta', fraktur: 'fraktura', cyrillic: 'cyrylica' } as Record<string, string>,
         entriesLabel: 'Wpisy na stronie',
         entrySr: (n: number, name: string) => `Wpis ${n}${name ? `, ${name}` : ''}`,
-        openPage: 'Pokaż całą stronę',
         noImage: 'Strona nie ma podglądu',
-        scanHint: (variants: boolean): string => variants
-            ? 'Zielona ramka = wybrany wpis · bursztynowa = miejsce, w którym czytelnicy się różnią · kliknięcie we wpis go wybiera'
-            : 'Zielona ramka = wybrany wpis · kliknięcie we wpis go wybiera',
         transcriptSub: (langs: string) => langs ? `dosłownie, ${langs}` : 'dosłownie',
         sInscription: 'Napis',
         variantNote: (a: string, b: string) => `czytelnicy się różnią: pierwszy czyta „${a}”, drugi „${b}”`,

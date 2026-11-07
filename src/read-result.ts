@@ -374,6 +374,27 @@ export function cropLayout(region: ReadRegion | null, boxW: number, boxH: number
     };
 }
 
+/**
+ * The phone's strip over the text (spec 059 P7 §10): the page as wide as the entry (`region`, with `pad` around it)
+ * fills the box's width; vertically the whole entry centred when it fits, else the `focus` (the chosen line) centred,
+ * else the entry's middle. The sheet never leaves an empty band inside the box when the page reaches beyond it.
+ */
+export function stripLayout(region: ReadRegion | null, focus: ReadRegion | null, boxW: number, boxH: number, ratio: number, pad = 0.02): CropLayout {
+    const ar = ratio > 0 && Number.isFinite(ratio) ? ratio : 0.75;
+    if (boxW <= 0 || boxH <= 0) return { width: 0, height: 0, left: 0, top: 0 };
+    const [rx, ry, rw, rh] = region ?? [0, 0, 1, 1];
+    const p = region ? pad : 0;
+    const width = Math.max(1, boxW / Math.max(Math.min(1, rw + 2 * p), 1e-3));
+    const height = width / ar;
+    const fits = Math.min(1, rh + 2 * p) * height <= boxH;
+    const cy = focus && !fits ? focus[1] + focus[3] / 2 : ry + rh / 2;
+    const place = (box: number, size: number, centre: number): number => {
+        if (size <= box) return (box - size) / 2;
+        return Math.min(0, Math.max(box - size, box / 2 - centre * size));
+    };
+    return { width, height, left: place(boxW, width, rx + rw / 2), top: place(boxH, height, cy) };
+}
+
 /** The entry of a source read again shown first: the first of the source's own (`ids`) among `entries`, else -1. */
 export function sourceEntryIndex(entries: readonly Pick<ReadEntry, 'id'>[], ids: readonly string[]): number {
     for (const id of ids) {

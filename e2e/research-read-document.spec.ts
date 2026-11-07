@@ -651,7 +651,9 @@ test.describe('Read a document: the result', () => {
         await expect.poll(() => b.read!.pageAsks.length).toBeGreaterThan(0);
         await expect(d.locator('.read-frame')).toHaveCount(2);
         await expect(d.locator('.read-frame.is-selected')).toHaveAttribute('data-entry', '1');
-        await expect(d.locator('.read-scan-var')).toHaveCount(1);
+        // The place chosen above: its line's band; the legend in one row (no place without read.variantRegion).
+        await expect(d.locator('#read-scan-line')).toBeVisible();
+        await expect(d.locator('.read-scan-legend .read-lg')).toHaveText(['selected entry', 'line']);
         // Footer: nothing written without confirmation, kept in the history; Suggest for the tree… as the main action.
         await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['Nothing is written to the tree without confirmation.', 'The result stays in the reading history.']);
         await expect(d.locator('.read-footer .primary')).toHaveText('Suggest for the tree…');
@@ -664,12 +666,21 @@ test.describe('Read a document: the result', () => {
         await d.locator('.read-line[data-line="1"]').click();
         await expect(d.locator('.read-line[data-line="1"]')).toHaveClass(/is-active/);
         await expect(line).toBeVisible();
-        await expect(line).toHaveClass(/is-variant/);
+        // Without the research's line regions the band is approximate: dashed edges, no fill.
+        await expect(line).toHaveClass(/is-approx/);
+        expect(await line.evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('dashed');
+        expect(await line.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
         const frame = d.locator('.read-frame.is-selected');
         const box = (await frame.boundingBox())!;
+        // The second of three lines, inside the entry's frame.
+        const band = (await line.boundingBox())!;
+        expect(band.y).toBeGreaterThanOrEqual(box.y - 1);
+        expect(band.y + band.height).toBeLessThanOrEqual(box.y + box.height + 1);
+        expect(band.y - box.y).toBeCloseTo(box.height / 3, -1);
         await page.mouse.click(box.x + box.width / 2, box.y + box.height * (5 / 6));
         await expect(d.locator('.read-line.is-active')).toHaveAttribute('data-line', '2');
-        await expect(line).not.toHaveClass(/is-variant/);
+        const third = (await line.boundingBox())!;
+        expect(third.y).toBeGreaterThan(band.y + band.height - 2);
     });
 
     test('an entry of one line (cells): no strip of a line on the scan, the frame lights up; a click into the frame picks no line', async ({ page }) => {
@@ -682,7 +693,6 @@ test.describe('Read a document: the result', () => {
         }), 'P0003');
         const strip = d.locator('#read-scan-line');
         const frame = d.locator('.read-frame.is-selected');
-        await expect(d.locator('.read-scan-var')).toHaveCount(0);
         await expect(frame).not.toHaveClass(/is-lit/);
         const text = d.locator('.read-line[data-line="0"]');
         await text.hover();
@@ -692,7 +702,6 @@ test.describe('Read a document: the result', () => {
         await expect(text).toHaveClass(/is-active/);
         await expect(strip).toBeHidden();
         await expect(frame).toHaveClass(/is-lit/);
-        await expect(d.locator('.read-scan-var')).toHaveCount(0);
         // A click into the frame keeps the line as it was (one line: the whole entry).
         await text.click();
         await expect(text).not.toHaveClass(/is-active/);
@@ -700,14 +709,8 @@ test.describe('Read a document: the result', () => {
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
         await expect(d.locator('.read-line.is-active')).toHaveCount(0);
         await expect(strip).toBeHidden();
-        // No amber drawn on the scan: the hint under it does not speak of amber.
-        await expect(d.locator('.read-scan-hint')).toHaveText('Green frame = chosen entry · a click on an entry chooses it');
-    });
-
-    test('the hint under the scan speaks of amber only with amber drawn', async ({ page }) => {
-        const { d } = await showResult(page, baptismPage(), 'P0003');
-        await expect(d.locator('.read-scan-var').first()).toBeAttached();
-        await expect(d.locator('.read-scan-hint')).toHaveText('Green frame = chosen entry · amber = where the readers differ · a click on an entry chooses it');
+        // No band drawn for an entry of one line: the legend does not name the line.
+        await expect(d.locator('.read-scan-legend .read-lg')).toHaveText(['selected entry']);
     });
 
     test('several entries: a pill or a frame chooses one; the text and the suggestion follow', async ({ page }) => {
@@ -857,27 +860,28 @@ for (const viewport of [DESKTOP, { width: 1024, height: 768 }, PHONE]) {
             await noOverflow(d.locator('.read-footer'));
             const scan = (await d.locator('#read-scan').boundingBox())!;
             const text = (await d.locator('#read-text').boundingBox())!;
-            if (viewport.width > 1180) {
-                expect(Math.round(scan.width)).toBe(520);
+            if (viewport.width > 1024) {
+                expect(Math.round(scan.width)).toBe(500);
                 expect(text.x).toBeGreaterThan(scan.x + scan.width - 2);
-            } else if (viewport.width > 900) {
-                // 2 : 3 beside each other.
-                expect(scan.width / (scan.width + text.width)).toBeCloseTo(0.4, 1);
+            } else if (viewport.width > 640) {
+                // A tablet: the desktop's layout with a scan of 300 px.
+                expect(Math.round(scan.width)).toBe(300);
+                expect(text.x).toBeGreaterThan(scan.x + scan.width - 2);
             } else {
                 // The scan as a strip on top with the chosen entry's crop; the text below it.
                 await expect(d.locator('.read-scan-view')).toHaveClass(/is-strip/);
                 expect(text.y).toBeGreaterThanOrEqual(scan.y + scan.height - 2);
                 const box = (await d.locator('.read-scan-box').boundingBox())!;
-                expect(box.height).toBeGreaterThanOrEqual(200);
-                expect(box.height).toBeLessThanOrEqual(220);
+                expect(Math.round(box.height)).toBe(116);
                 const frame = (await d.locator('.read-frame.is-selected').boundingBox())!;
                 expect(frame.width).toBeGreaterThan(box.width * 0.8);
                 const foot = (await d.locator('[data-act="propose"]').boundingBox())!;
-                expect(foot.height).toBeGreaterThanOrEqual(44);
-                // ⤢ shows the whole page in the image viewer.
-                await d.locator('[data-act="open-page"]').click();
-                await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
-                await expect(page.locator('#attachment-overlay-img')).toHaveAttribute('src', /read\/D20261019153012-a1b2\/page\/1\.jpg/);
+                expect(foot.height).toBeGreaterThanOrEqual(48);
+                // Scan shows the whole scan in its tab.
+                await d.locator('[data-act="scan-tab"]').click();
+                await expect(d.locator('#read-result')).toHaveClass(/is-scan-tab/);
+                await expect(d.locator('.read-scan-view')).not.toHaveClass(/is-strip/);
+                await noOverflow(d.locator('.modal'));
             }
         });
     });
@@ -913,7 +917,6 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         await expect(btns).toHaveText(['Reader 1', 'Reader 2']);
         await expect(btns.nth(0)).toHaveAttribute('aria-pressed', 'true');
         await expect(btns.nth(1)).toHaveAttribute('aria-pressed', 'false');
-        await expect(d.locator('.read-scan-var').first()).toBeAttached();
         const tr = d.locator('.read-transcript');
         await expect(tr.locator('.read-mk-dis')).toHaveText(['Novák']);
         await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
@@ -922,6 +925,8 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         expect(named).toBeLessThanOrEqual(1);
         const rows = d.locator('.read-check [data-group="dis"] .read-check-row');
         await expect(rows.locator('.read-check-side.is-shown')).toHaveText('Novák');
+        await tr.locator('.read-line[data-line="1"]').click();
+        await expect(d.locator('#read-scan-line')).toBeVisible();
 
         await btns.nth(1).click();
         await expect(btns.nth(1)).toHaveAttribute('aria-pressed', 'true');
@@ -932,8 +937,8 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         await expect(tr.locator('.read-mk-unc')).toHaveCount(0);
         await expect(tr.locator('.read-mk-ill')).toHaveCount(1);
         await expect(tr.locator('.read-mk-dis')).toHaveText(['Nowak']);
-        // Its lines are not reader 1's lines on the scan: no strips, no line to choose.
-        await expect(d.locator('.read-scan-var')).toHaveCount(0);
+        // Its lines are not reader 1's lines on the scan: no line to choose there; the band chosen in reader 1's text stays.
+        await expect(d.locator('#read-scan-line')).toBeVisible();
         await expect(tr.locator('.read-line[data-line]')).toHaveCount(0);
         // The place stays as it was, ① then ②, the shown reader bold; the groups follow the marks of the text shown.
         await expect(rows).toHaveCount(1);
@@ -961,7 +966,8 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         await expect(d.locator('.read-section--transcript')).not.toHaveClass(/is-second/);
         await expect(tr.locator('.read-mk-dis')).toHaveText(['Novák']);
         await expect(d.locator('.read-from-first, .read-blind-extra')).toHaveCount(0);
-        await expect(d.locator('.read-scan-var').first()).toBeAttached();
+        await expect(d.locator('#read-scan-line')).toBeVisible();
+        await expect(tr.locator('.read-line[data-line="1"]')).toHaveClass(/is-active/);
     });
 
     test('an entry reader 2 did not read: its button off, saying so; never that the readers agree; the view kept across entries', async ({ page }) => {
@@ -1006,7 +1012,6 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         await expect(d.locator('.read-reader-seg, .read-from-first, .read-blind-extra')).toHaveCount(0);
         await expect(d.locator('.read-transcript .read-mk-dis')).toHaveText(['Novák']);
         await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
-        await expect(d.locator('.read-scan-var').first()).toBeAttached();
     });
 
     const kindsPage = (): Record<string, unknown> => baptismPage({
@@ -1038,3 +1043,214 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         await expect(d.locator('.read-kinds-note')).toHaveCount(0);
     });
 });
+
+/**
+ * The scan (spec 059 P7 §7) and the small screens (§10): a line's band, the place's outline (`read.variantRegion`),
+ * Enlarge beside the text on a desktop only, the phone's strip, Scan tab and bottom sheet. Invented names.
+ */
+const VLK_LONG = 'Maximilian Bartholomäus Vlkovský';
+const VLK_TEXT = [
+    'Anno 1852 die 3. Aprilis baptizatus est', 'Joannes Vlk filius legitimus', 'Josephi Vlk agricolae in Doubrava N. 7',
+    'et Catharinae Vlková natae Kortan', 'patrini Wenceslaus Vlk et Anna Vlková', 'obstetrix Maria Kortanová examinata',
+    'baptizavit Franciscus Vlk cooperator', 'natus die 2. Aprilis hora 5 matutina', 'religio catholica sexus masculinus',
+    'nota bene: in margine scriptum',
+].join('\n');
+function vlkPage(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return baptismPage({
+        doc: { kind: 'register.baptism', language: ['la'], script: 'kurrent', date: '1852', legible: 'yes', why: null },
+        readers: { asked: 2, ran: 2, agree: 'differ', who: [
+            { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
+            { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', modelName: 'GPT-6-Astra', effort: 'xhigh', ran: true },
+        ] },
+        entries: [
+            { id: 'e1', page: 1, region: [0.06, 0.04, 0.88, 0.06], transcript: `1852 | 1 | ${VLK_LONG} | Lhota`, variants: [],
+                persons: [{ ref: 'p1', role: 'child', given: 'Maximilian Bartholomäus', surname: 'Vlkovský' }] },
+            { id: 'e2', page: 1, region: [0.06, 0.12, 0.88, 0.6], transcript: VLK_TEXT,
+                variants: [{ at: 'Doubrava', other: 'Dubrava', region: [0.5, 0.24, 0.16, 0.04] }],
+                persons: [{ ref: 'p1', role: 'child', given: 'Joannes', surname: 'Vlk', match: [{ person: 'P0003', why: 'name', score: 0.8 }] }] },
+            { id: 'e3', page: 1, region: [0.06, 0.76, 0.88, 0.1], transcript: 'Ludmila Vlková filia\nJosephi Vlk', variants: [],
+                persons: [{ ref: 'p1', role: 'child', given: 'Ludmila', surname: VLK_LONG }] },
+        ],
+        blind: { doc: { kind: 'register.baptism' }, entries: [
+            { id: 'b2', page: 1, region: [0.06, 0.12, 0.88, 0.6], transcript: VLK_TEXT.replace('Doubrava', 'Dubrava'), of: 'e2' },
+        ] },
+        ...over,
+    });
+}
+const VLK_FEATURES = ['read.now', 'read.blindText', 'read.variantRegion'];
+
+test.describe('Read a document: the scan', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('To check: a row shows its line\'s band and, with read.variantRegion, the place\'s outline; a line under the mouse shows its band', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+        const band = d.locator('#read-scan-line');
+        const spot = d.locator('#read-scan-place');
+        await expect(d.locator('.read-scan-legend .read-lg')).toHaveText(['selected entry', 'line', 'place']);
+        await expect(band).toBeHidden();
+        // A line under the mouse: its band, gone again when the mouse leaves.
+        await d.locator('.read-line[data-line="4"]').hover();
+        await expect(band).toBeVisible();
+        await d.locator('#read-verdict').hover();
+        await expect(band).toBeHidden();
+        await d.locator('.read-check-row[data-place]').first().click();
+        await expect(d.locator('.read-line[data-line="2"]')).toHaveClass(/is-active/);
+        await expect(band).toBeVisible();
+        await expect(spot).toBeVisible();
+        const frame = (await d.locator('.read-frame.is-selected').boundingBox())!;
+        const b = (await band.boundingBox())!;
+        const o = (await spot.boundingBox())!;
+        expect(b.y).toBeGreaterThanOrEqual(frame.y - 1);
+        expect(b.y + b.height).toBeLessThanOrEqual(frame.y + frame.height + 1);
+        expect(o.x).toBeGreaterThan(frame.x);
+        expect(o.x + o.width).toBeLessThan(frame.x + frame.width);
+        // The same row style in the text: a fill and a bar on its left.
+        expect(await d.locator('.read-line[data-line="2"]').evaluate(el => getComputedStyle(el).boxShadow)).toContain('inset');
+        // Reader 2's text: the band and the outline stay.
+        await d.locator('.read-reader-btn[data-reader="2"]').click();
+        await expect(band).toBeVisible();
+        await expect(spot).toBeVisible();
+        // Another entry: nothing chosen there.
+        await d.locator('.read-entry-pill[data-entry="2"]').click();
+        await expect(band).toBeHidden();
+        await expect(spot).toBeHidden();
+    });
+
+    test('without read.variantRegion: the band alone, no outline, the legend without the place', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), 'P0003', ['read.now', 'read.blindText']);
+        await expect(d.locator('.read-scan-legend .read-lg')).toHaveText(['selected entry', 'line']);
+        await d.locator('.read-check-row[data-place]').first().click();
+        await expect(d.locator('#read-scan-line')).toBeVisible();
+        await expect(d.locator('#read-scan-place')).toBeHidden();
+    });
+
+    test('a click on the scan: its entry, then its line in the text; the frames told apart', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+        const frames = d.locator('.read-frame');
+        expect(parseFloat(await frames.nth(1).evaluate(el => getComputedStyle(el).borderTopWidth))).toBeGreaterThanOrEqual(2);
+        expect(await frames.nth(0).evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('solid');
+        // The entry's label in words inside the frame's top right corner.
+        await expect(frames.nth(1).locator('.read-frame-n')).toHaveText('entry 2');
+        const f = (await frames.nth(1).boundingBox())!;
+        const tag = (await frames.nth(1).locator('.read-frame-n').boundingBox())!;
+        expect(tag.x + tag.width).toBeLessThanOrEqual(f.x + f.width);
+        expect(tag.y).toBeGreaterThanOrEqual(f.y);
+        // A click in the chosen frame: the line under it chosen in the text.
+        await page.mouse.click(f.x + f.width / 2, f.y + f.height * 0.95);
+        await expect(d.locator('.read-line.is-active')).toHaveAttribute('data-line', '9');
+        await expect(d.locator('#read-scan-line')).toBeVisible();
+        // Another frame: its entry.
+        const g = (await frames.nth(2).boundingBox())!;
+        await page.mouse.click(g.x + g.width / 2, g.y + g.height / 2);
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '2');
+    });
+
+    test('an entry of one line: no band', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), '', VLK_FEATURES);
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '0');
+        await d.locator('.read-line[data-line="0"]').click();
+        await expect(d.locator('#read-scan-line')).toBeHidden();
+        await expect(d.locator('.read-frame.is-selected')).toHaveClass(/is-lit/);
+    });
+
+    test('Enlarge beside the text: the scan\'s column 500 → 780 px, the text stays beside it; Reduce returns it', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+        const zoom = d.locator('.read-scan-zoom');
+        await expect(zoom).toHaveText('+ Enlarge beside the text');
+        expect(Math.round((await d.locator('#read-scan').boundingBox())!.width)).toBe(500);
+        await zoom.click();
+        await expect(zoom).toHaveText('− Reduce');
+        await expect(zoom).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(async () => Math.round((await d.locator('#read-scan').boundingBox())!.width)).toBe(780);
+        const scan = (await d.locator('#read-scan').boundingBox())!;
+        const text = (await d.locator('#read-text').boundingBox())!;
+        expect(text.x).toBeGreaterThan(scan.x + scan.width - 2);
+        await expect(d.locator('[data-act="open-page"]')).toHaveCount(0);
+        await zoom.click();
+        await expect.poll(async () => Math.round((await d.locator('#read-scan').boundingBox())!.width)).toBe(500);
+    });
+});
+
+for (const viewport of [{ width: 834, height: 1112 }, PHONE]) {
+    test.describe(`Read a document: no Enlarge beside the text at ${viewport.width}px`, () => {
+        test.use({ viewport });
+        test('not offered', async ({ page }) => {
+            const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+            await expect(d.locator('.read-scan-zoom')).toBeHidden();
+        });
+    });
+}
+
+test.describe('Read a document: the result on a phone', () => {
+    test.use({ viewport: PHONE });
+
+    test('the strip of 116 px over the text, at least 8 lines of the text at once; Scan and back; the bubble a sheet with Show on the scan', async ({ page }) => {
+        const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+        const box = (await d.locator('.read-scan-box').boundingBox())!;
+        expect(box.height).toBeLessThanOrEqual(116.5);
+        await expect(d.locator('.read-strip-tag')).toHaveText('entry 2');
+        await expect(d.locator('.read-entries')).toBeHidden();
+        await expect(d.locator('.read-scan-legend')).toBeHidden();
+        // Lines of the text seen without scrolling.
+        const seen = await d.evaluate(() => {
+            const host = document.getElementById('read-result')!.getBoundingClientRect();
+            return [...document.querySelectorAll('#read-transcript .read-line')].filter(l => {
+                const r = l.getBoundingClientRect();
+                return r.top >= host.top && r.bottom <= host.bottom;
+            }).length;
+        });
+        expect(seen).toBeGreaterThanOrEqual(8);
+        // The footer: the main action across the width, Close as × in the header.
+        await expect(d.locator('.read-footer [data-act="close"]')).toBeHidden();
+        await expect(d.locator('.modal-header [data-act="close"]')).toBeVisible();
+        const propose = (await d.locator('[data-act="propose"]').boundingBox())!;
+        expect(propose.height).toBeGreaterThanOrEqual(48);
+        // The reader switch without names, 40 px at least.
+        expect((await d.locator('.read-reader-btn').first().boundingBox())!.height).toBeGreaterThanOrEqual(40);
+        // Scan: the whole scan, its chips, legend and back.
+        await d.locator('[data-act="scan-tab"]').click();
+        await expect(d.locator('#read-text')).toBeHidden();
+        await expect(d.locator('.read-entries')).toBeVisible();
+        await expect(d.locator('.read-scan-legend')).toBeVisible();
+        expect((await d.locator('.read-entry-pill').first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await d.locator('[data-act="scan-tab-off"]').click();
+        await expect(d.locator('#read-text')).toBeVisible();
+        // A mark: the bubble at the bottom, Show on the scan with the line's band.
+        await d.locator('#read-transcript .read-mk-dis').first().click();
+        const pop = d.locator('#read-pop');
+        await expect(pop).toHaveClass(/is-sheet/);
+        const p = (await pop.boundingBox())!;
+        expect(Math.round(p.y + p.height)).toBeGreaterThanOrEqual(PHONE.height - 2);
+        await pop.locator('[data-act="pop-scan"]').click();
+        await expect(d.locator('#read-result')).toHaveClass(/is-scan-tab/);
+        await expect(d.locator('#read-scan-line')).toBeVisible();
+        await expect(d.locator('#read-scan-place')).toBeVisible();
+    });
+});
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 640, height: 900 }, { width: 844, height: 390 }, { width: 834, height: 1112 }, DESKTOP]) {
+    test.describe(`Read a document: the scan in German at ${viewport.width}×${viewport.height}`, () => {
+        test.use({ viewport, locale: 'de-DE' });
+        test('long names: nothing runs over in the dialog, the chips, the reader switch, To check', async ({ page }) => {
+            const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
+            await expect(d.locator('.read-scan-zoom')).toHaveCount(1);
+            await noOverflow(d.locator('.modal'));
+            await noOverflow(d.locator('.read-reader-seg'));
+            await noOverflow(d.locator('.read-check'));
+            const chips = d.locator('.read-entries');
+            if (viewport.width <= 640) await d.locator('[data-act="scan-tab"]').click();
+            if (await chips.isVisible()) {
+                await noOverflow(chips);
+                // A chip never breaks inside.
+                const lines = await chips.locator('.read-entry-pill').evaluateAll(els => els.filter(e => (e as HTMLElement).offsetHeight > 0)
+                    .map(e => e.getBoundingClientRect().height));
+                for (const h of lines) expect(h).toBeLessThan(50);
+            }
+            if (viewport.height <= 500) {
+                // Held sideways: only the chosen entry's chip, no legend.
+                await expect(chips.locator('.read-entry-pill:visible')).toHaveCount(1);
+                await expect(d.locator('.read-scan-legend')).toBeHidden();
+            }
+        });
+    });
+}

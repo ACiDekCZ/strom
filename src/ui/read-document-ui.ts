@@ -35,13 +35,12 @@ import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
-    entryName, placeCountAll, readerPlaces, cropLayout,
+    entryName, placeCountAll, readerPlaces, cropLayout, stripLayout,
     sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict,
     compareWithTranscript, type VerdictFacts, type MergedVariant,
 } from '../read-result.js';
 import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, type ResultMarks, type ShownPlace } from './read-result-view.js';
 import { gedcomTagEventType } from '../ged-parser.js';
-import { openImageViewer } from './image-viewer.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, bridgeFailure } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -54,6 +53,8 @@ import {
 // Each reader's state and which one failed (spec 059 P7 §9).
 import { readerStates } from '../read-choices.js';
 import { READ_READER_STATE_FEATURE, readFailureShown, readOneReaderFailed, type ReadReaderFailure } from '../research-read.js';
+// The scan's place outline (spec 059 P7 §7).
+import { READ_VARIANT_REGION_FEATURE } from '../research-read.js';
 
 const DIALOG_ID = 'read-document-modal';
 const RECENT_KEY = 'read.recent';
@@ -66,8 +67,8 @@ const NOTICE_MS = 10_000;
 const NOTE_MAX = 500;
 /** The explanation unfolded (`'1'`) or folded (`'0'`) in the result; unset: unfolded where there is room. */
 const GLOSS_KEY = 'read.glossOpen';
-/** Below this the result's scan is a strip over the text with the chosen entry's crop. */
-const STRIP_QUERY = '(max-width: 900px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
+/** A phone upright: the result's scan is a strip over the text with the chosen entry's crop (spec 059 P7 §10). */
+const STRIP_QUERY = '(max-width: 640px)';
 
 /** One inserted file (a page of the document). */
 interface Page {
@@ -197,6 +198,14 @@ export interface DialogState {
     cmp?: { entry: number; variants: ReadVariant[] } | null;
     /** A source read again without its own entry said: the entry shown first (its comparison's). */
     srcEntry?: number;
+    /** The phone's Scan tab shows (the whole scan instead of the text, spec 059 P7 §10). */
+    scanTab?: boolean;
+    /** The scan's column widened beside the text (desktop, spec 059 P7 §7). */
+    zoom?: boolean;
+    /** A source's neighbouring entries unfolded among the chips. */
+    nbOpen?: boolean;
+    /** The outline of the place chosen on the scan (its region, `read.variantRegion`; null none). */
+    spot?: ReadRegion | null;
 }
 
 /**
@@ -1152,7 +1161,7 @@ export const readDocumentMethods = uiModule({
                 </div>
                 ${st.notice ? `<p class="read-notice" role="status">${esc(st.notice)}</p>` : ''}
                 <div class="modal-content batch-content read-content${wide ? ' read-content--result' : ''}">${body}</div>
-                <div class="buttons batch-footer read-footer${wide || st.phase === 'written' ? ' read-footer--result' : ''}">${foot}</div>
+                <div class="buttons batch-footer read-footer${wide || st.phase === 'written' ? ' read-footer--result' : ''}${st.phase === 'result' ? ' read-footer--read' : ''}">${foot}</div>
             </div>`;
         overlay.querySelector('.read-dialog > .modal-header > [data-act="close"]')?.before(helpMark('readDocument'));
         this.wireReadDialog(overlay);
@@ -1733,6 +1742,9 @@ export const readDocumentMethods = uiModule({
             st.reader = 1;
             st.focus = '';
             st.cmp = null;
+            st.spot = null;
+            st.scanTab = false;
+            st.nbOpen = false;
             st.srcEntry = st.entry;
             st.page = res.entries[st.entry]?.page ?? res.pages[0]?.n ?? 1;
         }
@@ -1949,7 +1961,7 @@ export const readDocumentMethods = uiModule({
         const s = st!;
         const entry = res.entries[s.entry] ?? null;
         return `
-                <div class="read-result" id="read-result" data-read="${esc(res.id)}" data-entry="${s.entry}">
+                <div class="read-result${s.scanTab ? ' is-scan-tab' : ''}${s.zoom ? ' is-zoomed' : ''}" id="read-result" data-read="${esc(res.id)}" data-entry="${s.entry}">
                     <div class="read-scan" id="read-scan">${this.readScanHtml(res, base)}</div>
                     <div class="read-text" id="read-text">${this.readTextHtml(res, entry)}</div>
                 </div>`;
@@ -1961,26 +1973,17 @@ export const readDocumentMethods = uiModule({
         return res.pages.find(p => p.n === s.page) ?? res.pages[0] ?? null;
     },
 
-    /** The scan: the entries' pills, the pages' tabs, the page with the entries' frames, the hint. */
+    /**
+     * The scan (spec 059 P7 §7, §10): the entries' chips, the pages' tabs, the page with the entries' frames, the
+     * chosen line's band and the place's outline, the legend, where the scan goes on. On a phone the same column is
+     * the strip over the text ("entry N", Scan) and, as the Scan tab, the whole scan with "Back to the text".
+     */
     readScanHtml(res: ReadResult, base: string): string {
         const s = st!;
         const t = strings.read;
-        const entries = res.entries;
         const page = this.readShownPage(res);
         const pageN = page?.n ?? s.page;
-        // A source read again (`read.sourceEntry`): its own entry and the neighbours at the excerpt's edge told apart.
-        const own = this.readSourceEntryIds(res).length > 0;
-        const pills = entries.length >= 2 && s.phase === 'result'
-            ? `<div class="read-entries" role="group" aria-label="${esc(t.entriesLabel)}">${entries.map((e, k) => {
-                const name = entryName(e);
-                const near = own && this.readNeighbour(res, k);
-                const tag = own ? near ? t.eNb : t.eSrc : '';
-                const sr = tag ? `${t.entrySr(k + 1, name)}, ${tag}` : t.entrySr(k + 1, name);
-                return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}${own ? near ? ' is-neighbour' : ' is-source' : ''}" data-act="entry" data-entry="${k}"`
-                    + ` aria-pressed="${k === s.entry}" aria-label="${esc(sr)}"><span class="read-entry-n">${esc(t.entryN(k + 1))}</span>`
-                    + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}`
-                    + `${tag ? `<span class="read-entry-tag">${esc(tag)}</span>` : ''}</button>`;
-            }).join('')}</div>` : '';
+        const result = s.phase === 'result';
         const names = readViewLabels(res.pages);
         const tabs = res.pages.length >= 2
             ? `<div class="read-page-tabs" role="group">${res.pages.map((p, i) =>
@@ -1992,11 +1995,11 @@ export const readDocumentMethods = uiModule({
         const img = url
             ? `<img class="read-scan-img" src="${esc(url)}" alt="${esc(shownName)}" draggable="false">`
             : `<span class="read-scan-noimg">${esc(t.noImage)}</span>`;
-        // Amber is named only where it is drawn on the scan (an entry of one line has no strips).
-        const variants = (entries[s.entry]?.variants.length ?? 0) > 0;
-        const amber = this.readScanVarsOf(res, page).length > 0;
-        const hint = s.phase === 'result' && (entries.length >= 2 || variants) ? `<p class="read-scan-hint">${esc(t.scanHint(amber))}</p>` : '';
-        return `${pills}${tabs}
+        const back = result ? `<button type="button" class="read-scan-back" data-act="scan-tab-off"><span aria-hidden="true">←</span> ${esc(t.backToText)}</button>` : '';
+        const zoom = result && url ? `<button type="button" class="read-scan-zoom" data-act="scan-zoom" aria-pressed="${!!s.zoom}">${this.readZoomLabel()}</button>` : '';
+        const strip = result ? `<span class="read-strip-tag">${esc(t.entryTag(s.entry + 1))}</span>`
+            + `<button type="button" class="read-strip-scan" data-act="scan-tab">${esc(t.scanBtn)}</button>` : '';
+        return `${back}${this.readChipsHtml(res)}${tabs}
                     <div class="read-scan-box">
                         <div class="read-scan-view" id="read-scan-view">
                             <div class="read-scan-sheet" id="read-scan-sheet" style="aspect-ratio: ${ratio}">
@@ -2004,9 +2007,65 @@ export const readDocumentMethods = uiModule({
                                 <div class="read-scan-marks" id="read-scan-marks">${this.readScanMarksHtml(res, page)}</div>
                             </div>
                         </div>
-                        ${url ? `<button type="button" class="read-scan-open" data-act="open-page" aria-label="${esc(t.openPage)}" title="${esc(t.openPage)}"><span aria-hidden="true">⤢</span></button>` : ''}
+                        ${zoom}${strip}
                     </div>
-                    ${hint}${s.phase === 'result' ? this.readScanLinksHtml(page) : ''}`;
+                    ${result ? this.readScanLegendHtml(res, page) + this.readScanLinksHtml(page) : ''}`;
+    },
+
+    /** "+ Enlarge beside the text" / "− Reduce" (spec 059 P7 §7). */
+    readZoomLabel(): string {
+        const t = strings.read;
+        return `<span aria-hidden="true">${st?.zoom ? '−' : '+'}</span> ${esc(st?.zoom ? t.unzoom : t.zoomSide)}`;
+    },
+
+    /**
+     * The entries' chips (spec 059 P7 §7): every entry; a source read again with its neighbours at the excerpt's edge
+     * folded: its own entry and "+ 2 neighbouring entries", unfolded the neighbours dashed and smaller with "hide
+     * neighbours" (a neighbour chosen keeps them unfolded). '' with one entry.
+     */
+    readChipsHtml(res: ReadResult): string {
+        const s = st!;
+        const t = strings.read;
+        const entries = res.entries;
+        if (entries.length < 2 || s.phase !== 'result') return '';
+        const own = this.readSourceEntryIds(res).length > 0;
+        const near = (k: number): boolean => own && this.readNeighbour(res, k);
+        const nbCount = entries.filter((_, k) => near(k)).length;
+        const nbChosen = near(s.entry);
+        const open = !nbCount || nbChosen || !!s.nbOpen;
+        const chips = entries.map((e, k) => {
+            if (!open && near(k)) return '';
+            const name = entryName(e);
+            const tag = own ? near(k) ? t.eNb : t.eSrc : '';
+            const sr = tag ? `${t.entrySr(k + 1, name)}, ${tag}` : t.entrySr(k + 1, name);
+            return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}${own ? near(k) ? ' is-neighbour' : ' is-source' : ''}" data-act="entry" data-entry="${k}"`
+                + ` aria-pressed="${k === s.entry}" aria-label="${esc(sr)}" title="${esc(sr)}"><span class="read-entry-n">${esc(t.entryN(k + 1))}</span>`
+                + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}`
+                + `${tag ? `<span class="read-entry-tag">${esc(tag)}</span>` : ''}</button>`;
+        }).join('');
+        const toggle = !nbCount || nbChosen ? ''
+            : open ? `<button type="button" class="read-nb-toggle is-less" data-act="nb-less" aria-expanded="true">${esc(t.nbLess)}</button>`
+            : `<button type="button" class="read-nb-toggle is-more" data-act="nb-more" aria-expanded="false">${esc(t.nbMore(nbCount))}</button>`;
+        return `<div class="read-entries" role="group" aria-label="${esc(t.entriesLabel)}">${chips}${toggle}</div>`;
+    },
+
+    /**
+     * The scan's legend in one row (spec 059 P7 §7): the chosen entry, a neighbouring entry (when one is drawn), the
+     * line (approximate without the research's line regions), the place (only with `read.variantRegion`).
+     */
+    readScanLegendHtml(res: ReadResult, page: ReadPage | null): string {
+        const t = strings.read;
+        const entry = res.entries[st!.entry];
+        if (!entry?.region || !this.readEntryOnView(res, entry, page)) return '';
+        const own = this.readSourceEntryIds(res).length > 0;
+        const nb = own && res.entries.some((e, k) => this.readNeighbour(res, k) && !!e.region && this.readEntryOnView(res, e, page));
+        const item = (key: string, text: string): string => `<span class="read-lg"><span class="read-lg-key ${key}" aria-hidden="true"></span>${esc(text)}</span>`;
+        return `<p class="read-scan-legend">${[
+            item('is-sel', t.lgSel),
+            nb ? item('is-nb', t.lgNb) : '',
+            parseTranscript(entry).lines.length >= 2 ? item('is-line is-approx', t.lgLine) : '',
+            this.readFeatureOn(READ_VARIANT_REGION_FEATURE) ? item('is-place', t.lgPlace) : '',
+        ].join('')}</p>`;
     },
 
     /**
@@ -2062,9 +2121,9 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
-     * The part of the page this view read (its region, the rest dimmed), the frames of the entries on its
-     * picture (the chosen one solid; an entry of another part of the same page too), the lines that differ
-     * (amber), the shown line.
+     * The part of the page this view read (its region, the rest dimmed), the frames of the entries on its picture
+     * (the chosen one solid, the source's own solid and thin, a neighbour dashed), the chosen line's band and the
+     * place's outline (drawn by `showReadScanLine` and `showReadSpot`).
      */
     readScanMarksHtml(res: ReadResult, page: ReadPage | null): string {
         const s = st!;
@@ -2075,29 +2134,14 @@ export const readDocumentMethods = uiModule({
         const frames = res.entries.map((e, k) => {
             if (!this.readEntryOnView(res, e, page) || !e.region) return '';
             const name = entryName(e);
-            const one = k === s.entry && (parseTranscript(e).lines.length < 2 || this.readerShown(res, e) === 2) ? ' is-one-line' : '';
+            const one = k === s.entry && parseTranscript(e).lines.length < 2 ? ' is-one-line' : '';
             const near = own && this.readNeighbour(res, k);
             const sr = own ? `${t.entrySr(k + 1, name)}, ${near ? t.entryNeighbour : t.entrySource}` : t.entrySr(k + 1, name);
             return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}${one}${near ? ' is-neighbour' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
                 + ` aria-label="${esc(sr)}" aria-pressed="${k === s.entry}">`
                 + `${many ? `<span class="read-frame-n" aria-hidden="true">${esc(t.entryTag(k + 1))}</span>` : ''}</button>`;
         }).join('');
-        const lines = this.readScanVarsOf(res, page).map(v => `<span class="read-scan-var" data-line="${v.j}" style="${regionStyle(v.region)}"></span>`).join('');
-        return `${view}${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
-    },
-
-    /**
-     * The amber strips of the chosen entry's lines that differ, on the view shown: none for an entry of one line (a
-     * register entry of cells: its strip would be the whole frame) and none for the second reader's text (its lines
-     * are not reader 1's lines on the scan).
-     */
-    readScanVarsOf(res: ReadResult, page: ReadPage | null): { j: number; region: ReadRegion }[] {
-        const entry = res.entries[st?.entry ?? 0];
-        if (!entry?.region || !this.readEntryOnView(res, entry, page) || this.readerShown(res, entry) === 2) return [];
-        const parsed = parseTranscript(entry);
-        const n = parsed.lines.length;
-        if (n < 2) return [];
-        return parsed.lines.flatMap((l, j) => l.variant ? [{ j, region: lineRegion(entry.region!, j, n) }] : []);
+        return `${view}${frames}<span class="read-scan-line" id="read-scan-line" hidden></span><span class="read-scan-place" id="read-scan-place" hidden></span>`;
     },
 
     /** Whether an entry stands on the picture a view shows (its own view, or another part of the same page). */
@@ -2302,28 +2346,30 @@ export const readDocumentMethods = uiModule({
     readResultFootHtml(): string {
         const t = strings.read;
         const res = st?.result;
-        const note = (lines: readonly string[]): string =>
-            `<span class="batch-foot-note read-kept">${lines.filter(Boolean).map(l => `<span class="read-foot-line">${esc(l)}</span>`).join('')}</span>`;
+        // A phone (spec 059 P7 §10): one sentence of its own and only the main action of a document (× closes).
+        const note = (lines: readonly string[], phone: string): string =>
+            `<span class="batch-foot-note read-kept">${lines.filter(Boolean).map(l => `<span class="read-foot-line">${esc(l)}</span>`).join('')}`
+            + `<span class="read-foot-phone">${esc(phone)}</span></span>`;
         if (res && this.readIsSourceAgain(res)) {
             const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
             const confirmed = src ? !!this.sourceConfirmState(src).conf ? t.keepConfirm : '' : '';
             const failed = this.readSourceFailed(res);
             if (!this.readSourceChanges(res) || st?.cmp) {
                 const again = st?.readId ? `<button type="button" class="secondary" data-act="again">${researchBridgeAgentLabel(t.readAgain)}</button>` : '';
-                return `${note([t.fNc1, confirmed])}${again}<button type="button" class="primary" data-act="close">${esc(t.close)}</button>`;
+                return `${note([t.fNc1, confirmed], t.fNc1)}${again}<button type="button" class="primary" data-act="close">${esc(t.close)}</button>`;
             }
             // A difference opens its task in the research (terminal); nothing is proposed nor read anew here.
             const differ = res.source?.agree === 'differ';
             const task = differ && res.source!.task && this.researchLinkAvailable('task') ? res.source!.task : '';
             const lines = failed === 'write' ? [t.srcNotWritten] : [t.fSrc1, differ ? t.fSrc2 : t.fSrcSame];
-            return `${note([...lines, confirmed])}
+            return `${note([...lines, confirmed], failed === 'write' ? t.srcNotWritten : t.fSrcPh)}
                 <button type="button" class="${task ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
                 ${task ? `<button type="button" class="primary" data-act="open-task" data-task="${esc(task)}">${researchActionLabel(t.openTaskN(task), researchLinkMark('task'))}</button>` : ''}`;
         }
         const propose = canPropose(res?.entries[st?.entry ?? 0]);
         const another = this.readDocumentReady()
             ? `<button type="button" class="secondary" data-act="another">${esc(t.another)}</button>` : '';
-        return `${note([propose ? t.fDoc1 : '', t.fHist])}${another}
+        return `${note([propose ? t.fDoc1 : '', t.fHist], propose ? t.fDoc1 : t.fHist)}${another}
                 <button type="button" class="${propose ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
                 ${propose ? `<button type="button" class="primary" data-act="propose">${esc(t.propose)}</button>` : ''}`;
     },
@@ -2336,7 +2382,10 @@ export const readDocumentMethods = uiModule({
         s.entry = i;
         s.line = -1;
         s.focus = '';
+        s.spot = null;
         s.page = res.entries[i].page;
+        // A neighbour chosen (on the scan too): the neighbours stay unfolded.
+        if (this.readSourceEntryIds(res).length > 0 && this.readNeighbour(res, i)) s.nbOpen = true;
         this.readRedrawResult(true);
     },
 
@@ -2384,12 +2433,14 @@ export const readDocumentMethods = uiModule({
         img?.addEventListener('load', () => this.layoutReadScan());
         img?.addEventListener('error', () => {
             img.replaceWith(Object.assign(document.createElement('span'), { className: 'read-scan-noimg', textContent: strings.read.noImage }));
-            overlay.querySelector('.read-scan-open')?.remove();
+            overlay.querySelector('.read-scan-zoom')?.remove();
         });
+        // A line under the mouse shows on the scan (only with a mouse: a touch picks it by its click).
+        const hover = (): boolean => window.matchMedia('(hover: hover)').matches;
         overlay.querySelectorAll<HTMLElement>('.read-line[data-line]').forEach(line => {
             const j = Number(line.dataset.line);
-            line.addEventListener('mouseenter', () => this.showReadScanLine(j));
-            line.addEventListener('mouseleave', () => this.showReadScanLine(st?.line ?? -1));
+            line.addEventListener('mouseenter', () => { if (hover()) this.showReadScanLine(j); });
+            line.addEventListener('mouseleave', () => { if (hover()) this.showReadScanLine(st?.line ?? -1); });
             line.addEventListener('focus', () => this.showReadScanLine(j));
             line.addEventListener('blur', () => this.showReadScanLine(st?.line ?? -1));
             line.addEventListener('click', (e) => {
@@ -2419,6 +2470,19 @@ export const readDocumentMethods = uiModule({
             const j = lineAt(entry.region, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, n);
             if (j >= 0) this.readSelectLine(j, true);
         }));
+        // With a mouse, the band follows the line under it in the chosen entry's frame.
+        const chosen = overlay.querySelector<HTMLElement>('.read-frame.is-selected');
+        chosen?.addEventListener('mousemove', (e) => {
+            const cur = st;
+            const entry = cur?.result?.entries[cur.entry];
+            if (!hover() || !cur?.result || !entry?.region || !sheet || this.readerShown(cur.result, entry) === 2) return;
+            const n = parseTranscript(entry).lines.length;
+            const rect = sheet.getBoundingClientRect();
+            if (n < 2 || rect.width <= 0 || rect.height <= 0) return;
+            const j = lineAt(entry.region, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, n);
+            if (j >= 0) this.showReadScanLine(j);
+        });
+        chosen?.addEventListener('mouseleave', () => { if (hover()) this.showReadScanLine(st?.line ?? -1); });
         if (view && typeof ResizeObserver !== 'undefined') {
             scanObserver = new ResizeObserver(() => this.layoutReadScan());
             scanObserver.observe(view);
@@ -2426,6 +2490,7 @@ export const readDocumentMethods = uiModule({
         this.wireReadMarks(overlay);
         this.layoutReadScan();
         this.showReadScanLine(s.line);
+        this.showReadSpot();
         this.readScrollScanToEntry();
     },
 
@@ -2513,6 +2578,9 @@ export const readDocumentMethods = uiModule({
         const li = row?.closest('li');
         if (li?.hidden) li.closest('ul')?.querySelector<HTMLElement>('[data-act="places-more"]')?.click();
         row?.closest('details')?.setAttribute('open', '');
+        // Its word outlined on the scan where the research said where it lies (`read.variantRegion`).
+        s.spot = this.readFeatureOn(READ_VARIANT_REGION_FEATURE) ? place.v?.region ?? null : null;
+        this.showReadSpot();
         if (place.line >= 0 && view.shown === 1) this.readSelectLine(place.line, false);
         const mk = mark ?? root?.querySelector<HTMLElement>(`#read-transcript [data-place="${CSS.escape(id)}"]`) ?? null;
         if (from === 'list') {
@@ -2532,12 +2600,14 @@ export const readDocumentMethods = uiModule({
         const ids = new Set<string>([mk, ...mk.querySelectorAll<HTMLElement>('[data-place]')].map(el => el.dataset.place ?? ''));
         for (let up = mk.parentElement?.closest<HTMLElement>('[data-place]'); up && host.contains(up); up = up.parentElement?.closest<HTMLElement>('[data-place]')) ids.add(up.dataset.place ?? '');
         const places: ShownPlace[] = view.marks.places.filter(p => ids.has(p.id));
-        const html = placePopHtml(places, view.shown, false);
+        // A phone: a bottom sheet with "Show on the scan" (spec 059 P7 §10).
+        const sheet = !hover && window.matchMedia(STRIP_QUERY).matches;
+        const html = placePopHtml(places, view.shown, sheet);
         if (!html) return;
         this.readClosePop(false);
         const pop = document.createElement('div');
         pop.id = 'read-pop';
-        pop.className = 'read-pop';
+        pop.className = sheet ? 'read-pop is-sheet' : 'read-pop';
         pop.setAttribute('role', 'dialog');
         pop.setAttribute('aria-label', (mk.textContent ?? '').replace(/\s+/g, ' ').trim());
         if (hover) pop.dataset.hover = '1';
@@ -2545,6 +2615,7 @@ export const readDocumentMethods = uiModule({
         host.appendChild(pop);
         popFrom = mk;
         mk.setAttribute('aria-expanded', 'true');
+        if (sheet) return;
         const hr = host.getBoundingClientRect();
         const mr = mk.getBoundingClientRect();
         const left = Math.max(8, Math.min(mr.left - hr.left + host.scrollLeft - 10, host.clientWidth - pop.offsetWidth - 8));
@@ -2570,6 +2641,8 @@ export const readDocumentMethods = uiModule({
         const lines = document.querySelectorAll<HTMLElement>(`#${DIALOG_ID} .read-line[data-line]`);
         lines.forEach(l => l.classList.toggle('is-active', Number(l.dataset.line) === j));
         this.showReadScanLine(j);
+        // The phone's strip follows the chosen line.
+        if (document.getElementById('read-scan-view')?.classList.contains('is-strip')) this.layoutReadScan();
         if (fromScan && j >= 0) {
             const line = document.querySelector<HTMLElement>(`#${DIALOG_ID} .read-line[data-line="${j}"]`);
             line?.scrollIntoView({ block: 'nearest' });
@@ -2577,8 +2650,9 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
-     * The highlight of line `j` of the chosen entry on the scan (its region split evenly); -1 hides it. An entry
-     * of one line has no strip: its frame lights up instead.
+     * The band of line `j` of the chosen entry on the scan (spec 059 P7 §7); -1 hides it. Without the research's own
+     * line regions (`read.lines`, not sent) the entry's region is split evenly: the band is approximate (dashed edges,
+     * no fill). An entry of one line has no band: its frame is the line.
      */
     showReadScanLine(j: number): void {
         const el = document.getElementById('read-scan-line');
@@ -2589,18 +2663,34 @@ export const readDocumentMethods = uiModule({
         const frame = document.querySelector<HTMLElement>(`#${DIALOG_ID} .read-frame.is-selected`);
         frame?.classList.remove('is-lit');
         if (j < 0 || !entry?.region || (page && !this.readEntryOnView(s.result, entry, page))) { el.hidden = true; return; }
-        const parsed = parseTranscript(entry);
-        if (parsed.lines.length < 2) {
+        const n = parseTranscript(entry).lines.length;
+        if (n < 2) {
             el.hidden = true;
             frame?.classList.add('is-lit');
             return;
         }
         el.hidden = false;
-        el.setAttribute('style', regionStyle(lineRegion(entry.region, j, parsed.lines.length)));
-        el.classList.toggle('is-variant', !!parsed.lines[j]?.variant);
+        el.setAttribute('style', regionStyle(lineRegion(entry.region, Math.min(j, n - 1), n)));
+        el.classList.add('is-approx');
     },
 
-    /** Lay the page out: whole and scrollable beside the text, or the chosen entry's crop in the narrow strip. */
+    /** The outline of the chosen place's word on the scan (`spot`, spec 059 P7 §7); none without its region. */
+    showReadSpot(): void {
+        const el = document.getElementById('read-scan-place');
+        const s = st;
+        if (!el || !s?.result) return;
+        const entry = s.result.entries[s.entry];
+        const page = this.readShownPage(s.result);
+        const r = s.spot;
+        if (!r || !entry || (page && !this.readEntryOnView(s.result, entry, page))) { el.hidden = true; return; }
+        el.hidden = false;
+        el.setAttribute('style', regionStyle(r));
+    },
+
+    /**
+     * Lay the page out: whole and scrollable beside the text (and in the phone's Scan tab), or the phone's strip over
+     * the text: the chosen entry as wide as the strip, around its chosen line.
+     */
     layoutReadScan(): void {
         const s = st;
         const view = document.getElementById('read-scan-view');
@@ -2613,7 +2703,7 @@ export const readDocumentMethods = uiModule({
             ratio = img.naturalWidth / img.naturalHeight;
             sheet.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
         }
-        const strip = window.matchMedia(STRIP_QUERY).matches;
+        const strip = window.matchMedia(STRIP_QUERY).matches && !s.scanTab;
         view.classList.toggle('is-strip', strip);
         if (!strip) {
             sheet.style.width = sheet.style.height = sheet.style.left = sheet.style.top = '';
@@ -2621,9 +2711,11 @@ export const readDocumentMethods = uiModule({
         }
         const entry = s.result.entries[s.entry];
         // The chosen entry's crop on its own view; on another part of the page that part (it is what that view read).
-        const region = (entry && entry.page === page?.n ? entry.region : null)
-            ?? page?.region ?? (entry && this.readEntryOnView(s.result, entry, page) ? entry.region : null);
-        const c = cropLayout(region, view.clientWidth, view.clientHeight, ratio || 0.75);
+        const own = entry && entry.page === page?.n ? entry.region : null;
+        const region = own ?? page?.region ?? (entry && this.readEntryOnView(s.result, entry, page) ? entry.region : null);
+        const n = entry ? parseTranscript(entry).lines.length : 0;
+        const focus = own && s.line >= 0 && n >= 2 ? lineRegion(own, Math.min(s.line, n - 1), n) : null;
+        const c = stripLayout(region, focus, view.clientWidth, view.clientHeight, ratio || 0.75);
         sheet.style.width = `${c.width}px`;
         sheet.style.height = `${c.height}px`;
         sheet.style.left = `${c.left}px`;
@@ -2643,6 +2735,47 @@ export const readDocumentMethods = uiModule({
         const f = frame.getBoundingClientRect();
         if (f.top >= v.top && f.bottom <= v.bottom) return;
         view.scrollTop += f.top - v.top - 24;
+    },
+
+    /** The phone's Scan tab (spec 059 P7 §10): the whole scan instead of the text, and back. */
+    readScanTab(on: boolean): void {
+        const s = st;
+        const root = document.getElementById('read-result');
+        if (!s?.result || !root) return;
+        this.readClosePop(false);
+        s.scanTab = on;
+        root.classList.toggle('is-scan-tab', on);
+        root.scrollTop = 0;
+        this.layoutReadScan();
+        this.showReadScanLine(s.line);
+        this.showReadSpot();
+        this.readScrollScanToEntry();
+        document.querySelector<HTMLElement>(`#${DIALOG_ID} ${on ? '.read-scan-back' : '.read-strip-scan'}`)?.focus();
+    },
+
+    /** "+ Enlarge beside the text" / "− Reduce" (spec 059 P7 §7): the scan's column 500 ↔ 780 px on a desktop. */
+    readToggleZoom(): void {
+        const s = st;
+        const root = document.getElementById('read-result');
+        if (!s?.result || !root) return;
+        s.zoom = !s.zoom;
+        root.classList.toggle('is-zoomed', s.zoom);
+        const btn = root.querySelector<HTMLElement>('.read-scan-zoom');
+        if (btn) {
+            btn.innerHTML = this.readZoomLabel();
+            btn.setAttribute('aria-pressed', String(s.zoom));
+        }
+        this.readScrollScanToEntry();
+    },
+
+    /** A source's neighbouring entries unfolded among the chips, or folded again. */
+    readToggleNeighbours(open: boolean): void {
+        const s = st;
+        const chips = document.querySelector<HTMLElement>(`#${DIALOG_ID} #read-scan .read-entries`);
+        if (!s?.result || !chips) return;
+        s.nbOpen = open;
+        chips.outerHTML = this.readChipsHtml(s.result);
+        document.querySelector<HTMLElement>(`#${DIALOG_ID} #read-scan .read-nb-toggle`)?.focus();
     },
 
     /** "Copy transcription": the chosen entry's text as shown (reader 1's or the second reader's) with its original marks (`[?]`, `[...]`). */
@@ -2679,16 +2812,6 @@ export const readDocumentMethods = uiModule({
         if (body) body.hidden = !open;
         btn.closest('.read-section')?.classList.toggle('is-open', open);
         try { localStorage.setItem(GLOSS_KEY, open ? '1' : '0'); } catch { /* storage off */ }
-    },
-
-    /** The whole page in the image viewer (⤢). */
-    openReadPage(): void {
-        const s = st;
-        const link = this.researchOriginalsLink();
-        if (!s?.result || !link) return;
-        const page = this.readShownPage(s.result);
-        const base = this.readBridgeBase(link.researchId);
-        if (page && base && page.image) openImageViewer(readPageImageUrl(base, page));
     },
 
     /**
@@ -3098,11 +3221,17 @@ export const readDocumentMethods = uiModule({
             case 'reader': {
                 // Whose transcription shows: only the view (nothing is stored); no line chosen in another reader's text.
                 const n = el.dataset.reader === '2' ? 2 : 1;
-                if (st && st.reader !== n) { st.reader = n; st.line = -1; this.readRedrawResult(false); }
+                // The chosen line's band and the place's outline stay on the scan (spec 059 P7 §7).
+                if (st && st.reader !== n) { st.reader = n; this.readRedrawResult(false); }
                 break;
             }
             case 'page': this.readSelectPage(Number(el.dataset.page)); break;
-            case 'open-page': this.openReadPage(); break;
+            case 'scan-zoom': this.readToggleZoom(); break;
+            case 'scan-tab': this.readScanTab(true); break;
+            case 'scan-tab-off': this.readScanTab(false); break;
+            case 'pop-scan': this.readScanTab(true); break;
+            case 'nb-more': this.readToggleNeighbours(true); break;
+            case 'nb-less': this.readToggleNeighbours(false); break;
             case 'full-quality': {
                 const res = st?.result;
                 const url = res ? this.readScanLinks(this.readShownPage(res)).full?.url : null;

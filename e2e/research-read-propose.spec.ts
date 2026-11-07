@@ -515,12 +515,13 @@ for (const viewport of [DESKTOP, { width: 1024, height: 768 }, { width: 390, hei
             await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
             await expect(dialog(page).locator('#read-result')).toBeVisible();
             if (viewport.width <= 640) {
-                // The result's footer: the secondary buttons side by side, the main one across.
-                const close = (await dialog(page).locator('.read-footer [data-act="close"]').boundingBox())!;
-                const another = (await dialog(page).locator('.read-footer [data-act="another"]').boundingBox())!;
+                // The result's footer on a phone (spec 059 P7 §10): its sentence and the main action across, 48 px;
+                // Close is the × in the header.
+                await expect(dialog(page).locator('.read-footer [data-act="close"]')).toBeHidden();
+                const footer = (await dialog(page).locator('.read-footer').boundingBox())!;
                 const propose = (await dialog(page).locator('.read-footer [data-act="propose"]').boundingBox())!;
-                expect(Math.abs(close.y - another.y)).toBeLessThan(2);
-                expect(propose.width).toBeGreaterThan(close.width + another.width);
+                expect(propose.width).toBeGreaterThan(footer.width * 0.85);
+                expect(propose.height).toBeGreaterThanOrEqual(48);
                 await noOverflow(dialog(page).locator('.read-footer'));
             }
             await dialog(page).locator('.read-footer [data-act="propose"]').click();
