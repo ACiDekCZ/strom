@@ -152,7 +152,7 @@ export const readSourceMethods = uiModule({
     },
 
     /** The research's word on the source (`read.sourceTask`, `/status.readAgain`); null: not said (the viewer as before). */
-    readSourceStateCtx(src: Source): { rid: string; key: string; refn: string; state: ReadSourceState | null; features: readonly string[]; up: boolean; phone: boolean } | null {
+    readSourceStateCtx(src: Source): { rid: string; key: string; refn: string; state: ReadSourceState | null; proposal: ReadSourceProposal | null; features: readonly string[]; up: boolean; phone: boolean } | null {
         const treeId = DataManager.getCurrentTreeId();
         const refn = readSourceId(src.refn?.trim());
         if (!treeId || !refn || this.sourceViewerReadOnly || this.activeResearchAgentless()) return null;
@@ -169,7 +169,9 @@ export const readSourceMethods = uiModule({
             if (local.seen === stateMark(said)) state = local.state;
             else rowLocal.delete(key);
         }
-        return { rid, key, refn, state, features, up: this.researchBridgeUp(rid), phone: !onComputer() };
+        // The agent's proposal: with the newer reading's state, else from the waiting list (a source with no differing newer reading).
+        const proposal = state?.proposal ?? said?.proposal ?? status?.sourceProposals?.[refn] ?? null;
+        return { rid, key, refn, state, proposal, features, up: this.researchBridgeUp(rid), phone: !onComputer() };
     },
 
     /** §2: the row under the links (and §3 the proposal under it); '' when the research says nothing of the source. */
@@ -200,7 +202,7 @@ export const readSourceMethods = uiModule({
         const c = ctx === undefined ? this.readSourceStateCtx(src) : ctx;
         if (!c) return '';
         const done = propDone.get(c.key);
-        const proposal = done?.proposal ?? c.state?.proposal;
+        const proposal = done?.proposal ?? c.proposal;
         if (!proposal) return '';
         return proposalHtml({
             proposal, transcript: done?.asked ?? src.transcript ?? '', lang: getCurrentLanguage(), ...proposalActions(c.features, c.phone, c.up),
@@ -304,7 +306,7 @@ export const readSourceMethods = uiModule({
         const c = this.readSourceStateCtx(src);
         if (!c || !c.up || propAct.get(c.key)?.busy) return;
         const done = propDone.get(c.key);
-        const proposal = done?.proposal ?? c.state?.proposal;
+        const proposal = done?.proposal ?? c.proposal;
         if (!proposal || (take === 'undo') !== !!done) return;
         const act: ProposalAct = { take, busy: true };
         propAct.set(c.key, act);
@@ -425,7 +427,7 @@ export const readSourceMethods = uiModule({
     readSourceViewKey(src: Source, view: SourceAgainView): string {
         // The research's state of the source (and what was done here with it) redraws the viewer when it moves.
         const c = this.readSourceStateCtx(src);
-        const state = c ? [stateMark(c.state), c.up, rowCounts.get(c.state?.read ?? '')?.major ?? '', rowCounts.get(c.state?.read ?? '')?.unsure ?? '',
+        const state = c ? [stateMark(c.state), c.proposal ? JSON.stringify(c.proposal) : '', c.up, rowCounts.get(c.state?.read ?? '')?.major ?? '', rowCounts.get(c.state?.read ?? '')?.unsure ?? '',
             propDone.get(c.key)?.take ?? '', c.features.includes(READ_PROPOSAL_FEATURE), c.features.includes(READ_PROPOSAL_UNDO_FEATURE)].join('/') : '';
         return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? '', view.phone, state].join('|');
     },

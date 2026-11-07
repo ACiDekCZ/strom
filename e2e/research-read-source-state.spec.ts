@@ -15,7 +15,7 @@ const FEATURES = ['read.now', 'read.source', 'read.sourceTask'];
 
 const file = (): string => researchGed().replace('1 _STROM_READ research', '1 _STROM_READ research\n1 _STROM_ORIG Y');
 
-async function setup(page: Page, opts: { features?: string[]; readAgain?: Record<string, unknown>; sourceTask?: string } = {}): Promise<FakeBridge> {
+async function setup(page: Page, opts: { features?: string[]; readAgain?: Record<string, unknown>; sourceTask?: string; waiting?: unknown[] } = {}): Promise<FakeBridge> {
     const ged = file();
     const b = await fakeBridge(page, {
         treeGed: ged,
@@ -26,6 +26,7 @@ async function setup(page: Page, opts: { features?: string[]; readAgain?: Record
         features: opts.features ?? FEATURES,
         links: ['send', 'open', 'live', 'app', 'setup', 'task'],
         read: fakeRead(),
+        ...(opts.waiting ? { waiting: opts.waiting } : {}),
         ...(opts.readAgain ? { statusExtra: { readAgain: opts.readAgain } } : {}),
     });
     await openResearch(page, { ged, media: true });
@@ -159,6 +160,27 @@ test.describe('A source after a newer reading', () => {
         await expect(page.locator('#source-viewer-proposal [data-proposal-take="proposal"]')).toBeVisible();
         await expect(page.locator('#source-viewer-transcript-changed')).toHaveCount(0);
         expect(b.read!.proposalPosts!.map(x => x.take)).toEqual(['proposal', 'undo']);
+    });
+
+    test('the agent\'s proposal from its own work, no newer reading: from the waiting list, accepted with its task', async ({ page }) => {
+        // The research's waiting item (kind transcript); `readAgain` names only sources whose newest reading differs.
+        const b = await setup(page, {
+            features: [...FEATURES, 'sources.proposal'],
+            waiting: [{
+                id: 'T0003', what: 'Transcript of S0001: a new wording', on: '', at: '2026-11-07T17:40:00Z', kind: 'transcript',
+                section: 'decide', phase: 'todo', choices: ['proposal', 'keep'], actions: [],
+                proposal: { source: 'S0001', text: 'Josef Fíšek a Anně', mark: 'm1', by: 'agent', at: '2026-11-07T17:40:00Z',
+                    current: 'Josef Fíšek a Anna', txt: 't1', choices: ['proposal', 'keep'] },
+            }],
+        });
+        await view(page);
+        await expect(row(page)).toHaveCount(0);
+        const p = page.locator('#source-viewer-proposal');
+        await expect(p).toBeVisible();
+        await expect(p.locator('.viewer-proposal-row')).toContainText('Anně');
+        await p.locator('[data-proposal-take="proposal"]').click();
+        await expect(p).toHaveClass(/is-done/);
+        expect(b.read!.proposalPosts).toEqual([{ source: 'S0001', task: 'T0003', take: 'proposal' }]);
     });
 
     test('the bridge down: the state stays, nothing to choose', async ({ page }) => {

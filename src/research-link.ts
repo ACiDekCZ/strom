@@ -14,7 +14,7 @@ import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.
 import { keepPlaceOrigins, placesWithoutMeta, isPlaceRecordId, cleanCoords } from './place-records.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
-import { readAgainSaid, type ReadSourceState } from './research-read-task.js';
+import { readAgainSaid, waitingProposalsSaid, type ReadSourceProposal, type ReadSourceState } from './research-read-task.js';
 import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
@@ -1877,6 +1877,11 @@ export interface LiveStatus {
      * differs from its transcript, by source id (S…). Absent: not said (an archive, a research waiting for its agent, an older research).
      */
     readAgain?: Record<string, ReadSourceState>;
+    /**
+     * The agent's proposals for confirmed transcripts (`waiting` items of kind `transcript`, with `read.sourceTask` in
+     * `features`), by source id (S…): also for a source with no differing newer reading. Absent: none.
+     */
+    sourceProposals?: Record<string, ReadSourceProposal>;
     /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
     busy?: LiveBusy;
     /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
@@ -3138,6 +3143,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...experimentsSaid(r, features),
         ...hypothesesSaid(r, features),
         ...(readAgainSaid(r.readAgain, features) ? { readAgain: readAgainSaid(r.readAgain, features)! } : {}),
+        ...(waitingProposalsSaid(r.waiting, features) ? { sourceProposals: waitingProposalsSaid(r.waiting, features)! } : {}),
         ...qualitySaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),

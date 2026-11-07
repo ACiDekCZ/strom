@@ -348,6 +348,32 @@ export function readAgainSaid(v: unknown, features: readonly string[] | null | u
     return asRecord(v) ? Object.fromEntries(m) : undefined;
 }
 
+/**
+ * The agent's proposals for confirmed transcripts in `/status.waiting` (kind `transcript`, the task's id, its
+ * `proposal {source, text, by, at, …}`), by source id (S…). The only place a proposal from the agent's own work is
+ * said when the source has no differing newer reading (`readAgain` names only those). Untrusted.
+ */
+export function sanitizeWaitingProposals(v: unknown): Map<string, ReadSourceProposal> {
+    const out = new Map<string, ReadSourceProposal>();
+    if (!Array.isArray(v)) return out;
+    for (const item of v.slice(0, 2000)) {
+        const r = asRecord(item);
+        if (!r || r.kind !== 'transcript') continue;
+        const p = asRecord(r[READ_TASK_NAMES.proposal]);
+        const source = p && typeof p.source === 'string' && /^S\d{1,9}$/.test(p.source) ? p.source : '';
+        const proposal = p && source ? sanitizeReadSourceProposal({ ...p, task: r.id }) : null;
+        if (proposal && !out.has(source)) out.set(source, proposal);
+    }
+    return out;
+}
+
+/** `sanitizeWaitingProposals` as a plain record, read only with `read.sourceTask` in `features`; undefined: none. */
+export function waitingProposalsSaid(v: unknown, features: readonly string[] | null | undefined): Record<string, ReadSourceProposal> | undefined {
+    if (!features?.includes(READ_SOURCE_TASK_FEATURE)) return undefined;
+    const m = sanitizeWaitingProposals(v);
+    return m.size ? Object.fromEntries(m) : undefined;
+}
+
 /** `/status.readAgain`: the sources' states by source id (S…); empty when absent. Untrusted. */
 export function sanitizeReadAgain(v: unknown): Map<string, ReadSourceState> {
     const out = new Map<string, ReadSourceState>();

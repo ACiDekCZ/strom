@@ -7,10 +7,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     READ_SOURCE_TASK_FEATURE, readTaskChoiceFor, readTaskPath, sanitizeSourceTaskInfo, sanitizeVariantTask, sanitizeReadTaskReply,
-    sanitizeReadSourceProposal, sanitizeReadSourceState, sanitizeReadAgain, sanitizeTaskSetting, readTaskId,
+    sanitizeReadSourceProposal, sanitizeReadSourceState, sanitizeReadAgain, sanitizeTaskSetting, readTaskId, sanitizeWaitingProposals,
     readJudgedId, readJudgedKept, readTaskRefusal, readProposalStale, READ_TASK_CODES,
 } from '../research-read-task.js';
 import { sanitizeReadAccepts, sanitizeReadResult, startSourceRead, postReadTask, postReadProposal } from '../research-read.js';
+import { sanitizeLiveStatus } from '../research-link.js';
 
 const ID = 'D20261019153012-a1b2';
 const BASE = 'http://127.0.0.1:1/t';
@@ -117,6 +118,43 @@ describe('/status.readAgain and the agent\'s proposal (for the source\'s row)', 
         // The research's own shape: `by` a string, no places.
         expect(sanitizeReadSourceProposal({ text: 'x', by: 'agent · opus · high + agent · m-2', task: 'T0417', at: '2026-11-06T10:00:00Z' }))
             .toEqual({ text: 'x', by: 'agent · opus · high + agent · m-2', task: 'T0417', at: '2026-11-06T10:00:00Z' });
+    });
+});
+
+describe('the agent\'s proposal from its own work (`/status.waiting`, kind transcript)', () => {
+    // The research's own item (`waiting.ts`: a task with a proposal), a confirmed source with no differing newer reading.
+    const item = (over: Record<string, unknown> = {}, p: Record<string, unknown> = {}) => ({
+        id: 'T0003', what: 'Transcript of S0001: a new wording', on: '', at: '2026-11-07T17:40:00Z', kind: 'transcript',
+        section: 'decide', group: { key: 'transcripts', name: 'Transcripts', kind: 'other' }, phase: 'todo', priority: 3,
+        choices: ['proposal', 'keep'], actions: [],
+        proposal: { source: 'S0001', text: 'Josephi Vlk in Doubrava N. 7', mark: 'a1b2c3', by: 'agent', at: '2026-11-07T17:40:00Z',
+            why: 'the register says Doubrava', current: 'Josephi Vlk in Dubrava N. 7', txt: 'f0e1d2', choices: ['proposal', 'keep'], ...p },
+        ...over,
+    });
+
+    it('the proposal by its source, the task being the item\'s id', () => {
+        const m = sanitizeWaitingProposals([
+            item(),
+            item({ id: 'T0004' }, { source: 'S0002', text: 'Catharinae Hora' }),
+            item({ id: 'T0005', kind: 'check' }, { source: 'S0003' }),
+            item({ id: 'nope' }, { source: 'S0004' }),
+            item({ id: 'T0006' }, { source: '../S1' }),
+            item({ id: 'T0007' }, { text: '' }),
+            { id: 'T0008', what: 'x', kind: 'transcript' },
+        ]);
+        expect([...m.keys()]).toEqual(['S0001', 'S0002']);
+        expect(m.get('S0001')).toEqual({ text: 'Josephi Vlk in Doubrava N. 7', by: 'agent', task: 'T0003', at: '2026-11-07T17:40:00Z' });
+        expect(m.get('S0002')!.task).toBe('T0004');
+        expect(sanitizeWaitingProposals(undefined).size).toBe(0);
+        expect(sanitizeWaitingProposals({ S0001: item() }).size).toBe(0);
+    });
+
+    it('in the bridge\'s status only with read.sourceTask, also without readAgain and without waiting.groups', () => {
+        const status = (features: string[]) => sanitizeLiveStatus({ tree: { id: 'R1', name: 'Vlk' }, head: 'h', features, waiting: [item()] });
+        expect(status(['read.sourceTask'])!.sourceProposals).toEqual({ S0001: { text: 'Josephi Vlk in Doubrava N. 7', by: 'agent', task: 'T0003', at: '2026-11-07T17:40:00Z' } });
+        expect(status(['read.sourceTask'])!.readAgain).toBeUndefined();
+        expect(status(['waiting.groups'])!).not.toHaveProperty('sourceProposals');
+        expect(sanitizeLiveStatus({ tree: { id: 'R1', name: 'Vlk' }, head: 'h', features: ['read.sourceTask'], waiting: [] })!).not.toHaveProperty('sourceProposals');
     });
 });
 
