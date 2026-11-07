@@ -623,8 +623,8 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         const panel = page.locator('#live-panel');
         const queue = head(page, '#live-panel', 'Awaiting action');
         await expect(queue).toHaveAttribute('aria-expanded', 'true');
-        await queue.focus();
-        await page.keyboard.press('Shift+F10');
+        // The locator's own press finds the heading again: a redraw of the panel (a slow runner) detaches a focused one.
+        await queue.press('Shift+F10');
         const menu = page.locator('.live-sec-menu');
         await expect(menu).toBeVisible();
         // Under the heading, the first item focused; arrows walk, Escape closes back to the heading.
@@ -637,7 +637,7 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await expect(menu).toHaveCount(0);
         await expect(queue).toBeFocused();
         await expect(queue).toHaveAttribute('aria-expanded', 'true');
-        await page.keyboard.press('ContextMenu');
+        await queue.press('ContextMenu');
         await expect(menu).toBeVisible();
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('Enter');
