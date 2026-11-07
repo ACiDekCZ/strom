@@ -116,14 +116,17 @@ function result(who?: Record<string, unknown>[]): Record<string, unknown> {
 test.describe('Read a document: the readers\' agent, model and effort', () => {
     test.use({ viewport: DESKTOP });
 
-    test('who reads as by default: one line, "as set in the research"; Read with the AI badge sends no `with`', { tag: '@smoke' }, async ({ page }) => {
+    test('who reads as by default: the two cards and why two, nothing technical folded; Read with the AI badge sends no `with`', { tag: '@smoke' }, async ({ page }) => {
         const b = await setup(page);
         const d = await openWithPage(page);
-        await expect(d.locator('.read-readers legend .read-readers-gloss')).toHaveText('two read separately, the transcripts are compared and where they differ is shown');
+        await expect(d.locator('.read-reader-text strong')).toHaveText(['1 reader', '2 readers']);
+        await expect(d.locator('.read-reader-text > span')).toHaveText(['faster', 'more reliable, for the tree']);
+        await expect(d.locator('.read-readers-why')).toHaveText('Two readers read separately. Where their texts disagree there may be a mistake, and that place is shown to check.');
         const who = d.locator('.read-who');
-        await expect(who.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus · high']);
-        await expect(who.locator('.read-who-from')).toHaveText('as set in the research');
-        await expect(who.locator('.read-reset')).toHaveCount(0);
+        await expect(who.locator('.read-who-tag, .read-reset')).toHaveCount(0);
+        // Folded: no agent, model, effort or command.
+        const folded = await d.locator('.read-readers, .read-choose').evaluateAll(els => els.map(el => (el as HTMLElement).innerText).join(' '));
+        for (const word of ['effort', 'high', 'xhigh', 'npm', 'Opus', 'Claude Code']) expect(folded).not.toContain(word);
         const toggle = d.locator('[data-act="refine"]');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await expect(d.locator('#read-refine-panel')).toHaveCount(0);
@@ -143,25 +146,29 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect(d.locator('[data-act="refine"]')).toHaveAttribute('aria-expanded', 'true');
         const panel = d.locator('#read-refine-panel');
         await expect(panel).toBeVisible();
-        await expect(panel.locator('.read-refine-label')).toHaveText(['Reader 1', 'Reader 2 (independent)']);
-        await expect(select(d, 0, 'agent')).toHaveAttribute('aria-label', 'Reader 1 – Agent');
+        await expect(panel.locator('.read-refine-label')).toHaveText(['Reader 1', 'Reader 2']);
+        await expect(panel.locator('.read-refine-cols span')).toHaveText(['', 'Program', 'Model', 'Thoroughness']);
+        await expect(select(d, 0, 'agent')).toHaveAttribute('aria-label', 'Reader 1 – Program');
         // The agent that cannot read now is offered greyed, with why.
         const gemini = select(d, 0, 'agent').locator('option[value="gemini"]');
         await expect(gemini).toHaveText('Gemini CLI – sign-in expired');
         await expect(gemini).toBeDisabled();
         // A model or effort `""`: as the agent itself is set.
         await expect(select(d, 0, 'model').locator('option[value=""]')).toHaveText('as the agent is set');
-        await expect(select(d, 0, 'effort').locator('option[value=""]')).toHaveText('as the agent is set');
+        // Thoroughness in words, the default said; never the research's own values.
+        await expect(select(d, 0, 'effort').locator('option')).toHaveText(['higher – default', 'standard', 'as the agent is set']);
+        await expect(panel.locator('.read-refine-foot-line')).toHaveText([
+            'Higher thoroughness reads more carefully, but longer.', 'Usage: Claude Code draws on the Claude subscription.']);
 
-        // Reader 2 with another agent: its own default model; it has no effort; the note says what it draws on.
+        // Reader 2 with another agent: its own default model; it has no thoroughness; under the panel what each draws on.
         await select(d, 1, 'agent').focus();
         await select(d, 1, 'agent').selectOption('codex');
         await expect(select(d, 1, 'model')).toHaveValue('gpt-5');
         await expect(select(d, 1, 'effort')).toHaveCount(0);
-        await expect(d.locator('.read-refine-row[data-at="1"] .read-refine-noeffort')).toHaveText('no effort');
-        await expect(d.locator('.read-refine-row[data-at="1"] .read-refine-note')).toHaveText('uses the Codex subscription or credit');
-        await expect(d.locator('.read-refine-row[data-at="0"] .read-refine-note')).toHaveCount(0);
-        await expect(d.locator('.read-who-tag')).toHaveText('kept for the next readings');
+        await expect(d.locator('.read-refine-row[data-at="1"] .read-refine-noeffort')).toHaveText('no choice of thoroughness');
+        await expect(d.locator('.read-refine-note')).toHaveCount(0);
+        await expect(panel.locator('[data-note="bill"]')).toHaveText('Usage: Claude Code draws on the Claude subscription, Codex on the Codex subscription or credit.');
+        await expect(d.locator('.read-who-tag')).toHaveText('adjusted, kept for the next readings');
         // The focus stays on the select just changed.
         await expect(select(d, 1, 'agent')).toBeFocused();
 
@@ -169,13 +176,14 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await d.locator('[data-act="reset-with"]').click();
         await expect(panel).toBeVisible();
         await expect(select(d, 1, 'agent')).toHaveValue('claude');
-        await expect(d.locator('.read-who-from')).toHaveText('as set in the research');
+        await expect(d.locator('.read-who-tag')).toHaveCount(0);
 
         await select(d, 1, 'agent').selectOption('codex');
         await select(d, 0, 'effort').selectOption('');
-        // Closed: each reader on its own line.
+        // Folded: only that it is adjusted, and the way back.
         await d.locator('[data-act="refine"]').click();
-        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · Opus', 'Reader 2: Codex · GPT-5']);
+        await expect(d.locator('.read-who-tag')).toHaveText('adjusted, kept for the next readings');
+        await expect(d.locator('.read-who')).not.toContainText('Codex');
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.posts.length).toBe(1);
         expect(b.read!.posts[0].with).toEqual([{ agent: 'claude', model: 'opus', effort: '' }, { agent: 'codex', model: 'gpt-5', effort: '' }]);
@@ -196,19 +204,19 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
     test('Default forgets the kept choice at once, even when the dialog closes without reading', async ({ page }) => {
         await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'codex', model: 'gpt-5', effort: '' }] });
         const d = await openWithPage(page);
-        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · Opus · high', 'Reader 2: Codex · GPT-5']);
-        await expect(d.locator('.read-who-tag')).toHaveText('kept for the next readings');
+        await expect(d.locator('.read-who-tag')).toHaveText('adjusted, kept for the next readings');
         await d.locator('[data-act="reset-with"]').click();
-        await expect(d.locator('.read-who-from')).toHaveText('as set in the research');
+        await expect(d.locator('.read-who-tag, .read-reset')).toHaveCount(0);
         expect(await page.evaluate(() => localStorage.getItem('read.with'))).toBeNull();
         await d.locator('.read-footer [data-act="close"]').last().click();
         await expect(d).toHaveCount(0);
         const d2 = await openWithPage(page);
-        await expect(d2.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus · high']);
-        await expect(d2.locator('.read-who-from')).toHaveText('as set in the research');
+        await expect(d2.locator('.read-who-tag')).toHaveCount(0);
+        await d2.locator('[data-act="refine"]').click();
+        await expect(select(d2, 1, 'agent')).toHaveValue('claude');
     });
 
-    test('the time said is the slowest reader\'s; none for a reader never timed here; past it, the reading waits for the other reader', async ({ page }) => {
+    test('the time said is the slowest reader\'s; none for a reader never timed here; past it, longer than usual', async ({ page }) => {
         await page.clock.install();
         const b = await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'codex', model: 'gpt-5', effort: '' }] });
         const d = await openWithPage(page);
@@ -232,24 +240,29 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         r.state = 'reading';
         r.since = new Date(await page.evaluate(() => Date.now())).toISOString();
         await poll(page);
-        await expect(d2.locator('#read-progress-time')).toContainText('Usually within 6 minutes · running');
-        await expect(d2.locator('#read-progress-time')).not.toContainText('waiting');
-        // Past the time said, one reader done: it says the reading waits for the other one.
+        const note = d2.locator('#read-progress-note');
+        await expect(note).toHaveText('Usually within 6 minutes. The window can be closed; the result will be announced.');
+        // One reader done (no state of each reader said): how many, never an empty bar.
         r.done = 1;
+        await poll(page);
+        await expect(d2.locator('.read-run-text')).toHaveText('1 of 2 readers finished, the remaining reader is still reading.');
+        await expect(d2.locator('.read-bar')).toHaveAttribute('aria-valuenow', '1');
+        await expect(d2.locator('.read-run-rows')).toHaveCount(0);
+        // Past the time said: longer than usual, in amber; reading goes on.
         await page.clock.fastForward(6 * 60_000 + 5_000);
-        await expect(d2.locator('#read-progress-time')).toContainText('· waiting for the other reader');
-        await expect(d2.locator('#read-progress-slow')).toBeHidden();
+        await expect(note).toHaveText('Taking longer than usual (usually within 6 minutes). Reading continues; the window can be closed and the result will be announced.');
+        await expect(note).toHaveClass(/is-late/);
     });
 
     test('one reader: "Read by"; switching to two keeps reader 1 and starts reader 2 as by default', async ({ page }) => {
         const b = await setup(page, { readers: 1 });
         const d = await openWithPage(page);
-        await expect(d.locator('.read-who-line')).toHaveText(['Read by Claude Code · Opus · high']);
+        await expect(d.locator('.read-who')).not.toContainText('Claude Code');
         await d.locator('[data-act="refine"]').click();
         await expect(d.locator('.read-refine-label')).toHaveText(['Reader']);
         await select(d, 0, 'model').selectOption('sonnet');
         await d.locator('.read-reader input[value="2"]').check();
-        await expect(d.locator('.read-refine-label')).toHaveText(['Reader 1', 'Reader 2 (independent)']);
+        await expect(d.locator('.read-refine-label')).toHaveText(['Reader 1', 'Reader 2']);
         await expect(select(d, 0, 'model')).toHaveValue('sonnet');
         await expect(select(d, 1, 'model')).toHaveValue('opus');
         await d.locator('[data-act="read"]').click();
@@ -260,8 +273,8 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
     test('an agent chosen last that cannot read now: said at the reader, Read stays off, nothing switched quietly', async ({ page }) => {
         const b = await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'gemini', model: '', effort: '' }] });
         const d = await openWithPage(page);
-        await expect(d.locator('.read-who-line').nth(1)).toHaveText('Reader 2: Gemini CLI · as the agent is set · sign-in expired');
-        await expect(d.locator('.read-who-down')).toHaveText(' · sign-in expired');
+        // Folded, the reader that cannot start says so (the Read button is off for it).
+        await expect(d.locator('.read-who-held')).toHaveText('Reader 2 (Gemini CLI) can’t read now: sign-in expired.');
         await expect(d.locator('[data-act="read"]')).toBeDisabled();
         await expect(d.locator('.read-foot-down')).toHaveText('A reader with an unavailable agent cannot start.');
         await d.locator('[data-act="refine"]').click();
@@ -308,10 +321,10 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect.poll(() => b.read!.posts.length).toBe(1);
         await expect(d.locator('.read-notice')).toHaveText('The research no longer offers what reader 2 was to read with; the default is set.');
         await expect(select(d, 1, 'model')).toHaveValue('opus');
-        await expect(d.locator('.read-who-from')).toHaveText('as set in the research');
+        await expect(d.locator('.read-who-tag')).toHaveCount(0);
     });
 
-    test('who read: in the progress (only when not as by default), the result, the strip, the menu and the list', async ({ page }) => {
+    test('who read: the result, the strip, the menu and the list; the progress without each reader\'s state says how many are done', async ({ page }) => {
         const b = await setup(page);
         const d = await openWithPage(page);
         await d.locator('[data-act="refine"]').click();
@@ -323,7 +336,8 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         r.state = 'reading';
         r.done = 1;
         await poll(page);
-        await expect(d.locator('.read-progress-who li')).toHaveText(['Reader 1: Claude Code · Opus · high · done', 'Reader 2: Codex · GPT-5 · reading…']);
+        await expect(d.locator('.read-run-rows')).toHaveCount(0);
+        await expect(d.locator('.read-run-text')).toHaveText('1 of 2 readers finished, the remaining reader is still reading.');
 
         // The Research menu and the panel's strip add the other agent.
         await d.locator('.read-footer [data-act="close"]').last().click();
@@ -362,8 +376,8 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         r.who = same;
         r.state = 'reading';
         await poll(page);
-        await expect(d.locator('.read-step.is-now')).toContainText('Reading');
-        await expect(d.locator('.read-progress-who')).toHaveCount(0);
+        await expect(d.locator('.read-run-title')).toHaveText('Reading');
+        await expect(d.locator('.read-run-rows')).toHaveCount(0);
         r.state = 'done';
         r.done = 2;
         b.read!.results.set(r.id, result(same));
@@ -416,7 +430,6 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
     test('what an alias runs on now (read.choices.now): said after the model, the alias is what is sent', async ({ page }) => {
         const b = await setup(page, { offer: choicesNow(), features: ['read.choices.now'] });
         const d = await openWithPage(page);
-        await expect(d.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus (now Opus 5.5) · high']);
         await d.locator('[data-act="refine"]').click();
         const model = select(d, 0, 'model');
         await expect(model).toHaveValue('opus');
@@ -425,7 +438,6 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await select(d, 1, 'model').selectOption('opus');
         await select(d, 1, 'effort').selectOption('medium');
         await d.locator('[data-act="refine"]').click();
-        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · as the agent is set (now Opus 5.5) · high', 'Reader 2: Claude Code · Opus (now Opus 5.5) · medium']);
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.posts.length).toBe(1);
         // The alias goes out, never what it runs on now: a newer Opus is taken by itself.
@@ -436,7 +448,10 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await d.locator('.read-cancel').click();
         await d.locator('[data-act="again"]').click();
         await expect(d.locator('#read-title')).toHaveText('Read again');
-        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · as the agent is set (now Opus 5.5) · high', 'Reader 2: Claude Code · Opus (now Opus 5.5) · medium']);
+        await d.locator('[data-act="refine"]').click();
+        await expect(select(d, 0, 'model').locator('option:checked')).toHaveText('as the agent is set (now Opus 5.5)');
+        await expect(select(d, 1, 'model').locator('option:checked')).toHaveText('Opus (now Opus 5.5)');
+        await expect(select(d, 1, 'effort')).toHaveValue('medium');
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.agains.length).toBe(1);
         expect(b.read!.agains[0].body.with).toEqual([{ agent: 'claude', model: '', effort: 'high' }, { agent: 'claude', model: 'opus', effort: 'medium' }]);
@@ -445,12 +460,11 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
     test('without read.choices.now: the models as before, even when the offer carries what they run on', async ({ page }) => {
         await setup(page, { offer: choicesNow() });
         const d = await openWithPage(page);
-        await expect(d.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus · high']);
         await d.locator('[data-act="refine"]').click();
         await expect(select(d, 0, 'model').locator('option')).toHaveText(['Opus', 'Sonnet', 'as the agent is set']);
     });
 
-    test('a Codex model from a newer Codex\'s list: a note under the reader; none for the other models', async ({ page }) => {
+    test('a Codex model from a newer Codex\'s list: one sentence under the reader, how to update folded; none for the other models', async ({ page }) => {
         await setup(page, { offer: choicesNow(), features: ['read.choices.now'] });
         const d = await openWithPage(page);
         await d.locator('[data-act="refine"]').click();
@@ -458,14 +472,28 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         const row = d.locator('.read-refine-row[data-at="1"]');
         await expect(row.locator('[data-note="catalog-newer"]')).toHaveCount(0);
         await select(d, 1, 'model').selectOption('gpt-6-astra');
-        await expect(row.locator('[data-note="catalog-newer"]')).toHaveText(
-            'The model list comes from Codex 0.60.0; the installed Codex 0.57.1 may not know this model. A newer Codex: npm install -g @openai/codex@latest');
-        await expect(row.locator('.read-refine-note')).toHaveCount(2);
+        const note = row.locator('[data-note="catalog-newer"]');
+        await expect(note).toContainText('The installed Codex is older and may not know this model.');
+        await expect(row.locator('.read-refine-note')).toHaveCount(1);
+        // The command only once unfolded, never in the sentence itself.
+        const how = d.locator('[data-act="how-update"]');
+        await expect(how).toHaveText('How to update ▾');
+        await expect(how).toHaveAttribute('aria-expanded', 'false');
+        await expect(row.locator('.read-how')).toBeHidden();
+        expect(await note.evaluate(el => (el as HTMLElement).innerText)).not.toContain('npm');
+        await how.click();
+        await expect(d.locator('[data-act="how-update"]')).toHaveAttribute('aria-expanded', 'true');
+        await expect(row.locator('.read-how')).toBeVisible();
+        await expect(row.locator('.read-how')).toContainText('Codex is updated in the computer’s terminal with:');
+        await expect(row.locator('.read-how-cmd')).toHaveText('npm install -g @openai/codex@latest');
+        await expect(d.locator('[data-act="how-update"]')).toBeFocused();
+        await d.locator('[data-act="how-update"]').click();
+        await expect(row.locator('.read-how')).toBeHidden();
         await select(d, 1, 'model').selectOption('gpt-5');
         await expect(row.locator('[data-note="catalog-newer"]')).toHaveCount(0);
     });
 
-    test('a reading whose reader\'s agent refused the model: the research\'s own sentence', async ({ page }) => {
+    test('a reading whose reader\'s agent refused the model, no reader said: did not finish; the research\'s own sentence only under Details', async ({ page }) => {
         const b = await setup(page);
         const d = await openWithPage(page);
         await d.locator('[data-act="read"]').click();
@@ -475,7 +503,19 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         b.read!.reads[0].state = 'failed';
         await poll(page);
         await expect(d.locator('.read-error')).toHaveAttribute('data-error', 'failed');
-        await expect(d.locator('.read-error-text')).toHaveText(said);
+        await expect(d.locator('.read-error-title')).toHaveText('Reading did not finish');
+        await expect(d.locator('.read-error-text')).toHaveText('The chosen model is not available now. Another model can be chosen, or it can be tried again later.');
+        await expect(d.locator('.read-details-text')).toBeHidden();
+        await d.locator('[data-act="details"]').click();
+        await expect(d.locator('[data-act="details"]')).toHaveAttribute('aria-expanded', 'true');
+        await expect(d.locator('.read-details-text')).toBeVisible();
+        await expect(d.locator('.read-details-text strong')).toHaveText('Research message:');
+        await expect(d.locator('.read-details-said')).toHaveText(said);
+        // Another way than the same retry: another model, in the app (no mark); retrying starts an agent.
+        await expect(d.locator('.read-footer [data-act="retry"] .research-ai-badge')).toHaveCount(1);
+        const other = d.locator('.read-footer [data-act="other-model"]');
+        await expect(other).toHaveText('Try another model');
+        await expect(other.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
     });
 
     test('Read again after cancelling: the readers chosen first, `with` only when changed', async ({ page }) => {
@@ -497,6 +537,160 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await expect.poll(() => b.read!.agains.length).toBe(1);
         expect(b.read!.agains[0].body.with).toEqual([{ agent: 'codex', model: 'gpt-5', effort: '' }]);
         await expect(d.locator('#read-title')).toHaveText('Reading a document');
+    });
+});
+
+/** Who reads with the state of each (`read.readerState`): Claude Code done in `secs`, Codex as said. */
+function whoStates(second: Record<string, unknown>, secs = 180): Record<string, unknown>[] {
+    return [
+        { agent: 'claude', name: 'Claude Code', model: 'opus', effort: 'high', state: 'done', secs },
+        { agent: 'codex', name: 'Codex', model: 'gpt-5', effort: '', ...second },
+    ];
+}
+
+const SAID = 'Model gpt-6-astra není v nainstalované verzi Codex CLI dostupný – aktualizujte Codex (npm install -g @openai/codex@latest), nebo zvolte jiný model.';
+
+/** Started with reader 2 on Codex (as kept from before); the reading listed as running. */
+async function readWithCodex(page: Page, opts: { features?: string[]; offer?: Record<string, unknown>; model?: string; timed?: boolean } = {}): Promise<{ b: FakeBridge; d: Locator; r: FakeReading }> {
+    const b = await setup(page, { stored: [{ agent: 'claude', model: 'opus', effort: 'high' }, { agent: 'codex', model: opts.model ?? 'gpt-5', effort: '' }], ...opts });
+    if (opts.timed) {
+        // A reading of both ended here in 4 min 30 s: Codex has a pace.
+        const at = new Date(Date.now() - 3_600_000);
+        b.read!.reads = [reading('D20261106173422-86d4', 'done', {
+            from: 'research', at: at.toISOString(), since: new Date(at.getTime() + 270_000).toISOString(), done: 2, entries: 1, who: WHO_MIXED,
+        })];
+        await poll(page);
+    }
+    const d = await openWithPage(page);
+    await d.locator('[data-act="read"]').click();
+    await expect.poll(() => b.read!.posts.length).toBe(1);
+    const r = b.read!.reads[0];
+    r.state = 'reading';
+    return { b, d, r };
+}
+
+test.describe('Read a document: each reader\'s state (read.readerState)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('queued: waiting, no running time, no rows', async ({ page }) => {
+        const { d, r } = await readWithCodex(page, { features: ['read.readerState'] });
+        r.state = 'queued';
+        r.who = whoStates({ state: 'queued' }).map(w => ({ ...w, state: 'queued', secs: undefined }));
+        await poll(page);
+        await expect(d.locator('.read-run-title')).toHaveText('Waiting');
+        await expect(d.locator('.read-run-text')).toHaveText('Another document is being read in the research right now. This reading starts by itself when its turn comes.');
+        await expect(d.locator('#read-progress-time')).toBeHidden();
+        await expect(d.locator('.read-run-rows, .read-bar')).toHaveCount(0);
+        await expect(d.locator('#read-progress-note')).toHaveText('The window can be closed; the result will be announced.');
+    });
+
+    test('a row per reader: done in N min, reading, then longer than usual with the amber sentence', async ({ page }) => {
+        await page.clock.install();
+        const { d, r } = await readWithCodex(page, { features: ['read.readerState'], timed: true });
+        r.who = whoStates({ state: 'reading' });
+        r.done = 1;
+        r.expectSecs = 300;
+        r.since = new Date(await page.evaluate(() => Date.now())).toISOString();
+        await poll(page);
+        await expect(d.locator('.read-run-title')).toHaveText('Reading');
+        const rows = d.locator('.read-run-row');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.locator('.read-run-who')).toHaveText(['Reader 1 · Claude Code', 'Reader 2 · Codex']);
+        await expect(rows.locator('.read-run-state')).toHaveText(['finished in 3 min', 'reading…']);
+        await expect(rows.nth(0)).toHaveAttribute('data-reader-state', 'done');
+        await expect(rows.nth(0).locator('.read-run-mark')).toHaveText('✓');
+        await expect(rows.nth(1)).toHaveAttribute('data-reader-state', 'reading');
+        // The rows say it: no "1 of 2" sentence; the bar is the share done.
+        await expect(d.locator('.read-run-text')).toHaveCount(0);
+        await expect(d.locator('.read-bar')).toHaveAttribute('aria-valuenow', '1');
+        const note = d.locator('#read-progress-note');
+        await expect(note).toHaveText('Usually within 5 minutes. The window can be closed; the result will be announced.');
+        await page.clock.fastForward(5 * 60_000 + 5_000);
+        await expect(rows.nth(1).locator('.read-run-state')).toHaveText('reading longer than usual');
+        await expect(rows.nth(1)).toHaveClass(/is-late/);
+        await expect(note).toHaveText('Reader 2 is reading longer than usual (usually within 5 minutes). Reading continues; the window can be closed and the result will be announced.');
+        await expect(note).toHaveClass(/is-late/);
+    });
+
+    test('reader 2 could not read (model): its title and reason, the rows, Details folded; Try another model opens the panel at its model', async ({ page }) => {
+        const { b, d, r } = await readWithCodex(page, { features: ['read.readerState'], offer: choicesNow(), model: 'gpt-6-astra' });
+        const who = whoStates({ model: 'gpt-6-astra', modelName: 'GPT-6-Astra', state: 'failed', ran: false });
+        r.who = who;
+        r.state = 'failed';
+        b.read!.results.set(READ_ID, { ...result(who), state: 'failed', entries: [], readers: { asked: 2, ran: 1, agree: null, who },
+            failure: { code: 'model', reader: 2, text: SAID, params: { agent: 'codex', model: 'gpt-6-astra' } } });
+        await poll(page);
+        const err = d.locator('.read-error');
+        await expect(err).toHaveAttribute('data-reader', '2');
+        await expect(d.locator('.read-error-title')).toHaveText('Reader 2 could not read');
+        await expect(d.locator('.read-error-text')).toHaveText('Codex does not know the chosen model GPT-6-Astra; the installed Codex is older. Reader 1 finished.');
+        const rows = d.locator('.read-run-row');
+        await expect(rows.locator('.read-run-state')).toHaveText(['finished', 'model not available']);
+        await expect(rows.nth(1).locator('.read-run-who')).toHaveText('Reader 2 · Codex · GPT-6-Astra');
+        await expect(rows.nth(1).locator('.read-run-mark')).toHaveText('×');
+        // The research's technical sentence only under Details, folded.
+        expect(await err.evaluate(el => (el as HTMLElement).innerText)).not.toContain('npm');
+        await expect(d.locator('.read-details-text')).toBeHidden();
+        await expect(d.locator('.read-details-said')).toHaveText(SAID);
+        await expect(d.locator('.read-footer .batch-foot-note')).toHaveText('Nothing was written.');
+        await d.locator('[data-act="other-model"]').click();
+        await expect(d.locator('#read-title')).toHaveText('Read again');
+        await expect(d.locator('#read-refine-panel')).toBeVisible();
+        await expect(select(d, 1, 'agent')).toHaveValue('codex');
+        await expect(select(d, 1, 'model')).toHaveValue('gpt-6-astra');
+        await expect(select(d, 1, 'model')).toBeFocused();
+        await select(d, 1, 'model').selectOption('gpt-5');
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.agains.length).toBe(1);
+        expect(b.read!.agains[0].body.with).toEqual([{}, { agent: 'codex', model: 'gpt-5', effort: '' }]);
+    });
+
+    test('done with reader 2 failed: a text of one reader, said so; never that the readers agree', async ({ page }) => {
+        const b = await setup(page, { features: ['read.readerState'] });
+        const who = whoStates({ state: 'failed', ran: false });
+        b.read!.reads = [reading(READ_ID, 'done', { who, done: 1, entries: 1 })];
+        b.read!.results.set(READ_ID, { ...result(who), readers: { asked: 2, ran: 2, agree: 'same', who } });
+        await poll(page);
+        await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
+        const d = dialog(page);
+        await expect(d.locator('#read-result')).toBeVisible();
+        await expect(d.locator('.read-notice')).toHaveText('Reader 2 could not read. The text of one reader is not checked by the other; disagreements are not shown.');
+        await expect(d.locator('#read-verdict')).toBeVisible();
+        await expect(d.locator('#read-verdict')).not.toContainText('agree');
+        const text = await d.evaluate(el => (el as HTMLElement).innerText);
+        for (const agree of ['2 readers, agree', 'The readers agree.']) expect(text).not.toContain(agree);
+    });
+
+    test('without read.readerState: no rows, how many readers are done, a failure said in general', async ({ page }) => {
+        const { b, d, r } = await readWithCodex(page);
+        r.who = whoStates({ state: 'reading' });
+        r.done = 1;
+        await poll(page);
+        await expect(d.locator('.read-run-rows')).toHaveCount(0);
+        await expect(d.locator('.read-run-text')).toHaveText('1 of 2 readers finished, the remaining reader is still reading.');
+        const who = whoStates({ state: 'failed', ran: false });
+        r.who = who;
+        r.state = 'failed';
+        b.read!.results.set(READ_ID, { ...result(who), state: 'failed', entries: [], failure: { code: 'model', reader: 2, text: SAID } });
+        await poll(page);
+        await expect(d.locator('.read-error-title')).toHaveText('Reading did not finish');
+        await expect(d.locator('.read-error')).not.toHaveAttribute('data-reader', /./);
+        await expect(d.locator('.read-error .read-run-rows')).toHaveCount(0);
+        await expect(d.locator('.read-details-said')).toHaveText(SAID);
+    });
+
+    test('a done reading of one failed reader without read.readerState: no notice of it', async ({ page }) => {
+        const b = await setup(page);
+        const who = whoStates({ state: 'failed', ran: false });
+        b.read!.reads = [reading(READ_ID, 'done', { who, done: 1, entries: 1 })];
+        b.read!.results.set(READ_ID, { ...result(who), readers: { asked: 2, ran: 1, agree: null, who } });
+        await poll(page);
+        await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
+        const d = dialog(page);
+        await expect(d.locator('#read-result')).toBeVisible();
+        await expect(d.locator('.read-notice')).toHaveCount(0);
+        await expect(d.locator('#read-verdict')).toBeVisible();
+        await expect(d.locator('#read-verdict')).not.toContainText('agree');
     });
 });
 
@@ -522,7 +716,7 @@ test.describe('Read a document: the readers on a phone', () => {
         await select(d, 1, 'agent').selectOption('codex');
         const row = d.locator('.read-refine-row[data-at="1"]');
         const fields = row.locator('.read-refine-field');
-        await expect(fields.locator('.read-refine-field-key')).toHaveText(['Agent', 'Model', 'Effort']);
+        await expect(fields.locator('.read-refine-field-key')).toHaveText(['Program', 'Model', 'Thoroughness']);
         const rowBox = (await row.boundingBox())!;
         let lastBottom = 0;
         for (const f of await fields.all()) {
@@ -535,7 +729,7 @@ test.describe('Read a document: the readers on a phone', () => {
             expect(key.x).toBeLessThan(r.x + 20);
         }
         // An agent without effort keeps the third field, so the height does not jump.
-        await expect(fields.nth(2).locator('.read-refine-noeffort')).toHaveText('no effort');
+        await expect(fields.nth(2).locator('.read-refine-noeffort')).toHaveText('no choice of thoroughness');
         // The links have a target of 44 px.
         expect(Math.round((await d.locator('[data-act="refine"]').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
         expect(Math.round((await d.locator('[data-act="reset-with"]').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
@@ -554,6 +748,28 @@ test.describe('Read a document: the readers on a phone', () => {
         await expect(who).toHaveText('Text by reader 1 (Claude Code · Opus 4). Reader 2 (Codex · GPT-5) read independently, as a check.');
         const [line, text] = [(await who.boundingBox())!, (await d.locator('#read-transcript').boundingBox())!];
         expect(line.y).toBeGreaterThanOrEqual(text.y + text.height - 1);
+        expect(await d.locator('.read-dialog').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    });
+});
+
+test.describe('Read a document: a failed reading on a phone', () => {
+    test.use({ viewport: PHONE });
+
+    test('the × closes, so no Close in the footer; the main action across, 44 px targets', async ({ page }) => {
+        const { b, d, r } = await readWithCodex(page, { features: ['read.readerState'] });
+        const who = whoStates({ model: 'gpt-5', state: 'failed', ran: false });
+        r.who = who;
+        r.state = 'failed';
+        b.read!.results.set(READ_ID, { ...result(who), state: 'failed', entries: [], failure: { code: 'model', reader: 2, text: SAID } });
+        await poll(page);
+        await expect(d.locator('.read-error-title')).toHaveText('Reader 2 could not read');
+        await expect(d.locator('.read-footer [data-act="close"]')).toBeHidden();
+        await expect(d.locator('.close-btn[data-act="close"]')).toBeVisible();
+        const foot = (await d.locator('.read-footer').boundingBox())!;
+        const main = (await d.locator('.read-footer button.primary').boundingBox())!;
+        expect(main.width).toBeGreaterThan(foot.width - 50);
+        expect(Math.round(main.height)).toBeGreaterThanOrEqual(44);
+        expect(Math.round((await d.locator('[data-act="details"]').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
         expect(await d.locator('.read-dialog').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
     });
 });
