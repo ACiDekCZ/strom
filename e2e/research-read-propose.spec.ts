@@ -165,6 +165,35 @@ test.describe('Read a document: suggest for the tree', () => {
         expect(marie.notes).toContain('given name');
     });
 
+    test('the transcription\'s uncertain mark in a person: drawn as in the result (dotted, a raised ?), never written into the tree', async ({ page }) => {
+        const res = baptism();
+        const people = (res.entries as { persons: Record<string, unknown>[] }[])[0].persons;
+        people.find(p => p.ref === 'p1')!.surname = 'Fíšková[?]';
+        people.find(p => p.ref === 'p4')!.written = 'Wenceslaus Král[?]';
+        await setup(page, res);
+        const d = await openPropose(page);
+        // The godfather as written: the uncertain word marked, no raw mark.
+        const head = cardOf(d, 'p4').locator('.read-p-written');
+        await expect(head).not.toContainText('[?]');
+        await expect(head.locator('.read-mk-unc')).toHaveCount(1);
+        await expect(head.locator('.read-mk-unc')).toContainText('Král');
+        await expect(head.locator('.read-mk-unc sup')).toHaveText('?');
+        await expect(cardOf(d, 'p4').locator('.read-p-name')).toHaveText('Václav Král');
+        // A surname the research gave with the mark: the value without it, the field uncertain.
+        await expect(cardOf(d, 'p1').locator('input[data-p-field="surname"]')).toHaveValue('Fíšková');
+        await expect(cardOf(d, 'p1').locator('.read-p-field').nth(1)).toHaveClass(/is-uncertain/);
+        await expect(d.locator('#read-propose')).not.toContainText('[?]');
+
+        // Both written: nothing of the mark in the tree's persons.
+        await cardOf(d, 'p4').locator('[data-choice="new"]').click();
+        await apply(d).click();
+        await expect(d.locator('#read-title')).toHaveText('Added to the tree');
+        await expect(d.locator('.read-written')).not.toContainText('[?]');
+        const names = (await persons(page)).map(p => p.name);
+        expect(names).toEqual(expect.arrayContaining(['Marie Fíšková', 'Václav Král']));
+        expect(await page.evaluate(() => JSON.stringify(window.Strom.DataManager.getData().persons))).not.toContain('[?]');
+    });
+
     test('an edited uncertain name loses the mark and is written as typed, without the note', async ({ page }) => {
         await setup(page, baptism());
         const d = await openPropose(page);

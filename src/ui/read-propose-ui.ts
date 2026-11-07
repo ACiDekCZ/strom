@@ -19,7 +19,8 @@ import { displayYear, formatFlexDate } from '../dates.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { excerptFromDataUrl } from '../excerpts.js';
 import { cropToJpeg } from './crop-editor.js';
-import { ReadEntry, ReadPerson, ReadResult, ReadPage, ReadRegion, readDocYear } from '../research-read.js';
+import { ReadEntry, ReadPerson, ReadResult, ReadPage, ReadRegion, readDocYear, unmarkedText } from '../research-read.js';
+import { lineMarksHtml } from './read-result-view.js';
 import { entryName } from '../read-result.js';
 import {
     ProposeState, ProposeChoice, ProposeItem, initialPropose, carryPropose, proposeItems, proposeCounts, linkAdditions,
@@ -266,7 +267,7 @@ export const readProposeMethods = uiModule({
         const said = variantsText(variants, { word: t.variantRole, name: code => t.roles[code] || code });
         let main = '';
         if (c.choice === 'skip') {
-            main = `<span class="read-p-line"><span class="read-p-name">${esc(readName(p) || p.written)}</span> <span class="read-p-muted">· ${esc(t.skipped)}</span></span>`;
+            main = `<span class="read-p-line"><span class="read-p-name">${esc(readName(p) || unmarkedText(p.written))}</span> <span class="read-p-muted">· ${esc(t.skipped)}</span></span>`;
         } else if (c.choice === 'new') {
             const field = (key: 'given' | 'surname', label: string): string => {
                 const unsure = p.uncertain.includes(key) && !c.edited[key];
@@ -314,7 +315,7 @@ export const readProposeMethods = uiModule({
         return `<div class="read-p-card is-${c.choice}${fresh ? ' has-fresh' : ''}" data-ref="${esc(p.ref)}">
                     <span class="read-p-crop" aria-hidden="true">${crop}</span>
                     <div class="read-p-main">
-                        <span class="read-p-head"><span class="read-p-role">${esc(role)}</span>${p.written ? `<span class="read-p-written">${esc(p.written)}</span>` : ''}</span>
+                        <span class="read-p-head"><span class="read-p-role">${esc(role)}</span>${p.written ? `<span class="read-p-written">${lineMarksHtml(p.written, 0, [], '')}</span>` : ''}</span>
                         ${main}
                     </div>
                     <div class="read-p-seg" role="radiogroup" aria-label="${esc(t.choiceGroup(who))}">${seg('new', t.choiceNew)}${seg('link', linkLabel)}${seg('skip', t.choiceSkip)}</div>
@@ -361,7 +362,7 @@ export const readProposeMethods = uiModule({
             if (tree) return shownName(tree);
         }
         if (c.choice === 'new') return [c.given, c.surname].filter(Boolean).join(' ') || readName(p);
-        return readName(p) || p.written;
+        return readName(p) || unmarkedText(p.written);
     },
 
     /** An event or relationship row. */

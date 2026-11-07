@@ -10,6 +10,7 @@ import {
     readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
     readPaceSecs, readViewNames, readSameSheet,
     readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState, startSourceRead, startRead, readAgain,
+    unmarkedText,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
 import { strings, setLanguage, type Language } from '../strings.js';
@@ -217,6 +218,18 @@ describe('GET read/<id>', () => {
         cost: { amount: 0.42, currency: 'USD', partial: false },
         version: 2,
     };
+
+    it('a person\'s value never keeps the transcription\'s uncertain mark: taken off, the field uncertain; the written form keeps it', () => {
+        const marked = sanitizeReadResult({ ...full, entries: [{ ...full.entries[0], persons: [
+            { ref: 'p1', role: 'godparent', given: 'Franciscus', surname: 'Krejčí[?]', written: 'Franciscus Krejčí[?]', occupation: 'agricola [?]', residence: 'Lhota', uncertain: ['surname'] },
+        ] }] })!;
+        const p = marked.entries[0].persons[0];
+        expect(p).toMatchObject({ given: 'Franciscus', surname: 'Krejčí', occupation: 'agricola', residence: 'Lhota', written: 'Franciscus Krejčí[?]' });
+        expect(p.uncertain).toEqual(['surname', 'occupation']);
+        expect(unmarkedText('Franciscus Krejčí[?]')).toBe('Franciscus Krejčí');
+        expect(unmarkedText('[?] Novák [?]  Lhota')).toBe('Novák Lhota');
+        expect(unmarkedText('Novák')).toBe('Novák');
+    });
 
     it('takes the whole result', () => {
         const r = sanitizeReadResult(full)!;

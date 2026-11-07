@@ -701,22 +701,37 @@ function sanitizePerson(v: unknown): ReadPerson | null {
         match.push({ person, why: cleanText(r.why, 200), score: asFraction(r.score) ?? 0 });
     }
     const field = (x: unknown, max = 200) => (typeof x === 'number' && Number.isFinite(x) ? String(x) : cleanText(x, max));
+    const uncertain = Array.isArray(p.uncertain)
+        ? p.uncertain.slice(0, 20).filter((u): u is string => typeof u === 'string' && /^[a-z][a-zA-Z]{0,30}$/.test(u)) : [];
+    // A value the tree can take never carries the transcription's mark: `Krejčí[?]` is `Krejčí`, read uncertainly.
+    const value = (key: 'given' | 'surname' | 'occupation' | 'residence', max: number): string => {
+        const raw = cleanText(p[key], max);
+        if (!UNCERTAIN_MARK.test(raw)) return raw;
+        if (!uncertain.includes(key)) uncertain.push(key);
+        return unmarkedText(raw);
+    };
     return {
         ref,
         role: READ_ROLES.includes(p.role as ReadRole) ? p.role as ReadRole : 'other',
         roleText: cleanText(p.roleText, 60),
-        given: cleanText(p.given, 120),
-        surname: cleanText(p.surname, 120),
+        given: value('given', 120),
+        surname: value('surname', 120),
         written: cleanText(p.written, 300),
         sex: p.sex === 'M' || p.sex === 'F' ? p.sex : '',
         age: field(p.age, 40),
-        occupation: cleanText(p.occupation, 200),
-        residence: cleanText(p.residence, 200),
-        uncertain: Array.isArray(p.uncertain)
-            ? p.uncertain.slice(0, 20).filter((u): u is string => typeof u === 'string' && /^[a-z][a-zA-Z]{0,30}$/.test(u)) : [],
+        occupation: value('occupation', 200),
+        residence: value('residence', 200),
+        uncertain,
         region: region(p.region),
         match,
     };
+}
+
+const UNCERTAIN_MARK = /\[\?\]/;
+
+/** A transcription's text without its uncertain marks (`Franciscus Krejčí[?]` → `Franciscus Krejčí`), as a name or a value. */
+export function unmarkedText(text: string): string {
+    return text.replace(/\s*\[\?\]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 function sanitizeEvent(v: unknown): ReadEvent | null {
