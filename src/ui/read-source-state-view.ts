@@ -11,7 +11,7 @@ import { researchLinkMark } from '../research-link.js';
 import { researchActionLabel, researchBridgeAgentLabel } from './research-open-mark.js';
 import { compareWithTranscript, readerPlaces, transcriptLines, variantClass, locateSpan } from '../read-result.js';
 import { changeWhatHtml, kindText } from './read-result-view.js';
-import type { ReadProposalTake, ReadSourceProposal, ReadSourceState, ReadTaskHow } from '../research-read-task.js';
+import { READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, type ReadProposalTake, type ReadSourceProposal, type ReadSourceState, type ReadTaskHow } from '../research-read-task.js';
 
 function esc(text: string): string {
     return text
@@ -75,7 +75,13 @@ function iconHtml(icon: Icon, cls = 'viewer-read-state-icon'): string {
 }
 
 /** A choice made at the row: on its way, or failed (a done one shows as the research's new state). */
-export interface SourceRowAct { how: ReadTaskHow; busy: boolean; failed?: boolean }
+export interface SourceRowAct {
+    how: ReadTaskHow;
+    busy: boolean;
+    failed?: boolean;
+    /** Nothing was left to decide (decided meanwhile): said until the research's state comes. */
+    settled?: boolean;
+}
 
 export interface SourceRowInput {
     state: ReadSourceState;
@@ -167,6 +173,7 @@ export function sourceRowHtml(o: SourceRowInput): string {
             + `<div class="viewer-read-state-choices">${offer.choices.map(choice).join('')}</div>`
             + `<p class="viewer-read-state-note">${esc(offer.note)}</p>`
             + (o.act?.failed && !busy ? `<p class="viewer-read-state-fail" role="alert">${esc(t.tFail)}</p>` : '')
+            + (o.act?.settled && !busy ? `<p class="viewer-read-state-note is-settled" role="status">${esc(t.tSettled)}</p>` : '')
             + `</div>`;
     }
     return `<div class="viewer-read-state${kind === 'unchecked' ? ' is-open' : ''}" id="source-viewer-read-state" data-state="${kind}" role="status" aria-live="polite">`
@@ -215,7 +222,13 @@ export function proposalPlaces(transcript: string, p: Pick<ReadSourceProposal, '
 }
 
 /** An answer to the proposal: on its way, failed, or answered (`done`, until the research's state moves on). */
-export interface ProposalAct { take: ReadProposalTake; busy: boolean; failed?: boolean }
+export interface ProposalAct {
+    take: ReadProposalTake;
+    busy: boolean;
+    failed?: boolean;
+    /** The proposal moved on meanwhile (answered, another wording, nothing to undo): the state now is shown. */
+    stale?: boolean;
+}
 
 export interface ProposalInput {
     proposal: ReadSourceProposal;
@@ -234,6 +247,17 @@ export interface ProposalInput {
     act?: ProposalAct | null;
 }
 
+/**
+ * What the proposal offers by the research's features: Accept / Keep only with `sources.proposal` and the bridge
+ * up (a phone: where it works), Undo only with `sources.proposal.undo`.
+ */
+export function proposalActions(features: readonly string[], phone: boolean, up: boolean): Pick<ProposalInput, 'actions' | 'undo'> {
+    return {
+        actions: phone ? 'phone' : up && features.includes(READ_PROPOSAL_FEATURE) ? 'bridge' : 'none',
+        undo: features.includes(READ_PROPOSAL_FEATURE) && features.includes(READ_PROPOSAL_UNDO_FEATURE),
+    };
+}
+
 function spinLabel(on: boolean, label: string): string {
     return on ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(label)}` : esc(label);
 }
@@ -249,7 +273,8 @@ export function proposalHtml(o: ProposalInput): string {
     const meta = [p.by ? `<span class="viewer-proposal-by">${esc(p.by)}</span>` : '', from, at ? `<span>${esc(at)}</span>` : '']
         .filter(Boolean).join('<span aria-hidden="true"> · </span>');
     const busy = !!o.act?.busy;
-    const fail = o.act?.failed && !busy ? `<p class="viewer-proposal-fail" role="alert">${esc(t.pFail)}</p>` : '';
+    const fail = o.act?.failed && !busy ? `<p class="viewer-proposal-fail" role="alert">${esc(t.pFail)}</p>`
+        : o.act?.stale && !busy ? `<p class="viewer-proposal-stale" role="status">${esc(t.pStale)}</p>` : '';
     const head = `<h4 class="viewer-proposal-title" id="source-viewer-proposal-title">${esc(t.pTitle)}</h4><p class="viewer-proposal-meta">${meta}</p>`;
     if (o.done) {
         const accepted = o.done === 'proposal';

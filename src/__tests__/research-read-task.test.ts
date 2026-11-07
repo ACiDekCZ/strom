@@ -8,8 +8,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     READ_SOURCE_TASK_FEATURE, readTaskChoiceFor, readTaskPath, sanitizeSourceTaskInfo, sanitizeVariantTask, sanitizeReadTaskReply,
     sanitizeReadSourceProposal, sanitizeReadSourceState, sanitizeReadAgain, sanitizeTaskSetting, readTaskId,
+    readJudgedId, readJudgedKept, readTaskRefusal, readProposalStale, READ_TASK_CODES,
 } from '../research-read-task.js';
-import { sanitizeReadAccepts, sanitizeReadResult, startSourceRead, postReadTask, postReadProposal, postReadTaskSetting } from '../research-read.js';
+import { sanitizeReadAccepts, sanitizeReadResult, startSourceRead, postReadTask, postReadProposal } from '../research-read.js';
 
 const ID = 'D20261019153012-a1b2';
 const BASE = 'http://127.0.0.1:1/t';
@@ -53,6 +54,30 @@ describe('the research\'s fields', () => {
         expect(readTaskId('S0417')).toBe('');
         expect(sanitizeReadAccepts({ ready: true, sourceTask: 'ask' })?.sourceTask).toBe('ask');
         expect(sanitizeReadAccepts({ ready: true, sourceTask: 'often' })?.sourceTask).toBeUndefined();
+    });
+
+    it('judged: a task (T…) or a reading a person kept (D…); anything else none', () => {
+        const KEPT = 'D20261105101500-c3d4';
+        expect(sanitizeVariantTask({ judged: KEPT })).toEqual({ judged: KEPT });
+        expect(sanitizeVariantTask({ judged: 'T0399', sure: true })).toEqual({ judged: 'T0399', sure: true });
+        expect(readJudgedId('D2026-x')).toBe('');
+        expect(readJudgedKept(KEPT)).toBe(true);
+        expect(readJudgedKept('T0399')).toBe(false);
+        expect(readJudgedKept(undefined)).toBe(false);
+        const r = sanitizeReadResult(result({ id: 'S0042', agree: 'differ', variants: [{ at: 'Wlk', other: 'Vlk', judged: KEPT }] }))!;
+        expect(r.source!.variants).toEqual([{ at: 'Wlk', other: 'Vlk', judged: KEPT }]);
+    });
+
+    it('source.state: the source\'s state after this reading, in the shape of /status.readAgain', () => {
+        const r = sanitizeReadResult(result({ id: 'S0042', agree: 'differ', task: 'T0417', taskSetting: 'ask', taskOffer: true,
+            state: { read: ID, state: 'task', task: 'T0417', taskFor: 'agent', taskOpen: true, taskQueued: true }, variants: [] }))!;
+        expect(r.source!.state).toEqual({ read: ID, state: 'task', task: 'T0417', taskFor: 'agent', taskOpen: true, taskQueued: true });
+        // Without its `read`, or a bare word: of this reading.
+        expect(sanitizeReadResult(result({ id: 'S0042', agree: 'differ', taskSetting: 'ask', state: { state: 'unchecked' }, variants: [] }))!.source!.state)
+            .toEqual({ read: ID, state: 'unchecked' });
+        expect(sanitizeReadResult(result({ id: 'S0042', agree: 'differ', taskSetting: 'ask', state: 'saved', variants: [] }))!.source!.state)
+            .toEqual({ read: ID, state: 'saved' });
+        expect(sanitizeReadResult(result({ id: 'S0042', agree: 'differ', taskSetting: 'ask', state: 'later', variants: [] }))!.source).not.toHaveProperty('state');
     });
 
     it('the answer to a choice: the task, a chat asked for, the places added to the open task', () => {
@@ -141,15 +166,54 @@ describe('the bridge calls', () => {
         expect(f).not.toHaveBeenCalled();
     });
 
-    it('the proposal\'s answer and the setting go to their own paths', async () => {
+    it('the proposal\'s answer goes to its own path, with the task also for undo', async () => {
         let f = stubFetch(200, { ok: true });
         await postReadProposal(BASE, 'S0042', 'T0417', 'keep');
         expect(sent(f).url).toContain(`${BASE}/sources/proposal`);
         expect(sent(f).body).toEqual({ source: 'S0042', task: 'T0417', take: 'keep' });
         vi.unstubAllGlobals();
-        f = stubFetch(200, {});
-        await postReadTaskSetting(BASE, 'never');
-        expect(sent(f).url).toContain(`${BASE}/sourceTask`);
-        expect(sent(f).body).toEqual({ sourceTask: 'never' });
+        f = stubFetch(200, { ok: true });
+        await postReadProposal(BASE, 'S0042', 'T0417', 'undo');
+        expect(sent(f).body).toEqual({ source: 'S0042', task: 'T0417', take: 'undo' });
+    });
+
+    it('409 read.decide.task: the task that holds the places, an answer (the task beside the code or in params)', async () => {
+        stubFetch(409, { code: 'read.decide.task', task: 'T0410', error: 'A task holds it.' });
+        expect(await postReadTask(BASE, 'S0042', ID, 'queue')).toEqual({ ok: true, value: { task: 'T0410', chat: '', appended: false, outcome: 'held' } });
+        vi.unstubAllGlobals();
+        stubFetch(409, { code: 'read.decide.task', params: { task: 'T0411' } });
+        expect(await postReadTask(BASE, 'S0042', ID, 'save')).toMatchObject({ ok: true, value: { task: 'T0411', outcome: 'held' } });
+        vi.unstubAllGlobals();
+        // Without a task to open: a failure as before.
+        stubFetch(409, { code: 'read.decide.task' });
+        expect((await postReadTask(BASE, 'S0042', ID, 'save')).ok).toBe(false);
+    });
+
+    it('409 read.decide.done / nothing: nothing left to decide, an answer; busy and the other refusals: failures', async () => {
+        for (const code of [READ_TASK_CODES.done, READ_TASK_CODES.nothing]) {
+            stubFetch(409, { code });
+            expect(await postReadTask(BASE, 'S0042', ID, 'now')).toEqual({ ok: true, value: { task: '', chat: '', appended: false, outcome: 'settled' } });
+            vi.unstubAllGlobals();
+        }
+        for (const [status, code] of [[503, 'research.busy'], [409, 'read.decide.confirmed'], [409, 'read.decide.declined'], [404, 'read.decide.none'], [400, 'read.decide.invalid']] as const) {
+            stubFetch(status, { code });
+            const r = await postReadTask(BASE, 'S0042', ID, 'now');
+            expect(r.ok).toBe(false);
+            vi.unstubAllGlobals();
+        }
+        expect(readTaskRefusal(400, { code: 'read.decide.done' })).toBeNull();
+    });
+
+    it('the proposal moved on meanwhile (decided, changed, nothing to undo): stale, not a failure', async () => {
+        for (const code of [READ_TASK_CODES.proposalDecided, READ_TASK_CODES.proposalChanged, READ_TASK_CODES.proposalUndo]) {
+            expect(readProposalStale(409, code)).toBe(true);
+            stubFetch(409, { code });
+            const r = await postReadProposal(BASE, 'S0042', 'T0417', 'proposal');
+            expect(r.ok === false && readProposalStale(r.failure.status, r.failure.code)).toBe(true);
+            vi.unstubAllGlobals();
+        }
+        expect(readProposalStale(409, 'proposal.archive')).toBe(false);
+        expect(readProposalStale(503, 'research.busy')).toBe(false);
+        expect(readProposalStale(400, 'proposal.decided')).toBe(false);
     });
 });

@@ -23,12 +23,12 @@ import { onComputer } from './research-ui.js';
 import { researchLinksEnabled } from '../research-device.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import {
-    READ_SOURCE_TASK_FEATURE, READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, READ_TASK_HOWS,
+    READ_SOURCE_TASK_FEATURE, READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, READ_TASK_HOWS, readProposalStale,
     type ReadProposalTake, type ReadSourceProposal, type ReadSourceState, type ReadTaskHow,
 } from '../research-read-task.js';
 import { postReadTask, postReadProposal } from '../research-read.js';
 import {
-    sourceRowHtml, sourceRowKind, proposalHtml, readIdDate, readStateShortDate, readStateLongDate,
+    sourceRowHtml, sourceRowKind, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowAct, type ProposalAct,
 } from './read-source-state-view.js';
 
@@ -162,7 +162,7 @@ export const readSourceMethods = uiModule({
         const features = status?.features ?? [];
         if (!features.includes(READ_SOURCE_TASK_FEATURE)) return null;
         const key = `${treeId}|${refn}`;
-        const said = status?.readAgain?.[refn] ?? null;
+        const said = this.readSourceSaidState(refn);
         const local = rowLocal.get(key);
         let state = said;
         if (local) {
@@ -202,10 +202,9 @@ export const readSourceMethods = uiModule({
         const done = propDone.get(c.key);
         const proposal = done?.proposal ?? c.state?.proposal;
         if (!proposal) return '';
-        const actions = c.phone ? 'phone' : c.up && c.features.includes(READ_PROPOSAL_FEATURE) ? 'bridge' : 'none';
         return proposalHtml({
-            proposal, transcript: done?.asked ?? src.transcript ?? '', lang: getCurrentLanguage(), actions,
-            undo: c.features.includes(READ_PROPOSAL_UNDO_FEATURE), canOpenTask: !c.phone && this.researchLinkAvailable('task'),
+            proposal, transcript: done?.asked ?? src.transcript ?? '', lang: getCurrentLanguage(), ...proposalActions(c.features, c.phone, c.up),
+            canOpenTask: !c.phone && this.researchLinkAvailable('task'),
             whole: propWhole.has(c.key), done: done?.take ?? '', act: propAct.get(c.key) ?? null,
         });
     },
@@ -251,11 +250,20 @@ export const readSourceMethods = uiModule({
         rowLocal.set(key, { state, seen });
     },
 
-    /** The status's own state of a source (no local word). */
+    /**
+     * The research's own state of a source (no local word): its status, or the newest reading's word on the source
+     * (`source.state`) when the status is older than that reading: it names an older reading, or it was taken
+     * while this one still ran (just read, the status not asked since).
+     */
     readSourceSaidState(refn: string): ReadSourceState | null {
         const rid = this.researchOriginalsLink()?.researchId ?? this.researchSyncLink()?.link.id ?? '';
         const status = rid ? this.researchStatusOf(rid) ?? lastBridgeStatus(rid) : null;
-        return status?.readAgain?.[refn] ?? null;
+        const fromStatus = status?.readAgain?.[refn] ?? null;
+        const fromResult = this.readSourceResultOf(refn)?.source?.state ?? null;
+        if (!fromResult) return fromStatus;
+        const newer = fromStatus ? fromResult.read > fromStatus.read
+            : !!status?.reads?.some(r => r.id === fromResult.read && r.state !== 'done');
+        return newer ? fromResult : fromStatus;
     },
 
     /** §2: a choice at the row — the bridge as in the dialog's footer; "Check now" opens the task's conversation. */
@@ -270,6 +278,14 @@ export const readSourceMethods = uiModule({
         if (!reply.ok) {
             rowAct.set(c.key, { how, busy: false, failed: true });
             this.redrawReadSourceState(src);
+            return;
+        }
+        if (reply.value.outcome) {
+            // Decided meanwhile, or a task already holds the places: the research's state asked again, nothing guessed here.
+            if (reply.value.outcome === 'settled') rowAct.set(c.key, { how, busy: false, settled: true });
+            else { rowAct.delete(c.key); rowOpen.delete(c.key); }
+            this.redrawReadSourceState(src);
+            void this.pollResearchBridge({ reschedule: false });
             return;
         }
         rowAct.delete(c.key);
@@ -296,8 +312,12 @@ export const readSourceMethods = uiModule({
         const reply = await postReadProposal(this.readBridgeBase(c.rid), c.refn, proposal.task, take);
         if (propAct.get(c.key) !== act) return;
         if (!reply.ok) {
-            propAct.set(c.key, { take, busy: false, failed: true });
+            // The proposal moved on meanwhile (answered, another wording, nothing to undo): its state asked again.
+            const stale = readProposalStale(reply.failure.status, reply.failure.code);
+            propAct.set(c.key, { take, busy: false, ...(stale ? { stale: true } : { failed: true }) });
+            if (stale && take === 'undo') propDone.delete(c.key);
             this.redrawReadSourceState(src);
+            if (stale) void this.pollResearchBridge({ reschedule: false });
             return;
         }
         propAct.delete(c.key);

@@ -6,7 +6,7 @@
 import { strings } from '../strings.js';
 import { researchLinkMark } from '../research-link.js';
 import { researchActionLabel, researchBridgeAgentLabel } from './research-open-mark.js';
-import type { ReadTaskFor, ReadTaskHow, ReadTaskReply, ReadTaskSetting } from '../research-read-task.js';
+import { readJudgedKept, type ReadTaskFor, type ReadTaskHow, type ReadTaskReply, type ReadTaskSetting } from '../research-read-task.js';
 import type { VerdictSorted } from '../read-result.js';
 
 /**
@@ -62,6 +62,8 @@ export function readTaskFootState(i: ReadTaskFootInput): ReadTaskFootState | nul
 export function readTaskMajorNote(state: ReadTaskFootState | null, i: Pick<ReadTaskFootInput, 'task' | 'openTask' | 'act' | 'confirmed' | 'taskFor'>): string {
     const t = strings.read;
     const reply = i.act?.reply?.task || i.task;
+    if (state === 'F' && i.act?.reply?.outcome === 'settled') return '';
+    if (state === 'F' && i.act?.reply?.outcome === 'held') return t.cMajTask(i.act.reply.task);
     if (state === 'C' || state === 'decided') return reply ? t.cMajTask(reply) : '';
     if (state === 'F' && i.act?.reply && i.act.how !== 'save') return reply ? t.cMajTask(reply) : '';
     if (state === 'append' || (state === 'F' && i.act?.append && i.openTask)) return t.cMajAppend(i.openTask ?? '');
@@ -188,8 +190,10 @@ export function readTaskFootHtml(i: ReadTaskFootInput): string {
         case 'phone':
             return foot(state, statusHtml('open', t.tPhone(i.counts.major), ''), '');
         case 'B': {
-            const judged = i.counts.judged.find(j => j.n > 0);
+            // A task's places first (with its link); places of a reading a person kept (D…) have no task.
+            const judged = i.counts.judged.find(j => j.n > 0 && !readJudgedKept(j.task));
             if (judged) return foot(state, statusHtml('info', t.tAllJudged(judged.task), '', i.canOpenTask ? taskLink(judged.task) : ''), closeBtn(true));
+            if (i.counts.judged.some(j => j.n > 0)) return foot(state, statusHtml('info', t.tAllKept, ''), closeBtn(true));
             if (i.counts.unsure > 0) return foot(state, statusHtml('info', t.tOnlyUnsure(i.counts.unsure), ''), closeBtn(true));
             return foot(state, statusHtml('info', t.tOnlyMinor, ''), closeBtn(true));
         }
@@ -214,6 +218,13 @@ export function readTaskFootHtml(i: ReadTaskFootInput): string {
                 return foot(state, choicesHtml(shown, i), '');
             }
             if (act.failed || !act.reply) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how));
+            // Decided meanwhile (elsewhere, or nothing was left): no choice; the dialog asks the research's state again.
+            if (act.reply.outcome === 'settled') return foot(state, statusHtml('info', t.tSettled, ''), closeBtn(true));
+            // A task already holds the places: that task, to open.
+            if (act.reply.outcome === 'held' && act.reply.task) {
+                const task = act.reply.task;
+                return foot(state, statusHtml('ok', t.tDoneAppend(task), ''), (i.canOpenTask ? openTaskBtn(task, false) : '') + closeBtn(true));
+            }
             const task = act.reply.task || (act.append ? i.openTask ?? '' : '');
             if (act.how !== 'save' && !task) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how));
             return doneHtml(act.how, act.append || act.reply.appended, task, i, state);

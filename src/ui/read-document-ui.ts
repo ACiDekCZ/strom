@@ -2368,6 +2368,11 @@ export const readDocumentMethods = uiModule({
 
     /** The footer's input for who creates the task (`read.sourceTask`); null: the research does not say it (the footer as before). */
     readTaskInput(res: ReadResult): ReadTaskFootInput | null {
+        return this.readTaskInputOf(res, st?.task?.read === res.id ? st.task.act : null);
+    },
+
+    /** `readTaskInput` with the choice made (`act`; null none). */
+    readTaskInputOf(res: ReadResult, act: ReadTaskAct | null): ReadTaskFootInput | null {
         const s = res.source;
         if (!s || !s.taskSetting || s.agree !== 'differ' || st?.cmp || !this.readFeatureOn(READ_SOURCE_TASK_FEATURE)) return null;
         if (this.readSourceFailed(res) === 'write' || !this.readSourceChanges(res)) return null;
@@ -2383,7 +2388,7 @@ export const readDocumentMethods = uiModule({
             computer: onComputer(),
             counts: this.readSourceCounts(res),
             canOpenTask: this.researchLinkAvailable('task'),
-            act: st?.task?.read === res.id ? st.task.act : null,
+            act,
         };
     },
 
@@ -2423,6 +2428,12 @@ export const readDocumentMethods = uiModule({
         s.task = { read: res.id, act: reply.ok ? { how, append, busy: false, reply: reply.value } : { how, append, busy: false, failed: true } };
         this.readRedrawTaskFoot(true);
         if (!reply.ok) return;
+        if (reply.value.outcome) {
+            // Decided meanwhile, or a task already holds the places: the research's state asked again, nothing guessed here.
+            void this.pollResearchBridge({ reschedule: false });
+            if (reply.value.outcome === 'settled') void this.readTaskSettled(link.researchId, res.id);
+            return;
+        }
         const task = reply.value.task || (append ? input.openTask ?? '' : '');
         // The source's row in the viewer says the choice until the research's status does (spec 059 §2).
         this.noteReadSourceTask(res.source.id, res.id, how, task);
@@ -2430,6 +2441,27 @@ export const readDocumentMethods = uiModule({
             const url = this.activeResearchLink('task', { task, taskDo: 'chat' });
             if (url) this.launchResearchLink(url);
         }
+        this.refreshReadSourceViewer();
+    },
+
+    /**
+     * Nothing was left to decide (409 read.decide.done / nothing): the result asked again, past the cache, and the
+     * footer drawn from what it says now (decided, a task, no choice). Should it still offer the choices, the footer
+     * keeps its sentence that nothing is left.
+     */
+    async readTaskSettled(researchId: string, id: string): Promise<void> {
+        const s = st;
+        const base = this.readBridgeBase(researchId);
+        if (!s || !base) return;
+        const reply = await fetchReadResult(base, id);
+        if (st !== s || !reply.ok || s.result?.id !== id) return;
+        const input = this.readTaskInputOf(reply.value, null);
+        const state = input ? readTaskFootState(input) : null;
+        if (state === 'A' || state === 'append' || state === 'E' || state === 'phone') return;
+        results.set(id, reply.value);
+        s.result = reply.value;
+        delete s.task;
+        this.readRedrawResult(false);
         this.refreshReadSourceViewer();
     },
 

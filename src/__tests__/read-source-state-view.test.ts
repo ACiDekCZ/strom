@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-    sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalPlaces, readIdDate, readStateShortDate, readStateLongDate,
+    sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalPlaces, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowInput, type ProposalInput,
 } from '../ui/read-source-state-view.js';
 import { readTaskSettingHtml } from '../ui/read-task-setting-view.js';
@@ -144,6 +144,12 @@ describe('§2 the choices', () => {
         expect(failed).toContain('data-read-how="now"');
     });
 
+    it('nothing left to decide (decided meanwhile): its sentence instead of the failure, until the research\'s state comes', () => {
+        const settled = row({ act: { how: 'queue', busy: false, settled: true } });
+        expect(settled).toContain(t.tSettled);
+        expect(settled).not.toContain(t.tFail);
+    });
+
     it('a phone: the state, and where deciding works instead of the links; no bridge: no choices', () => {
         const phone = row({ phone: true, open: true });
         expect(stateOf(phone)).toBe('unchecked');
@@ -229,6 +235,26 @@ describe('§3 the agent\'s proposal', () => {
         expect(kept).toContain(t.pKept);
         expect(kept).toContain(t.pKept2);
         expect(block({ done: 'keep', undo: false })).not.toContain('data-proposal-take="undo"');
+    });
+
+    it('the proposal moved on meanwhile: the current state is shown with its sentence, not the failure', () => {
+        const stale = block({ act: { take: 'proposal', busy: false, stale: true } });
+        expect(stale).toContain(t.pStale);
+        expect(stale).not.toContain(t.pFail);
+        expect(stale).toContain('data-proposal-take="proposal"');
+        expect(block({ done: 'proposal', act: { take: 'undo', busy: false, stale: true } })).toContain(t.pStale);
+    });
+
+    it('the features: Accept / Keep only with sources.proposal (bridge up), Undo only with sources.proposal.undo', () => {
+        expect(proposalActions(['read.sourceTask'], false, true)).toEqual({ actions: 'none', undo: false });
+        expect(proposalActions(['read.sourceTask', 'sources.proposal'], false, true)).toEqual({ actions: 'bridge', undo: false });
+        expect(proposalActions(['sources.proposal', 'sources.proposal.undo'], false, true)).toEqual({ actions: 'bridge', undo: true });
+        expect(proposalActions(['sources.proposal', 'sources.proposal.undo'], false, false)).toMatchObject({ actions: 'none' });
+        expect(proposalActions(['sources.proposal'], true, false)).toMatchObject({ actions: 'phone' });
+        const off = block(proposalActions(['read.sourceTask'], false, true));
+        expect(off).not.toContain('data-proposal-take');
+        expect(block({ ...proposalActions(['sources.proposal'], false, true), done: 'proposal' })).not.toContain('data-proposal-take="undo"');
+        expect(block({ ...proposalActions(['sources.proposal', 'sources.proposal.undo'], false, true), done: 'proposal' })).toContain('data-proposal-take="undo"');
     });
 
     it('a phone: the block and its places, no answers, where it works', () => {

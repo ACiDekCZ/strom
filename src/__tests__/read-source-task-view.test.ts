@@ -254,3 +254,94 @@ describe('the footer: who creates the task', () => {
         expect(readTaskFootHtml({ ...BASE, act: { how: 'queue', append: false, busy: false, reply: { task: '', chat: '', appended: false } } })).toContain(t.tFail);
     });
 });
+
+describe('a place a person kept (judged "D…", "Save only")', () => {
+    const KEPT = 'D20261105101500-c3d4';
+    const KEPT2 = 'D20261106111500-e5f6';
+    const chg = [
+        v('Dubrava', 'Doubrava', { sure: true }),
+        v('Kolář', 'Kolar', { sure: true, judged: KEPT }),
+        v('Marek', 'Hora', { sure: true, judged: KEPT2 }),
+        v('N. 4', 'N. 7', { sure: true, judged: 'T0399' }),
+    ];
+    const { lines, places } = resultPlaces({ text: TEXT, dis: [], disSide: 'at', disKinded: true, data: [], chg });
+    const sorted = sortPlaces(places);
+    const opts = { isSource: true, shown: 1 as const, kinded: true, focus: '' };
+    const sortedOpt = { note: t.cMajNote, person: false, taskLink: true };
+
+    it('not a sure change: its own group (the kept readings in one), not counted in the task\'s places', () => {
+        expect(readSourceCat(v('Kolář', 'Kolar', { sure: true, judged: KEPT }))).toBe('judged');
+        const g = sortedGroups(sorted);
+        expect(g.major.map(p => p.v!.other)).toEqual(['Doubrava']);
+        expect(g.judged.map(j => [j.task, j.rows.length])).toEqual([[KEPT, 2], ['T0399', 1]]);
+        expect(sortedCounts(sorted)).toEqual({ major: 1, unsure: 0, minor: 0, judged: [{ task: KEPT, n: 2 }, { task: 'T0399', n: 1 }] });
+    });
+
+    it('one count everywhere: the first group = the footer\'s places = the header\'s first number; "N already kept" in the header', () => {
+        const counts = sortedCounts(sorted);
+        const html = checkHtml(sorted, { ...opts, sorted: sortedOpt });
+        const group = /data-group="major">\s*<div class="read-check-head">.*?<span class="read-check-count">\((\d+)\)<\/span>/s.exec(html)![1];
+        const facts: VerdictFacts = { partial: false, why: '', illegible: 0, source: { compared: true, major: 4, minor: 0, kinded: true, sorted: counts }, disagree: null };
+        const verdict = composeVerdict(facts, t, x => x, x => `[${x}]`);
+        expect(group).toBe('1');
+        expect(/\[(\d+)/.exec(verdict)![1]).toBe(group);
+        expect(readTaskFootHtml({ ...BASE, counts })).toContain(t.tAgentN(1));
+        expect(verdict).toBe(`${t.vRead} [${t.vMajor(1)}] · ${t.vKept(2)} · ${t.vJudged(1, 'T0399')}`);
+    });
+
+    it('the group "Already decided: kept": folded, its sentence, no task link; the task\'s group keeps its link', () => {
+        const html = checkHtml(sorted, { ...opts, sorted: sortedOpt });
+        const kept = /<div class="read-check-group is-fold" data-group="kept">[\s\S]*?<\/details>\s*<\/div>/.exec(html)![0];
+        expect(kept).toContain(`${t.gKept}</span><span class="read-check-count">(2)</span>`);
+        expect(kept).toContain(`<p class="read-check-note">${t.cJudNote}</p>`);
+        expect(kept).not.toContain('data-task=');
+        expect(kept).not.toContain('read-check-task');
+        expect(count(html, /data-act="open-task"/g)).toBe(1);
+        expect(html).toContain('data-task="T0399"');
+        expect(html).not.toContain(KEPT);
+    });
+
+    it('the bubble and the text say "Already decided: kept"', () => {
+        const c = sorted.find(p => p.v?.judged === KEPT)!;
+        expect(placePopHtml([c], 1, false)).toContain(t.bKept);
+        expect(placePopHtml([c], 1, false)).not.toContain(KEPT);
+        const text = lines.map((l, j) => lineMarksHtml(l, j, sorted, '')).join('\n');
+        expect(text).toContain(`(${t.bKept})`);
+        expect(text).toContain(`(${t.bJudged('T0399')})`);
+    });
+
+    it('footer B: only kept places → their sentence without a link; mixed → the task\'s sentence with its link first', () => {
+        const b = { ...BASE, offer: false };
+        const only = readTaskFootHtml({ ...b, counts: { major: 0, unsure: 0, minor: 0, judged: [{ task: KEPT, n: 2 }] } });
+        expect(only).toContain(t.tAllKept);
+        expect(acts(only)).toEqual(['close']);
+        const mixed = readTaskFootHtml({ ...b, counts: { major: 0, unsure: 0, minor: 0, judged: [{ task: KEPT, n: 2 }, { task: 'T0399', n: 1 }] } });
+        expect(mixed).toContain(t.tAllJudged('T0399'));
+        expect(mixed).not.toContain(t.tAllKept);
+        expect(acts(mixed)).toEqual(['open-task', 'close']);
+    });
+});
+
+describe('the research\'s refusals that are answers', () => {
+    it('a task already holds the places: that task, to open, the sure changes say it', () => {
+        const act = { how: 'queue' as const, append: false, busy: false, reply: { task: 'T0410', chat: '', appended: false, outcome: 'held' as const } };
+        const html = readTaskFootHtml({ ...BASE, act });
+        expect(html).toContain(t.tDoneAppend('T0410'));
+        expect(acts(html)).toEqual(['open-task', 'close']);
+        expect(readTaskMajorNote('F', { ...BASE, act })).toBe(t.cMajTask('T0410'));
+        // Also after "Save only": the task, not "saved".
+        const save = readTaskFootHtml({ ...BASE, act: { ...act, how: 'save' } });
+        expect(save).toContain(t.tDoneAppend('T0410'));
+        expect(save).not.toContain(t.tDoneSave);
+        expect(acts(readTaskFootHtml({ ...BASE, canOpenTask: false, act }))).toEqual(['close']);
+    });
+
+    it('nothing left to decide: its sentence, no choice and no retry', () => {
+        const act = { how: 'now' as const, append: false, busy: false, reply: { task: '', chat: '', appended: false, outcome: 'settled' as const } };
+        const html = readTaskFootHtml({ ...BASE, act });
+        expect(html).toContain(t.tSettled);
+        expect(html).not.toContain(t.tFail);
+        expect(acts(html)).toEqual(['close']);
+        expect(readTaskMajorNote('F', { ...BASE, act })).toBe('');
+    });
+});

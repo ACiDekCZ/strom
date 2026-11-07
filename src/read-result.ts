@@ -6,6 +6,7 @@
  */
 
 import type { ReadDocKind, ReadEntry, ReadRegion, ReadResult, ReadVariant, ReadVariantKind } from './research-read.js';
+import { readJudgedKept } from './research-read-task.js';
 
 /** A piece of a transcription line: plain text, an uncertain word (`[?]`), an illegible spot (`[...]`), a column/line mark (`|`). */
 export type MarkSeg =
@@ -549,7 +550,7 @@ const ILLEGIBLE_ONLY = /^\s*\[\s*(?:\.{2,}|…)\s*\]\s*$/;
 
 /**
  * One change's group: `unsure` when the research says it is not sure (also an illegible spot in the new reading
- * where the transcript has a word), `judged` when a task assessed it before, `minor` by its kind (without a kind:
+ * where the transcript has a word), `judged` when a task assessed it before or a person kept the reading, `minor` by its kind (without a kind:
  * the app's own rule), the rest `major`.
  */
 export function readSourceCat(v: MergedVariant): ReadSourceCat {
@@ -584,7 +585,7 @@ export interface VerdictFacts {
     disagree: number | null;
 }
 
-/** A source read again, sorted (`read.sourceTask`): the groups' counts, the assessed ones by task. */
+/** A source read again, sorted (`read.sourceTask`): the groups' counts, the assessed ones by task (a kept reading's, D…: one group). */
 export interface VerdictSorted { major: number; unsure: number; minor: number; judged: { task: string; n: number }[] }
 
 /** The strings the header's sentence is made of (`strings.read`). `b` makes a count bold. */
@@ -601,6 +602,7 @@ export interface VerdictStrings {
     vUnsure: (n: number) => string;
     vMinor: (n: number) => string;
     vJudged: (n: number, task: string) => string;
+    vKept: (n: number) => string;
 }
 
 /** The reason after the illegible words' count, in words: none for `other` or an unknown reason
@@ -619,7 +621,7 @@ export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string
         const s = f.source.sorted;
         const parts = [
             s.major ? t.vMajor(s.major) : '', s.unsure ? t.vUnsure(s.unsure) : '', s.minor ? t.vMinor(s.minor) : '',
-            ...s.judged.filter(j => j.n > 0).map(j => t.vJudged(j.n, j.task)),
+            ...s.judged.filter(j => j.n > 0).map(j => readJudgedKept(j.task) ? t.vKept(j.n) : t.vJudged(j.n, j.task)),
         ].filter(Boolean);
         out.push(parts.length ? [bPart(parts[0]), ...parts.slice(1)].join(' · ') : t.vSrcSame);
         return out.join(' ');

@@ -58,6 +58,7 @@ export const READ_TASK_NAMES = {
     taskFor: 'taskFor',
     decided: 'decided',
     openTask: 'openTask',
+    state: 'state',
     /** `variants[].*` */
     sure: 'sure',
     judged: 'judged',
@@ -109,6 +110,19 @@ export function readTaskId(v: unknown): string {
 
 const readIdOf = (v: unknown): string => typeof v === 'string' && /^D\d{14}-[0-9a-f]{4}$/.test(v) ? v : '';
 
+/**
+ * A difference's `judged`: the task that holds or held the place, or whose wording a person turned down (T…), or
+ * the reading a person just kept ("Save only", D…). Either way the place is not asked again. '' none. Untrusted.
+ */
+export function readJudgedId(v: unknown): string {
+    return readTaskId(v) || readIdOf(v);
+}
+
+/** `judged` is a reading a person kept (D…), not a task. */
+export function readJudgedKept(judged: string | undefined): boolean {
+    return !!judged && judged.startsWith('D');
+}
+
 /** A setting, or null (absent, unknown). Untrusted. */
 export function sanitizeTaskSetting(v: unknown): ReadTaskSetting | null {
     return READ_TASK_SETTINGS.includes(v as ReadTaskSetting) ? v as ReadTaskSetting : null;
@@ -116,9 +130,9 @@ export function sanitizeTaskSetting(v: unknown): ReadTaskSetting | null {
 
 const taskFor = (v: unknown): ReadTaskFor | null => v === 'agent' || v === 'person' ? v : null;
 
-/** A difference's `sure` and `judged` (the task that already assessed it), where said. Untrusted. */
+/** A difference's `sure` and `judged` (the task that assessed it, or the reading a person kept), where said. Untrusted. */
 export function sanitizeVariantTask(x: Record<string, unknown>): { sure?: boolean; judged?: string } {
-    const judged = readTaskId(x[READ_TASK_NAMES.judged]);
+    const judged = readJudgedId(x[READ_TASK_NAMES.judged]);
     const sure = x[READ_TASK_NAMES.sure];
     return { ...(typeof sure === 'boolean' ? { sure } : {}), ...(judged ? { judged } : {}) };
 }
@@ -138,28 +152,86 @@ export interface ReadSourceTaskInfo {
     decided?: 'saved';
     /** The source's open task from before: new places are added to it. */
     openTask?: string;
+    /** The source's state after this reading, as `/status.readAgain[S]` says it (`source.state`). */
+    state?: ReadSourceState;
 }
 
-/** `source.taskSetting…` of a result, or null when the research does not say the setting. Untrusted. */
-export function sanitizeSourceTaskInfo(s: Record<string, unknown>): ReadSourceTaskInfo | null {
+/**
+ * `source.taskSetting…` of a result, or null when the research does not say the setting. `read`: the result's
+ * own id (D…), the reading a `source.state` without its `read` is of. Untrusted.
+ */
+export function sanitizeSourceTaskInfo(s: Record<string, unknown>, read = ''): ReadSourceTaskInfo | null {
     const taskSetting = sanitizeTaskSetting(s[READ_TASK_NAMES.setting]);
     if (!taskSetting) return null;
     const f = taskFor(s[READ_TASK_NAMES.taskFor]);
     const open = readTaskId(s[READ_TASK_NAMES.openTask]);
+    const raw = s[READ_TASK_NAMES.state];
+    const rec = asRecord(raw);
+    // The same shape as `/status.readAgain[S]`; a bare state word or one without `read` is of this reading.
+    const state = rec ? sanitizeReadSourceState(rec.read === undefined && readIdOf(read) ? { ...rec, read } : rec)
+        : typeof raw === 'string' && readIdOf(read) ? sanitizeReadSourceState({ read, state: raw }) : null;
     return {
         taskSetting,
         taskOffer: s[READ_TASK_NAMES.offer] === true,
         ...(f ? { taskFor: f } : {}),
         ...(s[READ_TASK_NAMES.decided] === 'saved' ? { decided: 'saved' as const } : {}),
         ...(open ? { openTask: open } : {}),
+        ...(state ? { state } : {}),
     };
 }
 
-/** The answer to `POST …/task`: the task made or added to ('' none), the chat to open ('' none), the places added to `openTask`. */
+/**
+ * The answer to `POST …/task`: the task made or added to ('' none), the chat to open ('' none), the places added to
+ * `openTask`. `outcome` (a refusal that is an answer, `readTaskRefusal`): `held` a task already holds the places
+ * (`task`), `settled` nothing is left to decide (decided before, or only minor, uncertain, assessed places).
+ */
 export interface ReadTaskReply {
     task: string;
     chat: string;
     appended: boolean;
+    outcome?: 'held' | 'settled';
+}
+
+/** The research's refusals of `POST …/task` and `POST sources/proposal` that the app answers on its own (the rest: failed). */
+export const READ_TASK_CODES = {
+    /** 409 (+`task`): a task already holds the places. */
+    held: 'read.decide.task',
+    /** 409: decided before. */
+    done: 'read.decide.done',
+    /** 409: nothing to decide (minor details, uncertain or assessed places). */
+    nothing: 'read.decide.nothing',
+    /** 409: the proposal was answered before (accept / keep). */
+    proposalDecided: 'proposal.decided',
+    /** 409 (+`proposed`): another wording was proposed meanwhile; undo: the transcript changed since. */
+    proposalChanged: 'proposal.changed',
+    /** 409: nothing to undo. */
+    proposalUndo: 'proposal.undo',
+} as const;
+
+const codeOf = (body: unknown): { code: string; p: Record<string, unknown> } => {
+    const b = asRecord(body);
+    const code = b && typeof b.code === 'string' && /^[a-z][a-z0-9.-]{0,40}$/.test(b.code) ? b.code : '';
+    return { code, p: { ...(asRecord(b?.params) ?? {}), ...(b ?? {}) } };
+};
+
+/**
+ * A refusal of `POST …/task` the app takes as an answer: `held` (the task that holds the places) and `settled`
+ * (the source's state is asked again, no choice is left); null: a failure (busy, other refusals, no answer).
+ */
+export function readTaskRefusal(status: number, body: unknown): ReadTaskReply | null {
+    if (status !== 409) return null;
+    const { code, p } = codeOf(body);
+    if (code === READ_TASK_CODES.held) {
+        const task = readTaskId(p[READ_TASK_NAMES.replyTask]);
+        return task ? { task, chat: '', appended: false, outcome: 'held' } : null;
+    }
+    if (code === READ_TASK_CODES.done || code === READ_TASK_CODES.nothing) return { task: '', chat: '', appended: false, outcome: 'settled' };
+    return null;
+}
+
+/** A refusal of `POST sources/proposal` saying the proposal moved on meanwhile (the state is asked again, not a failure). */
+export function readProposalStale(status: number, code: string): boolean {
+    return status === 409 && (code === READ_TASK_CODES.proposalDecided || code === READ_TASK_CODES.proposalChanged || code === READ_TASK_CODES.proposalUndo);
 }
 
 /** The answer to `POST …/task`. `chat` is kept only as a flag that a chat was asked for: the app opens its own link. Untrusted. */

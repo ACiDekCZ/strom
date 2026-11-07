@@ -16,8 +16,8 @@ import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 import type { Source } from './types.js';
 import { cleanWith, ReadChoices, ReadWho, ReadWithItem, sanitizeReadChoices, sanitizeReadWho } from './read-choices.js';
 import {
-    READ_PROPOSAL_PATH, READ_TASK_NAMES, READ_TASK_SETTING_PATH, readProposalBody, readTaskBody, readTaskId, readTaskPath,
-    readTaskSettingBody, sanitizeReadTaskReply, sanitizeSourceTaskInfo, sanitizeTaskSetting, sanitizeVariantTask,
+    READ_PROPOSAL_PATH, READ_TASK_NAMES, readProposalBody, readTaskBody, readTaskId, readTaskPath, readTaskRefusal,
+    sanitizeReadTaskReply, sanitizeSourceTaskInfo, sanitizeTaskSetting, sanitizeVariantTask,
 } from './research-read-task.js';
 import type { ReadProposalTake, ReadSourceTaskInfo, ReadTaskHow, ReadTaskReply, ReadTaskSetting } from './research-read-task.js';
 
@@ -598,7 +598,7 @@ export function readOneReaderFailed(res: Pick<ReadResult, 'state' | 'readers'> |
 }
 
 /** `source` of a result: the comparison with the source's transcript, or null. Untrusted. */
-function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
+function sanitizeSourceResult(v: unknown, read = ''): ReadSourceResult | null {
     const s = asRecord(v);
     const id = s ? readSourceId(s.id) : null;
     if (!s || !id || (s.agree !== 'same' && s.agree !== 'differ')) return null;
@@ -611,7 +611,7 @@ function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
         if (at || other) variants.push({ at, other, ...variantExtras(x) });
     }
     const task = readTaskId(s.task);
-    const info = sanitizeSourceTaskInfo(s);
+    const info = sanitizeSourceTaskInfo(s, read);
     return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '', ...(info ?? {}) };
 }
 
@@ -852,7 +852,7 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
         context: cleanBlock(r.context, 5000),
         cost: amount !== null && currency ? { amount, currency, partial: c!.partial === true } : null,
         version: asCount(r.version) || 1,
-        ...(sanitizeSourceResult(r.source) ? { source: sanitizeSourceResult(r.source)! } : {}),
+        ...(sanitizeSourceResult(r.source, id) ? { source: sanitizeSourceResult(r.source, id)! } : {}),
         ...(sourceRead ? { sourceRead } : {}),
         ...(blind ? { blind } : {}),
         ...(sanitizeReaderFailure(r.failure, state) ? { readerFailure: sanitizeReaderFailure(r.failure, state)! } : {}),
@@ -1211,7 +1211,11 @@ export async function postReadTask(base: string, source: string, read: string, h
     const d = readId(read);
     if (!s || !d) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
     const r = await call(`${base}${readTaskPath(s, d)}`, postJson(readTaskBody(how)), jsonTimeoutMs());
-    if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
+    if (!ok(r.status)) {
+        // A task already holds the places, or nothing is left to decide: an answer, not a failure.
+        const answer = readTaskRefusal(r.status, r.body);
+        return answer ? { ok: true, value: answer } : { ok: false, failure: readFailure(r.status, r.body, r.retry) };
+    }
     return { ok: true, value: sanitizeReadTaskReply(r.body) };
 }
 
@@ -1221,13 +1225,6 @@ export async function postReadProposal(base: string, source: string, task: strin
     const tk = readTaskId(task);
     if (!s || !tk) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
     const r = await call(`${base}${READ_PROPOSAL_PATH}`, postJson(readProposalBody(s, tk, take)), jsonTimeoutMs());
-    if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
-    return { ok: true, value: asRecord(r.body) };
-}
-
-/** The research's setting "Task from a new reading" (`POST sourceTask`); the answer's body, as the research gives it. */
-export async function postReadTaskSetting(base: string, value: ReadTaskSetting): Promise<ReadReply<Record<string, unknown> | null>> {
-    const r = await call(`${base}${READ_TASK_SETTING_PATH}`, postJson(readTaskSettingBody(value)), jsonTimeoutMs());
     if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
     return { ok: true, value: asRecord(r.body) };
 }

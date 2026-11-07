@@ -9,6 +9,7 @@ import { strings } from '../strings.js';
 import { researchLinkMark } from '../research-link.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { locateSpan, readSourceCat, variantClass, type MergedVariant, type ReadSourceCat, type VariantClass, type VerdictSorted } from '../read-result.js';
+import { readJudgedKept } from '../research-read-task.js';
 
 export type PlaceKind = 'dis' | 'chg' | 'unc' | 'ill';
 
@@ -187,7 +188,9 @@ export function sortedGroups(places: readonly ShownPlace[]): SortedGroups {
         if (p.kind === 'chg') {
             if (p.cat === 'judged' && p.v?.judged) {
                 const task = p.v.judged;
-                const j = g.judged.find(x => x.task === task);
+                // A task's places by task; the readings a person kept (D…) in one group.
+                const kept = readJudgedKept(task);
+                const j = g.judged.find(x => kept ? readJudgedKept(x.task) : x.task === task);
                 if (j) j.rows.push(p); else g.judged.push({ task, rows: [p] });
             } else g[p.cat === 'judged' ? 'major' : p.cat ?? 'major'].push(p);
         } else if (p.kind === 'dis' && !p.under) {
@@ -204,6 +207,11 @@ export function sortedGroups(places: readonly ShownPlace[]): SortedGroups {
 export function sortedCounts(places: readonly ShownPlace[]): VerdictSorted {
     const g = sortedGroups(places);
     return { major: g.major.length, unsure: g.unsure.length, minor: g.minor.length, judged: g.judged.map(j => ({ task: j.task, n: j.rows.length })) };
+}
+
+/** The bubble's word on an assessed place: the task that assessed it, or the reading a person kept. */
+function judgedText(judged: string): string {
+    return readJudgedKept(judged) ? strings.read.bKept : strings.read.bJudged(judged);
 }
 
 function esc(text: string): string {
@@ -266,7 +274,7 @@ export function lineMarksHtml(line: string, j: number, places: readonly ShownPla
         out += inner(pos, s);
         const cls = c.cat === 'unsure' ? 'read-mk-dis read-mk-unsure' : c.cat === 'judged' ? 'read-mk-jud' : c.cat === 'minor' ? 'read-mk-min' : 'read-mk-chg';
         const ok = c.cat === 'judged' && c.v?.judged
-            ? `<sup aria-hidden="true">✓</sup><span class="read-sr"> (${esc(strings.read.bJudged(c.v.judged))})</span>` : '';
+            ? `<sup aria-hidden="true">✓</sup><span class="read-sr"> (${esc(judgedText(c.v.judged))})</span>` : '';
         out += `<span class="read-mk ${cls}${c.id === focus ? ' is-focus' : ''}"${PLACE_ATTRS(c.id, focus)}>${inner(s, e)}${ok}</span>`;
         pos = e;
     }
@@ -383,14 +391,18 @@ function sortedCheckHtml(places: readonly ShownPlace[], o: CheckOptions & { sort
                     <div class="read-check-head">${head(sample('read-mk-dis'), t.gUnsure, g.unsure.length)}</div>
                     ${note(t.cUnsNote)}${rowsHtml(g.unsure, o)}
                 </div>`);
-    for (const j of g.judged) out.push(`
-                <div class="read-check-group is-fold" data-group="judged" data-task="${esc(j.task)}">
+    for (const j of g.judged) {
+        // A reading a person kept (D…): no task to open.
+        const kept = readJudgedKept(j.task);
+        out.push(`
+                <div class="read-check-group is-fold" data-group="${kept ? 'kept' : 'judged'}"${kept ? '' : ` data-task="${esc(j.task)}"`}>
                     <details class="read-check-fold"${open(j.rows)}>
-                        <summary class="read-check-head">${head(sample('read-mk-jud', '✓'), t.gJudged(j.task), j.rows.length)}</summary>
+                        <summary class="read-check-head">${head(sample('read-mk-jud', '✓'), kept ? t.gKept : t.gJudged(j.task), j.rows.length)}</summary>
                         ${note(t.cJudNote)}<ul class="read-check-rows">${j.rows.map(p => checkRowHtml(p, o.shown, o.focus, false)).join('')}</ul>
                     </details>
-                    ${o.sorted.taskLink ? `<button type="button" class="read-link read-check-task" data-act="open-task" data-task="${esc(j.task)}">${researchActionLabel(t.tTaskLink(j.task), researchLinkMark('task'))}</button>` : ''}
+                    ${o.sorted.taskLink && !kept ? `<button type="button" class="read-link read-check-task" data-act="open-task" data-task="${esc(j.task)}">${researchActionLabel(t.tTaskLink(j.task), researchLinkMark('task'))}</button>` : ''}
                 </div>`);
+    }
     if (g.minor.length) out.push(`
                 <div class="read-check-group is-fold" data-group="minor">
                     <details class="read-check-fold"${open(g.minor)}>
@@ -471,7 +483,7 @@ export function placePopHtml(places: readonly ShownPlace[], shown: 1 | 2, phone:
     if (disKind) notes.push(disKind);
     if (chg?.cls) {
         const k = kindText(chg.cls);
-        const sorted = chg.cat === 'unsure' ? t.bUnsure : chg.cat === 'judged' && chg.v?.judged ? t.bJudged(chg.v.judged) : '';
+        const sorted = chg.cat === 'unsure' ? t.bUnsure : chg.cat === 'judged' && chg.v?.judged ? judgedText(chg.v.judged) : '';
         const weight = sorted || (chg.cls.kinds.length ? chg.cls.minor ? t.minor : t.major : '');
         const line = [k && k !== disKind ? k : '', weight].filter(Boolean).join(' · ');
         if (line) notes.push(line);
