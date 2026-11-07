@@ -557,6 +557,27 @@ async function showResult(page: Page, res: Record<string, unknown>, person = '',
 test.describe('Read a document: the result', () => {
     test.use({ viewport: DESKTOP });
 
+    test('a page of the research\'s media: the archive\'s page from an excerpt of the same scan; without one, no archive link', async ({ page }) => {
+        const SHA = 'ab'.repeat(32);
+        const PAGE_URL = 'https://archive.example/register/41';
+        const res = baptismPage({ pages: [{ n: 1, file: 'M0003', sha: SHA, name: 'matrika-lhota-1846.jpg', page: 1, w: 600, h: 800, image: `read/${READ_ID}/page/1.jpg` }] });
+        const { d } = await showResult(page, res);
+        const links = d.locator('.read-scan-links');
+        await expect(links.locator('.read-scan-archive')).toHaveCount(0);
+        // A source of the tree holds an excerpt cut from this scan, with its page in the archive.
+        await page.evaluate(({ sha, url }) => {
+            const data = window.Strom.DataManager.getData() as unknown as { sources?: Record<string, unknown> };
+            data.sources = { ...(data.sources ?? {}), S0099: { id: 'S0099', title: 'Matrika Lhota', excerpts: [{ id: 'x1', dataUrl: '', width: 1, height: 1, sizeBytes: 0, originalSha: sha.toUpperCase(), pageUrl: url }] } };
+        }, { sha: SHA, url: PAGE_URL });
+        await d.locator('.read-footer [data-act="close"]').last().click();
+        await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
+        await expect(d.locator('#read-result')).toBeVisible();
+        const archive = d.locator('.read-scan-links .read-scan-archive');
+        await expect(archive).toHaveText('Open the page in the archive ↗');
+        await expect(archive).toHaveAttribute('href', PAGE_URL);
+        await expect(archive).toHaveAttribute('target', '_blank');
+    });
+
     test('title, pills, the entry of the dialog\'s person, marks by shape and the legend of those present', { tag: '@smoke' }, async ({ page }) => {
         const { d, b } = await showResult(page, baptismPage(), 'P0003');
         await expect(d.locator('#read-title')).toHaveText('Baptism entry, Latin, Kurrent, 1846');

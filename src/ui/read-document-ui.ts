@@ -1902,8 +1902,23 @@ export const readDocumentMethods = uiModule({
             ? researchSchemeUrl('media', { tree: link.researchId, sha }, announcedResearchScheme()) : null;
         return {
             full: url ? { url, text: strings.research.fullQualityExternal, mark: researchLinkMark('media'), title: strings.research.fullQualityTitle } : null,
-            archive: null,
+            archive: sha ? this.readArchivePageOf(sha) : null,
         };
+    },
+
+    /**
+     * The archive's page of a scan the tree already knows by its SHA-256: an excerpt cut from it with its
+     * page's permalink, else a source read from that page with its own address. Null: none known.
+     */
+    readArchivePageOf(sha: string): string | null {
+        const treeId = DataManager.getCurrentTreeId();
+        let fallback: string | null = null;
+        for (const src of Object.values(DataManager.getData().sources ?? {})) {
+            const exc = shownExcerpts(treeId, src).find(e => normalizeSha256(e.originalSha) === sha && safeHttpUrl(e.pageUrl));
+            if (exc) return safeHttpUrl(exc.pageUrl);
+            if (!fallback && normalizeSha256(src.readingSha) === sha) fallback = safeHttpUrl(src.url);
+        }
+        return fallback;
     },
 
     readScanLinksHtml(page: ReadPage | null): string {

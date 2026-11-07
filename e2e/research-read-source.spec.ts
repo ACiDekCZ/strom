@@ -331,6 +331,8 @@ test.describe('Read a source again from its original', () => {
         await expect(vs).toHaveCount(3);
         await expect(note.locator('.read-source-vs .read-source-head')).toHaveText('Compared with the transcript so far · 3 places');
         await expect(vs.nth(0)).toContainText('Martinus Zvonářík→Zvonařík');
+        // An uncertain reading keeps its mark against the transcript as well (problemy.md č. 11).
+        await expect(vs.nth(0).locator('mark.uncertain')).toHaveCount(1);
         await expect(vs.nth(2).locator('.read-place-missing')).toHaveText('missing');
         await expect(note.locator('.read-source-readers')).toHaveCount(1);
         expect(await note.evaluate(el => el.textContent ?? '')).not.toContain('…');
