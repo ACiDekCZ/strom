@@ -488,6 +488,57 @@ test.describe('Read a source again from its original', () => {
         expect(b.read!.sourcePosts).toHaveLength(1);
     });
 
+    test('a busy bridge takes the reading late: the dialog waits for it and follows it, no input offering a second reading', async ({ page }) => {
+        const b = await setup(page);
+        await page.evaluate(() => { (globalThis as { __STROM_READ_TIMEOUT_MS?: number }).__STROM_READ_TIMEOUT_MS = 600; });
+        b.read!.startDelayMs = 2000;
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        // No answer in time: said so; neither the input's "Read" nor "Try again" (a second reading paid for).
+        await expect(d.locator('.read-error[data-error="late"] .read-error-title')).toHaveText('The research did not confirm the reading in time.');
+        await expect(d.locator('.read-error-text')).toHaveText('The reading may have started all the same: its progress shows here as soon as the research lists it.');
+        await expect(d.locator('[data-act="read"]')).toHaveCount(0);
+        await expect(d.locator('[data-act="retry"]')).toHaveCount(0);
+        // A status while the bridge has not taken it yet: still waiting, not the input.
+        await poll(page);
+        await expect(d.locator('.read-error[data-error="late"]')).toBeVisible();
+        // The bridge takes it: its progress, then its result.
+        await expect.poll(() => b.read!.reads.length).toBe(1);
+        await poll(page);
+        await expect(d.locator('.read-dialog')).toHaveAttribute('data-phase', 'progress');
+        await expect(d.locator('#read-title')).toHaveText('Reading again');
+        b.read!.reads[0].state = 'done';
+        b.read!.results.set(READ_ID, result({ id: 'S0001', agree: 'same', variants: [] }));
+        await poll(page);
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        expect(b.read!.sourcePosts).toHaveLength(1);
+    });
+
+    test('a start without an answer that the bridge never lists: long after, it most likely did not start and can be tried again', async ({ page }) => {
+        const b = await setup(page);
+        await page.evaluate(() => {
+            const g = globalThis as { __STROM_READ_TIMEOUT_MS?: number; __STROM_READ_LATE_WAIT_MS?: number };
+            g.__STROM_READ_TIMEOUT_MS = 600;
+            g.__STROM_READ_LATE_WAIT_MS = 1500;
+        });
+        b.read!.startDelayMs = 1500;
+        b.read!.sourceReply = { status: 500, body: { error: 'lost' } };
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        await expect(d.locator('.read-error[data-error="late"]')).toBeVisible();
+        await expect(d.locator('[data-act="retry"]')).toHaveCount(0);
+        await expect.poll(async () => { await poll(page); return d.locator('[data-act="retry"]').count(); }, { timeout: 15_000 }).toBe(1);
+        await expect(d.locator('.read-error-text')).toHaveText('The research has not listed such a reading since then, so it most likely did not start.');
+        // Tried again with a bridge that answers: the progress.
+        b.read!.startDelayMs = 0;
+        delete b.read!.sourceReply;
+        await d.locator('[data-act="retry"]').click();
+        await expect(d.locator('#read-title')).toHaveText('Reading again');
+        expect(b.read!.sourcePosts).toHaveLength(2);
+    });
+
     test('other refusals: an unknown source and a research not ready say why; the action stays', async ({ page }) => {
         const b = await setup(page);
         b.read!.sourceReply = { status: 404, body: { error: 'none', code: 'read.source.none', source: 'S0001' } };

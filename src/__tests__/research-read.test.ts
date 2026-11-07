@@ -4,12 +4,12 @@
  * takes. Invented data only (Novák, Lhota).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     sanitizeReadAccepts, sanitizeReads, sanitizeLiveRead, sanitizeReadResult, readFailure, retryAfter,
     readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
     readPaceSecs, readViewNames, readSameSheet,
-    readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState,
+    readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState, startSourceRead, startRead, readAgain,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
 import { strings, setLanguage, type Language } from '../strings.js';
@@ -468,5 +468,37 @@ describe('the files a reading takes', () => {
         expect(readSlow(119)).toBe(false);
         expect(readSlow(120)).toBe(true);
         expect(readSlow(240)).toBe(true);
+    });
+});
+
+describe('a start the bridge does not answer in time (a busy bridge takes it late)', () => {
+    const g = globalThis as { __STROM_READ_TIMEOUT_MS?: number };
+    afterEach(() => { vi.unstubAllGlobals(); delete g.__STROM_READ_TIMEOUT_MS; });
+
+    /** A fetch that answers only when aborted (the app gave up), or refuses the connection at once. */
+    function stubFetch(how: 'hang' | 'refused'): void {
+        vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+            if (how === 'refused') { reject(new TypeError('Failed to fetch')); return; }
+            init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        })));
+    }
+
+    it('given up waiting: down, marked late (the reading may have been taken)', async () => {
+        g.__STROM_READ_TIMEOUT_MS = 20;
+        stubFetch('hang');
+        const source = await startSourceRead('http://127.0.0.1:1/t', { source: 'S0001', readers: 1 });
+        const doc = await startRead('http://127.0.0.1:1/t', { files: ['a'.repeat(64)], readers: 1, lang: 'en' });
+        const again = await readAgain('http://127.0.0.1:1/t', 'D20261019153012-a1b2', 1);
+        for (const r of [source, doc, again]) expect(r).toEqual({ ok: false, failure: expect.objectContaining({ kind: 'down', status: 0, late: true }) });
+    });
+
+    it('a bridge not running (connection refused): down, not late', async () => {
+        stubFetch('refused');
+        const r = await startSourceRead('http://127.0.0.1:1/t', { source: 'S0001', readers: 1 });
+        expect(r.ok).toBe(false);
+        if (!r.ok) {
+            expect(r.failure.kind).toBe('down');
+            expect(r.failure.late).toBeUndefined();
+        }
     });
 });

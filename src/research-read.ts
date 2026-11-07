@@ -854,6 +854,11 @@ export interface ReadFailure {
     clip?: string;
     /** `source-running`: the reading of the source under way. */
     read?: string;
+    /**
+     * `down` of a start (`POST read`, `read/<id>/again`, `sources/read`) whose answer did not come in time:
+     * the bridge may still have taken the reading (a busy bridge takes it late), so it is not a bridge that is not running.
+     */
+    late?: boolean;
 }
 
 /** `Retry-After` in ms (seconds or an HTTP date), capped at a day; 0 when absent or bad. */
@@ -946,9 +951,19 @@ export type ReadReply<T> = { ok: true; value: T } | { ok: false; failure: ReadFa
 const JSON_TIMEOUT_MS = 15_000;
 const PUT_MIN_TIMEOUT_MS = 60_000;
 
-async function call(url: string, init: RequestInit, timeoutMs: number): Promise<{ status: number; body: unknown; retry: string | null }> {
+/** How long a JSON call waits for the bridge (tests shorten it with `__STROM_READ_TIMEOUT_MS`). */
+function jsonTimeoutMs(): number {
+    const t = (globalThis as { __STROM_READ_TIMEOUT_MS?: unknown }).__STROM_READ_TIMEOUT_MS;
+    return typeof t === 'number' && t > 0 ? t : JSON_TIMEOUT_MS;
+}
+
+/** A call's answer; `late`: none came in time (the call was given up, the bridge may still act on it). */
+interface CallReply { status: number; body: unknown; retry: string | null; late?: boolean }
+
+async function call(url: string, init: RequestInit, timeoutMs: number): Promise<CallReply> {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+    let late = false;
+    const timer = ctl ? setTimeout(() => { late = true; ctl.abort(); }, timeoutMs) : null;
     try {
         const res = await fetch(withAppVersion(url), { mode: 'cors', credentials: 'omit', cache: 'no-store', ...init, signal: ctl?.signal });
         const body = await res.json().catch(() => null);
@@ -960,7 +975,7 @@ async function call(url: string, init: RequestInit, timeoutMs: number): Promise<
         return { status: res.status, body, retry: res.headers.get('Retry-After') };
     } catch (err) {
         console.warn('Reading: no answer', err);
-        return { status: 0, body: null, retry: null };
+        return { status: 0, body: null, retry: null, ...(late ? { late: true } : {}) };
     } finally {
         if (timer) clearTimeout(timer);
     }
@@ -1014,6 +1029,14 @@ function putWith(body: Record<string, unknown>, value: readonly ReadWithItem[] |
     if (w) body.with = w;
 }
 
+/** A start's answer: the reading, or why not (`late`: no answer in time, the bridge may have taken it). */
+function startReply(r: CallReply): ReadReply<ReadStarted> {
+    const s = ok(r.status) ? started(r.body) : null;
+    if (s) return { ok: true, value: s };
+    const failure = readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry);
+    return { ok: false, failure: r.late && failure.kind === 'down' ? { ...failure, late: true } : failure };
+}
+
 const postJson = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /** Start reading (`POST read`). */
@@ -1023,14 +1046,13 @@ export async function startRead(base: string, req: ReadRequest): Promise<ReadRep
     const note = req.note === undefined ? undefined : clipText(req.note.trim(), 500);
     if (note) body.note = note;
     putWith(body, req.with, req.readers);
-    const r = await call(`${base}/read`, postJson(body), JSON_TIMEOUT_MS);
-    const s = ok(r.status) ? started(r.body) : null;
-    return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+    const r = await call(`${base}/read`, postJson(body), jsonTimeoutMs());
+    return startReply(r);
 }
 
 /** A reading's result (`GET read/<id>`; partial while it runs). */
 export async function fetchReadResult(base: string, id: string): Promise<ReadReply<ReadResult>> {
-    const r = await call(`${base}/read/${encodeURIComponent(id)}`, { method: 'GET' }, JSON_TIMEOUT_MS);
+    const r = await call(`${base}/read/${encodeURIComponent(id)}`, { method: 'GET' }, jsonTimeoutMs());
     const res = ok(r.status) ? sanitizeReadResult(r.body) : null;
     return res ? { ok: true, value: res } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
 }
@@ -1040,7 +1062,7 @@ export async function fetchReadResult(base: string, id: string): Promise<ReadRep
  * (an older one: 404 without a code) answers `down`; an archive `none`.
  */
 export async function fetchReads(base: string): Promise<ReadReply<ReadHistoryItem[]>> {
-    const r = await call(`${base}/reads`, { method: 'GET' }, JSON_TIMEOUT_MS);
+    const r = await call(`${base}/reads`, { method: 'GET' }, jsonTimeoutMs());
     const list = ok(r.status) ? sanitizeReadHistory(r.body) : null;
     return list ? { ok: true, value: list } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
 }
@@ -1049,9 +1071,8 @@ export async function fetchReads(base: string): Promise<ReadReply<ReadHistoryIte
 export async function readAgain(base: string, id: string, readers?: 1 | 2, withReaders?: ReadWithItem[]): Promise<ReadReply<ReadStarted>> {
     const body: Record<string, unknown> = readers ? { readers } : {};
     putWith(body, withReaders, readers ?? 2);
-    const r = await call(`${base}/read/${encodeURIComponent(id)}/again`, postJson(body), JSON_TIMEOUT_MS);
-    const s = ok(r.status) ? started(r.body) : null;
-    return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+    const r = await call(`${base}/read/${encodeURIComponent(id)}/again`, postJson(body), jsonTimeoutMs());
+    return startReply(r);
 }
 
 /** What `POST sources/read` takes: a source of the research read again from its original. */
@@ -1078,9 +1099,8 @@ export async function startSourceRead(base: string, req: ReadSourceRequest): Pro
     if (req.clip && READ_CLIP.test(req.clip)) body.clip = req.clip;
     if (req.lang && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(req.lang)) body.lang = req.lang;
     putWith(body, req.with, req.readers);
-    const r = await call(`${base}/sources/read`, postJson(body), JSON_TIMEOUT_MS);
-    const s = ok(r.status) ? started(r.body) : null;
-    return s ? { ok: true, value: s } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+    const r = await call(`${base}/sources/read`, postJson(body), jsonTimeoutMs());
+    return startReply(r);
 }
 
 /**
@@ -1126,7 +1146,7 @@ export function readSourceAgainClip(src: Pick<Source, 'excerpts'>, excerptId?: s
  * previous version (its result stands).
  */
 export async function cancelRead(base: string, id: string): Promise<ReadReply<ReadStarted & { cancelled: boolean }>> {
-    const r = await call(`${base}/read/${encodeURIComponent(id)}/cancel`, postJson({}), JSON_TIMEOUT_MS);
+    const r = await call(`${base}/read/${encodeURIComponent(id)}/cancel`, postJson({}), jsonTimeoutMs());
     const s = ok(r.status) ? started({ ...(asRecord(r.body) ?? {}), read: asRecord(r.body)?.read ?? id }) : null;
     return s
         ? { ok: true, value: { ...s, cancelled: asRecord(r.body)?.cancelled !== false } }

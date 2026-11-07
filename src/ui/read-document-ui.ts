@@ -78,7 +78,35 @@ interface Page {
 }
 
 /** What stands in place of the dialog's content. */
-type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source' | 'held' | 'source-again';
+type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source' | 'held' | 'source-again' | 'late';
+
+/**
+ * A start the bridge did not answer in time (`ReadFailure.late`): it may still take the reading (a busy
+ * bridge takes it late), so the dialog waits for the reading to be listed and follows it, never back to
+ * an empty input inviting a second reading. `before`: the readings listed when it was sent.
+ */
+interface LateStart {
+    at: number;
+    before: Set<string>;
+    /** A source read again (S…). */
+    source?: string;
+    /** A reading read again: its id and version before. */
+    again?: { id: string; version: number };
+    /** Pages sent (a document), its document key. */
+    pages: number;
+    doc: string;
+    /** A status came after the start was given up. */
+    heard: boolean;
+    /** No such reading listed long after: most likely not started (the dialog offers to try again). */
+    gone: boolean;
+}
+
+/** How long after a start without an answer a reading still counts as possibly taken (tests shorten it with `__STROM_READ_LATE_WAIT_MS`). */
+const LATE_WAIT_MS = 120_000;
+function lateWaitMs(): number {
+    const t = (globalThis as { __STROM_READ_LATE_WAIT_MS?: unknown }).__STROM_READ_LATE_WAIT_MS;
+    return typeof t === 'number' && t > 0 ? t : LATE_WAIT_MS;
+}
 
 /** Why a source's reading cannot be shown (the `source` error: the source's own transcription stands in). */
 export type SourceWhy = 'down' | 'older' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
@@ -154,6 +182,8 @@ export interface DialogState {
     srcAgain: SourceAgain | null;
     /** Whose transcription the result shows (spec 059 K6.6): reader 1, or the second reader's own text; a new result starts at 1. */
     reader: 1 | 2;
+    /** A start without an answer in time: the reading it may have started (null: none). */
+    late: LateStart | null;
 }
 
 /**
@@ -663,11 +693,12 @@ export const readDocumentMethods = uiModule({
     /** After new readings: announce what ended, follow it in the dialog, redraw the menu, the strip and the button. */
     readsChanged(researchId: string, prev: Map<string, LiveRead>): void {
         const reads = readsByResearch.get(researchId)!;
+        const adopted = this.readCheckLate(researchId, reads, false);
         const shownId = st && document.getElementById(DIALOG_ID) ? st.readId : '';
         const shown = shownId ? reads.get(shownId) : undefined;
         if (shown) {
             const before = prev.get(shownId);
-            if (!before || before.state !== shown.state || before.done !== shown.done || before.version !== shown.version || before.entries !== shown.entries) this.followReadInDialog(shown);
+            if (!before || shownId === adopted || before.state !== shown.state || before.done !== shown.done || before.version !== shown.version || before.entries !== shown.entries) this.followReadInDialog(shown);
         }
         // Ended with the dialog closed (or showing something else): the notice, once in the reading's life.
         const { announce, settle, rearm } = readEndsToAnnounce(reads, prev, readRecent(), shownId);
@@ -827,7 +858,7 @@ export const readDocumentMethods = uiModule({
             notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1, second: false,
             sourceId: sourceRead ? opts.sourceId ?? '' : '', entryId: sourceRead ? source?.readingEntry ?? '' : opts.entryId ?? '',
             mode: opts.again ? 'source' : 'document', with: null, refineOpen: false, agentDown: {}, sentWith: null, choicesKey: '',
-            srcAgain: opts.again ?? null, reader: 1,
+            srcAgain: opts.again ?? null, reader: 1, late: null,
         };
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
@@ -2489,6 +2520,7 @@ export const readDocumentMethods = uiModule({
             }
             // A source the research cannot read again (no original here, no transcript, not known there).
             case 'source-again': title = t.srcCannot; text = t.srcWhy[err.failure?.kind ?? ''] ?? ''; break;
+            case 'late': ({ title, text } = this.readLateWords()); break;
         }
         return { title, text };
     },
@@ -2530,6 +2562,8 @@ export const readDocumentMethods = uiModule({
                 return `<span class="batch-foot-note"></span>${btn('close', t.close, !seal)}${seal ? btn('seal', seal.label, true) : ''}`;
             }
             case 'unreadable': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('insert-other', t.insertOther, true)}`;
+            // Waiting for the reading the bridge may have taken: no second start offered until it most likely did not.
+            case 'late': return `<span class="batch-foot-note"></span>${s.late?.gone ? `${btn('close', t.close)}${btn('retry', t.retry, true)}` : btn('close', t.close, true)}`;
             default: return `<span class="batch-foot-note"></span>${close}`;
         }
     },
@@ -2868,6 +2902,7 @@ export const readDocumentMethods = uiModule({
                 return;
             }
         }
+        const late = this.readLateStart(link.researchId, { pages: pages.length, doc: pages.map(p => p.sha).join(',') });
         const reply = await startRead(base, {
             files: pages.map(p => p.sha), readers: s.readers, lang: getCurrentLanguage(), person: refn, note: s.note,
             with: this.readWithNow(),
@@ -2877,6 +2912,7 @@ export const readDocumentMethods = uiModule({
         s.sending = null;
         if (!reply.ok) {
             const f = reply.failure;
+            if (f.late) { this.readStartLate(link.researchId, late); return; }
             if ((f.kind === 'type' || f.kind === 'large') && f.sha) {
                 const p = s.pages.find(x => x.sha === f.sha);
                 if (p) {
@@ -2904,12 +2940,14 @@ export const readDocumentMethods = uiModule({
         s.busy = true;
         s.notice = '';
         this.renderReadDialog();
+        const late = this.readLateStart(link.researchId, { pages: 1, doc: `source:${again.refn}`, source: again.refn });
         const reply = await startSourceRead(base, {
             source: again.refn, ...(again.clip ? { clip: again.clip } : {}), readers: s.readers, lang: getCurrentLanguage(),
             with: this.readWithNow(),
         });
         if (st !== s) return;
         s.busy = false;
+        if (!reply.ok && reply.failure.late) { this.readStartLate(link.researchId, late); return; }
         if (!reply.ok) { this.readFailed(reply.failure); return; }
         s.result = null;
         this.readStarted(link.researchId, reply.value.read, reply.value.state, 1, again.title, `source:${again.refn}`, again.refn);
@@ -2950,6 +2988,106 @@ export const readDocumentMethods = uiModule({
         // The research's offer may have changed: asked again.
         const link = this.researchOriginalsLink();
         if (link) void this.askResearchBridge(link.researchId, POLL_MS);
+    },
+
+    /** What a start about to be sent may leave behind when its answer does not come in time. */
+    readLateStart(researchId: string, what: Pick<LateStart, 'pages' | 'doc' | 'source' | 'again'>): LateStart {
+        if (st) st.late = null;
+        return { ...what, at: Date.now(), before: new Set(readsByResearch.get(researchId)?.keys() ?? []), heard: false, gone: false };
+    },
+
+    /**
+     * A start without an answer in time: the bridge may still take it. The dialog says so and waits for the
+     * reading to be listed (then its progress), never back to the input (a second reading paid for).
+     */
+    readStartLate(researchId: string, late: LateStart): void {
+        const s = st;
+        if (!s) return;
+        s.busy = false;
+        s.sending = null;
+        s.late = late;
+        if (s.phase === 'propose') {
+            // A second reader from the suggestion: the suggestion stays, the words above it.
+            const { title, text } = this.readLateWords();
+            s.notice = [title, text].filter(Boolean).join(' ');
+        } else {
+            s.phase = 'error';
+            s.error = { kind: 'late' };
+        }
+        // Listed already (a status came meanwhile): followed at once.
+        const reads = readsByResearch.get(researchId);
+        if (reads) this.readCheckLate(researchId, reads, true);
+        if (s.late) this.renderReadDialog();
+        this.watchReads();
+        void this.askResearchBridge(researchId, POLL_MS);
+    },
+
+    /** The words of a start without an answer: waiting for the reading, or (long after, not listed) most likely not started. */
+    readLateWords(): { title: string; text: string } {
+        const t = strings.read;
+        return { title: t.lateTitle, text: st?.late?.gone ? t.lateGone : t.lateWait };
+    },
+
+    /** The reading a start without an answer started, as the bridge lists it now (null: none listed). */
+    readLateMatch(reads: Map<string, LiveRead>, late: LateStart): LiveRead | null {
+        if (late.again) {
+            const r = reads.get(late.again.id);
+            return r && (r.version > late.again.version || readRunning(r.state)) ? r : null;
+        }
+        for (const r of reads.values()) {
+            if (late.before.has(r.id) || r.from !== 'app') continue;
+            // Asked for well before the start: not this one (the clock is the same computer's).
+            const at = Date.parse(r.at);
+            if (Number.isFinite(at) && at < late.at - 60_000) continue;
+            if (late.source ? r.source === late.source : !r.source && (!r.files || r.files === late.pages)) return r;
+        }
+        return null;
+    },
+
+    /**
+     * After a status: the reading of a start without an answer taken over when listed (its id; followed here
+     * with `follow`, else by the caller); long after, the dialog says it most likely did not start.
+     */
+    readCheckLate(researchId: string, reads: Map<string, LiveRead>, follow: boolean): string {
+        const s = st;
+        const late = s?.late;
+        if (!s || !late || this.researchOriginalsLink()?.researchId !== researchId) return '';
+        const r = this.readLateMatch(reads, late);
+        if (r) {
+            s.late = null;
+            rememberRead(r.id, researchId, late.doc);
+            results.delete(r.id);
+            if (s.phase === 'error' && s.error?.kind === 'late') {
+                s.phase = 'progress';
+                s.error = null;
+                s.result = null;
+            }
+            s.readId = r.id;
+            s.startedAt = Number.isFinite(Date.parse(r.at)) ? Date.parse(r.at) : Date.now();
+            s.sawChecking = false;
+            if (s.phase === 'propose') {
+                // The words above the suggestion go (the second reader's progress follows).
+                s.notice = '';
+                if (document.getElementById(DIALOG_ID)) this.renderReadDialog();
+            }
+            if (follow && document.getElementById(DIALOG_ID)) this.followReadInDialog(r);
+            return r.id;
+        }
+        // The listing known when the start was given up is not a status since then.
+        if (follow) return '';
+        const heard = late.heard;
+        late.heard = true;
+        if (heard && !late.gone && Date.now() - late.at >= lateWaitMs()) {
+            late.gone = true;
+            if (s.phase === 'propose') {
+                // The second reader most likely did not start: the suggestion can be written or read again.
+                s.second = false;
+                const { title, text } = this.readLateWords();
+                s.notice = [title, text].filter(Boolean).join(' ');
+            }
+            this.renderReadDialog();
+        }
+        return '';
     },
 
     /** A reading started (or started again): remembered, followed. */
@@ -3097,9 +3235,11 @@ export const readDocumentMethods = uiModule({
         const base = this.readBridgeBase(link.researchId);
         if (!base) { this.readFailed({ kind: 'down', code: '', status: 0, retryAfterMs: 0 }); return; }
         s.busy = true;
+        const late = this.readLateStart(link.researchId, { pages: 0, doc: '', again: { id: s.readId, version: this.readLiveOf(s.readId)?.version ?? 0 } });
         const reply = await readAgain(base, s.readId, s.readers, this.readWithNow());
         if (st !== s) return;
         s.busy = false;
+        if (!reply.ok && reply.failure.late) { this.readStartLate(link.researchId, late); return; }
         if (!reply.ok) { this.readFailed(reply.failure); return; }
         s.error = null;
         const prev = this.readLiveOf(s.readId);

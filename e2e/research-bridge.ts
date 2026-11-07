@@ -1158,6 +1158,11 @@ export interface FakeRead {
     sourcePosts?: Record<string, unknown>[];
     /** `POST /sources/read` turned down: this status and body. */
     sourceReply?: { status: number; body: unknown };
+    /**
+     * A busy bridge (its thread being sorted): a start (`POST /read`, `/read/<id>/again`, `/sources/read`)
+     * is taken only this late (ms), the app may have given up waiting meanwhile.
+     */
+    startDelayMs?: number;
 }
 
 export const READ_ID = 'D20261019153012-a1b2';
@@ -1607,7 +1612,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (b.busy && route.request().method() !== 'OPTIONS') {
             return route.fulfill({ status: 503, headers: { ...cors, 'content-type': 'application/json', 'retry-after': '2' }, body: JSON.stringify({ error: 'busy' }) });
         }
-        const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        // A start answered late: the app may have given up on it meanwhile (its request gone, the answer goes nowhere).
+        let late = false;
+        const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+            .catch((err: unknown) => { if (!late) throw err; });
         if (route.request().method() === 'OPTIONS') {
             return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });
         }
@@ -1703,6 +1711,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return json(200, { reads: rd.history });
         }
         // A source read again from its original (spec 059): a reading like any other, with its source.
+        if (rd?.startDelayMs && method === 'POST' && (/\/sources\/read$/.test(url.pathname) || /\/read(?:\/[^/]+\/again)?$/.test(url.pathname))) {
+            late = true;
+            await new Promise(resolve => setTimeout(resolve, rd.startDelayMs));
+        }
         if (rd && method === 'POST' && /\/sources\/read$/.test(url.pathname) && b.features?.includes('read.source')) {
             let body: Record<string, unknown> = {};
             try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }

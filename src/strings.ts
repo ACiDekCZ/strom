@@ -6514,6 +6514,10 @@ const stringsEN = {
         srcFailedNoSource: 'The source changed or was merged in the research meanwhile, so nothing was compared with the transcript.',
         srcNotWritten: 'The result was not written to the research (neither a task nor another reading at the source came of it); the source’s transcript stays.',
         srcFailedPill: 'comparison did not succeed',
+        // A start the research did not answer in time: it may still take the reading.
+        lateTitle: 'The research did not confirm the reading in time.',
+        lateWait: 'The reading may have started all the same: its progress shows here as soon as the research lists it.',
+        lateGone: 'The research has not listed such a reading since then, so it most likely did not start.',
         // The readers read the document as different kinds (spec 059 K6.10).
         kindsDiffer: (a: string, b: string) => `The readers did not even agree on the kind of entry: reader 1 ${a}, reader 2 ${b}. To be checked against the scan before writing to the tree.`,
         // Reader 1 / Reader 2 (spec 059 K6.6): the second reader's own text.
@@ -14048,6 +14052,9 @@ const stringsCZ: StringsType = {
         srcFailedNoSource: 'Pramen se ve výzkumu mezitím změnil nebo sloučil s jiným, s přepisem se proto neporovnalo.',
         srcNotWritten: 'Výsledek se do výzkumu nezapsal (úkol ani další čtení u pramene nevznikly); přepis pramene zůstává.',
         srcFailedPill: 'porovnání se nepodařilo',
+        lateTitle: 'Výzkum čtení včas nepotvrdil.',
+        lateWait: 'Čtení přesto mohlo začít: jakmile ho výzkum ohlásí, ukáže se tady jeho průběh.',
+        lateGone: 'Výzkum takové čtení ani potom neohlásil, nejspíš tedy nezačalo.',
         kindsDiffer: (a: string, b: string) => `Čtenáři se neshodli ani na druhu zápisu: čtenář 1 ${a}, čtenář 2 ${b}. Před zápisem do stromu ověřit podle skenu.`,
         readerView: 'Přepis čtenáře',
         readerNone2: 'Čtenář 2 tento zápis nepřečetl',
@@ -21486,6 +21493,9 @@ const stringsDE: StringsType = {
         srcFailedNoSource: 'Die Quelle wurde in der Forschung inzwischen geändert oder zusammengeführt, daher wurde nicht mit der Abschrift verglichen.',
         srcNotWritten: 'Das Ergebnis wurde nicht in die Forschung geschrieben (weder eine Aufgabe noch ein weiteres Lesen bei der Quelle ist entstanden); die Abschrift der Quelle bleibt.',
         srcFailedPill: 'Vergleich nicht gelungen',
+        lateTitle: 'Die Forschung hat das Lesen nicht rechtzeitig bestätigt.',
+        lateWait: 'Das Lesen kann trotzdem begonnen haben: Sein Fortschritt erscheint hier, sobald die Forschung es meldet.',
+        lateGone: 'Die Forschung hat seitdem kein solches Lesen gemeldet, es hat also wohl nicht begonnen.',
         kindsDiffer: (a: string, b: string) => `Die Leser waren sich nicht einmal über die Art des Eintrags einig: Leser 1 ${a}, Leser 2 ${b}. Vor dem Eintragen in den Stammbaum am Scan prüfen.`,
         readerView: 'Abschrift von',
         readerNone2: 'Leser 2 hat diesen Eintrag nicht gelesen',

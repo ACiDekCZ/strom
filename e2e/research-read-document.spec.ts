@@ -416,6 +416,26 @@ test.describe('Read a document', () => {
         expect(b.read!.reads[0].state).toBe('cancelled');
     });
 
+    test('a busy bridge takes the reading late: the dialog waits for it and follows it, never the input again', async ({ page }) => {
+        const b = await setup(page);
+        await page.evaluate(() => { (globalThis as { __STROM_READ_TIMEOUT_MS?: number }).__STROM_READ_TIMEOUT_MS = 600; });
+        b.read!.startDelayMs = 2000;
+        const d = await openFromMenu(page);
+        await addPages(page, [{ name: 'zapis.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
+        await d.locator('[data-act="read"]').click();
+        await expect(d.locator('.read-error[data-error="late"]')).toBeVisible();
+        await poll(page);
+        await expect(d.locator('.read-error[data-error="late"]')).toBeVisible();
+        await expect(d.locator('[data-act="read"]')).toHaveCount(0);
+        await expect.poll(() => b.read!.reads.length).toBe(1);
+        await poll(page);
+        await expect(d.locator('#read-title')).toHaveText('Reading a document');
+        await expect(d.locator('.read-dialog')).toHaveAttribute('data-phase', 'progress');
+        await step(page, b, 'done', 1);
+        await expect(d.locator('#read-result')).toBeVisible();
+        expect(b.read!.posts).toHaveLength(1);
+    });
+
     test('the hourly limit: not started, said why', async ({ page }) => {
         const b = await setup(page);
         b.read!.startReply = { status: 429, body: { error: 'Limit.', code: 'read.limit', text: 'Limit.', params: { per: 'hour' } }, retryAfter: '600' };

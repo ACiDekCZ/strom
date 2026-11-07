@@ -391,6 +391,44 @@ test.describe('Read a document: suggest for the tree', () => {
         expect(await page.evaluate(() => localStorage.getItem('read.secondBeforeApply'))).toBe('1');
     });
 
+    for (const taken of [true, false]) {
+        test(`a second reader without an answer in time: the suggestion waits with its words; ${taken ? 'taken late: followed' : 'never taken: long after, written or read again'}`, async ({ page }) => {
+            const b = await setup(page, baptism({ readers: { asked: 1, ran: 1, agree: null } }, { variants: [] }));
+            await page.evaluate(() => {
+                const g = globalThis as { __STROM_READ_TIMEOUT_MS?: number; __STROM_READ_LATE_WAIT_MS?: number };
+                g.__STROM_READ_TIMEOUT_MS = 600;
+                g.__STROM_READ_LATE_WAIT_MS = 1500;
+            });
+            b.read!.startDelayMs = 2000;
+            if (!taken) b.read!.againReply = { status: 500, body: { error: 'lost' } };
+            const d = await openPropose(page);
+            await apply(d).click();
+            await expect(d.locator('.read-notice')).toContainText('The research did not confirm the reading in time.');
+            await expect(d.locator('#read-title')).toHaveText('Suggest for the tree');
+            // Not a second start while it may run.
+            await expect(apply(d)).toBeDisabled();
+            if (taken) {
+                await expect.poll(() => b.read!.reads[0].version).toBe(2);
+                await poll(page);
+                await expect(d.locator('.read-p-progress')).toContainText('The second reader is reading');
+                await expect(d.locator('.read-notice')).toHaveCount(0);
+                const r = b.read!.reads[0];
+                r.state = 'done';
+                r.done = 2;
+                r.readers = 2;
+                r.since = new Date().toISOString();
+                b.read!.results.set(READ_ID, baptism({ readers: { asked: 2, ran: 2, agree: 'same' }, version: 2 }, { variants: [] }));
+                await poll(page);
+                await expect(d.locator('.read-notice')).toHaveText('The second reader is done. Both readings agree.');
+            } else {
+                await expect.poll(async () => { await poll(page); return apply(d).isEnabled(); }, { timeout: 15_000 }).toBe(true);
+                await expect(d.locator('.read-notice')).toContainText('most likely did not start');
+                await expect(d.locator('.read-p-progress')).toHaveCount(0);
+            }
+            await expect.poll(() => b.read!.agains.length).toBe(1);
+        });
+    }
+
     test('a second reader that agrees: the notice says the readings agree, nothing marked new', async ({ page }) => {
         const b = await setup(page, baptism({ readers: { asked: 1, ran: 1, agree: null } }, { variants: [] }));
         const d = await openPropose(page);
