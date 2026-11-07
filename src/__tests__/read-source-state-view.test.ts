@@ -15,7 +15,7 @@ import { postBridgeReadTask, readTaskSettingReply } from '../history-bridge.js';
 import { readAgainSaid, sanitizeReadSourceState, type ReadSourceState } from '../research-read-task.js';
 import { sanitizeLiveStatus, researchLinkMark } from '../research-link.js';
 import { researchActionLabel, researchBridgeAgentLabel } from '../ui/research-open-mark.js';
-import { strings } from '../strings.js';
+import { strings, getStringsForLang } from '../strings.js';
 
 const t = strings.read;
 const ts = strings.treeSettings;
@@ -99,6 +99,25 @@ describe('§2 the source\'s row: each state of the research', () => {
         expect(stateOf(unsure)).toBe('unsure');
         expect(unsure).toContain(t.sUnsure('7 Nov', 1));
         expect(row({ state: st({ state: 'saved', unsureOnly: true }), counts: null })).toContain(t.sUnsureAny('7 Nov'));
+    });
+
+    it('uncertain places by the number of readers from the reading\'s result; not known yet: neutral, no readers said', () => {
+        const unsure = (counts: SourceRowInput['counts']): string => row({ state: st({ state: 'saved', unsureOnly: true }), counts });
+        const one = unsure({ major: 0, unsure: 6, readers: 1 });
+        expect(one).toContain('Newer reading of 7 Nov: the reader was not sure at 6 places; the transcript stays.');
+        expect(one).not.toContain('readers disagree');
+        expect(unsure({ major: 0, unsure: 6, readers: 2 })).toContain('Newer reading of 7 Nov: the readers disagree at 6 places; the transcript stays.');
+        expect(unsure({ major: 0, unsure: 6 })).toContain(t.sUnsure('7 Nov', 6));
+        expect(unsure({ major: 0, unsure: 0, readers: 1 })).toContain(t.sUnsureAny('7 Nov', 1));
+        const unknown = unsure(null);
+        expect(unknown).toContain('Newer reading of 7 Nov: uncertain places; the transcript stays.');
+        expect(unknown).not.toMatch(/reader/);
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const l = getStringsForLang(lang).read;
+            expect(new Set([l.sUnsure('7. 11.', 6, 1), l.sUnsure('7. 11.', 6, 2)]).size).toBe(2);
+            expect(new Set([l.sUnsureAny('7. 11.', 1), l.sUnsureAny('7. 11.', 2), l.sUnsureAny('7. 11.')]).size).toBe(3);
+        }
+        expect(getStringsForLang('cs').read.sUnsureAny('7. 11.')).toBe('Novější čtení 7. 11.: nejistá místa, přepis se nemění.');
     });
 
     it('the kinds as the research says them', () => {

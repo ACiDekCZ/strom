@@ -13,7 +13,7 @@
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
-import { bookReference, entryDateLine } from '../source-page.js';
+import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
 import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -1213,8 +1213,16 @@ export const sourcesMethods = uiModule({
                 this.citeSourceAfterCreate = true;
             }
             this.sourceEditorContext = ctx;
-            this.showAddSourceModal({ repository: base.repository, reference: base.reference, url: base.url }, base.title);
-            document.getElementById('input-source-title')?.focus();
+            // The book, without the entry's own number and date; a shape not recognized stays whole, selected to check.
+            const ref = base.reference?.trim() ? sameBookReference(base.reference) : null;
+            this.showAddSourceModal({ repository: base.repository, reference: ref?.reference ?? base.reference, url: base.url }, base.title);
+            if (ref?.whole && ref.reference) {
+                const input = document.getElementById('input-source-reference') as HTMLInputElement | null;
+                input?.focus();
+                input?.select();
+            } else {
+                document.getElementById('input-source-title')?.focus();
+            }
         };
         if (editorOpen && this.hasSourceEditorChanges()) {
             this.showUnsavedEditorDialog(strings.sources.unsavedMessage,

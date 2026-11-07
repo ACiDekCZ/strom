@@ -27,6 +27,7 @@ import {
     type ReadProposalTake, type ReadSourceProposal, type ReadSourceState, type ReadTaskHow,
 } from '../research-read-task.js';
 import { postReadTask, postReadProposal } from '../research-read.js';
+import { readOneReader } from '../read-result.js';
 import {
     sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowAct, type ProposalAct,
@@ -52,7 +53,7 @@ const rowOpen = new Set<string>();
 const rowAct = new Map<string, SourceRowAct>();
 const rowLocal = new Map<string, { state: ReadSourceState; seen: string }>();
 /** A reading's counts (sure substantive changes, uncertain places), by its id; asked once. */
-const rowCounts = new Map<string, { major: number; unsure: number }>();
+const rowCounts = new Map<string, { major: number; unsure: number; readers: number }>();
 const rowCountsAsked = new Set<string>();
 /**
  * The agent's proposal (spec 059 §3), per `tree|S…`: the whole text open, an answer on its way or failed, and the
@@ -234,10 +235,11 @@ export const readSourceMethods = uiModule({
         rowCountsAsked.add(read);
         const res = await this.loadReadResult(rid, read);
         if (!res?.source) return;
-        let counts: { major: number; unsure: number };
+        let counts: { major: number; unsure: number; readers: number };
         try {
             const sorted = this.readSourceCounts(res);
-            counts = { major: sorted.major, unsure: sorted.unsure };
+            // How many read: from the reading's result (`/status.readAgain` does not say it).
+            counts = { major: sorted.major, unsure: sorted.unsure, readers: readOneReader(res) ? 1 : 2 };
         } catch {
             return;
         }

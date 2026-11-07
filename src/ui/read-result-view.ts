@@ -81,24 +81,81 @@ function snap(span: [number, number], toks: readonly Tok[]): [number, number] {
     return [a, b];
 }
 
+/** A word as compared for the context of a place: NFC, lower case, without marks and the punctuation around it ('' none). */
+function contextWord(w: string): string {
+    return w.normalize('NFC').toLocaleLowerCase().replace(/\[\?\]/g, '').replace(/^[.,;:!?„“"'()\-–]+|[.,;:!?„“"'()\-–]+$/g, '');
+}
+
+/** The words of a text as compared for a context, `|` and marks aside. */
+function contextWords(text: string): string[] {
+    return text.split(/[\s|]+/).map(contextWord).filter(Boolean);
+}
+
+/** How many words around `[a, b)` of `words` match `before` (its end) and `after` (its start), up to `n` each side. */
+function contextScore(words: readonly string[], a: number, b: number, before: readonly string[], after: readonly string[], n: number): number {
+    let score = 0;
+    for (let k = 1; k <= n && k <= before.length && a - k >= 0 && words[a - k] === before[before.length - k]; k++) score++;
+    for (let k = 0; k < n && k < after.length && b + k < words.length && words[b + k] === after[k]; k++) score++;
+    return score;
+}
+
+/** Words of context compared on each side of a repeated place. */
+const CONTEXT_WORDS = 3;
+
+/**
+ * Of the occurrences of a place's words in the shown text, the one the other text has around the place's other
+ * words: the research says no position of a place (only its words), and a word repeated ("12 | 3. Martii | 12")
+ * is the occurrence whose neighbours stand around the other side there. -1: not to tell (the first one stays).
+ */
+function pickByContext(lines: readonly string[], spots: readonly { line: number; span: [number, number] }[], counter: readonly string[], counterNeedle: string): number {
+    const want = contextWords(counterNeedle);
+    // Where the other words stand in the other text (none: each gap between its words).
+    const at: [number, number][] = [];
+    for (let i = 0; i + want.length <= counter.length; i++) {
+        if (want.every((w, k) => counter[i + k] === w)) at.push([i, i + want.length]);
+    }
+    if (!at.length) return -1;
+    // The most neighbours alike wins; of equals, the first (as without the other text).
+    let best = -1, bestScore = 0;
+    spots.forEach((p, i) => {
+        const before = contextWords([...lines.slice(0, p.line), lines[p.line].slice(0, p.span[0])].join('\n'));
+        const after = contextWords([lines[p.line].slice(p.span[1]), ...lines.slice(p.line + 1)].join('\n'));
+        const score = Math.max(...at.map(([a, b]) => contextScore(counter, a, b, before, after, CONTEXT_WORDS)));
+        if (score > bestScore) { best = i; bestScore = score; }
+    });
+    return best;
+}
+
 /**
  * Where each variant lies in the lines (`side`: which of its words are in this text), each once, the first
- * occurrence not taken by an earlier one; null where not found.
+ * occurrence not taken by an earlier one; null where not found. `counter`: the text of the variant's other side
+ * (the other reader's, the existing transcript): a place whose words stand more than once in the lines takes the
+ * occurrence with the same neighbours there.
  */
-export function locatePlaces(lines: readonly string[], variants: readonly MergedVariant[], side: 'at' | 'other'): ({ line: number; span: [number, number] } | null)[] {
+export function locatePlaces(lines: readonly string[], variants: readonly MergedVariant[], side: 'at' | 'other', counter?: string): ({ line: number; span: [number, number] } | null)[] {
     const taken: [number, number][][] = lines.map(() => []);
     const toks = lines.map(lineTokens);
+    const counterWords = counter ? contextWords(counter) : null;
     return variants.map(v => {
         const needle = side === 'at' ? v.at : v.other;
         if (!needle.trim()) return null;
+        const spots: { line: number; span: [number, number] }[] = [];
         for (let j = 0; j < lines.length; j++) {
-            const span = locateSpan(lines[j], needle, taken[j]);
-            if (!span) continue;
-            const s = snap(span, toks[j]);
-            taken[j].push(s);
-            return { line: j, span: s };
+            const seen: [number, number][] = [...taken[j]];
+            for (;;) {
+                const span = locateSpan(lines[j], needle, seen);
+                if (!span) break;
+                spots.push({ line: j, span: snap(span, toks[j]) });
+                seen.push(span);
+                if (!counterWords) break;
+            }
+            if (spots.length && !counterWords) break;
         }
-        return null;
+        if (!spots.length) return null;
+        const k = spots.length > 1 && counterWords ? pickByContext(lines, spots, counterWords, side === 'at' ? v.other : v.at) : -1;
+        const p = spots[k >= 0 ? k : 0];
+        taken[p.line].push(p.span);
+        return p;
     });
 }
 
@@ -114,6 +171,10 @@ export interface ResultMarksInput {
     data: readonly { v: MergedVariant; label: string }[];
     /** Changes against the existing transcript (`other` in this text), or null: not marked in this text. */
     chg: readonly MergedVariant[] | null;
+    /** The other reader's text (the readers' places' other side): a repeated word is placed by its neighbours there. */
+    disCounter?: string;
+    /** The existing transcript (the changes' other side), for the same. */
+    chgCounter?: string;
 }
 
 export interface ResultMarks { lines: string[]; places: ShownPlace[] }
@@ -122,7 +183,7 @@ export interface ResultMarks { lines: string[]; places: ShownPlace[] }
 export function resultPlaces(o: ResultMarksInput): ResultMarks {
     const lines = o.text.split('\n').map(l => l.trimEnd()).filter(l => l.trim() !== '');
     const places: ShownPlace[] = [];
-    const disAt = locatePlaces(lines, o.dis, o.disSide);
+    const disAt = locatePlaces(lines, o.dis, o.disSide, o.disCounter);
     o.dis.forEach((v, i) => {
         const p = disAt[i];
         const cls = o.disKinded && (v.kind || v.kinds) ? variantClass(v) : { minor: false, kinds: [] };
@@ -133,7 +194,7 @@ export function resultPlaces(o: ResultMarksInput): ResultMarks {
         cls: o.disKinded && (d.v.kind || d.v.kinds) ? variantClass(d.v) : { minor: false, kinds: [] }, word: '', label: d.label, inside: false,
     }));
     if (o.chg) {
-        const chgAt = locatePlaces(lines, o.chg, 'other');
+        const chgAt = locatePlaces(lines, o.chg, 'other', o.chgCounter);
         o.chg.forEach((v, i) => {
             const p = chgAt[i];
             places.push({ id: `c${i}`, kind: 'chg', line: p?.line ?? -1, span: p?.span ?? null, v, cls: variantClass(v), word: '', label: '', inside: false });
@@ -355,6 +416,8 @@ export interface CheckOptions {
     focus: string;
     /** A source read again, sorted (`read.sourceTask`): the sentence under the sure changes ('' none), a person reviews them. */
     sorted?: { note: string; person: boolean; taskLink: boolean };
+    /** One reader read (`readOneReader`): its uncertain places are where it was not sure. */
+    oneReader?: boolean;
 }
 
 /** Rows shown up to `CHECK_SHOWN`, then "and N more". */
@@ -388,7 +451,7 @@ function sortedCheckHtml(places: readonly ShownPlace[], o: CheckOptions & { sort
                 </div>`);
     if (g.unsure.length) out.push(`
                 <div class="read-check-group" data-group="unsure">
-                    <div class="read-check-head">${head(sample('read-mk-dis'), t.gUnsure, g.unsure.length)}</div>
+                    <div class="read-check-head">${head(sample('read-mk-dis'), o.oneReader ? t.gUnsure1 : t.gUnsure, g.unsure.length)}</div>
                     ${note(t.cUnsNote)}${rowsHtml(g.unsure, o)}
                 </div>`);
     for (const j of g.judged) {

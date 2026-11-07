@@ -506,6 +506,30 @@ test.describe('another entry from the same register, from the editor', () => {
         expect(created.note).toBeUndefined();
         expect(data.persons.j.sourceIds).toEqual(['s1', created.id]);
     });
+
+    test('the new entry takes the book, not the entry\'s number and date; a shape not recognized is selected to check', async ({ page }) => {
+        await tree(page, {
+            persons: { j: { ...jan, partnerships: [] } },
+            sources: {
+                s1: { title: 'Křest Jana', repository: 'SOA Zámrsk', reference: 'kn. 704, sn. 88, str. 169, 6. zápis (21./22. 2. 1755)' },
+                s2: { title: 'Křest Anny', repository: 'SOA Zámrsk', reference: 'Týnec 17' },
+            },
+        });
+        const ref = editor(page).locator('#input-source-reference');
+        await page.evaluate(() => window.Strom.UI.showSourceViewer('s1', null));
+        await viewer(page).locator('#source-viewer-same-book').click();
+        await expect(editor(page)).toBeVisible();
+        await expect(ref).toHaveValue('kn. 704, sn. 88, str. 169');
+        await expect(editor(page).locator('#input-source-title')).toBeFocused();
+        await editor(page).locator('[data-dismiss], .modal-close').first().click();
+        await expect(editor(page)).toBeHidden();
+
+        await page.evaluate(() => window.Strom.UI.showSourceViewer('s2', null));
+        await viewer(page).locator('#source-viewer-same-book').click();
+        await expect(ref).toHaveValue('Týnec 17');
+        await expect(ref).toBeFocused();
+        expect(await ref.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd])).toEqual([0, 'Týnec 17'.length]);
+    });
 });
 
 test.describe('crop editor tools', () => {

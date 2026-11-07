@@ -407,7 +407,7 @@ test.describe('Read a source again from its original', () => {
         await expect(major).toHaveCount(1);
         await expect(major.locator('.read-check-old')).toHaveText('čp 12');
         await expect(major.locator('.read-check-what .read-mk-chg')).toHaveText('čp. 21');
-        await expect(major.locator('.read-check-kind')).toHaveText('house number');
+        await expect(major.locator('.read-check-kind')).toHaveText('number');
         const minors = group.locator('.read-check-minors');
         await expect(minors.locator('summary')).toHaveText('and 2 minor details (punctuation)');
         await expect(minors).not.toHaveAttribute('open', '');
@@ -653,6 +653,9 @@ test.describe('Read a source again from its original', () => {
         await readAndFinish(page, b, d, UNSURE_SOURCE);
         const foot = d.locator('.read-task-foot');
         await expect(foot).toHaveAttribute('data-task-state', 'B');
+        // One reader: not sure, never "the readers disagree"; with the choice beside it no task by itself.
+        await expect(foot.locator('.read-task-t1')).toHaveText('The reader was not sure at 1 place. That is uncertainty, not a change of the transcript: no task is created by itself.');
+        await expect(d.locator('.read-check-group[data-group="unsure"] .read-check-name')).toHaveText('Uncertain – the reader was not sure');
         const choice = foot.locator('[data-act="task-queue"][data-unsure="true"]');
         await expect(choice).toContainText('Give to the agent to assess');
         await expect(choice).toContainText('corrects the transcript only where the scan is clear');
@@ -688,6 +691,7 @@ test.describe('Read a source again from its original', () => {
         await readAndFinish(page, b, d, UNSURE_SOURCE);
         const foot = d.locator('.read-task-foot');
         await expect(foot).toHaveAttribute('data-task-state', 'B');
+        await expect(foot.locator('.read-task-t1')).toHaveText('The reader was not sure at 1 place. That is uncertainty, not a change of the transcript: no task is created.');
         await expect(foot.locator('[data-act^="task-"]')).toHaveCount(0);
         await expect(foot.locator('[data-unsure]')).toHaveCount(0);
         await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);

@@ -48,6 +48,8 @@ export interface ReadTaskFootInput {
     canOpenTask: boolean;
     /** The research offers the uncertain places to hand over (`source.unsureOffer`, only with `read.sourceTask.unsure`). */
     unsureOffer?: boolean;
+    /** One reader read (`readOneReader`): its uncertain places are where it was not sure, not where readers disagree. */
+    oneReader?: boolean;
     act?: ReadTaskAct | null;
 }
 
@@ -222,14 +224,16 @@ function unsureChoiceHtml(i: ReadTaskFootInput): string {
 /** States B and D: their sentence, the uncertain places to hand over where offered, Close. `as`: the state the footer says (F while busy). */
 function quietHtml(quiet: 'B' | 'D', i: ReadTaskFootInput, as: ReadTaskFootState = quiet): string {
     const t = strings.read;
-    const unsure = readTaskUnsureShown(quiet, i) ? unsureChoiceHtml(i) : '';
+    const offered = readTaskUnsureShown(quiet, i);
+    const unsure = offered ? unsureChoiceHtml(i) : '';
     const close = closeBtn(true);
-    if (quiet === 'D') return foot(as, statusHtml('save', t.tNever, t.tNever2, settingsLink()) + unsure, close);
+    // With the uncertain places offered beside it, no task is made by itself (one can be on the person's word).
+    if (quiet === 'D') return foot(as, statusHtml('save', offered ? t.tNeverSelf : t.tNever, t.tNever2, settingsLink()) + unsure, close);
     // A task's places first (with its link); places of a reading a person kept (D…) have no task.
     const judged = i.counts.judged.find(j => j.n > 0 && !readJudgedKept(j.task));
     if (judged) return foot(as, statusHtml('info', t.tAllJudged(judged.task), '', i.canOpenTask ? taskLink(judged.task) : '') + unsure, close);
     if (i.counts.judged.some(j => j.n > 0)) return foot(as, statusHtml('info', t.tAllKept, '') + unsure, close);
-    if (i.counts.unsure > 0) return foot(as, statusHtml('info', t.tOnlyUnsure(i.counts.unsure), '') + unsure, close);
+    if (i.counts.unsure > 0) return foot(as, statusHtml('info', t.tOnlyUnsure(i.counts.unsure, !!i.oneReader, offered), '') + unsure, close);
     return foot(as, statusHtml('info', t.tOnlyMinor, '') + unsure, close);
 }
 

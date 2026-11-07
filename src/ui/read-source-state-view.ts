@@ -91,8 +91,11 @@ export interface SourceRowInput {
     state: ReadSourceState;
     /** The newer reading's day, as said ("7. 11."). */
     date: string;
-    /** The reading's counts (sure substantive changes, uncertain places); null: not known here. */
-    counts: { major: number; unsure: number } | null;
+    /**
+     * The reading's counts (sure substantive changes, uncertain places) and how many read, from its result; null: not
+     * known here (`/status.readAgain` says no number of readers: the row's uncertain places are then said neutrally).
+     */
+    counts: { major: number; unsure: number; readers?: number } | null;
     /** A person confirmed the transcript: a person reviews, the agent never changes it. */
     confirmed: boolean;
     /** The research offers the uncertain places to hand over (`unsureOffer`, only with `read.sourceTask.unsure`). */
@@ -144,7 +147,7 @@ function rowSentence(kind: SourceRowKind, s: ReadSourceState, d: string, counts:
         case 'done': return t.sTaskDone(d, task);
         case 'person': return t.sTaskPerson(d, task);
         case 'minor': return t.sMinor(d);
-        case 'unsure': return counts && counts.unsure > 0 ? t.sUnsure(d, counts.unsure) : t.sUnsureAny(d);
+        case 'unsure': return counts && counts.unsure > 0 ? t.sUnsure(d, counts.unsure, counts.readers ?? 2) : t.sUnsureAny(d, counts?.readers ?? 0);
     }
 }
 

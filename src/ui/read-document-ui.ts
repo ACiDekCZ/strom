@@ -39,7 +39,7 @@ import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
     entryName, placeCountAll, readerPlaces, cropLayout, stripLayout,
-    sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict, verdictWhy,
+    sourceEntryIndex, readOneReader, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict, verdictWhy,
     compareWithTranscript, readSourceSaysSure, type VerdictFacts, type VerdictSorted, type MergedVariant,
 } from '../read-result.js';
 import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, sortPlaces, sortedCounts, type ResultMarks, type ShownPlace } from './read-result-view.js';
@@ -365,11 +365,10 @@ function thoroughText(effort: string): string {
     return effort ? t.thorough[effort] ?? effort : t.bySettings;
 }
 
-/** An effort offered in the panel: its thoroughness with a short hint ("higher – default"). */
+/** An effort offered in the panel: its thoroughness by name, the default one said ("higher – default"); nothing recommended. */
 function thoroughOption(effort: string, byDefault: boolean): string {
     const t = strings.read;
-    const hint = [byDefault ? t.thoroughDefault : '', t.thoroughHint[effort] ?? ''].filter(Boolean).join(', ');
-    return hint ? `${thoroughText(effort)} – ${hint}` : thoroughText(effort);
+    return byDefault ? `${thoroughText(effort)} – ${t.thoroughDefault}` : thoroughText(effort);
 }
 
 /** Whose subscription a program draws on: Claude Code the Claude one, another program its own, or its credit. */
@@ -1948,10 +1947,14 @@ export const readDocumentMethods = uiModule({
         const k = res.entries.indexOf(entry);
         const src = this.readIsSourceAgain(res) ? this.readSourceChanges(res) : null;
         const chg = src && src.k === k && !this.readNeighbour(res, k) ? src.variants : null;
-        const marks = resultPlaces({ text, dis, disSide: shown === 2 ? 'other' : 'at', disKinded: kindOn, data, chg: shown === 1 ? chg : null });
+        // The other side's text: a word repeated in the shown text is placed by its neighbours there.
+        const disCounter = shown === 2 && blind ? entry.transcript : blind?.transcript;
+        const chgCounter = chg?.length ? DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? '']?.transcript : undefined;
+        const counters = { ...(disCounter ? { disCounter } : {}), ...(chgCounter ? { chgCounter } : {}) };
+        const marks = resultPlaces({ text, dis, disSide: shown === 2 ? 'other' : 'at', disKinded: kindOn, data, chg: shown === 1 ? chg : null, ...counters });
         if (shown === 2 && chg?.length) {
             // Reader 2's text: the changes are listed (from reader 1's text) but not marked here.
-            const r1 = resultPlaces({ text: entry.transcript, dis: [], disSide: 'at', disKinded: kindOn, data: [], chg });
+            const r1 = resultPlaces({ text: entry.transcript, dis: [], disSide: 'at', disKinded: kindOn, data: [], chg, ...counters });
             marks.places.push(...r1.places.filter(p => p.kind === 'chg').map(p => ({ ...p, elsewhere: true })));
         }
         // Sorted (`read.sourceTask`): each change in its group, a disagreement on a changed word covered by the change.
@@ -2304,7 +2307,9 @@ export const readDocumentMethods = uiModule({
     readCheckHtml(res: ReadResult, view: EntryView, near: boolean): string {
         const t = strings.read;
         const sorted = this.readSourceSortedOn(res) ? this.readSortedCheck(res) : undefined;
-        const groups = checkHtml(view.marks.places, { isSource: this.readIsSourceAgain(res), shown: view.shown, kinded: view.kinded, focus: st?.focus ?? '', ...(sorted ? { sorted } : {}) });
+        const groups = checkHtml(view.marks.places, {
+            isSource: this.readIsSourceAgain(res), shown: view.shown, kinded: view.kinded, focus: st?.focus ?? '', oneReader: readOneReader(res), ...(sorted ? { sorted } : {}),
+        });
         if (!groups && !near) return '';
         return `
                 <section class="read-section read-check" aria-labelledby="read-s-check">
@@ -2390,6 +2395,7 @@ export const readDocumentMethods = uiModule({
             canOpenTask: this.researchLinkAvailable('task'),
             // Uncertain places to hand over (spec 059 P8): only a research that says it takes them.
             unsureOffer: !!s.unsureOffer && this.readFeatureOn(READ_SOURCE_TASK_UNSURE_FEATURE),
+            oneReader: readOneReader(res),
             act,
         };
     },

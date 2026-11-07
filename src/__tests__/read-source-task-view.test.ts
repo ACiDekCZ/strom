@@ -9,10 +9,10 @@ import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { resultPlaces, sortPlaces, sortedGroups, sortedCounts, checkHtml, lineMarksHtml, placePopHtml, type ShownPlace } from '../ui/read-result-view.js';
 import { readTaskFootHtml, readTaskFootState, readTaskMajorNote, readTaskOffers, type ReadTaskFootInput } from '../ui/read-task-view.js';
-import { composeVerdict, mergeAdjacent, readSourceCat, readSourceSort, readSourceSaysSure, type MergedVariant, type VerdictFacts } from '../read-result.js';
+import { composeVerdict, mergeAdjacent, readOneReader, readSourceCat, readSourceSort, readSourceSaysSure, type MergedVariant, type VerdictFacts } from '../read-result.js';
 import { researchLinkMark } from '../research-link.js';
 import { researchActionLabel, researchBridgeAgentLabel } from '../ui/research-open-mark.js';
-import { strings } from '../strings.js';
+import { strings, getStringsForLang } from '../strings.js';
 
 const t = strings.read;
 const v = (at: string, other: string, over: Partial<MergedVariant> = {}): MergedVariant => ({ at, other, ...over });
@@ -95,6 +95,21 @@ describe('"To check" sorted', () => {
         expect(html).toContain('read-check-row is-judged');
         expect(checkHtml(sorted, { ...opts, sorted: { ...sortedOpt, taskLink: false } })).not.toContain('read-check-task');
         expect(checkHtml(sorted, { ...opts, sorted: { ...sortedOpt, person: true } })).toContain(t.gMajorPerson);
+        // The uncertain group's name: the readers disagree (two), the reader was not sure (one).
+        expect(html).toContain(`${t.gUnsure}</span>`);
+        const one = checkHtml(sorted, { ...opts, oneReader: true, sorted: sortedOpt });
+        expect(one).toContain(`${t.gUnsure1}</span>`);
+        expect(one).not.toContain(`${t.gUnsure}</span>`);
+    });
+
+    it('one reader as the research counts it: the second one did not run, no blind text', () => {
+        const r = (asked: number, ran: number, blind = false) => ({ readers: { asked, ran, agree: null }, ...(blind ? { blind: { entries: [] } } : {}) }) as never;
+        expect(readOneReader(r(1, 1))).toBe(true);
+        expect(readOneReader(r(2, 1))).toBe(true);
+        expect(readOneReader(r(1, 0))).toBe(true);
+        expect(readOneReader(r(2, 2))).toBe(false);
+        expect(readOneReader(r(2, 0))).toBe(false);
+        expect(readOneReader(r(1, 1, true))).toBe(false);
     });
 
     it('the text: an unsure change drawn as the readers\' place (once), an assessed one muted with ✓, a minor one dashed', () => {
@@ -388,7 +403,8 @@ describe('uncertain places handed over on the person\'s word (spec 059 P8, read.
     it('B with the offer: the sentence, one secondary choice for the agent (the AI badge alone), Close the main action', () => {
         const html = readTaskFootHtml(UNS);
         expect(stateOf(html)).toBe('B');
-        expect(html).toContain(t.tOnlyUnsure(6));
+        // With the choice beside it: no task by itself ("úkol sám nevznikne").
+        expect(html).toContain(t.tOnlyUnsure(6, false, true));
         expect(acts(html)).toEqual(['task-queue', 'close']);
         expect(choiceAttrs(html)).toEqual(['data-act="task-queue" data-unsure="true"']);
         expect(html).toContain(`<span class="read-task-ct">${researchBridgeAgentLabel(t.tUnsureQueue)}</span>`);
@@ -436,10 +452,12 @@ describe('uncertain places handed over on the person\'s word (spec 059 P8, read.
         expect(stateOf(busy)).toBe('F');
         expect(count(busy, /aria-busy="true"/g)).toBe(1);
         expect(busy).toContain(t.tBusy);
-        expect(busy).toContain(t.tOnlyUnsure(6));
+        expect(busy).toContain(t.tOnlyUnsure(6, false, true));
         expect(acts(busy)).toEqual(['task-queue', 'close']);
         // A busy choice of A is not this one.
-        expect(readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, busy: true } })).not.toContain(t.tOnlyUnsure(6));
+        const ofA = readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, busy: true } });
+        expect(ofA).not.toContain(t.tOnlyUnsure(6, false, true));
+        expect(ofA).not.toContain(t.tOnlyUnsure(6));
     });
 
     it('done: a task for the agent in the queue, or the places added to the open task; the task to open', () => {
@@ -454,6 +472,46 @@ describe('uncertain places handed over on the person\'s word (spec 059 P8, read.
         const review = readTaskFootHtml({ ...UNS, confirmed: true, act: { how: 'review', append: false, unsure: true, busy: false, reply: { task: 'T0413', chat: '', appended: false } } });
         expect(review).toContain(t.tDoneReview('T0413'));
         expect(readTaskMajorNote('F', { ...UNS, act: { how: 'queue', append: false, unsure: true, busy: false, reply: { task: 'T0412', chat: '', appended: false } } })).toBe('');
+    });
+
+    it('"no task is created" says "by itself" only with the choice beside it (B and D)', () => {
+        const offered = readTaskFootHtml(UNS);
+        const without = readTaskFootHtml({ ...UNS, unsureOffer: false });
+        expect(offered).toContain(t.tOnlyUnsure(6, false, true));
+        expect(without).toContain(t.tOnlyUnsure(6));
+        expect(without).not.toContain(t.tOnlyUnsure(6, false, true));
+        expect(t.tOnlyUnsure(6, false, true)).toMatch(/no task is created by itself\.$/);
+        expect(t.tOnlyUnsure(6)).toMatch(/no task is created\.$/);
+        const never = readTaskFootHtml({ ...UNS, setting: 'never' });
+        expect(never).toContain(t.tNeverSelf);
+        expect(never).not.toContain(t.tNever);
+        const neverWithout = readTaskFootHtml({ ...UNS, setting: 'never', unsureOffer: false });
+        expect(neverWithout).toContain(t.tNever);
+        expect(neverWithout).not.toContain(t.tNeverSelf);
+        // The same in every language: the cs words of the design ("úkol sám nevznikne").
+        const cs = getStringsForLang('cs').read;
+        expect(cs.tOnlyUnsure(6, false, true)).toMatch(/úkol sám nevznikne\.$/);
+        expect(cs.tOnlyUnsure(6)).toMatch(/: úkol nevznikne\.$/);
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const l = getStringsForLang(lang).read;
+            expect(l.tOnlyUnsure(6, false, true)).not.toBe(l.tOnlyUnsure(6));
+            expect(l.tNeverSelf).not.toBe(l.tNever);
+        }
+    });
+
+    it('one reader: the reader was not sure, never "the readers disagree"; two readers as before', () => {
+        const one = readTaskFootHtml({ ...UNS, oneReader: true });
+        expect(one).toContain(t.tOnlyUnsure(6, true, true));
+        expect(one).toContain('The reader was not sure at 6 places.');
+        expect(one).not.toContain('readers disagree');
+        expect(readTaskFootHtml({ ...UNS, oneReader: true, unsureOffer: false })).toContain(t.tOnlyUnsure(6, true));
+        expect(readTaskFootHtml({ ...UNS, oneReader: false })).toContain('The readers disagree at 6 places.');
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const l = getStringsForLang(lang).read;
+            expect(l.tOnlyUnsure(6, true)).not.toBe(l.tOnlyUnsure(6));
+            expect(l.gUnsure1).not.toBe(l.gUnsure);
+        }
+        expect(getStringsForLang('cs').read.tOnlyUnsure(6, true)).toMatch(/^Čtenář si nebyl jistý na 6 místech\./);
     });
 
     it('failed: a retry that repeats the same choice (unsure, its mark)', () => {

@@ -585,6 +585,14 @@ export interface VerdictFacts {
     disagree: number | null;
 }
 
+/**
+ * One reader read (as the research counts it: a reading where the second one did not run is one reader's): its places
+ * not sure are where that reader was not sure, never where readers disagree.
+ */
+export function readOneReader(r: Pick<ReadResult, 'readers' | 'blind'>): boolean {
+    return (r.readers.ran || r.readers.asked) < 2 && !r.blind;
+}
+
 /** A source read again, sorted (`read.sourceTask`): the groups' counts, the assessed ones by task (a kept reading's, D…: one group). */
 export interface VerdictSorted { major: number; unsure: number; minor: number; judged: { task: string; n: number }[] }
 

@@ -1,7 +1,7 @@
 /**
  * "Read a document", the result screen's builders (spec 059 P7): the places of the shown entry, the text with one
  * mark per place, "To check" with minor details folded, the bubble of a place; and how the phone's strip frames its
- * entry and line. Invented data only (Vlk, Doubrava).
+ * entry and line. Invented data only (Vlk, Pištěnice).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -9,7 +9,7 @@ import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, type ShownPlace }
 import { stripLayout, type MergedVariant } from '../read-result.js';
 import { getStringsForLang } from '../strings.js';
 
-const TEXT = 'Joannes Vlk filius legitimus\nJosephi Vlk[?] in Doubrava N. 7\net Catharinae [...]';
+const TEXT = 'Joannes Vlk filius legitimus\nJosephi Vlk[?] in Pištěnice N. 7\net Catharinae [...]';
 const v = (at: string, other: string, over: Partial<MergedVariant> = {}): MergedVariant => ({ at, other, ...over });
 const opts = { isSource: false, shown: 1 as const, kinded: false, focus: '' };
 const count = (html: string, re: RegExp): number => (html.match(re) ?? []).length;
@@ -17,7 +17,7 @@ const count = (html: string, re: RegExp): number => (html.match(re) ?? []).lengt
 describe('resultPlaces', () => {
     it('a disagreement found on its line, an uncertain word and an illegible spot with their spans, a place of the data off the text', () => {
         const { lines, places } = resultPlaces({
-            text: TEXT, dis: [v('Doubrava', 'Dubrava')], disSide: 'at', disKinded: false,
+            text: TEXT, dis: [v('Pištěnice', 'Dubrava')], disSide: 'at', disKinded: false,
             data: [{ v: v('Vlk', 'Wolf'), label: 'Josef Vlk · surname' }], chg: null,
         });
         expect(lines).toHaveLength(3);
@@ -25,7 +25,7 @@ describe('resultPlaces', () => {
         expect(byKind('dis').map(p => [p.id, p.line])).toEqual([['d0', 1], ['d1', -1]]);
         expect(byKind('dis')[1].label).toBe('Josef Vlk · surname');
         const dis = byKind('dis')[0];
-        expect(lines[1].slice(dis.span![0], dis.span![1])).toBe('Doubrava');
+        expect(lines[1].slice(dis.span![0], dis.span![1])).toBe('Pištěnice');
         expect(byKind('unc')).toHaveLength(1);
         expect(byKind('unc')[0].word).toBe('Vlk');
         expect(byKind('ill').map(p => p.line)).toEqual([2]);
@@ -38,27 +38,51 @@ describe('resultPlaces', () => {
     });
 
     it('changes against the existing transcript found by their new reading; their kind from the app without named kinds', () => {
-        const { places } = resultPlaces({ text: TEXT, dis: [], disSide: 'at', disKinded: false, data: [], chg: [v('Dubrava', 'Doubrava'), v('legitimus,', 'legitimus')] });
+        const { places } = resultPlaces({ text: TEXT, dis: [], disSide: 'at', disKinded: false, data: [], chg: [v('Dubrava', 'Pištěnice'), v('legitimus,', 'legitimus')] });
         const chg = places.filter(p => p.kind === 'chg');
         expect(chg.map(p => [p.line, p.cls!.minor])).toEqual([[1, false], [0, true]]);
     });
 
     it('the readers\' minor places fold only when the research named their kinds', () => {
-        const dis = [v('Doubrava', 'Doubrava,', { kind: 'punctuation' })];
+        const dis = [v('Pištěnice', 'Pištěnice,', { kind: 'punctuation' })];
         const named = resultPlaces({ text: TEXT, dis, disSide: 'at', disKinded: true, data: [], chg: null }).places[0];
         const unnamed = resultPlaces({ text: TEXT, dis, disSide: 'at', disKinded: false, data: [], chg: null }).places[0];
         expect(named.cls).toEqual({ minor: true, kinds: ['punctuation'] });
         expect(unnamed.cls).toEqual({ minor: false, kinds: [] });
     });
+
+    it('a repeated word is marked where the readers differ, by its neighbours in the other text (not its first occurrence)', () => {
+        const r1 = 'Kropacek Habrovany 12 | 3. Martii | 12 | Pištěnice';
+        const r2 = 'Kropacek Habrovany 12 | 3. Martii | 14 | Pištěnice';
+        const span = (o: Parameters<typeof resultPlaces>[0]): string => {
+            const { lines, places } = resultPlaces(o);
+            const d = places.find(p => p.kind === 'dis')!;
+            return `${d.line}:${d.span![0]}`;
+        };
+        const second = r1.lastIndexOf('12');
+        // Reader 1's text: the second 12 (the house number), with reader 2's text beside it.
+        expect(span({ text: r1, dis: [v('12', '14')], disSide: 'at', disKinded: false, data: [], chg: null, disCounter: r2 })).toBe(`0:${second}`);
+        // Over lines too, and a change against the transcript the same way.
+        const lines1 = 'Kropacek Habrovany 12\n3. Martii\n12 Pištěnice';
+        const { lines, places } = resultPlaces({
+            text: lines1, dis: [], disSide: 'at', disKinded: false, data: [], chg: [v('14', '12')], chgCounter: 'Kropacek Habrovany 12 3. Martii 14 Pištěnice',
+        });
+        const c = places.find(p => p.kind === 'chg')!;
+        expect([c.line, lines[c.line].slice(c.span![0], c.span![1])]).toEqual([2, '12']);
+        // No other text: the first occurrence, as before.
+        expect(span({ text: r1, dis: [v('12', '14')], disSide: 'at', disKinded: false, data: [], chg: null })).toBe('0:19');
+        // The other text tells nothing (the same neighbours everywhere): the first occurrence.
+        expect(span({ text: '12 a 12 a', dis: [v('12', '14')], disSide: 'at', disKinded: false, data: [], chg: null, disCounter: '9 b 9 b' })).toBe('0:0');
+    });
 });
 
 describe('lineMarksHtml', () => {
-    const { lines, places } = resultPlaces({ text: TEXT, dis: [v('Doubrava', 'Dubrava')], disSide: 'at', disKinded: false, data: [], chg: [v('Vlk', 'Wolf')] });
+    const { lines, places } = resultPlaces({ text: TEXT, dis: [v('Pištěnice', 'Dubrava')], disSide: 'at', disKinded: false, data: [], chg: [v('Vlk', 'Wolf')] });
 
     it('one mark per place: a disagreement tinted, the uncertain word and the illegible spot as their own marks', () => {
         const html = lineMarksHtml(lines[1], 1, places, '');
         expect(count(html, /class="read-mk read-mk-dis"/g)).toBe(1);
-        expect(html).toContain('>Doubrava</span>');
+        expect(html).toContain('>Pištěnice</span>');
         expect(count(html, /read-mk-unc/g)).toBe(1);
         expect(lineMarksHtml(lines[2], 2, places, '')).toContain('read-mk-ill');
         // A line without places: plain text.
@@ -120,7 +144,7 @@ describe('checkHtml', () => {
 });
 
 describe('placePopHtml', () => {
-    const dis: ShownPlace = { id: 'd0', kind: 'dis', line: 1, span: [0, 8], v: v('Doubrava', 'Dubrava'), cls: { minor: false, kinds: ['name'] }, word: '', label: '', inside: false };
+    const dis: ShownPlace = { id: 'd0', kind: 'dis', line: 1, span: [0, 8], v: v('Pištěnice', 'Dubrava'), cls: { minor: false, kinds: ['name'] }, word: '', label: '', inside: false };
 
     it('each reader\'s reading, the shown one bold, its kind under a line; Show on the scan only as a phone\'s sheet', () => {
         const html = placePopHtml([dis], 2, false);
@@ -132,7 +156,7 @@ describe('placePopHtml', () => {
     });
 
     it('a change: the new reading and the existing transcript, its weight; an illegible spot in one sentence', () => {
-        const chg: ShownPlace = { ...dis, id: 'c0', kind: 'chg', v: v('Dubrava', 'Doubrava'), cls: { minor: false, kinds: ['spelling'] } };
+        const chg: ShownPlace = { ...dis, id: 'c0', kind: 'chg', v: v('Dubrava', 'Pištěnice'), cls: { minor: false, kinds: ['spelling'] } };
         const html = placePopHtml([chg], 1, false);
         expect(count(html, /class="read-pop-row[ "]/g)).toBe(2);
         expect(html).toContain('Existing transcript');
