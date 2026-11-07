@@ -607,6 +607,20 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-task-foot')).toContainText('Task T0043 for the agent created.');
     });
 
+    test('read.sourceTask: the setting "always" as the bridge says it (no offer, the task made): created, the task to open', async ({ page }) => {
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        // The research sends `taskOffer: false` once a task holds the places.
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', task: 'T0001', taskFor: 'agent', taskSetting: 'always', taskOffer: false, variants: [{ at: 'Anna', other: 'Anně', sure: true }] });
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'C');
+        await expect(foot).toContainText('T0001');
+        await expect(foot).not.toContainText('No task is needed');
+        await expect(foot.locator('[data-act="open-task"]')).toBeVisible();
+        expect(b.read!.taskPosts ?? []).toEqual([]);
+    });
+
     test('read.sourceTask: the setting "never": no choice, the footer says why, nothing sent', async ({ page }) => {
         const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
         await view(page);

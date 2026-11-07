@@ -184,15 +184,49 @@ describe('the footer: who creates the task', () => {
         expect(readTaskMajorNote('append', i)).toBe(t.cMajAppend('T0399'));
     });
 
-    it('B: no sure change, before the setting "always" and a task made; its sentence by what is left', () => {
-        const b = { ...BASE, offer: false };
-        expect(readTaskFootState({ ...b, setting: 'always', task: 'T0400' })).toBe('B');
-        expect(readTaskFootState({ ...b, task: 'T0400' })).toBe('B');
+    it('B: no sure change, no task and no decision; its sentence by what is left', () => {
+        const b = { ...BASE, offer: false, counts: { major: 0, unsure: 0, minor: 2, judged: [] } };
+        expect(readTaskFootState(b)).toBe('B');
+        expect(readTaskFootState({ ...b, setting: 'always' })).toBe('B');
+        // Sure changes counted, yet nothing offered and nothing held: the footer as before (never "only minor details").
+        expect(readTaskFootState({ ...b, counts: BASE.counts })).toBeNull();
         expect(readTaskFootHtml({ ...b, counts: { major: 0, unsure: 0, minor: 2, judged: [{ task: 'T0399', n: 2 }] } })).toContain(t.tAllJudged('T0399'));
         expect(readTaskFootHtml({ ...b, counts: { major: 0, unsure: 2, minor: 1, judged: [] } })).toContain(t.tOnlyUnsure(2));
         const minor = readTaskFootHtml({ ...b, counts: { major: 0, unsure: 0, minor: 2, judged: [] } });
         expect(minor).toContain(t.tOnlyMinor);
         expect(acts(minor)).toEqual(['close']);
+    });
+
+    // The bridge's own shape (research `sourceReadForApp`): `taskOffer` is false whenever a task holds the places or a person decided.
+    it('the bridge\'s answer with a task or a decision: never B or D (`taskOffer: false` + `task` / `decided`)', () => {
+        const held = { ...BASE, offer: false, task: 'T0001', counts: { major: 0, unsure: 0, minor: 1, judged: [{ task: 'T0001', n: 2 }] } };
+        const always = readTaskFootHtml({ ...held, setting: 'always' });
+        expect(stateOf(always)).toBe('C');
+        expect(always).toContain(t.tAlways('T0001'));
+        expect(acts(always)).toEqual(['open-settings', 'close', 'open-task']);
+        expect(readTaskMajorNote('C', held)).toBe(t.cMajTask('T0001'));
+        // The places still counted as sure in the app (no `judged` sent): the same.
+        expect(readTaskFootState({ ...held, setting: 'always', counts: BASE.counts })).toBe('C');
+        // Asked, then queued or started: opened again, the task.
+        const ask = readTaskFootHtml(held);
+        expect(stateOf(ask)).toBe('decided');
+        expect(acts(ask)).toEqual(['open-task', 'close']);
+        // "never", a task made at the source afterwards: the task, not "tasks are not created".
+        const never = readTaskFootHtml({ ...held, setting: 'never' });
+        expect(stateOf(never)).toBe('decided');
+        expect(never).toContain(t.tDoneAgent('T0001'));
+        expect(never).not.toContain(t.tNever);
+        expect(acts(never)).toEqual(['open-task', 'close']);
+        // A person's review of a confirmed transcript.
+        expect(readTaskFootHtml({ ...held, taskFor: 'person' })).toContain(t.tDoneReview('T0001'));
+        // Kept without a task ("just save"), under any setting: saved.
+        const saved = { ...BASE, offer: false, decided: 'saved' as const, counts: { major: 0, unsure: 0, minor: 0, judged: [{ task: 'D20261107174337-5c33', n: 2 }] } };
+        for (const setting of ['ask', 'always', 'never'] as const) {
+            const html = readTaskFootHtml({ ...saved, setting });
+            expect(stateOf(html)).toBe('decided');
+            expect(html).toContain(t.tDoneSave);
+            expect(html).not.toContain(t.tAllKept);
+        }
     });
 
     it('C: created by the setting "always", the task to open; without a task the footer as before', () => {

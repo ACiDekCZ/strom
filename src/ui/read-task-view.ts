@@ -46,13 +46,18 @@ export interface ReadTaskFootInput {
     act?: ReadTaskAct | null;
 }
 
-/** The footer's state; null: the research said nothing usable (the footer as before the feature). */
+/**
+ * The footer's state; null: the research said nothing usable (the footer as before the feature). A task or a
+ * decision comes first: the research sends `taskOffer: false` whenever the reading's places are held by a task or
+ * were decided, so "no sure change" (B) is only a reading with neither and no sure change counted here either.
+ */
 export function readTaskFootState(i: ReadTaskFootInput): ReadTaskFootState | null {
     if (i.act) return 'F';
+    if (i.task) return i.setting === 'always' ? 'C' : 'decided';
+    if (i.decided === 'saved') return 'decided';
     if (i.setting === 'never') return 'D';
-    if (!i.offer) return 'B';
-    if (i.setting === 'always') return i.task ? 'C' : null;
-    if (i.task || i.decided === 'saved') return 'decided';
+    if (!i.offer) return i.counts.major > 0 ? null : 'B';
+    if (i.setting === 'always') return null;
     if (!i.computer) return 'phone';
     if (i.confirmed) return 'E';
     return i.openTask ? 'append' : 'A';
