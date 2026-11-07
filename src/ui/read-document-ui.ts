@@ -2786,7 +2786,7 @@ export const readDocumentMethods = uiModule({
         const text = this.readerShown(res, entry) === 2 ? this.readBlindOf(res, entry)?.transcript ?? entry.transcript : entry.transcript;
         try {
             await navigator.clipboard.writeText(text);
-            this.showToast(strings.read.copied);
+            this.showToast(strings.read.textCopied);
         } catch {
             this.showToast(strings.read.copyFailed);
         }

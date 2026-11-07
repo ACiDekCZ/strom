@@ -1028,6 +1028,10 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         nPlaces: (n: number) => nPl(n, 'miejsce', 'miejsca', 'miejsc'),
         nWords: (n: number) => nPl(n, 'słowo', 'słowa', 'słów'),
         minors: (n: number, kinds: string) => `i ${nPl(n, 'drobiazg', 'drobiazgi', 'drobiazgów')}${kinds ? ` (${kinds})` : ''}`,
+        // A group of minor details alone: no joining word.
+        minorsOnly: (n: number, kinds: string) => `${nPl(n, 'drobiazg', 'drobiazgi', 'drobiazgów')}${kinds ? ` (${kinds})` : ''}`,
+        // The entry's text copied (the transcription or the second reader's).
+        textCopied: 'Tekst skopiowany',
         ln: 'w.',
         vk: {
             name: 'imię', number: 'numer domu', date: 'data', person: 'osoba', spelling: 'pisownia', punctuation: 'interpunkcja',

@@ -740,7 +740,7 @@ test.describe('Read a document: the result', () => {
             Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => { (window as any).__copied = t; } } });
         });
         await d.locator('[data-act="copy"]').click();
-        await expect(page.locator('.toast', { hasText: 'Transcription copied' })).toBeVisible();
+        await expect(page.locator('.toast', { hasText: 'Text copied' })).toBeVisible();
         expect(await page.evaluate(() => (window as any).__copied))
             .toBe('Joannes[?] filius legitimus\nAntonii Novák et Mariae [...]\nLhota N. 12 | patrinus Wenceslaus');
     });

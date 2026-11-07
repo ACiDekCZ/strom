@@ -284,7 +284,7 @@ export function checkHtml(places: readonly ShownPlace[], o: CheckOptions): strin
         const kinds = [...new Set(minor.flatMap(p => p.cls?.kinds ?? []).map(k => t.vk[k] ?? k))].join(', ');
         const minors = minor.length ? `
                     <details class="read-check-minors"${minor.some(p => p.id === o.focus) ? ' open' : ''}>
-                        <summary>${esc(t.minors(minor.length, kinds))}</summary>
+                        <summary>${esc((major.length ? t.minors : t.minorsOnly)(minor.length, kinds))}</summary>
                         <ul class="read-check-rows">${minor.map(p => checkRowHtml(p, o.shown, o.focus, false)).join('')}</ul>
                     </details>` : '';
         return `

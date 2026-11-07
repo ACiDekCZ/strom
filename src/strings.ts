@@ -6756,6 +6756,10 @@ const stringsEN = {
         nPlaces: (n: number) => nEn(n, 'place', 'places'),
         nWords: (n: number) => nEn(n, 'word', 'words'),
         minors: (n: number, kinds: string) => `and ${nEn(n, 'minor detail', 'minor details')}${kinds ? ` (${kinds})` : ''}`,
+        // A group of minor details alone: no joining word.
+        minorsOnly: (n: number, kinds: string) => `${nEn(n, 'minor detail', 'minor details')}${kinds ? ` (${kinds})` : ''}`,
+        // The entry's text copied (the transcription or the second reader's).
+        textCopied: 'Text copied',
         ln: 'l.',
         vk: {
             name: 'name', number: 'house number', date: 'date', person: 'person', spelling: 'spelling', punctuation: 'punctuation',
@@ -14415,6 +14419,10 @@ const stringsCZ: StringsType = {
         nPlaces: (n: number) => nCs(n, 'místo', 'místa', 'míst'),
         nWords: (n: number) => nCs(n, 'slovo', 'slova', 'slov'),
         minors: (n: number, kinds: string) => `a ${nCs(n, 'drobnost', 'drobnosti', 'drobností')}${kinds ? ` (${kinds})` : ''}`,
+        // A group of minor details alone: no joining word.
+        minorsOnly: (n: number, kinds: string) => `${nCs(n, 'drobnost', 'drobnosti', 'drobností')}${kinds ? ` (${kinds})` : ''}`,
+        // The entry's text copied (the transcription or the second reader's).
+        textCopied: 'Text zkopírován',
         ln: 'ř.',
         vk: {
             name: 'jméno', number: 'číslo domu', date: 'datum', person: 'osoba', spelling: 'pravopis', punctuation: 'interpunkce',
@@ -21980,6 +21988,10 @@ const stringsDE: StringsType = {
         nPlaces: (n: number) => nDe(n, 'Stelle', 'Stellen'),
         nWords: (n: number) => nDe(n, 'Wort', 'Wörter'),
         minors: (n: number, kinds: string) => `und ${nDe(n, 'Kleinigkeit', 'Kleinigkeiten')}${kinds ? ` (${kinds})` : ''}`,
+        // A group of minor details alone: no joining word.
+        minorsOnly: (n: number, kinds: string) => `${nDe(n, 'Kleinigkeit', 'Kleinigkeiten')}${kinds ? ` (${kinds})` : ''}`,
+        // The entry's text copied (the transcription or the second reader's).
+        textCopied: 'Text kopiert',
         ln: 'Z.',
         vk: {
             name: 'Name', number: 'Hausnummer', date: 'Datum', person: 'Person', spelling: 'Schreibweise', punctuation: 'Satzzeichen',
