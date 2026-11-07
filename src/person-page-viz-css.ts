@@ -98,7 +98,7 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-row.is-sel { background: var(--hover-bg); }
 .pp-map-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pp-map-rt { min-width: 0; overflow-wrap: anywhere; }
-.pp-map-badge { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 600; line-height: 20px; text-align: center; }
+.pp-map-badge { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: var(--primary); color: var(--on-primary, #fff); font-size: 11px; font-weight: 600; line-height: 20px; text-align: center; }
 .pp-map-row.is-sel .pp-map-badge:not(.pp-map-badge--rel):not(.pp-map-badge--none) { background: var(--accent); }
 .pp-map-badge--rel { width: 14px; height: 14px; margin: 4px 3px 0; border: 2px solid var(--primary); background: var(--surface); }
 .pp-map-row.is-sel .pp-map-badge--rel { border-color: var(--accent); }
@@ -136,7 +136,7 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-brief-main { flex: 1 1 auto; min-width: 0; }
 .pp-map-sub { margin: -4px 0 8px !important; color: var(--text-light); font-size: 13px; }
 .pp-map-from { color: var(--text-light); }
-.pp-mini { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 9.5px; font-weight: 600; line-height: 15px; text-align: center; vertical-align: 1px; }
+.pp-mini { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); color: var(--on-primary, #fff); font-size: 9.5px; font-weight: 600; line-height: 15px; text-align: center; vertical-align: 1px; }
 @media (min-width: 641px) {
   .lb-d-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }
   .lb-d-a { transform: translate(calc(-1 * var(--hw)), calc(-100% - var(--hh) - 2px)); }

@@ -259,7 +259,7 @@
             --primary: #3f6b4f;       /* green — primary actions, focus */
             --primary-dark: #2d5340;  /* hover */
             --primary-soft: #e6efe8;  /* chip/avatar focus background */
-            --on-primary: #ffffff;    /* text/glyphs on a --primary fill */
+            --on-primary: #ffffff;    /* text/glyphs on a --primary fill: 6.1:1 (every such rule uses this token) */
             --accent: #b0703c;        /* copper — active tab, sections, TODAY, minimap viewport */
             --accent-text: #8a5528;   /* copper for small text (section titles): 5.1:1 on --surface-2 */
             --danger: #a8574a;
@@ -450,7 +450,7 @@
             --primary: #6f9c7f;
             --primary-dark: #85b295;
             --primary-soft: #33403a;
-            --on-primary: #1c1a15;    /* dark ink on the lighter dark-mode green */
+            --on-primary: #1c1a15;    /* dark ink on the lighter dark-mode green: 5.6:1, 7.3:1 on hover */
             --accent: #c98d59;
             --accent-text: #c98d59;   /* already 5.3:1 on the dark surfaces */
             --danger: #c97b6e;
@@ -2969,11 +2969,11 @@
             display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; line-height: 1;
             background: var(--surface-2); border: 1px solid var(--border); color: var(--text-light);
         }
-        .hal-block.is-show .hal-mark { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .hal-block.is-show .hal-mark { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
         .hal-block.is-fill .hal-mark { background: var(--research-soft); border-color: var(--research-line); color: var(--research); }
         .hal-block.is-busy .hal-mark { background: none; border: 2px dashed var(--research); }
         .hal-block.is-shared .hal-mark { border-radius: 5px; font-size: 11px; }
-        .hal-block.is-nothing .hal-mark { background: var(--primary); border-color: var(--primary); color: #fff; font-size: 12px; }
+        .hal-block.is-nothing .hal-mark { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-size: 12px; }
         .hal-block-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
         .hal-head { display: flex; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--text); }
         .hal-head > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
@@ -5821,7 +5821,7 @@
         .waiting-place-cand.is-selected { background: var(--primary-soft); }
         .waiting-place-letter {
             display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-sizing: border-box;
-            border-radius: 50%; background: var(--primary); color: var(--surface); font-size: 12px; font-weight: 700;
+            border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 700;
         }
         .waiting-place-cand[data-tone="warn"] .waiting-place-letter { background: var(--map-check); }
         .waiting-place-letter.is-current { background: var(--map-check); }
@@ -5837,14 +5837,14 @@
             min-height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; white-space: nowrap;
         }
         .waiting-places-modal .waiting-place-cand.is-selected button.waiting-place-pick {
-            background: var(--primary); border-color: var(--primary); color: var(--surface);
+            background: var(--primary); border-color: var(--primary); color: var(--on-primary);
         }
         .waiting-place-mapbox { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
         .waiting-place-map { height: 260px; }
         .waiting-places-modal button.place-mini-pin {
             position: absolute; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;
             min-height: 0; margin: -11px 0 0 -11px; padding: 0; border: 2px solid var(--surface); border-radius: 50%;
-            background: var(--primary); color: var(--surface); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+            background: var(--primary); color: var(--on-primary); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
         }
         .waiting-places-modal button.place-mini-pin[data-tone="warn"],
         .waiting-places-modal button.place-mini-pin[data-tone="current"] { background: var(--map-check); }
@@ -6631,7 +6631,7 @@
         .pm-lifeline-childtoggle[aria-checked="true"] .pm-lifeline-childtoggle-box {
             background: var(--primary);
             border-color: var(--primary);
-            color: var(--surface, #fff);
+            color: var(--on-primary);
         }
         .pm-lifeline-childtoggle[aria-checked="true"] .pm-lifeline-childtoggle-box::before { content: '✓'; }
         .pm-lifeline-childtoggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -10895,7 +10895,7 @@
         .content-preset.active {
             background: var(--primary);
             border-color: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
         }
         .content-checks {
             display: grid;
@@ -15352,7 +15352,7 @@
         .research-sync-pill-label, .research-sync-pill.is-warn .research-sync-pill-mark { cursor: pointer; }
         .toolbar .research-sync-pill .research-sync-pill-send {
             height: 22px; padding: 0 10px; border-radius: 999px; border: 0;
-            background: var(--primary); color: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer;
+            background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 600; cursor: pointer;
         }
         /* The label only where the tree switcher keeps its name. */
         @media (max-width: 1599px) {
@@ -15792,7 +15792,7 @@
             position: absolute; top: -10px; left: -10px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--primary);
             background: var(--surface); color: var(--primary); font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
         }
-        .read-frame.is-selected .read-frame-n { background: var(--primary); color: #fff; }
+        .read-frame.is-selected .read-frame-n { background: var(--primary); color: var(--on-primary); }
         /* The chosen line (spec 059 P7 §7): a band with a bar on its left; approximate (the entry split evenly): dashed edges, no fill. */
         .read-scan-line {
             position: absolute; box-sizing: border-box; pointer-events: none;
@@ -16252,7 +16252,7 @@
             font-size: 12.5px; box-shadow: none !important; min-height: 0; white-space: nowrap; cursor: pointer;
         }
         .read-p-seg-btn + .read-p-seg-btn { border-left: 1px solid var(--border) !important; }
-        .read-p-seg-btn.is-on { background: var(--primary) !important; color: #fff !important; }
+        .read-p-seg-btn.is-on { background: var(--primary) !important; color: var(--on-primary) !important; }
         .read-p-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
         .read-p-item label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 4px; font-size: 13.5px; cursor: pointer; }
         .read-p-item input { flex: none; margin: 0; align-self: center; }
@@ -21461,7 +21461,7 @@
             font-size: 13px; color: var(--text); border-right: 1px solid var(--border);
         }
         .source-quality button:last-child { border-right: none; }
-        .source-quality button[aria-checked="true"] { background: var(--primary); color: #fff; }
+        .source-quality button[aria-checked="true"] { background: var(--primary); color: var(--on-primary); }
 
         /* Person menu: a quiet number at the row's end ("Show sources  3"). */
         .menu-item-meta {
@@ -23595,7 +23595,7 @@
         }
         button.help-mark:active { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
         button.help-mark:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        button.help-mark[aria-expanded="true"] { color: var(--surface); border-color: var(--primary); background: var(--primary); }
+        button.help-mark[aria-expanded="true"] { color: var(--on-primary); border-color: var(--primary); background: var(--primary); }
         /* A window: right before ×, 8 px. */
         .modal-header > button.help-mark { margin-left: auto; margin-right: 8px; }
         .prc-panel-head > button.help-mark { margin: 0 0 0 auto; }
