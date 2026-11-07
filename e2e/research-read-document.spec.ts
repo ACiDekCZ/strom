@@ -456,6 +456,8 @@ async function noOverflow(target: Locator): Promise<void> {
             .filter(c => c.getClientRects().length > 0)
             // The result's scan strip shows a crop of a larger page on purpose (clipped by its view).
             .filter(c => !c.closest('.read-scan-view'))
+            // On a narrow screen the entries are one row that scrolls sideways (overflow-x: auto) on purpose.
+            .filter(c => !(c.closest('.read-entries') && getComputedStyle(c.closest('.read-entries')!).overflowX === 'auto'))
             .filter(c => { const r = c.getBoundingClientRect(); return r.right > box.right + 1 || r.left < box.left - 1; })
             .map(c => c.className || c.tagName);
         return { scroll: el.scrollWidth, client: el.clientWidth, right: box.right, vw: window.innerWidth, wider };
@@ -578,37 +580,57 @@ test.describe('Read a document: the result', () => {
         await expect(archive).toHaveAttribute('target', '_blank');
     });
 
-    test('title, pills, the entry of the dialog\'s person, marks by shape and the legend of those present', { tag: '@smoke' }, async ({ page }) => {
+    test('title, the result in one sentence, the entry of the dialog\'s person, a mark of its own shape per place and "To check"', { tag: '@smoke' }, async ({ page }) => {
         const { d, b } = await showResult(page, baptismPage(), 'P0003');
         await expect(d.locator('#read-title')).toHaveText('Baptism entry, Latin, Kurrent, 1846');
         await expect(d.locator('.read-file')).toHaveText('matrika-lhota-1846.jpg');
-        await expect(d.locator('.read-pill[data-pill="legible"]')).toHaveText('legible');
-        await expect(d.locator('.read-pill[data-pill="legible"]')).toHaveClass(/is-ok/);
-        await expect(d.locator('.read-pill[data-pill="readers"]')).toHaveText('2 readers, 1 place differs');
-        await expect(d.locator('.read-pill[data-pill="readers"]')).toHaveClass(/is-warn/);
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
+        await expect(d.locator('.read-pill')).toHaveCount(0);
         // The entry with the person the dialog was about (P0003) is chosen.
-        await expect(d.locator('.read-entry-pill[aria-pressed="true"]')).toContainText('2');
+        await expect(d.locator('.read-entry-pill[aria-pressed="true"] .read-entry-n')).toHaveText('Entry 2');
         await expect(d.locator('.read-entry-pill[aria-pressed="true"]')).toContainText('Joannes Novák');
         const tr = d.locator('.read-transcript');
         await expect(tr).toContainText('filius legitimus');
-        // Uncertain: a dotted mark; illegible: a block with its own label; differing: A / B.
-        await expect(tr.locator('mark.uncertain')).toHaveCount(1);
-        await expect(tr.locator('mark.uncertain')).toContainText('Joannes');
-        const ill = tr.locator('.illegible');
+        // Uncertain: dotted with "?"; illegible: a label of its own; a disagreement: reader 1's words marked.
+        await expect(tr.locator('.read-mk-unc')).toHaveCount(1);
+        await expect(tr.locator('.read-mk-unc')).toContainText('Joannes');
+        const ill = tr.locator('.read-mk-ill');
         await expect(ill).toHaveCount(1);
         await expect(ill).toHaveAttribute('aria-label', 'illegible spot');
         await expect(ill).toHaveText('illegible');
         expect(await ill.evaluate(el => getComputedStyle(el).display)).toBe('inline-block');
-        expect(await tr.locator('mark.uncertain').evaluate(el => getComputedStyle(el).borderBottomStyle)).toBe('dotted');
-        const variant = tr.locator('.read-variant');
-        await expect(variant.locator('.read-variant-a')).toHaveText('Novák');
-        await expect(variant.locator('.read-variant-slash')).toHaveText('/');
-        await expect(variant.locator('.read-variant-b')).toHaveText('Nowak');
+        await expect(tr.locator('.read-mk-dis')).toHaveText(['Novák']);
+        await expect(tr).not.toContainText('Nowak');
         await expect(tr).toContainText('|');
-        const legend = d.locator('.read-legend li');
-        await expect(legend).toHaveCount(4);
-        await expect(legend.nth(1)).toHaveText('/The readers differ in 1 place');
-        await expect(legend.nth(2).locator('.read-variant')).toHaveAttribute('title', /the first reads “Novák”, the second “Nowak”/);
+        // Line numbers are drawn, not text: the copy and the text stay as read.
+        await expect(tr.locator('.read-line').first()).toHaveAttribute('data-n', '1');
+        expect(await tr.evaluate(el => el.textContent ?? '')).not.toMatch(/^\s*1/);
+        // "To check": the readers' place, the uncertain word and the illegible spot, each with its line.
+        const check = d.locator('.read-check');
+        await expect(check.locator('.read-section-title')).toHaveText('To check');
+        await expect(check.locator('.read-check-group')).toHaveCount(3);
+        expect(await check.locator('.read-check-group').evaluateAll(els => els.map(e => e.getAttribute('data-group')))).toEqual(['dis', 'unc', 'ill']);
+        const dis = check.locator('[data-group="dis"] .read-check-row');
+        await expect(dis).toHaveCount(1);
+        await expect(dis.locator('.read-check-ln')).toHaveText('l. 2');
+        await expect(dis.locator('.read-check-side')).toHaveText(['Novák', 'Nowak']);
+        await expect(dis.locator('.read-check-side.is-shown')).toHaveText('Novák');
+        await expect(dis.locator('.read-rd')).toHaveText(['1', '2']);
+        await expect(check.locator('[data-group="unc"] .read-check-kind')).toHaveText('reader was unsure');
+        await expect(check.locator('[data-group="ill"] .read-check-kind')).toHaveText('could not be read');
+        // A row picks its place in the text; a mark opens its bubble with both readings, Escape closes it.
+        await dis.click();
+        await expect(dis).toHaveClass(/is-focus/);
+        await expect(tr.locator('.read-mk-dis')).toHaveClass(/is-focus/);
+        await tr.locator('.read-mk-dis').click();
+        const pop = d.locator('#read-pop');
+        await expect(pop).toBeVisible();
+        await expect(pop.locator('.read-pop-row')).toHaveCount(2);
+        await expect(pop.locator('.read-pop-row.is-shown .read-pop-val')).toHaveText('Novák');
+        await expect(pop.locator('.read-pop-row').nth(1).locator('.read-pop-val')).toHaveText('Nowak');
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        await expect(d).toBeVisible();
         // Translation (Latin ≠ English), with its marks.
         const translation = d.locator('.read-section--translation');
         await expect(translation).toContainText('legitimate son');
@@ -626,8 +648,8 @@ test.describe('Read a document: the result', () => {
         await expect(d.locator('.read-frame')).toHaveCount(2);
         await expect(d.locator('.read-frame.is-selected')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-scan-var')).toHaveCount(1);
-        // Footer: kept in the history, Suggest for the tree… as the main action.
-        await expect(d.locator('.read-kept')).toHaveText('The result stays in the reading history');
+        // Footer: nothing written without confirmation, kept in the history; Suggest for the tree… as the main action.
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['Nothing is written to the tree without confirmation.', 'The result stays in the reading history.']);
         await expect(d.locator('.read-footer .primary')).toHaveText('Suggest for the tree…');
     });
 
@@ -690,12 +712,15 @@ test.describe('Read a document: the result', () => {
         await expect(d.locator('.read-frame.is-selected')).toHaveAttribute('data-entry', '0');
         await expect(d.locator('.read-transcript')).toContainText('Georgii Svoboda');
         await expect(d.locator('.read-section--translation')).toHaveCount(0);
-        await expect(d.locator('.read-legend')).toHaveCount(0);
+        await expect(d.locator('.read-check')).toHaveCount(0);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. The readers agree.');
         await d.locator('.read-frame[data-entry="1"]').click();
         await expect(d.locator('.read-frame.is-selected')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-entry-pill[data-entry="1"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(d.locator('.read-transcript')).toContainText('Joannes');
         await expect(d.locator('.read-section--translation')).toBeVisible();
+        // The header's sentence follows the entry.
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
         await d.locator('.read-entry-pill[data-entry="0"]').click();
         await expect(d.locator('.read-transcript')).toContainText('Anna filia legitima');
         await expect(d.locator('.read-frame.is-selected')).toHaveAttribute('data-entry', '0');
@@ -735,11 +760,12 @@ test.describe('Read a document: the result', () => {
         await expect(d.locator('#read-title')).toHaveText('Letter, English, 1921');
         await expect(d.locator('.read-transcript')).toContainText('we are well in Lhota');
         await expect(d.locator('.read-section--translation')).toHaveCount(0);
-        // No data, no section: no explanation, no legend.
+        // No data, no section: no explanation, nothing to check.
         await expect(d.locator('.read-section--gloss')).toHaveCount(0);
-        await expect(d.locator('.read-legend')).toHaveCount(0);
-        await expect(d.locator('.read-pill[data-pill="readers"]')).toHaveText('1 reader');
-        await expect(d.locator('.read-pill[data-pill="readers"]')).toHaveClass(/is-muted/);
+        await expect(d.locator('.read-check')).toHaveCount(0);
+        // One reader: nothing said of agreeing.
+        await expect(d.locator('#read-verdict')).toHaveText('Read.');
+        await expect(d.locator('.read-who-sentence')).toHaveText('Read by one reader.');
         await expect(d.locator('[data-act="propose"]')).toBeVisible();
     });
 
@@ -763,7 +789,7 @@ test.describe('Read a document: the result', () => {
             persons: [{ ref: 'p1', role: 'mentioned', given: 'Marie', surname: '' }, { ref: 'p2', role: 'mentioned', given: 'Josef', surname: '' }],
         }));
         await expect(d2.locator('#read-title')).toHaveText('Back of a photo, Czech, 1921');
-        await expect(d2.locator('#read-s-transcript')).toHaveText('Transcription');
+        await expect(d2.locator('#read-s-transcript')).toHaveText('Text as read');
         await expect(d2.locator('.read-section--translation')).toBeVisible();
         await expect(d2.locator('.read-section--mentioned')).toContainText('Mentioned');
         await expect(d2.locator('.read-mentioned li')).toHaveCount(2);
@@ -771,17 +797,22 @@ test.describe('Read a document: the result', () => {
         await expect(d2.locator('.read-footer .primary')).toHaveText('Close');
     });
 
-    test('partly legible: the note over the text, Insert a better photo goes back to the input', async ({ page }) => {
-        const { d } = await showResult(page, baptismPage({
-            doc: { kind: 'register.death', language: ['la'], script: '', date: '1850', legible: 'partly', why: 'glare' },
-        }), 'P0003');
-        await expect(d.locator('#read-title')).toHaveText('Death entry, Latin, 1850');
-        await expect(d.locator('.read-pill[data-pill="legible"]')).toHaveText('partly legible');
-        await expect(d.locator('.read-pill[data-pill="legible"]')).toHaveClass(/is-warn/);
-        const note = d.locator('.read-partial');
-        await expect(note).toContainText('Partly legible:');
-        await expect(note).toContainText('glare over the text');
-        await note.locator('[data-act="insert-other"]').click();
+    test('partly legible: the reason and the advice in the header\'s sentence, Insert a better photo goes back to the input', async ({ page }) => {
+        const PARTLY = { kind: 'register.death', language: ['la'], script: '', date: '1850', legible: 'partly', why: 'glare' };
+        // A few illegible words only: read, with their count; nothing more said.
+        const few = await showResult(page, baptismPage({ doc: PARTLY }), 'P0003');
+        await expect(few.d.locator('#read-title')).toHaveText('Death entry, Latin, 1850');
+        await expect(few.d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
+        await expect(few.d.locator('#read-verdict [data-act="insert-other"]')).toHaveCount(0);
+        await few.d.locator('.read-footer [data-act="close"]').last().click();
+        // More than three: read only in part, why, what to do and the way to a better photo; no notice over the text.
+        const entries = (baptismPage().entries as Record<string, unknown>[]).map((e, k) => k === 1
+            ? { ...e, transcript: 'Joannes[?] filius legitimus\nAntonii Novák et Mariae [...] [...]\nLhota N. [...] | patrinus [...]' } : e);
+        const { d } = await showResult(page, baptismPage({ doc: PARTLY, entries }), 'P0003');
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveText('Read only in part: 4 words illegible (glare over the text). The readers disagree in 1 place. Take it straight on, without flash, in even light. Insert a better photo');
+        await expect(d.locator('.read-kinds-note, .read-partial')).toHaveCount(0);
+        await verdict.locator('[data-act="insert-other"]').click();
         await expect(d.locator('#read-drop')).toBeVisible();
     });
 
@@ -811,9 +842,11 @@ for (const viewport of [DESKTOP, { width: 1024, height: 768 }, PHONE]) {
                 pages: [{ n: 1, file: 'I0101', name: 'taufmatrikel-lhota-1846-seite-zwei-und-drei-mit-randvermerken.jpg', page: 1, w: 600, h: 800, image: `read/${READ_ID}/page/1.jpg` }],
             }), 'P0003');
             await expect(d.locator('#read-title')).toHaveText('Taufeintrag, Latein, Kurrent, 1846');
-            await expect(d.locator('.read-pill[data-pill="readers"]')).toHaveText('2 Leser, 1 Stelle weicht ab');
+            await expect(d.locator('#read-verdict')).toHaveText('Gelesen, 1 Wort unleserlich. Die Leser weichen an 1 Stelle voneinander ab.');
             await expect(d.locator('[data-act="propose"]')).toHaveText('In den Stammbaum vorschlagen…');
-            await expect(d.locator('.read-kept')).toHaveText('Das Ergebnis bleibt im Leseverlauf');
+            await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['Ohne Bestätigung wird nichts in den Stammbaum eingetragen.', 'Das Ergebnis bleibt im Leseverlauf.']);
+            await expect(d.locator('.read-check-head').first()).toContainText('Leser weichen ab');
+            await noOverflow(d.locator('.read-check'));
             await expect(d.locator('.read-scan-img')).toBeVisible();
             await noOverflow(d.locator('.modal'));
             await noOverflow(d.locator('.read-text'));
@@ -868,41 +901,41 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         ...over,
     });
 
-    test('read.blindText: Reader 1 / Reader 2 above the text; reader 2\'s text with its marks, copied as shown', async ({ page }) => {
+    test('read.blindText: Reader 1 / Reader 2 beside the title; reader 2\'s text with its marks, copied as shown; the programs named once, under the text', async ({ page }) => {
         const { d } = await showResult(page, blindPage(), 'P0003', ['read.now', 'read.blindText']);
         const seg = d.locator('#read-result .read-section--transcript .read-section-head .read-reader-seg');
         await expect(seg).toHaveAttribute('role', 'group');
         const btns = seg.locator('.read-reader-btn');
-        await expect(btns).toHaveText(['Reader 1 · Claude Code · Opus', 'Reader 2 · Codex · GPT-6-Astra']);
+        await expect(btns).toHaveText(['Reader 1', 'Reader 2']);
         await expect(btns.nth(0)).toHaveAttribute('aria-pressed', 'true');
         await expect(btns.nth(1)).toHaveAttribute('aria-pressed', 'false');
         await expect(d.locator('.read-scan-var').first()).toBeAttached();
         const tr = d.locator('.read-transcript');
-        await expect(tr.locator('.read-variant-a')).toHaveText('Novák');
-        const legend = d.locator('#read-transcript ~ .read-legend');
-        const places = await legend.locator('.read-legend-differ').innerText();
+        await expect(tr.locator('.read-mk-dis')).toHaveText(['Novák']);
+        await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
+        const named = await d.evaluate(el => (el.textContent ?? '').split('Claude Code').length - 1);
+        expect(named).toBeLessThanOrEqual(1);
+        const rows = d.locator('.read-check [data-group="dis"] .read-check-row');
+        await expect(rows.locator('.read-check-side.is-shown')).toHaveText('Novák');
 
         await btns.nth(1).click();
         await expect(btns.nth(1)).toHaveAttribute('aria-pressed', 'true');
         await expect(btns.nth(0)).toHaveAttribute('aria-pressed', 'false');
         await expect(d.locator('.read-section--transcript')).toHaveClass(/is-second/);
-        // Its own text: its version first, marked ②, the first reader's after it.
+        // Its own text with its own marks: its words of the place marked, nothing uncertain, the illegible spot.
         await expect(tr).toContainText('Joannes filius legitimus');
-        await expect(tr.locator('mark.uncertain')).toHaveCount(0);
-        await expect(tr.locator('.illegible')).toHaveCount(1);
-        const v = tr.locator('.read-variant');
-        await expect(v).toHaveCount(1);
-        await expect(v.locator('.read-variant-a')).toHaveText('Nowak');
-        await expect(v.locator('.read-variant-b')).toHaveText('Novák');
-        expect(await v.locator('.read-variant-mk').evaluateAll(els => els.map(e => e.getAttribute('data-mk')))).toEqual(['2', '1']);
+        await expect(tr.locator('.read-mk-unc')).toHaveCount(0);
+        await expect(tr.locator('.read-mk-ill')).toHaveCount(1);
+        await expect(tr.locator('.read-mk-dis')).toHaveText(['Nowak']);
         // Its lines are not reader 1's lines on the scan: no strips, no line to choose.
         await expect(d.locator('.read-scan-var')).toHaveCount(0);
         await expect(tr.locator('.read-line[data-line]')).toHaveCount(0);
-        // The places stay as they were.
-        await expect(legend.locator('.read-legend-place')).toHaveText('Antonii Novák/Nowak et Mariae illegible');
-        expect(await legend.locator('.read-legend-differ').innerText()).toBe(places);
-        // The keys follow the marks of the text shown: reader 2 marks nothing uncertain.
-        await expect(legend.locator('.read-key--uncertain')).toHaveCount(0);
+        // The place stays as it was, ① then ②, the shown reader bold; the groups follow the marks of the text shown.
+        await expect(rows).toHaveCount(1);
+        await expect(rows.locator('.read-check-side')).toHaveText(['Novák', 'Nowak']);
+        await expect(rows.locator('.read-check-side.is-shown')).toHaveText('Nowak');
+        expect(await d.locator('.read-check-group').evaluateAll(els => els.map(e => e.getAttribute('data-group')))).toEqual(['dis', 'ill']);
         // The translation and explanation are reader 1's.
         await expect(d.locator('.read-from-first')).toHaveText('Translation and explanation are reader 1’s (reader 2 reads blind, without a translation).');
         // What only reader 2 read: folded.
@@ -922,12 +955,12 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         // Back to reader 1: as before.
         await btns.nth(0).click();
         await expect(d.locator('.read-section--transcript')).not.toHaveClass(/is-second/);
-        await expect(tr.locator('.read-variant-a')).toHaveText('Novák');
+        await expect(tr.locator('.read-mk-dis')).toHaveText(['Novák']);
         await expect(d.locator('.read-from-first, .read-blind-extra')).toHaveCount(0);
         await expect(d.locator('.read-scan-var').first()).toBeAttached();
     });
 
-    test('an entry reader 2 did not read: its button off, saying so; the view kept across entries', async ({ page }) => {
+    test('an entry reader 2 did not read: its button off, saying so; never that the readers agree; the view kept across entries', async ({ page }) => {
         const { d } = await showResult(page, blindPage(), 'P0003', ['read.now', 'read.blindText']);
         const btns = d.locator('.read-reader-btn');
         await btns.nth(1).click();
@@ -935,32 +968,57 @@ test.describe('Read a document: the second reader\'s text, the kinds', () => {
         // The first entry: no counterpart at reader 2, its own text shown, the button off.
         await d.locator('.read-entry-pill[data-entry="0"]').click();
         await expect(btns.nth(1)).toBeDisabled();
-        await expect(btns.nth(1)).toHaveAttribute('title', 'Reader 2 did not read this entry');
+        await expect(btns.nth(1)).toHaveText('Reader 2 · did not read');
+        await expect(btns.nth(1)).toHaveAttribute('aria-disabled', 'true');
+        expect(await btns.nth(1).evaluate(el => getComputedStyle(el).fontStyle)).toBe('italic');
         await expect(btns.nth(0)).toHaveAttribute('aria-pressed', 'true');
         await expect(d.locator('.read-transcript')).toContainText('Anna filia legitima');
+        await expect(d.locator('#read-verdict')).toHaveText('Read.');
+        await expect(d.locator('.read-who-sentence')).toHaveText('Only reader 1 read this entry (Claude Code · Opus).');
+        await expect(d.locator('#read-text')).not.toContainText(/agree/);
         // Back to the second entry: reader 2's view, as chosen.
         await d.locator('.read-entry-pill[data-entry="1"]').click();
         await expect(btns.nth(1)).toHaveAttribute('aria-pressed', 'true');
         await expect(d.locator('.read-transcript')).toContainText('Antonii Nowak');
     });
 
+    test('reader 2 failed: the reading done with reader 1 alone, "Reader 2 · did not read" off, never that the readers agree', async ({ page }) => {
+        const res = oneEntry('register.baptism', ['cs'], { transcript: 'Jan Vlk syn Josefa Vlka\nKateřina Vlková z Doubravy', variants: [],
+            persons: [{ ref: 'p1', role: 'child', given: 'Jan', surname: 'Vlk' }] });
+        const { d } = await showResult(page, { ...res, readers: { asked: 2, ran: 1, agree: null, who: [WHO[0], { ...WHO[1], ran: false }] } }, '', ['read.now', 'read.blindText']);
+        const btns = d.locator('.read-reader-seg .read-reader-btn');
+        await expect(btns).toHaveText(['Reader 1', 'Reader 2 · did not read']);
+        await expect(btns.nth(1)).toBeDisabled();
+        await expect(d.locator('#read-verdict')).toHaveText('Read.');
+        await expect(d.locator('.read-who-sentence')).toHaveText('Only reader 1 read this entry (Claude Code · Opus).');
+        await expect(d.locator('#read-result')).not.toContainText(/agree/);
+        await expect(d.locator('.read-check')).toHaveCount(0);
+        // Not even without the second reader's texts announced.
+        await d.locator('.read-footer [data-act="close"]').last().click();
+    });
+
     test('without read.blindText: no switch, the same result as today', async ({ page }) => {
         const { d } = await showResult(page, blindPage(), 'P0003');
         await expect(d.locator('.read-reader-seg, .read-from-first, .read-blind-extra')).toHaveCount(0);
-        await expect(d.locator('.read-transcript .read-variant-a')).toHaveText('Novák');
+        await expect(d.locator('.read-transcript .read-mk-dis')).toHaveText(['Novák']);
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
         await expect(d.locator('.read-scan-var').first()).toBeAttached();
     });
 
     const kindsPage = (): Record<string, unknown> => baptismPage({
         readers: { asked: 2, ran: 2, agree: 'differ', who: WHO, kinds: { first: 'register.marriage', blind: 'register.baptism' } },
     });
-    const KINDS = 'The readers did not even agree on the kind of entry: reader 1 marriage, reader 2 baptism. To be checked against the scan before writing to the tree.';
+    const KINDS = '!The readers disagree on the kind of entry: reader 1 reads marriage, reader 2 baptism. This changes how the whole entry is read. To be checked against the scan before writing to the tree.';
 
     test('read.kinds: the readers differ on the kind of entry, said above the text and at Propose', async ({ page }) => {
         const { d } = await showResult(page, kindsPage(), 'P0003', ['read.now', 'read.kinds']);
         const note = d.locator('#read-result .read-kinds-note');
         await expect(note).toHaveText(KINDS);
         await expect(note).toHaveAttribute('role', 'note');
+        expect(await note.evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('solid');
+        // One notice only, and the readers never said to agree beside it.
+        await expect(d.locator('#read-result .read-kinds-note, #read-result .read-nc')).toHaveCount(1);
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. The readers disagree in 1 place.');
         await d.locator('[data-act="propose"]').click();
         const at = d.locator('#read-propose .read-kinds-note');
         await expect(at).toHaveText(KINDS);

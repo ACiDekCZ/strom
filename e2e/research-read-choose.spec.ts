@@ -333,31 +333,23 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await page.evaluate(() => window.Strom.UI.showResearchWaiting());
         await expect(page.locator('#live-panel #read-strip .read-strip__name')).toHaveText('1 of 2 readers · zapis.jpg · Claude Code and Codex');
 
-        // Done: the result says who read; each version of a difference carries its reader's mark.
+        // Done: the result names who read once, under the text; each side of a difference carries its reader's mark.
         r.state = 'done';
         r.done = 2;
         b.read!.results.set(r.id, result(WHO_MIXED));
         await poll(page);
         await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
         await expect(d.locator('#read-result')).toBeVisible();
-        await expect(d.locator('.read-result-who-line')).toHaveText(['Reader 1: Claude Code · Opus 4 · high', 'Reader 2: Codex · GPT-5']);
-        const variant = d.locator('.read-transcript .read-variant');
-        await expect(variant).toHaveText('Novák/Nowak');
-        await expect(variant.locator('.read-variant-mk')).toHaveCount(2);
-        expect(await variant.locator('.read-variant-mk').nth(1).evaluate(el => getComputedStyle(el, '::after').content)).toBe('"2"');
-        await expect(variant).toHaveAttribute('title', 'Reader 1 · Claude Code · Opus 4: “Novák”\nReader 2 · Codex · GPT-5: “Nowak”');
-        // The legend says the count and the readers once, then one row per place with its words around it.
-        const differ = d.locator('.read-legend-differ');
-        await expect(differ).toContainText('The readers differ in 1 place: ');
-        await expect(differ).toContainText('Claude Code · Opus 4');
-        await expect(differ).toContainText('Codex · GPT-5');
-        await expect(differ.locator('.read-variant-mk')).toHaveCount(2);
-        const place = d.locator('.read-legend-place');
-        await expect(place).toHaveCount(1);
-        await expect(place).toContainText('Antonii');
-        await expect(place).toContainText('Lhota');
-        await expect(place.locator('.read-variant')).toHaveAttribute('title', 'Reader 1 · Claude Code · Opus 4: “Novák”\nReader 2 · Codex · GPT-5: “Nowak”');
-        await expect(place.locator('.read-variant-mk')).toHaveCount(2);
+        await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1 (Claude Code · Opus 4). Reader 2 (Codex · GPT-5) read independently, as a check.');
+        await expect(d.locator('.read-transcript .read-mk-dis')).toHaveText(['Novák']);
+        const row = d.locator('.read-check [data-group="dis"] .read-check-row');
+        await expect(row).toHaveCount(1);
+        await expect(row.locator('.read-check-side')).toHaveText(['Novák', 'Nowak']);
+        await expect(row.locator('.read-rd')).toHaveText(['1', '2']);
+        await expect(row.locator('.read-check-ln')).toHaveText('l. 2');
+        // The programs are not repeated over the text or in "To check": each once, in the sentence.
+        expect(await d.evaluate(el => (el.textContent ?? '').split('Codex').length - 1)).toBe(1);
+        expect(await d.evaluate(el => (el.textContent ?? '').split('Claude Code').length - 1)).toBe(1);
     });
 
     test('as by default: no readers in the progress; one line for both readers in the result', async ({ page }) => {
@@ -377,7 +369,9 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         b.read!.results.set(r.id, result(same));
         await poll(page);
         await expect(d.locator('#read-result')).toBeVisible();
-        await expect(d.locator('.read-result-who-line')).toHaveText(['Both readers: Claude Code · Opus 4 · high']);
+        // The same program and model for both: named once.
+        await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1. Reader 2 read independently, as a check. Both read with Claude Code · Opus 4.');
+        expect(await d.locator('#read-result').evaluate(el => (el.textContent ?? '').split('Claude Code').length - 1)).toBe(1);
     });
 
     test('a reading from before (no `who`): nothing of who read; the list names another agent only where one read', async ({ page }) => {
@@ -401,11 +395,11 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
         const d = dialog(page);
         await expect(d.locator('#read-result')).toBeVisible();
-        await expect(d.locator('.read-result-who')).toHaveCount(0);
-        await expect(d.locator('.read-variant-mk')).toHaveCount(0);
-        await expect(d.locator('.read-legend-who')).toHaveCount(0);
-        await expect(d.locator('.read-legend-differ')).toHaveText('/The readers differ in 1 place');
-        await expect(d.locator('.read-legend-place .read-variant')).toHaveAttribute('title', /readers differ: the first reads “Novák”, the second “Nowak”/);
+        // No names to say: the sentence without them; the place listed with the readers' marks.
+        await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1. Reader 2 read independently, as a check.');
+        await expect(d.locator('#read-result')).not.toContainText('Claude Code');
+        await expect(d.locator('.read-check [data-group="dis"] .read-check-side')).toHaveText(['Novák', 'Nowak']);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. The readers disagree in 1 place.');
     });
 
     test('a research without the choice (no read.choose): no who reads, nothing sent as `with`', async ({ page }) => {
@@ -548,7 +542,7 @@ test.describe('Read a document: the readers on a phone', () => {
         expect(await content.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
 
-    test('who read in the result: one line per reader, within the width', async ({ page }) => {
+    test('who read in the result: one sentence under the text, within the width', async ({ page }) => {
         const b = await setup(page);
         b.read!.reads = [reading(READ_ID, 'done', { who: WHO_MIXED, done: 2, entries: 1 })];
         b.read!.results.set(READ_ID, result(WHO_MIXED));
@@ -556,10 +550,10 @@ test.describe('Read a document: the readers on a phone', () => {
         await page.evaluate((id) => (window.Strom.UI as any).showReadDocumentDialog({ readId: id }), READ_ID);
         const d = dialog(page);
         await expect(d.locator('#read-result')).toBeVisible();
-        const lines = d.locator('.read-result-who-line');
-        await expect(lines).toHaveText(['Reader 1: Claude Code · Opus 4 · high', 'Reader 2: Codex · GPT-5']);
-        const [a, c] = [(await lines.nth(0).boundingBox())!, (await lines.nth(1).boundingBox())!];
-        expect(c.y).toBeGreaterThanOrEqual(a.y + a.height - 1);
+        const who = d.locator('.read-who-sentence');
+        await expect(who).toHaveText('Text by reader 1 (Claude Code · Opus 4). Reader 2 (Codex · GPT-5) read independently, as a check.');
+        const [line, text] = [(await who.boundingBox())!, (await d.locator('#read-transcript').boundingBox())!];
+        expect(line.y).toBeGreaterThanOrEqual(text.y + text.height - 1);
         expect(await d.locator('.read-dialog').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
     });
 });

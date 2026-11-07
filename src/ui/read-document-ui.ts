@@ -2093,7 +2093,7 @@ export const readDocumentMethods = uiModule({
                     </div>
                     ${r2note}
                     <div class="read-transcript" id="read-transcript">${lines}</div>
-                    <p class="read-who">${esc(this.readWhoSentence(res, view))}</p>
+                    <p class="read-who-sentence">${esc(this.readWhoSentence(res, view))}</p>
                     ${second ? this.readBlindExtraHtml(res) : ''}
                 </section>`);
         }
@@ -2175,7 +2175,8 @@ export const readDocumentMethods = uiModule({
         const who = res.readers.who ?? [];
         const choices = this.researchReadAcceptsAny()?.choices;
         const a = (i: number): string => who[i] ? whoLabel(who[i], choices, false) : '';
-        if (view.both) return t.whoLine(a(0), a(1));
+        // Both with the same program and model: named once.
+        if (view.both) return a(0) && a(0) === a(1) ? t.whoSame(a(0)) : t.whoLine(a(0), a(1));
         if (view.onlyR1) return t.whoOnly(a(0));
         return t.whoSingle(a(0));
     },

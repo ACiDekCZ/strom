@@ -196,7 +196,7 @@ test.describe('Read a source again from its original', () => {
         const verdict = d.locator('#read-verdict');
         await expect(verdict).toHaveText('Read. Matches the existing transcript.');
         await expect(verdict).toHaveAttribute('data-agree', 'same');
-        await expect(d.locator('.read-who')).toHaveText('Read by one reader (Claude Code · Opus).');
+        await expect(d.locator('.read-who-sentence')).toHaveText('Read by one reader (Claude Code · Opus).');
         await expect(d.locator('.read-check-row, .read-transcript .read-mk')).toHaveCount(0);
         // The footer says what became of the transcript.
         await expect(d.locator('.read-kept .read-foot-line')).toHaveText([
@@ -246,7 +246,7 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-frame')).toHaveCount(1);
         await expect(d.locator('.read-scan-var')).toHaveCount(2);
         // The text is reader 1's; reader 2 read independently and disagreed in the places marked; both named once, under the text.
-        await expect(d.locator('.read-who')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
+        await expect(d.locator('.read-who-sentence')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
         await expect(d.locator('.read-transcript .read-mk-dis')).toHaveCount(2);
         await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
         await expect(d.locator('#read-verdict')).toHaveText('Read. Against the existing transcript 1 change. The readers disagree in 2 places.');
@@ -342,6 +342,124 @@ test.describe('Read a source again from its original', () => {
         await more.click();
         await expect(group.locator('.read-check-row:visible')).toHaveCount(10);
         await expect(more).toHaveCount(0);
+    });
+
+    test('each kind of mark has its own shape, not only its colour (readable in greyscale)', async ({ page }) => {
+        const d = await readCells(page, CELL_VARIANTS);
+        const tr = d.locator('.read-transcript');
+        const shape = (sel: string) => tr.locator(sel).first().evaluate(el => {
+            const c = getComputedStyle(el);
+            return { outline: c.outlineStyle, deco: c.textDecorationLine.includes('underline') ? c.textDecorationStyle : 'none', inset: c.boxShadow.includes('inset'),
+                italic: c.fontStyle === 'italic', block: c.display === 'inline-block', sup: !!el.querySelector('sup'), bg: c.backgroundColor !== 'rgba(0, 0, 0, 0)' };
+        });
+        const dis = await shape('.read-mk-dis');
+        const chg = await shape('.read-mk-chg');
+        const unc = await shape('.read-mk-unc');
+        const ill = await shape('.read-mk-ill');
+        // A disagreement: tinted with a line under it; a change: a dashed frame; uncertain: dotted with "?"; illegible: a label.
+        expect(dis).toMatchObject({ inset: true, bg: true, outline: 'none' });
+        expect(chg).toMatchObject({ outline: 'dashed', inset: false });
+        expect(unc).toMatchObject({ deco: 'dotted', sup: true, outline: 'none' });
+        expect(ill).toMatchObject({ block: true, italic: true, bg: true });
+        const sigs = [dis, chg, unc, ill].map(x => JSON.stringify([x.outline, x.deco, x.inset, x.italic, x.block, x.sup]));
+        expect(new Set(sigs).size).toBe(4);
+        // The groups' samples are drawn as their marks.
+        expect(await d.locator('.read-check [data-group="chg"] .read-check-head .read-mk-chg').evaluate(el => getComputedStyle(el).outlineStyle)).toBe('dashed');
+    });
+
+    /** Invented people (Vlk): the existing transcript, the text as read, the research's kinds of the changes. */
+    const VLK_OLD = 'Jan Vlk, syn Josefa Vlka a Kateřiny, roz. Vlkové z Doubravy čp 12';
+    const VLK_NEW = 'Jan Vlk syn Josefa Vlka a Kateřiny roz. Vlkové z Doubravy čp. 21';
+    const VLK_CHANGES = [
+        { at: 'Vlk,', other: 'Vlk', kind: 'punctuation' },
+        { at: 'Kateřiny,', other: 'Kateřiny', kind: 'punctuation' },
+        { at: 'čp 12', other: 'čp. 21', kind: 'number' },
+    ];
+    async function readVlk(page: Page, features: string[], extra: Record<string, unknown> = {}): Promise<Locator> {
+        const b = await setup(page, { text: VLK_OLD, features: ['read.now', 'read.source', ...features] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
+        b.read!.reads[0].state = 'done';
+        b.read!.results.set(READ_ID, {
+            ...result({ id: 'S0001', agree: 'differ', task: 'T0077', variants: VLK_CHANGES }),
+            entries: [{ id: 'e1', page: 1, transcript: VLK_NEW, variants: [], persons: [], events: [], relations: [] }],
+            ...extra,
+        });
+        await poll(page);
+        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        return d;
+    }
+
+    test('read.variantKind: substantive changes first, minor details folded with their count and kinds; every one marked in the text', async ({ page }) => {
+        const d = await readVlk(page, ['read.variantKind']);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Against the existing transcript 1 substantive change and 2 minor details.');
+        await expect(d.locator('#read-verdict strong')).toHaveText(['1 substantive change']);
+        // Marks stay at minor details too.
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(3);
+        const group = d.locator('.read-check [data-group="chg"]');
+        await expect(group.locator('.read-check-head')).toHaveText(/Differs from the existing transcript· 1 substantive change$/);
+        const major = group.locator(':scope > .read-check-rows .read-check-row');
+        await expect(major).toHaveCount(1);
+        await expect(major.locator('.read-check-old')).toHaveText('čp 12');
+        await expect(major.locator('.read-check-what .read-mk-chg')).toHaveText('čp. 21');
+        await expect(major.locator('.read-check-kind')).toHaveText('house number');
+        const minors = group.locator('.read-check-minors');
+        await expect(minors.locator('summary')).toHaveText('and 2 minor details (punctuation)');
+        await expect(minors).not.toHaveAttribute('open', '');
+        await expect(minors.locator('.read-check-row')).toHaveCount(2);
+        await expect(minors.locator('.read-check-row:visible')).toHaveCount(0);
+        await minors.locator('summary').click();
+        await expect(minors.locator('.read-check-row:visible')).toHaveCount(2);
+        await expect(minors.locator('.read-check-kind')).toHaveText(['punctuation', 'punctuation']);
+        // A minor one's mark in the text opens its row folded out, its bubble saying the kind.
+        await minors.locator('summary').click();
+        await d.locator('.read-transcript .read-mk-chg').first().click();
+        await expect(minors).toHaveAttribute('open', '');
+        await expect(minors.locator('.read-check-row.is-focus')).toHaveCount(1);
+        const pop = d.locator('#read-pop');
+        await expect(pop.locator('.read-pop-row')).toHaveCount(2);
+        await expect(pop.locator('.read-pop-row').nth(1)).toContainText('Existing transcript');
+        await expect(pop.locator('.read-pop-row').nth(1).locator('.read-pop-val')).toHaveText('Vlk,');
+        await expect(pop.locator('.read-pop-note')).toHaveText('punctuation · minor detail');
+        await pop.locator('[data-act="pop-close"]').click();
+        await expect(pop).toHaveCount(0);
+    });
+
+    test('without read.variantKind: told apart in the app, "changes" without a kind, the kinds the research sent unused', async ({ page }) => {
+        const d = await readVlk(page, []);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Against the existing transcript 1 change and 2 minor details.');
+        const group = d.locator('.read-check [data-group="chg"]');
+        await expect(group.locator(':scope > .read-check-rows .read-check-kind')).toHaveText(['']);
+        await expect(group.locator('.read-check-minors summary')).toHaveText('and 2 minor details');
+    });
+
+    test('reader 2\'s text: no change marked in it, said so; the changes listed from reader 1\'s text, a row goes back to it', async ({ page }) => {
+        const blind = 'Jan Vlk syn Josefa Vlka a Katerziny roz. Vlkove z Doubravy cp. 21';
+        const d = await readVlk(page, ['read.variantKind', 'read.blindText'], {
+            readers: { asked: 2, ran: 2, agree: 'differ', who: [
+                { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
+                { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', modelName: 'GPT-6-Astra', effort: 'xhigh', ran: true },
+            ] },
+            blind: { doc: { kind: 'register.marriage' }, entries: [{ id: 'b1', page: 1, transcript: blind, of: 'e1' }] },
+        });
+        const btns = d.locator('.read-reader-btn');
+        await expect(btns).toHaveText(['Reader 1', 'Reader 2']);
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(3);
+        await expect(d.locator('.read-r2note')).toHaveCount(0);
+        await btns.nth(1).click();
+        await expect(d.locator('.read-transcript')).toContainText('Katerziny');
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(0);
+        await expect(d.locator('.read-r2note')).toHaveText('Text of reader 2. Changes against the existing transcript are computed from the text of reader 1 and not marked here.');
+        const group = d.locator('.read-check [data-group="chg"]');
+        await expect(group.locator('.read-check-from')).toHaveText('· in the text of reader 1');
+        await expect(group.locator('.read-check-row')).toHaveCount(3);
+        // The row of a change: back in reader 1's text, its mark picked.
+        await group.locator(':scope > .read-check-rows .read-check-row').click();
+        await expect(btns.nth(0)).toHaveAttribute('aria-pressed', 'true');
+        await expect(d.locator('.read-transcript .read-mk-chg.is-focus')).toHaveText('čp. 21');
+        await expect(d.locator('.read-r2note')).toHaveCount(0);
     });
 
     test('under the scan: Full quality opens the excerpt in the research, the page opens in the archive', async ({ page }) => {

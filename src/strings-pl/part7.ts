@@ -959,6 +959,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         whoLine: (a1: string, a2: string) => `Tekst według czytelnika 1${a1 ? ` (${a1})` : ''}. Czytelnik 2${a2 ? ` (${a2})` : ''} czytał niezależnie, dla kontroli.`,
         whoOnly: (a1: string) => `Ten wpis czytał tylko czytelnik 1${a1 ? ` (${a1})` : ''}.`,
         whoSingle: (a1: string) => `Czytał jeden czytelnik${a1 ? ` (${a1})` : ''}.`,
+        whoSame: (a: string) => `Tekst według czytelnika 1. Czytelnik 2 czytał niezależnie, dla kontroli. Obaj czytali w programie ${a}.`,
         vRead: 'Odczytano.',
         vIll: (n: number) => `Odczytano, ${nPl(n, 'słowo nieczytelne', 'słowa nieczytelne', 'słów nieczytelnych')}.`,
         vPartial: (n: number, why: string) => `Odczytano tylko częściowo${n ? `: ${nPl(n, 'słowo nieczytelne', 'słowa nieczytelne', 'słów nieczytelnych')}` : ''}${why ? ` (${why})` : ''}.`,

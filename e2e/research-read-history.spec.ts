@@ -127,7 +127,7 @@ test.describe('Read a document: the history', () => {
         const d = dialog(page);
         await expect(d.locator('#read-result')).toBeVisible();
         await expect(d.locator('#read-transcript')).toContainText('Maria filia legitima');
-        await expect(d.locator('.read-kept')).toHaveText('The result stays in the reading history');
+        await expect(d.locator('.read-kept .read-foot-line').last()).toHaveText('The result stays in the reading history.');
         await expect(d.locator('.read-footer [data-act="close"]')).toBeVisible();
         await d.locator('.read-footer [data-act="close"]').click();
         await expect(d).toHaveCount(0);
