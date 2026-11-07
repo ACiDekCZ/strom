@@ -90,6 +90,54 @@ describe('accepts.read.choices', () => {
         expect(status(['read.now'])?.accepts?.read?.ready).toBe(true);
         expect(status(['read.choose'])?.accepts?.read).toBeUndefined();
     });
+
+    it('what an alias runs on now (read.choices.now): a label only, the id stays the alias; without the feature none', () => {
+        const claude = {
+            ...CHOICES.agents[0],
+            models: [
+                { id: 'opus', name: 'Opus', now: 'claude-opus-5-5', nowName: 'Opus 5.5' },
+                { id: 'sonnet', name: 'Sonnet' },
+                { id: '', name: '', now: 'claude-opus-5-5', nowName: 'Opus 5.5' },
+                { id: 'claude-opus-5', name: 'Opus 5', nowName: 'Opus 5' },
+            ],
+        };
+        const read = { ready: true, readers: 2, types: ['image/jpeg'], max: 1000, pages: 3, choices: { ...CHOICES, agents: [claude] } };
+        const status = (features: string[]) => sanitizeLiveStatus({ tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'N' }, head: 'abc1234', features, accepts: { read } });
+        const on = status(['read.now', 'read.choose', 'read.choices.now'])!.accepts!.read!.choices!.agents[0].models;
+        expect(on.map(m => [m.id, m.nowName ?? ''])).toEqual([['opus', 'Opus 5.5'], ['sonnet', ''], ['', 'Opus 5.5'], ['claude-opus-5', '']]);
+        expect(JSON.stringify(on)).not.toContain('claude-opus-5-5');
+        const off = status(['read.now', 'read.choose'])!.accepts!.read!.choices!.agents[0].models;
+        expect(off.some(m => 'nowName' in m)).toBe(false);
+        // A label a bridge could misuse is capped; one of another type is none.
+        const odd = sanitizeReadChoices({ agents: [{ ...claude, models: [{ id: 'opus', name: 'Opus', nowName: 7 }, { id: 'sonnet', name: 'Sonnet', nowName: 'x'.repeat(200) }] }] }, true)!;
+        expect(odd.agents[0].models[0]).not.toHaveProperty('nowName');
+        expect(odd.agents[0].models[1].nowName!.length).toBeLessThanOrEqual(60);
+    });
+
+    it('a Codex catalog newer than the Codex installed: its models marked unsure, both versions; without catalogNewer none', () => {
+        const codex = {
+            ...CHOICES.agents[1], ready: true,
+            models: [{ id: 'gpt-5.1-codex', name: 'gpt-5.1-codex' }, { id: 'gpt-6-astra', name: 'gpt-6-astra', unsure: true }, { id: '', name: '' }],
+            catalogNewer: { catalog: '0.60.0', installed: '0.57.1' },
+        };
+        const a = sanitizeReadChoices({ agents: [codex] })!.agents[0];
+        expect(a.catalogNewer).toEqual({ catalog: '0.60.0', installed: '0.57.1' });
+        expect(a.models.map(m => !!m.unsure)).toEqual([false, true, false]);
+        const { catalogNewer: _gone, ...without } = codex;
+        const b = sanitizeReadChoices({ agents: [without] })!.agents[0];
+        expect(b).not.toHaveProperty('catalogNewer');
+        expect(b.models.some(m => m.unsure)).toBe(false);
+        expect(sanitizeReadChoices({ agents: [{ ...codex, catalogNewer: { catalog: '<b>', installed: '0.57.1' } }] })!.agents[0]).not.toHaveProperty('catalogNewer');
+    });
+
+    it('a failed reading: the research\'s own sentence for a model refused (failure.code model); another code or state none', () => {
+        const failure = { code: 'model', text: 'Model gpt-6-astra není v nainstalované verzi Codex CLI dostupný.', params: { agent: 'codex', model: 'gpt-6-astra' } };
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure })?.readerFailure)
+            .toEqual({ code: 'model', text: failure.text });
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { ...failure, code: 'other' } })).not.toHaveProperty('readerFailure');
+        expect(sanitizeReadResult({ id: ID, state: 'done', readers: { asked: 1, ran: 1 }, failure })).not.toHaveProperty('readerFailure');
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { code: 'model', text: '' } })).not.toHaveProperty('readerFailure');
+    });
 });
 
 describe('the readers chosen', () => {

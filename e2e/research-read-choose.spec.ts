@@ -38,14 +38,30 @@ function choices(): Record<string, unknown> {
     };
 }
 
-async function setup(page: Page, opts: { choose?: boolean; history?: (FakeReading & { inSource?: boolean })[]; readers?: 1 | 2; stored?: unknown } = {}): Promise<FakeBridge> {
+/**
+ * The offer of a research that says what an alias runs on now (`read.choices.now`: Opus and the agent's own model
+ * of Claude Code) and whose Codex list comes from a newer Codex than the installed one (one model `unsure`).
+ */
+function choicesNow(): Record<string, unknown> {
+    const c = choices() as { agents: Record<string, unknown>[] };
+    c.agents[0].models = [
+        { id: 'opus', name: 'Opus', now: 'claude-opus-5-5', nowName: 'Opus 5.5' },
+        { id: 'sonnet', name: 'Sonnet' },
+        { id: '', name: '', now: 'claude-opus-5-5', nowName: 'Opus 5.5' },
+    ];
+    c.agents[1].models = [{ id: 'gpt-5', name: 'GPT-5' }, { id: 'gpt-6-astra', name: 'GPT-6-Astra', unsure: true }, { id: '', name: '' }];
+    c.agents[1].catalogNewer = { catalog: '0.60.0', installed: '0.57.1' };
+    return c;
+}
+
+async function setup(page: Page, opts: { choose?: boolean; history?: (FakeReading & { inSource?: boolean })[]; readers?: 1 | 2; stored?: unknown; offer?: Record<string, unknown>; features?: string[] } = {}): Promise<FakeBridge> {
     const choose = opts.choose !== false;
     const b = await fakeBridge(page, {
         accepts: {
             sync: { auto: 'off' }, sources: true, verified: true, media: { max: 500 * 1024 * 1024, region: true },
-            read: readAccepts(choose ? { choices: choices() } : {}),
+            read: readAccepts(choose ? { choices: opts.offer ?? choices() } : {}),
         },
-        features: choose ? ['read.now', 'read.choose'] : ['read.now'],
+        features: [...(choose ? ['read.now', 'read.choose'] : ['read.now']), ...(opts.features ?? [])],
         read: fakeRead(opts.history ? { history: opts.history } : {}),
     });
     await openResearch(page, { media: true });
@@ -401,6 +417,71 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.posts.length).toBe(1);
         expect('with' in b.read!.posts[0]).toBe(false);
+    });
+
+    test('what an alias runs on now (read.choices.now): said after the model, the alias is what is sent', async ({ page }) => {
+        const b = await setup(page, { offer: choicesNow(), features: ['read.choices.now'] });
+        const d = await openWithPage(page);
+        await expect(d.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus (now Opus 5.5) · high']);
+        await d.locator('[data-act="refine"]').click();
+        const model = select(d, 0, 'model');
+        await expect(model).toHaveValue('opus');
+        await expect(model.locator('option')).toHaveText(['Opus (now Opus 5.5)', 'Sonnet', 'as the agent is set (now Opus 5.5)']);
+        await model.selectOption('');
+        await select(d, 1, 'model').selectOption('opus');
+        await select(d, 1, 'effort').selectOption('medium');
+        await d.locator('[data-act="refine"]').click();
+        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · as the agent is set (now Opus 5.5) · high', 'Reader 2: Claude Code · Opus (now Opus 5.5) · medium']);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        // The alias goes out, never what it runs on now: a newer Opus is taken by itself.
+        expect(b.read!.posts[0].with).toEqual([{ agent: 'claude', model: '', effort: 'high' }, { agent: 'claude', model: 'opus', effort: 'medium' }]);
+        expect(JSON.stringify(b.read!.posts[0])).not.toContain('claude-opus-5-5');
+
+        // Read again keeps saying it and sends the alias as well.
+        await d.locator('.read-cancel').click();
+        await d.locator('[data-act="again"]').click();
+        await expect(d.locator('#read-title')).toHaveText('Read again');
+        await expect(d.locator('.read-who-line')).toHaveText(['Reader 1: Claude Code · as the agent is set (now Opus 5.5) · high', 'Reader 2: Claude Code · Opus (now Opus 5.5) · medium']);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.agains.length).toBe(1);
+        expect(b.read!.agains[0].body.with).toEqual([{ agent: 'claude', model: '', effort: 'high' }, { agent: 'claude', model: 'opus', effort: 'medium' }]);
+    });
+
+    test('without read.choices.now: the models as before, even when the offer carries what they run on', async ({ page }) => {
+        await setup(page, { offer: choicesNow() });
+        const d = await openWithPage(page);
+        await expect(d.locator('.read-who-line')).toHaveText(['Both readers: Claude Code · Opus · high']);
+        await d.locator('[data-act="refine"]').click();
+        await expect(select(d, 0, 'model').locator('option')).toHaveText(['Opus', 'Sonnet', 'as the agent is set']);
+    });
+
+    test('a Codex model from a newer Codex\'s list: a note under the reader; none for the other models', async ({ page }) => {
+        await setup(page, { offer: choicesNow(), features: ['read.choices.now'] });
+        const d = await openWithPage(page);
+        await d.locator('[data-act="refine"]').click();
+        await select(d, 1, 'agent').selectOption('codex');
+        const row = d.locator('.read-refine-row[data-at="1"]');
+        await expect(row.locator('[data-note="catalog-newer"]')).toHaveCount(0);
+        await select(d, 1, 'model').selectOption('gpt-6-astra');
+        await expect(row.locator('[data-note="catalog-newer"]')).toHaveText(
+            'The model list comes from Codex 0.60.0; the installed Codex 0.57.1 may not know this model. A newer Codex: npm install -g @openai/codex@latest');
+        await expect(row.locator('.read-refine-note')).toHaveCount(2);
+        await select(d, 1, 'model').selectOption('gpt-5');
+        await expect(row.locator('[data-note="catalog-newer"]')).toHaveCount(0);
+    });
+
+    test('a reading whose reader\'s agent refused the model: the research\'s own sentence', async ({ page }) => {
+        const b = await setup(page);
+        const d = await openWithPage(page);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        const said = 'The model gpt-6-astra is not available in the installed version of the Codex CLI – update Codex (npm install -g @openai/codex@latest), or choose another model.';
+        b.read!.results.set(READ_ID, { ...result(), state: 'failed', entries: [], failure: { code: 'model', text: said, params: { agent: 'codex', model: 'gpt-6-astra' } } });
+        b.read!.reads[0].state = 'failed';
+        await poll(page);
+        await expect(d.locator('.read-error')).toHaveAttribute('data-error', 'failed');
+        await expect(d.locator('.read-error-text')).toHaveText(said);
     });
 
     test('Read again after cancelling: the readers chosen first, `with` only when changed', async ({ page }) => {

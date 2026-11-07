@@ -45,7 +45,7 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 import { helpMark } from './help-mark.js';
 import {
-    ReadChoices, ReaderChoice, ReadWho, ReadWithItem, readerDefault, readerWithAgent, readersFromStored, readersChanged, readerHeld, readWith,
+    ReadChoiceModel, ReadChoices, ReaderChoice, ReadWho, ReadWithItem, readerDefault, readerWithAgent, readersFromStored, readersChanged, readerHeld, readWith,
     readWhoLabel, readWhoSame, readWhoOtherAgents,
 } from '../read-choices.js';
 
@@ -148,7 +148,8 @@ export interface DialogState {
     /** The reading came to "comparing readings" (the step shows from then on). */
     sawChecking: boolean;
     startedAt: number;
-    error: { kind: ErrorKind; failure?: ReadFailure; why?: string } | null;
+    /** `said`: the research's own sentence why a reading failed (`failure.text`, e.g. a model its agent refused). */
+    error: { kind: ErrorKind; failure?: ReadFailure; why?: string; said?: string } | null;
     result: ReadResult | null;
     /** A quiet line over the content ("New reading cancelled; the previous result stands."). */
     notice: string;
@@ -313,8 +314,17 @@ function agentWhyText(why: string, resets: string): string {
 /** A chosen reader as one line: "Claude Code · Opus · high" (a model `''`: as the agent is set). */
 function readerLabel(choices: ReadChoices, r: ReaderChoice): string {
     const a = choices.agents.find(x => x.id === r.agent);
-    const modelName = a?.models.find(m => m.id === r.model)?.name ?? '';
-    return readWhoLabel({ name: a?.name ?? r.agent, model: r.model, modelName, effort: r.effort }, strings.read.bySettings);
+    const m = a?.models.find(x => x.id === r.model);
+    // The agent's own model (''): its words, with what it runs on now when the research says it.
+    return readWhoLabel({ name: a?.name ?? r.agent, model: r.model, modelName: m ? modelText(m) : '', effort: r.effort },
+        m && !m.id ? modelText(m) : strings.read.bySettings);
+}
+
+/** A model offered as a person reads it: its name ("Opus", "as the agent is set"), with what an alias runs on now ("Opus (now Opus 5.5)"). */
+function modelText(m: ReadChoiceModel): string {
+    const t = strings.read;
+    const name = m.id ? m.name || m.id : t.bySettings;
+    return m.nowName ? t.modelNow(name, m.nowName) : name;
 }
 
 /** Who read as one line; the model's label from the offer when the reading does not say it; `effort` off: without it. */
@@ -1296,7 +1306,7 @@ export const readDocumentMethods = uiModule({
                 options.map(o => `<option value="${esc(o.value)}"${o.value === value ? ' selected' : ''}${o.disabled && o.value !== value ? ' disabled' : ''}>${esc(o.text)}</option>`).join('')}</select>`;
         };
         const agents = choices.agents.map(x => ({ value: x.id, text: x.ready ? x.name : `${x.name} – ${agentWhyText(x.why, x.resets)}`, disabled: !x.ready }));
-        const models = (a?.models ?? []).map(m => ({ value: m.id, text: m.id ? m.name || m.id : t.bySettings }));
+        const models = (a?.models ?? []).map(m => ({ value: m.id, text: modelText(m) }));
         // On a phone each choice is a full-width field with its column's name inside, on the left (spec 059 §2).
         const field = (col: string, inner: string, none = false): string =>
             `<span class="read-refine-field${none ? ' read-refine-field--none' : ''}"><span class="read-refine-field-key" aria-hidden="true">${esc(col)}</span>${inner}</span>`;
@@ -1309,6 +1319,10 @@ export const readDocumentMethods = uiModule({
             note = `<div class="read-refine-note is-down">${esc(a.why === 'limit' ? t.downRowLimit(a.name, why) : t.downRow(a.name, why))}</div>`;
         } else if (a && a.id !== choices.agents[0]?.id) {
             note = `<div class="read-refine-note">${esc(t.billAny(a.name))}</div>`;
+        }
+        if (a?.ready && a.catalogNewer && a.models.find(m => m.id === r.model)?.unsure) {
+            // Codex's list is newer than the Codex installed here: this model may be unknown to it.
+            note += `<div class="read-refine-note is-unsure" data-note="catalog-newer">${esc(t.catalogNewer(a.catalogNewer.catalog, a.catalogNewer.installed))}</div>`;
         }
         return `
                     <div class="read-refine-row" data-at="${at}">
@@ -1630,6 +1644,16 @@ export const readDocumentMethods = uiModule({
                     this.renderReadDialog();
                 });
             }
+        } else if (r.state === 'failed') {
+            // The research may say why in its own sentence (a model the reader's agent refused): only its result has it.
+            const link = this.researchOriginalsLink();
+            if (link) {
+                void this.loadReadResult(link.researchId, r.id).then(res => {
+                    if (!st || st.readId !== r.id || st.error?.kind !== 'failed' || !res?.readerFailure) return;
+                    st.error.said = res.readerFailure.text;
+                    this.renderReadDialog();
+                });
+            }
         }
         this.renderReadDialog();
         this.refreshReadSurfaces();
@@ -1654,7 +1678,8 @@ export const readDocumentMethods = uiModule({
             st.error = { kind: this.researchBridgeUp(link.researchId) ? 'failed' : 'down', ...(failure ? { failure } : {}) };
         } else if ((res.state === 'failed' || res.state === 'cancelled') && st.phase !== 'propose' && st.phase !== 'written') {
             st.phase = 'error';
-            st.error = st.sourceId ? { kind: 'source', why: 'other' } : { kind: res.state };
+            const said = res.readerFailure ? { said: res.readerFailure.text } : {};
+            st.error = st.sourceId ? { kind: 'source', why: 'other', ...said } : { kind: res.state, ...said };
         } else if (res.state === 'unreadable') {
             st.phase = 'error';
             st.error = { kind: 'unreadable', why: res.doc.why ?? 'other' };
@@ -2470,7 +2495,7 @@ export const readDocumentMethods = uiModule({
         return `
                 <div class="read-error read-source-block" data-error="source" data-why="${esc(why)}" role="alert">
                     <h3 class="read-error-title">${esc(t.sourceBlockTitle)}</h3>
-                    <p class="read-error-text">${esc(t.sourceWhy[why] ?? t.sourceWhy.other)}</p>
+                    <p class="read-error-text">${esc(s.error?.said || (t.sourceWhy[why] ?? t.sourceWhy.other))}</p>
                 </div>
                 <section class="read-source-transcript" aria-labelledby="read-source-title">
                     <h3 class="read-section-title" id="read-source-title">${esc(t.sourceTranscript)}</h3>
@@ -2494,7 +2519,7 @@ export const readDocumentMethods = uiModule({
                 break;
             }
             case 'older': title = t.older; break;
-            case 'failed': title = t.failed; text = t.failedWhy[err.failure?.kind ?? ''] ?? ''; break;
+            case 'failed': title = t.failed; text = err.said || (t.failedWhy[err.failure?.kind ?? ''] ?? ''); break;
             case 'cancelled': title = t.cancelled; break;
             // Held by the research (sealed elsewhere, files not downloaded, a full disk): its own sentence (017 U7).
             case 'held': {

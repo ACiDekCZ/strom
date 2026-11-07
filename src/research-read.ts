@@ -119,7 +119,8 @@ export function sanitizeReadAccepts(value: unknown): ReadAccepts | null {
         pages: Math.min(50, asCount(r.pages) || DEFAULT_PAGES),
         langs,
         ...(ready && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
-        ...(ready && sanitizeReadChoices(r.choices) ? { choices: sanitizeReadChoices(r.choices)! } : {}),
+        // `nowName` kept here; a research without `read.choices.now` has it cleared with the features (readAcceptsGated).
+        ...(ready && sanitizeReadChoices(r.choices, true) ? { choices: sanitizeReadChoices(r.choices, true)! } : {}),
     };
 }
 
@@ -509,6 +510,24 @@ export interface ReadResult {
     sourceRead?: ReadSourceRead;
     /** The second reader's own text (`read.blindText`; absent: none). */
     blind?: ReadBlind;
+    /** A failed reading: why, in the research's own sentence (`failure`, code `model`: its agent refused the model); absent: none said. */
+    readerFailure?: ReadReaderFailure;
+}
+
+/** Why a reading failed, said by the research for the person (`failure` of `GET read/<id>`). */
+export interface ReadReaderFailure {
+    /** `model`: a reader's agent refused its model (Codex: one its installed CLI does not have). */
+    code: 'model';
+    /** The research's sentence in its language (what to do included). */
+    text: string;
+}
+
+/** `failure` of a failed reading: a known code with its sentence, or null. Untrusted. */
+function sanitizeReaderFailure(v: unknown, state: string): ReadReaderFailure | null {
+    const f = asRecord(v);
+    if (!f || state !== 'failed' || f.code !== 'model') return null;
+    const text = cleanText(f.text, 400);
+    return text ? { code: 'model', text } : null;
 }
 
 /** `source` of a result: the comparison with the source's transcript, or null. Untrusted. */
@@ -761,6 +780,7 @@ export function sanitizeReadResult(value: unknown): ReadResult | null {
         ...(sanitizeSourceResult(r.source) ? { source: sanitizeSourceResult(r.source)! } : {}),
         ...(sourceRead ? { sourceRead } : {}),
         ...(blind ? { blind } : {}),
+        ...(sanitizeReaderFailure(r.failure, state) ? { readerFailure: sanitizeReaderFailure(r.failure, state)! } : {}),
     };
 }
 

@@ -15,6 +15,20 @@ import { cleanText } from './research-link.js';
 /** `/status.features`: the research takes the readers' agent, model and effort (`choices`, `with`, `who`). */
 export const READ_CHOOSE_FEATURE = 'read.choose';
 
+/** `/status.features`: a model that is an alias says what it last ran on here (`models[].now` / `nowName`). */
+export const READ_CHOICES_NOW_FEATURE = 'read.choices.now';
+
+/** One model offered for an agent. */
+export interface ReadChoiceModel {
+    /** What is sent (`with[].model`): an alias stays an alias ("opus"), never `now`. */
+    id: string;
+    name: string;
+    /** What the alias last ran on here, as a person reads it ("Opus 5.5"; `read.choices.now`); absent: unknown. A label only. */
+    nowName?: string;
+    /** From Codex's kept catalog fetched by a newer Codex than the installed one: it may not know this model. */
+    unsure?: true;
+}
+
 /** What one reader reads with. `model` / `effort` `''`: as the agent itself is set. */
 export interface ReaderChoice {
     agent: string;
@@ -34,7 +48,9 @@ export interface ReadChoiceAgent {
     /** Until when a `limit` lasts (ISO); ''. */
     resets: string;
     /** The models offered, in the bridge's order (`id: ''` = the agent's own model, `name` then ''). */
-    models: { id: string; name: string }[];
+    models: ReadChoiceModel[];
+    /** Codex: its kept catalog was fetched by a newer Codex (`catalog`) than the installed one (`installed`); absent: none said. */
+    catalogNewer?: { catalog: string; installed: string };
     /** The efforts it takes (`''` = the agent's own setting); empty: it has no effort to set. */
     efforts: string[];
     /** What a reader of it reads with when only the agent is chosen. */
@@ -79,16 +95,36 @@ function isoTime(v: unknown): string {
     return t && Number.isFinite(Date.parse(t)) ? t : '';
 }
 
-function sanitizeAgent(v: unknown): ReadChoiceAgent | null {
+/** A Codex version as its CLI names itself ("0.58.0"), or ''. */
+function cliVersion(v: unknown): string {
+    return typeof v === 'string' && /^\d{1,4}(\.\d{1,6}){1,3}(-[0-9A-Za-z.]{1,20})?$/.test(v) ? v : '';
+}
+
+function sanitizeCatalogNewer(v: unknown): { catalog: string; installed: string } | null {
+    const r = asRecord(v);
+    const catalog = r ? cliVersion(r.catalog) : '';
+    const installed = r ? cliVersion(r.installed) : '';
+    return catalog && installed ? { catalog, installed } : null;
+}
+
+function sanitizeAgent(v: unknown, now: boolean): ReadChoiceAgent | null {
     const r = asRecord(v);
     const id = r ? agentId(r.id) : '';
     if (!r || !id) return null;
-    const models: { id: string; name: string }[] = [];
+    const catalogNewer = sanitizeCatalogNewer(r.catalogNewer);
+    const models: ReadChoiceModel[] = [];
     for (const item of Array.isArray(r.models) ? r.models.slice(0, 40) : []) {
         const m = asRecord(item);
         const mid = m ? modelId(m.id) : null;
         if (!m || mid === null || models.some(x => x.id === mid)) continue;
-        models.push({ id: mid, name: mid ? cleanText(m.name, 60) || mid : '' });
+        const name = mid ? cleanText(m.name, 60) || mid : '';
+        // What an alias runs on now: only from a research that says it, and only where it adds something.
+        const nowName = now ? cleanText(m.nowName, 60) : '';
+        models.push({
+            id: mid, name,
+            ...(nowName && nowName !== name && nowName !== mid ? { nowName } : {}),
+            ...(catalogNewer && m.unsure === true ? { unsure: true as const } : {}),
+        });
     }
     const efforts: string[] = [];
     for (const item of Array.isArray(r.efforts) ? r.efforts.slice(0, 20) : []) {
@@ -103,7 +139,7 @@ function sanitizeAgent(v: unknown): ReadChoiceAgent | null {
         ready,
         why: ready ? '' : code(r.why) || 'other',
         resets: ready ? '' : isoTime(r.resets),
-        models, efforts,
+        models, ...(catalogNewer && models.some(m => m.unsure) ? { catalogNewer } : {}), efforts,
         default: { model: modelId(d.model) ?? '', effort: effortId(d.effort) ?? '' },
     };
 }
@@ -111,14 +147,16 @@ function sanitizeAgent(v: unknown): ReadChoiceAgent | null {
 /**
  * `accepts.read.choices`, or null when the research offers none (an older
  * one, not ready, nothing installed). A default naming an agent it does not
- * offer is not a choice the app can show: null. Untrusted.
+ * offer is not a choice the app can show: null. `now`: the research says
+ * what an alias runs on (`read.choices.now`), else `nowName` is not read.
+ * Untrusted.
  */
-export function sanitizeReadChoices(value: unknown): ReadChoices | null {
+export function sanitizeReadChoices(value: unknown, now = false): ReadChoices | null {
     const r = asRecord(value);
     if (!r || !Array.isArray(r.agents)) return null;
     const agents: ReadChoiceAgent[] = [];
     for (const item of r.agents.slice(0, 20)) {
-        const a = sanitizeAgent(item);
+        const a = sanitizeAgent(item, now);
         if (a && !agents.some(x => x.id === a.id)) agents.push(a);
     }
     if (!agents.length) return null;

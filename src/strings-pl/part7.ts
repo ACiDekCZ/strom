@@ -732,6 +732,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         colEffort: 'Effort',
         noEffort: 'bez effortu',
         billAny: (a: string) => `zużywa subskrypcję lub kredyt ${a}`,
+        modelNow: (model: string, now: string) => `${model} (teraz ${now})`,
+        catalogNewer: (catalog: string, installed: string) => `Lista modeli pochodzi z Codexa ${catalog}; zainstalowany Codex ${installed} może nie znać tego modelu. Nowszy Codex: npm install -g @openai/codex@latest`,
         agentWhyAuth: 'logowanie wygasło',
         agentWhyLimit: (time: string) => time ? `limit wyczerpany (do ${time})` : 'limit wyczerpany',
         agentWhyOther: 'nie może teraz czytać',
