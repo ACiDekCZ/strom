@@ -15605,7 +15605,7 @@
         .read-who--open { justify-content: space-between; }
         .read-refine { margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
         .read-refine-cols, .read-refine-row {
-            display: grid; grid-template-columns: 132px minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, .9fr); gap: 8px 10px; padding: 10px 14px;
+            display: grid; grid-template-columns: 132px minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1.15fr); gap: 8px 10px; padding: 10px 14px;
         }
         .read-refine-cols {
             padding-bottom: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint);
@@ -15747,7 +15747,7 @@
         .read-entry-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .read-entry-name::before { content: '· '; }
         /* A source read again (spec 059 K6.4): its own entry tagged, the neighbours at the excerpt's edge muted and dashed. */
-        .read-entry-tag { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
+        .read-entry-tag { flex: 0 0 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
         .read-entry-tag::before { content: '· '; }
         .read-entry-pill.is-source .read-entry-tag { color: var(--primary); font-weight: 600; }
         /* .modal button clears a pill's border; a neighbour's thin dashed one is its own (padding 1px less keeps the size). */
@@ -15942,6 +15942,7 @@
         .modal .read-nc-chip {
             display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 0; padding: 4px 10px; border-radius: 999px;
             border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; line-height: 1.3; cursor: pointer; white-space: nowrap;
+            min-width: 0; overflow: hidden;
         }
         .modal .read-nc-chip.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
         .modal .read-nc-btn { margin: 0; white-space: nowrap; }
@@ -16312,6 +16313,8 @@
             #read-document-modal .read-footer--read { flex-wrap: nowrap; }
             #read-document-modal .read-footer--read .read-foot-line + .read-foot-line { display: none; }
             #read-document-modal .read-footer--read .batch-foot-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            /* The ellipsis is drawn only by the block that holds the text itself. */
+            #read-document-modal .read-footer--read .read-foot-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             #read-document-modal .read-footer--read > button { flex: none; width: auto; }
         }
         .read-foot-phone { display: none; }

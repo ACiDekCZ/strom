@@ -1806,7 +1806,7 @@ export const readDocumentMethods = uiModule({
         const disagree = view?.both && (count > 0 || !this.readKindsText(res)) ? count : null;
         const facts: VerdictFacts = { partial, why: t.whyText[whyKey] ?? t.whyText.other, illegible: ill, source, disagree };
         // Bold counts marked in the plain sentence, then escaped as a whole.
-        const html = esc(composeVerdict(facts, t, x => `\u0001${x}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
+        const html = esc(composeVerdict(facts, t, x => `\u0001${x.replace(/ /g, '\u00a0')}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
         const photo = partial && !isSource
             ? ` ${esc(t.advice[whyKey] ?? t.advice.other)} <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button>` : '';
         return html + photo;
