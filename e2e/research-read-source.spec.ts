@@ -371,11 +371,11 @@ test.describe('Read a source again from its original', () => {
     });
 
     /** Invented people (Vlk): the existing transcript, the text as read, the research's kinds of the changes. */
-    const VLK_OLD = 'Jan Vlk, syn Josefa Vlka a Kateřiny, roz. Vlkové z Doubravy čp 12';
-    const VLK_NEW = 'Jan Vlk syn Josefa Vlka a Kateřiny roz. Vlkové z Doubravy čp. 21';
+    const VLK_OLD = 'Vojtěch Vlk, syn Matěje Vlka a Ludmily, roz. Vlkové z Lhotky čp 12';
+    const VLK_NEW = 'Vojtěch Vlk syn Matěje Vlka a Ludmily roz. Vlkové z Lhotky čp. 21';
     const VLK_CHANGES = [
         { at: 'Vlk,', other: 'Vlk', kind: 'punctuation' },
-        { at: 'Kateřiny,', other: 'Kateřiny', kind: 'punctuation' },
+        { at: 'Ludmily,', other: 'Ludmily', kind: 'punctuation' },
         { at: 'čp 12', other: 'čp. 21', kind: 'number' },
     ];
     async function readVlk(page: Page, features: string[], extra: Record<string, unknown> = {}): Promise<Locator> {
@@ -439,7 +439,7 @@ test.describe('Read a source again from its original', () => {
     });
 
     test('reader 2\'s text: no change marked in it, said so; the changes listed from reader 1\'s text, a row goes back to it', async ({ page }) => {
-        const blind = 'Jan Vlk syn Josefa Vlka a Katerziny roz. Vlkove z Doubravy cp. 21';
+        const blind = 'Vojtěch Vlk syn Matěje Vlka a Lidmily roz. Vlkove z Lhotky cp. 21';
         const d = await readVlk(page, ['read.variantKind', 'read.blindText'], {
             readers: { asked: 2, ran: 2, agree: 'differ', who: [
                 { agent: 'claude', name: 'Claude Code', model: 'opus', modelName: 'Opus', effort: 'high', ran: true },
@@ -452,7 +452,7 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(3);
         await expect(d.locator('.read-r2note')).toHaveCount(0);
         await btns.nth(1).click();
-        await expect(d.locator('.read-transcript')).toContainText('Katerziny');
+        await expect(d.locator('.read-transcript')).toContainText('Lidmily');
         await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(0);
         await expect(d.locator('.read-r2note')).toHaveText('Text of reader 2. Changes against the existing transcript are computed from the text of reader 1 and not marked here.');
         const group = d.locator('.read-check [data-group="chg"]');
