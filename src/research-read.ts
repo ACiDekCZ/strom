@@ -31,6 +31,9 @@ export const READ_BLIND_TEXT_FEATURE = 'read.blindText';
 /** `/status.features`: a reading of two readers says when they read the document as different kinds (spec 059 K6.10). */
 export const READ_KINDS_FEATURE = 'read.kinds';
 
+/** `/status.features`: each reader says its own state, and a failed reading which reader failed (spec 059 P7). */
+export const READ_READER_STATE_FEATURE = 'read.readerState';
+
 /** The states of one reading, as the bridge says them. */
 export type ReadState = 'queued' | 'reading' | 'checking' | 'done' | 'unreadable' | 'failed' | 'cancelled';
 const READ_STATES: readonly ReadState[] = ['queued', 'reading', 'checking', 'done', 'unreadable', 'failed', 'cancelled'];
@@ -516,18 +519,52 @@ export interface ReadResult {
 
 /** Why a reading failed, said by the research for the person (`failure` of `GET read/<id>`). */
 export interface ReadReaderFailure {
-    /** `model`: a reader's agent refused its model (Codex: one its installed CLI does not have). */
-    code: 'model';
+    /** `model`: a reader's agent refused its model (Codex: one its installed CLI does not have); another code: a failure the app has no words of its own for. */
+    code: string;
     /** The research's sentence in its language (what to do included). */
     text: string;
+    /**
+     * Which reader failed (`read.readerState`, with `code: model`); absent: not known, or both. A reading where
+     * the other reader finished is not failed: it ends done as a reading of one reader (its `who` says the failed one).
+     */
+    reader?: 1 | 2;
 }
 
-/** `failure` of a failed reading: a known code with its sentence, or null. Untrusted. */
+/** `failure` of a failed reading: a code with its sentence, or null. Untrusted. */
 function sanitizeReaderFailure(v: unknown, state: string): ReadReaderFailure | null {
     const f = asRecord(v);
-    if (!f || state !== 'failed' || f.code !== 'model') return null;
+    if (!f || state !== 'failed') return null;
+    const c = code(f.code);
     const text = cleanText(f.text, 400);
-    return text ? { code: 'model', text } : null;
+    if (!c || !text) return null;
+    return {
+        code: c, text,
+        // Which reader is said only with a refused model.
+        ...(c === 'model' && (f.reader === 1 || f.reader === 2) ? { reader: f.reader } : {}),
+    };
+}
+
+/**
+ * The failure as the app may show it: without `read.readerState` only a
+ * refused model (`code: model`), without which reader; with it, any code
+ * (an unknown one is a failure in general).
+ */
+export function readFailureShown(f: ReadReaderFailure | undefined, readerState: boolean): ReadReaderFailure | null {
+    if (!f) return null;
+    if (readerState) return f;
+    return f.code === 'model' ? { code: 'model', text: f.text } : null;
+}
+
+/**
+ * A reading done by one reader because the other one could not read (`read.readerState`): the
+ * failed reader's number, else null. Its text then has no check of a second reader.
+ */
+export function readOneReaderFailed(res: Pick<ReadResult, 'state' | 'readers'> | null | undefined, readerState: boolean): 1 | 2 | null {
+    const who = res?.readers.who;
+    if (!readerState || res?.state !== 'done' || !who || who.length < 2) return null;
+    const failed = who.findIndex(w => w.state === 'failed');
+    if (failed < 0 || !who.some((w, i) => i !== failed && w.state === 'done')) return null;
+    return failed === 0 ? 1 : 2;
 }
 
 /** `source` of a result: the comparison with the source's transcript, or null. Untrusted. */

@@ -267,7 +267,15 @@ export interface ReadWho {
     effort: string;
     /** false: this reader did not run (the blind one of a reading stopped early). */
     ran: boolean;
+    /** Where this reader is (`read.readerState`); absent: not said. */
+    state?: ReadWhoState;
+    /** A reader done: in how many seconds it read (`read.readerState`). */
+    secs?: number;
 }
+
+/** One reader's own state (`read.readerState`). */
+export type ReadWhoState = 'queued' | 'reading' | 'done' | 'failed';
+const WHO_STATES: readonly ReadWhoState[] = ['queued', 'reading', 'done', 'failed'];
 
 /** `readers.who` / `who`: each reader in order, or undefined (a reading before 059 says none: nothing shown). Untrusted. */
 export function sanitizeReadWho(value: unknown): ReadWho[] | undefined {
@@ -285,9 +293,28 @@ export function sanitizeReadWho(value: unknown): ReadWho[] | undefined {
             modelName: model ? cleanText(w.modelName, 60) : '',
             effort: effortId(w.effort) ?? '',
             ran: w.ran !== false,
+            ...whoState(w.state, w.secs),
         });
     }
     return out.length ? out : undefined;
+}
+
+/** A reader's state and (done only) its seconds, or nothing. Untrusted. */
+function whoState(state: unknown, secs: unknown): Pick<ReadWho, 'state' | 'secs'> {
+    if (!WHO_STATES.includes(state as ReadWhoState)) return {};
+    const s = state as ReadWhoState;
+    const n = typeof secs === 'number' && Number.isFinite(secs) && secs >= 0 && secs < 86_400 ? Math.round(secs) : null;
+    return s === 'done' && n !== null ? { state: s, secs: n } : { state: s };
+}
+
+/**
+ * The readers with their own states, for the rows of a reading
+ * (`read.readerState`): null when the feature is off, or when a reader
+ * says no state (the reading then says how many readers are done).
+ */
+export function readerStates(who: readonly ReadWho[] | undefined, on: boolean): ReadWho[] | null {
+    if (!on || !who?.length || who.some(w => !w.state)) return null;
+    return [...who];
 }
 
 /**

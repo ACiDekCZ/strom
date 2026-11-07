@@ -8,11 +8,11 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-    readersChanged, readersFromStored, readerDefault, readerHeld, readerWithAgent, readWhoLabel, readWhoOtherAgents,
+    readersChanged, readersFromStored, readerDefault, readerHeld, readerStates, readerWithAgent, readWhoLabel, readWhoOtherAgents,
     readWhoSame, readWith, sanitizeReadChoices, sanitizeReadWho, type ReadChoices,
 } from '../read-choices.js';
 import {
-    readAgain, readFailure, readSourceAgainClip, readSourceAgainOffered, sanitizeLiveRead, sanitizeReadAccepts,
+    readAgain, readFailure, readFailureShown, readOneReaderFailed, readSourceAgainClip, readSourceAgainOffered, sanitizeLiveRead, sanitizeReadAccepts,
     sanitizeReadHistory, sanitizeReadResult, startRead, startSourceRead,
 } from '../research-read.js';
 import { sanitizeLiveStatus } from '../research-link.js';
@@ -130,13 +130,61 @@ describe('accepts.read.choices', () => {
         expect(sanitizeReadChoices({ agents: [{ ...codex, catalogNewer: { catalog: '<b>', installed: '0.57.1' } }] })!.agents[0]).not.toHaveProperty('catalogNewer');
     });
 
-    it('a failed reading: the research\'s own sentence for a model refused (failure.code model); another code or state none', () => {
+    it('a failed reading: the research\'s own sentence, its code, which reader and whether the other text can be used; another state or no text none', () => {
         const failure = { code: 'model', text: 'Model gpt-6-astra není v nainstalované verzi Codex CLI dostupný.', params: { agent: 'codex', model: 'gpt-6-astra' } };
         expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure })?.readerFailure)
             .toEqual({ code: 'model', text: failure.text });
-        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { ...failure, code: 'other' } })).not.toHaveProperty('readerFailure');
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 2, ran: 0 }, failure: { ...failure, reader: 2 } })?.readerFailure)
+            .toEqual({ code: 'model', text: failure.text, reader: 2 });
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { ...failure, code: 'agent.crash' } })?.readerFailure)
+            .toEqual({ code: 'agent.crash', text: failure.text });
+        // Which reader is said only with a refused model.
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 2, ran: 1 }, failure: { ...failure, code: 'agent.crash', reader: 1 } })?.readerFailure)
+            .toEqual({ code: 'agent.crash', text: failure.text });
+        // A reader other than 1 or 2, a partial (never sent), a code a bridge could misuse: none of them.
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 2, ran: 1 }, failure: { ...failure, reader: 3, partial: 'yes' } })?.readerFailure)
+            .toEqual({ code: 'model', text: failure.text });
+        expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { ...failure, code: '<b>' } })).not.toHaveProperty('readerFailure');
         expect(sanitizeReadResult({ id: ID, state: 'done', readers: { asked: 1, ran: 1 }, failure })).not.toHaveProperty('readerFailure');
         expect(sanitizeReadResult({ id: ID, state: 'failed', readers: { asked: 1, ran: 1 }, failure: { code: 'model', text: '' } })).not.toHaveProperty('readerFailure');
+    });
+
+    it('a reading done by one reader because the other could not: which one failed, only with read.readerState', () => {
+        const done = (who: unknown[], state = 'done') => sanitizeReadResult({ id: ID, state, readers: { asked: 2, ran: 1, who } });
+        const one = done([{ agent: 'claude', state: 'done' }, { agent: 'codex', state: 'failed', ran: false }]);
+        expect(readOneReaderFailed(one, true)).toBe(2);
+        expect(readOneReaderFailed(one, false)).toBeNull();
+        expect(readOneReaderFailed(done([{ agent: 'claude', state: 'done' }, { agent: 'codex', state: 'done' }]), true)).toBeNull();
+        expect(readOneReaderFailed(done([{ agent: 'claude', state: 'failed' }, { agent: 'codex', state: 'failed' }], 'failed'), true)).toBeNull();
+        expect(readOneReaderFailed(done([{ agent: 'claude' }, { agent: 'codex' }]), true)).toBeNull();
+    });
+
+    it('a failure as shown: without read.readerState only a refused model and no reader; with it every code', () => {
+        const model = { code: 'model', text: 'Codex 0.57.1 nezná model gpt-6-astra.', reader: 2 as const };
+        const other = { code: 'agent.crash', text: 'Agent spadl.', reader: 1 as const };
+        expect(readFailureShown(model, false)).toEqual({ code: 'model', text: model.text });
+        expect(readFailureShown(other, false)).toBeNull();
+        expect(readFailureShown(model, true)).toEqual(model);
+        expect(readFailureShown(other, true)).toEqual(other);
+        expect(readFailureShown(undefined, true)).toBeNull();
+    });
+
+    it('each reader\'s own state and (done) its seconds; rows only with read.readerState and when every reader says one', () => {
+        const who = sanitizeReadWho([
+            { agent: 'claude', name: 'Claude Code', model: 'opus', effort: 'high', state: 'done', secs: 63.4 },
+            { agent: 'codex', name: 'Codex', model: 'gpt-6-astra', effort: 'xhigh', state: 'reading', secs: 12 },
+        ])!;
+        expect(who.map(w => [w.state, w.secs])).toEqual([['done', 63], ['reading', undefined]]);
+        expect(readerStates(who, true)).toEqual(who);
+        expect(readerStates(who, false)).toBeNull();
+        const odd = sanitizeReadWho([{ agent: 'claude', state: 'done', secs: -5 }, { agent: 'codex', state: 'sleeping' }])!;
+        expect(odd[0]).toMatchObject({ state: 'done' });
+        expect(odd[0]).not.toHaveProperty('secs');
+        expect(odd[1]).not.toHaveProperty('state');
+        expect(readerStates(odd, true)).toBeNull();
+        expect(readerStates(undefined, true)).toBeNull();
+        const live = sanitizeLiveRead({ id: ID, state: 'reading', readers: 2, done: 1, who: [{ agent: 'claude', state: 'done', secs: 63 }, { agent: 'codex', state: 'failed' }] })!;
+        expect(live.who!.map(w => w.state)).toEqual(['done', 'failed']);
     });
 });
 
