@@ -87,9 +87,10 @@ async function readAndFinish(page: Page, b: FakeBridge, d: Locator, source: Reco
     await d.locator('[data-act="read"]').click();
     await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
     await expect(d.locator('#read-title')).toHaveText('Reading again');
-    // The comparison with the transcript is a step even with one reader.
-    await expect(d.locator('.read-step')).toHaveCount(3);
-    await expect(d.locator('.read-step').last()).toContainText('Comparing with the source’s transcript');
+    // The comparison with the transcript is named as such, even with one reader.
+    b.read!.reads[0].state = 'checking';
+    await poll(page);
+    await expect(d.locator('.read-run-title')).toHaveText('Comparing with the source’s transcript');
     b.read!.reads[0].state = 'done';
     b.read!.results.set(READ_ID, result(source));
     await poll(page);

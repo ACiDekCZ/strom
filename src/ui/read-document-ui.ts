@@ -48,6 +48,9 @@ import {
     ReadChoiceModel, ReadChoices, ReaderChoice, ReadWho, ReadWithItem, readerDefault, readerWithAgent, readersFromStored, readersChanged, readerHeld, readWith,
     readWhoLabel, readWhoSame, readWhoOtherAgents,
 } from '../read-choices.js';
+// Each reader's state and which one failed (spec 059 P7 §9).
+import { readerStates } from '../read-choices.js';
+import { READ_READER_STATE_FEATURE, readFailureShown, readOneReaderFailed, type ReadReaderFailure } from '../research-read.js';
 
 const DIALOG_ID = 'read-document-modal';
 const RECENT_KEY = 'read.recent';
@@ -149,7 +152,7 @@ export interface DialogState {
     sawChecking: boolean;
     startedAt: number;
     /** `said`: the research's own sentence why a reading failed (`failure.text`, e.g. a model its agent refused). */
-    error: { kind: ErrorKind; failure?: ReadFailure; why?: string; said?: string } | null;
+    error: { kind: ErrorKind; failure?: ReadFailure; why?: string; said?: string; rf?: ReadReaderFailure } | null;
     result: ReadResult | null;
     /** A quiet line over the content ("New reading cancelled; the previous result stands."). */
     notice: string;
@@ -216,6 +219,9 @@ let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
 let drawnKey = '';
 /** Lays the result's scan out again when its box changes size. */
 let scanObserver: ResizeObserver | null = null;
+/** The panel's rows whose "How to update" is unfolded, and a failure's "Details" unfolded (both folded when the dialog opens). */
+const howOpen = new Set<number>();
+let detailsOpen = false;
 
 /** Each view's name on its tab: "Page 2", "Excerpt 1" (parts of the one page read), "Page 1 · excerpt 2" (mixed). */
 function readViewLabels(pages: readonly ReadPage[]): string[] {
@@ -326,6 +332,29 @@ function modelText(m: ReadChoiceModel): string {
     const name = m.id ? m.name || m.id : t.bySettings;
     return m.nowName ? t.modelNow(name, m.nowName) : name;
 }
+
+/** An effort as a person reads it: its thoroughness ("higher"); a value the app has no word for stays as it is; '' as the program is set. */
+function thoroughText(effort: string): string {
+    const t = strings.read;
+    return effort ? t.thorough[effort] ?? effort : t.bySettings;
+}
+
+/** An effort offered in the panel: its thoroughness with a short hint ("higher – default"). */
+function thoroughOption(effort: string, byDefault: boolean): string {
+    const t = strings.read;
+    const hint = [byDefault ? t.thoroughDefault : '', t.thoroughHint[effort] ?? ''].filter(Boolean).join(', ');
+    return hint ? `${thoroughText(effort)} – ${hint}` : thoroughText(effort);
+}
+
+/** Whose subscription a program draws on: Claude Code the Claude one, another program its own, or its credit. */
+function agentBrand(a: { id: string; name: string }): { name: string; brand: string; credit: boolean } {
+    if (a.id === 'claude') return { name: a.name, brand: 'Claude', credit: false };
+    if (a.id === 'codex') return { name: a.name, brand: 'Codex', credit: true };
+    return { name: a.name, brand: a.name, credit: true };
+}
+
+/** The command that updates Codex (shown as it is typed, never translated). */
+const CODEX_UPDATE = 'npm install -g @openai/codex@latest';
 
 /** Who read as one line; the model's label from the offer when the reading does not say it; `effort` off: without it. */
 function whoLabel(w: ReadWho, choices: ReadChoices | null | undefined, effort = true): string {
@@ -870,6 +899,8 @@ export const readDocumentMethods = uiModule({
             mode: opts.again ? 'source' : 'document', with: null, refineOpen: false, agentDown: {}, sentWith: null, choicesKey: '',
             srcAgain: opts.again ?? null, reader: 1, late: null,
         };
+        howOpen.clear();
+        detailsOpen = false;
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
         overlay.className = 'modal-overlay active';
@@ -1197,12 +1228,13 @@ export const readDocumentMethods = uiModule({
         }
         const readers = (accepts?.readers ?? 1) >= 2 ? `
                 <fieldset class="read-readers">
-                    <legend>${esc(t.readers)} <span class="read-readers-gloss">${esc(t.readersGloss)}</span></legend>
+                    <legend>${esc(t.readers)}</legend>
                     ${([1, 2] as const).map(n => `
                     <label class="read-reader${s.readers === n ? ' is-checked' : ''}">
                         <input type="radio" name="read-readers" value="${n}"${s.readers === n ? ' checked' : ''}>
-                        <span class="read-reader-text"><strong>${esc(n === 1 ? t.r1 : t.r2)}</strong><span>${esc(n === 1 ? t.r1Sub : t.r2Sub)}</span></span>
+                        <span class="read-reader-text"><strong>${esc(n === 1 ? t.c1 : t.c2)}</strong><span>${esc(n === 1 ? t.c1Sub : t.c2Sub)}</span></span>
                     </label>`).join('')}
+                    <p class="read-readers-why">${esc(t.readersWhy)}</p>
                 </fieldset>` : '';
         const choose = `<div id="read-choose" class="read-choose">${this.readChooseHtml()}</div>`;
         const slow = readSlow(accepts?.expectSecs) ? `<p class="read-slow-note">${esc(t.slowReader)}</p>` : '';
@@ -1231,7 +1263,7 @@ export const readDocumentMethods = uiModule({
                     ${again.thumb ? `<img class="read-source-thumb" src="${esc(again.thumb)}" alt="">` : ''}
                     <div class="read-source-preview-text">
                         <span class="read-source-what">${esc(what)}</span>
-                        <p class="read-source-gloss"><strong>${esc(t.sourceStrong)}</strong> ${esc(t.sourceText)}</p>
+                        <p class="read-source-gloss"><strong>${esc(t.sourceLead)}</strong> ${esc(t.sourceRest)}</p>
                     </div>
                 </div>`;
     },
@@ -1265,40 +1297,49 @@ export const readDocumentMethods = uiModule({
         s.choicesKey = JSON.stringify(choices);
         const chosen = this.readChosen(choices).slice(0, s.readers);
         const changed = readersChanged(choices, chosen);
+        // Collapsed, nothing technical (spec 059 P7 §8): only what was changed, and the way back to the default.
         const state = changed
-            ? `<span class="read-who-state"><span class="read-who-tag">${esc(t.changed)}</span><button type="button" class="research-sync-link read-reset" data-act="reset-with">${esc(t.reset)}</button></span>`
-            : `<span class="read-who-state"><span class="read-who-from">${esc(t.fromSettings)}</span></span>`;
+            ? `<span class="read-who-state"><span class="read-who-tag">${esc(t.changedKept)}</span><button type="button" class="research-sync-link read-reset" data-act="reset-with">${esc(t.reset)}</button></span>`
+            : '';
         const toggle = `<button type="button" class="research-sync-link read-refine-toggle" data-act="refine" aria-expanded="${s.refineOpen}" aria-controls="read-refine-panel">${esc(t.refine)} <span aria-hidden="true">${s.refineOpen ? '▴' : '▾'}</span></button>`;
         if (!s.refineOpen) {
-            const items = chosen.map((r, at) => {
+            // A reader that cannot start now says so even folded (the Read button is off for it).
+            const held = chosen.map((r, at) => {
                 const a = choices.agents.find(x => x.id === r.agent);
-                const down = a && !a.ready ? ` · ${agentWhyText(a.why, a.resets)}` : '';
-                return { label: readerLabel(choices, r), down, same: at === 0 || sameReader(r, chosen[0]) };
-            });
-            const line = (key: string, i: typeof items[number]): string =>
-                `<span class="read-who-line"><span class="read-who-key">${esc(key)}</span> <span class="read-who-val">${esc(i.label)}</span>${i.down ? `<span class="read-who-down">${esc(i.down)}</span>` : ''}</span>`;
-            const main = items.length === 1 ? line(t.whoOne, items[0])
-                : items.every(i => i.same) ? line(t.whoBoth, items[0])
-                    : items.map((i, k) => line(t.whoN(k + 1), i)).join('');
+                if (!a || a.ready) return '';
+                const who = chosen.length === 1 ? a.name : t.readerOf(at + 1, a.name);
+                const why = a.why === 'auth' || a.why === 'limit' ? agentWhyText(a.why, a.resets) : '';
+                return `<p class="read-who-held">${esc(why ? t.heldNow(who, why) : `${who} ${t.agentWhyOther}.`)}</p>`;
+            }).join('');
             return `
-                <div class="read-who">
-                    <div class="read-who-main">${main}${state}</div>
-                    ${toggle}
-                </div>`;
+                <div class="read-who">${toggle}${state}</div>
+                ${held}`;
         }
         const rows = chosen.map((r, at) => this.readRefineRowHtml(choices, r, at, chosen.length)).join('');
         return `
                 <div class="read-who read-who--open">${toggle}${state}</div>
                 <div class="read-refine" id="read-refine-panel">
-                    <div class="read-refine-cols" aria-hidden="true"><span></span><span>${esc(t.colAgent)}</span><span>${esc(t.colModel)}</span><span>${esc(t.colEffort)}</span></div>
+                    <div class="read-refine-cols" aria-hidden="true"><span></span><span>${esc(t.colProgram)}</span><span>${esc(t.colModel)}</span><span>${esc(t.colThorough)}</span></div>
                     ${rows}
+                    ${this.readRefineFootHtml(choices, chosen)}
                 </div>`;
+    },
+
+    /** Under the panel, once: what thoroughness does, and whose subscription each program used draws on. */
+    readRefineFootHtml(choices: ReadChoices, chosen: readonly ReaderChoice[]): string {
+        const t = strings.read;
+        const used = [...new Set(chosen.map(r => r.agent))]
+            .map(id => choices.agents.find(a => a.id === id))
+            .filter((a): a is ReadChoices['agents'][number] => !!a);
+        const thorough = used.some(a => a.efforts.length) ? `<p class="read-refine-foot-line">${esc(t.thoroughNote)}</p>` : '';
+        const bill = used.length ? `<p class="read-refine-foot-line" data-note="bill">${esc(t.bill(used.map(a => agentBrand(a))))}</p>` : '';
+        return thorough || bill ? `<div class="read-refine-foot">${thorough}${bill}</div>` : '';
     },
 
     /** One reader's row of the panel: its agent, model and effort, and a note under it. */
     readRefineRowHtml(choices: ReadChoices, r: ReaderChoice, at: number, n: number): string {
         const t = strings.read;
-        const label = n === 1 ? t.rowOnly : at === 0 ? t.row1 : t.row2;
+        const label = n === 1 ? t.rowOnly : t.readerN(at + 1);
         const a = choices.agents.find(x => x.id === r.agent);
         const select = (field: 'agent' | 'model' | 'effort', col: string, options: { value: string; text: string; disabled?: boolean }[], value: string): string => {
             const current = options.find(o => o.value === value)?.text ?? '';
@@ -1311,23 +1352,24 @@ export const readDocumentMethods = uiModule({
         const field = (col: string, inner: string, none = false): string =>
             `<span class="read-refine-field${none ? ' read-refine-field--none' : ''}"><span class="read-refine-field-key" aria-hidden="true">${esc(col)}</span>${inner}</span>`;
         const effort = a?.efforts.length
-            ? field(t.colEffort, select('effort', t.colEffort, a.efforts.map(e => ({ value: e, text: e || t.bySettings })), r.effort))
-            : field(t.colEffort, `<span class="read-refine-noeffort">${esc(t.noEffort)}</span>`, true);
+            ? field(t.colThoroughShort, select('effort', t.colThorough, a.efforts.map(e => ({ value: e, text: thoroughOption(e, !!e && e === a.default.effort) })), r.effort))
+            : field(t.colThoroughShort, `<span class="read-refine-noeffort">${esc(t.noThorough)}</span>`, true);
         let note = '';
         if (a && !a.ready) {
             const why = agentWhyText(a.why, a.resets);
             note = `<div class="read-refine-note is-down">${esc(a.why === 'limit' ? t.downRowLimit(a.name, why) : t.downRow(a.name, why))}</div>`;
-        } else if (a && a.id !== choices.agents[0]?.id) {
-            note = `<div class="read-refine-note">${esc(t.billAny(a.name))}</div>`;
         }
         if (a?.ready && a.catalogNewer && a.models.find(m => m.id === r.model)?.unsure) {
-            // Codex's list is newer than the Codex installed here: this model may be unknown to it.
-            note += `<div class="read-refine-note is-unsure" data-note="catalog-newer">${esc(t.catalogNewer(a.catalogNewer.catalog, a.catalogNewer.installed))}</div>`;
+            // Codex's list is newer than the Codex installed here: this model may be unknown to it; how to update, folded.
+            const open = howOpen.has(at);
+            note += `<div class="read-refine-note is-unsure" data-note="catalog-newer">${esc(t.oldCodex)} `
+                + `<button type="button" class="research-sync-link read-how-toggle" data-act="how-update" data-at="${at}" aria-expanded="${open}" aria-controls="read-how-${at}">${esc(t.howUpdate)} <span aria-hidden="true">${open ? '▴' : '▾'}</span></button>`
+                + `<span class="read-how" id="read-how-${at}"${open ? '' : ' hidden'}><span>${esc(t.howUpdateText)}</span> <code class="read-how-cmd">${esc(CODEX_UPDATE)}</code></span></div>`;
         }
         return `
                     <div class="read-refine-row" data-at="${at}">
                         <span class="read-refine-label">${esc(label)}</span>
-                        ${field(t.colAgent, select('agent', t.colAgent, agents, r.agent))}
+                        ${field(t.colProgram, select('agent', t.colProgram, agents, r.agent))}
                         ${field(t.colModel, select('model', t.colModel, models, r.model))}
                         ${effort}
                         ${note}
@@ -1484,67 +1526,60 @@ export const readDocumentMethods = uiModule({
         const state: ReadState | 'sending' = s.sending ? 'sending' : live?.state ?? 'queued';
         if (state === 'checking') s.sawChecking = true;
         const readers = live?.readers || s.readers;
-        const first = s.pages.find(p => !p.refused);
-        // A source read again: its excerpt, and its comparison with the transcript as a step even with one reader.
+        // A source read again: its comparison with the transcript is named as such.
         const again = live?.source || s.srcAgain ? this.readSourceAgainNow() : null;
-        const thumb = first?.preview || again?.thumb
-            ? `<img src="${esc(first?.preview || again!.thumb)}" alt="">`
-            : `<span class="read-tile"><strong>${esc(first?.kind ?? '')}</strong></span>`;
-        const step = (mark: 'done' | 'now' | 'wait', text: string, extra = ''): string =>
-            `<li class="read-step is-${mark}"><span class="read-step-mark" aria-hidden="true">${mark === 'done' ? '✓' : ''}</span>`
-            + `<span class="read-step-body"><span class="read-step-text">${esc(text)}</span>${extra}</span></li>`;
-        const sendingText = s.sending ? t.sendingPage(s.sending.k, s.sending.n) : state === 'queued' ? t.queued : t.sent;
-        const sendMark = state === 'sending' ? 'now' : state === 'queued' ? 'now' : 'done';
-        const readMark = state === 'reading' ? 'now' : state === 'checking' || state === 'done' ? 'done' : 'wait';
-        const done = live?.done ?? 0;
-        const bar = readers >= 2 && (state === 'reading' || state === 'checking')
-            ? `<span class="read-step-sub">${esc(t.readersDone(done, readers))}</span>`
-              + `<span class="batch-bar read-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"><span style="width:${Math.round(done / readers * 100)}%"></span></span>`
+        const running = state === 'reading' || state === 'checking';
+        const title = s.sending ? t.sendingPage(s.sending.k, s.sending.n)
+            : state === 'queued' ? t.waitTitle
+                : state === 'checking' ? (again ? t.comparingSource : t.checking) : t.readingTitle;
+        const done = state === 'checking' ? readers : Math.min(readers, live?.done ?? 0);
+        // Each reader on its own row when the research says where each one is (`read.readerState`).
+        const rows = running && readers >= 2 ? readerStates(live?.who, this.readFeatureOn(READ_READER_STATE_FEATURE))?.slice(0, readers) ?? null : null;
+        // Waiting is said only once the research lists the reading as queued (not while it is not listed yet).
+        const text = live?.state === 'queued' ? t.waitText
+            : running && readers >= 2 && !rows && done > 0 && done < readers ? t.readersSoFar(done, readers) : '';
+        // The share of readers done, never an empty bar.
+        const bar = running && readers >= 2
+            ? `<span class="batch-bar read-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"><span style="width:${Math.max(6, Math.round(done / readers * 100))}%"></span></span>`
             : '';
-        const steps = [
-            step(sendMark, sendingText),
-            step(readMark, readMark === 'done' ? t.readDone : t.reading, bar + this.readProgressWhoHtml(live, state, readers)),
-            ...(again ? [step(state === 'checking' ? 'now' : state === 'done' ? 'done' : 'wait', t.comparingSource)]
-                : s.sawChecking ? [step(state === 'checking' ? 'now' : 'done', t.checking)] : []),
-        ].join('');
         return `
-                <div class="read-progress">
-                    <div class="read-progress-thumb">${thumb}</div>
-                    <ol class="read-steps">${steps}</ol>
+                <div class="read-run" data-state="${state}">
+                    <div class="read-run-head">
+                        <h3 class="read-run-title">${esc(title)}</h3>
+                        <span class="read-progress-time" id="read-progress-time"${running ? '' : ' hidden'}></span>
+                    </div>
+                    ${text ? `<p class="read-run-text">${esc(text)}</p>` : ''}
+                    ${bar}
+                    ${rows ? `<ul class="read-run-rows">${rows.map((w, at) => this.readRunRowHtml(w, at)).join('')}</ul>` : ''}
+                    <p class="read-run-note" id="read-progress-note">${esc(t.closeShort)}</p>
                 </div>
-                <p class="read-progress-time" id="read-progress-time"></p>
-                <p class="read-progress-expect" id="read-progress-expect"${this.readSlowNow(live) ? '' : ' hidden'}>${esc(t.slowReader)}</p>
-                <p class="read-progress-slow" id="read-progress-slow" hidden>${esc(t.slow)}</p>
-                <p class="read-progress-note">${esc(t.closeNote)}</p>
                 ${this.readSoFarHtml()}`;
     },
 
     /**
-     * Under "Reading": each reader with its agent, model and effort, done or reading — only when
-     * they read otherwise than by default (spec 059); else nothing, as before.
+     * One reader's row: a mark by its state (✓ in a full circle, a dashed circle, × in a square), "Reader 2 · Codex"
+     * (the model too where it failed), and its state in words. `failCode`: the failure's code (a failed reading).
      */
-    readProgressWhoHtml(live: LiveRead | null, state: ReadState | 'sending', readers: number): string {
-        const s = st!;
+    readRunRowHtml(w: ReadWho, at: number, failCode?: string): string {
         const t = strings.read;
-        const choices = this.readChoicesNow();
-        if (!choices) return '';
-        let labels: string[];
-        if (live?.who?.length) {
-            const differs = live.who.some((w, at) => !sameReader(w, readerDefault(choices, at)));
-            if (!differs) return '';
-            labels = live.who.slice(0, readers).map(w => whoLabel(w, choices));
-        } else if (s.sentWith) {
-            labels = s.sentWith.slice(0, readers).map(r => readerLabel(choices, r));
-        } else return '';
-        const done = live?.done ?? 0;
-        const running = state === 'reading' || state === 'checking';
-        const items = labels.map((label, at) => {
-            const mark = !running ? '' : done > at || state === 'checking'
-                ? ` · <span class="read-progress-who-state is-done">${esc(t.finished)}</span>`
-                : ` · <span class="read-progress-who-state is-now">${esc(t.readingNow)}</span>`;
-            return `<li><span class="read-who-key">${esc(labels.length === 1 ? t.whoOne : t.whoN(at + 1))}</span> <span class="read-who-val">${esc(label)}</span>${mark}</li>`;
-        }).join('');
-        return `<ul class="read-progress-who">${items}</ul>`;
+        const state = w.state ?? 'reading';
+        const failed = state === 'failed';
+        const words = state === 'done'
+            ? (failCode === undefined && w.secs !== undefined ? t.rowDone(Math.max(1, Math.round(w.secs / 60))) : t.rowDoneOnly)
+            : failed ? (failCode === 'model' ? t.rowModelGone : t.rowFailed)
+                : state === 'queued' ? t.rowQueued : t.rowReading;
+        const model = failed ? this.readWhoModelName(w) : '';
+        const agent = [w.name, model].filter(Boolean).join(' · ');
+        return `<li class="read-run-row is-${state}" data-reader="${at + 1}" data-reader-state="${state}">`
+            + `<span class="read-run-mark" aria-hidden="true">${state === 'done' ? '✓' : failed ? '×' : ''}</span>`
+            + `<span class="read-run-who"><strong>${esc(t.readerN(at + 1))}</strong> <span class="read-run-agent">· ${esc(agent)}</span></span>`
+            + `<span class="read-run-state">${esc(words)}</span></li>`;
+    },
+
+    /** A reader's model as a person reads it ("GPT-6-Astra"): the reading's label, else the offer's; '' as the program is set. */
+    readWhoModelName(w: ReadWho): string {
+        if (!w.model) return '';
+        return w.modelName || this.readChoicesNow()?.agents.find(a => a.id === w.agent)?.models.find(m => m.id === w.model)?.name || w.model;
     },
 
     /** While it reads: the entries read so far (a result that grows), with their marks. */
@@ -1581,17 +1616,28 @@ export const readDocumentMethods = uiModule({
             const live = this.readLiveOf(s.readId);
             const since = Date.parse(live?.since ?? '') || s.startedAt;
             const secs = Math.max(0, Math.floor((Date.now() - since) / 1000));
+            const t = strings.read;
             const readers = live?.readers || s.readers;
             const usual = this.readUsualNow(live, readers);
-            const elapsed = strings.read.elapsed(Math.floor(secs / 60), secs % 60);
-            // Past the time said, one reader done: the reading waits for the other one (which one the bridge does not say).
-            const waits = usual !== null && secs > usual * 60 && readers >= 2 && live?.state === 'reading' && live.done === readers - 1;
-            time.textContent = `${usual === null ? strings.read.runningOnly(elapsed) : strings.read.running(usual, elapsed)}${waits ? ` · ${strings.read.waitingOther}` : ''}`;
-            const slow = document.getElementById('read-progress-slow');
-            if (slow) slow.hidden = usual === null || secs < usual * 60 * 2;
-            // A new expected time from /status shows at once, not only at the next state.
-            const expect = document.getElementById('read-progress-expect');
-            if (expect) expect.hidden = !this.readSlowNow(live);
+            const running = !s.sending && (live?.state === 'reading' || live?.state === 'checking');
+            // No running time while it waits for its turn (or its pages still go).
+            time.textContent = running ? t.elapsed(Math.floor(secs / 60), secs % 60) : '';
+            // Past the usual time (a new expected time from /status counts at once): the readers still reading read
+            // longer than usual. A pace not known says no time, so nothing is late either.
+            const late = running && live?.state === 'reading' && usual !== null && secs > usual * 60;
+            const reading = Array.from(document.querySelectorAll<HTMLElement>(`#${DIALOG_ID} .read-run-row[data-reader-state="reading"]`));
+            for (const row of reading) {
+                row.classList.toggle('is-late', late);
+                const words = row.querySelector('.read-run-state');
+                if (words) words.textContent = late ? t.rowLate : t.rowReading;
+            }
+            const note = document.getElementById('read-progress-note');
+            if (note) {
+                const k = reading.length === 1 ? Number(reading[0].dataset.reader) : 0;
+                note.textContent = !running || usual === null ? t.closeShort
+                    : late ? (k ? t.lateReader(k, usual) : t.lateAll(usual)) : t.usualNote(usual);
+                note.classList.toggle('is-late', late);
+            }
         };
         paint();
         if (!tickTimer) tickTimer = setInterval(paint, 1000);
@@ -1649,8 +1695,10 @@ export const readDocumentMethods = uiModule({
             const link = this.researchOriginalsLink();
             if (link) {
                 void this.loadReadResult(link.researchId, r.id).then(res => {
-                    if (!st || st.readId !== r.id || st.error?.kind !== 'failed' || !res?.readerFailure) return;
-                    st.error.said = res.readerFailure.text;
+                    const rf = readFailureShown(res?.readerFailure, this.readFeatureOn(READ_READER_STATE_FEATURE));
+                    if (!st || st.readId !== r.id || st.error?.kind !== 'failed' || !rf) return;
+                    st.error.said = rf.text;
+                    st.error.rf = rf;
                     this.renderReadDialog();
                 });
             }
@@ -1678,7 +1726,8 @@ export const readDocumentMethods = uiModule({
             st.error = { kind: this.researchBridgeUp(link.researchId) ? 'failed' : 'down', ...(failure ? { failure } : {}) };
         } else if ((res.state === 'failed' || res.state === 'cancelled') && st.phase !== 'propose' && st.phase !== 'written') {
             st.phase = 'error';
-            const said = res.readerFailure ? { said: res.readerFailure.text } : {};
+            const rf = readFailureShown(res.readerFailure, this.readFeatureOn(READ_READER_STATE_FEATURE));
+            const said = rf ? { said: rf.text, ...(st.sourceId ? {} : { rf }) } : {};
             st.error = st.sourceId ? { kind: 'source', why: 'other', ...said } : { kind: res.state, ...said };
         } else if (res.state === 'unreadable') {
             st.phase = 'error';
@@ -1699,6 +1748,13 @@ export const readDocumentMethods = uiModule({
                 this.refreshReadPropose(before);
             }
         } else {
+            // One reader could not read (`read.readerState`): a text of one reader, never said to agree.
+            const oneFailed = readOneReaderFailed(res, this.readFeatureOn(READ_READER_STATE_FEATURE));
+            if (oneFailed) {
+                res.readers.ran = 1;
+                res.readers.agree = null;
+                st.notice = strings.read.oneReaderFailed(oneFailed);
+            }
             st.result = res;
             st.phase = 'result';
             const refn = this.readLiveOf(id)?.person
@@ -2490,12 +2546,66 @@ export const readDocumentMethods = uiModule({
     readErrorHtml(): string {
         const err = st!.error ?? { kind: 'failed' as ErrorKind };
         if (err.kind === 'source') return this.readSourceBlockHtml();
+        if (err.kind === 'failed' && !err.failure) return this.readFailedHtml();
         const { title, text } = this.readErrorWords();
         return `
                 <div class="read-error" data-error="${err.kind}" role="alert">
                     <h3 class="read-error-title">${esc(title)}</h3>
                     ${text ? `<p class="read-error-text">${esc(text)}</p>` : ''}
                 </div>`;
+    },
+
+    /**
+     * A reading that failed (spec 059 P7 §9): which reader could not read and why in plain words
+     * (`read.readerState`), else that it did not finish; the readers' rows; the research's own
+     * sentence only under "Details".
+     */
+    readFailedHtml(): string {
+        const s = st!;
+        const t = strings.read;
+        const err = s.error ?? { kind: 'failed' as ErrorKind };
+        const rf = err.rf;
+        const on = this.readFeatureOn(READ_READER_STATE_FEATURE);
+        const who = readerStates(this.readLiveOf(s.readId)?.who ?? results.get(s.readId)?.readers.who, on);
+        const n = rf?.reader;
+        let title = t.failAllTitle;
+        let text = rf?.code === 'model' ? t.failAllModel : '';
+        if (n) {
+            title = t.readerFailed(n);
+            const w = who?.[n - 1];
+            const model = w ? this.readWhoModelName(w) : '';
+            const older = !!w && !!this.readChoicesNow()?.agents.find(a => a.id === w.agent)?.catalogNewer;
+            const why = !w ? '' : rf.code === 'model' && model ? t.whyModel(w.name, model, older) : t.whyStopped(w.name);
+            const other = who?.findIndex((x, i) => i !== n - 1 && x.state === 'done') ?? -1;
+            text = [why, other >= 0 ? t.otherDone(other + 1) : ''].filter(Boolean).join(' ') || text;
+        }
+        const rows = who && who.length >= 2
+            ? `<ul class="read-run-rows">${who.map((w, at) => this.readRunRowHtml(w, at, rf?.code ?? '')).join('')}</ul>` : '';
+        const said = err.said ?? '';
+        const details = said ? `
+                    <div class="read-details">
+                        <button type="button" class="research-sync-link read-details-toggle" data-act="details" aria-expanded="${detailsOpen}" aria-controls="read-details-text"><span aria-hidden="true">${detailsOpen ? '▾' : '▸'}</span> ${esc(t.details)}</button>
+                        <p class="read-details-text" id="read-details-text"${detailsOpen ? '' : ' hidden'}><strong>${esc(t.detailsLead)}</strong> <span class="read-details-said">${esc(said)}</span></p>
+                    </div>` : '';
+        return `
+                <div class="read-error read-failed" data-error="failed"${n ? ` data-reader="${n}"` : ''} role="alert">
+                    <h3 class="read-error-title">${esc(title)}</h3>
+                    ${text ? `<p class="read-error-text">${esc(text)}</p>` : ''}
+                    ${rows}
+                    ${details}
+                </div>`;
+    },
+
+    /** A failed reading's footer: nothing was written; try again (an agent starts), or another model in "Adjust reading". */
+    readFailedFootHtml(own: boolean): string {
+        const s = st!;
+        const t = strings.read;
+        // Another model only where the research offers a choice and the reading itself was this app's.
+        const other = own && !!s.readId && !!this.readChoicesNow();
+        const retry = own ? `<button type="button" class="${other ? 'secondary' : 'primary'}" data-act="retry">${researchBridgeAgentLabel(t.retry)}</button>` : '';
+        const tryOther = other ? `<button type="button" class="primary" data-act="other-model">${esc(t.tryOther)}</button>` : '';
+        return `<span class="batch-foot-note">${esc(t.failNothing)}</span>`
+            + `<button type="button" class="${own ? 'secondary read-close-wide' : 'primary'}" data-act="close">${esc(t.close)}</button>${retry}${tryOther}`;
     },
 
     /** A source's reading that cannot be shown: why, then the transcription the source carries (with its marks). */
@@ -2594,7 +2704,9 @@ export const readDocumentMethods = uiModule({
                     + btn('close', t.close) + btn('open-research', t.openResearch, true);
             case 'not-ready': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('open-research', t.openResearch, true)}`;
             case 'older': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('update-research', t.updateResearch, true)}`;
-            case 'failed': return `<span class="batch-foot-note"></span>${own ? `${btn('close', t.close)}${btn('retry', t.retry, true)}` : btn('close', t.close, true)}`;
+            case 'failed':
+                if (!s.error?.failure) return this.readFailedFootHtml(own);
+                return `<span class="batch-foot-note"></span>${own ? `${btn('close', t.close)}<button type="button" class="primary" data-act="retry">${researchBridgeAgentLabel(t.retry)}</button>` : btn('close', t.close, true)}`;
             case 'cancelled': return `<span class="batch-foot-note"></span>${s.readId && own ? `<button type="button" class="secondary" data-act="again">${researchBridgeAgentLabel(t.readAgain)}</button>` : ''}${close}`;
             case 'busy': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('show-running', t.showRunning, true)}`;
             case 'held': {
@@ -2750,6 +2862,24 @@ export const readDocumentMethods = uiModule({
                 if (st && choices) { st.with = [readerDefault(choices, 0), readerDefault(choices, 1)]; forgetWith(); this.readRedrawChoose(); }
                 break;
             }
+            case 'how-update': {
+                // A reader's "How to update" unfolded or folded (kept across redraws).
+                const at = Number(el.dataset.at);
+                if (howOpen.has(at)) howOpen.delete(at); else howOpen.add(at);
+                this.readRedrawChoose();
+                break;
+            }
+            case 'details': {
+                // A failure's "Details" unfolded in place (the focus stays on the toggle).
+                detailsOpen = !detailsOpen;
+                const text = overlay.querySelector<HTMLElement>('#read-details-text');
+                if (text) text.hidden = !detailsOpen;
+                el.setAttribute('aria-expanded', String(detailsOpen));
+                const mark = el.querySelector('[aria-hidden]');
+                if (mark) mark.textContent = detailsOpen ? '▾' : '▸';
+                break;
+            }
+            case 'other-model': this.readOtherModel(); break;
             case 'cancel': void this.cancelReadDocument(); break;
             case 'retry': void this.retryReadDocument(); break;
             case 'seal': this.researchSyncAction('sealTakeOver'); break;
@@ -2844,6 +2974,35 @@ export const readDocumentMethods = uiModule({
         const [page] = st.pages.splice(from, 1);
         st.pages.splice(to, 0, page);
         this.renderReadDialog();
+    },
+
+    /**
+     * "Try another model" after a failed reading: the input again with "Adjust reading" open, the
+     * readers as they were sent, and the focus on the failed reader's model (reader 1 when not known).
+     */
+    readOtherModel(): void {
+        const s = st;
+        const choices = this.readChoicesNow();
+        if (!s || !choices) return;
+        const who = this.readLiveOf(s.readId)?.who ?? results.get(s.readId)?.readers.who;
+        const sent: ReaderChoice[] | null = who?.length ? who.map(w => ({ agent: w.agent, model: w.model, effort: w.effort })) : s.sentWith;
+        if (sent?.length) {
+            const base = this.readChosen(choices);
+            s.with = readersFromStored(choices, [...sent, ...base.slice(sent.length)].slice(0, 2), 2);
+            s.readers = sent.length >= 2 ? 2 : 1;
+        }
+        const failed = s.error?.rf?.reader ?? ((who?.findIndex(w => w.state === 'failed') ?? -1) + 1);
+        const at = failed >= 1 && failed <= s.readers ? failed - 1 : 0;
+        s.refineOpen = true;
+        if (this.readSourceAgainNow()) this.readSourceAgainInput();
+        else if (s.readId) {
+            s.mode = 'again';
+            s.phase = 'input';
+            s.error = null;
+            s.notice = '';
+            this.renderReadDialog();
+        } else this.newReadInput(true);
+        document.querySelector<HTMLElement>(`#${DIALOG_ID} select[data-at="${at}"][data-field="model"]`)?.focus();
     },
 
     /** "Read again": the readers chosen first when the research offers a choice (spec 059), else read again at once. */
