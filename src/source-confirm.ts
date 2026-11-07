@@ -89,7 +89,7 @@ export function sourceConfirmOffer(action: SourceConfirmAction | null, env: {
     bridgeUp: boolean;
     /** An archive, or a research waiting for its agent. */
     agentless: boolean;
-    /** The tree is read-only or locked here. */
+    /** The tree is read-only here (a view, a locked file, newer data); following the research does not count. */
     readOnly: boolean;
 }): SourceConfirmOffer {
     if (!action || env.agentless || env.readOnly) return { kind: 'none' };

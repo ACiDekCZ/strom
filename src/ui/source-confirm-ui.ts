@@ -91,7 +91,9 @@ export const sourceConfirmMethods = uiModule({
             features,
             bridgeUp: up,
             agentless: this.activeResearchAgentless(),
-            readOnly: DataManager.isReadOnly() || DataManager.isTreeLocked(),
+            // Following the research locks the tree, not this: the confirmation goes to the research
+            // through the bridge and never changes the tree in the app (as "Read again…").
+            readOnly: DataManager.isReadOnly(),
         });
     },
 

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
-import { acceptLoad, dropFile, fakeBridge, openResearch, poll, researchGed, FakeBridge, FakeSourcesConfirm } from './research-bridge.js';
+import { acceptLoad, BRIDGE, dropFile, fakeBridge, openResearch, poll, researchGed, FakeBridge, FakeSourcesConfirm } from './research-bridge.js';
+import { seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
 
 /**
  * Confirming the research's transcript in the source viewer (spec 022 U3):
@@ -10,7 +11,9 @@ import { acceptLoad, dropFile, fakeBridge, openResearch, poll, researchGed, Fake
  * confirm}` and the line says the answer at once; the research's next file
  * brings the same. A wording changed meanwhile (409 `confirm.changed`) is
  * said under the line and nothing is sent again. Opening the viewer sends
- * nothing (K1.6). Invented people only (the bridge's own fixture).
+ * nothing (K1.6). Following the research (`?live=`, the tree locked
+ * meanwhile) offers it the same: it goes to the research, the tree in the
+ * app is not changed. Invented people only (the bridge's own fixture).
  */
 
 const TXT = '0a1b2c3d4e5f6a7b';
@@ -51,6 +54,44 @@ async function takeFile(page: Page, file: string): Promise<void> {
     await expect(page.locator('#research-load-modal')).toContainText('Nothing here will be overwritten.');
     await acceptLoad(page);
     await expect(page.locator('#research-load-modal')).toBeHidden();
+}
+
+/** The research followed from its bridge (`?live=`): the tree in the app locked meanwhile. */
+async function follow(page: Page, read: string, conf?: string): Promise<FakeBridge> {
+    const file = ged(read, conf);
+    await page.addInitScript(() => {
+        // The bridge's events: the hello is the status (the routed fetch); nothing else comes.
+        class FakeEventSource {
+            url: string;
+            readyState = 1;
+            onerror: ((e: Event) => void) | null = null;
+            private listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
+            constructor(url: string) {
+                this.url = url;
+                void fetch(url.replace(/\/events(\?.*)?$/, '/status')).then(r => r.json()).then(st => this.emit('hello', st));
+            }
+            addEventListener(type: string, fn: (e: MessageEvent) => void): void { (this.listeners[type] ??= []).push(fn); }
+            removeEventListener(): void { /* not needed */ }
+            close(): void { this.readyState = 2; }
+            emit(type: string, data: unknown): void {
+                for (const fn of this.listeners[type] ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
+            }
+        }
+        Object.defineProperty(window, 'EventSource', { value: FakeEventSource, configurable: true, writable: true });
+    });
+    await seedResearchPromoSeen(page);
+    await seedWhatsNewSeen(page);
+    await seedSetting(page, 'fileCopyReminders', false);
+    await seedSetting(page, 'onThisDay', false);
+    const bridge = await fakeBridge(page, {
+        features: ['sources.confirm'],
+        treeGed: file,
+        sourcesConfirm: { writes: [], sources: { S0001: { read, ...(conf ? { conf } : {}), txt: TXT } } },
+    });
+    await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+    await expect.poll(() => page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources ?? {}).some((s: any) => s.refn === 'S0001'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing() && window.Strom.DataManager.isTreeLocked())).toBe(true);
+    return bridge;
 }
 
 const line = (page: Page) => page.locator('#source-viewer-modal .viewer-read-by');
@@ -177,5 +218,36 @@ test.describe('Confirming the research\'s transcript in the source viewer', () =
             await expect(button(page)).toHaveCount(0);
         }
         expect(posts(bridge)).toEqual([]);
+    });
+
+    test('following the research (?live=, the tree locked): confirm and undo offered and sent, the tree not changed by the app', async ({ page }) => {
+        const bridge = await follow(page, 'research');
+        await view(page);
+        await expect(line(page)).toHaveText('Transcription read by the research');
+        await expect(button(page)).toHaveText('Confirm transcription');
+        expect(posts(bridge)).toEqual([]);
+        await button(page).click();
+        await expect.poll(() => bridge.sourcesConfirm!.writes).toEqual([{ source: 'S0001', txt: TXT, confirm: true }]);
+        await expect(line(page)).toHaveText('Transcription read by the research and confirmed in the app on 6 Nov 2026');
+        await expect(note(page)).toHaveCount(0);
+        // Still following, the tree as the research's file has it.
+        expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+        expect((await source(page)).readConfirmed).toBeUndefined();
+
+        // "Undo confirmation" the same way.
+        await expect(button(page)).toHaveText('Undo confirmation');
+        await button(page).click();
+        await expect.poll(() => bridge.sourcesConfirm!.writes.at(-1)).toEqual({ source: 'S0001', txt: TXT, confirm: false });
+        await expect(line(page)).toHaveText('Transcription read by the research');
+        await expect(button(page)).toHaveText('Confirm transcription');
+    });
+
+    test('following the research: a confirmed transcription offers its undo', async ({ page }) => {
+        const bridge = await follow(page, 'both', '2026-11-02');
+        await view(page);
+        await expect(line(page)).toHaveText('Transcription read by the research and confirmed in the app on 2 Nov 2026');
+        await button(page).click();
+        await expect.poll(() => bridge.sourcesConfirm!.writes).toEqual([{ source: 'S0001', txt: TXT, confirm: false }]);
+        await expect(line(page)).toHaveText('Transcription read by the research');
     });
 });
