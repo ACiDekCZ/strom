@@ -420,7 +420,8 @@ export function variantClass(v: MergedVariant): VariantClass {
     return { minor: classifyVariant(v.at, v.other) === 'minor', kinds: [] };
 }
 
-const GAP_ONLY = /^[\s.,;:!?„“"'()\-–|]*$/;
+/** Only white space and punctuation between two places; a register's cell boundary (`|`) keeps them apart (other fields). */
+const GAP_ONLY = /^[\s.,;:!?„“"'()\-–]*$/;
 
 /**
  * Differences next to each other merged into one: two variants whose spans in `text` (the text as read; `side` says
@@ -520,8 +521,8 @@ export interface VerdictFacts {
     partial: boolean;
     why: string;
     illegible: number;
-    /** A source read again: compared (substantive changes, minor details, whether the research named the kinds), or not compared. */
-    source: { compared: true; major: number; minor: number; kinded: boolean } | { compared: false } | null;
+    /** A source read again: compared (substantive changes, minor details, whether the research named the kinds), or not compared (`why`: its own sentence, else the entry not found). */
+    source: { compared: true; major: number; minor: number; kinded: boolean } | { compared: false; why?: string } | null;
     /** Two readers on this entry: the places they disagree in (0: they agree); null: not both read it. */
     disagree: number | null;
 }
@@ -542,7 +543,7 @@ export interface VerdictStrings {
 export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string) => string = s => s): string {
     const out: string[] = [];
     out.push(f.partial ? t.vPartial(f.illegible, f.why) : f.illegible > 0 ? t.vIll(f.illegible) : t.vRead);
-    if (f.source && !f.source.compared) out.push(t.vNc);
+    if (f.source && !f.source.compared) out.push(f.source.why || t.vNc);
     else if (f.source?.compared) out.push(f.source.major + f.source.minor ? t.vSrc(f.source.major, f.source.minor, f.source.kinded, b) : t.vSrcSame);
     if (f.disagree !== null) out.push(f.disagree > 0 ? t.vDis(f.disagree, b) : t.vAgree);
     return out.join(' ');

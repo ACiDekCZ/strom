@@ -192,14 +192,15 @@ test.describe('Read a source again from its original', () => {
         await view(page);
         const d = await openAgain(page, again(page));
         await readAndFinish(page, b, d, { id: 'S0001', agree: 'same', variants: [] });
-        await expect(d.locator('[data-pill="source"]')).toHaveText('Matches the transcript');
-        await expect(d.locator('[data-pill="source"]')).toHaveClass(/is-ok/);
-        await expect(d.locator('.read-result-who')).toContainText('New reading:');
-        const note = d.locator('.read-source-note');
-        await expect(note).toHaveAttribute('data-agree', 'same');
-        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; the match supports today’s transcript.');
-        await expect(note.locator('.read-source-vs')).toHaveCount(0);
-        await expect(note.locator('.read-source-variants')).toHaveCount(0);
+        // The header in one sentence; who read under the text; nothing to check.
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveText('Read. Matches the existing transcript.');
+        await expect(verdict).toHaveAttribute('data-agree', 'same');
+        await expect(d.locator('.read-who')).toHaveText('Read by one reader (Claude Code · Opus).');
+        await expect(d.locator('.read-check-row, .read-transcript .read-mk')).toHaveCount(0);
+        // The footer says what became of the transcript.
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText([
+            'The existing transcript stays unchanged; the text as read is saved next to it.', 'The match supports the existing transcript.']);
         // Nothing to propose to the tree, nothing to read anew here: Close alone, the main button.
         await expect(d.locator('.read-footer button')).toHaveText(['Close']);
         await expect(d.locator('.read-footer button.primary')).toHaveText('Close');
@@ -244,11 +245,12 @@ test.describe('Read a source again from its original', () => {
         await expect(region).toHaveAttribute('style', /left:5%/);
         await expect(d.locator('.read-frame')).toHaveCount(1);
         await expect(d.locator('.read-scan-var')).toHaveCount(2);
-        // The new reading is reader 1's text; reader 2 (independent) differed in the places marked amber.
-        await expect(d.locator('.read-source-sides')).toHaveText(/^left the transcript so far, right the new reading · Claude Code/);
-        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(2);
-        await expect(d.locator('.read-source-readers .read-source-head')).toHaveText('Between the readers');
-        await expect(d.locator('.read-source-second')).toHaveText('The readers differ in 2 places, marked in the transcript below.');
+        // The text is reader 1's; reader 2 read independently and disagreed in the places marked; both named once, under the text.
+        await expect(d.locator('.read-who')).toHaveText('Text by reader 1 (Claude Code · Opus). Reader 2 (Codex · GPT-6-Astra) read independently, as a check.');
+        await expect(d.locator('.read-transcript .read-mk-dis')).toHaveCount(2);
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Against the existing transcript 1 change. The readers disagree in 2 places.');
+        await expect(d.locator('#read-verdict strong')).toHaveText(['1 change', '2 places']);
     });
 
     /**
@@ -292,66 +294,54 @@ test.describe('Read a source again from its original', () => {
         return d;
     }
 
-    test('a register line of cells (S1383): every place marked in the text and one row of the legend; the data apart; both parts of the note', async ({ page }) => {
+    test('a register line of cells (S1383): every place marked once in the text and one row in "To check"; the data apart; an empty side in words', async ({ page }) => {
         const d = await readCells(page, CELL_VARIANTS);
-        const legend = d.locator('.read-legend:not(.read-source-variants)');
-        const rows = legend.locator('.read-legend-place');
-        // 7 places in the text (6 in the line, 1 only at reader 2) and 1 in the data (the other one repeats a text place).
-        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(6);
-        await expect(rows).toHaveCount(8);
-        await expect(legend.locator('.read-legend-place--data')).toHaveCount(1);
-        await expect(legend.locator('.read-legend-differ')).toHaveText('/The readers differ in 8 places: Claude Code · Opus, Codex · GPT-6-Astra');
-        await expect(d.locator('.read-source-second')).toHaveText('The readers differ in 8 places, marked in the transcript below.');
-        // The rows: the words around each place, its marks as in the text; nothing said with an ellipsis or empty quotes.
-        await expect(rows.nth(0)).toHaveText(/^1774 \| 12 Martinus\/12 Martin Zvonařík/);
-        await expect(rows.nth(0).locator('.read-place-ctx').last()).toHaveClass(/is-cut-after/);
-        await expect(rows.nth(6)).toHaveText('missing/sponsus');
-        const text = await legend.evaluate(el => el.textContent ?? '');
+        const check = d.locator('.read-check');
+        // The readers' places: 5 in the line (neighbours within a cell merged), 1 only at reader 2, 1 in the data (the other one repeats a text place).
+        const marked = await d.locator('.read-transcript .read-mk-dis').evaluateAll(els => new Set(els.map(e => e.getAttribute('data-place'))).size);
+        expect(marked).toBe(5);
+        const dis = check.locator('[data-group="dis"] .read-check-row');
+        await expect(dis).toHaveCount(7);
+        await expect(check.locator('[data-group="dis"] .read-check-head')).toHaveText(/The readers disagree· 7 places$/);
+        await expect(dis.nth(0)).toHaveText(/^l\. 1/);
+        await expect(dis.nth(5).locator('.read-place-missing')).toHaveText('missing');
+        await expect(dis.nth(5)).toContainText('sponsus');
+        await expect(dis.nth(6)).toContainText('Birth · date:');
+        await expect(dis.nth(6)).toContainText('12 Martii 1774');
+        await expect(check.locator('.read-places-more')).toHaveCount(0);
+        // The changes against the existing transcript: in groups first, 2 marked in the text, 1 only listed.
+        await expect(check.locator('.read-check-group').first()).toHaveAttribute('data-group', 'chg');
+        const chg = check.locator('[data-group="chg"] .read-check-row');
+        await expect(chg).toHaveCount(3);
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(2);
+        await expect(chg.nth(0).locator('.read-check-old')).toHaveText('Zvonářík');
+        // An uncertain reading keeps its mark against the transcript as well (problemy.md č. 11), in the text too.
+        await expect(chg.nth(0).locator('.read-mk-unc')).toHaveCount(1);
+        await expect(d.locator('.read-transcript .read-mk-unc')).toHaveCount(1);
+        await expect(chg.nth(2).locator('.read-place-missing')).toHaveText('missing');
+        await expect(d.locator('#read-verdict')).toHaveText('Read, 1 word illegible. Against the existing transcript 3 changes. The readers disagree in 7 places.');
+        // Nothing said with an ellipsis or empty quotes; each program named once.
+        const text = await check.evaluate(el => el.textContent ?? '');
         expect(text).not.toContain('…');
         expect(text).not.toMatch(/“\s*”|""/);
-        expect(text.split('Codex').length).toBe(2);
-        const unsure = legend.locator('.read-legend-place mark.uncertain').first();
-        await expect(unsure).toBeVisible();
-        expect(await unsure.evaluate(el => getComputedStyle(el).borderBottomStyle)).toBe('dotted');
-        await expect(legend.locator('.read-legend-place .read-variant .illegible')).toHaveCount(1);
-        await expect(legend.locator('.read-legend-place .read-place-missing')).toHaveText(['missing']);
-        await expect(legend.locator('.read-legend-sub')).toHaveText('Only in the data (the text matches):');
-        await expect(legend.locator('.read-legend-place--data')).toHaveText('Birth · date: 12 Martii 1774/13 Martii 1774');
-        await expect(legend.locator('.read-places-more')).toHaveCount(0);
-        // The titles say an illegible spot and a missing side in words.
-        const titles = await legend.locator('.read-legend-place .read-variant').evaluateAll(els => els.map(el => el.getAttribute('title') ?? ''));
-        expect(titles.join('\n')).not.toMatch(/“\s*”|…/);
-        expect(titles.join('\n')).toContain('“Catharina illegible”');
-        expect(titles.join('\n')).toContain('“missing”');
-        // The note: one sentence, the part against the transcript so far, the part between the readers.
-        const note = d.locator('.read-source-note');
-        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; task T1369 in the research decides where they differ.');
-        await expect(d.locator('[data-pill="source"]')).toHaveText('3 places differ from the transcript');
-        const vs = note.locator('.read-source-vs .read-legend-place');
-        await expect(vs).toHaveCount(3);
-        await expect(note.locator('.read-source-vs .read-source-head')).toHaveText('Compared with the transcript so far · 3 places');
-        await expect(vs.nth(0)).toContainText('Martinus Zvonářík→Zvonařík');
-        // An uncertain reading keeps its mark against the transcript as well (problemy.md č. 11).
-        await expect(vs.nth(0).locator('mark.uncertain')).toHaveCount(1);
-        await expect(vs.nth(2).locator('.read-place-missing')).toHaveText('missing');
-        await expect(note.locator('.read-source-readers')).toHaveCount(1);
-        expect(await note.evaluate(el => el.textContent ?? '')).not.toContain('…');
+        const all = await d.evaluate(el => el.textContent ?? '');
+        expect(all.split('Codex').length).toBe(2);
+        expect(all.split('Claude Code').length).toBeLessThanOrEqual(2);
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText([
+            'The existing transcript stays unchanged; the text as read is saved next to it.',
+            'The changes are decided in the source task, which opens in the research terminal.']);
     });
 
-    test('more than 8 places: the first 8 and "and N more", unfolded in place', async ({ page }) => {
-        const d = await readCells(page, [...CELL_VARIANTS,
-            { at: '1774', other: '1775' }, { at: 'filia', other: 'filius' }, { at: 'Adalbertus', other: 'Vojtěch' }]);
-        const legend = d.locator('.read-legend:not(.read-source-variants)');
-        const rows = legend.locator('.read-legend-place');
-        await expect(d.locator('.read-transcript .read-variant')).toHaveCount(9);
-        await expect(rows).toHaveCount(11);
-        await expect(legend.locator('.read-legend-place:visible')).toHaveCount(8);
-        const more = legend.locator('.read-places-more');
-        await expect(more).toHaveText('and 3 more');
+    test('more than 8 places in a group: the first 8 and "and N more", unfolded in place', async ({ page }) => {
+        const d = await readCells(page, [...CELL_VARIANTS, { at: '', other: 'sponsa' }, { at: '', other: 'testis' }, { at: '', other: 'parochus' }]);
+        const group = d.locator('.read-check [data-group="dis"]');
+        await expect(group.locator('.read-check-row')).toHaveCount(10);
+        await expect(group.locator('.read-check-row:visible')).toHaveCount(8);
+        const more = group.locator('.read-places-more');
+        await expect(more).toHaveText('and 2 more');
         await more.click();
-        await expect(legend.locator('.read-legend-place:visible')).toHaveCount(11);
+        await expect(group.locator('.read-check-row:visible')).toHaveCount(10);
         await expect(more).toHaveCount(0);
-        await expect(legend.locator('.read-legend-sub')).toBeVisible();
     });
 
     test('under the scan: Full quality opens the excerpt in the research, the page opens in the archive', async ({ page }) => {
@@ -390,8 +380,8 @@ test.describe('Read a source again from its original', () => {
         await view(page);
         const d = await openAgain(page, again(page));
         await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' });
-        await expect(d.locator('.read-source-note')).toBeVisible();
-        await expect(d.locator('.read-source-second')).toHaveCount(0);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Against the existing transcript 1 change.');
+        await expect(d.locator('.read-check [data-group="dis"], .read-reader-seg')).toHaveCount(0);
         await expect(d.locator('.read-page-tabs')).toHaveCount(0);
         await expect(d.locator('.read-view-region')).toHaveCount(0);
     });
@@ -401,25 +391,25 @@ test.describe('Read a source again from its original', () => {
         await view(page);
         const d = await openAgain(page, again(page));
         await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' });
-        await expect(d.locator('[data-pill="source"]')).toHaveText('1 place differs from the transcript');
-        await expect(d.locator('[data-pill="source"]')).toHaveClass(/is-warn/);
-        const note = d.locator('.read-source-note');
-        await expect(note).toHaveAttribute('data-agree', 'differ');
-        await expect(note.locator('.read-source-note-text')).toHaveText('The source’s transcript stays unchanged and the new reading is saved beside it; task T0042 in the research decides where they differ.');
-        // One part against the transcript so far: the count and the sides once, then the place with the words before it.
-        await expect(note.locator('.read-source-vs .read-source-head')).toHaveText('Compared with the transcript so far · 1 place');
-        await expect(note.locator('.read-source-sides')).toHaveText('left the transcript so far, right the new reading · Claude Code · Opus');
-        const rows = note.locator('.read-source-vs .read-legend-place');
-        await expect(rows).toHaveText(['Josef Fíšek a Anna→Anně']);
-        const mks = rows.locator('.read-variant-mk');
-        await expect(mks).toHaveCount(2);
-        expect(await mks.first().getAttribute('data-mk')).toBe('transcript');
-        expect(await mks.last().getAttribute('data-mk')).toBe('new');
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveText('Read. Against the existing transcript 1 change.');
+        await expect(verdict).toHaveAttribute('data-agree', 'differ');
+        // The change marked in the text (reader 1's) and one row: the transcript's words struck, the new ones framed.
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
+        const rows = d.locator('.read-check [data-group="chg"] .read-check-row');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.locator('.read-check-old')).toHaveText('Anna');
+        await expect(rows.locator('.read-check-what .read-mk-chg')).toHaveText('Anně');
+        await expect(rows.locator('.read-check-ln')).toHaveText('l. 1');
+        await expect(d.locator('.read-check [data-group="chg"] .read-check-head')).toHaveText(/Differs from the existing transcript· 1 change$/);
         // One reader ran: nothing between the readers.
-        await expect(note.locator('.read-source-readers')).toHaveCount(0);
+        await expect(d.locator('.read-check [data-group="dis"]')).toHaveCount(0);
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText([
+            'The existing transcript stays unchanged; the text as read is saved next to it.',
+            'The changes are decided in the source task, which opens in the research terminal.']);
         // The task opens in the research's terminal: its mark, not the AI badge.
         const open = d.locator('[data-act="open-task"]');
-        await expect(open).toHaveText(/Open the task/);
+        await expect(open).toHaveText(/Open task T0042/);
         await expect(open).toHaveClass(/primary/);
         await expect(open.locator('.research-open-mark')).toHaveCount(1);
         await expect(open.locator('.research-ai-badge')).toHaveCount(0);
@@ -605,26 +595,25 @@ test.describe('Read a source again: its own entry, a failed comparison, the kind
         await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-entry-pill.is-source')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-entry-pill.is-neighbour')).toHaveCount(2);
-        await expect(pills.locator('.read-entry-tag')).toHaveText(['neighbour at the edge', 'source entry', 'neighbour at the edge']);
-        await expect(pills.first()).toHaveAttribute('aria-label', /, neighbour at the edge$/);
+        await expect(pills.locator('.read-entry-n')).toHaveText(['Entry 1', 'Entry 2', 'Entry 3']);
+        await expect(pills.locator('.read-entry-tag')).toHaveText(['neighbouring', 'source entry', 'neighbouring']);
         await expect(d.locator('.read-frame.is-neighbour')).toHaveCount(2);
         await expect(d.locator('.read-frame.is-selected')).not.toHaveClass(/is-neighbour/);
-        // The source's entry: its comparison, no neighbour note.
+        // The source's entry: its change marked and listed, no neighbour note.
         await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
-        await expect(d.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
+        await expect(d.locator('.read-check [data-group="chg"] .read-check-row')).toHaveCount(1);
 
-        // A neighbour: said at the top, and the comparison does not pose as its own.
+        // A neighbour: said at the top; the changes are not its own, nothing marked or checked.
         await pills.first().click();
         await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '0');
-        await expect(d.locator('.read-neighbour-note')).toHaveText('A neighbouring entry at the edge of the excerpt – not compared with the source’s transcript.');
-        await expect(d.locator('.read-neighbour-note')).toHaveAttribute('role', 'note');
-        const vs = d.locator('.read-source-vs');
-        await expect(vs).toHaveClass(/is-elsewhere/);
-        await expect(vs.locator('.read-legend-place')).toHaveCount(0);
-        await expect(vs.locator('.read-source-sides')).toHaveText('The comparison belongs to the source’s entry, not to this neighbouring one.');
-        await vs.locator('[data-act="source-entry"]').click();
+        await expect(d.locator('.read-neighbour-note')).toHaveText('Neighbouring entry from the edge of the excerpt. It is not compared with the existing transcript.');
+        await expect(d.locator('.read-transcript .read-mk-chg, .read-check-row')).toHaveCount(0);
+        await expect(d.locator('.read-check .read-check-none')).toHaveText('Nothing is checked at a neighbouring entry.');
+        await pills.nth(1).click();
         await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
         await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
     });
 
     test('without read.sourceEntry: the same result as today, the first entry chosen, nothing told apart', async ({ page }) => {
@@ -633,78 +622,110 @@ test.describe('Read a source again: its own entry, a failed comparison, the kind
         await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '0');
         await expect(d.locator('.read-entry-pill.is-neighbour, .read-entry-pill.is-source, .read-entry-tag, .read-frame.is-neighbour')).toHaveCount(0);
         await expect(d.locator('.read-neighbour-note')).toHaveCount(0);
-        await expect(d.locator('.read-source-vs')).not.toHaveClass(/is-elsewhere/);
-        await expect(d.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
+        // The comparison is listed (its words are not in the entry shown, so nothing is marked).
+        const rows = d.locator('.read-check [data-group="chg"] .read-check-row');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.locator('.read-check-old')).toHaveText('Anna');
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveCount(0);
     });
 
-    test('no entry of the source found: the comparison did not succeed, the transcript stays; never as if none were needed', async ({ page }) => {
+    test('no entry of the source found: the comparison did not succeed, the transcript stays; the app compares a chosen entry, nothing saved', async ({ page }) => {
         const res = neighbours({ id: 'S0001', entries: [], failed: { code: 'no-entry', why: 'only neighbours read' } });
         const d = await readWith(page, ['read.sourceEntry'], res);
         await expect(d.locator('#read-title')).toHaveText('Source read again');
-        const note = d.locator('.read-source-note');
-        await expect(note).toHaveAttribute('data-agree', 'failed');
-        await expect(note).toHaveAttribute('data-failed', 'no-entry');
-        await expect(note.locator('.read-source-note-text')).toHaveText('The reading found no entry of the source (only neighbouring entries or none), so nothing was compared with the transcript. The source’s transcript stays unchanged.');
-        await expect(note).not.toContainText('only neighbours read');
-        await expect(d.locator('[data-pill="source"]')).toHaveText('comparison did not succeed');
-        await expect(d.locator('[data-pill="source"]')).toHaveClass(/is-warn/);
-        // Nothing to propose here, as at any source read again.
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveAttribute('data-agree', 'failed');
+        await expect(verdict).toHaveAttribute('data-failed', 'no-entry');
+        await expect(verdict).toHaveText('Read. The source entry was not found in the text as read, so it was not compared with the existing transcript.');
+        await expect(d).not.toContainText('only neighbours read');
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['The existing transcript stays unchanged.']);
+        // Nothing to propose here, as at any source read again; reading again is the research agent's.
         await expect(d.locator('[data-act="propose"]')).toHaveCount(0);
+        await expect(d.locator('[data-act="open-task"]')).toHaveCount(0);
+        await expect(d.locator('.read-footer [data-act="again"] .research-ai-badge')).toHaveCount(1);
+        await expect(d.locator('.read-footer button.primary')).toHaveText('Close');
+        // The one notice: which entry is the source's; its entries as chips, the comparison in the app (no mark).
+        const nc = d.locator('.read-nc');
+        await expect(nc).toHaveCount(1);
+        await expect(d.locator('.read-kinds-note')).toHaveCount(0);
+        await expect(nc.locator('.read-nc-q')).toHaveText('Which entry belongs to the source?');
+        await expect(nc.locator('.read-nc-chip')).toHaveCount(3);
+        const compare = nc.locator('[data-act="nc-compare"]');
+        await expect(compare).toHaveText('Compare with the existing transcript');
+        await expect(compare.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        await nc.locator('.read-nc-chip').nth(1).click();
+        await expect(d.locator('.read-entry-pill.is-selected')).toHaveAttribute('data-entry', '1');
+        await d.locator('.read-nc [data-act="nc-compare"]').click();
+        await expect(d.locator('.read-nc')).toHaveCount(0);
+        await expect(d.locator('.read-nc-done')).toHaveText('Compared in the app; nothing was saved.');
+        await expect(d.locator('.read-transcript .read-mk-chg')).toHaveText(['Anně']);
+        const rows = d.locator('.read-check [data-group="chg"] .read-check-row');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.locator('.read-check-old')).toHaveText('Anna');
+        await expect(verdict).toHaveText('Read. Against the existing transcript 1 change.');
+        // Only in the dialog: the source's transcript untouched, nothing sent.
+        expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().sources).find((s: any) => s.refn === 'S0001') as any).transcript))
+            .toBe('Josef Fíšek a Anna');
         await expect(d.locator('[data-act="open-task"]')).toHaveCount(0);
     });
 
     test('a source changed meanwhile, or another failure: their own sentence', async ({ page }) => {
         const d = await readWith(page, ['read.sourceEntry'], result({ id: 'S0001', failed: { code: 'no-source', why: 'merged' } }));
-        await expect(d.locator('.read-source-note')).toHaveAttribute('data-failed', 'no-source');
-        await expect(d.locator('.read-source-note-text')).toHaveText(/^The source changed or was merged in the research meanwhile, so nothing was compared with the transcript\. The source’s transcript stays unchanged\.$/);
-        await expect(d.locator('[data-pill="source"]')).toHaveText('comparison did not succeed');
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveAttribute('data-failed', 'no-source');
+        await expect(verdict).toHaveText('Read. The source changed or was merged in the research meanwhile, so nothing was compared with the transcript.');
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['The existing transcript stays unchanged.']);
     });
 
     test('compared but not written to the research: the comparison, and nothing says it was saved', async ({ page }) => {
         const d = await readWith(page, ['read.sourceEntry'], result({ id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], failed: { code: 'write', why: 'sealed elsewhere' } }));
         await expect(d.locator('#read-title')).toHaveText('Source read again');
-        const note = d.locator('.read-source-note');
-        await expect(note).toHaveAttribute('data-agree', 'differ');
-        await expect(note).toHaveAttribute('data-failed', 'write');
-        await expect(note.locator('.read-source-note-text')).toHaveText('The result was not written to the research (neither a task nor another reading at the source came of it); the source’s transcript stays.');
-        await expect(note.locator('.read-source-note-text')).not.toContainText('saved beside it');
-        await expect(note.locator('.read-source-vs .read-legend-place')).toHaveText(['Josef Fíšek a Anna→Anně']);
-        await expect(d.locator('[data-pill="source"]')).toHaveText('1 place differs from the transcript');
+        const verdict = d.locator('#read-verdict');
+        await expect(verdict).toHaveAttribute('data-agree', 'differ');
+        await expect(verdict).toHaveAttribute('data-failed', 'write');
+        await expect(verdict).toHaveText('Read. Against the existing transcript 1 change.');
+        await expect(d.locator('.read-kept .read-foot-line')).toHaveText(['The result was not written to the research (neither a task nor another reading at the source came of it); the source’s transcript stays.']);
+        await expect(d.locator('.read-kept')).not.toContainText('saved next to it');
+        await expect(d.locator('.read-check [data-group="chg"] .read-check-row')).toHaveCount(1);
         await expect(d.locator('[data-act="open-task"]')).toHaveCount(0);
     });
 
-    test('without read.sourceEntry: no comparison as today, a plain reading without the comparison note', async ({ page }) => {
+    test('without read.sourceEntry: no comparison as today, a plain reading without the comparison', async ({ page }) => {
         const d = await readWith(page, [], result({ id: 'S0001', failed: { code: 'no-entry', why: 'x' } }));
         // No `agree`: a plain reading, as today.
         await expect(d.locator('.read-transcript')).toBeVisible();
         await expect(d.locator('#read-title')).not.toHaveText('Source read again');
-        await expect(d.locator('.read-source-note')).toHaveCount(0);
-        await expect(d.locator('[data-pill="source"]')).toHaveCount(0);
+        await expect(d.locator('#read-verdict')).not.toHaveAttribute('data-agree', /./);
+        await expect(d.locator('.read-nc, .read-check [data-group="chg"]')).toHaveCount(0);
     });
 
     test('without read.sourceEntry: a write failure compared as before', async ({ page }) => {
         const d = await readWith(page, [], result({ id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], failed: { code: 'write', why: 'x' } }));
         await expect(d.locator('#read-title')).toHaveText('Source read again');
-        await expect(d.locator('.read-source-note')).not.toHaveAttribute('data-failed', /./);
-        await expect(d.locator('.read-source-note-text')).toHaveText(/^The source’s transcript stays unchanged and the new reading is saved beside it/);
+        await expect(d.locator('#read-verdict')).not.toHaveAttribute('data-failed', /./);
+        await expect(d.locator('.read-kept .read-foot-line').first()).toHaveText('The existing transcript stays unchanged; the text as read is saved next to it.');
     });
 
-    test('read.kinds: the readers differ on the kind of entry, said between the readers', async ({ page }) => {
+    test('read.kinds: the readers differ on the kind of entry, one notice over the text; never that they agree', async ({ page }) => {
         const res = { ...result({ id: 'S0001', agree: 'same', variants: [] }), readers: { ...TWO_READERS, kinds: { first: 'register.marriage', blind: 'register.baptism' } } };
         const d = await readWith(page, ['read.kinds'], res);
-        const kinds = d.locator('.read-source-readers .read-kinds-note');
-        await expect(kinds).toHaveText('The readers did not even agree on the kind of entry: reader 1 marriage, reader 2 baptism. To be checked against the scan before writing to the tree.');
+        const kinds = d.locator('.read-kinds-note');
+        await expect(kinds).toHaveCount(1);
+        await expect(kinds).toHaveText('!The readers disagree on the kind of entry: reader 1 reads marriage, reader 2 baptism. This changes how the whole entry is read. To be checked against the scan before writing to the tree.');
+        await expect(kinds.locator('strong')).toHaveText('The readers disagree on the kind of entry: reader 1 reads marriage, reader 2 baptism.');
         await expect(kinds).toHaveAttribute('role', 'note');
-        // Said once, between the readers, not again above the text; never that the readers agree.
-        await expect(d.locator('.read-kinds-note')).toHaveCount(1);
-        await expect(d.locator('.read-source-second')).toHaveCount(0);
+        // Above the text, before it.
+        expect(await d.locator('#read-text').evaluate(el => {
+            const n = el.querySelector('.read-kinds-note'), tx = el.querySelector('.read-transcript');
+            return !!n && !!tx && !!(n.compareDocumentPosition(tx) & Node.DOCUMENT_POSITION_FOLLOWING);
+        })).toBe(true);
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Matches the existing transcript.');
     });
 
     test('without read.kinds: nothing said of the kinds', async ({ page }) => {
         const res = { ...result({ id: 'S0001', agree: 'same', variants: [] }), readers: { ...TWO_READERS, kinds: { first: 'register.marriage', blind: 'register.baptism' } } };
         const d = await readWith(page, [], res);
-        await expect(d.locator('.read-source-readers')).toBeVisible();
-        await expect(d.locator('.read-source-second')).toHaveText('The readers agree.');
+        await expect(d.locator('#read-verdict')).toHaveText('Read. Matches the existing transcript. The readers agree.');
         await expect(d.locator('.read-kinds-note')).toHaveCount(0);
     });
 });

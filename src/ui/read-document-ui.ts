@@ -27,16 +27,19 @@ import {
     readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
     readPaceSecs, readSameSheet, readViewNames, type ReadPaceReader,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, readEndsToAnnounce, readSuperseded, READ_FEATURE,
-    startSourceRead, readSourceId, READ_SOURCE_ENTRY_FEATURE, READ_BLIND_TEXT_FEATURE, READ_KINDS_FEATURE, type ReadBlindEntry,
+    startSourceRead, readSourceId, READ_SOURCE_ENTRY_FEATURE, READ_BLIND_TEXT_FEATURE, READ_KINDS_FEATURE, READ_VARIANT_KIND_FEATURE, type ReadBlindEntry,
+    type ReadVariant,
     type ReadSourceFailCode,
 } from '../research-read.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
-    entryName, placeCount, placeCountAll, readerPlaces, placeContext, locateSpan, cropLayout, type PlaceContext,
-    sourceEntryIndex, parseBlindTranscript, transcriptLines,
+    entryName, placeCountAll, readerPlaces, cropLayout,
+    sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict,
+    compareWithTranscript, type VerdictFacts, type MergedVariant,
 } from '../read-result.js';
+import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, type ResultMarks, type ShownPlace } from './read-result-view.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { openImageViewer } from './image-viewer.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -185,6 +188,12 @@ export interface DialogState {
     reader: 1 | 2;
     /** A start without an answer in time: the reading it may have started (null: none). */
     late: LateStart | null;
+    /** The place chosen in the result's text or its "To check" list ('' none, spec 059 P7). */
+    focus?: string;
+    /** A source read again that the research did not compare: the entry compared in the app and its differences (state only, nothing saved). */
+    cmp?: { entry: number; variants: ReadVariant[] } | null;
+    /** A source read again without its own entry said: the entry shown first (its comparison's). */
+    srcEntry?: number;
 }
 
 /**
@@ -216,6 +225,9 @@ let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
 let drawnKey = '';
 /** Lays the result's scan out again when its box changes size. */
 let scanObserver: ResizeObserver | null = null;
+/** The mark whose bubble is open (spec 059 P7 §5) and the hover bubble's pending close. */
+let popFrom: HTMLElement | null = null;
+let popHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Each view's name on its tab: "Page 2", "Excerpt 1" (parts of the one page read), "Page 1 · excerpt 2" (mixed). */
 function readViewLabels(pages: readonly ReadPage[]): string[] {
@@ -333,16 +345,6 @@ function whoLabel(w: ReadWho, choices: ReadChoices | null | undefined, effort = 
     return readWhoLabel({ ...w, modelName, effort: effort ? w.effort : '' }, strings.read.bySettings);
 }
 
-/** "Read by …", "Both readers: …" or each reader on its own (`one`: the words for a single reader). */
-function whoLinesHtml(items: { label: string; same: boolean }[], one: string, cls: string): string {
-    const t = strings.read;
-    const line = (key: string, label: string): string =>
-        `<span class="${cls}"><span class="read-who-key">${esc(key)}</span> <span class="read-who-val">${esc(label)}</span></span>`;
-    if (items.length === 1) return line(one, items[0].label);
-    if (items.every(i => i.same)) return line(t.whoBoth, items[0].label);
-    return items.map((i, k) => line(t.whoN(k + 1), i.label)).join('');
-}
-
 /** A long name shortened in the middle (the whole name in `title`). */
 function middleName(name: string, max = 42): string {
     if (name.length <= max) return name;
@@ -413,6 +415,18 @@ function titleMarks(text: string): string {
 /** The two readers of a reading that differ, as one line each without the effort (spec 059; null: not said). */
 interface VariantWho { a: string; b: string }
 
+/** An entry as the result shows it (`readEntryView`). */
+interface EntryView {
+    shown: 1 | 2;
+    marks: ResultMarks;
+    /** Both readers read the entry (only then can they agree). */
+    both: boolean;
+    /** Two readers read, this entry only reader 1. */
+    onlyR1: boolean;
+    /** The changes against the existing transcript carry the research's kinds. */
+    kinded: boolean;
+}
+
 /** "Reader 1 · Claude Code · Opus: “text”" — one version of a place where the readers differ. */
 function variantWhoLine(n: number, who: string, text: string): string {
     return `${strings.read.readerN(n)} · ${who}: “${text}”`;
@@ -454,54 +468,6 @@ function segsHtml(segs: readonly LineSeg[], who: VariantWho | null = null, secon
             }
         }
     }).join('');
-}
-
-/** "word [?]" marks the word (as the research reads it): drawn on the word, not alone. */
-function attachUncertain(text: string): string {
-    return text.replace(/(\S)\s+\[\?\]/g, '$1[?]');
-}
-
-/** One side of a place where readers differ: its marks drawn as in the text; an empty side in words. */
-function placeSideHtml(text: string): string {
-    return text.trim() ? segsHtml(parseMarks(attachUncertain(text))) : `<span class="read-place-missing">${esc(strings.read.placeMissing)}</span>`;
-}
-
-/**
- * A place's two versions as in the text (`a`, the separator, `b`), each with its mark (`marks`: the readers'
- * 1 and 2, or the transcript so far and the new reading; none without them).
- */
-function placeVariantHtml(a: string, b: string, marks: readonly [string, string] | null, sep: string, title: string): string {
-    const mk = (m: string | undefined): string => m ? `<span class="read-variant-mk" data-mk="${esc(m)}" aria-hidden="true"></span>` : '';
-    return `<span class="read-variant" title="${esc(title)}"><span class="read-variant-a">${placeSideHtml(a)}</span>${mk(marks?.[0])}`
-        + `<span class="read-variant-slash" aria-hidden="true">${esc(sep)}</span><span class="read-variant-b">${placeSideHtml(b)}</span>${mk(marks?.[1])}</span>`;
-}
-
-/** One place as a row: the words before it, its versions, the words after it (`…` where the text goes on, drawn by CSS). */
-function placeRowHtml(ctx: PlaceContext | null, variant: string, label = ''): string {
-    const part = (text: string, cut: string): string => text
-        ? `<span class="read-place-ctx${cut}">${segsHtml(parseMarks(attachUncertain(text)))}</span>` : '';
-    const before = ctx ? part(ctx.before, ctx.moreBefore ? ' is-cut-before' : '') : '';
-    const after = ctx ? part(ctx.after, ctx.moreAfter ? ' is-cut-after' : '') : '';
-    return `<span class="read-place">${label ? `<span class="read-place-label">${esc(label)}:</span> ` : ''}${before}${variant}${after}</span>`;
-}
-
-/** Rows of places: past `PLACES_SHOWN` folded behind "and N more" (unfolded in place). */
-const PLACES_SHOWN = 8;
-function placeRowsHtml(rows: readonly { html: string; cls: string; sub?: string }[]): string {
-    const out: string[] = [];
-    let subShown = false;
-    rows.forEach((r, i) => {
-        const more = i >= PLACES_SHOWN ? ' data-more hidden' : '';
-        if (r.sub && !subShown) {
-            subShown = true;
-            out.push(`<li class="read-legend-sub"${more}>${esc(r.sub)}</li>`);
-        }
-        out.push(`<li class="${r.cls}"${more}>${r.html}</li>`);
-    });
-    if (rows.length > PLACES_SHOWN) {
-        out.push(`<li class="read-legend-more"><button type="button" class="link-button read-places-more" data-act="places-more">${esc(strings.read.placesMore(rows.length - PLACES_SHOWN))}</button></li>`);
-    }
-    return out.join('');
 }
 
 /** An event's name by its GEDCOM tag ("MARR" → "Marriage"), else the tag. */
@@ -1709,6 +1675,9 @@ export const readDocumentMethods = uiModule({
             st.entry = chosen >= 0 ? chosen : own >= 0 ? own : defaultEntryIndex(res.entries, refn);
             st.line = -1;
             st.reader = 1;
+            st.focus = '';
+            st.cmp = null;
+            st.srcEntry = st.entry;
             st.page = res.entries[st.entry]?.page ?? res.pages[0]?.n ?? 1;
         }
         this.renderReadDialog();
@@ -1726,7 +1695,7 @@ export const readDocumentMethods = uiModule({
         return [kind, langNames(res.doc.language), t.scripts[res.doc.script] ?? '', readDocYear(res.doc.date)].filter(Boolean).join(', ');
     },
 
-    /** The result's subtitle (HTML): the file's name, then legibility and the readers as pills. */
+    /** The result's subtitle (HTML, spec 059 P7 §3): the file's name (a source: its kind and entry), then the result in one sentence. */
     readResultSubtitle(res: ReadResult): string {
         const t = strings.read;
         const isSource = this.readIsSourceAgain(res);
@@ -1734,27 +1703,45 @@ export const readDocumentMethods = uiModule({
         const name = again ? sourceAgainSub(again) : res.pages[0]?.name ?? '';
         const file = name
             ? `<span class="read-file" title="${esc(name)}">${esc(res.pages.length > 1 && !again ? t.progressSub(middleName(name, 40), res.pages.length) : middleName(name, 48))}</span>` : '';
-        const legible = res.doc.legible === 'yes' ? { tone: 'is-ok', text: t.legible }
-            : { tone: 'is-warn', text: res.doc.legible === 'partly' ? t.partly : t.notLegible };
-        // A source read again: how it compares with the transcript, in place of how the readers agree.
-        const failed = this.readSourceFailed(res);
-        const agree = !res.source || (failed && failed !== 'write') ? isSource ? { tone: 'is-warn', text: t.srcFailedPill } : agreeTone(res)
-            : res.source.agree === 'same' ? { tone: 'is-ok', text: t.srcSame } : { tone: 'is-warn', text: t.srcDiffer(Math.max(1, res.source.variants.length)) };
-        const choices = this.researchReadAcceptsAny()?.choices;
-        const who = (res.readers.who ?? []).filter(w => w.ran);
-        const whoRow = who.length
-            ? `<div class="read-result-who">${whoLinesHtml(who.map(w => ({ label: whoLabel(w, choices), same: readWhoSame(who) })), isSource ? t.newRead : t.readBy, 'read-result-who-line')}</div>`
-            : '';
-        return `${file}<span class="read-pills"><span class="read-pill ${legible.tone}" data-pill="legible">${esc(legible.text)}</span>`
-            + `<span class="read-pill ${agree.tone}" data-pill="${isSource ? 'source' : 'readers'}">${esc(agree.text)}</span></span>${whoRow}`;
+        // A source read again: how it compares and why not, for the research's words to be found by.
+        const failed = isSource ? this.readSourceFailed(res) : null;
+        const cmp = isSource ? ` data-agree="${esc(!res.source || (failed && failed !== 'write') ? 'failed' : res.source.agree)}"${failed ? ` data-failed="${esc(failed)}"` : ''}` : '';
+        return `${file}<p class="read-verdict" id="read-verdict"${cmp}>${this.readVerdictHtml(res)}</p>`;
     },
 
-    /** The two readers of a result, for its places where they differ (null: the reading says no two readers). */
-    readVariantWho(res: ReadResult): VariantWho | null {
-        const who = (res.readers.who ?? []).filter(w => w.ran);
-        if (who.length < 2) return null;
-        const choices = this.researchReadAcceptsAny()?.choices;
-        return { a: whoLabel(who[0], choices, false), b: whoLabel(who[1], choices, false) };
+    /**
+     * The header's sentence (spec 059 P7 §3): how legible, against the existing transcript (a source), whether the
+     * readers agree (only when both read the shown entry, never when they read different kinds without a place).
+     * Read only in part: the reason and, for a photo, what to do and "Insert a better photo".
+     */
+    readVerdictHtml(res: ReadResult): string {
+        const t = strings.read;
+        const entry = res.entries[st?.entry ?? 0] ?? null;
+        const view = entry ? this.readEntryView(res, entry) : null;
+        const isSource = this.readIsSourceAgain(res);
+        const ill = entry ? illegibleCount(entry.transcript) : 0;
+        const whyKey = res.doc.why ?? 'other';
+        const partial = res.doc.legible !== 'yes' && (ill > 3 || res.doc.legible === 'no' || !entry);
+        const src = isSource ? this.readSourceChanges(res) : null;
+        let source: VerdictFacts['source'] = null;
+        if (isSource) {
+            if (src) {
+                const minor = src.variants.filter(v => variantClass(v).minor).length;
+                source = { compared: true, major: src.variants.length - minor, minor, kinded: src.kinded };
+            } else {
+                // The source changed meanwhile, or another failure: its own sentence; no entry found (or none said): not found.
+                const failed = this.readSourceFailed(res);
+                source = { compared: false, why: failed === 'no-source' ? t.srcFailedNoSource : failed && failed !== 'no-entry' ? t.srcFailed : '' };
+            }
+        }
+        const count = view ? view.marks.places.filter(p => p.kind === 'dis').length : 0;
+        const disagree = view?.both && (count > 0 || !this.readKindsText(res)) ? count : null;
+        const facts: VerdictFacts = { partial, why: t.whyText[whyKey] ?? t.whyText.other, illegible: ill, source, disagree };
+        // Bold counts marked in the plain sentence, then escaped as a whole.
+        const html = esc(composeVerdict(facts, t, x => `\u0001${x}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
+        const photo = partial && !isSource
+            ? ` ${esc(t.advice[whyKey] ?? t.advice.other)} <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button>` : '';
+        return html + photo;
     },
 
     /** The open tree's research says `feature` in its `/status.features`. */
@@ -1803,10 +1790,98 @@ export const readDocumentMethods = uiModule({
         return t.kindsDiffer(t.kinds[k.first] ?? t.kinds.other, t.kinds[k.blind] ?? t.kinds.other);
     },
 
-    /** The amber note over the text and the suggestion when the readers read different kinds ('' none). */
+    /**
+     * The one notice over the text (spec 059 P7 §3): the readers read different kinds of entry (`read.kinds`), its
+     * first sentence bold, a ring with "!" for its shape ('' none). Also over the suggestion.
+     */
     readKindsNoteHtml(res: ReadResult): string {
-        const text = this.readIsSourceAgain(res) ? '' : this.readKindsText(res);
-        return text ? `<p class="read-kinds-note" role="note">${esc(text)}</p>` : '';
+        const k = res.readers.kinds;
+        if (!k || !this.readFeatureOn(READ_KINDS_FEATURE)) return '';
+        const t = strings.read;
+        return `<div class="read-kinds-note read-warn" role="note"><span class="read-warn-icon" aria-hidden="true">!</span>`
+            + `<span class="read-warn-body"><strong>${esc(t.warnT(t.kinds[k.first] ?? t.kinds.other, t.kinds[k.blind] ?? t.kinds.other))}</strong> ${esc(t.warnS)}</span></div>`;
+    },
+
+    /** Both readers read this entry (spec 059 P7 §6): the second reader's text of it exists; never for a reader that did not read. */
+    readBothRead(res: ReadResult, entry: ReadEntry): boolean {
+        if (this.readFeatureOn(READ_BLIND_TEXT_FEATURE) && res.blind) return !!this.readBlindOf(res, entry);
+        const who = res.readers.who;
+        if (who && who.length >= 2 && !who[1].ran) return false;
+        return (res.readers.ran ?? 0) >= 2;
+    },
+
+    /** The reading had two readers, though maybe not both on every entry (reader 2 failed, a neighbour only reader 1 read). */
+    readTwoReaders(res: ReadResult): boolean {
+        return (res.readers.asked ?? 0) >= 2 || (res.readers.ran ?? 0) >= 2 || (res.readers.who?.length ?? 0) >= 2;
+    },
+
+    /** A difference as the dialog uses it: its kind only when the research says kinds (`read.variantKind`). */
+    readVariantShown<V extends ReadVariant>(v: V): V {
+        if (this.readFeatureOn(READ_VARIANT_KIND_FEATURE) || !v.kind) return v;
+        const { kind: _kind, ...rest } = v;
+        return rest as V;
+    },
+
+    /**
+     * A source read again: the entry its comparison belongs to (the research's own entry, an entry compared in the
+     * app, else the entry shown first).
+     */
+    readSourceEntryK(res: ReadResult): number {
+        if (st?.cmp) return st.cmp.entry;
+        const own = this.readSourceEntryIds(res);
+        const k = own.length ? sourceEntryIndex(res.entries, own) : -1;
+        return k >= 0 ? k : st?.srcEntry ?? 0;
+    },
+
+    /**
+     * A source read again, compared with its existing transcript (by the research, or in the app): its entry and
+     * the differences (`at` the transcript's words, `other` the new reading's), neighbours merged; null: not compared.
+     */
+    readSourceChanges(res: ReadResult): { k: number; variants: MergedVariant[]; kinded: boolean } | null {
+        let raw: readonly ReadVariant[];
+        let kindOn = false;
+        if (st?.cmp) raw = st.cmp.variants;
+        else {
+            const failed = this.readSourceFailed(res);
+            if (!res.source || (failed && failed !== 'write')) return null;
+            raw = res.source.agree === 'differ' ? res.source.variants.map(v => this.readVariantShown(v)) : [];
+            kindOn = this.readFeatureOn(READ_VARIANT_KIND_FEATURE);
+        }
+        const k = this.readSourceEntryK(res);
+        const entry = res.entries[k];
+        const variants: MergedVariant[] = entry ? mergeAdjacent(raw, entry.transcript, 'other') : [...raw];
+        return { k, variants, kinded: kindOn && variants.length > 0 && variants.every(v => !!(v.kind || v.kinds?.length)) };
+    },
+
+    /**
+     * An entry as the result shows it (spec 059 P7 §1, §5, §6): whose text, its marks and places (the readers'
+     * differences, the changes against the existing transcript only in reader 1's text of the source's entry,
+     * uncertain and illegible words), whether both readers read it.
+     */
+    readEntryView(res: ReadResult, entry: ReadEntry): EntryView {
+        const t = strings.read;
+        const shown = this.readerShown(res, entry);
+        const blind = this.readBlindOf(res, entry);
+        const text = shown === 2 && blind ? blind.transcript : entry.transcript;
+        const kindOn = this.readFeatureOn(READ_VARIANT_KIND_FEATURE);
+        const dis = mergeAdjacent(entry.variants.filter(textVariant).map(v => this.readVariantShown(v)), entry.transcript, 'at');
+        const data = readerPlaces(entry).data.map(p => {
+            const role = p.v.field?.endsWith('.role');
+            const v = this.readVariantShown(p.v);
+            const side = (x: string): string => role && x ? t.roles[x] ?? x : x;
+            return { v: { ...v, at: side(v.at), other: side(v.other) }, label: dataPlaceLabel(p.v.field ?? '', p.v.at, entry) };
+        });
+        const k = res.entries.indexOf(entry);
+        const src = this.readIsSourceAgain(res) ? this.readSourceChanges(res) : null;
+        const chg = src && src.k === k && !this.readNeighbour(res, k) ? src.variants : null;
+        const marks = resultPlaces({ text, dis, disSide: shown === 2 ? 'other' : 'at', disKinded: kindOn, data, chg: shown === 1 ? chg : null });
+        if (shown === 2 && chg?.length) {
+            // Reader 2's text: the changes are listed (from reader 1's text) but not marked here.
+            const r1 = resultPlaces({ text: entry.transcript, dis: [], disSide: 'at', disKinded: kindOn, data: [], chg });
+            marks.places.push(...r1.places.filter(p => p.kind === 'chg').map(p => ({ ...p, elsewhere: true })));
+        }
+        const both = this.readBothRead(res, entry);
+        return { shown, marks, both, onlyR1: !both && this.readTwoReaders(res), kinded: !!src?.kinded };
     },
 
     /**
@@ -1843,10 +1918,10 @@ export const readDocumentMethods = uiModule({
             ? `<div class="read-entries" role="group" aria-label="${esc(t.entriesLabel)}">${entries.map((e, k) => {
                 const name = entryName(e);
                 const near = own && this.readNeighbour(res, k);
-                const tag = own ? near ? t.entryNeighbour : t.entrySource : '';
+                const tag = own ? near ? t.eNb : t.eSrc : '';
                 const sr = tag ? `${t.entrySr(k + 1, name)}, ${tag}` : t.entrySr(k + 1, name);
                 return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}${own ? near ? ' is-neighbour' : ' is-source' : ''}" data-act="entry" data-entry="${k}"`
-                    + ` aria-pressed="${k === s.entry}" aria-label="${esc(sr)}"><span class="read-entry-n">${k + 1}</span>`
+                    + ` aria-pressed="${k === s.entry}" aria-label="${esc(sr)}"><span class="read-entry-n">${esc(t.entryN(k + 1))}</span>`
                     + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}`
                     + `${tag ? `<span class="read-entry-tag">${esc(tag)}</span>` : ''}</button>`;
             }).join('')}</div>` : '';
@@ -1949,7 +2024,7 @@ export const readDocumentMethods = uiModule({
             const sr = own ? `${t.entrySr(k + 1, name)}, ${near ? t.entryNeighbour : t.entrySource}` : t.entrySr(k + 1, name);
             return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}${one}${near ? ' is-neighbour' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
                 + ` aria-label="${esc(sr)}" aria-pressed="${k === s.entry}">`
-                + `${many ? `<span class="read-frame-n" aria-hidden="true">${k + 1}</span>` : ''}</button>`;
+                + `${many ? `<span class="read-frame-n" aria-hidden="true">${esc(t.entryTag(k + 1))}</span>` : ''}</button>`;
         }).join('');
         const lines = this.readScanVarsOf(res, page).map(v => `<span class="read-scan-var" data-line="${v.j}" style="${regionStyle(v.region)}"></span>`).join('');
         return `${view}${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
@@ -1977,48 +2052,48 @@ export const readDocumentMethods = uiModule({
         return !!own && readSameSheet(own, page);
     },
 
-    /** The text column: a partly legible note, then the sections the document's kind and its data give. */
+    /**
+     * The text column (spec 059 P7 §3): at most one notice (the readers read different kinds; a source not compared:
+     * which entry to compare), the text as read with its marks and who read it, the translation, "To check", the
+     * explanation and the people mentioned.
+     */
     readTextHtml(res: ReadResult, entry: ReadEntry | null): string {
         const s = st!;
         const t = strings.read;
-        const partial = res.doc.legible !== 'yes'
-            ? `<div class="read-partial" role="note"><strong>${esc(t.partialLead)}</strong> ${esc(t.partialText(t.whyText[res.doc.why ?? 'other'] ?? t.whyText.other))}`
-              + ` <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button></div>` : '';
         const isSource = this.readIsSourceAgain(res);
-        // A neighbour at the excerpt's edge (`read.sourceEntry`): said first, it is not what was compared.
-        const near = isSource && this.readNeighbour(res, s.entry)
-            ? `<p class="read-neighbour-note" role="note">${esc(t.neighbourNote)}</p>` : '';
-        const note = isSource ? this.readSourceNoteHtml(res) : '';
-        const kinds = s.phase === 'result' ? this.readKindsNoteHtml(res) : '';
-        if (!entry) return `${kinds}${note}${partial}<p class="read-empty">${esc(t.noEntries)}</p>`;
+        const nc = isSource && s.phase === 'result' ? this.readNotComparedHtml(res) : '';
+        const notice = nc || (s.phase === 'result' ? this.readKindsNoteHtml(res) : '');
+        if (!entry) return `${notice}<p class="read-empty">${esc(t.noEntries)}</p>`;
         const sec = resultSections(res, entry, getCurrentLanguage());
-        const parts: string[] = [kinds, near, note, partial];
-        const blind = this.readBlindOf(res, entry);
-        const second = this.readerShown(res, entry) === 2;
+        const view = this.readEntryView(res, entry);
+        const second = view.shown === 2;
+        const parts: string[] = [notice];
+        // A neighbour at the excerpt's edge (`read.sourceEntry`): said first, it is not what was compared.
+        const near = isSource && this.readNeighbour(res, s.entry);
+        if (near) parts.push(`<p class="read-neighbour-note" role="note"><span class="read-nb-key" aria-hidden="true"></span><span>${esc(t.nbNote(view.onlyR1))}</span></p>`);
+        if (s.cmp && s.cmp.entry === s.entry) parts.push(`<p class="read-nc-done" role="status">${esc(t.ncDone)}</p>`);
         if (sec.transcript) {
-            const parsed = second && blind ? parseBlindTranscript(entry, blind.transcript) : parseTranscript(entry);
             const focusable = entry.region ? ' tabindex="0"' : '';
-            const vwho = this.readVariantWho(res);
+            const focus = s.focus ?? '';
             // The second reader's lines are its own (not reader 1's lines on the scan): no line to show there.
-            const lines = parsed.lines.map((l, j) => second
-                ? `<div class="read-line${l.variant ? ' has-variant' : ''}">${segsHtml(l.segs, vwho, true)}</div>`
-                : `<div class="read-line${l.variant ? ' has-variant' : ''}${j === s.line ? ' is-active' : ''}" data-line="${j}"${focusable}>${segsHtml(l.segs, vwho)}</div>`).join('');
-            const legend: string[] = [];
-            if (parsed.marks.uncertain) legend.push(`<li><span class="read-key read-key--uncertain" aria-hidden="true">a</span>${esc(t.uncertain)}</li>`);
-            // The places are the same whoever's text shows (found and listed as in reader 1's).
-            legend.push(this.readPlacesLegendHtml(entry, transcriptLines(entry.transcript), vwho));
-            if (parsed.marks.illegible) legend.push(`<li><span class="read-key read-key--illegible" aria-hidden="true"></span>${esc(t.illegibleNote)}</li>`);
+            const lines = view.marks.lines.map((l, j) => {
+                const marked = view.marks.places.some(p => p.line === j && !p.elsewhere && (p.kind === 'dis' || p.kind === 'chg'));
+                const cls = `read-line${marked ? ' has-variant' : ''}${!second && j === s.line ? ' is-active' : ''}`;
+                return `<div class="${cls}" data-n="${j + 1}"${second ? '' : ` data-line="${j}"${focusable}`}>${lineMarksHtml(l, j, view.marks.places, focus)}</div>`;
+            }).join('');
             const langs = langNames(res.doc.language);
+            const r2note = second && isSource ? `<p class="read-r2note"><span class="read-r2note-key" aria-hidden="true"></span><span>${esc(t.r2note)}</span></p>` : '';
             parts.push(`
                 <section class="read-section read-section--transcript${second ? ' is-second' : ''}" aria-labelledby="read-s-transcript">
                     <div class="read-section-head">
-                        <h3 class="read-section-title" id="read-s-transcript">${esc(sec.inscription ? t.sInscription : t.sTranscript)}</h3>
+                        <h3 class="read-section-title" id="read-s-transcript">${esc(sec.inscription ? t.sInscription : t.txHead)}</h3>
                         <span class="read-section-sub">${esc(t.transcriptSub(langs))}</span>
-                        <button type="button" class="read-copy" data-act="copy">${esc(t.copy)}</button>
                         ${this.readReaderSwitchHtml(res, entry, second)}
+                        <button type="button" class="read-copy" data-act="copy">${esc(t.copyText)}</button>
                     </div>
+                    ${r2note}
                     <div class="read-transcript" id="read-transcript">${lines}</div>
-                    ${legend.join('') ? `<ul class="read-legend">${legend.join('')}</ul>` : ''}
+                    <p class="read-who">${esc(this.readWhoSentence(res, view))}</p>
                     ${second ? this.readBlindExtraHtml(res) : ''}
                 </section>`);
         }
@@ -2031,6 +2106,7 @@ export const readDocumentMethods = uiModule({
                     <div class="read-translation">${parseBlock(entry.translation).map(l => `<p>${segsHtml(l)}</p>`).join('')}</div>
                 </section>`);
         }
+        parts.push(this.readCheckHtml(res, view, near));
         if (sec.gloss) {
             const flavor = glossFlavor(res.doc.kind);
             const n = entry.glossary.length;
@@ -2068,24 +2144,40 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
-     * Reader 1 / Reader 2 (spec 059 K6.6, `read.blindText`): whose transcription shows, each with who read
-     * (as the places name them); reader 2 off for an entry it did not read. '' without the second reader's text.
+     * Reader 1 / Reader 2 (spec 059 K6.6, P7 §6): whose text shows, without names (they are said once under the
+     * text). Reader 2 off ("Reader 2 · did not read") for an entry it did not read, or when it could not read at all.
+     * '' with one reader.
      */
     readReaderSwitchHtml(res: ReadResult, entry: ReadEntry, second: boolean): string {
-        if (!res.blind?.entries.length || !this.readFeatureOn(READ_BLIND_TEXT_FEATURE) || st?.phase !== 'result') return '';
+        if (st?.phase !== 'result') return '';
+        const blindOn = !!res.blind?.entries.length && this.readFeatureOn(READ_BLIND_TEXT_FEATURE);
+        const who = res.readers.who ?? [];
+        const r2failed = who.length >= 2 && !who[1].ran;
+        if (!blindOn && !r2failed) return '';
         const t = strings.read;
-        const vwho = this.readVariantWho(res);
-        const has = !!this.readBlindOf(res, entry);
+        const has = blindOn && !!this.readBlindOf(res, entry);
         const btn = (n: 1 | 2): string => {
-            const who = vwho ? n === 1 ? vwho.a : vwho.b : '';
-            const label = who ? `${t.readerN(n)} · ${who}` : t.readerN(n);
-            const on = (n === 2) === second;
             const off = n === 2 && !has;
-            return `<button type="button" class="read-reader-btn${on ? ' is-on' : ''}" data-act="reader" data-reader="${n}" aria-pressed="${on}"`
-                + `${off ? ` disabled title="${esc(t.readerNone2)}"` : ` title="${esc(label)}"`}>`
-                + `<span class="read-reader-mk" data-mk="${n}" aria-hidden="true"></span><span class="read-reader-label">${esc(label)}</span></button>`;
+            const on = !off && (n === 2) === second;
+            const label = off ? t.r2no : t.readerN(n);
+            return `<button type="button" class="read-reader-btn${on ? ' is-on' : ''}${off ? ' is-off' : ''}" data-act="reader" data-reader="${n}" aria-pressed="${on}"`
+                + `${off ? ' disabled aria-disabled="true"' : ''}><span class="read-reader-label">${esc(label)}</span></button>`;
         };
         return `<div class="read-reader-seg" role="group" aria-label="${esc(t.readerView)}">${btn(1)}${btn(2)}</div>`;
+    },
+
+    /**
+     * Under the text, once (spec 059 P7 §2): whose text it is and who read it, the agents and models named only
+     * here. Both read: reader 1's text, reader 2 as the check; only reader 1 read this entry; one reader.
+     */
+    readWhoSentence(res: ReadResult, view: EntryView): string {
+        const t = strings.read;
+        const who = res.readers.who ?? [];
+        const choices = this.researchReadAcceptsAny()?.choices;
+        const a = (i: number): string => who[i] ? whoLabel(who[i], choices, false) : '';
+        if (view.both) return t.whoLine(a(0), a(1));
+        if (view.onlyR1) return t.whoOnly(a(0));
+        return t.whoSingle(a(0));
     },
 
     /** Under the second reader's text: the entries only it read, folded ('' none). */
@@ -2097,135 +2189,84 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
-     * The places the readers differ in (spec 059 K6.5), under the transcription: the count and the readers
-     * once, then one row per place with the words around it in its line (every placed one is marked in the
-     * text), those without a place in the text, then those only in the data. '' without any.
+     * "To check" (spec 059 P7 §4): the shown entry's places in groups (a source: changes, disagreements, uncertain,
+     * illegible), substantive first, minor details folded. A neighbour without any: said that nothing is checked.
      */
-    readPlacesLegendHtml(entry: ReadEntry, lines: readonly string[], vwho: VariantWho | null): string {
+    readCheckHtml(res: ReadResult, view: EntryView, near: boolean): string {
         const t = strings.read;
-        const places = readerPlaces(entry);
-        const count = places.text.length + places.data.length;
-        if (!count) return '';
-        const mk = (n: 1 | 2): string => `<span class="read-variant-mk" data-mk="${n}" aria-hidden="true"></span>`;
-        const marks = vwho ? ['1', '2'] as const : null;
-        const title = (a: string, b: string): string => vwho
-            ? `${variantWhoLine(1, vwho.a, titleMarks(a))}\n${variantWhoLine(2, vwho.b, titleMarks(b))}`
-            : t.variantNote(titleMarks(a), titleMarks(b));
-        const head = `<li class="read-legend-differ"><span class="read-key read-key--variant" aria-hidden="true">/</span>`
-            + `<span class="read-legend-differ-text">${esc(t.differAt(count))}${vwho ? `: ${mk(1)}\u00a0${esc(vwho.a)}, ${mk(2)}\u00a0${esc(vwho.b)}` : ''}</span></li>`;
-        const rows: { html: string; cls: string; sub?: string }[] = places.text.map(p => {
-            const ctx = p.span && lines[p.line] !== undefined ? placeContext(lines[p.line], p.span[0], p.span[1]) : null;
-            return { cls: 'read-legend-place', html: placeRowHtml(ctx, placeVariantHtml(p.v.at, p.v.other, marks, '/', title(p.v.at, p.v.other))) };
-        });
-        for (const p of places.data) {
-            const role = p.v.field?.endsWith('.role');
-            const a = role && p.v.at ? t.roles[p.v.at] ?? p.v.at : p.v.at;
-            const b = role && p.v.other ? t.roles[p.v.other] ?? p.v.other : p.v.other;
-            rows.push({
-                cls: 'read-legend-place read-legend-place--data', sub: t.placesData,
-                html: placeRowHtml(null, placeVariantHtml(a, b, marks, '/', title(a, b)), dataPlaceLabel(p.v.field ?? '', p.v.at, entry)),
-            });
-        }
-        return head + placeRowsHtml(rows);
+        const groups = checkHtml(view.marks.places, { isSource: this.readIsSourceAgain(res), shown: view.shown, kinded: view.kinded, focus: st?.focus ?? '' });
+        if (!groups && !near) return '';
+        return `
+                <section class="read-section read-check" aria-labelledby="read-s-check">
+                    <div class="read-section-head"><h3 class="read-section-title" id="read-s-check">${esc(t.check)}</h3></div>
+                    ${groups || `<p class="read-check-none">${esc(t.nbNothing)}</p>`}
+                </section>`;
     },
 
     /**
-     * A source read again: one sentence on what became of it (the transcript stays, the new reading beside
-     * it, where they differ a task of the research decides), then the places it differs from the transcript
-     * so far, each with the words around it, then how the two readers compare (spec 059 K6.5). With
-     * `read.sourceEntry`: a failed comparison said in its place (K6.10), a neighbour's comparison not listed (K6.4).
+     * A source read again that the research did not compare (spec 059 P7 §6): which entry is the source's, its
+     * chips, and "Compare with the existing transcript" (in the app, nothing saved). '' when compared, or with no
+     * existing transcript to compare with.
      */
-    readSourceNoteHtml(res: ReadResult): string {
-        const t = strings.read;
-        const failed = this.readSourceFailed(res);
+    readNotComparedHtml(res: ReadResult): string {
+        if (st?.cmp || this.readSourceChanges(res) || !res.entries.length) return '';
         const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
-        const confirmed = src ? !!this.sourceConfirmState(src).conf : false;
-        const entry = res.entries[st?.entry ?? 0];
-        // Two readers ran: how they compare (their places are marked in the transcript and listed under it);
-        // readers that differ on the kind of entry (`read.kinds`) are never said to agree.
-        const n = entry ? placeCount(entry) : 0;
-        const kinds = this.readKindsText(res);
-        const readers = (res.readers.ran ?? 0) >= 2 ? `
-                    <div class="read-source-part read-source-readers">
-                        <h4 class="read-source-head">${esc(t.readersTitle)}</h4>
-                        ${n || !kinds ? `<p class="read-source-second">${esc(n ? t.readersDiffer(n) : t.readersAgree)}</p>` : ''}
-                        ${kinds ? `<p class="read-kinds-note" role="note">${esc(kinds)}</p>` : ''}
-                    </div>` : '';
-        const cmp = res.source;
-        // Not compared (`read.sourceEntry`): said in place of the comparison, never as if none were needed.
-        if (!cmp || (failed && failed !== 'write')) {
-            const why = failed === 'no-entry' ? t.srcFailedNoEntry : failed === 'no-source' ? t.srcFailedNoSource : t.srcFailed;
-            const said = [why, t.srcUnchanged, confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
-            return `
-                <div class="read-source-note is-failed" role="note" data-agree="failed" data-failed="${esc(failed ?? 'other')}">
-                    <p class="read-source-note-text">${esc(said)}</p>${readers}
-                </div>`;
-        }
-        const differ = cmp.agree === 'differ';
-        const choices = this.researchReadAcceptsAny()?.choices;
-        const who = (res.readers.who ?? []).filter(w => w.ran);
-        // Compared but not written to the research: nothing says it was saved there.
-        const said = [failed === 'write' ? t.srcNotWritten : t.srcStays(differ, cmp.task), confirmed ? t.keepConfirm : ''].filter(Boolean).join(' ');
-        const ownIds = this.readSourceEntryIds(res);
-        let vs = '';
-        if (differ && cmp.variants.length && this.readNeighbour(res, st?.entry ?? 0)) {
-            // A neighbour shown: the comparison is the source entry's, so its places are not listed beside the neighbour's text.
-            vs = `
-                    <div class="read-source-part read-source-vs is-elsewhere">
-                        <h4 class="read-source-head">${esc(t.srcVsTitle)}<span class="read-source-count"> · ${esc(t.placesN(cmp.variants.length))}</span></h4>
-                        <p class="read-source-sides">${esc(t.srcVsSource)}</p>
-                        <button type="button" class="link-button read-to-source" data-act="source-entry">${esc(t.toSourceEntry)}</button>
-                    </div>`;
-        } else if (differ && cmp.variants.length) {
-            // The words around each place: in the transcript so far, else (nothing there) around the new version in the new reading.
-            const old = src?.transcript ?? '';
-            const taken: [number, number][] = [];
-            const chosen = res.entries[st?.entry ?? 0];
-            // The source's own entries first (`read.sourceEntry`): the comparison is theirs.
-            const first = ownIds.length ? res.entries.filter(e => ownIds.includes(e.id)) : [chosen];
-            const readTexts = [...first, ...res.entries.filter(e => !first.includes(e))].filter(Boolean).map(e => e!.transcript);
-            const rows = cmp.variants.map(v => {
-                let ctx: PlaceContext | null = null;
-                const span = v.at && old ? locateSpan(old, v.at, taken) : null;
-                if (span) {
-                    taken.push(span);
-                    ctx = placeContext(old, span[0], span[1]);
-                } else if (!v.at && v.other) {
-                    for (const text of readTexts) {
-                        const sp = locateSpan(text, v.other);
-                        if (sp) { ctx = placeContext(text, sp[0], sp[1]); break; }
-                    }
-                }
-                const title = `${t.mkOld}: “${titleMarks(v.at)}”\n${t.mkNew}: “${titleMarks(v.other)}”`;
-                return { cls: 'read-legend-place', html: placeRowHtml(ctx, placeVariantHtml(v.at, v.other, [t.mkOld, t.mkNew], '→', title)) };
-            });
-            vs = `
-                    <div class="read-source-part read-source-vs">
-                        <h4 class="read-source-head">${esc(t.srcVsTitle)}<span class="read-source-count"> · ${esc(t.placesN(rows.length))}</span></h4>
-                        <p class="read-source-sides">${esc(t.srcSides(who.length ? whoLabel(who[0], choices, false) : ''))}</p>
-                        <ul class="read-legend read-source-variants">${placeRowsHtml(rows)}</ul>
-                    </div>`;
-        }
+        if (!src?.transcript?.trim()) return '';
+        const t = strings.read;
+        const chips = res.entries.map((e, k) => {
+            const name = entryName(e);
+            return `<button type="button" class="read-nc-chip${k === st!.entry ? ' is-selected' : ''}" data-act="entry" data-entry="${k}" aria-pressed="${k === st!.entry}">`
+                + `<span class="read-entry-n">${esc(t.entryN(k + 1))}</span>${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}</button>`;
+        }).join('');
         return `
-                <div class="read-source-note" role="note" data-agree="${cmp.agree}"${failed ? ` data-failed="${esc(failed)}"` : ''}>
-                    <p class="read-source-note-text">${esc(said)}</p>${vs}${readers}
+                <div class="read-nc" role="group" aria-labelledby="read-nc-q">
+                    <p class="read-nc-q" id="read-nc-q">${esc(t.ncQ)}</p>
+                    <p class="read-nc-t">${esc(t.ncT)}</p>
+                    <div class="read-nc-row">${res.entries.length > 1 ? chips : ''}<button type="button" class="primary read-nc-btn" data-act="nc-compare">${esc(t.ncBtn)}</button></div>
                 </div>`;
     },
 
+    /** Compare the shown entry with the source's existing transcript in the app (spec 059 P7 §6): the dialog's state only. */
+    readCompareInApp(): void {
+        const s = st;
+        const res = s?.result;
+        const entry = res?.entries[s!.entry];
+        const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
+        if (!s || !res || !entry || !src?.transcript) return;
+        s.cmp = { entry: s.entry, variants: compareWithTranscript(src.transcript, entry.transcript) };
+        s.focus = '';
+        this.readRedrawResult(false);
+    },
+
+    /**
+     * The result's footer (spec 059 P7 §3): one main action. A source compared: what became of the transcript, Close ·
+     * Open task (terminal); not compared: Read again (AI) · Close; a document: Read another · Close · Propose to the tree.
+     */
     readResultFootHtml(): string {
         const t = strings.read;
         const res = st?.result;
+        const note = (lines: readonly string[]): string =>
+            `<span class="batch-foot-note read-kept">${lines.filter(Boolean).map(l => `<span class="read-foot-line">${esc(l)}</span>`).join('')}</span>`;
         if (res && this.readIsSourceAgain(res)) {
-            // A source read again: nothing to propose nor read anew here; a difference opens its task in the research.
-            const task = res.source?.agree === 'differ' && res.source.task && this.researchLinkAvailable('task') ? res.source.task : '';
-            return `<span class="batch-foot-note read-kept">${esc(t.kept)}</span>
+            const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
+            const confirmed = src ? !!this.sourceConfirmState(src).conf ? t.keepConfirm : '' : '';
+            const failed = this.readSourceFailed(res);
+            if (!this.readSourceChanges(res) || st?.cmp) {
+                const again = st?.readId ? `<button type="button" class="secondary" data-act="again">${researchBridgeAgentLabel(t.readAgain)}</button>` : '';
+                return `${note([t.fNc1, confirmed])}${again}<button type="button" class="primary" data-act="close">${esc(t.close)}</button>`;
+            }
+            // A difference opens its task in the research (terminal); nothing is proposed nor read anew here.
+            const differ = res.source?.agree === 'differ';
+            const task = differ && res.source!.task && this.researchLinkAvailable('task') ? res.source!.task : '';
+            const lines = failed === 'write' ? [t.srcNotWritten] : [t.fSrc1, differ ? t.fSrc2 : t.fSrcSame];
+            return `${note([...lines, confirmed])}
                 <button type="button" class="${task ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
-                ${task ? `<button type="button" class="primary" data-act="open-task" data-task="${esc(task)}">${researchActionLabel(t.openTask, researchLinkMark('task'))}</button>` : ''}`;
+                ${task ? `<button type="button" class="primary" data-act="open-task" data-task="${esc(task)}">${researchActionLabel(t.openTaskN(task), researchLinkMark('task'))}</button>` : ''}`;
         }
         const propose = canPropose(res?.entries[st?.entry ?? 0]);
         const another = this.readDocumentReady()
             ? `<button type="button" class="secondary" data-act="another">${esc(t.another)}</button>` : '';
-        return `<span class="batch-foot-note read-kept">${esc(t.kept)}</span>${another}
+        return `${note([propose ? t.fDoc1 : '', t.fHist])}${another}
                 <button type="button" class="${propose ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
                 ${propose ? `<button type="button" class="primary" data-act="propose">${esc(t.propose)}</button>` : ''}`;
     },
@@ -2237,6 +2278,7 @@ export const readDocumentMethods = uiModule({
         if (!s || !res || !res.entries[i] || i === s.entry || s.phase !== 'result') return;
         s.entry = i;
         s.line = -1;
+        s.focus = '';
         s.page = res.entries[i].page;
         this.readRedrawResult(true);
     },
@@ -2260,6 +2302,10 @@ export const readDocumentMethods = uiModule({
         const foot = overlay.querySelector<HTMLElement>('.read-footer');
         const keep = text?.scrollTop ?? 0;
         overlay.querySelector('#read-result')?.setAttribute('data-entry', String(s.entry));
+        // The header's sentence follows the entry and the reader shown.
+        const sub = overlay.querySelector<HTMLElement>('.read-result-sub');
+        if (sub) sub.innerHTML = this.readResultSubtitle(s.result);
+        this.readClosePop(false);
         if (scan) scan.innerHTML = this.readScanHtml(s.result, link ? this.readBridgeBase(link.researchId) : '');
         if (text) {
             text.innerHTML = this.readTextHtml(s.result, s.result.entries[s.entry] ?? null);
@@ -2289,9 +2335,13 @@ export const readDocumentMethods = uiModule({
             line.addEventListener('mouseleave', () => this.showReadScanLine(st?.line ?? -1));
             line.addEventListener('focus', () => this.showReadScanLine(j));
             line.addEventListener('blur', () => this.showReadScanLine(st?.line ?? -1));
-            line.addEventListener('click', () => this.readSelectLine(j === st?.line ? -1 : j, false));
+            line.addEventListener('click', (e) => {
+                // A mark picks its line (never unpicks it); its bubble opens from the text's own listener.
+                if ((e.target as Element | null)?.closest('[data-place]')) { this.readSelectLine(j, false); return; }
+                this.readSelectLine(j === st?.line ? -1 : j, false);
+            });
             line.addEventListener('keydown', (e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
+                if (e.target !== line || (e.key !== 'Enter' && e.key !== ' ')) return;
                 e.preventDefault();
                 this.readSelectLine(j === st?.line ? -1 : j, false);
             });
@@ -2316,9 +2366,143 @@ export const readDocumentMethods = uiModule({
             scanObserver = new ResizeObserver(() => this.layoutReadScan());
             scanObserver.observe(view);
         }
+        this.wireReadMarks(overlay);
         this.layoutReadScan();
         this.showReadScanLine(s.line);
         this.readScrollScanToEntry();
+    },
+
+    /**
+     * The marks of the text (spec 059 P7 §5): a click or Enter opens the place's bubble and lights its row in "To
+     * check"; with a mouse, hovering shows it too. Esc closes the bubble (focus back on its mark), so does a click
+     * elsewhere. Wired once on the text column (its content is redrawn).
+     */
+    wireReadMarks(overlay: HTMLElement): void {
+        const text = overlay.querySelector<HTMLElement>('#read-text');
+        if (!text || text.dataset.wiredMarks) return;
+        text.dataset.wiredMarks = '1';
+        const markOf = (e: Event): HTMLElement | null => (e.target as Element | null)?.closest<HTMLElement>('#read-transcript [data-place]') ?? null;
+        const hover = (): boolean => window.matchMedia('(hover: hover)').matches;
+        text.addEventListener('click', (e) => {
+            const mk = markOf(e);
+            if (mk) { this.readFocusPlace(mk.dataset.place ?? '', 'text', mk); return; }
+            if (!(e.target as Element | null)?.closest('#read-pop')) this.readClosePop(false);
+        });
+        text.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('read-pop')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.readClosePop(true);
+                return;
+            }
+            const mk = markOf(e);
+            if (mk && e.target === mk && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                this.readFocusPlace(mk.dataset.place ?? '', 'text', mk);
+            }
+        });
+        text.addEventListener('mouseover', (e) => {
+            if (!hover()) return;
+            const pop = document.getElementById('read-pop');
+            if ((e.target as Element | null)?.closest('#read-pop')) { if (popHideTimer) clearTimeout(popHideTimer); return; }
+            const mk = markOf(e);
+            if (!mk || (pop && !pop.dataset.hover)) return;
+            if (popHideTimer) clearTimeout(popHideTimer);
+            if (popFrom !== mk) this.readOpenPop(mk, true);
+        });
+        text.addEventListener('mouseout', (e) => {
+            const pop = document.getElementById('read-pop');
+            if (!pop?.dataset.hover) return;
+            const to = (e.relatedTarget as Element | null);
+            if (to && (to.closest('#read-pop') || to.closest('#read-transcript [data-place]') === popFrom)) return;
+            if (popHideTimer) clearTimeout(popHideTimer);
+            popHideTimer = setTimeout(() => { if (document.getElementById('read-pop')?.dataset.hover) this.readClosePop(false); }, 150);
+        });
+        // A click outside the text column (the scan, the header) closes a bubble too.
+        if (!overlay.dataset.wiredPop) {
+            overlay.dataset.wiredPop = '1';
+            overlay.addEventListener('click', (e) => {
+                const el = e.target as Element | null;
+                if (!el?.closest('#read-text')) this.readClosePop(false);
+            });
+        }
+    },
+
+    /**
+     * A place chosen (spec 059 P7 §1, §4): its mark in the text and its row in "To check" lit, its line on the scan.
+     * From the list: the mark scrolled into view (a change of reader 1's text while reader 2's shows: reader 1's text
+     * first); from the text: its bubble opens.
+     */
+    readFocusPlace(id: string, from: 'list' | 'text', mark?: HTMLElement): void {
+        const s = st;
+        const res = s?.result;
+        const entry = res?.entries[s?.entry ?? 0];
+        if (!s || !res || !entry || !id || s.phase !== 'result') return;
+        const view = this.readEntryView(res, entry);
+        const place = view.marks.places.find(p => p.id === id);
+        if (!place) return;
+        if (place.elsewhere) {
+            s.reader = 1;
+            s.focus = id;
+            s.line = -1;
+            this.readRedrawResult(false);
+            this.readFocusPlace(id, 'list');
+            return;
+        }
+        s.focus = id;
+        const root = document.getElementById(DIALOG_ID);
+        root?.querySelectorAll<HTMLElement>('#read-transcript [data-place], .read-check-row[data-place]').forEach(el => el.classList.toggle('is-focus', el.dataset.place === id));
+        const row = root?.querySelector<HTMLElement>(`.read-check-row[data-place="${CSS.escape(id)}"]`);
+        const li = row?.closest('li');
+        if (li?.hidden) li.closest('ul')?.querySelector<HTMLElement>('[data-act="places-more"]')?.click();
+        row?.closest('details')?.setAttribute('open', '');
+        if (place.line >= 0 && view.shown === 1) this.readSelectLine(place.line, false);
+        const mk = mark ?? root?.querySelector<HTMLElement>(`#read-transcript [data-place="${CSS.escape(id)}"]`) ?? null;
+        if (from === 'list') {
+            this.readClosePop(false);
+            mk?.scrollIntoView({ block: 'nearest' });
+        } else if (mk) this.readOpenPop(mk, false);
+    },
+
+    /** The bubble of a mark (spec 059 P7 §5): every place the mark is part of (a change around a disagreement). */
+    readOpenPop(mk: HTMLElement, hover: boolean): void {
+        const s = st;
+        const res = s?.result;
+        const entry = res?.entries[s?.entry ?? 0];
+        const host = document.getElementById('read-text');
+        if (!s || !res || !entry || !host) return;
+        const view = this.readEntryView(res, entry);
+        const ids = new Set<string>([mk, ...mk.querySelectorAll<HTMLElement>('[data-place]')].map(el => el.dataset.place ?? ''));
+        for (let up = mk.parentElement?.closest<HTMLElement>('[data-place]'); up && host.contains(up); up = up.parentElement?.closest<HTMLElement>('[data-place]')) ids.add(up.dataset.place ?? '');
+        const places: ShownPlace[] = view.marks.places.filter(p => ids.has(p.id));
+        const html = placePopHtml(places, view.shown, false);
+        if (!html) return;
+        this.readClosePop(false);
+        const pop = document.createElement('div');
+        pop.id = 'read-pop';
+        pop.className = 'read-pop';
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('aria-label', (mk.textContent ?? '').replace(/\s+/g, ' ').trim());
+        if (hover) pop.dataset.hover = '1';
+        pop.innerHTML = html + (hover ? '' : `<button type="button" class="read-pop-x" data-act="pop-close" aria-label="${esc(strings.read.popClose)}">&times;</button>`);
+        host.appendChild(pop);
+        popFrom = mk;
+        mk.setAttribute('aria-expanded', 'true');
+        const hr = host.getBoundingClientRect();
+        const mr = mk.getBoundingClientRect();
+        const left = Math.max(8, Math.min(mr.left - hr.left + host.scrollLeft - 10, host.clientWidth - pop.offsetWidth - 8));
+        pop.style.left = `${left}px`;
+        pop.style.top = `${mr.bottom - hr.top + host.scrollTop + 8}px`;
+    },
+
+    /** Close the bubble; `back`: focus returns to its mark. */
+    readClosePop(back: boolean): void {
+        if (popHideTimer) { clearTimeout(popHideTimer); popHideTimer = null; }
+        document.getElementById('read-pop')?.remove();
+        const from = popFrom;
+        popFrom = null;
+        from?.removeAttribute('aria-expanded');
+        if (back && from?.isConnected) from.focus();
     },
 
     /** A transcription line chosen (on the text or the scan): marked in both; -1 clears it. */
@@ -2803,6 +2987,9 @@ export const readDocumentMethods = uiModule({
                 el.closest('li')?.remove();
                 break;
             }
+            case 'place': this.readFocusPlace(el.dataset.place ?? '', 'list'); break;
+            case 'nc-compare': this.readCompareInApp(); break;
+            case 'pop-close': this.readClosePop(true); break;
             case 'propose': this.readDocumentPropose(); break;
             default: this.readProposeAct(el); break;
         }
