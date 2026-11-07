@@ -13,6 +13,10 @@ import { cleanText } from './research-link.js';
 
 /** `/status.features`: the app chooses who creates the task after a source is read again. */
 export const READ_SOURCE_TASK_FEATURE = 'read.sourceTask';
+/** `/status.features`: the bridge takes the answer to the agent's proposal (accept, keep). */
+export const READ_PROPOSAL_FEATURE = 'sources.proposal';
+/** `/status.features`: the bridge undoes an answer to the proposal (without it no Undo is offered). */
+export const READ_PROPOSAL_UNDO_FEATURE = 'sources.proposal.undo';
 
 /**
  * `POST sources/read`: the app chooses who creates the task only with a research that says the feature; an older
@@ -175,7 +179,8 @@ export interface ReadProposalPlace { at: string; old: string; new: string; kind:
 export interface ReadSourceProposal {
     /** The whole proposed transcript. */
     text: string;
-    by: { program: string; model: string };
+    /** Who proposed it, as the research says it ("agent · model · effort", readers joined " + "). */
+    by: string;
     task: string;
     /** When it was proposed (ISO). */
     at: string;
@@ -204,7 +209,10 @@ export function sanitizeReadSourceProposal(v: unknown): ReadSourceProposal | nul
     const text = p ? blockText(p.text) : '';
     const task = p ? readTaskId(p.task) : '';
     if (!p || !text || !task) return null;
-    const by = asRecord(p.by);
+    // The research sends a string; an object {program, model} (the design's shape) is joined the same way.
+    const byRec = asRecord(p.by);
+    const by = typeof p.by === 'string' ? cleanText(p.by, 160)
+        : byRec ? [cleanText(byRec.program, 60), cleanText(byRec.model, 80)].filter(Boolean).join(' · ') : '';
     const places: ReadProposalPlace[] = [];
     for (const item of Array.isArray(p.places) ? p.places.slice(0, 200) : []) {
         const x = asRecord(item);
@@ -217,7 +225,7 @@ export function sanitizeReadSourceProposal(v: unknown): ReadSourceProposal | nul
     }
     return {
         text,
-        by: { program: by ? cleanText(by.program, 60) : '', model: by ? cleanText(by.model, 80) : '' },
+        by,
         task,
         at: isoTime(p.at),
         ...(Array.isArray(p.places) ? { places } : {}),
@@ -259,6 +267,13 @@ export function sanitizeReadSourceState(v: unknown): ReadSourceState | null {
         ...flag('taskOpen'), ...flag('taskQueued'), ...flag('minorOnly'), ...flag('unsureOnly'),
         ...(proposal ? { proposal } : {}),
     };
+}
+
+/** `/status.readAgain` as a plain record (kept in the bridge's status), read only with `read.sourceTask` in `features`. Untrusted. */
+export function readAgainSaid(v: unknown, features: readonly string[] | null | undefined): Record<string, ReadSourceState> | undefined {
+    if (!features?.includes(READ_SOURCE_TASK_FEATURE)) return undefined;
+    const m = sanitizeReadAgain(v);
+    return asRecord(v) ? Object.fromEntries(m) : undefined;
 }
 
 /** `/status.readAgain`: the sources' states by source id (S…); empty when absent. Untrusted. */

@@ -285,7 +285,18 @@ function readerMark(n: 1 | 2): string {
     return `<span class="read-rd" aria-hidden="true">${n}</span><span class="read-sr"> (${esc(strings.read.readerN(n))})</span>`;
 }
 
-function kindText(cls: VariantClass | null): string {
+/**
+ * A change drawn as in "To check": the old words struck through, an arrow, the new words in the change's mark;
+ * `before`/`after`: the line's words around it (the proposal's rows).
+ */
+export function changeWhatHtml(at: string, other: string, mk = 'read-mk-chg', before = '', after = ''): string {
+    const t = strings.read;
+    return `${before ? `<span class="read-check-ctx">${esc(before)}</span> ` : ''}<s class="read-check-old">${sideHtml(at, t.oldNone)}</s>`
+        + `<span class="read-check-arrow" aria-hidden="true"> → </span><span class="read-mk ${mk}">${sideHtml(other, t.newNone)}</span>`
+        + `${after ? ` <span class="read-check-ctx">${esc(after)}</span>` : ''}`;
+}
+
+export function kindText(cls: VariantClass | null): string {
     const vk = strings.read.vk;
     return cls?.kinds.length ? [...new Set(cls.kinds.map(k => vk[k] ?? k))].join(', ') : '';
 }
@@ -304,8 +315,7 @@ function checkRowHtml(p: ShownPlace, shown: 1 | 2, focus: string, more: boolean)
         kind = kindText(p.cls);
     } else if (p.kind === 'chg' && p.v) {
         const mk = p.cat === 'judged' ? 'read-mk-jud' : p.cat === 'minor' ? 'read-mk-min' : 'read-mk-chg';
-        what = `<s class="read-check-old">${sideHtml(p.v.at, t.oldNone)}</s><span class="read-check-arrow" aria-hidden="true"> → </span>`
-            + `<span class="read-mk ${mk}">${sideHtml(p.v.other, t.newNone)}</span>`;
+        what = changeWhatHtml(p.v.at, p.v.other, mk);
         kind = kindText(p.cls);
     } else if (p.kind === 'dis' && p.v) {
         const side = (n: 1 | 2, text: string): string =>

@@ -19,7 +19,9 @@ import {
     researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, researchLinkMark, researchUrlMark,
     type ResearchHypothesesDecide,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask } from '../history-bridge.js';
+import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
+import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -50,6 +52,14 @@ let storiesListening = false;
  * the value asked until the status says it (`want`), a write on its way (`busy`).
  */
 const hypos: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: ResearchHypothesesDecide; busy?: boolean } = { rid: '' };
+
+/**
+ * "Task from a new reading" (spec 059 §4): the same parts as `hypos` — the note under the choices (the write on
+ * its way, the research's confirmation, a refusal), the value asked until the status says it (`want`), the group open.
+ */
+const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSetting; busy?: boolean; open?: boolean } = { rid: '' };
+/** How long the group stays highlighted when a link opens the dialog at it. */
+const READ_TASK_FLASH_MS = 1500;
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -287,6 +297,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <div class="research-images-host" id="research-images-host"></div>
                 <div class="research-stories-host" id="research-stories-host"></div>
                 ${archive || agentAway ? '' : `<div class="research-hypos-host" id="research-hypos-host"></div>`}
+                ${archive || agentAway ? '' : `<div class="research-readtask-host" id="research-readtask-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>`}
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
@@ -421,6 +432,9 @@ export const researchTreeSettingsMethods = uiModule({
         hypos.rid = link.id;
         delete hypos.note; delete hypos.want; delete hypos.busy;
         this.renderResearchHypothesesRow();
+        readTask.rid = link.id;
+        delete readTask.note; delete readTask.want; delete readTask.busy; delete readTask.open;
+        this.renderResearchReadTaskRow();
         // Work outside the directions (§9.5): the same condition as the transcripts, with the research's branches.
         this.startOffLineSettings(link.id);
         if (!storiesListening) {
@@ -429,6 +443,7 @@ export const researchTreeSettingsMethods = uiModule({
                 if (rid !== stories.rid) return;
                 this.renderResearchStoriesRow();
                 this.renderResearchHypothesesRow();
+                this.renderResearchReadTaskRow();
                 this.renderOffLineSettings();
             });
         }
@@ -598,6 +613,92 @@ export const researchTreeSettingsMethods = uiModule({
             hypos.note = { text: res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed) };
         }
         this.renderResearchHypothesesRow();
+    },
+
+    /**
+     * Spec 059 §4: "Reading documents" — only with `read.sourceTask` (not in an archive nor a research waiting for
+     * its agent: no host there); the choice follows the research's status (no value said: `ask`); without the
+     * bridge the choices rest, dimmed, with its sentence.
+     */
+    renderResearchReadTaskRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-readtask-host`);
+        if (!host) return;
+        const rid = readTask.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        if (!features.includes(READ_SOURCE_TASK_FEATURE)) {
+            host.innerHTML = '';
+            return;
+        }
+        const was = host.querySelector<HTMLDetailsElement>('#research-readtask-group');
+        if (was) readTask.open = was.open;
+        const up = this.researchBridgeUp(rid);
+        const said: ReadTaskSetting = last?.accepts?.read?.sourceTask ?? 'ask';
+        if (readTask.want !== undefined && said === readTask.want) delete readTask.want;
+        const value = readTask.want ?? said;
+        const note: ReadTaskSettingNote | undefined = readTask.busy ? { kind: 'busy' }
+            : !up ? { kind: 'text', text: strings.history.storiesBridgeDown } : readTask.note;
+        const focused = (document.activeElement as HTMLInputElement | null)?.name === 'research-read-task'
+            ? (document.activeElement as HTMLInputElement).value : '';
+        host.innerHTML = readTaskSettingHtml({ value, open: !!readTask.open, up, note });
+        host.querySelector<HTMLDetailsElement>('#research-readtask-group')?.addEventListener('toggle', (e) => {
+            readTask.open = (e.currentTarget as HTMLDetailsElement).open;
+        });
+        host.querySelectorAll<HTMLInputElement>('input[name="research-read-task"]').forEach(input => {
+            input.addEventListener('change', () => { if (input.checked) void this.setResearchReadTask(input.value as ReadTaskSetting); });
+            if (focused && input.value === focused) input.focus({ preventScroll: true });
+        });
+    },
+
+    /** Spec 059 §4: `POST /sourceTask {sourceTask}` — written at once; the choice stays as the research says. */
+    async setResearchReadTask(value: ReadTaskSetting): Promise<void> {
+        const rid = readTask.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || readTask.busy) { this.renderResearchReadTaskRow(); return; }
+        readTask.busy = true;
+        readTask.want = value;
+        delete readTask.note;
+        this.renderResearchReadTaskRow();
+        const res = await postBridgeReadTask(base, value, ctx!.features, { tree: rid });
+        if (readTask.rid !== rid) return;
+        delete readTask.busy;
+        if (res.ok) {
+            readTask.want = res.value ?? value;
+            readTask.note = { kind: 'ok' };
+        } else {
+            delete readTask.want;
+            readTask.note = {
+                kind: 'text',
+                text: res.code === 'busy' ? strings.history.errBusy
+                    : res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed),
+            };
+        }
+        this.renderResearchReadTaskRow();
+    },
+
+    /**
+     * "Change in the research settings ›" (the reading's footer, spec 059 §1 C/D): the dialog opens with
+     * "Reading documents" open, scrolled into view in the dialog (its own scroll, not the page's) and
+     * highlighted for a moment.
+     */
+    openReadTaskSettings(): void {
+        this.closeActionsMenu();
+        const id = TreeManager.getActiveTreeId();
+        if (!id) return;
+        void this.showResearchTreeSettings(id).then(() => {
+            const group = document.querySelector<HTMLDetailsElement>(`#${SETTINGS_ID} #research-readtask-group`);
+            if (!group) return;
+            group.open = true;
+            readTask.open = true;
+            let box: HTMLElement | null = group.parentElement;
+            while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
+            if (box) box.scrollTop += group.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
+            group.classList.add('is-flash');
+            window.setTimeout(() => group.classList.remove('is-flash'), READ_TASK_FLASH_MS);
+            group.querySelector<HTMLInputElement>('input[name="research-read-task"]:checked')?.focus({ preventScroll: true });
+        });
     },
 
     /** Save the choice at once (it goes with the next send). */

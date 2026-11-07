@@ -435,8 +435,11 @@ export const sourcesMethods = uiModule({
         if (src.transcript) {
             // Who read the entry, as the research says (nothing when it does not), and its confirmation (spec 022).
             const readBy = this.sourceReadByHtml(src);
+            // The agent's proposal accepted here (spec 059 §3): its text until the tree has it.
+            const shown = this.readSourceTranscriptShown(src);
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerTranscript)}</h3>
-                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy}${translation}${reading}</section>`);
+                <p class="viewer-transcript">${esc(shown?.text ?? src.transcript)}</p>${shown?.note
+                    ? `<p class="viewer-transcript-changed" id="source-viewer-transcript-changed">${esc(shown.note)}</p>` : ''}${readBy}${translation}${reading}</section>`);
         } else if (translation || reading) {
             chunks.push(translation ? `<section>${translation}${reading}</section>` : reading);
         }

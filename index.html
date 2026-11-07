@@ -16235,6 +16235,98 @@
         }
         /* A phone: where reading again works, in place of the action (spec 059 §5). */
         .viewer-read-again-phone { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-faint); overflow-wrap: anywhere; }
+        /* The source's state after a newer reading (spec 059 §2): one quiet row with its shape; only "not checked" stands out. */
+        .viewer-read-state {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 8px; align-items: start;
+            margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light);
+        }
+        .viewer-read-state.is-open {
+            padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+            background: color-mix(in srgb, var(--surface-2) 88%, var(--text) 12%);
+        }
+        .viewer-read-state.is-open .viewer-read-state-text { color: var(--text); font-weight: 600; }
+        .viewer-read-state-icon {
+            display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box;
+            margin-top: 1px; font-size: 11px; font-weight: 700; line-height: 1;
+        }
+        .viewer-read-state-icon.is-open { border: 1.5px dashed var(--text-light); border-radius: 50%; color: var(--text-light); }
+        .viewer-read-state-icon.is-save { border: 1.5px solid var(--text-light); border-radius: 4px; color: var(--text-light); }
+        .viewer-read-state-icon.is-task { border: 1.5px solid var(--primary); border-radius: 50%; color: var(--primary); }
+        .viewer-read-state-icon.is-done { border-radius: 50%; background: var(--primary); color: var(--on-primary); }
+        .viewer-read-state-icon.is-none { color: var(--text-faint); font-size: 14px; }
+        .viewer-read-state-body { min-width: 0; }
+        .viewer-read-state-text { margin: 0; overflow-wrap: anywhere; }
+        .viewer-read-state-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; margin: 2px 0 0; }
+        .viewer-read-state-dot { color: var(--text-faint); }
+        .modal .viewer-read-state-links .link-button, .modal .viewer-read-state-choice { padding: 2px 0; font-size: 13px; }
+        .modal .viewer-read-state-toggle.is-decide { font-weight: 600; }
+        .viewer-read-state-caret { font-size: 11px; text-decoration: none; display: inline-block; }
+        .viewer-read-state-phone { margin: 2px 0 0; font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .viewer-read-state-opts { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+        .viewer-read-state-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 18px; }
+        .modal .viewer-read-state-choice { display: inline-flex; align-items: center; gap: 6px; }
+        .modal .viewer-read-state-choice:disabled { opacity: 0.45; cursor: default; }
+        .modal .viewer-read-state-choice.is-busy:disabled { opacity: 1; }
+        .viewer-read-state-note { margin: 4px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .viewer-read-state-fail { margin: 4px 0 0; font-size: 12.5px; color: var(--danger); overflow-wrap: anywhere; }
+        /* The agent's proposal for a confirmed transcript (spec 059 §3): framed in the change's colour. */
+        .viewer-proposal {
+            margin: 10px 0 0; padding: 10px 12px; border: 1.5px solid var(--hist-place); border-radius: 12px; background: var(--surface-2);
+            font-size: 13px; line-height: 1.45; color: var(--text);
+        }
+        .viewer-proposal-title { margin: 0; font-size: 14px; font-weight: 600; }
+        .viewer-proposal-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; margin: 2px 0 6px; color: var(--text-light); font-size: 12.5px; overflow-wrap: anywhere; }
+        .modal .viewer-proposal-meta .link-button, .modal .viewer-proposal-links .link-button, .modal .viewer-proposal-undo { padding: 2px 0; font-size: 12.5px; }
+        .viewer-proposal-places { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .modal .viewer-proposal .read-check-row { cursor: default; padding: 3px 0 !important; }
+        @media (hover: hover) { .modal .viewer-proposal .read-check-row:hover { background: none !important; } }
+        .read-check-ctx { color: var(--text-light); }
+        .viewer-proposal-links { margin: 4px 0 0; }
+        .viewer-proposal-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 0; }
+        .viewer-proposal-col h5 { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .viewer-proposal-text {
+            margin: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+            font-family: var(--font-serif); font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+        }
+        .viewer-proposal-col.is-new .viewer-proposal-text { border-color: var(--hist-place); }
+        .viewer-proposal-note { margin: 8px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .viewer-proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+        .modal .viewer-proposal-actions > button { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+        .modal .viewer-proposal-actions > button:disabled { opacity: 0.45; }
+        .modal .viewer-proposal-actions > button[aria-busy="true"] { opacity: 1; }
+        .viewer-proposal-phone { margin: 6px 0 0; font-size: 12.5px; color: var(--text-faint); }
+        .viewer-proposal-fail { margin: 6px 0 0; font-size: 12.5px; color: var(--danger); }
+        .viewer-proposal-status { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 8px; align-items: start; }
+        .viewer-proposal-t1, .viewer-proposal-t2 { margin: 0; overflow-wrap: anywhere; }
+        .viewer-proposal-t1 { font-weight: 600; }
+        .viewer-proposal-t2 { color: var(--text-light); }
+        .viewer-transcript-changed { margin: 4px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        /* Touch: every link and choice a full target; the choices in a column. */
+        @media (pointer: coarse) {
+            .modal .viewer-read-state-links .link-button, .modal .viewer-read-state-choice,
+            .modal .viewer-proposal-meta .link-button, .modal .viewer-proposal-links .link-button, .modal .viewer-proposal-undo { min-height: 44px; }
+            .viewer-read-state-choices { flex-direction: column; align-items: stretch; gap: 0; }
+        }
+        /* Tablet: the row as on a computer; the proposal's columns a little closer. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .viewer-proposal-cols { gap: 8px; }
+        }
+        /* Phone: choices under each other, the whole text one column under the other, the answers full width. */
+        @media (max-width: 640px) {
+            .viewer-read-state-choices { flex-direction: column; align-items: stretch; gap: 0; }
+            .modal .viewer-read-state-choice { min-height: 44px; }
+            .viewer-proposal-cols { grid-template-columns: minmax(0, 1fr); }
+            .viewer-proposal-actions { flex-direction: column; }
+            .modal .viewer-proposal-actions > button { width: 100%; min-height: 48px; justify-content: center; }
+            .modal .viewer-proposal .read-check-row { grid-template-columns: 30px minmax(0, 1fr); }
+            .modal .viewer-proposal .read-check-kind { grid-column: 2; text-align: left; }
+        }
+        /* A phone held sideways: the columns side by side again, the answers in one row. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .viewer-proposal-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .viewer-proposal-actions { flex-direction: row; }
+            .modal .viewer-proposal-actions > button { width: auto; min-height: 44px; }
+        }
         /* "Full quality" and "Read again…" under an excerpt, right under it (the body's gap pulled back). */
         .viewer-excerpt-links { display: flex; flex-wrap: wrap; gap: 0 16px; align-self: flex-start; margin-top: -8px; }
         .modal .viewer-excerpt-links .viewer-full-quality { margin-top: 0; }
@@ -22374,6 +22466,44 @@
         .research-hypos .research-not-retroactive { margin-top: 8px; }
         .research-hypos-note { margin-top: 6px; }
         @media (pointer: coarse) { .modal .research-hypos .settings-checkbox.research-hypos-row { min-height: 44px; } }
+        /* "Reading documents" (spec 059 §4): a group folded by default, its value beside the title. */
+        .research-readtask-host:empty { display: none; }
+        .research-group { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--divider, var(--border)); border-radius: 8px; transition: background-color 0.3s; }
+        .research-group > summary {
+            display: flex; align-items: center; gap: 8px; min-height: 32px; list-style: none; cursor: pointer;
+        }
+        .research-group > summary::-webkit-details-marker { display: none; }
+        .research-group-caret::before { content: '▸'; font-size: 12px; color: var(--text-light); }
+        .research-group[open] .research-group-caret::before { content: '▾'; }
+        .research-group-title { font-weight: 600; color: var(--text); }
+        .research-group-value { margin-left: auto; min-width: 0; font-size: 12.5px; color: var(--text-light); text-align: right; overflow-wrap: anywhere; }
+        .research-group[open] .research-group-value { display: none; }
+        .research-group-value-short { display: none; }
+        .research-group > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .research-group.is-flash { outline: 2px solid var(--primary); outline-offset: 4px; background: var(--primary-soft); }
+        @media (prefers-reduced-motion: reduce) { .research-group { transition: none; } }
+        .research-readtask { margin-top: 6px; }
+        .research-readtask legend { float: left; width: 100%; font-weight: 600; }
+        .modal .research-readtask .settings-checkbox.research-readtask-row { padding: 4px 0; margin: 0; clear: both; align-items: flex-start; }
+        .research-readtask.is-down .research-readtask-row { opacity: 0.55; }
+        .research-readtask-note { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+        .research-readtask-ok {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;
+            background: var(--primary); color: var(--on-primary); font-size: 10px; font-weight: 700;
+        }
+        @media (hover: hover) { .research-group > summary:hover .research-group-title { color: var(--primary); } }
+        @media (pointer: coarse) {
+            .research-group > summary { min-height: 44px; }
+            .modal .research-readtask .settings-checkbox.research-readtask-row { min-height: 44px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) { .research-group-value { font-size: 12px; } }
+        @media (max-width: 640px) {
+            .research-group-value-full { display: none; }
+            .research-group-value-short { display: inline; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-group > summary { min-height: 40px; }
+        }
         /* Work outside the directions (spec 038 §9.5, research-offline-ui.ts): the tree's choice as cards, the growing
            branches' question, branches with their own choice and tasks with a manual place; a refusal under its card. */
         .research-offline-host:empty { display: none; }

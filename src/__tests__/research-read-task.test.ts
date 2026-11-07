@@ -76,7 +76,7 @@ describe('/status.readAgain and the agent\'s proposal (for the source\'s row)', 
         expect([...m.keys()]).toEqual(['S0042', 'S0043']);
         expect(m.get('S0042')).toEqual({
             read: ID, state: 'task', task: 'T0417', taskFor: 'agent', taskOpen: true,
-            proposal: { text: 'Josephi Vlk\nin Doubrava N. 7', by: { program: 'agent', model: 'm-1' }, task: 'T0417', at: '2026-11-06T10:00:00Z',
+            proposal: { text: 'Josephi Vlk\nin Doubrava N. 7', by: 'agent · m-1', task: 'T0417', at: '2026-11-06T10:00:00Z',
                 places: [{ at: 'in Doubrava', old: 'Dubrava', new: 'Doubrava', kind: 'spelling' }] },
         });
         expect(m.get('S0043')).toEqual({ read: ID, state: 'saved', minorOnly: true });
@@ -89,6 +89,9 @@ describe('/status.readAgain and the agent\'s proposal (for the source\'s row)', 
         expect(sanitizeReadSourceProposal({ ...proposal, task: 'x' })).toBeNull();
         const { places: _p, ...noPlaces } = proposal;
         expect(sanitizeReadSourceProposal(noPlaces)).not.toHaveProperty('places');
+        // The research's own shape: `by` a string, no places.
+        expect(sanitizeReadSourceProposal({ text: 'x', by: 'agent · opus · high + agent · m-2', task: 'T0417', at: '2026-11-06T10:00:00Z' }))
+            .toEqual({ text: 'x', by: 'agent · opus · high + agent · m-2', task: 'T0417', at: '2026-11-06T10:00:00Z' });
     });
 });
 

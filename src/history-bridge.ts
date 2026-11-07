@@ -16,6 +16,7 @@ import {
     cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
+import { READ_TASK_NAMES, READ_TASK_SETTING_PATH, readTaskSettingBody, sanitizeTaskSetting, type ReadTaskSetting } from './research-read-task.js';
 import {
     HISTORY_ALIGN_PLAN_RE, HISTORY_ALIGN_UNDO_RE, HISTORY_KINDS, HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE,
     parseHistoryAlignPreview, parseHistoryDeleted, parseHistoryKindList, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
@@ -600,6 +601,45 @@ export async function postBridgeHypotheses(base: string, decide: ResearchHypothe
     check: { tree: string; scheme?: string }): Promise<HypothesesDecideResult> {
     const res = await postWrite(base, '/hypotheses', { decide });
     return res ? hypothesesDecideReply(res.status, res.body, features, decide, check) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+}
+
+// ==================== TASK FROM A NEW READING (spec 059 §4) ====================
+
+/**
+ * Why `POST /sourceTask {sourceTask}` did not go: `archive` 409 `sourceTask.archive`; `invalid` 400;
+ * `busy` 503 research.busy; `held` sealed elsewhere / not downloaded / disk full; `network` no answer; `unknown` anything else.
+ */
+export type ReadTaskSettingError = 'archive' | 'invalid' | 'busy' | 'held' | 'network' | 'unknown';
+
+export type ReadTaskSettingResult =
+    | { ok: true; value?: ReadTaskSetting }
+    | { ok: false; code: ReadTaskSettingError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** The reply to `POST /sourceTask`, typed: the value the research says it keeps now. */
+export function readTaskSettingReply(status: number, body: unknown, features: readonly string[] | null | undefined): ReadTaskSettingResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        const value = sanitizeTaskSetting(r[READ_TASK_NAMES.settingValue]);
+        return { ok: true, ...(value ? { value } : {}) };
+    }
+    const reason = bridgeSentence(body);
+    // The research's codes of this route are camelCase (`sourceTask.archive`).
+    const code = typeof r.code === 'string' && /^[A-Za-z0-9.-]{1,40}$/.test(r.code) ? r.code : '';
+    const out = (c: ReadTaskSettingError, extra: { held?: ResearchWriteHeld } = {}): ReadTaskSettingResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && code === 'sourceTask.archive') return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    return out('unknown');
+}
+
+/** The research's setting "Task from a new reading": written at once (`tree`: the research's tree, kept for the log). */
+export async function postBridgeReadTask(base: string, value: ReadTaskSetting, features: readonly string[] | null | undefined,
+    _check: { tree: string }): Promise<ReadTaskSettingResult> {
+    const res = await postWrite(base, READ_TASK_SETTING_PATH, readTaskSettingBody(value));
+    return res ? readTaskSettingReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

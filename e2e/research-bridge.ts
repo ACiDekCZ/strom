@@ -1162,6 +1162,14 @@ export interface FakeRead {
     taskPosts?: { source: string; read: string; body: Record<string, unknown> }[];
     /** `POST …/task` answers this (default: task T0043 made, none for `save`). */
     taskReply?: { status: number; body: unknown };
+    /** Every `POST /sources/proposal` body (with `sources.proposal` in `features`): the agent's proposal taken, kept or undone. */
+    proposalPosts?: Record<string, unknown>[];
+    /** `POST /sources/proposal` answers this (default: `{ok: true}`). */
+    proposalReply?: { status: number; body: unknown };
+    /** Every `POST /sourceTask` body (with `read.sourceTask` in `features`): the setting "Task from a new reading". */
+    settingPosts?: Record<string, unknown>[];
+    /** `POST /sourceTask` answers this (default: the value written to `accepts.read.sourceTask` and said back). */
+    settingReply?: { status: number; body: unknown };
     /**
      * A busy bridge (its thread being sorted): a start (`POST /read`, `/read/<id>/again`, `/sources/read`)
      * is taken only this late (ms), the app may have given up waiting meanwhile.
@@ -1726,6 +1734,24 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             (rd.taskPosts ??= []).push({ source: decodeURIComponent(taskPath[1]), read: decodeURIComponent(taskPath[2]), body });
             if (rd.taskReply) return json(rd.taskReply.status, rd.taskReply.body);
             return json(200, body.how === 'save' ? {} : { task: 'T0043', ...(body.how === 'now' ? { chat: 'chat-1' } : {}) });
+        }
+        // The agent's proposal for a confirmed transcript (spec 059 §3): taken, kept or undone.
+        if (rd && method === 'POST' && /\/sources\/proposal$/.test(url.pathname) && b.features?.includes('sources.proposal')) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            (rd.proposalPosts ??= []).push(body);
+            if (rd.proposalReply) return json(rd.proposalReply.status, rd.proposalReply.body);
+            return json(200, { ok: true, source: body.source, take: body.take });
+        }
+        // The setting "Task from a new reading" (spec 059 §4): said in `accepts.read.sourceTask` from then on.
+        if (rd && method === 'POST' && /\/sourceTask$/.test(url.pathname) && b.features?.includes('read.sourceTask')) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            (rd.settingPosts ??= []).push(body);
+            if (rd.settingReply) return json(rd.settingReply.status, rd.settingReply.body);
+            const accepts = (b.accepts ?? {}) as Record<string, unknown>;
+            b.accepts = { ...accepts, read: { ...(accepts.read as Record<string, unknown> ?? {}), sourceTask: body.sourceTask } };
+            return json(200, { ok: true, sourceTask: body.sourceTask });
         }
         if (rd && method === 'POST' && /\/sources\/read$/.test(url.pathname) && b.features?.includes('read.source')) {
             let body: Record<string, unknown> = {};

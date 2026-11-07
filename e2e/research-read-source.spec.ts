@@ -617,6 +617,12 @@ test.describe('Read a source again from its original', () => {
         await expect(foot.locator('[data-act^="task-"]')).toHaveCount(0);
         await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
         expect(b.read!.taskPosts ?? []).toEqual([]);
+        // "Change in the research settings ›": the research's settings with "Reading documents" open and its value checked.
+        await foot.locator('[data-act="open-settings"]').click();
+        const group = page.locator('#research-tree-settings-modal #research-readtask-group');
+        await expect(group).toBeVisible();
+        await expect(group).toHaveAttribute('open', '');
+        await expect(group.locator('input[name="research-read-task"]:checked')).toBeFocused();
     });
 
     test('read.sourceTask on a tablet: the two groups of choices fit the dialog\'s width', async ({ page }) => {

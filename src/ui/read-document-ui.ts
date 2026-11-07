@@ -2424,6 +2424,8 @@ export const readDocumentMethods = uiModule({
         this.readRedrawTaskFoot(true);
         if (!reply.ok) return;
         const task = reply.value.task || (append ? input.openTask ?? '' : '');
+        // The source's row in the viewer says the choice until the research's status does (spec 059 §2).
+        this.noteReadSourceTask(res.source.id, res.id, how, task);
         if (how === 'now' && task) {
             const url = this.activeResearchLink('task', { task, taskDo: 'chat' });
             if (url) this.launchResearchLink(url);
@@ -3284,7 +3286,7 @@ export const readDocumentMethods = uiModule({
             case 'open-settings':
                 // The research's settings of the tree (its group "Reading documents", spec 059 §4).
                 this.closeReadDocumentDialog();
-                this.researchActionTreeSettings();
+                this.openReadTaskSettings();
                 break;
             case 'refine': if (st) { st.refineOpen = !st.refineOpen; this.readRedrawChoose(); } break;
             case 'reset-with': {

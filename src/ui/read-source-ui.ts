@@ -21,6 +21,16 @@ import { researchBridgeAgentLabel } from './research-open-mark.js';
 import { readSourceAgainOffered, readSourceAgainCandidate, readSourceAgainClip, readSourceId, LiveRead, ReadResult } from '../research-read.js';
 import { onComputer } from './research-ui.js';
 import { researchLinksEnabled } from '../research-device.js';
+import { lastBridgeStatus } from './research-sync-ui.js';
+import {
+    READ_SOURCE_TASK_FEATURE, READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, READ_TASK_HOWS,
+    type ReadProposalTake, type ReadSourceProposal, type ReadSourceState, type ReadTaskHow,
+} from '../research-read-task.js';
+import { postReadTask, postReadProposal } from '../research-read.js';
+import {
+    sourceRowHtml, sourceRowKind, proposalHtml, readIdDate, readStateShortDate, readStateLongDate,
+    type SourceRowAct, type ProposalAct,
+} from './read-source-state-view.js';
 
 function esc(text: string): string {
     return text
@@ -32,6 +42,36 @@ function esc(text: string): string {
 const held = new Map<string, string>();
 /** What the open viewer shows of reading its source again (redrawn when it changes). */
 let drawnKey = '';
+
+/**
+ * The source's row after a newer reading (spec 059 §2), per `tree|S…`: the choices open, a choice on its way or
+ * failed, and the state a choice made here (or in the dialog) said until the research's status moves on (`seen`:
+ * the status's state when it was made).
+ */
+const rowOpen = new Set<string>();
+const rowAct = new Map<string, SourceRowAct>();
+const rowLocal = new Map<string, { state: ReadSourceState; seen: string }>();
+/** A reading's counts (sure substantive changes, uncertain places), by its id; asked once. */
+const rowCounts = new Map<string, { major: number; unsure: number }>();
+const rowCountsAsked = new Set<string>();
+/**
+ * The agent's proposal (spec 059 §3), per `tree|S…`: the whole text open, an answer on its way or failed, and the
+ * answer the research took (`asked`: the transcript it was taken against; shown until undone or the viewer's session ends).
+ */
+const propWhole = new Set<string>();
+const propAct = new Map<string, ProposalAct>();
+const propDone = new Map<string, { take: 'proposal' | 'keep'; proposal: ReadSourceProposal; asked: string; at: string }>();
+
+const stateMark = (s: ReadSourceState | null | undefined): string => s ? JSON.stringify(s) : '';
+
+/** The focused button of the row or the proposal, found again after a redraw. */
+function focusSelector(el: HTMLElement): string {
+    for (const k of ['readHow', 'proposalTake', 'readState', 'proposalAct'] as const) {
+        const v = el.dataset[k];
+        if (v) return `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${v.replace(/"/g, '')}"]`;
+    }
+    return '';
+}
 
 /** What the viewer shows of reading a source again. */
 interface SourceAgainView {
@@ -103,10 +143,218 @@ export const readSourceMethods = uiModule({
                 ? `<button type="button" class="link-button viewer-read-again" id="source-viewer-read-again" title="${esc(t.sourceAgainTitle)}">${researchBridgeAgentLabel(t.sourceAgain)}</button>`
                 : '';
         const row = reading || action ? `<p class="viewer-reading">${reading}${action}</p>` : '';
-        const after = view.after && !view.running ? this.readSourceAfterHtml(view.after) : '';
+        // The research says the source's state (spec 059 §2): its row and the agent's proposal; else the line as before.
+        const state = view.running ? '' : this.readSourceStateHtml(src);
+        const after = state || (view.after && !view.running ? this.readSourceAfterHtml(view.after) : '');
         // A phone: no action, a quiet sentence where it works (spec 059 §5); nothing at an excerpt.
         const phone = view.phone ? `<p class="viewer-read-again-phone" id="source-viewer-read-again-phone">${esc(t.againPhone)}</p>` : '';
         return `${row}${after}${phone}`;
+    },
+
+    /** The research's word on the source (`read.sourceTask`, `/status.readAgain`); null: not said (the viewer as before). */
+    readSourceStateCtx(src: Source): { rid: string; key: string; refn: string; state: ReadSourceState | null; features: readonly string[]; up: boolean; phone: boolean } | null {
+        const treeId = DataManager.getCurrentTreeId();
+        const refn = readSourceId(src.refn?.trim());
+        if (!treeId || !refn || this.sourceViewerReadOnly || this.activeResearchAgentless()) return null;
+        const rid = this.researchOriginalsLink()?.researchId ?? this.researchSyncLink()?.link.id ?? '';
+        if (!rid) return null;
+        const status = this.researchStatusOf(rid) ?? lastBridgeStatus(rid);
+        const features = status?.features ?? [];
+        if (!features.includes(READ_SOURCE_TASK_FEATURE)) return null;
+        const key = `${treeId}|${refn}`;
+        const said = status?.readAgain?.[refn] ?? null;
+        const local = rowLocal.get(key);
+        let state = said;
+        if (local) {
+            if (local.seen === stateMark(said)) state = local.state;
+            else rowLocal.delete(key);
+        }
+        return { rid, key, refn, state, features, up: this.researchBridgeUp(rid), phone: !onComputer() };
+    },
+
+    /** §2: the row under the links (and §3 the proposal under it); '' when the research says nothing of the source. */
+    readSourceStateHtml(src: Source): string {
+        const c = this.readSourceStateCtx(src);
+        if (!c) return '';
+        const lang = getCurrentLanguage();
+        let row = '';
+        if (c.state) {
+            const s = c.state;
+            const kind = sourceRowKind(s);
+            const counts = rowCounts.get(s.read) ?? null;
+            if (!counts && (kind === 'unchecked' || kind === 'unsure') && c.up) void this.loadReadSourceStateCounts(c.rid, s.read);
+            const live = this.readsOfResearch(c.rid).find(r => r.id === s.read);
+            const at = readIdDate(s.read) ?? (live?.at ? new Date(live.at) : null);
+            row = sourceRowHtml({
+                state: s, date: at ? readStateShortDate(at, lang) : '', counts,
+                confirmed: !!this.sourceConfirmState(src).conf, phone: c.phone, bridgeUp: c.up,
+                canOpenTask: !c.phone && this.researchLinkAvailable('task'),
+                open: rowOpen.has(c.key), act: rowAct.get(c.key) ?? null,
+            });
+        }
+        return row + this.readSourceProposalHtml(src, c);
+    },
+
+    /** §3: the agent's proposal for the confirmed transcript ('' none). */
+    readSourceProposalHtml(src: Source, ctx?: ReturnType<typeof readSourceMethods.readSourceStateCtx>): string {
+        const c = ctx === undefined ? this.readSourceStateCtx(src) : ctx;
+        if (!c) return '';
+        const done = propDone.get(c.key);
+        const proposal = done?.proposal ?? c.state?.proposal;
+        if (!proposal) return '';
+        const actions = c.phone ? 'phone' : c.up && c.features.includes(READ_PROPOSAL_FEATURE) ? 'bridge' : 'none';
+        return proposalHtml({
+            proposal, transcript: done?.asked ?? src.transcript ?? '', lang: getCurrentLanguage(), actions,
+            undo: c.features.includes(READ_PROPOSAL_UNDO_FEATURE), canOpenTask: !c.phone && this.researchLinkAvailable('task'),
+            whole: propWhole.has(c.key), done: done?.take ?? '', act: propAct.get(c.key) ?? null,
+        });
+    },
+
+    /** The transcript the viewer shows: the accepted proposal's text and its note until the tree has it (null: the tree's own). */
+    readSourceTranscriptShown(src: Source): { text: string; note: string } | null {
+        const treeId = DataManager.getCurrentTreeId();
+        const refn = readSourceId(src.refn?.trim());
+        const done = treeId && refn ? propDone.get(`${treeId}|${refn}`) : undefined;
+        if (!done || done.take !== 'proposal') return null;
+        const own = src.transcript ?? '';
+        if (own !== done.asked && own !== done.proposal.text) return null;
+        const at = new Date(done.at);
+        return { text: done.proposal.text, note: strings.read.pChanged(done.proposal.task, readStateLongDate(at, getCurrentLanguage())) };
+    },
+
+    /** A reading's counts for the row's sentence, from its result (once); the viewer redrawn when they come. */
+    async loadReadSourceStateCounts(rid: string, read: string): Promise<void> {
+        if (rowCountsAsked.has(read)) return;
+        rowCountsAsked.add(read);
+        const res = await this.loadReadResult(rid, read);
+        if (!res?.source) return;
+        let counts: { major: number; unsure: number };
+        try {
+            const sorted = this.readSourceCounts(res);
+            counts = { major: sorted.major, unsure: sorted.unsure };
+        } catch {
+            return;
+        }
+        rowCounts.set(read, counts);
+        this.refreshReadSourceViewer();
+    },
+
+    /** A choice made for a source's newer reading (here or in the dialog): the row says it until the research's status does. */
+    noteReadSourceTask(refn: string, read: string, how: ReadTaskHow, task: string): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId) return;
+        const key = `${treeId}|${refn}`;
+        const seen = stateMark(this.readSourceSaidState(refn));
+        const state: ReadSourceState = how === 'save'
+            ? { read, state: 'saved' }
+            : { read, state: 'task', ...(task ? { task } : {}), taskFor: how === 'review' ? 'person' : 'agent', taskOpen: true, ...(how === 'queue' ? { taskQueued: true } : {}) };
+        rowLocal.set(key, { state, seen });
+    },
+
+    /** The status's own state of a source (no local word). */
+    readSourceSaidState(refn: string): ReadSourceState | null {
+        const rid = this.researchOriginalsLink()?.researchId ?? this.researchSyncLink()?.link.id ?? '';
+        const status = rid ? this.researchStatusOf(rid) ?? lastBridgeStatus(rid) : null;
+        return status?.readAgain?.[refn] ?? null;
+    },
+
+    /** §2: a choice at the row — the bridge as in the dialog's footer; "Check now" opens the task's conversation. */
+    async readSourceStateChoose(src: Source, how: ReadTaskHow): Promise<void> {
+        const c = this.readSourceStateCtx(src);
+        if (!c?.state || !c.up || rowAct.get(c.key)?.busy || !READ_TASK_HOWS.includes(how)) return;
+        const act: SourceRowAct = { how, busy: true };
+        rowAct.set(c.key, act);
+        this.redrawReadSourceState(src);
+        const reply = await postReadTask(this.readBridgeBase(c.rid), c.refn, c.state.read, how);
+        if (rowAct.get(c.key) !== act) return;
+        if (!reply.ok) {
+            rowAct.set(c.key, { how, busy: false, failed: true });
+            this.redrawReadSourceState(src);
+            return;
+        }
+        rowAct.delete(c.key);
+        rowOpen.delete(c.key);
+        const task = reply.value.task;
+        this.noteReadSourceTask(c.refn, c.state.read, how, task);
+        this.redrawReadSourceState(src);
+        if (how === 'now' && task) {
+            const url = this.activeResearchLink('task', { task, taskDo: 'chat' });
+            if (url) this.launchResearchLink(url);
+        }
+    },
+
+    /** §3: Accept / Keep / Undo through the bridge, no confirmation dialog. */
+    async readSourceProposalTake(src: Source, take: ReadProposalTake): Promise<void> {
+        const c = this.readSourceStateCtx(src);
+        if (!c || !c.up || propAct.get(c.key)?.busy) return;
+        const done = propDone.get(c.key);
+        const proposal = done?.proposal ?? c.state?.proposal;
+        if (!proposal || (take === 'undo') !== !!done) return;
+        const act: ProposalAct = { take, busy: true };
+        propAct.set(c.key, act);
+        this.redrawReadSourceState(src);
+        const reply = await postReadProposal(this.readBridgeBase(c.rid), c.refn, proposal.task, take);
+        if (propAct.get(c.key) !== act) return;
+        if (!reply.ok) {
+            propAct.set(c.key, { take, busy: false, failed: true });
+            this.redrawReadSourceState(src);
+            return;
+        }
+        propAct.delete(c.key);
+        if (take === 'undo') propDone.delete(c.key);
+        else propDone.set(c.key, { take, proposal, asked: src.transcript ?? '', at: new Date().toISOString() });
+        // The transcript shown changes with the answer: the whole viewer.
+        this.renderSourceViewer();
+    },
+
+    /** The row and the proposal redrawn in place (the viewer keeps its scroll and the focused button). */
+    redrawReadSourceState(src: Source): void {
+        const modal = document.getElementById('source-viewer-modal');
+        const old = modal ? [...modal.querySelectorAll<HTMLElement>('#source-viewer-read-state, #source-viewer-proposal')] : [];
+        if (!old.length) { this.refreshReadSourceViewer(); return; }
+        const active = document.activeElement as HTMLElement | null;
+        const focus = active && old.some(o => o.contains(active)) ? focusSelector(active) : '';
+        const tmp = document.createElement('div');
+        tmp.innerHTML = this.readSourceStateHtml(src);
+        const nodes = [...tmp.children] as HTMLElement[];
+        for (const n of nodes) old[0].before(n);
+        old.forEach(o => o.remove());
+        nodes.forEach(n => this.wireReadSourceState(n, src, true));
+        if (focus) nodes.map(n => n.querySelector<HTMLElement>(focus)).find(Boolean)?.focus({ preventScroll: true });
+        drawnKey = this.readSourceViewKey(src, this.readSourceAgainView(src));
+    },
+
+    /** The row's and the proposal's buttons. */
+    wireReadSourceState(root: HTMLElement, src: Source, results: boolean): void {
+        const key = (): string => this.readSourceStateCtx(src)?.key ?? '';
+        root.querySelectorAll<HTMLElement>('[data-read-state="toggle"]').forEach(el => el.addEventListener('click', () => {
+            const k = key();
+            if (!k) return;
+            if (rowOpen.has(k)) { rowOpen.delete(k); if (!rowAct.get(k)?.busy) rowAct.delete(k); } else rowOpen.add(k);
+            this.redrawReadSourceState(src);
+        }));
+        root.querySelectorAll<HTMLElement>('[data-read-how]').forEach(el => el.addEventListener('click', () => {
+            void this.readSourceStateChoose(src, el.dataset.readHow as ReadTaskHow);
+        }));
+        root.querySelectorAll<HTMLElement>('[data-read-state="task"], [data-proposal-act="task"]').forEach(el => el.addEventListener('click', () => {
+            const url = el.dataset.task ? this.activeResearchLink('task', { task: el.dataset.task }) : null;
+            if (url) this.launchResearchLink(url);
+        }));
+        root.querySelectorAll<HTMLElement>('[data-proposal-act="whole"]').forEach(el => el.addEventListener('click', () => {
+            const k = key();
+            if (!k) return;
+            if (propWhole.has(k)) propWhole.delete(k); else propWhole.add(k);
+            this.redrawReadSourceState(src);
+        }));
+        root.querySelectorAll<HTMLElement>('[data-proposal-take]').forEach(el => el.addEventListener('click', () => {
+            void this.readSourceProposalTake(src, el.dataset.proposalTake as ReadProposalTake);
+        }));
+        // Redrawn in place: the result link wired here (the viewer's own wiring went with the old row).
+        if (results) {
+            root.querySelectorAll<HTMLElement>('[data-read-again-open]').forEach(el => {
+                el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen }));
+            });
+        }
     },
 
     /** "Read again 6 Nov 2026 · 2 places differ from the transcript · Result ›". */
@@ -151,10 +399,15 @@ export const readSourceMethods = uiModule({
         body.querySelectorAll<HTMLElement>('[data-read-again-open]').forEach(el => {
             el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen }));
         });
+        body.querySelectorAll<HTMLElement>('#source-viewer-read-state, #source-viewer-proposal').forEach(el => this.wireReadSourceState(el, src, false));
     },
 
     readSourceViewKey(src: Source, view: SourceAgainView): string {
-        return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? '', view.phone].join('|');
+        // The research's state of the source (and what was done here with it) redraws the viewer when it moves.
+        const c = this.readSourceStateCtx(src);
+        const state = c ? [stateMark(c.state), c.up, rowCounts.get(c.state?.read ?? '')?.major ?? '', rowCounts.get(c.state?.read ?? '')?.unsure ?? '',
+            propDone.get(c.key)?.take ?? '', c.features.includes(READ_PROPOSAL_FEATURE), c.features.includes(READ_PROPOSAL_UNDO_FEATURE)].join('/') : '';
+        return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? '', view.phone, state].join('|');
     },
 
     /** After readings, a refusal or a status: the open viewer redrawn when what it shows of reading again changed. */
