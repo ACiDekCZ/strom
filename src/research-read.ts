@@ -15,6 +15,11 @@ import { clipText } from './text-clip.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 import type { Source } from './types.js';
 import { cleanWith, ReadChoices, ReadWho, ReadWithItem, sanitizeReadChoices, sanitizeReadWho } from './read-choices.js';
+import {
+    READ_PROPOSAL_PATH, READ_TASK_NAMES, READ_TASK_SETTING_PATH, readProposalBody, readTaskBody, readTaskId, readTaskPath,
+    readTaskSettingBody, sanitizeReadTaskReply, sanitizeSourceTaskInfo, sanitizeTaskSetting, sanitizeVariantTask,
+} from './research-read-task.js';
+import type { ReadProposalTake, ReadSourceTaskInfo, ReadTaskHow, ReadTaskReply, ReadTaskSetting } from './research-read-task.js';
 
 /** `/status.features`: the research reads a document for the app now (`POST read`). */
 export const READ_FEATURE = 'read.now';
@@ -75,6 +80,8 @@ export interface ReadAccepts {
     expectSecs?: number;
     /** The readers one may choose (spec 059, only when ready and the bridge says `read.choose`; absent: as before). */
     choices?: ReadChoices;
+    /** The research's setting "Task from a new reading" (`read.sourceTask`; absent: not said). */
+    sourceTask?: ReadTaskSetting;
 }
 
 /** Defaults when the research leaves a limit out (the bridge's own: 50 MB, 10 pages). */
@@ -134,6 +141,7 @@ export function sanitizeReadAccepts(value: unknown): ReadAccepts | null {
         ...(ready && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
         // `nowName` kept here; a research without `read.choices.now` has it cleared with the features (readAcceptsGated).
         ...(ready && sanitizeReadChoices(r.choices, true) ? { choices: sanitizeReadChoices(r.choices, true)! } : {}),
+        ...(sanitizeTaskSetting(r[READ_TASK_NAMES.acceptsSetting]) ? { sourceTask: sanitizeTaskSetting(r[READ_TASK_NAMES.acceptsSetting])! } : {}),
     };
 }
 
@@ -384,7 +392,7 @@ export interface ReadReaders {
  * transcript's words, `other` the new reading's. A difference is a task of
  * the research (`task`, T…), never a conflict: the transcript does not change.
  */
-export interface ReadSourceResult {
+export interface ReadSourceResult extends Partial<ReadSourceTaskInfo> {
     id: string;
     agree: 'same' | 'differ';
     variants: ReadVariant[];
@@ -457,6 +465,10 @@ export interface ReadVariant {
     kind?: ReadVariantKind;
     /** Where it lies on the page, fractions of the whole page (`read.variantRegion`; absent: not said). */
     region?: ReadRegion;
+    /** A source read again (`read.sourceTask`): false = the readers disagree here, not a sure change; absent: not said. */
+    sure?: boolean;
+    /** A source read again (`read.sourceTask`): the task that already assessed this place (T…); absent: none. */
+    judged?: string;
 }
 
 export interface ReadGloss { term: string; meaning: string; kind: 'term' | 'occupation' | 'abbr' | 'symbol' }
@@ -598,8 +610,9 @@ function sanitizeSourceResult(v: unknown): ReadSourceResult | null {
         const other = cleanText(x.other, 500);
         if (at || other) variants.push({ at, other, ...variantExtras(x) });
     }
-    const task = typeof s.task === 'string' && /^T\d{1,9}$/.test(s.task) ? s.task : '';
-    return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '' };
+    const task = readTaskId(s.task);
+    const info = sanitizeSourceTaskInfo(s);
+    return { id, agree: s.agree, variants: s.agree === 'same' ? [] : variants, task: s.agree === 'differ' ? task : '', ...(info ?? {}) };
 }
 
 /** `source.entries` and `source.failed` (`read.sourceEntry`): only entries of the result, a known code; null when neither. Untrusted. */
@@ -648,10 +661,10 @@ function sanitizeKinds(v: unknown): { first: ReadDocKind; blind: ReadDocKind } |
 }
 
 /** A difference's `kind` and `region`, where known and valid (an unknown kind, a broken region: left out). Untrusted. */
-function variantExtras(x: Record<string, unknown>): { kind?: ReadVariantKind; region?: ReadRegion } {
+function variantExtras(x: Record<string, unknown>): { kind?: ReadVariantKind; region?: ReadRegion; sure?: boolean; judged?: string } {
     const kind = READ_VARIANT_KINDS.includes(x.kind as ReadVariantKind) ? x.kind as ReadVariantKind : null;
     const r = region(x.region);
-    return { ...(kind ? { kind } : {}), ...(r && r[2] > 0 && r[3] > 0 ? { region: r } : {}) };
+    return { ...(kind ? { kind } : {}), ...(r && r[2] > 0 && r[3] > 0 ? { region: r } : {}), ...sanitizeVariantTask(x) };
 }
 
 function region(v: unknown): ReadRegion | null {
@@ -1167,6 +1180,8 @@ export interface ReadSourceRequest {
     /** The language of translation and explanation; none: the research's. */
     lang?: string;
     with?: ReadWithItem[];
+    /** The app chooses who creates the task (`read.sourceTask`): sent only when the research says the feature. */
+    taskChoice?: boolean;
 }
 
 /**
@@ -1181,8 +1196,40 @@ export async function startSourceRead(base: string, req: ReadSourceRequest): Pro
     if (req.clip && READ_CLIP.test(req.clip)) body.clip = req.clip;
     if (req.lang && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(req.lang)) body.lang = req.lang;
     putWith(body, req.with, req.readers);
+    if (req.taskChoice === true) body[READ_TASK_NAMES.choice] = true;
     const r = await call(`${base}/sources/read`, postJson(body), jsonTimeoutMs());
     return startReply(r);
+}
+
+/**
+ * What the app chose after a source was read again (`read.sourceTask`):
+ * `POST sources/<S>/read/<D>/task {how}`. The one call for the dialog's
+ * footer and the source's row. A call without an answer in time is a failure.
+ */
+export async function postReadTask(base: string, source: string, read: string, how: ReadTaskHow): Promise<ReadReply<ReadTaskReply>> {
+    const s = readSourceId(source);
+    const d = readId(read);
+    if (!s || !d) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
+    const r = await call(`${base}${readTaskPath(s, d)}`, postJson(readTaskBody(how)), jsonTimeoutMs());
+    if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
+    return { ok: true, value: sanitizeReadTaskReply(r.body) };
+}
+
+/** The answer to the agent's proposal for a source (`POST sources/proposal {source, task, take}`); the answer's body, as the research gives it. */
+export async function postReadProposal(base: string, source: string, task: string, take: ReadProposalTake): Promise<ReadReply<Record<string, unknown> | null>> {
+    const s = readSourceId(source);
+    const tk = readTaskId(task);
+    if (!s || !tk) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
+    const r = await call(`${base}${READ_PROPOSAL_PATH}`, postJson(readProposalBody(s, tk, take)), jsonTimeoutMs());
+    if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
+    return { ok: true, value: asRecord(r.body) };
+}
+
+/** The research's setting "Task from a new reading" (`POST sourceTask`); the answer's body, as the research gives it. */
+export async function postReadTaskSetting(base: string, value: ReadTaskSetting): Promise<ReadReply<Record<string, unknown> | null>> {
+    const r = await call(`${base}${READ_TASK_SETTING_PATH}`, postJson(readTaskSettingBody(value)), jsonTimeoutMs());
+    if (!ok(r.status)) return { ok: false, failure: readFailure(r.status, r.body, r.retry) };
+    return { ok: true, value: asRecord(r.body) };
 }
 
 /**

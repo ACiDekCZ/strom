@@ -6,7 +6,9 @@
  */
 
 import { strings } from '../strings.js';
-import { locateSpan, variantClass, type MergedVariant, type VariantClass } from '../read-result.js';
+import { researchLinkMark } from '../research-link.js';
+import { researchActionLabel } from './research-open-mark.js';
+import { locateSpan, readSourceCat, variantClass, type MergedVariant, type ReadSourceCat, type VariantClass, type VerdictSorted } from '../read-result.js';
 
 export type PlaceKind = 'dis' | 'chg' | 'unc' | 'ill';
 
@@ -29,6 +31,12 @@ export interface ShownPlace {
     inside: boolean;
     /** A change listed but not marked in the shown text (reader 2's text shows; the change lies in reader 1's). */
     elsewhere?: boolean;
+    /** A change, sorted (`read.sourceTask`): its group (`sortPlaces`). */
+    cat?: ReadSourceCat;
+    /** A disagreement, sorted: the change whose row covers it (the readers disagree on a changed word). */
+    under?: string;
+    /** An uncertain change, sorted: reader 2's words there (from the disagreement it covers); absent: not known. */
+    r2?: string;
 }
 
 interface Tok { k: 'text' | 'unc' | 'ill' | 'sep'; start: number; end: number; word: string }
@@ -140,6 +148,64 @@ export function resultPlaces(o: ResultMarksInput): ResultMarks {
     return { lines, places };
 }
 
+/** Two places cover the same words: on one line, spans that meet; without spans (another text shows), words in common. */
+function overlaps(c: ShownPlace, d: ShownPlace): boolean {
+    if (c.span && d.span && !c.elsewhere && c.line === d.line) return c.span[0] < d.span[1] && d.span[0] < c.span[1];
+    const a = (c.v?.other ?? '').trim(), b = (d.v?.at ?? '').trim();
+    return !!a && !!b && (a.includes(b) || b.includes(a));
+}
+
+/**
+ * The places sorted (spec 059, `read.sourceTask`): each change gets its group, a disagreement on a changed word is
+ * covered by that change (listed once, in the change's row), an uncertain change keeps reader 2's words.
+ */
+export function sortPlaces(places: readonly ShownPlace[]): ShownPlace[] {
+    const out = places.map(p => p.kind === 'chg' && p.v ? { ...p, cat: readSourceCat(p.v) } : { ...p });
+    const chg = out.filter(p => p.kind === 'chg');
+    for (const d of out) {
+        if (d.kind !== 'dis' || !d.v || d.line < 0) continue;
+        const c = chg.find(x => overlaps(x, d));
+        if (!c) continue;
+        d.under = c.id;
+        if (c.cat === 'unsure' && c.r2 === undefined) c.r2 = d.v.other;
+    }
+    return out;
+}
+
+/** The sorted groups of "To check": sure changes, uncertain (changes and the readers' other places), assessed by task, minor. */
+export interface SortedGroups {
+    major: ShownPlace[];
+    unsure: ShownPlace[];
+    judged: { task: string; rows: ShownPlace[] }[];
+    minor: ShownPlace[];
+}
+
+export function sortedGroups(places: readonly ShownPlace[]): SortedGroups {
+    const g: SortedGroups = { major: [], unsure: [], judged: [], minor: [] };
+    for (const p of places) {
+        if (p.inside) continue;
+        if (p.kind === 'chg') {
+            if (p.cat === 'judged' && p.v?.judged) {
+                const task = p.v.judged;
+                const j = g.judged.find(x => x.task === task);
+                if (j) j.rows.push(p); else g.judged.push({ task, rows: [p] });
+            } else g[p.cat === 'judged' ? 'major' : p.cat ?? 'major'].push(p);
+        } else if (p.kind === 'dis' && !p.under) {
+            g[p.cls?.minor ? 'minor' : 'unsure'].push(p);
+        }
+    }
+    // Changes and the readers' places mixed in a group: in reading order (a place off the text last).
+    const at = (p: ShownPlace): number => p.line < 0 || !p.span ? Infinity : p.line * 1e6 + p.span[0];
+    for (const rows of [g.unsure, g.minor]) rows.sort((x, y) => at(x) - at(y) || 0);
+    return g;
+}
+
+/** The sorted groups' counts for the header's sentence. */
+export function sortedCounts(places: readonly ShownPlace[]): VerdictSorted {
+    const g = sortedGroups(places);
+    return { major: g.major.length, unsure: g.unsure.length, minor: g.minor.length, judged: g.judged.map(j => ({ task: j.task, n: j.rows.length })) };
+}
+
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -176,7 +242,9 @@ export function lineMarksHtml(line: string, j: number, places: readonly ShownPla
     const toks = lineTokens(line);
     const on = places.filter(p => p.line === j && p.span && !p.elsewhere);
     const chg = on.filter(p => p.kind === 'chg').sort((x, y) => x.span![0] - y.span![0]);
-    const dis = on.filter(p => p.kind === 'dis').sort((x, y) => x.span![0] - y.span![0]);
+    // An uncertain change is drawn as the readers' disagreement: the disagreement it covers is not drawn again.
+    const asDis = new Set(chg.filter(p => p.cat === 'unsure').map(p => p.id));
+    const dis = on.filter(p => p.kind === 'dis' && !(p.under && asDis.has(p.under))).sort((x, y) => x.span![0] - y.span![0]);
     const ids = new Map(on.filter(p => (p.kind === 'unc' || p.kind === 'ill') && !p.inside).map(p => [p.span![0], p.id] as const));
     const inner = (a: number, b: number): string => {
         let out = '';
@@ -196,7 +264,10 @@ export function lineMarksHtml(line: string, j: number, places: readonly ShownPla
         const [s, e] = c.span!;
         if (s < pos) continue;
         out += inner(pos, s);
-        out += `<span class="read-mk read-mk-chg${c.id === focus ? ' is-focus' : ''}"${PLACE_ATTRS(c.id, focus)}>${inner(s, e)}</span>`;
+        const cls = c.cat === 'unsure' ? 'read-mk-dis read-mk-unsure' : c.cat === 'judged' ? 'read-mk-jud' : c.cat === 'minor' ? 'read-mk-min' : 'read-mk-chg';
+        const ok = c.cat === 'judged' && c.v?.judged
+            ? `<sup aria-hidden="true">✓</sup><span class="read-sr"> (${esc(strings.read.bJudged(c.v.judged))})</span>` : '';
+        out += `<span class="read-mk ${cls}${c.id === focus ? ' is-focus' : ''}"${PLACE_ATTRS(c.id, focus)}>${inner(s, e)}${ok}</span>`;
         pos = e;
     }
     return out + inner(pos, line.length);
@@ -224,9 +295,17 @@ function checkRowHtml(p: ShownPlace, shown: 1 | 2, focus: string, more: boolean)
     const t = strings.read;
     let what = '';
     let kind = '';
-    if (p.kind === 'chg' && p.v) {
+    if (p.kind === 'chg' && p.v && p.cat === 'unsure') {
+        // The transcript · reader 1 · reader 2 (the shown reader bold).
+        const side = (n: 1 | 2, text: string): string =>
+            `<span class="read-check-side${shown === n ? ' is-shown' : ''}">${sideHtml(text, t.placeMissing)}</span> ${readerMark(n)}`;
+        what = `<span class="read-check-was">${sideHtml(p.v.at, t.oldNone)}</span><span class="read-check-dot" aria-hidden="true"> · </span>${side(1, p.v.other)}`
+            + (p.r2 !== undefined ? `<span class="read-check-dot" aria-hidden="true"> · </span>${side(2, p.r2)}` : '');
+        kind = kindText(p.cls);
+    } else if (p.kind === 'chg' && p.v) {
+        const mk = p.cat === 'judged' ? 'read-mk-jud' : p.cat === 'minor' ? 'read-mk-min' : 'read-mk-chg';
         what = `<s class="read-check-old">${sideHtml(p.v.at, t.oldNone)}</s><span class="read-check-arrow" aria-hidden="true"> → </span>`
-            + `<span class="read-mk read-mk-chg">${sideHtml(p.v.other, t.newNone)}</span>`;
+            + `<span class="read-mk ${mk}">${sideHtml(p.v.other, t.newNone)}</span>`;
         kind = kindText(p.cls);
     } else if (p.kind === 'dis' && p.v) {
         const side = (n: 1 | 2, text: string): string =>
@@ -241,7 +320,7 @@ function checkRowHtml(p: ShownPlace, shown: 1 | 2, focus: string, more: boolean)
         kind = t.kIll;
     }
     const ln = p.line >= 0 ? `${t.ln} ${p.line + 1}` : '';
-    return `<li${more ? ' data-more hidden' : ''}><button type="button" class="read-check-row${p.id === focus ? ' is-focus' : ''}" data-act="place" data-place="${esc(p.id)}">`
+    return `<li${more ? ' data-more hidden' : ''}><button type="button" class="read-check-row${p.cat === 'judged' ? ' is-judged' : ''}${p.id === focus ? ' is-focus' : ''}" data-act="place" data-place="${esc(p.id)}">`
         + `<span class="read-check-ln">${esc(ln)}</span><span class="read-check-what">${what}</span>`
         + `<span class="read-check-kind">${esc(kind)}</span></button></li>`;
 }
@@ -256,6 +335,60 @@ export interface CheckOptions {
     /** The research named the changes' kinds ("2 substantive changes"); else "2 changes". */
     kinded: boolean;
     focus: string;
+    /** A source read again, sorted (`read.sourceTask`): the sentence under the sure changes ('' none), a person reviews them. */
+    sorted?: { note: string; person: boolean; taskLink: boolean };
+}
+
+/** Rows shown up to `CHECK_SHOWN`, then "and N more". */
+function rowsHtml(rows: readonly ShownPlace[], o: CheckOptions): string {
+    const t = strings.read;
+    const list = rows.map((p, i) => checkRowHtml(p, o.shown, o.focus, i >= CHECK_SHOWN)).join('');
+    const more = rows.length > CHECK_SHOWN
+        ? `<li class="read-check-more"><button type="button" class="link-button read-places-more" data-act="places-more">${esc(t.placesMore(rows.length - CHECK_SHOWN))}</button></li>` : '';
+    return rows.length ? `<ul class="read-check-rows">${list}${more}</ul>` : '';
+}
+
+/**
+ * "To check" sorted (spec 059, `read.sourceTask`): sure substantive changes (only they go into a task), uncertain
+ * places, places assessed in an earlier task (folded, one group per task, a link to the task), minor details
+ * (folded); then uncertain words and illegible spots as before.
+ */
+function sortedCheckHtml(places: readonly ShownPlace[], o: CheckOptions & { sorted: { note: string; person: boolean; taskLink: boolean } }): string {
+    const t = strings.read;
+    const g = sortedGroups(places);
+    const sample = (cls: string, sup = ''): string => `<span class="read-mk ${cls}" aria-hidden="true">Abc${sup ? `<sup>${sup}</sup>` : ''}</span>`;
+    const head = (smp: string, name: string, n: number, extra = ''): string =>
+        `${smp}<span class="read-check-name">${esc(name)}</span><span class="read-check-count">(${n})</span>${extra}`;
+    const from = o.shown === 2 ? ` <span class="read-check-from">${esc(t.fromR1)}</span>` : '';
+    const note = (text: string): string => text ? `<p class="read-check-note">${esc(text)}</p>` : '';
+    const open = (rows: readonly ShownPlace[]): string => rows.some(p => p.id === o.focus) ? ' open' : '';
+    const out: string[] = [];
+    if (g.major.length) out.push(`
+                <div class="read-check-group" data-group="major">
+                    <div class="read-check-head">${head(sample('read-mk-chg'), o.sorted.person ? t.gMajorPerson : t.gMajor, g.major.length, from)}</div>
+                    ${note(o.sorted.note)}${rowsHtml(g.major, o)}
+                </div>`);
+    if (g.unsure.length) out.push(`
+                <div class="read-check-group" data-group="unsure">
+                    <div class="read-check-head">${head(sample('read-mk-dis'), t.gUnsure, g.unsure.length)}</div>
+                    ${note(t.cUnsNote)}${rowsHtml(g.unsure, o)}
+                </div>`);
+    for (const j of g.judged) out.push(`
+                <div class="read-check-group is-fold" data-group="judged" data-task="${esc(j.task)}">
+                    <details class="read-check-fold"${open(j.rows)}>
+                        <summary class="read-check-head">${head(sample('read-mk-jud', '✓'), t.gJudged(j.task), j.rows.length)}</summary>
+                        ${note(t.cJudNote)}<ul class="read-check-rows">${j.rows.map(p => checkRowHtml(p, o.shown, o.focus, false)).join('')}</ul>
+                    </details>
+                    ${o.sorted.taskLink ? `<button type="button" class="read-link read-check-task" data-act="open-task" data-task="${esc(j.task)}">${researchActionLabel(t.tTaskLink(j.task), researchLinkMark('task'))}</button>` : ''}
+                </div>`);
+    if (g.minor.length) out.push(`
+                <div class="read-check-group is-fold" data-group="minor">
+                    <details class="read-check-fold"${open(g.minor)}>
+                        <summary class="read-check-head">${head(sample('read-mk-min'), t.gMinor, g.minor.length)}</summary>
+                        <ul class="read-check-rows">${g.minor.map(p => checkRowHtml(p, o.shown, o.focus, false)).join('')}</ul>
+                    </details>
+                </div>`);
+    return out.join('') + kindGroupsHtml(places, ['unc', 'ill'], o);
 }
 
 /**
@@ -264,8 +397,13 @@ export interface CheckOptions {
  * details folded under "and N minor details (kinds)". '' with no place.
  */
 export function checkHtml(places: readonly ShownPlace[], o: CheckOptions): string {
+    if (o.sorted && o.isSource) return sortedCheckHtml(places, { ...o, sorted: o.sorted });
+    return kindGroupsHtml(places, o.isSource ? ['chg', 'dis', 'unc', 'ill'] : ['dis', 'unc', 'ill'], o);
+}
+
+/** The groups of the kinds in `order` (as before the sorted view). */
+function kindGroupsHtml(places: readonly ShownPlace[], order: readonly PlaceKind[], o: CheckOptions): string {
     const t = strings.read;
-    const order: PlaceKind[] = o.isSource ? ['chg', 'dis', 'unc', 'ill'] : ['dis', 'unc', 'ill'];
     const groups = order.map(kind => {
         const rows = places.filter(p => p.kind === kind && !p.inside);
         if (!rows.length) return '';
@@ -312,6 +450,9 @@ export function placePopHtml(places: readonly ShownPlace[], shown: 1 | 2, phone:
     if (dis?.v) {
         rows.push(row(readerMark(1), t.readerN(1), sideHtml(dis.v.at, t.placeMissing), shown === 1));
         rows.push(row(readerMark(2), t.readerN(2), sideHtml(dis.v.other, t.placeMissing), shown === 2));
+    } else if (chg?.v && chg.cat === 'unsure' && chg.r2 !== undefined) {
+        rows.push(row(readerMark(1), t.readerN(1), sideHtml(chg.v.other, t.newNone), shown === 1));
+        rows.push(row(readerMark(2), t.readerN(2), sideHtml(chg.r2, t.placeMissing), shown === 2));
     } else if (chg?.v) {
         rows.push(row(readerMark(1), t.readerN(1), sideHtml(chg.v.other, t.newNone), true));
     }
@@ -320,7 +461,9 @@ export function placePopHtml(places: readonly ShownPlace[], shown: 1 | 2, phone:
     if (disKind) notes.push(disKind);
     if (chg?.cls) {
         const k = kindText(chg.cls);
-        const line = [k && k !== disKind ? k : '', chg.cls.kinds.length ? chg.cls.minor ? t.minor : t.major : ''].filter(Boolean).join(' · ');
+        const sorted = chg.cat === 'unsure' ? t.bUnsure : chg.cat === 'judged' && chg.v?.judged ? t.bJudged(chg.v.judged) : '';
+        const weight = sorted || (chg.cls.kinds.length ? chg.cls.minor ? t.minor : t.major : '');
+        const line = [k && k !== disKind ? k : '', weight].filter(Boolean).join(' · ');
         if (line) notes.push(line);
     }
     const unc = places.find(p => p.kind === 'unc');

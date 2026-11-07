@@ -513,6 +513,8 @@ test.describe('Read a source again from its original', () => {
         await view(page);
         const d = await openAgain(page, again(page));
         await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', variants: [{ at: 'Anna', other: 'Anně' }], task: 'T0042' });
+        // A research without read.sourceTask creates its task itself: the request as before.
+        expect(b.read!.sourcePosts![0]).not.toHaveProperty('taskChoice');
         const verdict = d.locator('#read-verdict');
         await expect(verdict).toHaveText('Read. Against the existing transcript 1 change.');
         await expect(verdict).toHaveAttribute('data-agree', 'differ');
@@ -544,6 +546,94 @@ test.describe('Read a source again from its original', () => {
         await expect(after).toContainText('1 place differs from the transcript');
         await after.locator('[data-read-again-open]').click();
         await expect(dialog(page).locator('#read-title')).toHaveText('Source read again');
+    });
+
+    test('read.sourceTask: the app chooses who creates the task; the sure changes counted alike everywhere; one call; a failure retried', async ({ page }) => {
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        const source = {
+            id: 'S0001', agree: 'differ', task: '', taskSetting: 'ask', taskOffer: true,
+            variants: [{ at: 'Anna', other: 'Anně', sure: true }, { at: 'Josef', other: 'Josef,', sure: true }],
+        };
+        await readAndFinish(page, b, d, source);
+        expect(b.read!.sourcePosts![0].taskChoice).toBe(true);
+        // The header, the first group and the agent's group say the same count: 1 sure change (the comma is minor).
+        await expect(d.locator('#read-verdict')).toHaveText('Read. 1 substantive change against the transcript · 1 minor detail');
+        await expect(d.locator('#read-verdict strong').first()).toHaveText('1 substantive change against the transcript');
+        await expect(d.locator('.read-check [data-group="major"] .read-check-count')).toHaveText('(1)');
+        await expect(d.locator('.read-check [data-group="major"] .read-check-note')).toHaveText('Only these places go into the task.');
+        await expect(d.locator('.read-check [data-group="minor"] details')).not.toHaveAttribute('open', '');
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'A');
+        await expect(foot.locator('[data-group="agent"] legend')).toContainText('1 substantive change to check');
+        // Marks: now = the agent badge and the terminal mark, queue = the agent badge alone, save none.
+        const now = foot.locator('[data-act="task-now"]');
+        const queue = foot.locator('[data-act="task-queue"]');
+        const save = foot.locator('[data-act="task-save"]');
+        await expect(now.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(now.locator('.research-open-mark')).toHaveCount(1);
+        await expect(queue.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(queue.locator('.research-open-mark')).toHaveCount(0);
+        await expect(save.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        // A choice fits a finger.
+        for (const c of [now, queue, save]) expect((await c.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+        // The research does not answer: said, and a retry repeats the choice.
+        b.read!.taskReply = { status: 500, body: { code: 'oops' } };
+        await queue.click();
+        await expect(foot).toContainText('The task could not be created');
+        const retry = foot.locator('[data-act="task-retry"]');
+        await expect(retry).toHaveAttribute('data-how', 'queue');
+        await expect(retry).toBeFocused();
+        b.read!.taskReply = undefined;
+        await retry.click();
+        await expect(foot).toContainText('Task T0043 for the agent created, ahead in the queue.');
+        expect(b.read!.taskPosts!.map(p => [p.source, p.read, p.body])).toEqual([['S0001', READ_ID, { how: 'queue' }], ['S0001', READ_ID, { how: 'queue' }]]);
+        await expect(d.locator('.read-check [data-group="major"] .read-check-note')).toHaveText('Task T0043 has these places.');
+        // Nothing opens by itself for the queue; the task opens from the footer.
+        expect(await page.evaluate(() => (window.Strom.UI as unknown as { __links?: string[] }).__links ?? [])).toEqual([]);
+        await foot.locator('[data-act="open-task"]').click();
+        await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([expect.stringContaining('task=T0043')]);
+    });
+
+    test('read.sourceTask: "now" opens the chat with the agent in the research terminal', async ({ page }) => {
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', task: '', taskSetting: 'ask', taskOffer: true, variants: [{ at: 'Anna', other: 'Anně', sure: true }] });
+        await d.locator('[data-act="task-now"]').click();
+        await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([expect.stringMatching(/task=T0043.*do=chat|do=chat.*task=T0043/)]);
+        await expect(d.locator('.read-task-foot')).toContainText('Task T0043 for the agent created.');
+    });
+
+    test('read.sourceTask: the setting "never": no choice, the footer says why, nothing sent', async ({ page }) => {
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', task: '', taskSetting: 'never', taskOffer: true, variants: [{ at: 'Anna', other: 'Anně', sure: true }] });
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'D');
+        await expect(foot.locator('[data-act^="task-"]')).toHaveCount(0);
+        await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
+        expect(b.read!.taskPosts ?? []).toEqual([]);
+    });
+
+    test('read.sourceTask on a tablet: the two groups of choices fit the dialog\'s width', async ({ page }) => {
+        await page.setViewportSize({ width: 800, height: 1000 });
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, { id: 'S0001', agree: 'differ', task: '', taskSetting: 'ask', taskOffer: true, variants: [{ at: 'Anna', other: 'Anně', sure: true }] });
+        const foot = d.locator('.read-task-foot');
+        await expect(foot.locator('.read-task-choice')).toHaveCount(3);
+        const box = (await d.locator('.modal-content, .modal').first().boundingBox())!;
+        for (const c of await foot.locator('.read-task-choice').all()) {
+            const r = (await c.boundingBox())!;
+            expect(r.x).toBeGreaterThanOrEqual(box.x);
+            expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+        }
+        expect(await foot.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
 
     for (const code of ['noscan', 'notext'] as const) {

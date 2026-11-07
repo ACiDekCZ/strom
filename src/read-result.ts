@@ -478,10 +478,14 @@ export function mergeAdjacent(variants: readonly ReadVariant[], text: string, si
         const region = regions.every((r): r is ReadRegion => !!r) ? unionRegion(regions) : undefined;
         const first = Math.min(...g.map(h => h.i));
         const kind = kinds ? kinds.find(k => !MINOR_KINDS.has(k)) ?? kinds[0] : undefined;
+        // Unsure when any part is; sure only when every part says so; judged when every part was, in one task.
+        const sure = parts.some(p => p.sure === false) ? false : parts.every(p => p.sure === true) ? true : undefined;
+        const judged = parts.every(p => p.judged && p.judged === parts[0].judged) ? parts[0].judged : undefined;
         merged.set(first, {
             at: side === 'at' ? readSide : oldSide, other: side === 'at' ? oldSide : readSide,
             ...(parts[0].field ? { field: parts[0].field } : {}),
             ...(kind ? { kind } : {}), ...(kinds ? { kinds } : {}), ...(region ? { region } : {}),
+            ...(sure !== undefined ? { sure } : {}), ...(judged ? { judged } : {}),
         });
         for (const h of g) if (h.i !== first) dropped.add(h.i);
     }
@@ -536,6 +540,38 @@ export function compareWithTranscript(transcript: string, text: string, cap = 15
     return out;
 }
 
+// ---- A source read again, sorted (spec 059, `read.sourceTask`): only sure substantive changes go into a task ----
+
+/** Where a change against the transcript belongs: a sure substantive change, the readers disagree, assessed in a task before, a minor detail. */
+export type ReadSourceCat = 'major' | 'unsure' | 'judged' | 'minor';
+
+const ILLEGIBLE_ONLY = /^\s*\[\s*(?:\.{2,}|…)\s*\]\s*$/;
+
+/**
+ * One change's group: `unsure` when the research says it is not sure (also an illegible spot in the new reading
+ * where the transcript has a word), `judged` when a task assessed it before, `minor` by its kind (without a kind:
+ * the app's own rule), the rest `major`.
+ */
+export function readSourceCat(v: MergedVariant): ReadSourceCat {
+    if (v.sure === false || (ILLEGIBLE_ONLY.test(v.other) && v.at.trim() !== '')) return 'unsure';
+    if (v.judged) return 'judged';
+    return variantClass(v).minor ? 'minor' : 'major';
+}
+
+export interface ReadSourceSorted<V> { major: V[]; unsure: V[]; judged: V[]; minor: V[] }
+
+/** The changes in their groups (order kept). Only `major` goes into a task: its length is the count everywhere. */
+export function readSourceSort<V extends MergedVariant>(variants: readonly V[]): ReadSourceSorted<V> {
+    const out: ReadSourceSorted<V> = { major: [], unsure: [], judged: [], minor: [] };
+    for (const v of variants) out[readSourceCat(v)].push(v);
+    return out;
+}
+
+/** The research says which changes are sure or assessed: the sorted view applies (else everything as before it). */
+export function readSourceSaysSure(variants: readonly ReadVariant[]): boolean {
+    return variants.some(v => v.sure !== undefined || !!v.judged);
+}
+
 /** What the header's sentence says (spec 059 P7 §3), counted by the dialog. */
 export interface VerdictFacts {
     /** Read only in part, with the reason in words ('' none). */
@@ -543,10 +579,13 @@ export interface VerdictFacts {
     why: string;
     illegible: number;
     /** A source read again: compared (substantive changes, minor details, whether the research named the kinds), or not compared (`why`: its own sentence, else the entry not found). */
-    source: { compared: true; major: number; minor: number; kinded: boolean } | { compared: false; why?: string } | null;
+    source: { compared: true; major: number; minor: number; kinded: boolean; sorted?: VerdictSorted } | { compared: false; why?: string } | null;
     /** Two readers on this entry: the places they disagree in (0: they agree); null: not both read it. */
     disagree: number | null;
 }
+
+/** A source read again, sorted (`read.sourceTask`): the groups' counts, the assessed ones by task. */
+export interface VerdictSorted { major: number; unsure: number; minor: number; judged: { task: string; n: number }[] }
 
 /** The strings the header's sentence is made of (`strings.read`). `b` makes a count bold. */
 export interface VerdictStrings {
@@ -558,6 +597,10 @@ export interface VerdictStrings {
     vNc: string;
     vDis: (n: number, b: (s: string) => string) => string;
     vAgree: string;
+    vMajor: (n: number) => string;
+    vUnsure: (n: number) => string;
+    vMinor: (n: number) => string;
+    vJudged: (n: number, task: string) => string;
 }
 
 /** The reason after the illegible words' count, in words: none for `other` or an unknown reason
@@ -566,11 +609,21 @@ export function verdictWhy(why: string | null | undefined, whyText: Record<strin
     return why && why !== 'other' ? whyText[why] ?? '' : '';
 }
 
-/** The header's sentence: legibility, then the comparison with the transcript, then the readers. */
-export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string) => string = s => s): string {
+/** The header's sentence: legibility, then the comparison with the transcript, then the readers. `bPart`: a whole part bold (the sorted groups' first). */
+export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string) => string = s => s, bPart: (s: string) => string = b): string {
     const out: string[] = [];
     out.push(f.partial ? t.vPartial(f.illegible, f.why) : f.illegible > 0 ? t.vIll(f.illegible) : t.vRead);
     if (f.source && !f.source.compared) out.push(f.source.why || t.vNc);
+    else if (f.source?.compared && f.source.sorted) {
+        // Sorted: the groups joined by "·", the first bold, a group without places left out; the readers are in "uncertain".
+        const s = f.source.sorted;
+        const parts = [
+            s.major ? t.vMajor(s.major) : '', s.unsure ? t.vUnsure(s.unsure) : '', s.minor ? t.vMinor(s.minor) : '',
+            ...s.judged.filter(j => j.n > 0).map(j => t.vJudged(j.n, j.task)),
+        ].filter(Boolean);
+        out.push(parts.length ? [bPart(parts[0]), ...parts.slice(1)].join(' · ') : t.vSrcSame);
+        return out.join(' ');
+    }
     else if (f.source?.compared) out.push(f.source.major + f.source.minor ? t.vSrc(f.source.major, f.source.minor, f.source.kinded, b) : t.vSrcSame);
     if (f.disagree !== null) out.push(f.disagree > 0 ? t.vDis(f.disagree, b) : t.vAgree);
     return out.join(' ');

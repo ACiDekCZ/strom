@@ -1158,6 +1158,10 @@ export interface FakeRead {
     sourcePosts?: Record<string, unknown>[];
     /** `POST /sources/read` turned down: this status and body. */
     sourceReply?: { status: number; body: unknown };
+    /** Every `POST /sources/<S>/read/<D>/task` (with `read.sourceTask` in `features`): who creates the task. */
+    taskPosts?: { source: string; read: string; body: Record<string, unknown> }[];
+    /** `POST …/task` answers this (default: task T0043 made, none for `save`). */
+    taskReply?: { status: number; body: unknown };
     /**
      * A busy bridge (its thread being sorted): a start (`POST /read`, `/read/<id>/again`, `/sources/read`)
      * is taken only this late (ms), the app may have given up waiting meanwhile.
@@ -1714,6 +1718,14 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (rd?.startDelayMs && method === 'POST' && (/\/sources\/read$/.test(url.pathname) || /\/read(?:\/[^/]+\/again)?$/.test(url.pathname))) {
             late = true;
             await new Promise(resolve => setTimeout(resolve, rd.startDelayMs));
+        }
+        const taskPath = /\/sources\/([^/]+)\/read\/([^/]+)\/task$/.exec(url.pathname);
+        if (rd && taskPath && method === 'POST' && b.features?.includes('read.sourceTask')) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            (rd.taskPosts ??= []).push({ source: decodeURIComponent(taskPath[1]), read: decodeURIComponent(taskPath[2]), body });
+            if (rd.taskReply) return json(rd.taskReply.status, rd.taskReply.body);
+            return json(200, body.how === 'save' ? {} : { task: 'T0043', ...(body.how === 'now' ? { chat: 'chat-1' } : {}) });
         }
         if (rd && method === 'POST' && /\/sources\/read$/.test(url.pathname) && b.features?.includes('read.source')) {
             let body: Record<string, unknown> = {};

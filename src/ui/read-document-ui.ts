@@ -30,16 +30,19 @@ import {
     startSourceRead, readSourceId, READ_SOURCE_ENTRY_FEATURE, READ_BLIND_TEXT_FEATURE, READ_KINDS_FEATURE, READ_VARIANT_KIND_FEATURE, type ReadBlindEntry,
     type ReadVariant,
     type ReadSourceFailCode,
+    postReadTask,
 } from '../research-read.js';
+import { READ_SOURCE_TASK_FEATURE, readTaskChoiceFor, type ReadTaskHow } from '../research-read-task.js';
+import { readTaskFootHtml, readTaskFootState, readTaskForPerson, readTaskMajorNote, type ReadTaskAct, type ReadTaskFootInput } from './read-task-view.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
     entryName, placeCountAll, readerPlaces, cropLayout, stripLayout,
     sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict, verdictWhy,
-    compareWithTranscript, type VerdictFacts, type MergedVariant,
+    compareWithTranscript, readSourceSaysSure, type VerdictFacts, type VerdictSorted, type MergedVariant,
 } from '../read-result.js';
-import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, type ResultMarks, type ShownPlace } from './read-result-view.js';
+import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, sortPlaces, sortedCounts, type ResultMarks, type ShownPlace } from './read-result-view.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, bridgeFailure } from './research-ui.js';
@@ -206,6 +209,8 @@ export interface DialogState {
     nbOpen?: boolean;
     /** The outline of the place chosen on the scan (its region, `read.variantRegion`; null none). */
     spot?: ReadRegion | null;
+    /** A source read again (`read.sourceTask`): the choice made in the footer for reading `read`. */
+    task?: { read: string; act: ReadTaskAct } | null;
 }
 
 /**
@@ -1795,7 +1800,8 @@ export const readDocumentMethods = uiModule({
         if (isSource) {
             if (src) {
                 const minor = src.variants.filter(v => variantClass(v).minor).length;
-                source = { compared: true, major: src.variants.length - minor, minor, kinded: src.kinded };
+                const sorted = this.readSourceSortedOn(res) ? this.readSourceCounts(res) : null;
+                source = { compared: true, major: src.variants.length - minor, minor, kinded: src.kinded, ...(sorted ? { sorted } : {}) };
             } else {
                 // The source changed meanwhile, or another failure: its own sentence; no entry found (or none said): not found.
                 const failed = this.readSourceFailed(res);
@@ -1806,7 +1812,7 @@ export const readDocumentMethods = uiModule({
         const disagree = view?.both && (count > 0 || !this.readKindsText(res)) ? count : null;
         const facts: VerdictFacts = { partial, why: verdictWhy(res.doc.why, t.whyText), illegible: ill, source, disagree };
         // Bold counts marked in the plain sentence, then escaped as a whole.
-        const html = esc(composeVerdict(facts, t, x => `\u0001${x.replace(/ /g, '\u00a0')}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
+        const html = esc(composeVerdict(facts, t, x => `\u0001${x.replace(/ /g, '\u00a0')}\u0002`, x => `\u0001${x}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
         const photo = partial && !isSource
             ? ` ${esc(t.advice[whyKey] ?? t.advice.other)} <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button>` : '';
         return html + photo;
@@ -1948,6 +1954,8 @@ export const readDocumentMethods = uiModule({
             const r1 = resultPlaces({ text: entry.transcript, dis: [], disSide: 'at', disKinded: kindOn, data: [], chg });
             marks.places.push(...r1.places.filter(p => p.kind === 'chg').map(p => ({ ...p, elsewhere: true })));
         }
+        // Sorted (`read.sourceTask`): each change in its group, a disagreement on a changed word covered by the change.
+        if (chg && this.readSourceSortedOn(res)) marks.places = sortPlaces(marks.places);
         const both = this.readBothRead(res, entry);
         return { shown, marks, both, onlyR1: !both && this.readTwoReaders(res), kinded: !!src?.kinded };
     },
@@ -2295,7 +2303,8 @@ export const readDocumentMethods = uiModule({
      */
     readCheckHtml(res: ReadResult, view: EntryView, near: boolean): string {
         const t = strings.read;
-        const groups = checkHtml(view.marks.places, { isSource: this.readIsSourceAgain(res), shown: view.shown, kinded: view.kinded, focus: st?.focus ?? '' });
+        const sorted = this.readSourceSortedOn(res) ? this.readSortedCheck(res) : undefined;
+        const groups = checkHtml(view.marks.places, { isSource: this.readIsSourceAgain(res), shown: view.shown, kinded: view.kinded, focus: st?.focus ?? '', ...(sorted ? { sorted } : {}) });
         if (!groups && !near) return '';
         return `
                 <section class="read-section read-check" aria-labelledby="read-s-check">
@@ -2340,6 +2349,102 @@ export const readDocumentMethods = uiModule({
     },
 
     /**
+     * A source read again, sorted (spec 059, `read.sourceTask`): the research says which changes are sure or
+     * assessed before, and the comparison is the research's own (not one made in the app).
+     */
+    readSourceSortedOn(res: ReadResult): boolean {
+        return !st?.cmp && res.source?.agree === 'differ' && this.readFeatureOn(READ_SOURCE_TASK_FEATURE) && readSourceSaysSure(res.source.variants);
+    },
+
+    /** A source read again: the sorted groups' counts of its own entry (only `major` goes into a task). */
+    readSourceCounts(res: ReadResult): VerdictSorted {
+        const src = this.readSourceChanges(res);
+        const entry = src ? res.entries[src.k] : null;
+        if (!src || !entry) return { major: 0, unsure: 0, minor: 0, judged: [] };
+        const places = this.readEntryView(res, entry).marks.places;
+        // Without the sorted view the same counting: each change by its kind, the readers' places uncertain.
+        return sortedCounts(this.readSourceSortedOn(res) ? places : sortPlaces(places));
+    },
+
+    /** The footer's input for who creates the task (`read.sourceTask`); null: the research does not say it (the footer as before). */
+    readTaskInput(res: ReadResult): ReadTaskFootInput | null {
+        const s = res.source;
+        if (!s || !s.taskSetting || s.agree !== 'differ' || st?.cmp || !this.readFeatureOn(READ_SOURCE_TASK_FEATURE)) return null;
+        if (this.readSourceFailed(res) === 'write' || !this.readSourceChanges(res)) return null;
+        const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
+        return {
+            setting: s.taskSetting,
+            offer: !!s.taskOffer,
+            task: s.task,
+            ...(s.taskFor ? { taskFor: s.taskFor } : {}),
+            ...(s.decided ? { decided: s.decided } : {}),
+            ...(s.openTask ? { openTask: s.openTask } : {}),
+            confirmed: !!src && !!this.sourceConfirmState(src).conf,
+            computer: onComputer(),
+            counts: this.readSourceCounts(res),
+            canOpenTask: this.researchLinkAvailable('task'),
+            act: st?.task?.read === res.id ? st.task.act : null,
+        };
+    },
+
+    /** The footer that says who creates the task (spec 059 §1); '' without the feature or the research's fields. */
+    readSourceTaskFootHtml(res: ReadResult): string {
+        const input = this.readTaskInput(res);
+        return input ? readTaskFootHtml(input) : '';
+    },
+
+    /** The sorted "To check" options: the sentence under the sure changes (by the footer's state), a person reviews them. */
+    readSortedCheck(res: ReadResult): { note: string; person: boolean; taskLink: boolean } {
+        const input = this.readTaskInput(res);
+        const taskLink = this.researchLinkAvailable('task');
+        if (!input) return { note: '', person: false, taskLink };
+        return { note: readTaskMajorNote(readTaskFootState(input), input), person: readTaskForPerson(input), taskLink };
+    },
+
+    /**
+     * A choice of the footer (spec 059 §1): the bridge creates the task (or saves without one); meanwhile the chosen
+     * button is busy and the others off. `now` then opens the chat with the agent in the research's terminal (the
+     * app's own link, never one from the answer). A retry repeats the choice it shows.
+     */
+    async readTaskChoose(how: ReadTaskHow, retry = false): Promise<void> {
+        const s = st;
+        const res = s?.result;
+        const link = this.researchOriginalsLink();
+        const input = res ? this.readTaskInput(res) : null;
+        if (!s || !res?.source || !link || !input || input.act?.busy) return;
+        const state = readTaskFootState(input);
+        if (!retry && state !== 'A' && state !== 'append' && state !== 'E') return;
+        const append = retry ? !!input.act?.append : state === 'append' && how !== 'save';
+        const act: ReadTaskAct = { how, append, busy: true };
+        s.task = { read: res.id, act };
+        this.readRedrawTaskFoot(false);
+        const reply = await postReadTask(this.readBridgeBase(link.researchId), res.source.id, res.id, how);
+        if (st !== s || s.task?.act !== act) return;
+        s.task = { read: res.id, act: reply.ok ? { how, append, busy: false, reply: reply.value } : { how, append, busy: false, failed: true } };
+        this.readRedrawTaskFoot(true);
+        if (!reply.ok) return;
+        const task = reply.value.task || (append ? input.openTask ?? '' : '');
+        if (how === 'now' && task) {
+            const url = this.activeResearchLink('task', { task, taskDo: 'chat' });
+            if (url) this.launchResearchLink(url);
+        }
+        this.refreshReadSourceViewer();
+    },
+
+    /** Redraw the footer after a choice (and the sentence over the sure changes, which follows it). */
+    readRedrawTaskFoot(focus: boolean): void {
+        const overlay = document.getElementById(DIALOG_ID);
+        const s = st;
+        if (!overlay || !s?.result || s.phase !== 'result') return;
+        const foot = overlay.querySelector<HTMLElement>('.read-footer');
+        if (foot) foot.innerHTML = this.readResultFootHtml();
+        const note = overlay.querySelector<HTMLElement>('.read-check-group[data-group="major"] .read-check-note');
+        const text = this.readSortedCheck(s.result).note;
+        if (note && text) note.textContent = text;
+        if (focus) overlay.querySelector<HTMLElement>('.read-footer .primary')?.focus();
+    },
+
+    /**
      * The result's footer (spec 059 P7 §3): one main action. A source compared: what became of the transcript, Close ·
      * Open task (terminal); not compared: Read again (AI) · Close; a document: Read another · Close · Propose to the tree.
      */
@@ -2351,6 +2456,9 @@ export const readDocumentMethods = uiModule({
             `<span class="batch-foot-note read-kept">${lines.filter(Boolean).map(l => `<span class="read-foot-line">${esc(l)}</span>`).join('')}`
             + `<span class="read-foot-phone">${esc(phone)}</span></span>`;
         if (res && this.readIsSourceAgain(res)) {
+            // Who creates the task (`read.sourceTask`): the footer of its own; without the feature as before.
+            const taskFoot = this.readSourceTaskFootHtml(res);
+            if (taskFoot) return taskFoot;
             const src = DataManager.getData().sources?.[this.readSourceAgainNow()?.id ?? ''];
             const confirmed = src ? !!this.sourceConfirmState(src).conf ? t.keepConfirm : '' : '';
             const failed = this.readSourceFailed(res);
@@ -3164,6 +3272,20 @@ export const readDocumentMethods = uiModule({
                 if (url) this.launchResearchLink(url);
                 break;
             }
+            case 'task-now': void this.readTaskChoose('now'); break;
+            case 'task-queue': void this.readTaskChoose('queue'); break;
+            case 'task-save': void this.readTaskChoose('save'); break;
+            case 'task-review': void this.readTaskChoose('review'); break;
+            case 'task-retry': {
+                const how = st?.task?.act.how;
+                if (how) void this.readTaskChoose(how, true);
+                break;
+            }
+            case 'open-settings':
+                // The research's settings of the tree (its group "Reading documents", spec 059 §4).
+                this.closeReadDocumentDialog();
+                this.researchActionTreeSettings();
+                break;
             case 'refine': if (st) { st.refineOpen = !st.refineOpen; this.readRedrawChoose(); } break;
             case 'reset-with': {
                 const choices = this.readChoicesNow();
@@ -3460,6 +3582,8 @@ export const readDocumentMethods = uiModule({
         const reply = await startSourceRead(base, {
             source: again.refn, ...(again.clip ? { clip: again.clip } : {}), readers: s.readers, lang: getCurrentLanguage(),
             with: this.readWithNow(),
+            // The app chooses who creates the task only with a research that says so; an older one creates it itself.
+            ...readTaskChoiceFor(this.researchStatusOf(link.researchId)?.features),
         });
         if (st !== s) return;
         s.busy = false;
