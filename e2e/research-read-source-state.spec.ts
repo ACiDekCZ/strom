@@ -183,6 +183,60 @@ test.describe('A source after a newer reading', () => {
         expect(b.read!.proposalPosts).toEqual([{ source: 'S0001', task: 'T0003', take: 'proposal' }]);
     });
 
+    test('only uncertain places with read.sourceTask.unsure: "Give to the agent…" offers the agent\'s look (AI alone); queued', async ({ page }) => {
+        const b = await setup(page, {
+            features: [...FEATURES, 'read.sourceTask.unsure'],
+            readAgain: { S0001: { read: READ_ID, state: 'saved', unsureOnly: true, unsureOffer: true } },
+        });
+        await view(page);
+        await expect(row(page)).toHaveAttribute('data-state', 'unsure');
+        const toggle = row(page).locator('[data-read-state="toggle"]');
+        await expect(toggle).toHaveText(/Give to the agent…/);
+        await toggle.click();
+        const opts = page.locator('#source-viewer-read-state-opts');
+        await expect(opts.locator('[data-read-how]')).toHaveCount(1);
+        const choice = opts.locator('[data-read-how="queue"][data-read-unsure="true"]');
+        await expect(choice).toContainText('Give to the agent to assess');
+        await expect(choice.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(choice.locator('.research-open-mark')).toHaveCount(0);
+        await expect(opts.locator('.viewer-read-state-note')).toContainText('corrects the transcript only where the scan is clear');
+        expect(b.read!.taskPosts ?? []).toEqual([]);
+        await choice.click();
+        await expect(row(page)).toHaveAttribute('data-state', 'queued');
+        expect(b.read!.taskPosts!.map(p => [p.source, p.read, p.body])).toEqual([['S0001', READ_ID, { how: 'queue', unsure: true }]]);
+    });
+
+    test('only uncertain places without read.sourceTask.unsure: nothing to choose, as before', async ({ page }) => {
+        await setup(page, { readAgain: { S0001: { read: READ_ID, state: 'saved', unsureOnly: true, unsureOffer: true } } });
+        await view(page);
+        await expect(row(page)).toHaveAttribute('data-state', 'unsure');
+        await expect(row(page).locator('[data-read-state="toggle"]')).toHaveCount(0);
+    });
+
+    test('only uncertain places of a confirmed transcript: set aside for review; nothing to propose said, no choice left', async ({ page }) => {
+        const b = await setup(page, {
+            features: [...FEATURES, 'read.sourceTask.unsure'],
+            readAgain: { S0001: { read: READ_ID, state: 'saved', unsureOnly: true, unsureOffer: true } },
+        });
+        await page.evaluate(() => {
+            const src = Object.values(window.Strom.DataManager.getData().sources).find((s: any) => s.refn === 'S0001') as any;
+            src.readBy = 'both';
+            src.readConfirmed = '2026-11-01';
+        });
+        await view(page);
+        const toggle = row(page).locator('[data-read-state="toggle"]');
+        await expect(toggle).toHaveText(/Set aside for review…/);
+        await toggle.click();
+        const choice = page.locator('#source-viewer-read-state-opts [data-read-how="review"][data-read-unsure="true"]');
+        await expect(choice.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        b.read!.taskReply = { status: 409, body: { code: 'read.decide.noproposal' } };
+        await choice.click();
+        await expect(row(page).locator('.viewer-read-state-note.is-settled')).toHaveText('The new reading did not read the uncertain places: there is nothing to propose.');
+        await expect(row(page).locator('[data-read-how]')).toHaveCount(0);
+        await expect(page.locator('.viewer-read-state-fail')).toHaveCount(0);
+        expect(b.read!.taskPosts!.map(p => p.body)).toEqual([{ how: 'review', unsure: true }]);
+    });
+
     test('the bridge down: the state stays, nothing to choose', async ({ page }) => {
         const b = await setup(page, { readAgain: { S0001: { read: READ_ID, state: 'unchecked' } } });
         await view(page);

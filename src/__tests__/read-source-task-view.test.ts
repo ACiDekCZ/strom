@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { resultPlaces, sortPlaces, sortedGroups, sortedCounts, checkHtml, lineMarksHtml, placePopHtml, type ShownPlace } from '../ui/read-result-view.js';
-import { readTaskFootHtml, readTaskFootState, readTaskMajorNote, type ReadTaskFootInput } from '../ui/read-task-view.js';
+import { readTaskFootHtml, readTaskFootState, readTaskMajorNote, readTaskOffers, type ReadTaskFootInput } from '../ui/read-task-view.js';
 import { composeVerdict, mergeAdjacent, readSourceCat, readSourceSort, readSourceSaysSure, type MergedVariant, type VerdictFacts } from '../read-result.js';
 import { researchLinkMark } from '../research-link.js';
 import { researchActionLabel, researchBridgeAgentLabel } from '../ui/research-open-mark.js';
@@ -377,5 +377,107 @@ describe('the research\'s refusals that are answers', () => {
         expect(html).not.toContain(t.tFail);
         expect(acts(html)).toEqual(['close']);
         expect(readTaskMajorNote('F', { ...BASE, act })).toBe('');
+    });
+});
+
+describe('uncertain places handed over on the person\'s word (spec 059 P8, read.sourceTask.unsure)', () => {
+    // Only uncertain places, no sure change, no task, nothing decided: what the research sends with `unsureOffer`.
+    const UNS: ReadTaskFootInput = { ...BASE, offer: false, unsureOffer: true, counts: { major: 0, unsure: 6, minor: 1, judged: [] } };
+    const choiceAttrs = (html: string): string[] => [...html.matchAll(/<button type="button" class="read-task-choice" ([^>]*)>/g)].map(m => m[1]);
+
+    it('B with the offer: the sentence, one secondary choice for the agent (the AI badge alone), Close the main action', () => {
+        const html = readTaskFootHtml(UNS);
+        expect(stateOf(html)).toBe('B');
+        expect(html).toContain(t.tOnlyUnsure(6));
+        expect(acts(html)).toEqual(['task-queue', 'close']);
+        expect(choiceAttrs(html)).toEqual(['data-act="task-queue" data-unsure="true"']);
+        expect(html).toContain(`<span class="read-task-ct">${researchBridgeAgentLabel(t.tUnsureQueue)}</span>`);
+        expect(html).not.toContain('research-open-mark');
+        expect(html).toContain(t.tUnsureQueueSub);
+        expect(html).toContain('<button type="button" class="primary" data-act="close">');
+        expect(readTaskMajorNote('B', UNS)).toBe('');
+    });
+
+    it('a confirmed transcript: "Set aside for review" for a person, no mark, the wording only from the places read', () => {
+        const html = readTaskFootHtml({ ...UNS, confirmed: true });
+        expect(stateOf(html)).toBe('B');
+        expect(acts(html)).toEqual(['task-review', 'close']);
+        expect(choiceAttrs(html)).toEqual(['data-act="task-review" data-unsure="true"']);
+        expect(html).toContain(`<span class="read-task-ct">${t.tReview}</span>`);
+        expect(html).toContain(t.tUnsureReviewSub);
+        expect(html).not.toContain('research-ai-badge');
+    });
+
+    it('offered by `unsureOffer`, not by what is left: also beside places a task assessed; the setting "never" too', () => {
+        const judged = readTaskFootHtml({ ...UNS, counts: { major: 0, unsure: 2, minor: 0, judged: [{ task: 'T0399', n: 3 }] } });
+        expect(judged).toContain(t.tAllJudged('T0399'));
+        expect(acts(judged)).toEqual(['open-task', 'task-queue', 'close']);
+        const never = readTaskFootHtml({ ...UNS, setting: 'never' });
+        expect(stateOf(never)).toBe('D');
+        expect(acts(never)).toEqual(['open-settings', 'task-queue', 'close']);
+        expect(readTaskFootState({ ...UNS, setting: 'always' })).toBe('B');
+    });
+
+    it('without the offer (or the feature: the caller passes none), on a phone, or with a task or a decision: nothing new', () => {
+        const without = readTaskFootHtml({ ...UNS, unsureOffer: false });
+        expect(acts(without)).toEqual(['close']);
+        expect(without).not.toContain('data-unsure');
+        expect(acts(readTaskFootHtml({ ...UNS, unsureOffer: undefined, counts: { major: 0, unsure: 0, minor: 2, judged: [] } }))).toEqual(['close']);
+        expect(acts(readTaskFootHtml({ ...UNS, computer: false }))).toEqual(['close']);
+        expect(readTaskFootHtml({ ...UNS, task: 'T0400' })).not.toContain('data-unsure');
+        expect(readTaskFootHtml({ ...UNS, decided: 'saved' })).not.toContain('data-unsure');
+        // A sure change offered: the choices of A, never the uncertain places alone.
+        expect(stateOf(readTaskFootHtml({ ...BASE, unsureOffer: true }))).toBe('A');
+        expect(readTaskFootHtml({ ...BASE, unsureOffer: true })).not.toContain('data-unsure');
+    });
+
+    it('on its way: the choice busy, Close still there; the other choices of A never shown', () => {
+        const busy = readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, unsure: true, busy: true } });
+        expect(stateOf(busy)).toBe('F');
+        expect(count(busy, /aria-busy="true"/g)).toBe(1);
+        expect(busy).toContain(t.tBusy);
+        expect(busy).toContain(t.tOnlyUnsure(6));
+        expect(acts(busy)).toEqual(['task-queue', 'close']);
+        // A busy choice of A is not this one.
+        expect(readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, busy: true } })).not.toContain(t.tOnlyUnsure(6));
+    });
+
+    it('done: a task for the agent in the queue, or the places added to the open task; the task to open', () => {
+        const done = readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, unsure: true, busy: false, reply: { task: 'T0412', chat: '', appended: false } } });
+        expect(done).toContain(t.tDoneQueue('T0412'));
+        expect(acts(done)).toEqual(['open-task', 'close']);
+        const appended = readTaskFootHtml({ ...UNS, openTask: 'T0399', act: { how: 'queue', append: false, unsure: true, busy: false, reply: { task: 'T0399', chat: '', appended: true } } });
+        expect(appended).toContain(t.tDoneAppend('T0399'));
+        // `appended` without the task in the answer: the source's open task.
+        expect(readTaskFootHtml({ ...UNS, openTask: 'T0399', act: { how: 'queue', append: false, unsure: true, busy: false, reply: { task: '', chat: '', appended: true } } }))
+            .toContain(t.tDoneAppend('T0399'));
+        const review = readTaskFootHtml({ ...UNS, confirmed: true, act: { how: 'review', append: false, unsure: true, busy: false, reply: { task: 'T0413', chat: '', appended: false } } });
+        expect(review).toContain(t.tDoneReview('T0413'));
+        expect(readTaskMajorNote('F', { ...UNS, act: { how: 'queue', append: false, unsure: true, busy: false, reply: { task: 'T0412', chat: '', appended: false } } })).toBe('');
+    });
+
+    it('failed: a retry that repeats the same choice (unsure, its mark)', () => {
+        const failed = readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, unsure: true, busy: false, failed: true } });
+        expect(failed).toContain(t.tFail);
+        expect(failed).toContain(`data-act="task-retry" data-how="queue" data-unsure="true">${researchBridgeAgentLabel(t.tRetry)}`);
+        expect(readTaskFootHtml({ ...UNS, act: { how: 'queue', append: false, busy: false, failed: true } })).not.toContain('data-unsure');
+    });
+
+    it('the research\'s answers: sure changes came meanwhile, nothing to propose, a wording turned down, nothing left', () => {
+        const reply = (outcome: 'sure' | 'noproposal' | 'declined' | 'settled') =>
+            readTaskFootHtml({ ...UNS, confirmed: true, act: { how: 'review', append: false, unsure: true, busy: false, reply: { task: '', chat: '', appended: false, outcome } } });
+        for (const [outcome, text] of [['sure', t.tUnsureSure], ['noproposal', t.tNoProposal], ['declined', t.tDeclined], ['settled', t.tSettled]] as const) {
+            const html = reply(outcome);
+            expect(html).toContain(text);
+            expect(html).not.toContain(t.tFail);
+            expect(acts(html)).toEqual(['close']);
+        }
+    });
+
+    it('what is still offered: the choices of A, the uncertain places alone, or nothing', () => {
+        expect(readTaskOffers(BASE)).toBe('choices');
+        expect(readTaskOffers(UNS)).toBe('unsure');
+        expect(readTaskOffers({ ...UNS, unsureOffer: false })).toBeNull();
+        expect(readTaskOffers({ ...UNS, act: { how: 'queue', append: false, unsure: true, busy: false, failed: true } })).toBe('unsure');
     });
 });

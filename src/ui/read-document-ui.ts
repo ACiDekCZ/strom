@@ -32,8 +32,8 @@ import {
     type ReadSourceFailCode,
     postReadTask,
 } from '../research-read.js';
-import { READ_SOURCE_TASK_FEATURE, readTaskChoiceFor, type ReadTaskHow } from '../research-read-task.js';
-import { readTaskFootHtml, readTaskFootState, readTaskForPerson, readTaskMajorNote, type ReadTaskAct, type ReadTaskFootInput } from './read-task-view.js';
+import { READ_SOURCE_TASK_FEATURE, READ_SOURCE_TASK_UNSURE_FEATURE, readTaskChoiceFor, type ReadTaskHow } from '../research-read-task.js';
+import { readTaskFootHtml, readTaskFootState, readTaskForPerson, readTaskMajorNote, readTaskOffers, readTaskUnsureShown, type ReadTaskAct, type ReadTaskFootInput } from './read-task-view.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import {
@@ -2388,6 +2388,8 @@ export const readDocumentMethods = uiModule({
             computer: onComputer(),
             counts: this.readSourceCounts(res),
             canOpenTask: this.researchLinkAvailable('task'),
+            // Uncertain places to hand over (spec 059 P8): only a research that says it takes them.
+            unsureOffer: !!s.unsureOffer && this.readFeatureOn(READ_SOURCE_TASK_UNSURE_FEATURE),
             act,
         };
     },
@@ -2409,32 +2411,37 @@ export const readDocumentMethods = uiModule({
     /**
      * A choice of the footer (spec 059 §1): the bridge creates the task (or saves without one); meanwhile the chosen
      * button is busy and the others off. `now` then opens the chat with the agent in the research's terminal (the
-     * app's own link, never one from the answer). A retry repeats the choice it shows.
+     * app's own link, never one from the answer). A retry repeats the choice it shows. `unsure`: only the uncertain
+     * places (B or D with the research's offer, spec 059 P8): `queue` for the agent, `review` for a confirmed transcript.
      */
-    async readTaskChoose(how: ReadTaskHow, retry = false): Promise<void> {
+    async readTaskChoose(how: ReadTaskHow, retry = false, unsure = false): Promise<void> {
         const s = st;
         const res = s?.result;
         const link = this.researchOriginalsLink();
         const input = res ? this.readTaskInput(res) : null;
         if (!s || !res?.source || !link || !input || input.act?.busy) return;
         const state = readTaskFootState(input);
-        if (!retry && state !== 'A' && state !== 'append' && state !== 'E') return;
+        if (retry) unsure = !!input.act?.unsure;
+        else if (unsure ? !readTaskUnsureShown(state, input) || how !== (input.confirmed ? 'review' : 'queue')
+            : state !== 'A' && state !== 'append' && state !== 'E') return;
         const append = retry ? !!input.act?.append : state === 'append' && how !== 'save';
-        const act: ReadTaskAct = { how, append, busy: true };
+        const act: ReadTaskAct = { how, append, ...(unsure ? { unsure } : {}), busy: true };
         s.task = { read: res.id, act };
         this.readRedrawTaskFoot(false);
-        const reply = await postReadTask(this.readBridgeBase(link.researchId), res.source.id, res.id, how);
+        const reply = await postReadTask(this.readBridgeBase(link.researchId), res.source.id, res.id, how, unsure);
         if (st !== s || s.task?.act !== act) return;
-        s.task = { read: res.id, act: reply.ok ? { how, append, busy: false, reply: reply.value } : { how, append, busy: false, failed: true } };
+        const done = { how, append, ...(unsure ? { unsure } : {}), busy: false };
+        s.task = { read: res.id, act: reply.ok ? { ...done, reply: reply.value } : { ...done, failed: true } };
         this.readRedrawTaskFoot(true);
         if (!reply.ok) return;
         if (reply.value.outcome) {
             // Decided meanwhile, or a task already holds the places: the research's state asked again, nothing guessed here.
             void this.pollResearchBridge({ reschedule: false });
-            if (reply.value.outcome === 'settled') void this.readTaskSettled(link.researchId, res.id);
+            const outcome = reply.value.outcome;
+            if (outcome === 'settled' || outcome === 'sure') void this.readTaskSettled(link.researchId, res.id, outcome === 'sure');
             return;
         }
-        const task = reply.value.task || (append ? input.openTask ?? '' : '');
+        const task = reply.value.task || (append || reply.value.appended ? input.openTask ?? '' : '');
         // The source's row in the viewer says the choice until the research's status does (spec 059 §2).
         this.noteReadSourceTask(res.source.id, res.id, how, task);
         if (how === 'now' && task) {
@@ -2447,17 +2454,18 @@ export const readDocumentMethods = uiModule({
     /**
      * Nothing was left to decide (409 read.decide.done / nothing): the result asked again, past the cache, and the
      * footer drawn from what it says now (decided, a task, no choice). Should it still offer the choices, the footer
-     * keeps its sentence that nothing is left.
+     * keeps its sentence that nothing is left. `sure` (409 read.decide.sure): the sure changes came meanwhile, their
+     * choices are drawn; the footer keeps its sentence only while the uncertain places are still offered alone.
      */
-    async readTaskSettled(researchId: string, id: string): Promise<void> {
+    async readTaskSettled(researchId: string, id: string, sure = false): Promise<void> {
         const s = st;
         const base = this.readBridgeBase(researchId);
         if (!s || !base) return;
         const reply = await fetchReadResult(base, id);
         if (st !== s || !reply.ok || s.result?.id !== id) return;
         const input = this.readTaskInputOf(reply.value, null);
-        const state = input ? readTaskFootState(input) : null;
-        if (state === 'A' || state === 'append' || state === 'E' || state === 'phone') return;
+        const offers = input ? readTaskOffers(input) : null;
+        if (sure ? offers === 'unsure' : offers) return;
         results.set(id, reply.value);
         s.result = reply.value;
         delete s.task;
@@ -3307,9 +3315,9 @@ export const readDocumentMethods = uiModule({
                 break;
             }
             case 'task-now': void this.readTaskChoose('now'); break;
-            case 'task-queue': void this.readTaskChoose('queue'); break;
+            case 'task-queue': void this.readTaskChoose('queue', false, el.dataset.unsure === 'true'); break;
             case 'task-save': void this.readTaskChoose('save'); break;
-            case 'task-review': void this.readTaskChoose('review'); break;
+            case 'task-review': void this.readTaskChoose('review', false, el.dataset.unsure === 'true'); break;
             case 'task-retry': {
                 const how = st?.task?.act.how;
                 if (how) void this.readTaskChoose(how, true);

@@ -13,7 +13,8 @@ import type { VerdictSorted } from '../read-result.js';
  * The footer's states (frames of the design): `A` the choices, `append` the choices for the source's open task,
  * `B` no sure change (only minor, uncertain or assessed places), `C` created by the setting "always", `D` the
  * setting "never", `E` the transcript confirmed (a person reviews), `decided` chosen before (opened again),
- * `phone` the choices where the bridge is not reached, `F` after a choice (busy, done, failed).
+ * `phone` the choices where the bridge is not reached, `F` after a choice (busy, done, failed). B and D offer the
+ * uncertain places to hand over beside Close when the research says so (`unsureOffer`, spec 059 P8).
  */
 export type ReadTaskFootState = 'A' | 'append' | 'B' | 'C' | 'D' | 'E' | 'decided' | 'phone' | 'F';
 
@@ -22,6 +23,8 @@ export interface ReadTaskAct {
     how: ReadTaskHow;
     /** Chosen from the open task's choices (the places are added to it). */
     append: boolean;
+    /** Only the uncertain places handed over (B or D, `read.sourceTask.unsure`). */
+    unsure?: boolean;
     busy: boolean;
     reply?: ReadTaskReply;
     failed?: boolean;
@@ -43,6 +46,8 @@ export interface ReadTaskFootInput {
     counts: VerdictSorted;
     /** A task opens in the research's terminal from here. */
     canOpenTask: boolean;
+    /** The research offers the uncertain places to hand over (`source.unsureOffer`, only with `read.sourceTask.unsure`). */
+    unsureOffer?: boolean;
     act?: ReadTaskAct | null;
 }
 
@@ -63,9 +68,26 @@ export function readTaskFootState(i: ReadTaskFootInput): ReadTaskFootState | nul
     return i.openTask ? 'append' : 'A';
 }
 
+/**
+ * The uncertain places can be handed over from B or D: the research offers them, nothing holds or decided the reading,
+ * on a computer (a phone has no choices).
+ */
+export function readTaskUnsureShown(state: ReadTaskFootState | null, i: Pick<ReadTaskFootInput, 'unsureOffer' | 'computer' | 'task' | 'decided'>): boolean {
+    return (state === 'B' || state === 'D') && !!i.unsureOffer && i.computer && !i.task && !i.decided;
+}
+
+/** What the footer still offers to choose: the sure changes' choices, the uncertain places alone, or nothing. */
+export function readTaskOffers(i: ReadTaskFootInput): 'choices' | 'unsure' | null {
+    const state = readTaskFootState({ ...i, act: null });
+    if (state === 'A' || state === 'append' || state === 'E' || state === 'phone') return 'choices';
+    return readTaskUnsureShown(state, i) ? 'unsure' : null;
+}
+
 /** The sentence under the sure changes in "To check" for a state ('' none). */
 export function readTaskMajorNote(state: ReadTaskFootState | null, i: Pick<ReadTaskFootInput, 'task' | 'openTask' | 'act' | 'confirmed' | 'taskFor'>): string {
     const t = strings.read;
+    // The uncertain places handed over: no sure change, no sentence over them.
+    if (i.act?.unsure) return '';
     const reply = i.act?.reply?.task || i.task;
     if (state === 'F' && i.act?.reply?.outcome === 'settled') return '';
     if (state === 'F' && i.act?.reply?.outcome === 'held') return t.cMajTask(i.act.reply.task);
@@ -93,11 +115,11 @@ function choiceLabel(how: ReadTaskHow, label: string): string {
     return esc(label);
 }
 
-interface Choice { how: ReadTaskHow; title: string; sub: string; short?: string }
+interface Choice { how: ReadTaskHow; title: string; sub: string; short?: string; unsure?: boolean }
 
 function choiceHtml(c: Choice, act: ReadTaskAct | null | undefined): string {
     const t = strings.read;
-    const busy = !!act?.busy && act.how === c.how;
+    const busy = !!act?.busy && act.how === c.how && !!act.unsure === !!c.unsure;
     const off = !!act?.busy;
     const title = busy
         ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
@@ -105,7 +127,7 @@ function choiceHtml(c: Choice, act: ReadTaskAct | null | undefined): string {
     const sub = c.short
         ? `<span class="read-task-cs"><span class="read-task-long">${esc(c.sub)}</span><span class="read-task-short">${esc(c.short)}</span></span>`
         : `<span class="read-task-cs read-task-long">${esc(c.sub)}</span>`;
-    return `<button type="button" class="read-task-choice" data-act="task-${c.how}"${busy ? ' aria-busy="true"' : ''}${off ? ' disabled' : ''}>`
+    return `<button type="button" class="read-task-choice" data-act="task-${c.how}"${c.unsure ? ' data-unsure="true"' : ''}${busy ? ' aria-busy="true"' : ''}${off ? ' disabled' : ''}>`
         + `<span class="read-task-ct">${title}</span>${sub}</button>`;
 }
 
@@ -179,9 +201,36 @@ function doneHtml(how: ReadTaskHow, append: boolean, task: string, i: ReadTaskFo
 }
 
 /** Retry: the label and mark of the choice it repeats. */
-function retryBtn(how: ReadTaskHow): string {
+function retryBtn(how: ReadTaskHow, unsure = false): string {
     const t = strings.read;
-    return `<button type="button" class="primary" data-act="task-retry" data-how="${how}">${choiceLabel(how, t.tRetry)}</button>`;
+    return `<button type="button" class="primary" data-act="task-retry" data-how="${how}"${unsure ? ' data-unsure="true"' : ''}>${choiceLabel(how, t.tRetry)}</button>`;
+}
+
+/**
+ * The uncertain places handed over (spec 059 P8): the agent looks at them on the scan (the AI badge alone, through
+ * the bridge), or a person reviews a wording made of them (a confirmed transcript, no mark). A secondary choice beside
+ * Close, in the style of the choices of A.
+ */
+function unsureChoiceHtml(i: ReadTaskFootInput): string {
+    const t = strings.read;
+    const c: Choice = i.confirmed
+        ? { how: 'review', title: t.tReview, sub: t.tUnsureReviewSub, unsure: true }
+        : { how: 'queue', title: t.tUnsureQueue, sub: t.tUnsureQueueSub, unsure: true };
+    return `<div class="read-task-unsure">${choiceHtml(c, i.act)}</div>`;
+}
+
+/** States B and D: their sentence, the uncertain places to hand over where offered, Close. `as`: the state the footer says (F while busy). */
+function quietHtml(quiet: 'B' | 'D', i: ReadTaskFootInput, as: ReadTaskFootState = quiet): string {
+    const t = strings.read;
+    const unsure = readTaskUnsureShown(quiet, i) ? unsureChoiceHtml(i) : '';
+    const close = closeBtn(true);
+    if (quiet === 'D') return foot(as, statusHtml('save', t.tNever, t.tNever2, settingsLink()) + unsure, close);
+    // A task's places first (with its link); places of a reading a person kept (D…) have no task.
+    const judged = i.counts.judged.find(j => j.n > 0 && !readJudgedKept(j.task));
+    if (judged) return foot(as, statusHtml('info', t.tAllJudged(judged.task), '', i.canOpenTask ? taskLink(judged.task) : '') + unsure, close);
+    if (i.counts.judged.some(j => j.n > 0)) return foot(as, statusHtml('info', t.tAllKept, '') + unsure, close);
+    if (i.counts.unsure > 0) return foot(as, statusHtml('info', t.tOnlyUnsure(i.counts.unsure), '') + unsure, close);
+    return foot(as, statusHtml('info', t.tOnlyMinor, '') + unsure, close);
 }
 
 /** The footer's HTML for a state ('' for null: the caller draws the footer as before). */
@@ -194,22 +243,14 @@ export function readTaskFootHtml(i: ReadTaskFootInput): string {
             return foot(state, choicesHtml(state, i), '');
         case 'phone':
             return foot(state, statusHtml('open', t.tPhone(i.counts.major), ''), '');
-        case 'B': {
-            // A task's places first (with its link); places of a reading a person kept (D…) have no task.
-            const judged = i.counts.judged.find(j => j.n > 0 && !readJudgedKept(j.task));
-            if (judged) return foot(state, statusHtml('info', t.tAllJudged(judged.task), '', i.canOpenTask ? taskLink(judged.task) : ''), closeBtn(true));
-            if (i.counts.judged.some(j => j.n > 0)) return foot(state, statusHtml('info', t.tAllKept, ''), closeBtn(true));
-            if (i.counts.unsure > 0) return foot(state, statusHtml('info', t.tOnlyUnsure(i.counts.unsure), ''), closeBtn(true));
-            return foot(state, statusHtml('info', t.tOnlyMinor, ''), closeBtn(true));
-        }
+        case 'B': case 'D':
+            return quietHtml(state, i);
         case 'C': {
             const person = i.taskFor === 'person';
             const open = i.canOpenTask;
             return foot(state, statusHtml('ok', person ? t.tAlwaysPerson(i.task) : t.tAlways(i.task), '', settingsLink()),
                 closeBtn(!open) + (open ? openTaskBtn(i.task, true) : ''));
         }
-        case 'D':
-            return foot(state, statusHtml('save', t.tNever, t.tNever2, settingsLink()), closeBtn(true));
         case 'decided':
             // Chosen before: what became of it, without how it was chosen.
             if (!i.task) return doneHtml('save', false, '', i, state);
@@ -219,19 +260,27 @@ export function readTaskFootHtml(i: ReadTaskFootInput): string {
             const act = i.act!;
             if (act.busy) {
                 // The choices stay (the chosen one busy, the others off): the footer keeps its height.
+                if (act.unsure) {
+                    return quietHtml(readTaskFootState({ ...i, act: null }) === 'D' ? 'D' : 'B', { ...i, act }, state);
+                }
                 const shown = i.confirmed ? 'E' : act.append && i.openTask ? 'append' : 'A';
                 return foot(state, choicesHtml(shown, i), '');
             }
-            if (act.failed || !act.reply) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how));
+            if (act.failed || !act.reply) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how, !!act.unsure));
             // Decided meanwhile (elsewhere, or nothing was left): no choice; the dialog asks the research's state again.
             if (act.reply.outcome === 'settled') return foot(state, statusHtml('info', t.tSettled, ''), closeBtn(true));
+            // The reading has sure changes now: the dialog asks the research's state again (their choices follow).
+            if (act.reply.outcome === 'sure') return foot(state, statusHtml('info', t.tUnsureSure, ''), closeBtn(true));
+            // Nothing to propose: none of the uncertain places read, or that wording turned down before.
+            if (act.reply.outcome === 'noproposal') return foot(state, statusHtml('info', t.tNoProposal, ''), closeBtn(true));
+            if (act.reply.outcome === 'declined') return foot(state, statusHtml('info', t.tDeclined, ''), closeBtn(true));
             // A task already holds the places: that task, to open.
             if (act.reply.outcome === 'held' && act.reply.task) {
                 const task = act.reply.task;
                 return foot(state, statusHtml('ok', t.tDoneAppend(task), ''), (i.canOpenTask ? openTaskBtn(task, false) : '') + closeBtn(true));
             }
-            const task = act.reply.task || (act.append ? i.openTask ?? '' : '');
-            if (act.how !== 'save' && !task) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how));
+            const task = act.reply.task || (act.append || act.reply.appended ? i.openTask ?? '' : '');
+            if (act.how !== 'save' && !task) return foot(state, statusHtml('err', t.tFail, t.tFail2), closeBtn(false) + retryBtn(act.how, !!act.unsure));
             return doneHtml(act.how, act.append || act.reply.appended, task, i, state);
         }
     }

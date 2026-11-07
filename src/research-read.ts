@@ -1204,16 +1204,17 @@ export async function startSourceRead(base: string, req: ReadSourceRequest): Pro
 /**
  * What the app chose after a source was read again (`read.sourceTask`):
  * `POST sources/<S>/read/<D>/task {how}`. The one call for the dialog's
- * footer and the source's row. A call without an answer in time is a failure.
+ * footer and the source's row. `unsure`: only the uncertain places (`read.sourceTask.unsure`, with `queue` or
+ * `review`). A call without an answer in time is a failure.
  */
-export async function postReadTask(base: string, source: string, read: string, how: ReadTaskHow): Promise<ReadReply<ReadTaskReply>> {
+export async function postReadTask(base: string, source: string, read: string, how: ReadTaskHow, unsure = false): Promise<ReadReply<ReadTaskReply>> {
     const s = readSourceId(source);
     const d = readId(read);
     if (!s || !d) return { ok: false, failure: readFailure(400, { code: 'read.bad-body' }) };
-    const r = await call(`${base}${readTaskPath(s, d)}`, postJson(readTaskBody(how)), jsonTimeoutMs());
+    const r = await call(`${base}${readTaskPath(s, d)}`, postJson(readTaskBody(how, unsure)), jsonTimeoutMs());
     if (!ok(r.status)) {
         // A task already holds the places, or nothing is left to decide: an answer, not a failure.
-        const answer = readTaskRefusal(r.status, r.body);
+        const answer = readTaskRefusal(r.status, r.body, unsure && (how === 'queue' || how === 'review'));
         return answer ? { ok: true, value: answer } : { ok: false, failure: readFailure(r.status, r.body, r.retry) };
     }
     return { ok: true, value: sanitizeReadTaskReply(r.body) };

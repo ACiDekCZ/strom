@@ -1059,6 +1059,14 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         tFail2: 'Nowy odczyt jest zapisany, ponowić można przy źródle.',
         tRetry: 'Spróbuj ponownie',
         tPhone: (n: number) => `Niesprawdzone: ${nPl(n, 'zmiana merytoryczna', 'zmiany merytoryczne', 'zmian merytorycznych')}. Decyzja możliwa na komputerze z badaniem.`,
+        // Uncertain places handed over on the person's word (spec 059 P8, `read.sourceTask.unsure`)
+        tUnsureQueue: 'Przekaż agentowi do oceny',
+        tUnsureQueueSub: 'Agent obejrzy niepewne miejsca na skanie i poprawi transkrypcję tylko tam, gdzie skan jest jednoznaczny.',
+        tUnsureReviewSub: 'Propozycja brzmienia tylko z niepewnych miejsc, które nowy odczyt odczytał.',
+        tUnsureSure: 'Nowy odczyt ma teraz pewne miejsca do rozstrzygnięcia.',
+        tNoProposal: 'Nowy odczyt nie odczytał niepewnych miejsc: nie ma czego zaproponować.',
+        tDeclined: 'To brzmienie zostało już odrzucone; nie jest proponowane ponownie.',
+        sReviewGive: 'Odłóż do oceny…',
         // The source's row after a newer reading (spec 059 §2, `/status.readAgain`)
         sUnchecked: (d: string, n: number) => `Nowszy odczyt z ${d} się różni (${nPl(n, 'zmiana merytoryczna', 'zmiany merytoryczne', 'zmian merytorycznych')}), niesprawdzony.`,
         sUncheckedAny: (d: string) => `Nowszy odczyt z ${d} się różni, niesprawdzony.`,

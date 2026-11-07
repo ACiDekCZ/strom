@@ -77,10 +77,14 @@ function iconHtml(icon: Icon, cls = 'viewer-read-state-icon'): string {
 /** A choice made at the row: on its way, or failed (a done one shows as the research's new state). */
 export interface SourceRowAct {
     how: ReadTaskHow;
+    /** Only the uncertain places handed over (spec 059 P8). */
+    unsure?: boolean;
     busy: boolean;
     failed?: boolean;
     /** Nothing was left to decide (decided meanwhile): said until the research's state comes. */
     settled?: boolean;
+    /** The research's answer to the uncertain places: sure changes came meanwhile, nothing to propose, a wording turned down. */
+    answer?: 'sure' | 'noproposal' | 'declined';
 }
 
 export interface SourceRowInput {
@@ -91,6 +95,8 @@ export interface SourceRowInput {
     counts: { major: number; unsure: number } | null;
     /** A person confirmed the transcript: a person reviews, the agent never changes it. */
     confirmed: boolean;
+    /** The research offers the uncertain places to hand over (`unsureOffer`, only with `read.sourceTask.unsure`). */
+    unsure?: boolean;
     /** A phone (touch): the state, and a sentence where deciding works instead of the choices. */
     phone: boolean;
     /** The research's bridge answers: choices and the result work. */
@@ -102,11 +108,19 @@ export interface SourceRowInput {
     act?: SourceRowAct | null;
 }
 
-interface RowChoice { how: ReadTaskHow; label: string }
+interface RowChoice { how: ReadTaskHow; label: string; unsure?: boolean }
 
-/** The choices the row offers (none: the row only says the state). */
-export function sourceRowChoices(kind: SourceRowKind, confirmed: boolean): { toggle: 'decide' | 'give'; choices: RowChoice[]; note: string } | null {
+/**
+ * The choices the row offers (none: the row only says the state). `unsure`: the research offers the uncertain places
+ * alone (spec 059 K8.2): the same choice as the dialog's footer, whatever the state says besides.
+ */
+export function sourceRowChoices(kind: SourceRowKind, confirmed: boolean, unsure = false): { toggle: 'decide' | 'give' | 'review'; choices: RowChoice[]; note: string } | null {
     const t = strings.read;
+    if (unsure) {
+        return confirmed
+            ? { toggle: 'review', choices: [{ how: 'review', label: t.tReview, unsure: true }], note: t.tUnsureReviewSub }
+            : { toggle: 'give', choices: [{ how: 'queue', label: t.tUnsureQueue, unsure: true }], note: `${t.tUnsureQueueSub} ${t.tAgentShort}` };
+    }
     if (kind === 'unchecked') {
         return confirmed
             ? { toggle: 'decide', choices: [{ how: 'review', label: t.tReview }, { how: 'save', label: t.tSave }], note: t.sNoteConf }
@@ -144,7 +158,7 @@ function choiceLabel(how: ReadTaskHow, label: string): string {
 export function sourceRowHtml(o: SourceRowInput): string {
     const t = strings.read;
     const kind = sourceRowKind(o.state);
-    const offer = sourceRowChoices(kind, o.confirmed);
+    const offer = sourceRowChoices(kind, o.confirmed, !!o.unsure);
     const result = o.bridgeUp
         ? `<button type="button" class="link-button viewer-read-state-result" data-read-again-open="${esc(o.state.read)}">${esc(t.againResultLink)}</button>` : '';
     const task = o.state.task ?? '';
@@ -154,8 +168,8 @@ export function sourceRowHtml(o: SourceRowInput): string {
     const open = choosing && (o.open || !!o.act);
     const toggle = choosing
         ? `<button type="button" class="link-button viewer-read-state-toggle${offer!.toggle === 'decide' ? ' is-decide' : ''}" data-read-state="toggle" aria-expanded="${open}">`
-          + `${esc(offer!.toggle === 'decide' ? t.sDecide : t.sGiveAgent)} <span class="viewer-read-state-caret" aria-hidden="true">${open ? '▾' : '▸'}</span></button>` : '';
-    const links = (offer?.toggle === 'decide' ? [toggle, result] : kind === 'saved' ? [result, toggle] : [openTask, result]).filter(Boolean);
+          + `${esc(offer!.toggle === 'decide' ? t.sDecide : offer!.toggle === 'review' ? t.sReviewGive : t.sGiveAgent)} <span class="viewer-read-state-caret" aria-hidden="true">${open ? '▾' : '▸'}</span></button>` : '';
+    const links = (offer?.toggle === 'decide' ? [toggle, result] : [openTask, result, toggle]).filter(Boolean);
     const linksHtml = links.length
         ? `<p class="viewer-read-state-links">${links.join('<span class="viewer-read-state-dot" aria-hidden="true"> · </span>')}</p>` : '';
     const phone = offer && o.phone ? `<p class="viewer-read-state-phone">${esc(t.sPhone)}</p>` : '';
@@ -163,15 +177,20 @@ export function sourceRowHtml(o: SourceRowInput): string {
     if (open && offer) {
         const busy = !!o.act?.busy;
         const choice = (c: RowChoice): string => {
-            const on = busy && o.act!.how === c.how;
+            const on = busy && o.act!.how === c.how && !!o.act!.unsure === !!c.unsure;
             const label = on
                 ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
                 : choiceLabel(c.how, c.label);
-            return `<button type="button" class="link-button viewer-read-state-choice${on ? ' is-busy' : ''}" data-read-how="${c.how}"${busy ? ' disabled' : ''}${on ? ' aria-busy="true"' : ''}>${label}</button>`;
+            return `<button type="button" class="link-button viewer-read-state-choice${on ? ' is-busy' : ''}" data-read-how="${c.how}"${c.unsure ? ' data-read-unsure="true"' : ''}${busy ? ' disabled' : ''}${on ? ' aria-busy="true"' : ''}>${label}</button>`;
         };
+        // Nothing to propose from the uncertain places: the sentence alone, no choice that would be refused again.
+        const answer = !busy && o.act?.answer ? o.act.answer : '';
+        const none = answer === 'noproposal' || answer === 'declined';
+        const said = answer === 'sure' ? t.tUnsureSure : answer === 'noproposal' ? t.tNoProposal : answer === 'declined' ? t.tDeclined : '';
         opts = `<div class="viewer-read-state-opts" id="source-viewer-read-state-opts">`
-            + `<div class="viewer-read-state-choices">${offer.choices.map(choice).join('')}</div>`
-            + `<p class="viewer-read-state-note">${esc(offer.note)}</p>`
+            + (none ? '' : `<div class="viewer-read-state-choices">${offer.choices.map(choice).join('')}</div>`
+            + `<p class="viewer-read-state-note">${esc(offer.note)}</p>`)
+            + (said ? `<p class="viewer-read-state-note is-settled" role="status">${esc(said)}</p>` : '')
             + (o.act?.failed && !busy ? `<p class="viewer-read-state-fail" role="alert">${esc(t.tFail)}</p>` : '')
             + (o.act?.settled && !busy ? `<p class="viewer-read-state-note is-settled" role="status">${esc(t.tSettled)}</p>` : '')
             + `</div>`;

@@ -6799,6 +6799,14 @@ const stringsEN = {
         tFail2: 'The new reading is saved; trying again is possible at the source.',
         tRetry: 'Try again',
         tPhone: (n: number) => `Not checked: ${nEn(n, 'substantive change', 'substantive changes')}. Deciding is possible on the computer with the research.`,
+        // Uncertain places handed over on the person's word (spec 059 P8, `read.sourceTask.unsure`)
+        tUnsureQueue: 'Give to the agent to assess',
+        tUnsureQueueSub: 'The agent looks at the uncertain places on the scan and corrects the transcript only where the scan is clear.',
+        tUnsureReviewSub: 'A proposed wording only from the uncertain places the new reading read.',
+        tUnsureSure: 'The new reading has sure places to decide now.',
+        tNoProposal: 'The new reading did not read the uncertain places: there is nothing to propose.',
+        tDeclined: 'This wording was turned down before; it is not proposed again.',
+        sReviewGive: 'Set aside for review…',
         // The source's row after a newer reading (spec 059 §2, `/status.readAgain`)
         sUnchecked: (d: string, n: number) => `Newer reading of ${d} differs (${nEn(n, 'substantive change', 'substantive changes')}), not checked.`,
         sUncheckedAny: (d: string) => `Newer reading of ${d} differs, not checked.`,
@@ -14531,6 +14539,14 @@ const stringsCZ: StringsType = {
         tFail2: 'Nové čtení je uložené, zkusit jde znovu u pramene.',
         tRetry: 'Zkusit znovu',
         tPhone: (n: number) => `Neověřeno: ${nCs(n, 'věcná změna', 'věcné změny', 'věcných změn')}. Rozhodnout jde na počítači s výzkumem.`,
+        // Uncertain places handed over on the person's word (spec 059 P8, `read.sourceTask.unsure`)
+        tUnsureQueue: 'Dát agentovi k posouzení',
+        tUnsureQueueSub: 'Agent nejistá místa prohlédne na snímku; přepis opraví jen tam, kde je snímek jistý.',
+        tUnsureReviewSub: 'Návrh znění jen z nejistých míst, která nové čtení přečetlo.',
+        tUnsureSure: 'Nové čtení teď má jistá místa k rozhodnutí.',
+        tNoProposal: 'Nové čtení nejistá místa nepřečetlo: není co navrhnout.',
+        tDeclined: 'Toto znění už bylo zamítnuto; znovu se nenavrhuje.',
+        sReviewGive: 'Dát k posouzení…',
         // The source's row after a newer reading (spec 059 §2, `/status.readAgain`)
         sUnchecked: (d: string, n: number) => `Novější čtení ${d} se liší (${nCs(n, 'věcná změna', 'věcné změny', 'věcných změn')}), neověřeno.`,
         sUncheckedAny: (d: string) => `Novější čtení ${d} se liší, neověřeno.`,
@@ -22169,6 +22185,14 @@ const stringsDE: StringsType = {
         tFail2: 'Die neue Lesung ist gespeichert; erneut versuchen lässt es sich bei der Quelle.',
         tRetry: 'Erneut versuchen',
         tPhone: (n: number) => `Nicht geprüft: ${nDe(n, 'inhaltliche Änderung', 'inhaltliche Änderungen')}. Entscheiden lässt sich am Computer mit der Forschung.`,
+        // Uncertain places handed over on the person's word (spec 059 P8, `read.sourceTask.unsure`)
+        tUnsureQueue: 'Dem Agenten zur Prüfung geben',
+        tUnsureQueueSub: 'Der Agent sieht sich die unsicheren Stellen am Scan an und berichtigt die Abschrift nur, wo der Scan eindeutig ist.',
+        tUnsureReviewSub: 'Ein Vorschlag des Wortlauts nur aus den unsicheren Stellen, die die neue Lesung gelesen hat.',
+        tUnsureSure: 'Die neue Lesung hat jetzt sichere Stellen zu entscheiden.',
+        tNoProposal: 'Die neue Lesung hat die unsicheren Stellen nicht gelesen: Es gibt nichts vorzuschlagen.',
+        tDeclined: 'Dieser Wortlaut wurde bereits abgelehnt und wird nicht erneut vorgeschlagen.',
+        sReviewGive: 'Zur Prüfung vormerken…',
         // The source's row after a newer reading (spec 059 §2, `/status.readAgain`)
         sUnchecked: (d: string, n: number) => `Neuere Lesung vom ${d} weicht ab (${nDe(n, 'inhaltliche Änderung', 'inhaltliche Änderungen')}), nicht geprüft.`,
         sUncheckedAny: (d: string) => `Neuere Lesung vom ${d} weicht ab, nicht geprüft.`,

@@ -16115,6 +16115,9 @@
         .read-task-icon.is-open { border: 1.5px dashed var(--text-light); border-radius: 50%; color: var(--text-light); }
         .read-task-actions { flex: none; display: flex; align-items: center; gap: 10px; }
         .modal .read-task-actions > button { margin: 0; white-space: nowrap; }
+        /* B and D: the uncertain places to hand over (spec 059 P8), one secondary choice beside Close. */
+        .read-task-unsure { flex: 0 1 auto; display: flex; min-width: 0; max-width: 340px; }
+        .read-task-unsure > .read-task-choice { flex: 1 1 auto; }
         /* Tablet: the same two groups, narrower. */
         @media (min-width: 641px) and (max-width: 1024px) {
             .modal .read-task-choice { padding: 9px 12px; }
@@ -16132,6 +16135,7 @@
             .read-task-append { display: none; }
             .read-task-actions { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
             .modal .read-task-actions > button { width: 100%; min-height: 48px; white-space: normal; }
+            .read-task-unsure { max-width: none; }
         }
         /* A phone held sideways: the groups side by side (2.2 : 1), no sub-sentences, one row. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {

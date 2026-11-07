@@ -639,6 +639,90 @@ test.describe('Read a source again from its original', () => {
         await expect(group.locator('input[name="research-read-task"]:checked')).toBeFocused();
     });
 
+    // Only uncertain places, no sure change, no task (spec 059 P8): the research says `unsureOffer`.
+    const UNSURE_SOURCE = {
+        id: 'S0001', agree: 'differ', task: '', taskSetting: 'ask', taskOffer: false, unsureOffer: true,
+        variants: [{ at: 'Anna', other: 'Anně', sure: false }],
+    };
+    const UNSURE_FEATURES = ['read.now', 'read.source', 'read.sourceTask', 'read.sourceTask.unsure'];
+
+    test('read.sourceTask.unsure: only uncertain places, the agent looks at them on a click; Close stays the main action', async ({ page }) => {
+        const b = await setup(page, { features: UNSURE_FEATURES });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, UNSURE_SOURCE);
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'B');
+        const choice = foot.locator('[data-act="task-queue"][data-unsure="true"]');
+        await expect(choice).toContainText('Give to the agent to assess');
+        await expect(choice).toContainText('corrects the transcript only where the scan is clear');
+        await expect(choice.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(choice.locator('.research-open-mark')).toHaveCount(0);
+        await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
+        await expect(foot.locator('[data-act^="task-"]')).toHaveCount(1);
+        expect(await foot.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+        // Never by itself.
+        expect(b.read!.taskPosts ?? []).toEqual([]);
+        await choice.click();
+        await expect(foot).toContainText('Task T0043 for the agent created, ahead in the queue.');
+        expect(b.read!.taskPosts!.map(p => p.body)).toEqual([{ how: 'queue', unsure: true }]);
+        await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
+        await foot.locator('[data-act="open-task"]').click();
+        await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([expect.stringContaining('task=T0043')]);
+    });
+
+    test('read.sourceTask.unsure: the places added to the source\'s open task (appended)', async ({ page }) => {
+        const b = await setup(page, { features: UNSURE_FEATURES });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, { ...UNSURE_SOURCE, openTask: 'T0399' });
+        b.read!.taskReply = { status: 200, body: { ok: true, how: 'queue', unsure: true, task: 'T0399', taskFor: 'agent', appended: true } };
+        await d.locator('[data-act="task-queue"][data-unsure="true"]').click();
+        await expect(d.locator('.read-task-foot')).toContainText('Places added to task T0399.');
+    });
+
+    test('without read.sourceTask.unsure: the offer unread, only Close as before', async ({ page }) => {
+        const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, UNSURE_SOURCE);
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'B');
+        await expect(foot.locator('[data-act^="task-"]')).toHaveCount(0);
+        await expect(foot.locator('[data-unsure]')).toHaveCount(0);
+        await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
+    });
+
+    test('read.sourceTask.unsure on a confirmed transcript: set aside for a person\'s review; a failure retried as the same choice; nothing to propose said', async ({ page }) => {
+        const b = await setup(page, { features: UNSURE_FEATURES });
+        await page.evaluate(() => {
+            const src = Object.values(window.Strom.DataManager.getData().sources).find((s: any) => s.refn === 'S0001') as any;
+            src.readBy = 'both';
+            src.readConfirmed = '2026-11-01';
+        });
+        await view(page);
+        const d = await openAgain(page, again(page));
+        await readAndFinish(page, b, d, UNSURE_SOURCE);
+        const foot = d.locator('.read-task-foot');
+        await expect(foot).toHaveAttribute('data-task-state', 'B');
+        const choice = foot.locator('[data-act="task-review"][data-unsure="true"]');
+        await expect(choice).toContainText('Set aside for review');
+        await expect(choice).toContainText('only from the uncertain places the new reading read');
+        await expect(choice.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        b.read!.taskReply = { status: 503, body: { code: 'research.busy' } };
+        await choice.click();
+        await expect(foot).toContainText('The task could not be created');
+        const retry = foot.locator('[data-act="task-retry"]');
+        await expect(retry).toHaveAttribute('data-how', 'review');
+        await expect(retry).toHaveAttribute('data-unsure', 'true');
+        b.read!.taskReply = { status: 409, body: { code: 'read.decide.noproposal' } };
+        await retry.click();
+        await expect(foot).toContainText('The new reading did not read the uncertain places: there is nothing to propose.');
+        await expect(foot).not.toContainText('could not be created');
+        expect(b.read!.taskPosts!.map(p => p.body)).toEqual([{ how: 'review', unsure: true }, { how: 'review', unsure: true }]);
+        await expect(foot.locator('[data-act="close"]')).toHaveClass(/primary/);
+    });
+
     test('read.sourceTask on a tablet: the two groups of choices fit the dialog\'s width', async ({ page }) => {
         await page.setViewportSize({ width: 800, height: 1000 });
         const b = await setup(page, { features: ['read.now', 'read.source', 'read.sourceTask'] });

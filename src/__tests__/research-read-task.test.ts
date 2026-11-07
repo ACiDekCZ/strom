@@ -9,6 +9,7 @@ import {
     READ_SOURCE_TASK_FEATURE, readTaskChoiceFor, readTaskPath, sanitizeSourceTaskInfo, sanitizeVariantTask, sanitizeReadTaskReply,
     sanitizeReadSourceProposal, sanitizeReadSourceState, sanitizeReadAgain, sanitizeTaskSetting, readTaskId, sanitizeWaitingProposals,
     readJudgedId, readJudgedKept, readTaskRefusal, readProposalStale, READ_TASK_CODES,
+    READ_SOURCE_TASK_UNSURE_FEATURE, readUnsureOn, readAgainSaid, readTaskBody,
 } from '../research-read-task.js';
 import { sanitizeReadAccepts, sanitizeReadResult, startSourceRead, postReadTask, postReadProposal } from '../research-read.js';
 import { sanitizeLiveStatus } from '../research-link.js';
@@ -253,5 +254,95 @@ describe('the bridge calls', () => {
         expect(readProposalStale(409, 'proposal.archive')).toBe(false);
         expect(readProposalStale(503, 'research.busy')).toBe(false);
         expect(readProposalStale(400, 'proposal.decided')).toBe(false);
+    });
+});
+
+describe('uncertain places handed over on the person\'s word (spec 059 P8, read.sourceTask.unsure)', () => {
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    function stubFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
+        const f = vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+        vi.stubGlobal('fetch', f);
+        return f;
+    }
+    const bodyOf = (f: ReturnType<typeof vi.fn>): Record<string, unknown> => JSON.parse(String((f.mock.calls[0] as [string, RequestInit])[1].body));
+
+    it('the feature: both read.sourceTask and read.sourceTask.unsure', () => {
+        expect(READ_SOURCE_TASK_UNSURE_FEATURE).toBe('read.sourceTask.unsure');
+        expect(readUnsureOn(null)).toBe(false);
+        expect(readUnsureOn([READ_SOURCE_TASK_FEATURE])).toBe(false);
+        expect(readUnsureOn([READ_SOURCE_TASK_UNSURE_FEATURE])).toBe(false);
+        expect(readUnsureOn([READ_SOURCE_TASK_FEATURE, READ_SOURCE_TASK_UNSURE_FEATURE])).toBe(true);
+    });
+
+    it('source.unsureOffer (and the open task) in a result: only true counts', () => {
+        const src = { id: 'S0042', agree: 'differ', task: '', taskSetting: 'ask', taskOffer: false, variants: [{ at: 'N. 4', other: 'N. 7', sure: false }] };
+        expect(sanitizeReadResult(result({ ...src, unsureOffer: true, openTask: 'T0399' }))!.source).toMatchObject({ unsureOffer: true, openTask: 'T0399' });
+        for (const v of ['true', 1, false, null, {}]) {
+            expect(sanitizeReadResult(result({ ...src, unsureOffer: v }))!.source).not.toHaveProperty('unsureOffer');
+        }
+        expect(sanitizeReadResult(result(src))!.source).not.toHaveProperty('unsureOffer');
+    });
+
+    it('/status.readAgain[S].unsureOffer: kept only with the feature, only true', () => {
+        const readAgain = {
+            S0042: { read: ID, state: 'saved', unsureOnly: true, unsureOffer: true },
+            S0043: { read: ID, state: 'task', task: 'T0417', taskFor: 'agent', taskOpen: false, unsureOffer: true },
+            S0044: { read: ID, state: 'saved', unsureOnly: true, unsureOffer: 'yes' },
+        };
+        const on = readAgainSaid(readAgain, [READ_SOURCE_TASK_FEATURE, READ_SOURCE_TASK_UNSURE_FEATURE])!;
+        expect(on.S0042).toEqual({ read: ID, state: 'saved', unsureOnly: true, unsureOffer: true });
+        expect(on.S0043.unsureOffer).toBe(true);
+        expect(on.S0044).not.toHaveProperty('unsureOffer');
+        const off = readAgainSaid(readAgain, [READ_SOURCE_TASK_FEATURE])!;
+        expect(off.S0042).toEqual({ read: ID, state: 'saved', unsureOnly: true });
+        expect(off.S0043).not.toHaveProperty('unsureOffer');
+        expect(readAgainSaid(readAgain, [READ_SOURCE_TASK_UNSURE_FEATURE])).toBeUndefined();
+        // Through the bridge's status as well.
+        const status = (features: string[]) => sanitizeLiveStatus({ tree: { id: 'R1', name: 'Vlk' }, head: 'h', features, readAgain })!;
+        expect(status([READ_SOURCE_TASK_FEATURE, READ_SOURCE_TASK_UNSURE_FEATURE]).readAgain!.S0042.unsureOffer).toBe(true);
+        expect(status([READ_SOURCE_TASK_FEATURE]).readAgain!.S0042).not.toHaveProperty('unsureOffer');
+    });
+
+    it('the body: {how: queue|review, unsure: true}; never with now or save; without unsure as before', async () => {
+        expect(readTaskBody('queue', true)).toEqual({ how: 'queue', unsure: true });
+        expect(readTaskBody('review', true)).toEqual({ how: 'review', unsure: true });
+        expect(readTaskBody('now', true)).toEqual({ how: 'now' });
+        expect(readTaskBody('save', true)).toEqual({ how: 'save' });
+        expect(readTaskBody('queue')).toEqual({ how: 'queue' });
+        let f = stubFetch(200, { ok: true, source: 'S0042', reading: ID, how: 'queue', unsure: true, task: 'T0420', taskFor: 'agent', head: 'h', parent: 'p' });
+        expect(await postReadTask(BASE, 'S0042', ID, 'queue', true)).toEqual({ ok: true, value: { task: 'T0420', chat: '', appended: false } });
+        expect(bodyOf(f)).toEqual({ how: 'queue', unsure: true });
+        vi.unstubAllGlobals();
+        f = stubFetch(200, { ok: true, how: 'queue', unsure: true, task: 'T0399', taskFor: 'agent', appended: true });
+        expect(await postReadTask(BASE, 'S0042', ID, 'queue', true)).toEqual({ ok: true, value: { task: 'T0399', chat: '', appended: true } });
+        vi.unstubAllGlobals();
+        f = stubFetch(200, { ok: true, how: 'review', unsure: true, task: 'T0421', taskFor: 'person' });
+        await postReadTask(BASE, 'S0042', ID, 'review', true);
+        expect(bodyOf(f)).toEqual({ how: 'review', unsure: true });
+    });
+
+    it('the refusals: sure, noproposal and declined are answers of the uncertain places; the rest failures', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        for (const [code, outcome] of [['read.decide.sure', 'sure'], ['read.decide.noproposal', 'noproposal'], ['read.decide.declined', 'declined'], ['read.decide.nothing', 'settled']] as const) {
+            stubFetch(409, { code });
+            expect(await postReadTask(BASE, 'S0042', ID, 'review', true)).toEqual({ ok: true, value: { task: '', chat: '', appended: false, outcome } });
+            vi.unstubAllGlobals();
+        }
+        // Without unsure the new codes stay what they were: failures.
+        for (const code of ['read.decide.sure', 'read.decide.noproposal', 'read.decide.declined']) {
+            stubFetch(409, { code });
+            expect((await postReadTask(BASE, 'S0042', ID, 'review')).ok).toBe(false);
+            vi.unstubAllGlobals();
+        }
+        for (const [status, code] of [[400, 'read.decide.invalid'], [404, 'read.decide.noreading'], [409, 'read.decide.confirmed'], [409, 'read.decide.unconfirmed'], [503, 'research.busy']] as const) {
+            stubFetch(status, { code });
+            expect((await postReadTask(BASE, 'S0042', ID, 'queue', true)).ok).toBe(false);
+            vi.unstubAllGlobals();
+        }
+        stubFetch(409, { code: 'read.decide.task', task: 'T0410' });
+        expect(await postReadTask(BASE, 'S0042', ID, 'queue', true)).toMatchObject({ ok: true, value: { task: 'T0410', outcome: 'held' } });
+        expect(readTaskRefusal(409, { code: 'read.decide.sure' })).toBeNull();
+        expect(readTaskRefusal(409, { code: 'read.decide.sure' }, true)).toMatchObject({ outcome: 'sure' });
     });
 });

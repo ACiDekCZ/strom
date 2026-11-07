@@ -23,12 +23,12 @@ import { onComputer } from './research-ui.js';
 import { researchLinksEnabled } from '../research-device.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import {
-    READ_SOURCE_TASK_FEATURE, READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, READ_TASK_HOWS, readProposalStale,
+    READ_SOURCE_TASK_FEATURE, READ_PROPOSAL_FEATURE, READ_PROPOSAL_UNDO_FEATURE, READ_TASK_HOWS, readProposalStale, readUnsureOn,
     type ReadProposalTake, type ReadSourceProposal, type ReadSourceState, type ReadTaskHow,
 } from '../research-read-task.js';
 import { postReadTask, postReadProposal } from '../research-read.js';
 import {
-    sourceRowHtml, sourceRowKind, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
+    sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowAct, type ProposalAct,
 } from './read-source-state-view.js';
 
@@ -189,12 +189,17 @@ export const readSourceMethods = uiModule({
             const at = readIdDate(s.read) ?? (live?.at ? new Date(live.at) : null);
             row = sourceRowHtml({
                 state: s, date: at ? readStateShortDate(at, lang) : '', counts,
-                confirmed: !!this.sourceConfirmState(src).conf, phone: c.phone, bridgeUp: c.up,
+                confirmed: !!this.sourceConfirmState(src).conf, unsure: this.readSourceUnsure(c), phone: c.phone, bridgeUp: c.up,
                 canOpenTask: !c.phone && this.researchLinkAvailable('task'),
                 open: rowOpen.has(c.key), act: rowAct.get(c.key) ?? null,
             });
         }
         return row + this.readSourceProposalHtml(src, c);
+    },
+
+    /** The research offers the source's uncertain places to hand over (spec 059 K8.2; only with `read.sourceTask.unsure`). */
+    readSourceUnsure(c: { state: ReadSourceState | null; features: readonly string[] }): boolean {
+        return !!c.state?.unsureOffer && readUnsureOn(c.features);
     },
 
     /** §3: the agent's proposal for the confirmed transcript ('' none). */
@@ -268,24 +273,32 @@ export const readSourceMethods = uiModule({
         return newer ? fromResult : fromStatus;
     },
 
-    /** §2: a choice at the row — the bridge as in the dialog's footer; "Check now" opens the task's conversation. */
-    async readSourceStateChoose(src: Source, how: ReadTaskHow): Promise<void> {
+    /**
+     * §2: a choice at the row — the bridge as in the dialog's footer; "Check now" opens the task's conversation.
+     * `unsure`: only the uncertain places, where the research offers them (spec 059 K8.2).
+     */
+    async readSourceStateChoose(src: Source, how: ReadTaskHow, unsure = false): Promise<void> {
         const c = this.readSourceStateCtx(src);
         if (!c?.state || !c.up || rowAct.get(c.key)?.busy || !READ_TASK_HOWS.includes(how)) return;
-        const act: SourceRowAct = { how, busy: true };
+        const offer = sourceRowChoices(sourceRowKind(c.state), !!this.sourceConfirmState(src).conf, this.readSourceUnsure(c));
+        if (!offer?.choices.some(x => x.how === how && !!x.unsure === unsure)) return;
+        const u = unsure ? { unsure } : {};
+        const act: SourceRowAct = { how, ...u, busy: true };
         rowAct.set(c.key, act);
         this.redrawReadSourceState(src);
-        const reply = await postReadTask(this.readBridgeBase(c.rid), c.refn, c.state.read, how);
+        const reply = await postReadTask(this.readBridgeBase(c.rid), c.refn, c.state.read, how, unsure);
         if (rowAct.get(c.key) !== act) return;
         if (!reply.ok) {
-            rowAct.set(c.key, { how, busy: false, failed: true });
+            rowAct.set(c.key, { how, ...u, busy: false, failed: true });
             this.redrawReadSourceState(src);
             return;
         }
         if (reply.value.outcome) {
             // Decided meanwhile, or a task already holds the places: the research's state asked again, nothing guessed here.
-            if (reply.value.outcome === 'settled') rowAct.set(c.key, { how, busy: false, settled: true });
-            else { rowAct.delete(c.key); rowOpen.delete(c.key); }
+            const outcome = reply.value.outcome;
+            if (outcome === 'settled') rowAct.set(c.key, { how, ...u, busy: false, settled: true });
+            else if (outcome === 'held') { rowAct.delete(c.key); rowOpen.delete(c.key); }
+            else rowAct.set(c.key, { how, ...u, busy: false, answer: outcome });
             this.redrawReadSourceState(src);
             void this.pollResearchBridge({ reschedule: false });
             return;
@@ -356,7 +369,7 @@ export const readSourceMethods = uiModule({
             this.redrawReadSourceState(src);
         }));
         root.querySelectorAll<HTMLElement>('[data-read-how]').forEach(el => el.addEventListener('click', () => {
-            void this.readSourceStateChoose(src, el.dataset.readHow as ReadTaskHow);
+            void this.readSourceStateChoose(src, el.dataset.readHow as ReadTaskHow, el.dataset.readUnsure === 'true');
         }));
         root.querySelectorAll<HTMLElement>('[data-read-state="task"], [data-proposal-act="task"]').forEach(el => el.addEventListener('click', () => {
             const url = el.dataset.task ? this.activeResearchLink('task', { task: el.dataset.task }) : null;
@@ -428,7 +441,7 @@ export const readSourceMethods = uiModule({
         // The research's state of the source (and what was done here with it) redraws the viewer when it moves.
         const c = this.readSourceStateCtx(src);
         const state = c ? [stateMark(c.state), c.proposal ? JSON.stringify(c.proposal) : '', c.up, rowCounts.get(c.state?.read ?? '')?.major ?? '', rowCounts.get(c.state?.read ?? '')?.unsure ?? '',
-            propDone.get(c.key)?.take ?? '', c.features.includes(READ_PROPOSAL_FEATURE), c.features.includes(READ_PROPOSAL_UNDO_FEATURE)].join('/') : '';
+            propDone.get(c.key)?.take ?? '', c.features.includes(READ_PROPOSAL_FEATURE), c.features.includes(READ_PROPOSAL_UNDO_FEATURE), readUnsureOn(c.features)].join('/') : '';
         return [src.id, view.refn, view.offered, view.running?.id ?? '', view.after?.id ?? '', view.after?.source?.variants.length ?? '', view.phone, state].join('|');
     },
 

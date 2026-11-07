@@ -163,6 +163,67 @@ describe('§2 the choices', () => {
     });
 });
 
+describe('§2 the uncertain places handed over (spec 059 K8.2, read.sourceTask.unsure)', () => {
+    const unsureRow = (over: Partial<SourceRowInput> = {}): string =>
+        row({ state: st({ state: 'saved', unsureOnly: true, unsureOffer: true }), counts: { major: 0, unsure: 6 }, unsure: true, ...over });
+
+    it('"only uncertain places" with the offer: Give to the agent… ▸ opens the same choice as the dialog (the AI badge alone)', () => {
+        const closed = unsureRow();
+        expect(stateOf(closed)).toBe('unsure');
+        expect(closed).toContain(t.sUnsure('7 Nov', 6));
+        expect(closed).toContain(t.sGiveAgent);
+        expect(closed).toContain('aria-expanded="false"');
+        expect(closed).not.toContain('data-read-how');
+        const open = unsureRow({ open: true });
+        expect(open).toContain(`data-read-how="queue" data-read-unsure="true">${researchBridgeAgentLabel(t.tUnsureQueue)}</button>`);
+        expect((open.match(/data-read-how=/g) ?? []).length).toBe(1);
+        expect(open).not.toContain('research-open-mark');
+        expect(open).toContain(t.tUnsureQueueSub);
+    });
+
+    it('a confirmed transcript: Set aside for review… with "Set aside for review" for a person, no mark', () => {
+        const open = unsureRow({ open: true, confirmed: true });
+        expect(open).toContain(t.sReviewGive);
+        expect(open).toContain(`data-read-how="review" data-read-unsure="true">${t.tReview}</button>`);
+        expect(open).not.toContain('research-ai-badge');
+        expect(open).toContain(t.tUnsureReviewSub);
+    });
+
+    it('offered by unsureOffer whatever the state: saved, or a task done; never without the offer, on a phone or with the bridge down', () => {
+        const done = row({ state: st({ state: 'task', task: 'T0417', taskFor: 'agent', taskOpen: false, unsureOffer: true }), unsure: true, open: true });
+        expect(stateOf(done)).toBe('done');
+        expect(done).toContain('data-read-unsure="true"');
+        // A saved reading whose sure places a person kept earlier: the uncertain places alone, not Check now / Queue.
+        const saved = row({ state: st({ state: 'saved', unsureOffer: true }), unsure: true, open: true });
+        expect((saved.match(/data-read-how=/g) ?? []).length).toBe(1);
+        expect(saved).toContain('data-read-unsure="true"');
+        // The caller passes `unsure` only with the feature and the offer.
+        const without = row({ state: st({ state: 'saved', unsureOnly: true, unsureOffer: true }), open: true });
+        expect(without).not.toContain('data-read-how');
+        expect(without).not.toContain(t.sGiveAgent);
+        expect(unsureRow({ phone: true, open: true })).not.toContain('data-read-how');
+        expect(unsureRow({ bridgeUp: false, open: true })).not.toContain('data-read-how');
+        expect(sourceRowChoices('unsure', false)).toBeNull();
+        expect(sourceRowChoices('unsure', false, true)!.choices).toEqual([{ how: 'queue', label: t.tUnsureQueue, unsure: true }]);
+    });
+
+    it('on its way, failed, and the research\'s answers: sure changes came, nothing to propose, a wording turned down', () => {
+        const busy = unsureRow({ act: { how: 'queue', unsure: true, busy: true } });
+        expect(busy).toContain('aria-busy="true"');
+        expect(busy).toContain(t.tBusy);
+        expect(unsureRow({ act: { how: 'queue', unsure: true, busy: false, failed: true } })).toContain(t.tFail);
+        const sure = unsureRow({ act: { how: 'queue', unsure: true, busy: false, answer: 'sure' } });
+        expect(sure).toContain(t.tUnsureSure);
+        expect(sure).not.toContain(t.tFail);
+        for (const [answer, text] of [['noproposal', t.tNoProposal], ['declined', t.tDeclined]] as const) {
+            const h = unsureRow({ confirmed: true, act: { how: 'review', unsure: true, busy: false, answer } });
+            expect(h).toContain(text);
+            expect(h).not.toContain('data-read-how');
+            expect(h).not.toContain(t.tFail);
+        }
+    });
+});
+
 describe('the research\'s status: nothing said without the feature', () => {
     const raw = { features: ['read.sourceTask'], readAgain: { S0042: { read: ID, state: 'unchecked' } } };
     it('readAgain read only with read.sourceTask', () => {

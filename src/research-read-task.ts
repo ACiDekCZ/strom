@@ -13,6 +13,11 @@ import { cleanText } from './research-link.js';
 
 /** `/status.features`: the app chooses who creates the task after a source is read again. */
 export const READ_SOURCE_TASK_FEATURE = 'read.sourceTask';
+/**
+ * `/status.features`: a reading with no sure substantive change but uncertain places (`unsureOffer`) can be handed
+ * over on the person's word (`POST …/task {how, unsure: true}`). Without it `unsureOffer` is not read (spec 059 K8.6).
+ */
+export const READ_SOURCE_TASK_UNSURE_FEATURE = 'read.sourceTask.unsure';
 /** `/status.features`: the bridge takes the answer to the agent's proposal (accept, keep). */
 export const READ_PROPOSAL_FEATURE = 'sources.proposal';
 /** `/status.features`: the bridge undoes an answer to the proposal (without it no Undo is offered). */
@@ -59,11 +64,15 @@ export const READ_TASK_NAMES = {
     decided: 'decided',
     openTask: 'openTask',
     state: 'state',
+    /** `result.source.*` and `readAgain[S].*`: the uncertain places can be handed over (`read.sourceTask.unsure`). */
+    unsureOffer: 'unsureOffer',
     /** `variants[].*` */
     sure: 'sure',
     judged: 'judged',
     /** `POST …/task` body and answer. */
     how: 'how',
+    /** `POST …/task` body: only the uncertain places (with `queue` or `review`). */
+    unsure: 'unsure',
     replyTask: 'task',
     replyChat: 'chat',
     replyAppended: 'appended',
@@ -88,8 +97,14 @@ export const READ_PROPOSAL_PATH = '/sources/proposal';
 /** `POST <base>/sourceTask {sourceTask}`: the research's setting "Task from a new reading". */
 export const READ_TASK_SETTING_PATH = '/sourceTask';
 
-export function readTaskBody(how: ReadTaskHow): Record<string, unknown> {
-    return { [READ_TASK_NAMES.how]: how };
+/** The research hands over uncertain places (`read.sourceTask.unsure` in `features`). */
+export function readUnsureOn(features: readonly string[] | null | undefined): boolean {
+    return !!features?.includes(READ_SOURCE_TASK_FEATURE) && features.includes(READ_SOURCE_TASK_UNSURE_FEATURE);
+}
+
+/** `unsure`: only the uncertain places, sent only with `queue` (the agent) or `review` (a person); the research refuses it with the others. */
+export function readTaskBody(how: ReadTaskHow, unsure = false): Record<string, unknown> {
+    return { [READ_TASK_NAMES.how]: how, ...(unsure && (how === 'queue' || how === 'review') ? { [READ_TASK_NAMES.unsure]: true } : {}) };
 }
 
 export function readProposalBody(source: string, task: string, take: ReadProposalTake): Record<string, unknown> {
@@ -154,6 +169,8 @@ export interface ReadSourceTaskInfo {
     openTask?: string;
     /** The source's state after this reading, as `/status.readAgain[S]` says it (`source.state`). */
     state?: ReadSourceState;
+    /** No sure change, uncertain places no task holds: they can be handed over (read only with `read.sourceTask.unsure`). */
+    unsureOffer?: true;
 }
 
 /**
@@ -177,19 +194,22 @@ export function sanitizeSourceTaskInfo(s: Record<string, unknown>, read = ''): R
         ...(s[READ_TASK_NAMES.decided] === 'saved' ? { decided: 'saved' as const } : {}),
         ...(open ? { openTask: open } : {}),
         ...(state ? { state } : {}),
+        ...(s[READ_TASK_NAMES.unsureOffer] === true ? { unsureOffer: true as const } : {}),
     };
 }
 
 /**
  * The answer to `POST …/task`: the task made or added to ('' none), the chat to open ('' none), the places added to
  * `openTask`. `outcome` (a refusal that is an answer, `readTaskRefusal`): `held` a task already holds the places
- * (`task`), `settled` nothing is left to decide (decided before, or only minor, uncertain, assessed places).
+ * (`task`), `settled` nothing is left to decide (decided before, or only minor, uncertain, assessed places), `sure`
+ * the reading has sure changes to decide meanwhile (uncertain places go with them), `noproposal` the new reading read
+ * none of the uncertain places (nothing to propose), `declined` that wording was turned down before.
  */
 export interface ReadTaskReply {
     task: string;
     chat: string;
     appended: boolean;
-    outcome?: 'held' | 'settled';
+    outcome?: 'held' | 'settled' | 'sure' | 'noproposal' | 'declined';
 }
 
 /** The research's refusals of `POST …/task` and `POST sources/proposal` that the app answers on its own (the rest: failed). */
@@ -200,6 +220,12 @@ export const READ_TASK_CODES = {
     done: 'read.decide.done',
     /** 409: nothing to decide (minor details, uncertain or assessed places). */
     nothing: 'read.decide.nothing',
+    /** 409 (`unsure`): the reading has sure changes to decide; they are decided without `unsure`. */
+    sure: 'read.decide.sure',
+    /** 409 (`review` + `unsure`): the new reading read none of the uncertain places, nothing to propose. */
+    noproposal: 'read.decide.noproposal',
+    /** 409: a person turned that wording down before. */
+    declined: 'read.decide.declined',
     /** 409: the proposal was answered before (accept / keep). */
     proposalDecided: 'proposal.decided',
     /** 409 (+`proposed`): another wording was proposed meanwhile; undo: the transcript changed since. */
@@ -215,10 +241,11 @@ const codeOf = (body: unknown): { code: string; p: Record<string, unknown> } => 
 };
 
 /**
- * A refusal of `POST …/task` the app takes as an answer: `held` (the task that holds the places) and `settled`
- * (the source's state is asked again, no choice is left); null: a failure (busy, other refusals, no answer).
+ * A refusal of `POST …/task` the app takes as an answer: `held` (the task that holds the places), `settled` and
+ * `sure` (the source's state is asked again), `noproposal` and `declined` (nothing to propose; only for the
+ * uncertain places, `unsure`); null: a failure (busy, other refusals, no answer).
  */
-export function readTaskRefusal(status: number, body: unknown): ReadTaskReply | null {
+export function readTaskRefusal(status: number, body: unknown, unsure = false): ReadTaskReply | null {
     if (status !== 409) return null;
     const { code, p } = codeOf(body);
     if (code === READ_TASK_CODES.held) {
@@ -226,6 +253,10 @@ export function readTaskRefusal(status: number, body: unknown): ReadTaskReply | 
         return task ? { task, chat: '', appended: false, outcome: 'held' } : null;
     }
     if (code === READ_TASK_CODES.done || code === READ_TASK_CODES.nothing) return { task: '', chat: '', appended: false, outcome: 'settled' };
+    if (!unsure) return null;
+    if (code === READ_TASK_CODES.sure) return { task: '', chat: '', appended: false, outcome: 'sure' };
+    if (code === READ_TASK_CODES.noproposal) return { task: '', chat: '', appended: false, outcome: 'noproposal' };
+    if (code === READ_TASK_CODES.declined) return { task: '', chat: '', appended: false, outcome: 'declined' };
     return null;
 }
 
@@ -319,6 +350,8 @@ export interface ReadSourceState {
     minorOnly?: boolean;
     /** Only places the readers disagree on (no sure change). */
     unsureOnly?: boolean;
+    /** Uncertain places no task holds can be handed over (kept only with `read.sourceTask.unsure`). */
+    unsureOffer?: boolean;
     proposal?: ReadSourceProposal;
 }
 
@@ -336,15 +369,19 @@ export function sanitizeReadSourceState(v: unknown): ReadSourceState | null {
         read, state,
         ...(task ? { task } : {}),
         ...(f ? { taskFor: f } : {}),
-        ...flag('taskOpen'), ...flag('taskQueued'), ...flag('minorOnly'), ...flag('unsureOnly'),
+        ...flag('taskOpen'), ...flag('taskQueued'), ...flag('minorOnly'), ...flag('unsureOnly'), ...flag(READ_TASK_NAMES.unsureOffer),
         ...(proposal ? { proposal } : {}),
     };
 }
 
-/** `/status.readAgain` as a plain record (kept in the bridge's status), read only with `read.sourceTask` in `features`. Untrusted. */
+/**
+ * `/status.readAgain` as a plain record (kept in the bridge's status), read only with `read.sourceTask` in
+ * `features`; `unsureOffer` only with `read.sourceTask.unsure` as well. Untrusted.
+ */
 export function readAgainSaid(v: unknown, features: readonly string[] | null | undefined): Record<string, ReadSourceState> | undefined {
     if (!features?.includes(READ_SOURCE_TASK_FEATURE)) return undefined;
     const m = sanitizeReadAgain(v);
+    if (!readUnsureOn(features)) for (const s of m.values()) delete s.unsureOffer;
     return asRecord(v) ? Object.fromEntries(m) : undefined;
 }
 
