@@ -1,6 +1,6 @@
 {
   "name": "strom",
-  "version": "3.25.0-beta.4",
+  "version": "3.25.0-beta.5",
   "stromDoc": "8293ddb23906e0588971043f3d281bce0ff07427",
   "description": "Family tree application",
   "main": "dist/bundle.js",
