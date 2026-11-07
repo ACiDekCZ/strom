@@ -736,6 +736,32 @@ test.describe('Read a document: the readers on a phone', () => {
         expect(await content.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
 
+    for (const lang of ['de', 'cs', 'pl', 'en'] as const) {
+        test(`${lang}: the fields' names are never broken inside a word, the choices start in one column`, async ({ page }) => {
+            await setup(page);
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            const d = await openWithPage(page);
+            await d.locator('[data-act="refine"]').click();
+            await expect(d.locator('#read-refine-panel')).toBeVisible();
+            const keys = d.locator('.read-refine-field-key');
+            expect(await keys.count()).toBeGreaterThanOrEqual(3);
+            for (const k of await keys.all()) {
+                // One line: no wrap and nothing cut off.
+                const m = await k.evaluate(el => ({ over: el.scrollWidth - el.clientWidth, h: el.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(el).lineHeight) }));
+                expect(m.over).toBeLessThanOrEqual(1);
+                expect(m.h).toBeLessThan(m.lh * 1.5);
+            }
+            for (const row of await d.locator('.read-refine-row').all()) {
+                const xs: number[] = [];
+                for (const f of await row.locator('.read-refine-field').all()) {
+                    xs.push(Math.round((await f.locator('select.read-refine-select, .read-refine-noeffort').first().boundingBox())!.x));
+                }
+                expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(1);
+            }
+            expect(await d.locator('.read-content').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+        });
+    }
+
     test('who read in the result: one sentence under the text, within the width', async ({ page }) => {
         const b = await setup(page);
         b.read!.reads = [reading(READ_ID, 'done', { who: WHO_MIXED, done: 2, entries: 1 })];

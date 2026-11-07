@@ -15630,7 +15630,7 @@
         @media (max-width: 640px) {
             .read-refine-cols { display: none; }
             .read-refine-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px; }
-            .read-refine-note { grid-column: 1; }
+            .read-refine-note { grid-column: 1 / -1; }
             /* A phone: one full-width field of 44 px per choice, its name inside on the left. */
             .read-refine-field {
                 display: flex; align-items: center; height: 44px; box-sizing: border-box; padding: 0 0 0 12px;
@@ -15638,7 +15638,14 @@
             }
             .read-refine-field:focus-within { border-color: var(--primary); box-shadow: var(--shadow-focus); }
             .read-refine-field--none { border-style: dashed; background: transparent; }
-            .read-refine-field-key { display: block; flex: none; width: 52px; font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; line-height: 1.2; }
+            /* The name is never broken inside a word; with subgrid the three names share the widest one's column. */
+            .read-refine-field-key { display: block; flex: none; min-width: 52px; padding-right: 8px; font-size: 12.5px; color: var(--text-faint); white-space: nowrap; line-height: 1.2; }
+            @supports (grid-template-columns: subgrid) {
+                .read-refine-row { grid-template-columns: max-content minmax(0, 1fr); }
+                .read-refine-row > .read-refine-label, .read-refine-row > .read-refine-note { grid-column: 1 / -1; }
+                .read-refine-field { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: 0; }
+                .read-refine-field-key { min-width: 0; }
+            }
             .modal .read-refine-field select.read-refine-select {
                 flex: 1 1 auto; width: auto; height: 42px; padding: 0 10px 0 0; border: 0; background: transparent; box-shadow: none;
             }

@@ -36,7 +36,7 @@ import { excerptImageUrl } from '../excerpts.js';
 import {
     LineSeg, parseTranscript, parseBlock, parseMarks, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
     entryName, placeCountAll, readerPlaces, cropLayout, stripLayout,
-    sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict,
+    sourceEntryIndex, parseBlindTranscript, transcriptLines, textVariant, mergeAdjacent, variantClass, illegibleCount, composeVerdict, verdictWhy,
     compareWithTranscript, type VerdictFacts, type MergedVariant,
 } from '../read-result.js';
 import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, type ResultMarks, type ShownPlace } from './read-result-view.js';
@@ -1804,7 +1804,7 @@ export const readDocumentMethods = uiModule({
         }
         const count = view ? view.marks.places.filter(p => p.kind === 'dis').length : 0;
         const disagree = view?.both && (count > 0 || !this.readKindsText(res)) ? count : null;
-        const facts: VerdictFacts = { partial, why: t.whyText[whyKey] ?? t.whyText.other, illegible: ill, source, disagree };
+        const facts: VerdictFacts = { partial, why: verdictWhy(res.doc.why, t.whyText), illegible: ill, source, disagree };
         // Bold counts marked in the plain sentence, then escaped as a whole.
         const html = esc(composeVerdict(facts, t, x => `\u0001${x.replace(/ /g, '\u00a0')}\u0002`)).replace(/\u0001/g, '<strong>').replace(/\u0002/g, '</strong>');
         const photo = partial && !isSource

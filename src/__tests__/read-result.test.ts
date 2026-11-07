@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
     parseMarks, parseTranscript, transcriptLines, lineRegion, lineAt, defaultEntryIndex, canPropose,
     sameLanguage, resultSections, glossFlavor, entryName, cropLayout, locateSpan, readerPlaces, placeCount, placeCountAll, placeContext,
-    sourceEntryIndex, parseBlindTranscript, mergeAdjacent, classifyVariant, variantClass, composeVerdict, compareWithTranscript,
+    sourceEntryIndex, parseBlindTranscript, mergeAdjacent, classifyVariant, variantClass, composeVerdict, verdictWhy, compareWithTranscript,
     illegibleCount,
 } from '../read-result.js';
 import { getStringsForLang } from '../strings.js';
@@ -440,6 +440,23 @@ describe('result screen, round 2 (spec 059 P7)', () => {
                 .toBe('Přečteno. Zápis pramene se v přečteném textu nenašel, s dosavadním přepisem se proto neporovnalo.');
             expect(composeVerdict({ ...base, partial: true, illegible: 4, why: 'příliš malé písmo' }, cs, b))
                 .toBe('Přečteno jen zčásti: 4 slova nečitelná (příliš malé písmo).');
+        });
+
+        it('a partial reading with the reason `other` (or unknown): no bracket after the count, ×4 languages', () => {
+            const want: [typeof cs, string][] = [
+                [cs, 'Přečteno jen zčásti: 9 slov nečitelných.'],
+                [en, 'Read only in part: 9 words illegible.'],
+                [de, 'Nur teilweise gelesen: 9 Wörter unleserlich.'],
+                [pl, 'Odczytano tylko częściowo: 9 słów nieczytelnych.'],
+            ];
+            for (const [t, text] of want) {
+                for (const why of ['other', undefined, null, 'no-such-reason']) {
+                    expect(composeVerdict({ ...base, partial: true, illegible: 9, why: verdictWhy(why, t.whyText) }, t, b)).toBe(text);
+                }
+            }
+            expect(verdictWhy('small', cs.whyText)).toBe(cs.whyText.small);
+            expect(composeVerdict({ ...base, partial: true, illegible: 2, why: verdictWhy('blur', en.whyText) }, en, b))
+                .toBe('Read only in part: 2 words illegible (blurred).');
         });
 
         it('pl: plurals one / few / many', () => {

@@ -560,6 +560,12 @@ export interface VerdictStrings {
     vAgree: string;
 }
 
+/** The reason after the illegible words' count, in words: none for `other` or an unknown reason
+ *  (its text is written for a document that could not be read at all, not for a count of words). */
+export function verdictWhy(why: string | null | undefined, whyText: Record<string, string>): string {
+    return why && why !== 'other' ? whyText[why] ?? '' : '';
+}
+
 /** The header's sentence: legibility, then the comparison with the transcript, then the readers. */
 export function composeVerdict(f: VerdictFacts, t: VerdictStrings, b: (s: string) => string = s => s): string {
     const out: string[] = [];
