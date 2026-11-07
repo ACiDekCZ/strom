@@ -6521,7 +6521,7 @@ const stringsEN = {
         // The readers read the document as different kinds (spec 059 K6.10).
         kindsDiffer: (a: string, b: string) => `The readers did not even agree on the kind of entry: reader 1 ${a}, reader 2 ${b}. To be checked against the scan before writing to the tree.`,
         // Reader 1 / Reader 2 (spec 059 K6.6): the second reader's own text.
-        readerView: 'Transcription of',
+        readerView: 'Reader’s transcription',
         readerNone2: 'Reader 2 did not read this entry',
         blindExtra: (n: number) => `Reader 2 also read ${nEn(n, 'more entry', 'more entries')}`,
         fromFirst: 'Translation and explanation are reader 1’s (reader 2 reads blind, without a translation).',
@@ -21497,7 +21497,7 @@ const stringsDE: StringsType = {
         lateWait: 'Das Lesen kann trotzdem begonnen haben: Sein Fortschritt erscheint hier, sobald die Forschung es meldet.',
         lateGone: 'Die Forschung hat seitdem kein solches Lesen gemeldet, es hat also wohl nicht begonnen.',
         kindsDiffer: (a: string, b: string) => `Die Leser waren sich nicht einmal über die Art des Eintrags einig: Leser 1 ${a}, Leser 2 ${b}. Vor dem Eintragen in den Stammbaum am Scan prüfen.`,
-        readerView: 'Abschrift von',
+        readerView: 'Abschrift des Lesers',
         readerNone2: 'Leser 2 hat diesen Eintrag nicht gelesen',
         blindExtra: (n: number) => `Leser 2 hat zusätzlich ${nDe(n, 'Eintrag', 'Einträge')} gelesen`,
         fromFirst: 'Übersetzung und Erläuterungen stammen von Leser 1 (Leser 2 liest blind, ohne Übersetzung).',
