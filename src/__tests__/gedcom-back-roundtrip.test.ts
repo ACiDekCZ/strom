@@ -466,6 +466,51 @@ describe('a child recorded in two families (N3)', () => {
         expect(m.notes?.split('\n')).toHaveLength(1);
     });
 
+    it('a second family with one parent, and a family of one spouse with nothing but its ids, go back whole (N-A, N-B)', () => {
+        const file = MYHERITAGE
+            .replace('1 FAMS @F500001@\n1 RIN MH:I500001', '1 FAMS @F500001@\n1 FAMS @F500006@\n1 RIN MH:I500001')
+            .replace('1 FAMS @F500002@\n1 RIN MH:I500005', '1 FAMS @F500002@\n1 FAMS @F500005@\n1 RIN MH:I500005')
+            .replace('1 CHIL @I500003@\n1 MARR', '1 CHIL @I500003@\n1 CHIL @I500008@\n1 MARR')
+            .replace('0 TRLR', [
+                // Bořivoj hangs from Hromoslav and Libuna; Zbyhoň alone adopted him.
+                '0 @I500008@ INDI', '1 NAME Bořivoj /Ozubec/', '2 GIVN Bořivoj', '2 SURN Ozubec', '1 SEX M',
+                '1 FAMC @F500001@', '1 FAMC @F500005@', '2 PEDI adopted', '1 _UID C03A1B2C3D4E5F60718293A4B5C6D7F1',
+                '0 @F500005@ FAM', '1 HUSB @I500005@', '1 CHIL @I500008@', '1 _UID C13A1B2C3D4E5F60718293A4B5C6D7F2',
+                // Hromoslav's family of his own: no spouse, no children, no events.
+                '0 @F500006@ FAM', '1 _UPD 3 OCT 2026 11:00:00 GMT -0500', '1 HUSB @I500001@', '1 RIN MH:F500006', '1 _UID C23A1B2C3D4E5F60718293A4B5C6D7F3',
+                '0 TRLR',
+            ].join('\n'));
+        const data = migrateData(load(file).data);
+        const b = byName(data, 'Bořivoj');
+        expect(b.alsoChildOf).toHaveLength(1);
+        const ged = backTo(data);
+        expect(counts(ged)).toEqual(counts(file));
+        const rec = record(ged, '@I500008@');
+        expect(rec).toEqual(expect.arrayContaining(['1 FAMC @F500001@', '1 FAMC @F500005@', '2 PEDI adopted']));
+        expect(rec.some(l => l.startsWith('1 NOTE'))).toBe(false);
+        expect(record(ged, '@F500005@')).toEqual(expect.arrayContaining(['1 HUSB @I500005@', '1 CHIL @I500008@', '1 _UID C13A1B2C3D4E5F60718293A4B5C6D7F2']));
+        expect(record(ged, '@F500006@')).toEqual(expect.arrayContaining(['1 HUSB @I500001@', '1 RIN MH:F500006',
+            '1 _UID C23A1B2C3D4E5F60718293A4B5C6D7F3', '1 _UPD 3 OCT 2026 11:00:00 GMT -0500']));
+        // Read again and written again: the same.
+        const second = backTo(migrateData(load(ged, { at: '2026-11-09', file: 'back.ged', encoding: 'utf-8' }).data));
+        expect(body(second)).toEqual(body(ged));
+    });
+
+    it('the research’s file: a second family with one parent keeps its link and every family its import, no note made up', () => {
+        const data = migrateData(load(RESEARCH_FAMILIES, null).data);
+        const m = byName(data, 'Mlhoň');
+        expect(m.alsoChildOf).toHaveLength(1);
+        const count = (ged: string, re: RegExp) => ged.split('\n').filter(l => re.test(l)).length;
+        for (const ged of [exportToGedcom(data, 'Ozubec', { origins: true }).content, exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' } }).content]) {
+            expect(count(ged, /^0 @[^@]+@ FAM$/)).toBe(4);
+            expect(count(ged, /^1 FAMC /)).toBe(count(RESEARCH_FAMILIES, /^1 FAMC /));
+            expect(count(ged, /^1 NOTE (?!Strom surname)/)).toBe(0);
+        }
+        const file = exportToGedcom(data, 'Ozubec', { origins: true }).content;
+        expect(count(file, /^1 _STROM_IMPORT R1$/)).toBe(count(RESEARCH_FAMILIES, /^1 _STROM_IMPORT R1$/));
+        expect(count(file, /^2 _XREF /)).toBe(count(RESEARCH_FAMILIES, /^2 _XREF /));
+    });
+
     it('a note line deleted in the app drops the link', () => {
         const data = migrateData(load(MYHERITAGE).data);
         const m = byName(data, 'Mlhoň');
@@ -475,6 +520,75 @@ describe('a child recorded in two families (N3)', () => {
         expect(record(ged, '@F500002@')).not.toContain('1 CHIL @I500003@');
     });
 });
+
+/** The research's tree with a child in two families, the second with one parent, and a family of one spouse alone. */
+const RESEARCH_FAMILIES = `0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.30.0
+2 NAME Strom Research
+1 DATE 8 NOV 2026
+1 _STROM_IMPORT R1
+2 SOUR MyHeritage Family Tree Builder
+2 DATE 2 OCT 2026
+2 _AT 2026-11-08
+2 FILE family.ged
+1 CHAR UTF-8
+0 @I1@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500001@
+1 NAME Hromoslav /Ozubec/
+1 SEX M
+1 FAMS @F1@
+1 FAMS @F2@
+0 @I2@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500002@
+1 NAME Libuna /Šťovíková/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500003@
+1 NAME Mlhoň /Ozubec/
+1 SEX M
+1 FAMC @F1@
+1 FAMC @F3@
+2 PEDI adopted
+0 @I4@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500004@
+1 NAME Zbyhoň /Pražmouk/
+1 SEX M
+1 FAMS @F3@
+1 FAMS @F4@
+0 @I5@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500005@
+1 NAME Bořivoj /Pražmouk/
+1 SEX M
+1 FAMC @F4@
+0 @F1@ FAM
+1 _STROM_IMPORT R1
+2 _XREF @F500001@
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 @F2@ FAM
+1 _STROM_IMPORT R1
+2 _XREF @F500002@
+2 _UID AB3A1B2C3D4E5F60718293A4B5C6D7E8
+1 HUSB @I1@
+0 @F3@ FAM
+1 _STROM_IMPORT R1
+2 _XREF @F500003@
+1 HUSB @I4@
+1 CHIL @I3@
+0 @F4@ FAM
+1 _STROM_IMPORT R1
+2 _XREF @F500004@
+1 HUSB @I4@
+1 CHIL @I5@
+0 TRLR`;
 
 /** The research's tree as it writes it: record and fact origins, a death known without a date. */
 const RESEARCH = `0 HEAD

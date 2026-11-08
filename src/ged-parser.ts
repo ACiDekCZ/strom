@@ -4722,7 +4722,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         const saysSomething = fam.unionEvents.length > 0 || fam.divorced || !!fam.stat || !!fam.relationshipStatus || !!fam.marriageDate || !!fam.marriagePlace
             || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0
             || fam.marriageParticipants.length > 0 || !!fam.story;
-        if (ownChildren.length === 0 && !(parentId && saysSomething)) continue;
+        // A record of a loaded file (an import that keeps where its records came
+        // from, or the research's tree marking it so) is kept too, with nothing
+        // else of its own or with its children hanging from another family: its
+        // ids go back with "Back to {prog}", and a child recorded in it as well
+        // keeps the link (FAMC / CHIL), not a note (spec 066 K3.1/K3.2).
+        const fileRecord = (!!options.importOrigin && !ownFile) || !!fam.importMark || (fam.importIds?.length ?? 0) > 0;
+        if (ownChildren.length === 0 && !(parentId && (saysSomething || fileRecord))) continue;
 
         // A family naming children but neither parent still says they are
         // SIBLINGS. The model knows siblings only through shared parents, so
