@@ -604,6 +604,37 @@ export const researchSyncMethods = uiModule({
         return answer;
     },
 
+    /**
+     * One write of the app's own through the active research tree's bridge
+     * (verifying a fact, confirming one from the scan): `send` gets the
+     * bridge's address and the features it said, run as the only window
+     * doing a research step for the tree (a send of another window goes
+     * first). On an answer with a head, the research's new version is noted
+     * at once and (unless `load: false`) taken quietly when it changes no
+     * value here, as after a decided conflict (researchConflictKeptLoad).
+     * Null: no bridge, or `send` threw. Never throws.
+     */
+    async postResearchBridgeWrite<T extends { ok: boolean }>(send: (base: string, features: readonly string[]) => Promise<T>,
+        opts: { load?: boolean } = {}): Promise<T | null> {
+        const ctx = this.researchSyncLink();
+        const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
+        if (!ctx || !bridge) return null;
+        const features = (this.researchStatusOf(ctx.link.id) ?? lastBridgeStatus(ctx.link.id))?.features ?? [];
+        let result: T | null = null;
+        await this.researchWindowLock(ctx.treeId, false, async () => {
+            try { result = await send(bridge.base, features); } catch { result = null; }
+        });
+        const answer = result as T | null;
+        const head = answer?.ok ? (answer as { head?: unknown }).head : undefined;
+        if (typeof head === 'string' && head) {
+            const rt = runtime.get(ctx.link.id);
+            if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head } });
+            noteResearchBridgeStatus(ctx.link.id, null, head);
+            if (opts.load !== false) void this.researchConflictKeptLoad(head).catch(() => undefined);
+        }
+        return answer;
+    },
+
     /** The research's head as this page knows it now ('' = not known). */
     researchHeadNow(researchId: string): string {
         return runtime.get(researchId)?.status?.head || storedResearchBridge(researchId)?.head || '';
