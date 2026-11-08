@@ -37,7 +37,7 @@ import {
     gedcomSampleNames, GedcomImportOrigin,
 } from '../ged-parser.js';
 import { createSha256 } from '../sha256.js';
-import { localIsoDay } from '../import-origin.js';
+import { dropMediaLink, localIsoDay } from '../import-origin.js';
 import { importProgramName } from '../import-next.js';
 
 /**
@@ -618,7 +618,7 @@ export const importExportMethods = uiModule({
     },
 
     /** Attach one picked/downloaded file to the person of a media ref. */
-    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string; date?: string }, file: File): Promise<boolean> {
+    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string; date?: string; filePath?: string }, file: File): Promise<boolean> {
         const person = this.gedcomResult?.data.persons[ref.personId];
         if (!person) return false;
         // The picture's date from the file goes with it (spec 066 G8).
@@ -651,6 +651,7 @@ export const importExportMethods = uiModule({
             } else {
                 return false;
             }
+            if (ref.filePath) dropMediaLink(person, ref.filePath);
             return true;
         } catch {
             return false;

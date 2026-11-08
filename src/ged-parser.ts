@@ -843,6 +843,9 @@ interface RawMedia {
     orient?: number;
     /** _DATE: the picture's date as written (MyHeritage), kept with the picture (spec 066 G8). */
     date?: string;
+    /** Written in place (`1 OBJE` with its lines): where in the file, and those lines as written. */
+    rawLine?: number;
+    rawLines?: string[];
 }
 
 interface RawEvent {
@@ -3187,6 +3190,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // Written in place, or a link to a media record (`1 OBJE @O1@`).
                             const media: RawMedia = { title: '', form: '', file: '', stromKind: '' };
                             if (GED_POINTER.test(value.trim())) media.ref = value.trim();
+                            else if (level === 1) media.rawLine = rec.src;
                             indi.media.push(media);
                             currentMedia = media;
                             break;
@@ -3892,6 +3896,23 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
+    // A picture written in place: its lines as written, for a link that stays
+    // one (a path or an address, no file to take) — "Back to {prog}" gives it back.
+    for (const indi of individuals.values()) {
+        for (const media of indi.media) {
+            if (media.rawLine === undefined) continue;
+            const block = [lines[media.rawLine].trim()];
+            for (let i = media.rawLine + 1; i < lines.length; i++) {
+                const l = lines[i].trim();
+                if (!l) continue;
+                const lv = parseInt(l, 10);
+                if (!(lv >= 2)) break;
+                block.push(l);
+            }
+            media.rawLines = block;
+        }
+    }
+
     // One source cited at several pages (a register book, an entry per page):
     // here a source is the entry and its reference the page, so a citation of
     // another page than the source's gets a source of its own — same book,
@@ -4385,6 +4406,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     ...(media.primary ? { primary: true } : {}),
                     ...(media.date ? { date: media.date } : {}),
                 };
+                // The link as the file wrote it, for "Back to {prog}" while no file
+                // takes its place (spec 066 G8): another program's file only.
+                if (link.rawLines && options.importOrigin && !ownFile && !link.rawLines.some(l => /^\d+ @|\s@[^@\s]+@/.test(l))) {
+                    (indi.extras ??= []).push({ tag: 'OBJE', lines: link.rawLines, quiet: true });
+                }
                 // Primary portraits first so the photo (not a crop) wins.
                 if (media.primary) {
                     const firstOfPerson = externalMedia.findIndex(m => m.personId === personId);

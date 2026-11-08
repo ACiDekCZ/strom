@@ -208,7 +208,11 @@ describe('a picture’s _DATE', () => {
             else objes[objes.length - 1]?.push(line);
         }
         const dates = objes.filter(o => o[0] !== '-').map(o => o.filter(l => l.startsWith('2 _DATE')));
-        expect(dates).toEqual([['2 _DATE 3 MAR 1931'], ['2 _DATE ABT 1925']]);
+        // The photo, the attachment, and the link to a file never taken in (as the file wrote it, P-b).
+        expect(dates).toEqual([['2 _DATE 3 MAR 1931'], ['2 _DATE ABT 1925'], ['2 _DATE 24 JUL 2007']]);
+        expect(back).toContain('2 FILE https://www.myheritage.com/photos/mlhoslav.jpg');
+        // A link to a media record (1 OBJE @O1@) is not kept: no record of its own goes back.
+        expect(back).not.toContain('statek.jpg');
         expect(exportToGedcom(data).content).not.toContain('_DATE');
     });
 

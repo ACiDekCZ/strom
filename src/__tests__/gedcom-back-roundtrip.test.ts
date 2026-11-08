@@ -17,6 +17,7 @@ import { UndoManager } from '../undo.js';
 import { StorageManager } from '../storage.js';
 import { createMergeState } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
+import { dropMediaLink } from '../import-origin.js';
 import { Partnership, Person, StromData, TreeId } from '../types.js';
 
 const ORIGIN: GedcomImportOrigin = { at: '2026-11-08', file: 'family.ged', encoding: 'utf-8' };
@@ -420,6 +421,33 @@ describe('a tree loaded before e-mail and couples without MARR were kept, merged
         const incoming = migrateData(load(MYHERITAGE, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
         const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
         expect(Object.values(merged.partnerships).some(ps => ps.marriageUnrecorded)).toBe(false);
+    });
+});
+
+describe('a picture linked by path or address, with no file taken in (P-b)', () => {
+    const OBJE = ['1 OBJE', '2 FORM jpg', '2 FILE https://example.org/photos/hromoslav.jpg', '2 TITL Hromoslav 1930', '2 _DATE 1930', '2 _PRIM Y'];
+    const OBJE2 = ['1 OBJE', '2 FORM jpg', '2 FILE C:\\Photos\\wedding.jpg', '2 _DATE 12 MAY 1905'];
+    const file = MYHERITAGE.replace('1 FAMS @F500001@\n1 RIN MH:I500001', ['1 FAMS @F500001@', ...OBJE, ...OBJE2, '1 RIN MH:I500001'].join('\n'));
+
+    it('goes back as the file wrote it, its _DATE with it; the summary does not name it as kept', () => {
+        const r = load(file);
+        expect(r.externalMedia).toHaveLength(2);
+        expect(r.stats.keptTagSummary ?? '').not.toContain('OBJE');
+        const rec = record(backTo(migrateData(r.data)), '@I500001@');
+        for (const block of [OBJE, OBJE2]) {
+            const at = rec.indexOf(block[2]);
+            expect(rec.slice(at - 2, at - 2 + block.length)).toEqual(block);
+        }
+        // Another export does not write it (the app has no picture there).
+        expect(exportToGedcom(migrateData(r.data), 'Ozubec', { origins: true }).content).not.toContain('hromoslav.jpg');
+    });
+
+    it('once its file is taken in, the link is not written as well', () => {
+        const data = migrateData(load(file).data);
+        dropMediaLink(byName(data, 'Hromoslav'), 'https://example.org/photos/hromoslav.jpg');
+        const rec = record(backTo(data), '@I500001@');
+        expect(rec.some(l => l.includes('hromoslav.jpg'))).toBe(false);
+        expect(rec).toContain('2 _DATE 12 MAY 1905');
     });
 });
 

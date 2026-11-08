@@ -369,8 +369,12 @@ export function mergeOriginalIds(into: FactHolder, from: FactHolder, map: Map<st
 const EXTRA_MAX_LINES = 2000;
 const EXTRA_MAX_LINE = 10000;
 
-/** A kept line: `1 _XXX …` opens a block, the lines under it are level 2 or deeper; one line, no line break. */
-const EXTRA_HEAD = /^1 _[A-Za-z0-9_]+(?: |$)/;
+/**
+ * A kept line: `1 _XXX …` (or `1 OBJE`, a picture's link written in place that
+ * stays a link) opens a block, the lines under it are level 2 or deeper; one
+ * line, no line break.
+ */
+const EXTRA_HEAD = /^1 (?:_[A-Za-z0-9_]+(?: |$)|OBJE$)/;
 const EXTRA_BODY = /^(?:[2-9]|[1-9]\d+) \S/;
 
 /**
@@ -414,6 +418,20 @@ export function cleanGedcomExtra(value: unknown, known: ReadonlySet<string>): Ge
  * Add one import's kept tags to a holder: joined with the entry of the same
  * import (a block it already has is not added again), else a new entry.
  */
+/**
+ * A picture's link kept as written (`1 OBJE` … `2 FILE path`) once the file
+ * it names is taken in: the picture goes back as itself, not as a second link.
+ */
+export function dropMediaLink(holder: ExtraHolder, filePath: string): void {
+    for (const entry of holder.gedcomExtra ?? []) {
+        entry.lines = extraBlocks(entry.lines)
+            .filter(b => !(b[0] === '1 OBJE' && b.some(l => /^2 FILE /.test(l) && l.slice(7) === filePath)))
+            .flat();
+    }
+    if (holder.gedcomExtra) holder.gedcomExtra = holder.gedcomExtra.filter(e => e.lines.length > 0);
+    if (holder.gedcomExtra?.length === 0) delete holder.gedcomExtra;
+}
+
 export function addGedcomExtra(holder: ExtraHolder, entry: GedcomExtra): void {
     const list = holder.gedcomExtra ??= [];
     const have = list.find(e => e.from === entry.from);
