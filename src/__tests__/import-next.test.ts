@@ -32,9 +32,10 @@ describe('"What next" card: rows', () => {
         expect(importNextRows({ findings: 0, families: 0, research: 'have', verify: true })[1]).toMatchObject({ verify: false });
         expect(importNextRows({ findings: 0, families: 0, research: 'linked', verify: true })[1]).toMatchObject({ verify: true });
     });
-    it('the 065 hook names no feature yet, so no bridge offers it', () => {
-        expect(IMPORT_NEXT_VERIFY_FEATURES).toHaveLength(0);
+    it('offered by a bridge that names the bulk verification (verify.bulk)', () => {
+        expect(IMPORT_NEXT_VERIFY_FEATURES).toEqual(['verify.bulk']);
         expect(importNextVerifyAvailable(['places', 'verify', 'readPerson'])).toBe(false);
+        expect(importNextVerifyAvailable(['places', 'verify', 'verify.bulk'])).toBe(true);
         expect(importNextVerifyAvailable(null)).toBe(false);
     });
 });
