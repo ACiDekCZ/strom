@@ -53,6 +53,8 @@ export type ExportFormat = 'json' | 'html' | 'gedcom' | 'csv' | 'all';
 
 /** The dialog is the narrowed full backup (button says "Save to file"). */
 let exportQuick = false;
+/** Which export the dialog is for: GEDCOM keeps the deceased's sources under a privacy mode (spec 066 §4). */
+let exportFormat: ExportFormat = 'json';
 /** The export takes every tree (only the current one is measured; the others may hold sources). */
 let exportAllTrees = false;
 /**
@@ -722,6 +724,9 @@ export const encryptionUiMethods = uiModule({
      */
     /** Current value of the export dialog's privacy-mode selector. */
     readExportPrivacyMode(): PrivacyMode {
+        // GEDCOM "Back to {prog}": everyone's full data.
+        const override = this.exportGedcomPrivacyOverride();
+        if (override) return override;
         const sel = document.getElementById('export-privacy-mode') as HTMLSelectElement | null;
         const v = sel?.value;
         return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
@@ -729,6 +734,9 @@ export const encryptionUiMethods = uiModule({
 
     /** The four export-content checkboxes as a ContentOptions object. */
     readExportContentOptions(): ContentOptions {
+        // GEDCOM "Back to {prog}": its own content, the Content section hidden.
+        const override = this.exportGedcomContentOverride();
+        if (override) return override;
         const on = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.checked ?? true;
         return {
             photos: on('export-content-photos'),
@@ -793,8 +801,8 @@ export const encryptionUiMethods = uiModule({
         if (!sizes || !el) return;
         const opts = this.readExportContentOptions();
         // Source images offered apart: attachments count without the file's excerpts, the choice adds its own.
-        // A privacy mode drops the sources, and their images with them.
-        const images = this.readExportPrivacyMode() === 'full' ? this.exportSourceImagesBytes() : null;
+        // A privacy mode drops the sources, and their images with them (GEDCOM: the living's only).
+        const images = this.readExportPrivacyMode() === 'full' || exportFormat === 'gedcom' ? this.exportSourceImagesBytes() : null;
         const total = sizes.base
             + (opts.photos ? sizes.photos : 0)
             + (opts.attachments ? sizes.attachments - (images ? sizes.excerpts : 0) : 0)
@@ -840,6 +848,12 @@ export const encryptionUiMethods = uiModule({
         }
         this.updateExportSizeEstimate();
         this.syncExportPresetHighlight();
+        this.syncExportSourcesWarning();
+    },
+
+    /** The tree the export dialog measures: the exported one (null while another tree is read). */
+    exportMeasuredData(): StromData | null {
+        return exportOtherTree ? exportOtherTree.data : DataManager.getData();
     },
 
     /**
@@ -848,19 +862,23 @@ export const encryptionUiMethods = uiModule({
      * deceased too (applyLivingPrivacy). When the tree has any, say so under
      * the choice and in Content, dim the two checkboxes (and source images)
      * they would otherwise light, and size the estimate on the filtered tree.
+     * GEDCOM keeps the deceased's sources (spec 066 §4): only the living lose
+     * them, said under the choice; the checkboxes stay.
      */
     syncExportPrivacyEffects(): void {
         const mode = this.readExportPrivacyMode();
         // The exported tree: another than the open one is measured once it is read.
-        const data = exportOtherTree ? exportOtherTree.data : DataManager.getData();
+        const data = this.exportMeasuredData();
         const section = document.getElementById('export-content-section');
         const showContent = !!section && section.style.display !== 'none';
-        const drops = mode !== 'full' && showContent && (exportAllTrees || (!!data && hasSourcesOrAttachments(data)));
+        const gedcom = exportFormat === 'gedcom';
+        const affected = mode !== 'full' && showContent && (exportAllTrees || (!!data && hasSourcesOrAttachments(data)));
+        const drops = affected && !gedcom;
         const p = strings.privacy;
         const privacyNote = document.getElementById('export-privacy-drops');
         if (privacyNote) {
-            privacyNote.textContent = drops ? p.dropsSources(p.modeFull) : '';
-            privacyNote.hidden = !drops;
+            privacyNote.textContent = drops ? p.dropsSources(p.modeFull) : affected ? p.dropsLivingOnly : '';
+            privacyNote.hidden = !affected;
         }
         const contentNote = document.getElementById('export-content-privacy-note');
         if (contentNote) {
@@ -880,7 +898,8 @@ export const encryptionUiMethods = uiModule({
         if (images) images.disabled = drops;
         if (showContent && data) {
             // Per-category sizes computed here (open, privacy change); toggling never re-stringifies.
-            this.readExportContentSizes(mode === 'full' ? data : applyLivingPrivacy(data, mode));
+            this.readExportContentSizes(mode === 'full' ? data
+                : applyLivingPrivacy(data, mode, undefined, { keepDeceasedSources: gedcom }));
             this.updateExportSizeEstimate();
         } else if (showContent) {
             // Another tree not read yet: no estimate rather than the open tree's.
@@ -888,6 +907,9 @@ export const encryptionUiMethods = uiModule({
             const el = document.getElementById('export-content-size');
             if (el) el.textContent = '';
         }
+        // GEDCOM: the "Back" summary of the tree read, and what the choices leave out of its sources.
+        this.syncExportGedcomBack();
+        this.syncExportSourcesWarning();
     },
 
     /**
@@ -910,6 +932,7 @@ export const encryptionUiMethods = uiModule({
     onExportContentChange(): void {
         this.updateExportSizeEstimate();
         this.syncExportPresetHighlight();
+        this.syncExportSourcesWarning();
     },
 
     showExportPasswordDialog(
@@ -933,6 +956,8 @@ export const encryptionUiMethods = uiModule({
             treeId?: TreeId;
             /** Every tree goes into the file (not only the current one). */
             allTrees?: boolean;
+            /** GEDCOM: what the file is for, preselected ("back" from the What next card). */
+            gedcomPurpose?: 'back' | 'share';
         } = {}
     ): void {
         this.exportPasswordCallback = callback;
@@ -940,6 +965,7 @@ export const encryptionUiMethods = uiModule({
         exportQuick = !!quick;
         exportAllTrees = !!options.allTrees;
         const format = options.format ?? 'json';
+        exportFormat = format;
         const e = strings.encryption;
 
         const title = document.getElementById('export-dialog-title');
@@ -986,8 +1012,10 @@ export const encryptionUiMethods = uiModule({
         this.setupExportSourceImages(showContent ? options.treeId ?? null : null);
         // What the chosen privacy leaves out, and the estimate on what remains: the exported tree's.
         void this.setExportMeasuredTree(exportAllTrees ? null : options.treeId ?? null);
+        // GEDCOM: what the file is for (spec 066 §4); "Back" hides privacy and content.
+        this.setupExportGedcomPurpose(format === 'gedcom' && !quick, options.gedcomPurpose ?? 'share');
         this.syncExportPrivacyEffects();
-        if (showContent) this.syncExportPresetHighlight();
+        if (showContent && this.exportGedcomPurpose() !== 'back') this.syncExportPresetHighlight();
 
         const modal = document.getElementById('export-password-modal');
         const input = block.querySelector<HTMLInputElement>('#export-password-input');

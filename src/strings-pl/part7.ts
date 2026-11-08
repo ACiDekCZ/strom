@@ -275,6 +275,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         // Any privacy mode but Full data leaves the source catalog, citations and attachments out (all persons).
         dropsSources: (full: string) => `Przy wyborze innym niż „${full}” źródła, cytaty i załączniki nie są eksportowane, nawet u osób zmarłych.`,
         dropsSourcesContent: 'Załączniki i źródła pomija wybrana prywatność osób żyjących.',
+        dropsLivingOnly: 'Źródła, wycinki i załączniki są pomijane tylko u osób żyjących; zmarłym pozostają.',
     },
 
     personSources: {

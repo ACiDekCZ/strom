@@ -73,6 +73,69 @@ export interface GedcomExportOptions {
      * goes to the research (it keeps its own).
      */
     origins?: boolean;
+    /**
+     * "Back to {prog}" with "Mark the research's facts with a note" (spec 066
+     * §4): under each fact the research added or corrected, a `2 NOTE` with
+     * this text of the record(s) it cites — for the other program, which
+     * reads no `_STROM_*` tag. The text is in the app's language.
+     */
+    researchNote?: (src: string) => string;
+}
+
+/**
+ * A fact the research added or corrected: its origin is the research, or it
+ * keeps the family tree's earlier value (`_STROM_WAS`).
+ */
+export function isResearchFact(origin: ResearchFactOrigin | undefined): boolean {
+    return !!origin && (origin.kind === 'research' || !!origin.was);
+}
+
+/** The citations of one fact of a person or a couple. */
+function factCitations(holder: FactHolder, fact: string): readonly string[] {
+    if (fact.startsWith('event:')) {
+        const id = fact.slice(6);
+        return (holder.events ?? []).find(e => e?.id === id)?.sourceIds ?? [];
+    }
+    if ('person1Id' in holder) return fact === 'marriage' ? holder.sourceIds ?? [] : [];
+    return fact === 'birth' ? holder.birthSourceIds ?? [] : fact === 'death' ? holder.deathSourceIds ?? [] : [];
+}
+
+/**
+ * The record(s) a research fact rests on, for its note: the sources its
+ * origin names, else the fact's own citations; each as "title, reference",
+ * several joined by "; ". Null: no record in the tree (no note).
+ */
+export function researchNoteSource(data: Pick<StromData, 'sources'>, holder: FactHolder, fact: string): string | null {
+    const origin = holder.researchOrigins?.[fact];
+    if (!isResearchFact(origin)) return null;
+    const ids = origin!.sourceIds?.length ? origin!.sourceIds : factCitations(holder, fact);
+    const labels: string[] = [];
+    for (const id of ids) {
+        const s = data.sources?.[id];
+        if (!s) continue;
+        const label = [s.title, s.reference].filter(x => !!x?.trim()).map(x => x!.trim()).join(', ');
+        if (label && !labels.includes(label)) labels.push(label);
+    }
+    return labels.length ? labels.join('; ') : null;
+}
+
+/** Facts a research note can stand under: SEX takes no NOTE in GEDCOM. */
+const NOTE_FACT = (fact: string): boolean => fact !== 'sex';
+
+/**
+ * The first research fact of the tree that would get a note, its record(s)
+ * (the example in "Mark the research's facts with a note"); null: none.
+ */
+export function firstResearchNoteSource(data: StromData): string | null {
+    const holders: FactHolder[] = [...Object.values(data.persons), ...Object.values(data.partnerships)];
+    for (const h of holders) {
+        for (const fact of Object.keys(h.researchOrigins ?? {})) {
+            if (!NOTE_FACT(fact)) continue;
+            const src = researchNoteSource(data, h, fact);
+            if (src) return src;
+        }
+    }
+    return null;
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -682,6 +745,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     };
     /** The research's origin of a fact under it (`2 _STROM_ORIGIN`, `2 _STROM_WAS`), file exports only. */
     const pushFactOrigin = (holder: FactHolder, fact: string): void => {
+        if (options.researchNote && NOTE_FACT(fact)) {
+            const src = researchNoteSource(data, holder, fact);
+            if (src) pushNote(lines, 2, options.researchNote(src));
+        }
         const o = options.origins ? holder.researchOrigins?.[fact] : undefined;
         if (!o) return;
         if (o.kind && fact !== 'sex') lines.push(`2 _STROM_ORIGIN ${researchOriginValue(o)}`);

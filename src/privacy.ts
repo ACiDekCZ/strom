@@ -56,15 +56,24 @@ export type ContentPreset = 'complete' | 'small' | 'skeleton';
  * - small: no heavy media (photos + attachments), text kept — a file to email,
  * - skeleton: structure and names only (all four off).
  */
-export const CONTENT_PRESETS: Record<ContentPreset, ContentOptions> = {
+export const CONTENT_PRESETS: Record<ContentPreset | 'back', ContentOptions> = {
     complete: { photos: true, attachments: true, notes: true, sources: true, sourceImages: 'app' },
     small: { photos: false, attachments: false, notes: true, sources: true, sourceImages: 'none' },
     skeleton: { photos: false, attachments: false, notes: false, sources: false, sourceImages: 'none' },
+    /**
+     * GEDCOM "Back to {prog}" (spec 066 §4): the text of the tree with every
+     * source and citation, no media — other programs do not read embedded
+     * data URLs. Not a choice of the Content section (no button of its own).
+     */
+    back: { photos: false, attachments: false, notes: true, sources: true, sourceImages: 'none' },
 };
+
+/** The presets offered as buttons in the Content section, in their order. */
+const DIALOG_PRESETS: readonly ContentPreset[] = ['complete', 'small', 'skeleton'];
 
 /** The preset whose pattern equals `opts`, or null when the state is custom. */
 export function matchContentPreset(opts: ContentOptions): ContentPreset | null {
-    for (const name of Object.keys(CONTENT_PRESETS) as ContentPreset[]) {
+    for (const name of DIALOG_PRESETS) {
         const p = CONTENT_PRESETS[name];
         // Source images: "complete" takes those in the app or all of them.
         const images = opts.sourceImages === undefined || opts.sourceImages === p.sourceImages
@@ -489,6 +498,60 @@ export function applyLivingPrivacy(
     }
 
     return copy;
+}
+
+/**
+ * The citations of a tree: every reference from a person, a couple, their
+ * events and narratives to a source of the catalog (an attachment's link to
+ * its source is an image, not a citation).
+ */
+export function countCitations(data: StromData): number {
+    let n = 0;
+    const count = (ids: readonly string[] | undefined) => { n += ids?.length ?? 0; };
+    for (const p of Object.values(data.persons)) {
+        count(p.sourceIds);
+        count(p.birthSourceIds);
+        count(p.deathSourceIds);
+        for (const ev of p.events ?? []) count(ev.sourceIds);
+        count(storySourceIds(p.story));
+    }
+    for (const u of Object.values(data.partnerships)) {
+        count(u.sourceIds);
+        for (const ev of u.events ?? []) count(ev.sourceIds);
+        count(storySourceIds(u.story));
+    }
+    return n;
+}
+
+/** The tree's own people (no placeholders) the privacy filter treats as living. */
+export function countLivingPersons(data: StromData, currentYear: number = new Date().getFullYear()): number {
+    const bounds = inferBirthUpperBounds(data);
+    return Object.values(data.persons).filter(p => !p.isPlaceholder && isLivingPerson(p, currentYear, bounds)).length;
+}
+
+/**
+ * What a GEDCOM export leaves out of the tree's sources (spec 066 §5): the
+ * sources of the catalog and the citations the tree has and the file will
+ * not. Without "Sources & citations" everything; otherwise, under a privacy
+ * mode, the citations of the living (and of couples with a living partner)
+ * and the sources only they cite — the deceased keep theirs
+ * (`keepDeceasedSources`). Pure: does not touch `data`.
+ */
+export function droppedSources(
+    data: StromData,
+    privacy: PrivacyMode,
+    content: Pick<ContentOptions, 'sources'>,
+    currentYear: number = new Date().getFullYear()
+): { sources: number; citations: number } {
+    const sources = Object.keys(data.sources ?? {}).length;
+    const citations = countCitations(data);
+    if (!content.sources) return { sources, citations };
+    if (privacy === 'full' || (sources === 0 && citations === 0)) return { sources: 0, citations: 0 };
+    const kept = applyLivingPrivacy(data, privacy, currentYear, { keepDeceasedSources: true });
+    return {
+        sources: sources - Object.keys(kept.sources ?? {}).length,
+        citations: citations - countCitations(kept),
+    };
 }
 
 /**

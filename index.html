@@ -22868,6 +22868,83 @@
             #export-content-section:not(.is-expanded) .content-header { display: none; }
             #export-content-section .export-content-summary .link-button { padding: 10px 0; }
         }
+        /* GEDCOM export (spec 066 §4, §5): what the file is for, the "Back to {prog}"
+           summary in place of privacy and content, the sources warning in the footer. */
+        .export-gedcom-purpose[hidden], .export-back-section[hidden], .modal label.export-back-mark[hidden],
+        .export-back-living[hidden], .export-back-size[hidden] { display: none; }
+        .export-gedcom-purpose { display: flex; flex-direction: column; gap: 8px; }
+        .export-purpose-label { font-size: 13px; font-weight: 500; color: var(--text); }
+        .export-purpose-options { display: flex; flex-direction: column; gap: 8px; }
+        .modal label.export-purpose-option {
+            display: flex; flex-direction: row; align-items: flex-start; gap: 10px; margin: 0;
+            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface); cursor: pointer; font-weight: 400; box-sizing: border-box;
+        }
+        .modal label.export-purpose-option:has(input:checked) {
+            border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface));
+        }
+        @media (hover: hover) { .modal label.export-purpose-option:hover { border-color: var(--primary); } }
+        .export-purpose-option input[type="radio"] { width: 16px; height: 16px; margin: 2px 0 0; flex: none; accent-color: var(--primary); }
+        .export-purpose-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .export-purpose-title { font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+        .export-purpose-sub { font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
+        .export-back-section { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+        .export-back-summary {
+            list-style: none; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+            border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+            font-size: 13.5px; line-height: 1.45; color: var(--text);
+        }
+        .export-back-summary li { display: flex; gap: 8px; min-width: 0; }
+        .export-back-glyph { flex: none; width: 14px; text-align: center; color: var(--primary); }
+        .export-back-summary li.is-off { color: var(--text-light); }
+        .export-back-summary li.is-off .export-back-glyph { color: var(--text-faint); }
+        .modal label.export-back-mark {
+            display: flex; flex-direction: row; gap: 10px; align-items: flex-start; margin: 0;
+            cursor: pointer; font-weight: 400; box-sizing: border-box;
+        }
+        .export-back-mark input[type="checkbox"] { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--primary); }
+        .export-back-mark-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; color: var(--text); }
+        .export-back-mark-sub { font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .export-back-living {
+            display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 9px 12px; border-radius: 8px;
+            background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; line-height: 1.45; color: var(--text);
+        }
+        .export-back-dot, .export-warn-dot { flex: none; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--read-amber-dot); }
+        .export-back-size { margin-right: auto; font-size: 12.5px; color: var(--text-faint); }
+        #export-password-modal .export-buttons { flex-wrap: wrap; }
+        .export-sources-warning:empty { display: none; }
+        .export-sources-warning {
+            flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+            font-size: 13px; line-height: 1.45; color: var(--text); min-width: 0;
+        }
+        .export-sources-warning.is-loss {
+            padding: 8px 12px; border-radius: 8px; background: var(--read-amber-bg); border: 1px solid var(--read-amber-line);
+        }
+        .export-sources-warning.is-living { color: var(--text-light); }
+        .export-sources-warning.is-living .export-warn-dot { background: var(--border); }
+        .export-warn-text { display: flex; gap: 8px; align-items: flex-start; flex: 1 1 240px; min-width: 0; }
+        .modal .export-sources-warning button.export-keep-sources {
+            background: none; border: none; padding: 0 2px; min-height: 30px; color: var(--primary);
+            font-size: 13px; font-weight: 600; white-space: nowrap;
+        }
+        @media (hover: hover) { .modal .export-sources-warning button.export-keep-sources:hover { text-decoration: underline; } }
+        @media (pointer: coarse) {
+            .modal label.export-purpose-option, .modal label.export-back-mark { min-height: 44px; }
+            .modal .export-sources-warning button.export-keep-sources { min-height: 44px; }
+        }
+        /* Phones: the GEDCOM export takes the whole screen; header and footer stay,
+           the body scrolls; Cancel and Export side by side. */
+        @media (max-width: 640px) {
+            #export-password-modal .modal.export-dialog--ged {
+                width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
+            }
+            #export-password-modal .export-dialog--ged .export-buttons { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px 16px 16px; }
+            #export-password-modal .export-dialog--ged .export-buttons > button { width: auto; flex: 1 1 0; min-height: 44px; }
+            #export-password-modal .export-dialog--ged .export-back-size { flex: 1 1 100%; margin: 0; }
+            /* The warning and the size line above both buttons (Cancel carries order -1 on phones). */
+            #export-password-modal .export-dialog--ged .export-sources-warning,
+            #export-password-modal .export-dialog--ged .export-back-size { order: -2; }
+        }
         .snapshots-persistence .link-button { font-size: inherit; padding: 0; }
         .snapshot-delete { padding: 4px 8px; }
         .snapshots-auto { margin: 0 0 12px; }
@@ -27137,6 +27214,36 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportPasswordDialog()">&times;</button>
             </div>
             <p class="modal-description" id="export-dialog-hint"></p>
+            <div id="export-gedcom-purpose" class="form-group export-gedcom-purpose" hidden>
+                <span class="export-purpose-label" id="export-purpose-label" data-i18n="exportGed.purpose">What the file is for</span>
+                <div class="export-purpose-options" role="radiogroup" aria-labelledby="export-purpose-label">
+                    <label class="export-purpose-option">
+                        <input type="radio" name="export-gedcom-purpose" id="export-purpose-back" value="back" onchange="window.Strom.UI.selectExportGedcomPurpose('back')">
+                        <span class="export-purpose-text">
+                            <span class="export-purpose-title" id="export-purpose-back-title"></span>
+                            <span class="export-purpose-sub" data-i18n="exportGed.backSub"></span>
+                        </span>
+                    </label>
+                    <label class="export-purpose-option">
+                        <input type="radio" name="export-gedcom-purpose" id="export-purpose-share" value="share" onchange="window.Strom.UI.selectExportGedcomPurpose('share')">
+                        <span class="export-purpose-text">
+                            <span class="export-purpose-title" data-i18n="exportGed.share"></span>
+                            <span class="export-purpose-sub" data-i18n="exportGed.shareSub"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div id="export-back-section" class="export-back-section" hidden>
+                <ul class="export-back-summary" id="export-back-summary"></ul>
+                <label class="export-back-mark" id="export-back-mark-row" hidden>
+                    <input type="checkbox" id="export-back-mark" checked>
+                    <span class="export-back-mark-text">
+                        <span data-i18n="exportGed.markResearch"></span>
+                        <span class="export-back-mark-sub" id="export-back-mark-sub"></span>
+                    </span>
+                </label>
+                <p class="export-back-living" id="export-back-living" hidden><span class="export-back-dot" aria-hidden="true"></span><span id="export-back-living-text"></span></p>
+            </div>
             <div id="export-privacy-section" class="form-group">
                 <label for="export-privacy-mode" data-i18n="privacy.label" data-i18n-title="privacy.tooltip">Privacy of living people</label>
                 <select id="export-privacy-mode" aria-describedby="export-privacy-drops" onchange="window.Strom.UI.syncExportPrivacyEffects()">
@@ -27206,6 +27313,8 @@
             </div>
             <div class="export-images-progress" id="export-images-progress" role="status" aria-live="polite" hidden></div>
             <div class="buttons export-buttons">
+                <div class="export-sources-warning" id="export-sources-warning" role="status" aria-live="polite"></div>
+                <span class="export-back-size" id="export-back-size" hidden></span>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeExportPasswordDialog()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="export-submit-btn" onclick="window.Strom.UI.confirmExport()" data-i18n="encryption.exportBtn">Export</button>
             </div>

@@ -86,9 +86,10 @@ test('size estimate shrinks when photos are unchecked', async ({ page }) => {
 
 /**
  * Any privacy mode but Full data leaves out every source, citation and
- * attachment, the deceased's too (audit 017 c-D4). The dialog says so under
- * the privacy choice and in Content, the two checkboxes stop looking
- * included, and the estimate is sized on what the file really carries.
+ * attachment of a JSON / HTML export, the deceased's too (audit 017 c-D4).
+ * The dialog says so under the privacy choice and in Content, the two
+ * checkboxes stop looking included, and the estimate is sized on what the
+ * file really carries. GEDCOM keeps the deceased's (spec 066 §4).
  */
 test.describe('export with privacy of living people: sources and attachments', () => {
     /** A deceased man with a scan attached and a cited source, as its own tree. */
@@ -116,10 +117,36 @@ test.describe('export with privacy of living people: sources and attachments', (
         return pwd;
     }
 
-    test('GEDCOM with the default privacy: the note shows, the two checkboxes are inert, the estimate leaves them out', async ({ page }) => {
+    async function openHtmlExport(page: Page) {
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await page.evaluate(() => window.Strom.UI.exportTargetTreeApp());
+        const pwd = page.locator('#export-password-modal');
+        await expect(pwd).toBeVisible();
+        return pwd;
+    }
+
+    test('GEDCOM with the default privacy: the deceased keep sources and attachments, the note says only the living lose them', async ({ page }) => {
         await openApp(page);
         await seedTreeWithSources(page);
         const pwd = await openGedcomExport(page);
+        const privacy = pwd.locator('#export-privacy-mode');
+        const size = pwd.locator('#export-content-size');
+        await expect(privacy).toHaveValue('initials');
+        await expect(pwd.locator('#export-privacy-drops')).toHaveText('Sources, images and attachments are left out for living people only; the deceased keep them.');
+        await expect(pwd.locator('#export-content-privacy-note')).toBeHidden();
+        await expect(pwd.locator('#export-content-attachments')).toBeEnabled();
+        await expect(pwd.locator('#export-content-sources')).toBeEnabled();
+        const withPrivacy = (await size.textContent())?.trim();
+        // The only person is deceased: Full data carries the same.
+        await privacy.selectOption('full');
+        await expect(pwd.locator('#export-privacy-drops')).toBeHidden();
+        await expect(size).toHaveText(withPrivacy!);
+    });
+
+    test('HTML with the default privacy: the note shows, the two checkboxes are inert, the estimate leaves them out', async ({ page }) => {
+        await openApp(page);
+        await seedTreeWithSources(page);
+        const pwd = await openHtmlExport(page);
         const privacy = pwd.locator('#export-privacy-mode');
         const note = pwd.locator('#export-privacy-drops');
         const contentNote = pwd.locator('#export-content-privacy-note');

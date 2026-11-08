@@ -141,6 +141,7 @@ import { surnameSuggestMethods } from './surname-suggest-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { researchPromoMethods } from './research-promo-ui.js';
 import { importNextMethods } from './import-next-ui.js';
+import { exportGedcomMethods } from './export-gedcom-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
 import { fileAccessMethods } from './file-access-ui.js';
@@ -960,6 +961,10 @@ Object.assign(UIClass.prototype, researchPromoMethods);
 type ImportNextMethods = typeof importNextMethods;
 export interface UIClass extends ImportNextMethods {}
 Object.assign(UIClass.prototype, importNextMethods);
+
+type ExportGedcomMethods = typeof exportGedcomMethods;
+export interface UIClass extends ExportGedcomMethods {}
+Object.assign(UIClass.prototype, exportGedcomMethods);
 
 type TourMethods = typeof tourMethods;
 export interface UIClass extends TourMethods {}
