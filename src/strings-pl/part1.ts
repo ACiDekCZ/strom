@@ -790,6 +790,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         pendingAria: 'czeka na weryfikację',
         loading: 'Pytanie badania…',
         failed: 'Nie udało się rozpocząć weryfikacji; badanie nie odpowiada.',
+        confirmFailed: 'Bez zmian; badanie nie odpowiada.',
         nothing: 'Badanie nie ma tu teraz nic do zweryfikowania.',
         noResearch: 'Z badaniem przodków agent AI sam zweryfikuje daną w księgach.',
         personBtn: (n: number) => `Zweryfikuj dane (${n})`,

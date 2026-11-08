@@ -142,6 +142,7 @@ import { shareUiMethods } from './share-ui.js';
 import { researchPromoMethods } from './research-promo-ui.js';
 import { importNextMethods } from './import-next-ui.js';
 import { personReliabilityMethods } from './person-reliability-ui.js';
+import { verifyUiMethods } from './verify-ui.js';
 import { factOriginMethods } from './fact-origin-ui.js';
 import { exportGedcomMethods } from './export-gedcom-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
@@ -973,6 +974,10 @@ Object.assign(UIClass.prototype, importNextMethods);
 type PersonReliabilityMethods = typeof personReliabilityMethods;
 export interface UIClass extends PersonReliabilityMethods {}
 Object.assign(UIClass.prototype, personReliabilityMethods);
+
+type VerifyUiMethods = typeof verifyUiMethods;
+export interface UIClass extends VerifyUiMethods {}
+Object.assign(UIClass.prototype, verifyUiMethods);
 
 type FactOriginMethods = typeof factOriginMethods;
 export interface UIClass extends FactOriginMethods {}
