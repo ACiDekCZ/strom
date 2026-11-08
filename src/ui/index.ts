@@ -60,7 +60,7 @@ import { relationModalMethods } from './relation-modal.js';
 import { dialogsMethods } from './dialogs.js';
 import { relationshipsPanelMethods } from './relationships-panel.js';
 import { searchMethods } from './search.js';
-import { importExportMethods } from './import-export.js';
+import { importExportMethods, type AfterImportOptions } from './import-export.js';
 import { mergeUiMethods } from './merge-ui.js';
 import { encryptionUiMethods } from './encryption-ui.js';
 import { treeStatsMethods } from './tree-stats.js';
@@ -190,6 +190,12 @@ export class UIClass {
     gedcomRawBuffer: ArrayBuffer | null = null;
     /** How the GEDCOM file in the result dialog was decoded. */
     gedcomDecoding: GedcomDecoding | null = null;
+    /** The GEDCOM file of the result dialog as picked: its name, sha256 and the day it was loaded (spec 066). */
+    gedcomFileInfo: { name: string; sha: string; at: string } | null = null;
+    /** A new tree from a GEDCOM file waits for the import dialog's OK: the file's import record. */
+    pendingGedcomImport: { importId?: string } | null = null;
+    /** What the last import brought (the import summary reads it). */
+    lastImport: ({ treeId: TreeId } & AfterImportOptions) | null = null;
     /** State of the optional checkbox of the last showChoice() dialog. */
     choiceCheckboxChecked = false;
     /** The source catalog's filter ("Transcription not verified" from Research for this tree). */

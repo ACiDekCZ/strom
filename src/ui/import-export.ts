@@ -34,8 +34,24 @@ import { getDemoTree, DEMO_FOCUS } from '../demo-tree.js';
 import { demoImageMaker } from '../demo-images.js';
 import {
     parseGedcom, convertToStrom, decodeGedcomBytes, GedcomConversionResult, GedcomEncoding, GEDCOM_ENCODING_CHOICES,
-    gedcomSampleNames,
+    gedcomSampleNames, GedcomImportOrigin,
 } from '../ged-parser.js';
+import { createSha256 } from '../sha256.js';
+import { localIsoDay } from '../import-origin.js';
+
+/**
+ * What an import brought, for the steps after it (spec 066). `gedcom`: from a
+ * GEDCOM file; `path`: a new tree, inserted into the current (empty) tree, or
+ * merged into a new tree; `importId`: the file's import record in the tree;
+ * `added` / `updated`: people a merge added and merged into existing ones.
+ */
+export interface AfterImportOptions {
+    gedcom?: boolean;
+    path?: 'new' | 'insert' | 'merge';
+    importId?: string;
+    added?: number;
+    updated?: number;
+}
 import {
     validateJsonImport,
     ValidationResult,
@@ -394,7 +410,11 @@ export const importExportMethods = uiModule({
                 // ANSI, its bytes) decides the encoding; the summary offers another.
                 const buffer = e.target?.result as ArrayBuffer;
                 const decoding = decodeGedcomBytes(buffer);
-                this.gedcomResult = convertToStrom(parseGedcom(decoding.text));
+                const sha = createSha256();
+                sha.update(new Uint8Array(buffer));
+                this.gedcomFileInfo = { name: file.name, sha: sha.digestHex(), at: localIsoDay() };
+                this.gedcomResult = convertToStrom(parseGedcom(decoding.text),
+                    { importOrigin: this.gedcomImportOrigin(decoding.encoding) });
                 this.gedcomRawBuffer = buffer;
                 this.gedcomDecoding = decoding;
                 this.gedcomImportImages = null;
@@ -699,7 +719,9 @@ export const importExportMethods = uiModule({
         if (!this.gedcomRawBuffer || !(GEDCOM_ENCODING_CHOICES as readonly string[]).includes(encoding)) return;
         try {
             const decoding = decodeGedcomBytes(this.gedcomRawBuffer, encoding as GedcomEncoding);
-            const result = convertToStrom(parseGedcom(decoding.text));
+            // The import record says which encoding the file was read in: this one now.
+            const result = convertToStrom(parseGedcom(decoding.text),
+                { importOrigin: this.gedcomImportOrigin(decoding.encoding) });
             this.gedcomDecoding = decoding;
             this.gedcomResult = result;
         } catch (error) {
@@ -708,6 +730,17 @@ export const importExportMethods = uiModule({
             return;
         }
         this.showGedcomResultDialog();
+    },
+
+    /** The origin of the GEDCOM file in the result dialog, read in `encoding` (its import record). */
+    gedcomImportOrigin(encoding: string): GedcomImportOrigin {
+        const info = this.gedcomFileInfo;
+        return {
+            at: info?.at ?? localIsoDay(),
+            ...(info?.name ? { file: info.name } : {}),
+            encoding,
+            ...(info?.sha ? { sha: info.sha } : {}),
+        };
     },
 
     closeGedcomResultDialog(): void {
@@ -760,6 +793,7 @@ export const importExportMethods = uiModule({
     importGedcomAsNewTree(): void {
         if (!this.gedcomResult) return;
         this.gedcomRawBuffer = null;
+        const importId = this.gedcomResult.importId;
 
         // Check if importing directly to current tree (from empty state)
         if (this.importToCurrentTree) {
@@ -767,11 +801,15 @@ export const importExportMethods = uiModule({
             // Close gedcom result dialog
             document.getElementById('gedcom-result-modal')?.classList.remove('active');
             this.clearDialogStack();
+            // Back up the current state before overwriting it (as a JSON file does).
+            void DataManager.snapshotNow('pre-import');
             // Load data directly into current tree
             DataManager.loadStromData(this.gedcomDataForImport());
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
             this.gedcomResult = null;
+            const treeId = DataManager.getCurrentTreeId();
+            if (treeId) void this.afterImport(treeId, { gedcom: true, path: 'insert', ...(importId ? { importId } : {}) });
             return;
         }
 
@@ -784,6 +822,7 @@ export const importExportMethods = uiModule({
 
         // Show import tree dialog with parent preserved
         this.showImportTreeDialog(this.gedcomDataForImport(), strings.treeManager.importTreeName, fromManager);
+        this.pendingGedcomImport = importId ? { importId } : {};
         this.gedcomResult = null;
     },
 
@@ -794,7 +833,8 @@ export const importExportMethods = uiModule({
         if (!this.gedcomResult) return;
 
         // Start merge process
-        MergerUI.startMerge(this.gedcomDataForImport());
+        MergerUI.startMerge(this.gedcomDataForImport(), undefined, false,
+            { gedcom: true, ...(this.gedcomResult.importId ? { importId: this.gedcomResult.importId } : {}) });
         this.gedcomResult = null;
         this.closeGedcomResultDialog();
     },
@@ -1285,6 +1325,8 @@ export const importExportMethods = uiModule({
 
         this.importTreeData = data;
         this.importFromTreeManager = fromTreeManager;
+        // Set again by a GEDCOM import right after this.
+        this.pendingGedcomImport = null;
 
         // Handle dialog stack - if from tree manager, it's already in stack
         if (fromTreeManager) {
@@ -1331,6 +1373,7 @@ export const importExportMethods = uiModule({
         document.getElementById('import-tree-modal')?.classList.remove('active');
         this.importTreeData = null;
         this.pendingImportResearch = null;
+        this.pendingGedcomImport = null;
         if (this.importFromTreeManager) {
             this.returnToParentDialog();
             this.importFromTreeManager = false;
@@ -1346,6 +1389,7 @@ export const importExportMethods = uiModule({
         const nameInput = document.getElementById('import-tree-name') as HTMLInputElement;
         const name = nameInput?.value.trim() || strings.treeManager.importTreeName;
 
+        const gedcomImport = this.pendingGedcomImport;
         const newTreeId = await DataManager.importAsNewTree(this.importTreeData, name);
         this.restoreImportResearch(newTreeId);
 
@@ -1360,14 +1404,20 @@ export const importExportMethods = uiModule({
         // If this import came from "open from file", attach that handle now.
         void this.attachPendingFileHandle(newTreeId);
         // M6: post-import health check — offer to review any data issues.
-        void this.afterImport(newTreeId);
+        void this.afterImport(newTreeId, gedcomImport
+            ? { gedcom: true, path: 'new', ...(gedcomImport.importId ? { importId: gedcomImport.importId } : {}) }
+            : {});
     },
 
     /**
      * The two questions worth asking about a file somebody just imported, one
      * after the other so they do not pile up on top of each other.
      */
-    async afterImport(treeId: TreeId): Promise<void> {
+    async afterImport(treeId: TreeId, options: AfterImportOptions = {}): Promise<void> {
+        this.lastImport = { treeId, ...options };
+        // Inserting into the current tree and merging asked nothing after the
+        // import so far; what they show next is the import summary's to say.
+        if (options.path === 'insert' || options.path === 'merge') return;
         await this.offerPostImportValidation(treeId);
         await this.offerPostImportSplit(treeId);
         // A tree of a research: its places not on the map, once the research here takes them (spec 034 U5 point 7).

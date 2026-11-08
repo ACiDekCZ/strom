@@ -66,6 +66,8 @@ class MergerUIClass {
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
     private incomingFileName?: string;
+    /** A merge of a GEDCOM file: its import record in the incoming data (spec 066). */
+    private gedcomImport?: { gedcom: true; importId?: string };
 
     // Track if opened from tree manager (for returning to it)
     private openedFromTreeManager: boolean = false;
@@ -80,8 +82,12 @@ class MergerUIClass {
      * @param sourceTreeIdOrFileName Either a TreeId (for tree-to-tree merge) or a filename (for file import)
      * @param fromTreeManager Whether this merge was opened from the tree manager
      */
-    startMerge(incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false): void {
+    startMerge(
+        incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false,
+        gedcomImport?: { gedcom: true; importId?: string },
+    ): void {
         const existingData = DataManager.getData();
+        this.gedcomImport = gedcomImport;
 
         // Create merge state
         this.mergeState = createMergeState(existingData, incomingData);
@@ -117,6 +123,7 @@ class MergerUIClass {
      */
     resumeMerge(state: MergeState, fileName?: string, targetTreeName?: string, sourceTreeName?: string): void {
         this.mergeState = state;
+        this.gedcomImport = undefined;
         this.currentFilter = 'all';
         this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
@@ -1469,6 +1476,17 @@ class MergerUIClass {
             this.removeEscapeHandler();
             this.clearAutoSave();
             void clearCurrentMerge();
+
+            // What the import brought, for the steps after it.
+            const gedcomImport = this.gedcomImport;
+            this.gedcomImport = undefined;
+            if (gedcomImport) {
+                const importId = gedcomImport.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
+                void UI.afterImport(newTreeId, {
+                    gedcom: true, path: 'merge', ...(importId ? { importId } : {}),
+                    added: result.stats.added, updated: result.stats.merged,
+                });
+            }
 
             // Reset state
             this.mergeState = null;
