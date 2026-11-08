@@ -495,7 +495,12 @@ export const verifyUiMethods = uiModule({
         const done = (): void => {
             if (confirm) return;
             const again: FactView = { ...v, offer: { ...v.offer, scanViaBridge: viaBridge } };
+            // Undone in the person editor or the relationships panel: the toast stands above
+            // the dialog's overlay (its "Redo" reachable) and clear of the dialog's buttons.
+            const clearOf = document.querySelector('#person-modal.active') ? '#person-modal.active .pm-footer'
+                : document.querySelector('#relationships-modal.active') ? '#relationships-modal.active .buttons' : undefined;
             this.showToast(strings.verify.undone, 5000, {
+                kind: 'verify-confirm', ...(clearOf ? { clearOf } : {}),
                 action: { label: strings.undo.redo, run: () => { void this.verifyConfirm(again, true); } },
             });
         };
@@ -509,15 +514,22 @@ export const verifyUiMethods = uiModule({
             return;
         }
         const eid = v.offer.eid;
-        if (!eid || !tip) return;
-        tipState = { tip, key: v.key, busy: confirm ? 'scan' : 'undo' };
-        this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
+        if (!eid) return;
+        // "Redo" from the toast comes with the tip closed: the request goes all the same.
+        if (tip) {
+            tipState = { tip, key: v.key, busy: confirm ? 'scan' : 'undo' };
+            this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
+        }
         const result: FactConfirmResult | null = await this.postResearchBridgeWrite(
             (base, features) => postFactConfirm(base, eid, confirm, { features }));
         if (tipState?.key === v.key) tipState = null;
         if (!result?.ok) {
-            if (document.querySelector('#status-tip') === tip) tipState = { tip, key: v.key, error: strings.verify.confirmFailed };
-            this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
+            if (tip && document.querySelector('#status-tip') === tip) {
+                tipState = { tip, key: v.key, error: strings.verify.confirmFailed };
+                this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
+            } else {
+                this.showToast(strings.verify.confirmFailed, 5000, { alert: true, kind: 'verify-confirm' });
+            }
             return;
         }
         const holder = holderOf(v.target);

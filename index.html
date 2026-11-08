@@ -21926,6 +21926,8 @@
             .status-tip .st-preview { gap: 3px; padding: 8px; }
         }
         [data-theme="dark"] .status-tip .st-v-box { background: var(--surface-2); border: 1px solid var(--divider); }
+        /* An Undo of the scan is made in the person editor or the relationships panel: its toast (with Redo) is above the dialog's overlay. */
+        .toast[data-kind="verify-confirm"] { z-index: 250; }
         /* The person card: where its facts came from, under the person's header. */
         .person-origin {
             display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
