@@ -3782,7 +3782,7 @@ class DataManagerClass {
         // wins, the removed one's fills a gap.
         // The titles of the name and the surname after marriage likewise.
         const keptMarried = keepPerson.marriedSurname;
-        for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress', 'titleBefore', 'titleAfter', 'marriedSurname'] as const) {
+        for (const key of ['birthAddress', 'birthAge', 'deathCause', 'deathAge', 'deathAddress', 'titleBefore', 'titleAfter', 'marriedSurname'] as const) {
             if (!keepPerson[key] && removePerson[key]) keepPerson[key] = removePerson[key];
         }
         // Which surname the person goes by travels with the married surname:

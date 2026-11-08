@@ -500,6 +500,11 @@ export interface Person {
     birthPlace?: string;
     /** House or address of the birth (GEDCOM BIRT > ADDR). */
     birthAddress?: string;
+    /**
+     * An age written at the birth (BIRT > AGE) by a Strom file (the
+     * research's): not shown, kept so it goes back as it came.
+     */
+    birthAge?: string;
     deathDate?: string;
     deathPlace?: string;
     /** Cause of death as recorded (DEAT > CAUS). */

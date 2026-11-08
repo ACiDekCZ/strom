@@ -28,7 +28,7 @@ export interface PersonChange {
 }
 
 const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'nameVariants'];
-const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress'];
+const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress', 'birthAge'];
 const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause', 'deathAge', 'deathAddress', 'isDeceased'];
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
 /** Not the user's: the research's own knowledge and statuses, and what the app keeps for itself. */

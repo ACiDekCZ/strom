@@ -752,7 +752,7 @@ function factStands(holder: FactHolder, fact: string): boolean {
     const person = holder as Person;
     if (fact === 'death') return person.isDeceased === true || !!person.deathSourceIds?.length
         || !!person.deathCause || !!person.deathAge || !!person.deathAddress;
-    if (fact === 'birth') return !!person.birthSourceIds?.length || !!person.birthAddress;
+    if (fact === 'birth') return !!person.birthSourceIds?.length || !!person.birthAddress || !!person.birthAge;
     return false;
 }
 

@@ -318,6 +318,7 @@ function stripDetails(person: Person): void {
     delete person.deathPlace;
     delete person.gedcomDates;
     delete person.birthAddress;
+    delete person.birthAge;
     delete person.deathCause;
     delete person.deathAge;
     delete person.deathAddress;

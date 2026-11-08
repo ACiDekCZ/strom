@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { parseGedcom, convertToStrom, GedcomImportOrigin } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { DataManager, migrateData } from '../data.js';
-import { applyLivingPrivacy, CONTENT_PRESETS, PrivacyMode } from '../privacy.js';
+import { applyLivingPrivacy, CONTENT_PRESETS, PrivacyMode, resolveContentOptions } from '../privacy.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
@@ -705,5 +705,68 @@ describe('the research’s file read and written again (P2)', () => {
         expect(count(ged, /^2 _STROM_ORIGIN /)).toBe(count(RESEARCH, /^2 _STROM_ORIGIN /));
         const lines = ged.split('\n');
         expect(lines[lines.indexOf('1 DEAT Y') + 1]).toBe('2 _STROM_ORIGIN import R1');
+    });
+});
+
+/**
+ * The research's tree through the app and back (066 N-A, N-B, N-C): a child in
+ * two families, the second of one parent; a death known without a date, cited;
+ * an age written at the birth. Every import and origin goes back out, and the
+ * app makes up no note of its own from any of it.
+ */
+const RESEARCH_ROUND = RESEARCH_FAMILIES
+    .replace(`1 NAME Hromoslav /Ozubec/
+1 SEX M
+`, `1 NAME Hromoslav /Ozubec/
+2 _STROM_ORIGIN import R1
+1 SEX M
+1 DEAT Y
+2 SOUR @S1@
+3 PAGE fol. 7
+3 QUAY 2
+2 _STROM_STATUS lead
+2 _STROM_ORIGIN import R1
+`)
+    .replace(`1 NAME Mlhoň /Ozubec/
+1 SEX M
+`, `1 NAME Mlhoň /Ozubec/
+2 _STROM_ORIGIN import R1
+1 SEX M
+1 BIRT
+2 DATE 1890
+2 AGE 32y
+2 _STROM_ORIGIN import R1
+`)
+    .replace('0 TRLR', `0 @S1@ SOUR
+1 TITL Matrika Ozubcov
+0 TRLR`);
+
+describe('the research’s tree through the app and back (N-A, N-B, N-C)', () => {
+    const count = (ged: string, re: RegExp) => ged.split('\n').filter(l => re.test(l)).length;
+    const data = migrateData(load(RESEARCH_ROUND, null).data);
+    const file = exportToGedcom(structuredClone(data), 'Ozubec', { origins: true, content: resolveContentOptions(true) }).content;
+    const sync = exportToGedcom(structuredClone(data), 'Ozubec', { research: { id: 'r-test' } }).content;
+
+    it('the file export: as many imports, ids and origins as came in', () => {
+        expect(count(file, /^1 _STROM_IMPORT R1$/)).toBe(count(RESEARCH_ROUND, /^1 _STROM_IMPORT R1$/));
+        expect(count(file, /^2 _XREF /)).toBe(count(RESEARCH_ROUND, /^2 _XREF /));
+        expect(count(file, /^2 _STROM_ORIGIN /)).toBe(count(RESEARCH_ROUND, /^2 _STROM_ORIGIN /));
+        expect(count(file, /^1 FAMC /)).toBe(count(RESEARCH_ROUND, /^1 FAMC /));
+    });
+
+    it('the age at the birth goes back as AGE under BIRT, in the file and to the research', () => {
+        for (const ged of [file, sync]) {
+            expect(ged).toMatch(/1 BIRT\n2 DATE 1890\n2 AGE 32y\n/);
+            expect(count(ged, /^1 FAMC /)).toBe(count(RESEARCH_ROUND, /^1 FAMC /));
+        }
+    });
+
+    it('no note the research did not write, in either export', () => {
+        for (const ged of [file, sync]) {
+            expect(count(ged, /^1 NOTE (?!Strom surname)/)).toBe(0);
+            expect(count(ged, /^2 NOTE /)).toBe(0);
+        }
+        // The age is no line of the person's note either (the second family's line is the app's own explanation).
+        expect(byName(data, 'Mlhoň').notes ?? '').not.toMatch(/32/);
     });
 });

@@ -1134,6 +1134,8 @@ interface GedcomIndividual {
     deathPlace: string;
     /** BIRT > ADDR, DEAT > CAUS / AGE / ADDR (the first BIRT/DEAT block). */
     birthAddress?: string;
+    /** BIRT > AGE of a Strom file (kept, not shown). */
+    birthAge?: string;
     deathCause?: string;
     deathAge?: string;
     deathAddress?: string;
@@ -2334,6 +2336,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             if (ev) return { get: () => ev[key], set: v => { ev[key] = v; } };
             if (currentSubTag === 'BIRT' && key === 'address') {
                 return { get: () => indi.birthAddress, set: v => { indi.birthAddress = v; } };
+            }
+            // An age at the birth from Strom's own file goes back as it came:
+            // a note made of it would come back to the research as new.
+            if (currentSubTag === 'BIRT' && key === 'age' && (stromResearch || stromApp)) {
+                return { get: () => indi.birthAge, set: v => { indi.birthAge = v; } };
             }
             if (currentSubTag === 'DEAT') {
                 const field = key === 'cause' ? 'deathCause' : key === 'age' ? 'deathAge' : 'deathAddress';
@@ -4199,6 +4206,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (indi.deceased && !indi.deathDate) person.isDeceased = true;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
         if (indi.birthAddress) person.birthAddress = indi.birthAddress;
+        if (indi.birthAge) person.birthAge = indi.birthAge;
         if (indi.deathCause) person.deathCause = indi.deathCause;
         if (indi.deathAge) person.deathAge = indi.deathAge;
         if (indi.deathAddress) person.deathAddress = indi.deathAddress;

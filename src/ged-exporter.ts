@@ -1184,7 +1184,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (lineTag) lines.push(`1 ${STROM_LINE_TAG} ${lineTag}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
-        if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {
+        if (person.birthDate || person.birthPlace || person.birthAddress || person.birthAge || person.birthSourceIds?.length) {
             lines.push('1 BIRT');
             if (person.birthDate) {
                 const date = formatGedcomDate(person.birthDate, person.gedcomDates);
@@ -1193,7 +1193,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (person.birthPlace) {
                 pushPlace(lines, 2, person.birthPlace, data.places);
             }
-            pushDetails(lines, { address: person.birthAddress });
+            pushDetails(lines, { age: person.birthAge, address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(person, 'birth');

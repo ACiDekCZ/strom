@@ -932,7 +932,7 @@ export function mergePersonData(
     if (!existing.deathPlace && incoming.deathPlace) {
         existing.deathPlace = incoming.deathPlace;
     }
-    for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress'] as const) {
+    for (const key of ['birthAddress', 'birthAge', 'deathCause', 'deathAge', 'deathAddress'] as const) {
         if (!existing[key] && incoming[key]) existing[key] = incoming[key];
     }
 
