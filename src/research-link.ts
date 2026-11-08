@@ -16,6 +16,7 @@ import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 import { readAgainSaid, waitingProposalsSaid, type ReadSourceProposal, type ReadSourceState } from './research-read-task.js';
 import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js';
+import { verifyStatusSaid, type LiveVerifyStatus } from './research-verify.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -1856,6 +1857,8 @@ export interface LiveStatus {
     treeKind?: ResearchTreeKind;
     /** `tree.state` (with `tree.state` in `features`): a research, one waiting for its agent, or an archive. */
     treeState?: ResearchTreeState;
+    /** `verify` (with `verify` in `features`, not for an archive or a waiting tree): facts by their re-verification state (spec 065). */
+    verify?: LiveVerifyStatus;
     /** `seal` (with `seal.foreign` in `features`): the tree's key is on this computer, or it was sealed on another one. */
     seal?: 'here' | 'elsewhere';
     /** `notDownloaded` (with `tree.notDownloaded` in `features`): files of the tree a cloud folder has not brought down yet. */
@@ -3161,6 +3164,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(readAgainSaid(r.readAgain, features) ? { readAgain: readAgainSaid(r.readAgain, features)! } : {}),
         ...(waitingProposalsSaid(r.waiting, features) ? { sourceProposals: waitingProposalsSaid(r.waiting, features)! } : {}),
         ...qualitySaid(r, features),
+        ...verifyStatusSaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
