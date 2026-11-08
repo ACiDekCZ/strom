@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -580,6 +580,26 @@ function emailsBack(event: LifeEvent): { event: LifeEvent; emails: string[] } {
     return { event: { ...event, ...(note ? { note } : { note: undefined }) }, emails };
 }
 
+/**
+ * A source without the note line(s) the import made of its AUTH ("Author: …",
+ * in the language of the import), and the author while that line is still
+ * there; a line taken out or edited by hand stays a note (as emailsBack).
+ */
+function authorBack(source: Source): { source: Source; author?: string } {
+    if (!source.gedcomAuthor || !source.note) return { source };
+    const noteLines = source.note.split('\n');
+    const [first, ...rest] = source.gedcomAuthor.split('\n');
+    const i = noteLines.findIndex((l, at) => {
+        const colon = l.indexOf(': ');
+        return colon > 0 && !l.slice(0, colon).includes('@') && l.slice(colon + 2) === first
+            && rest.every((r, k) => noteLines[at + 1 + k] === r);
+    });
+    if (i < 0) return { source };
+    noteLines.splice(i, 1 + rest.length);
+    const note = noteLines.join('\n').trim();
+    return { source: { ...source, ...(note ? { note } : { note: undefined }) }, author: source.gedcomAuthor };
+}
+
 function pushStatus(lines: string[], status: FactStatus | undefined): void {
     if (status) lines.push(`2 _STROM_STATUS ${status}`);
 }
@@ -713,7 +733,37 @@ interface BackXrefs {
     reserved: Set<string>;
     /** The imports from that program (its own tags kept from them go back, spec 066 G8). */
     imports: Set<string>;
+    /**
+     * The sources one record of that program's file became (one per page
+     * cited): each member's id -> the group's first member. They go back as
+     * that one record, the pages on their citations (spec 066 K3.1).
+     */
+    sourceGroups: Map<string, string>;
+    /** The original xref a group uses (without @), by its first member. */
+    sources: Map<string, string>;
 }
+
+/** Every source a citation names (what pushCitation writes): of a person, a fact, an event, a couple. */
+function citedSourceIds(data: StromData): Set<string> {
+    const out = new Set<string>();
+    const add = (ids: readonly string[] | undefined): void => { for (const id of ids ?? []) out.add(id); };
+    for (const p of Object.values(data.persons) as Person[]) {
+        if (!p) continue;
+        add(p.sourceIds); add(p.birthSourceIds); add(p.deathSourceIds);
+        for (const ev of p.events ?? []) add(ev.sourceIds);
+    }
+    for (const ps of Object.values(data.partnerships) as Partnership[]) {
+        if (!ps) continue;
+        add(ps.sourceIds);
+        for (const ev of ps.events ?? []) add(ev.sourceIds);
+    }
+    return out;
+}
+
+/** What a source record says itself, apart from the page and the entry's date (the citation's). */
+const sameSourceRecord = (a: Source, b: Source): boolean =>
+    a.title === b.title && (a.repository ?? '') === (b.repository ?? '') && (a.url ?? '') === (b.url ?? '')
+    && (a.note ?? '') === (b.note ?? '') && (!a.transcript || !b.transcript || a.transcript === b.transcript);
 
 /**
  * The records' ids of "Back to {prog}" (spec 066 K3.2). A record's entry is
@@ -728,7 +778,7 @@ interface BackXrefs {
 function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     const out: BackXrefs = {
         program: '', persons: new Map(), families: new Map(), personEntries: new Map(), familyEntries: new Map(), reserved: new Set(),
-        imports: new Set(),
+        imports: new Set(), sourceGroups: new Map(), sources: new Map(),
     };
     const rec = backTo ? data.imports?.find(r => r.id === backTo) : undefined;
     if (!rec) return out;
@@ -737,7 +787,7 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     out.imports = new Set(same);
     // 0 for the import itself, then the later files before the earlier ones.
     const rank = (from: string): number => (from === rec.id ? 0 : same.length - same.indexOf(from));
-    const pick = (holder: FactHolder): OriginalIds | undefined => {
+    const pick = (holder: { originalIds?: OriginalIds[] }): OriginalIds | undefined => {
         let best: OriginalIds | undefined;
         for (const e of holder.originalIds ?? []) {
             if (!same.includes(e.from)) continue;
@@ -766,6 +816,34 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
         if (!entry) continue;
         out.familyEntries.set(id, entry);
         claim(entry.xref, rank(entry.from), () => out.families.set(id, entry.xref!));
+    }
+    // The sources one record became, cited somewhere: one group per record
+    // while they say the same of it (a title edited here makes a record of its own).
+    const cited = citedSourceIds(data);
+    const groups = new Map<string, Source[][]>();
+    for (const src of Object.values(data.sources ?? {}) as Source[]) {
+        if (!src) continue;
+        const entry = pick(src);
+        if (!entry?.xref) continue;
+        out.reserved.add(entry.xref.toUpperCase());
+        if (!cited.has(src.id)) continue;
+        const key = entry.xref.toUpperCase();
+        const list = groups.get(key) ?? [];
+        groups.set(key, list);
+        const group = list.find(g => sameSourceRecord(g[0], src) && g.every(m => sameSourceRecord(m, src)));
+        if (group) group.push(src);
+        else list.push([src]);
+    }
+    for (const list of groups.values()) {
+        for (const [i, group] of list.entries()) {
+            const head = group[0].id;
+            for (const m of group) out.sourceGroups.set(m.id, head);
+            // The record's xref: the first group's (the others are records of their own now).
+            if (i === 0) {
+                const entry = pick(group[0])!;
+                claim(entry.xref, rank(entry.from), () => out.sources.set(head, entry.xref!));
+            }
+        }
     }
     for (const [key, c] of claims) {
         out.reserved.add(key);
@@ -871,10 +949,26 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
     }
 
-    // Map all sources to GEDCOM IDs (@S1@ ...)
+    // Map all sources to GEDCOM IDs (@S1@ ...). "Back to {prog}": the sources
+    // one record became share its xref (its own where it is safe).
     const sourceIdMap = new Map<string, string>();
     for (const sourceId of Object.keys(data.sources ?? {})) {
-        sourceIdMap.set(sourceId, freshXref('S'));
+        const head = back.sourceGroups.get(sourceId);
+        if (head && head !== sourceId) continue;
+        const own = back.sources.get(sourceId);
+        sourceIdMap.set(sourceId, own ? `@${own}@` : freshXref('S'));
+    }
+    for (const [sourceId, head] of back.sourceGroups) {
+        if (head !== sourceId && sourceIdMap.has(head)) sourceIdMap.set(sourceId, sourceIdMap.get(head)!);
+    }
+    /** The members of each group, by its first member. */
+    const groupMembers = new Map<string, Source[]>();
+    for (const [sourceId, head] of back.sourceGroups) {
+        const src = data.sources?.[sourceId];
+        if (!src) continue;
+        const list = groupMembers.get(head) ?? [];
+        list.push(src);
+        groupMembers.set(head, list);
     }
     // Unique repository names -> @Rx@ records (standard 5.5.1 structure).
     const repoIdMap = new Map<string, string>();
@@ -1535,17 +1629,34 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // pointer; the reference/page lives on citations (see pushCitation). PAGE
     // is still emitted on the record too, purely for our own round-trip of
     // sources that are catalogued but not cited anywhere.
-    for (const [sourceId, source] of Object.entries(data.sources ?? {})) {
+    for (const [sourceId, recordSource] of Object.entries(data.sources ?? {})) {
         const gedcomId = sourceIdMap.get(sourceId);
         if (!gedcomId) continue;
+        // "Back to {prog}": one record for the sources it became, written once (by its first member).
+        const members = groupMembers.get(sourceId);
+        if (!members && back.sourceGroups.has(sourceId)) continue;
+        let source: Source = recordSource;
+        let author: string | undefined;
+        if (members) {
+            ({ source, author } = authorBack(recordSource));
+            const transcript = members.find(m => m.transcript)?.transcript;
+            if (transcript && !source.transcript) source = { ...source, transcript };
+        }
         lines.push(`0 ${gedcomId} SOUR`);
         pushRecordImport(source.importId);
+        // Its xref in the file it came from, so the file read again knows the record
+        // (a file export; the research keeps the app's own, see keepImports).
+        const fromEntry = !options.research && source.importId && knownImports.has(source.importId)
+            ? source.originalIds?.find(e => e.from === source.importId && e.xref) : undefined;
+        if (fromEntry) lines.push(`2 _XREF @${fromEntry.xref}@`);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
+        if (author) pushLongValue(lines, 1, 'AUTH', author);
         if (source.repository) {
             const repoRef = repoIdMap.get(source.repository);
             if (repoRef) lines.push(`1 REPO ${repoRef}`);
         }
-        if (source.reference) pushLongValue(lines, 1, 'PAGE', source.reference);
+        // A record of another program's file has its pages on the citations (5.5.1 knows no PAGE on a record).
+        if (source.reference && !members) pushLongValue(lines, 1, 'PAGE', source.reference);
         if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);
         if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
         // The user read the transcript from the record (Strom Research: the first reading).
@@ -1570,7 +1681,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (source.note) pushNote(lines, 1, source.note);
         // Crops of the entry, embedded like person media (other programs
         // cannot read data URLs — the content options can leave them out).
-        for (const exc of source.excerpts ?? []) {
+        for (const exc of members ? members.flatMap(m => m.excerpts ?? []) : source.excerpts ?? []) {
             const mime = exc.dataUrl.slice(5, exc.dataUrl.indexOf(';'));
             lines.push('1 OBJE');
             lines.push(`2 FORM ${mime.includes('/') ? mime.split('/')[1] : 'jpeg'}`);
@@ -1591,7 +1702,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushWrapped(lines, 2, 'FILE', exc.dataUrl);
         }
-        pushGedcomExtra(source);
+        // The record's own tags of another program, once (every page's source keeps them).
+        pushGedcomExtra(members ? { gedcomExtra: members.flatMap(m => m.gedcomExtra ?? []) } : source);
     }
 
     // ==================== REPOSITORIES ====================

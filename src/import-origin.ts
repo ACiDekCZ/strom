@@ -34,6 +34,9 @@ export type FactHolder = Person | Partnership;
 /** A record that keeps another program's own tags (a person, a couple, a source). */
 export type ExtraHolder = { gedcomExtra?: GedcomExtra[] };
 
+/** A record that keeps its ids in the loaded files (a person, a couple; a source its xref). */
+export type IdsHolder = { originalIds?: OriginalIds[] };
+
 const FACT_PARTS: readonly FactPart[] = ['DATE', 'PLAC', 'VAL', 'GIVN', 'SURN', 'SEX'];
 const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research'];
 
@@ -335,7 +338,7 @@ export function cleanOriginalIds(value: unknown, known: ReadonlySet<string>): Or
  * Add one import's ids to a holder: joined with the entry of the same import
  * (its xref stays, new lines are added, none twice), else a new entry.
  */
-export function addOriginalIds(holder: FactHolder, entry: OriginalIds): void {
+export function addOriginalIds(holder: IdsHolder, entry: OriginalIds): void {
     const list = holder.originalIds ??= [];
     const have = list.find(e => e.from === entry.from);
     if (!have) {
@@ -644,7 +647,31 @@ export function cleanImportOrigin(data: StromData, rawImports: unknown): void {
         if (!src || typeof src !== 'object') continue;
         if ('importId' in src && (typeof src.importId !== 'string' || !known.has(src.importId))) delete src.importId;
         cleanHolderExtra(src, known);
+        cleanSourceXrefs(src, known);
+        if ('gedcomAuthor' in src && (typeof src.gedcomAuthor !== 'string' || !src.gedcomAuthor)) delete src.gedcomAuthor;
     }
+}
+
+/** A source's xref in the loaded files (Source.originalIds): the xref only, of known imports. */
+function cleanSourceXrefs(src: IdsHolder, known: ReadonlySet<string>): void {
+    if (!('originalIds' in src)) return;
+    const raw: unknown = src.originalIds;
+    delete src.originalIds;
+    for (const v of Array.isArray(raw) ? raw : []) {
+        const clean = cleanOriginalIds(v, known);
+        if (clean?.xref) addOriginalIds(src, { from: clean.from, xref: clean.xref });
+    }
+}
+
+/** A source's xref and kept tags with their import ids renamed by `map` (after a merge). */
+export function remapSourceImports(src: IdsHolder & ExtraHolder, map: Map<string, string>): void {
+    if (map.size === 0) return;
+    if (src.originalIds) {
+        const list = src.originalIds;
+        delete src.originalIds;
+        for (const entry of list) addOriginalIds(src, { ...entry, from: map.get(entry.from) ?? entry.from });
+    }
+    remapGedcomExtra(src, map);
 }
 
 /**
@@ -859,10 +886,16 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
     }
     // The sources' own tags of another program, by the research's record id (REFN), else the same id.
     const nextSources = Object.values(out.sources ?? {});
+    // So does the record it was in that program's file, with its author (spec 066 K3.1).
     for (const src of Object.values(previous.sources ?? {})) {
-        if (!src?.gedcomExtra) continue;
+        if (!src?.gedcomExtra && !src?.originalIds && !src?.gedcomAuthor) continue;
         const now = (src.refn ? nextSources.find(s => s.refn === src.refn) : undefined) ?? out.sources?.[src.id];
-        if (now) for (const entry of src.gedcomExtra) addGedcomExtra(now, entry);
+        if (!now) continue;
+        for (const entry of src.gedcomExtra ?? []) addGedcomExtra(now, entry);
+        for (const entry of src.originalIds ?? []) {
+            if (!now.originalIds?.some(e => e.from === entry.from)) addOriginalIds(now, entry);
+        }
+        if (!now.gedcomAuthor && src.gedcomAuthor && now.note === src.note) now.gedcomAuthor = src.gedcomAuthor;
     }
     return out;
 }

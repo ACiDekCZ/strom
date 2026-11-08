@@ -381,6 +381,20 @@ export interface Source {
      * {prog}" (spec 066 G8), as Person.gedcomExtra.
      */
     gedcomExtra?: GedcomExtra[];
+    /**
+     * The source record's xref in the loaded GEDCOM files (only `from` and
+     * `xref` of OriginalIds). The sources a record became — one per page
+     * cited, see the import — share it, and "Back to {prog}" writes them
+     * as that one record again, the pages on the citations (spec 066 K3.1).
+     */
+    originalIds?: OriginalIds[];
+    /**
+     * The record's AUTH as the file wrote it. It is also a line of the note
+     * ("Author: …", in the language of the import), which is what the app
+     * shows; "Back to {prog}" writes it as `1 AUTH` while that line is still
+     * in the note (like LifeEvent.gedcomEmails).
+     */
+    gedcomAuthor?: string;
 }
 
 /** Why the research left a source's image out of its file (see Source.imageHeld). */

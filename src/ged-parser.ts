@@ -980,6 +980,22 @@ interface RawOriginalIds {
     ids: OriginalIdLine[];
 }
 
+/** One citation of a source record (`n SOUR @Sx@`) and what it says itself. */
+interface CitationSlot {
+    /** Where its pointer was written. */
+    list: string[];
+    index: number;
+    /** The source record's xref. */
+    id: string;
+    /** Its level and line in the file (its DATA > DATE is told apart by them). */
+    level: number;
+    line: number;
+    page?: string;
+    /** DATA > DATE: when the entry was written. */
+    date?: string;
+    quay?: number;
+}
+
 /** Raw GEDCOM source record (0 @Sx@ SOUR). */
 interface RawSource {
     id: string;
@@ -1023,6 +1039,12 @@ interface RawSource {
     heldClips?: string[];
     /** Another program's own level-1 tags kept as written (spec 066 G8). */
     extras?: RawExtra[];
+    /** The first AUTH as written (its CONT lines joined by line breaks); also a line of the note. */
+    author?: string;
+    /** `2 _XREF` under the record's `1 _STROM_IMPORT`: its xref in the file it came from (app files only). */
+    importXref?: string;
+    /** A page's source of its own: the record (xref) it was cut from. */
+    derivedFrom?: string;
 }
 
 /** Raw OBJE under a source record. */
@@ -2158,11 +2180,15 @@ export function parseGedcom(content: string): ParsedGedcom {
     const noteQuay = (ref: string | null, value: string): void => {
         const q = parseInt(value, 10);
         if (ref && q >= 0 && q <= 3 && !citationQuality.has(ref)) citationQuality.set(ref, q);
+        // This citation's own QUAY, for the page's source of its own (see the derived sources).
+        const c = currentCitation;
+        if (c && ref && c.id === ref && q >= 0 && q <= 3 && c.quay === undefined) c.quay = q;
     };
     const droppedTags = new Map<string, number>();
     const count = (tag: string): void => { droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1); };
-    /** The level of the line being read. */
+    /** The level of the line being read, and where it is in the file. */
     let lineLevel = 0;
+    let lineIndex = -1;
     /**
      * The level of a line already counted (or kept): nothing under it is
      * counted again (spec 066 G8). Cleared by the next line at its level or above.
@@ -2189,6 +2215,7 @@ export function parseGedcom(content: string): ParsedGedcom {
     const citationDates = new Map<string, string>();
     let citeLevel: number | null = null;
     let citeRef: string | null = null;
+    let citeLine = -1;
     let inCiteData = false;
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
@@ -2214,6 +2241,8 @@ export function parseGedcom(content: string): ParsedGedcom {
      */
     let currentFactSubTag: string | null = null;
     let currentSource: RawSource | null = null;
+    /** The source record's first AUTH is being read (its CONT/CONC lines join Source.author). */
+    let readingAuthor = false;
     /** Which name the current 1 NAME line was: -1 the primary, else its variant index. */
     let currentNameSlot: number | null = null;
     let currentMedia: RawMedia | null = null;
@@ -2225,21 +2254,29 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentCitationId: string | null = null;
     /** Where that citation's pointer was written (its PAGE may point it to a source of its own). */
     let currentCitationSlot: { list: string[]; index: number } | null = null;
-    /** Every citation that named a page: its pointer's place, the source and the page. */
-    const pagedCitations: { list: string[]; index: number; id: string; page: string }[] = [];
+    /**
+     * Every citation of a source record: its pointer's place, the source, and
+     * what the citation itself says (its page, the entry's date, its QUAY).
+     */
+    const citations: CitationSlot[] = [];
+    /** The citation being read (its PAGE, DATA > DATE and QUAY land on it). */
+    let currentCitation: CitationSlot | null = null;
     /** A citation pointer pushed onto `list`: remembered so its PAGE can find it. */
     const cite = (list: string[], value: string): void => {
         list.push(value);
         currentCitationId = value;
         currentCitationSlot = { list, index: list.length - 1 };
+        currentCitation = { list, index: list.length - 1, id: value, level: lineLevel, line: lineIndex };
+        citations.push(currentCitation);
     };
     /** A citation's PAGE: the source's reference (first wins) and this citation's own page. */
     const citePage = (value: string): void => {
         if (!currentCitationId) return;
         if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
         const slot = currentCitationSlot;
-        if (slot && slot.list[slot.index] === currentCitationId && value.trim()) {
-            pagedCitations.push({ ...slot, id: currentCitationId, page: value.trim() });
+        const c = currentCitation;
+        if (slot && slot.list[slot.index] === currentCitationId && value.trim() && c && c.id === currentCitationId && c.page === undefined) {
+            c.page = value.trim();
         }
     };
     /** 0 @Rx@ REPO record currently open. */
@@ -2491,6 +2528,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         const tag = rec.tag;
         let value = rec.value;
         lineLevel = level;
+        lineIndex = rec.src;
 
         // Another program's own level-1 tag being kept (spec 066 G8): the
         // lines under it are taken from the file as written, nothing reads them.
@@ -2554,12 +2592,15 @@ export function parseGedcom(content: string): ParsedGedcom {
         // so it is tracked here by level, apart from the per-record dispatch.
         if (citeLevel !== null && level <= citeLevel) { citeLevel = null; citeRef = null; inCiteData = false; }
         if (tag === 'SOUR' && level > 0 && currentType !== 'SOUR' && GED_POINTER.test(value)) {
-            citeLevel = level; citeRef = value; inCiteData = false;
+            citeLevel = level; citeRef = value; inCiteData = false; citeLine = rec.src;
         } else if (citeLevel !== null && citeRef) {
             if (level === citeLevel + 1) inCiteData = tag === 'DATA';
-            else if (level === citeLevel + 2 && inCiteData && tag === 'DATE' && value
-                && !citationDates.has(citeRef)) {
-                citationDates.set(citeRef, parseGedcomDate(value));
+            else if (level === citeLevel + 2 && inCiteData && tag === 'DATE' && value) {
+                const date = parseGedcomDate(value);
+                if (!citationDates.has(citeRef)) citationDates.set(citeRef, date);
+                // The date of this very citation (one read through cite()).
+                const c = currentCitation as CitationSlot | null;
+                if (c && c.id === citeRef && c.line === citeLine && c.date === undefined) c.date = date;
             }
         }
 
@@ -2810,7 +2851,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentResearch = null;
             currentMedia = null;
             currentMediaSubTag = null;
-            currentCitationId = null; currentCitationSlot = null;
+            currentCitationId = null; currentCitationSlot = null; currentCitation = null;
             currentPlaceValue = null;
             inHeader = recordType === 'HEAD';
             inNoteRecord = recordType === 'NOTE' || recordType === 'SNOTE';
@@ -2891,6 +2932,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentSubTag === 'TEXT' || currentSubTag === 'PUBL' ? text.replace(/<[^>]*>/g, '') : text;
             if (level === 1) {
                 currentSubTag = tag;
+                readingAuthor = false;
                 if (tag === 'TITL') src.title = value;
                 else if (tag === 'REPO') src.repository = value;
                 else if (tag === 'PAGE') src.reference = value;
@@ -2902,6 +2944,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     const label = tag === 'PUBL' ? strings.gedcomNotes.sourcePublication
                         : strings.gedcomNotes.sourceAuthor;
                     addLine(label(plain(value).trim()).trimEnd(), '\n');
+                    // The author as written too: "Back to {prog}" gives it back as AUTH (spec 066 K3.1).
+                    if (tag === 'AUTH' && src.author === undefined) { src.author = value.trim(); readingAuthor = true; }
                 }
                 else if (tag === 'REFN') { if (value) src.refn = value; }
                 else if (tag === '_STROM_VERIFIED') { if (value.trim().toUpperCase() === 'Y') src.verified = true; }
@@ -2944,6 +2988,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                     || currentSubTag === 'PUBL' || currentSubTag === 'AUTH') {
                     if (tag === 'CONT') src.note += (src.note ? '\n' : '') + plain(value);
                     else if (tag === 'CONC') src.note += plain(value);
+                    if (readingAuthor && tag === 'CONT') src.author += '\n' + value;
+                    else if (readingAuthor && tag === 'CONC') src.author += value;
+                } else if (currentSubTag === IMPORT_TAG && tag === '_XREF') {
+                    const xref = value.trim();
+                    if (GED_POINTER.test(xref) && src.importXref === undefined) src.importXref = xref.slice(1, -1);
                 } else if (currentSubTag === '_STROM_IMG_OMITTED' && tag === '_STROM_CLIP') {
                     const mark = value.trim();
                     if (/^[A-Za-z0-9-]{1,32}$/.test(mark) && !src.heldClips?.includes(mark)) {
@@ -2989,7 +3038,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentResearch = null;
                 if (tag !== 'OBJE') currentMedia = null;
                 currentMediaSubTag = null;
-                if (tag !== 'SOUR') { currentCitationId = null; currentCitationSlot = null; }
+                if (tag !== 'SOUR') { currentCitationId = null; currentCitationSlot = null; currentCitation = null; }
 
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
@@ -3825,6 +3874,13 @@ export function parseGedcom(content: string): ParsedGedcom {
 
     // Resolve repository pointers (1 REPO @Rx@) to names, and citation PAGEs
     // into the source's reference when the record itself carried none.
+    /** What the record itself says of its page and quality (a citation's are the citation's). */
+    const recordPage = new Map<string, string>();
+    const recordQuality = new Map<string, number | undefined>();
+    for (const src of sources.values()) {
+        recordPage.set(src.id, src.reference.trim());
+        recordQuality.set(src.id, src.quality);
+    }
     for (const src of sources.values()) {
         const m = src.repository.match(/^@\w+@$/);
         if (m) src.repository = repositories.get(src.repository) ?? '';
@@ -3834,34 +3890,62 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (src.quality === undefined && citationQuality.has(src.id)) {
             src.quality = citationQuality.get(src.id);
         }
-        if (!src.recordDate && citationDates.has(src.id)) {
-            src.recordDate = citationDates.get(src.id);
-        }
     }
 
     // One source cited at several pages (a register book, an entry per page):
     // here a source is the entry and its reference the page, so a citation of
     // another page than the source's gets a source of its own — same book,
     // its page. With one source for all, every citation showed the first page
-    // and the export wrote it to each of them.
+    // and the export wrote it to each of them. An entry's date (DATA > DATE)
+    // is the entry's too: the same page cited with another date is another
+    // entry, and a citation without one is not given one (spec 066 K3.1).
     const pageSources = new Map<string, string>();
-    for (const c of pagedCitations) {
+    /** The date and QUAY the record's own citations carry: the first of them says them. */
+    const ownCite = new Map<string, { date: string; quay: number | undefined }>();
+    for (const c of citations) {
         const src = sources.get(c.id);
-        if (!src || c.page === src.reference.trim()) continue;
-        const key = `${c.id}\u0000${c.page}`;
+        if (!src || c.list[c.index] !== c.id) continue;
+        // A citation without a page cites the record's own page, if it has one (not another citation's).
+        const page = c.page || recordPage.get(c.id) || '';
+        const date = c.date ?? '';
+        const quay = c.quay ?? recordQuality.get(c.id);
+        if (page === src.reference.trim()) {
+            if (!ownCite.has(c.id)) ownCite.set(c.id, { date, quay });
+            const own = ownCite.get(c.id)!;
+            if (own.date === date && own.quay === quay) continue;
+        }
+        const key = `${c.id}\u0000${page}\u0000${date}\u0000${quay ?? ''}`;
         let derived = pageSources.get(key);
         if (!derived) {
             derived = `${c.id}~${pageSources.size + 1}`;
             pageSources.set(key, derived);
+            const quality = quay;
             sources.set(derived, {
-                id: derived, title: src.title, repository: src.repository, reference: c.page, url: src.url,
-                note: src.note, media: [],
+                id: derived, title: src.title, repository: src.repository, reference: page, url: src.url,
+                note: src.note, media: [], derivedFrom: c.id,
                 ...(src.abbr ? { abbr: src.abbr } : {}),
-                ...(src.quality !== undefined ? { quality: src.quality } : {}),
+                ...(quality !== undefined ? { quality } : {}),
+                ...(date ? { recordDate: date } : {}),
                 ...(src.importMark ? { importMark: src.importMark } : {}),
+                ...(src.importXref ? { importXref: src.importXref } : {}),
+                ...(src.author !== undefined ? { author: src.author } : {}),
             });
         }
         c.list[c.index] = derived;
+    }
+    // The record's own date: that of its own citations, else (a citation read
+    // elsewhere, e.g. under a name) the first one seen, as before.
+    for (const src of sources.values()) {
+        if (src.derivedFrom) continue;
+        const own = ownCite.get(src.id);
+        // Its quality: that of its own citations (another page's QUAY is that page's).
+        if (own) {
+            if (own.quay !== undefined) src.quality = own.quay;
+            else delete src.quality;
+        }
+        if (src.recordDate) continue;
+        if (own) { if (own.date) src.recordDate = own.date; }
+        else if (citationDates.has(src.id)) src.recordDate = citationDates.get(src.id);
     }
 
     closePlaceRecord();
@@ -3995,6 +4079,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (raw.heldClips?.length) src.heldClips = raw.heldClips;
         }
         if (raw.recordDate) src.recordDate = raw.recordDate;
+        if (raw.author !== undefined && raw.author !== '' && src.note) src.gedcomAuthor = raw.author;
         // Images on a source record are crops of its entry. Only embedded
         // raster images come in; a path or URL (another program's media
         // folder) or any other payload is skipped and counted.
@@ -4875,6 +4960,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const sid = sourceIdMap.get(gedId);
             put(sid ? sources[sid] : undefined, raw.importMark, raw.extras);
         }
+        // A page's source of its own keeps its record's tags too (not counted again).
+        for (const [gedId, raw] of gedSources) {
+            const sid = sourceIdMap.get(gedId);
+            const base = raw.derivedFrom ? sources[sourceIdMap.get(raw.derivedFrom) ?? ''] : undefined;
+            if (!sid || !sources[sid] || !base) continue;
+            for (const entry of base.gedcomExtra ?? []) addGedcomExtra(sources[sid], entry);
+        }
     }
 
     /**
@@ -4904,6 +4996,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const ps = famPartnership.get(gedFamId);
             if (ps) put(ps, gedFamId, fam.fileIds);
         }
+        // A source record's xref, on every source it became (one per page cited).
+        for (const [gedId, raw] of gedSources) {
+            const sid = sourceIdMap.get(gedId);
+            const xref = (raw.derivedFrom ?? gedId).match(/^@([^@]+)@$/)?.[1];
+            if (sid && sources[sid] && xref && !xref.startsWith('__')) addOriginalIds(sources[sid], { from, xref });
+        }
     }
 
     /**
@@ -4928,6 +5026,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const [gedFamId, fam] of families) {
             const ps = famPartnership.get(gedFamId);
             if (ps) put(ps, fam.importIds);
+        }
+        // A source record's xref in the file it came from (`2 _XREF` under its `1 _STROM_IMPORT`).
+        for (const [gedId, raw] of gedSources) {
+            const sid = sourceIdMap.get(gedId);
+            if (!sid || !sources[sid] || !raw.importMark || !raw.importXref) continue;
+            addOriginalIds(sources[sid], { from: raw.importMark, xref: raw.importXref });
+            any = true;
         }
         return any;
     }

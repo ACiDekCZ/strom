@@ -393,8 +393,9 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
             if ([...eb.keys()].some(id => !ea.has(id))) kinds.add('excerptAdded');
             if ([...ea.keys()].some(id => !eb.has(id))) kinds.add('excerptRemoved');
             // Anything else of the entry (the archive, the date, a re-cropped excerpt, the reading…).
-            const { title: _t1, transcript: _r1, reference: _p1, excerpts: ex1, ...restA } = a;
-            const { title: _t2, transcript: _r2, reference: _p2, excerpts: ex2, ...restB } = b;
+            // Not the user's: the record it was in a loaded file, its author and tags as written there.
+            const { title: _t1, transcript: _r1, reference: _p1, excerpts: ex1, originalIds: _o1, gedcomAuthor: _a1, gedcomExtra: _g1, ...restA } = a;
+            const { title: _t2, transcript: _r2, reference: _p2, excerpts: ex2, originalIds: _o2, gedcomAuthor: _a2, gedcomExtra: _g2, ...restB } = b;
             const sameExcerpts = (ex1 ?? []).filter(e => eb.has(e.id)).every(e => !differs(e, eb.get(e.id)));
             if (differs(restA, restB) || !sameExcerpts) kinds.add('other');
         }

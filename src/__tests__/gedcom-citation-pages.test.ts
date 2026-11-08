@@ -66,13 +66,13 @@ describe('GEDCOM: one source cited at several pages', () => {
         expect(pages(data)).toEqual(['fol. 1', 'fol. 2']);
     });
 
-    it('citations without a page, or all of one page, keep one source', () => {
+    it('citations all of one page keep one source; one without a page cites the book, no page made up for it', () => {
         const ged = head
             + '0 @I1@ INDI\n1 NAME Josef /Novák/\n1 SEX M\n'
             + '1 BIRT\n2 SOUR @S1@\n3 PAGE fol. 7\n'
             + '1 DEAT\n2 SOUR @S1@\n'
             + '0 @I2@ INDI\n1 NAME Anna /Nováková/\n1 SEX F\n1 BIRT\n2 SOUR @S1@\n3 PAGE fol. 7\n'
             + '0 @S1@ SOUR\n1 TITL Kniha\n0 TRLR\n';
-        expect(pages(importGed(ged))).toEqual(['fol. 7']);
+        expect(pages(importGed(ged))).toEqual(['', 'fol. 7']);
     });
 });

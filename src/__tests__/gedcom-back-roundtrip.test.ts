@@ -14,6 +14,9 @@ import { applyLivingPrivacy, CONTENT_PRESETS, PrivacyMode } from '../privacy.js'
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
+import { StorageManager } from '../storage.js';
+import { createMergeState } from '../merge/matching.js';
+import { executeMerge } from '../merge/executor.js';
 import { Partnership, Person, StromData, TreeId } from '../types.js';
 
 const ORIGIN: GedcomImportOrigin = { at: '2026-11-08', file: 'family.ged', encoding: 'utf-8' };
@@ -211,6 +214,189 @@ describe('"Back to MyHeritage" gives back what the file brought', () => {
         const ged = exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, origins: true }).content;
         expect(ged).not.toContain('2 EMAIL');
         expect(ged).toMatch(/2 NOTE .*hromoslav@@example\.org/);
+    });
+});
+
+/** Two source records cited 17 times at 15 pages, two of the citations with the entry's date. */
+const SOURCES = `0 HEAD
+1 SOUR MYHERITAGE
+2 NAME MyHeritage Family Tree Builder
+2 VERS 5.5.1
+1 DATE 2 OCT 2026
+1 CHAR UTF-8
+0 @I500001@ INDI
+1 NAME Hromoslav /Ozubec/
+1 SEX M
+1 BIRT
+2 DATE 1880
+2 SOUR @S500001@
+3 PAGE p. 2
+3 QUAY 3
+1 DEAT
+2 DATE 1950
+2 SOUR @S500001@
+3 PAGE p. 3
+3 DATA
+4 DATE 5 MAY 1950
+1 SOUR @S500001@
+2 PAGE p. 1
+1 SOUR @S500002@
+2 PAGE Sheet 1
+1 FAMS @F500001@
+0 @I500002@ INDI
+1 NAME Libuna /Šťovíková/
+1 SEX F
+1 BIRT
+2 DATE 1884
+2 SOUR @S500001@
+3 PAGE p. 4
+1 SOUR @S500001@
+2 PAGE p. 1
+1 SOUR @S500002@
+2 PAGE Sheet 2
+1 FAMS @F500001@
+0 @I500003@ INDI
+1 NAME Mlhoň /Ozubec/
+1 SEX M
+1 BIRT
+2 DATE 1906
+2 SOUR @S500001@
+3 PAGE p. 5
+2 SOUR @S500002@
+3 PAGE Sheet 3
+1 RESI
+2 PLAC Ozubcov
+2 SOUR @S500002@
+3 PAGE Sheet 4
+3 DATA
+4 DATE 1 JUN 1900
+1 SOUR @S500001@
+2 PAGE p. 6
+1 SOUR @S500002@
+1 FAMC @F500001@
+0 @I500004@ INDI
+1 NAME Zbyhoň /Pražmouk/
+1 SEX M
+1 BIRT
+2 DATE 1875
+2 SOUR @S500001@
+3 PAGE p. 7
+1 SOUR @S500002@
+2 PAGE Sheet 5
+1 SOUR @S500001@
+2 PAGE p. 8
+0 @F500001@ FAM
+1 HUSB @I500001@
+1 WIFE @I500002@
+1 CHIL @I500003@
+1 MARR
+2 DATE 1905
+2 SOUR @S500001@
+3 PAGE p. 9
+2 SOUR @S500002@
+3 PAGE Sheet 6
+0 @S500001@ SOUR
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 TITL Parish register of Ozubcov
+1 AUTH Ozubcov parish office
+1 TEXT Births and deaths 1870-1950
+1 _TYPE Church record
+1 _MEDI Book
+0 @S500002@ SOUR
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 TITL Census of Zbyhoňov 1900
+1 AUTH District office
+1 _TYPE Census
+1 _MEDI Microfilm
+0 TRLR`;
+
+/** Every citation of a file: its record, its fact (level-1 tag, '' for the record), source xref, PAGE, DATA > DATE, QUAY. */
+function citations(ged: string): string[] {
+    const out: string[] = [];
+    let owner = '';
+    let fact = '';
+    let open: { level: number; owner: string; fact: string; xref: string; page: string; date: string; quay: string } | null = null;
+    const close = (): void => {
+        if (open) out.push([open.owner, open.fact, open.xref, open.page, open.date, open.quay].join('|'));
+        open = null;
+    };
+    for (const line of ged.split(/\r?\n/)) {
+        const m = line.match(/^(\d+) (?:(@[^@]+@) )?(\S+)(?: (.*))?$/);
+        if (!m) continue;
+        const level = Number(m[1]);
+        if (open && level <= open.level) close();
+        if (level === 0) owner = m[2] ?? m[3];
+        if (level === 1) fact = m[3];
+        if (m[3] === 'SOUR' && level > 0 && /^@[^@]+@$/.test(m[4] ?? '')) {
+            open = { level, owner, fact: level === 1 ? '' : fact, xref: m[4]!, page: '', date: '', quay: '' };
+        } else if (open && m[3] === 'PAGE') open.page = m[4] ?? '';
+        else if (open && m[3] === 'DATE') open.date = m[4] ?? '';
+        else if (open && m[3] === 'QUAY') open.quay = m[4] ?? '';
+    }
+    close();
+    return out.sort();
+}
+
+/** A source record's lines, by its xref. */
+function sourceRecord(ged: string, xref: string): string[] {
+    const lines = ged.split('\n');
+    const start = lines.indexOf(`0 ${xref} SOUR`);
+    expect(start).toBeGreaterThanOrEqual(0);
+    return lines.slice(start, lines.findIndex((l, i) => i > start && l.startsWith('0 ')));
+}
+
+const sourceRecords = (ged: string): string[] => ged.split('\n').filter(l => /^0 @[^@]+@ SOUR$/.test(l));
+
+describe('"Back to MyHeritage": one source record cited at many pages (N-A)', () => {
+    it('goes back as the same record, its xref, author and tags once, each page and date on its citation', () => {
+        const data = migrateData(load(SOURCES).data);
+        // In the app every page is a source of its own (the entry), as before.
+        expect(Object.keys(data.sources!)).toHaveLength(16);
+        const ged = backTo(data);
+        expect(sourceRecords(ged)).toEqual(['0 @S500001@ SOUR', '0 @S500002@ SOUR']);
+        expect(citations(ged)).toEqual(citations(SOURCES));
+        const parish = sourceRecord(ged, '@S500001@');
+        expect(parish).toEqual(expect.arrayContaining(['1 TITL Parish register of Ozubcov', '1 AUTH Ozubcov parish office',
+            '1 TEXT Births and deaths 1870-1950', '1 _TYPE Church record', '1 _MEDI Book', '1 _UPD 2 OCT 2026 10:00:00 GMT -0500']));
+        expect(parish.filter(l => /^1 (_TYPE|_MEDI|_UPD|AUTH) /.test(l))).toHaveLength(4);
+        expect(parish.some(l => /^1 (PAGE|NOTE) /.test(l))).toBe(false);
+        expect(sourceRecord(ged, '@S500002@')).toEqual(expect.arrayContaining(['1 AUTH District office', '1 _TYPE Census', '1 _MEDI Microfilm']));
+        expect(ged).not.toMatch(/NOTE .*Ozubcov parish office/);
+    });
+
+    it('a second pass keeps it so', () => {
+        const first = backTo(migrateData(load(SOURCES).data));
+        const second = backTo(migrateData(load(first, { at: '2026-11-09', file: 'back.ged', encoding: 'utf-8' }).data));
+        expect(citations(second)).toEqual(citations(SOURCES));
+        expect(body(second)).toEqual(body(first));
+    });
+
+    it('with the initials of the living, still the two records', () => {
+        const ged = backTo(migrateData(load(SOURCES).data), 'initials');
+        expect(sourceRecords(ged)).toEqual(['0 @S500001@ SOUR', '0 @S500002@ SOUR']);
+    });
+
+    it('another export keeps every page a source of its own, its page on the record and on the citation', () => {
+        const data = migrateData(load(SOURCES).data);
+        const ged = exportToGedcom(data, 'Ozubec', { origins: true }).content;
+        expect(sourceRecords(ged)).toHaveLength(16);
+        const withoutIds = (list: string[]): string[] => list.map(c => c.split('|')).map(([, fact, , ...rest]) => [fact, ...rest].join('|')).sort();
+        expect(withoutIds(citations(ged))).toEqual(withoutIds(citations(SOURCES)));
+        // The author stays a line of the note there.
+        expect(ged).toMatch(/NOTE .*Ozubcov parish office/);
+    });
+
+    it('a tree imported before (no record ids on its sources) takes them from the same file merged again', async () => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+        const existing = migrateData(load(SOURCES).data);
+        for (const src of Object.values(existing.sources!)) { delete src.originalIds; delete src.gedcomAuthor; }
+        expect(sourceRecords(backTo(existing))).toHaveLength(16);
+        const incoming = migrateData(load(SOURCES, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
+        const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
+        const ged = backTo(merged);
+        expect(sourceRecords(ged)).toEqual(['0 @S500001@ SOUR', '0 @S500002@ SOUR']);
+        expect(citations(ged)).toEqual(citations(SOURCES));
+        expect(sourceRecord(ged, '@S500001@')).toContain('1 AUTH Ozubcov parish office');
     });
 });
 

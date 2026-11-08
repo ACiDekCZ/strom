@@ -24,7 +24,7 @@ import {
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
-import { addGedcomExtra, addImportRecords, carryMergedImports, pruneImportOrigin, remapGedcomExtra, remapHolderImports } from '../import-origin.js';
+import { addGedcomExtra, addImportRecords, addOriginalIds, carryMergedImports, pruneImportOrigin, remapHolderImports, remapSourceImports } from '../import-origin.js';
 import { mergePlaceRecords } from '../place-records.js';
 import { mergePlaceAliases } from '../place-groups.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
@@ -241,11 +241,16 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 for (const entry of incomingSrc.gedcomExtra ?? []) {
                     if (into) addGedcomExtra(into, { ...entry, from: importMap.get(entry.from) ?? entry.from });
                 }
+                // ... and the record it was in the other program's file, with its author.
+                for (const entry of incomingSrc.originalIds ?? []) {
+                    if (into) addOriginalIds(into, { ...entry, from: importMap.get(entry.from) ?? entry.from });
+                }
+                if (into && !into.gedcomAuthor && incomingSrc.gedcomAuthor) into.gedcomAuthor = incomingSrc.gedcomAuthor;
                 continue;
             }
             const src = mergedData.sources?.[id];
             if (src?.importId) src.importId = importMap.get(src.importId) ?? src.importId;
-            if (src) remapGedcomExtra(src, importMap);
+            if (src) remapSourceImports(src, importMap);
         }
 
         // Tree-level registries come along too — the user curated them.

@@ -1112,10 +1112,12 @@ describe('register entries: what hangs under BIRT, DEAT and MARR', () => {
     it('keeps the citation of the birth and death entry on those fields', () => {
         const data = importGed(GED);
         const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
-        // BIRT and DEAT cite the same entry: one source, cited by both fields.
+        // BIRT and DEAT cite the same book; DEAT names no page, so it gets none (not BIRT's).
         expect(jan.birthSourceIds).toHaveLength(1);
-        expect(jan.deathSourceIds).toEqual(jan.birthSourceIds);
+        expect(jan.deathSourceIds).toHaveLength(1);
         expect(data.sources![jan.birthSourceIds![0]].title).toBe('Matrika narozených Lipany 1840-1870');
+        expect(data.sources![jan.deathSourceIds![0]].title).toBe('Matrika narozených Lipany 1840-1870');
+        expect(data.sources![jan.deathSourceIds![0]].reference ?? '').toBe('');
         // The PAGE under the citation becomes the source reference.
         expect(data.sources![jan.birthSourceIds![0]].reference).toBe('sign. LIP-N5, fol. 123');
         // …and they go back under BIRT and DEAT.
