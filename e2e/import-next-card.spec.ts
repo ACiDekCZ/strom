@@ -178,6 +178,10 @@ test('a merge with a GEDCOM: the card in the merged tree, with the new and updat
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(wizard.locator('#merge-stat-matches')).toHaveText('1');
+    // A name and a birth year are only offered (below 80): confirmed by hand.
+    const match = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Vendelin' });
+    await match.locator('.merge-btn-confirm').click();
+    await expect(match).toHaveClass(/confirmed/);
     await wizard.getByRole('button', { name: 'Execute merge' }).click();
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();

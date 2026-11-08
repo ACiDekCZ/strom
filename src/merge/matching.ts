@@ -6,7 +6,7 @@
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
-import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
+import { detectPartnershipConflicts } from './executor.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -613,9 +613,11 @@ function hasUnknownGivenName(person: Person): boolean {
 
 /**
  * The score of a match found through a relative of a person of unknown given
- * name: below the auto-confirm bar, so the wizard always asks for a look.
+ * name: below the auto-confirm bar, so the wizard always asks for a look, and
+ * below the 50 a name match with its context usually reaches, so it sorts
+ * after those.
  */
-const UNKNOWN_NAME_MATCH_SCORE = AUTO_CONFIRM_SCORE - 5;
+const UNKNOWN_NAME_MATCH_SCORE = 45;
 
 /** The relations a person of unknown given name is paired through. */
 const UNKNOWN_NAME_RELATIONS: Array<{

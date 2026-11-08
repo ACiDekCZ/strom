@@ -53,6 +53,8 @@ describe('a person of unknown given name pairs through a matched relative', () =
         expect(match.existingId).toBe(treeWife.id);
         expect(match.confidence).toBe('medium');
         expect(match.score).toBeLessThan(AUTO_CONFIRM_SCORE);
+        // Below the 50 a name match with its context reaches: it sorts after those.
+        expect(match.score).toBe(45);
         expect(match.reasons).toContain('unknown_name_relative');
         expect(isEffectivelyConfirmed(state, match)).toBe(false);
 

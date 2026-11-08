@@ -249,9 +249,14 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     await expect(wizard.locator('#merge-stat-new')).toHaveText('2');
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
 
+    // Name + birth year alone (score below 80) is only offered for review:
+    // confirmed by hand, so the run raises no "undecided" gate; the result
+    // goes to a new tree named in the prompt.
+    const janRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Jan' });
+    await expect(janRow).toHaveClass(/pending/);
+    await janRow.locator('.merge-btn-confirm').click();
+    await expect(janRow).toHaveClass(/confirmed/);
     await wizard.getByRole('button', { name: 'Execute merge' }).click();
-    // Same name + birth year is a confident match (no "undecided" gate); the
-    // result goes to a new tree named in the prompt.
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();
     await expect(confirm.locator('#prompt-input')).toHaveValue(/merged|\+/i);

@@ -727,12 +727,13 @@ class MergerUIClass {
         const decision = this.mergeState?.decisions.get(match.incomingId);
 
         // Determine status: confirmed, rejected, skipped, or pending (needs review)
-        // Score >= 50 is pre-confirmed, score < 50 requires explicit user action.
+        // Score >= AUTO_CONFIRM_SCORE is pre-confirmed, anything below it is
+        // only offered and requires explicit user action.
         // Skip is independent: the incoming person is neither merged nor added.
         const isSkipped = decision?.type === 'skip';
-        const isConfirmed = decision?.type === 'confirm' || (!decision && match.score >= 50);
+        const isConfirmed = decision?.type === 'confirm' || (!decision && match.score >= AUTO_CONFIRM_SCORE);
         const isRejected = decision?.type === 'reject';
-        const isPending = !decision && match.score < 50; // Needs user review
+        const isPending = !decision && match.score < AUTO_CONFIRM_SCORE; // Needs user review
 
         const confidenceClass = match.confidence;
         const confidenceLabel = strings.merge[`${match.confidence}Confidence`] || match.confidence;
