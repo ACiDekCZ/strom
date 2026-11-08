@@ -476,24 +476,101 @@ export function withoutNotedLines(lines: readonly string[]): string[] {
  * block: the record's xref, then those lines one level deeper (`2 MARR` /
  * `3 DATE 4 JUL 1914`). "Back to {prog}" writes the record again beside the
  * couple's own, with both partners' FAMS.
+ *
+ * What else of the record the couple has is said after those lines, in
+ * Strom's own lines (`2 _STROM_…`, see JoinedMarks), so "Back to {prog}"
+ * writes it in this record and not in the first one.
  */
 export const JOINED_TAG = '_STROM_FAM';
 
 const isJoinedHead = (line: string): boolean => line === `1 ${JOINED_TAG}` || line.startsWith(`1 ${JOINED_TAG} `);
 
+/**
+ * What the couple has of another of its records besides the lines kept as
+ * written: by what it says, never by an id of the tree (the same file merged
+ * twice gives the same block, joined into one).
+ */
+export interface JoinedMarks {
+    /** The lines the record gave the couple's note, as one run (`2 _STROM_TEXT`, `3 CONT`). */
+    text?: string;
+}
+
+/** A record of the couple kept so: its xref ('' unknown), its lines from level 1, and its marks. */
+export interface JoinedRecord {
+    xref: string;
+    lines: string[];
+    text: string;
+}
+
+const JOINED_MARK = /^2 _STROM_[A-Z]+( |$)/;
+
 /** The kept block of another record of the couple (null: not one to keep); `xref` without the @ signs. */
-export function joinedBlock(xref: string, structure: readonly string[]): string[] | null {
+export function joinedBlock(xref: string, structure: readonly string[], marks: JoinedMarks = {}): string[] | null {
     const block = [xref ? `1 ${JOINED_TAG} ${xref}` : `1 ${JOINED_TAG}`];
     for (const line of structure) block.push(line.replace(/^\d+/, n => String(Number(n) + 1)));
+    if (marks.text) {
+        const [first, ...rest] = marks.text.split('\n');
+        block.push(first ? `2 _STROM_TEXT ${first}` : '2 _STROM_TEXT');
+        for (const line of rest) block.push(line ? `3 CONT ${line}` : '3 CONT');
+    }
     return validExtraBlock(block) ? block : null;
 }
 
-/** The couple's other records of one import's kept lines: each one's xref ('' unknown) and its lines from level 1. */
-export function joinedRecords(lines: readonly string[]): { xref: string; lines: string[] }[] {
-    return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => ({
-        xref: b[0].slice(JOINED_TAG.length + 3).trim(),
-        lines: b.slice(1).map(l => l.replace(/^\d+/, n => String(Number(n) - 1))),
-    }));
+/** The couple's other records of one import's kept lines. */
+export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
+    return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => {
+        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '' };
+        let mark = '';
+        for (const line of b.slice(1)) {
+            if (JOINED_MARK.test(line)) {
+                mark = line.split(' ')[1];
+                const value = line.slice(mark.length + 3);
+                if (mark === '_STROM_TEXT') out.text = value;
+            } else if (mark && !line.startsWith('2 ')) {
+                if (mark === '_STROM_TEXT' && /^3 CONT( |$)/.test(line)) out.text += '\n' + line.slice(7);
+            } else {
+                mark = '';
+                out.lines.push(line.replace(/^\d+/, n => String(Number(n) - 1)));
+            }
+        }
+        return out;
+    });
+}
+
+/**
+ * The couple's note without what its other records gave it (each record's
+ * run of lines, while the note still has it), and the records whose run it
+ * had: they write their notes themselves. A record whose run was edited or
+ * taken out by hand leaves its notes in the couple's.
+ */
+export function joinedNoteBack(note: string | undefined, records: readonly JoinedRecord[]): { note: string | undefined; found: Set<JoinedRecord> } {
+    const found = new Set<JoinedRecord>();
+    if (!note) return { note, found };
+    let noteLines = note.split('\n');
+    for (const r of records) {
+        if (!r.text) continue;
+        const want = r.text.split('\n');
+        const at = noteLines.findIndex((_, i) => want.every((w, k) => noteLines[i + k] === w));
+        if (at < 0) continue;
+        noteLines = [...noteLines.slice(0, at), ...noteLines.slice(at + want.length)];
+        found.add(r);
+    }
+    if (found.size === 0) return { note, found };
+    return { note: noteLines.join('\n').trim() || undefined, found };
+}
+
+/** A record's kept lines without its notes (`1 NOTE`, `1 NCHI`, and a `2 NOTE` under a wedding or a divorce). */
+export function withoutJoinedNotes(lines: readonly string[]): string[] {
+    const out: string[] = [];
+    let below = -1;
+    for (const line of lines) {
+        const level = Number(/^(\d+)/.exec(line)?.[1] ?? 0);
+        if (below >= 0 && level > below) continue;
+        below = -1;
+        if (/^1 (NOTE|NCHI)( |$)/.test(line) || /^2 NOTE( |$)/.test(line)) { below = level; continue; }
+        out.push(line);
+    }
+    return out;
 }
 
 /**

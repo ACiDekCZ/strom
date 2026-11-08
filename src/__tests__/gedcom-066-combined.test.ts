@@ -168,7 +168,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
     });
 
     it('no note the file did not write', () => {
-        expect(count(lines(first), /^1 NOTE /)).toBe(0);
+        expect(count(lines(first), /^1 NOTE /)).toBe(count(lines(FILE), /^1 NOTE /));
         expect(first).not.toMatch(/_STROM_NOTED|_STROM_CITE|Number of children|Publication:|Author:|Birth:/);
     });
 
@@ -307,10 +307,26 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const remarried = record(first, '@F1402@');
             expect(remarried).toEqual(expect.arrayContaining(['1 HUSB @I1401@', '1 WIFE @I1402@', '1 RIN MH:F1402',
                 '1 _UID 14F1B2C3D4E5F60718293A4B5C6D7F02', '1 _UPD 8 NOV 2026 10:00:00 GMT -0500']));
-            expect(holdsRun(remarried, ['1 MARR', '2 DATE 4 JUL 1914', '2 PLAC Hrbolcov'])).toBe(true);
+            expect(holdsRun(remarried, ['1 MARR', '2 DATE 4 JUL 1914', '2 PLAC Hrbolcov',
+                '2 NOTE Married again at the town hall,', '3 CONT the same witnesses as before.'])).toBe(true);
+            // The second record's notes go back to it once, not to the first record as well.
+            expect(remarried).toContain('1 NOTE The second wedding of the two.');
+            expect(count(record(first, '@F1401@'), /NOTE|CONT/)).toBe(0);
+            // In the tree, the couple's note has them.
+            expect(couple[0].note).toContain('The second wedding of the two.');
             for (const xref of ['@I1401@', '@I1402@']) {
                 expect(holdsRun(record(first, xref), ['1 FAMS @F1401@', '1 FAMS @F1402@']), xref).toBe(true);
             }
+        });
+
+        it('14 · the couple\'s note edited in the tree: written once, in the first record', () => {
+            const edited = structuredClone(tree);
+            const couple = Object.values(edited.partnerships).find(p => edited.persons[p.person1Id]?.firstName === 'Kořenoslav')!;
+            couple.note = couple.note!.replace('The second wedding of the two.', 'The second wedding, in the town hall.');
+            const ged = backTo(edited);
+            expect(count(record(ged, '@F1402@'), /NOTE|CONT/)).toBe(0);
+            expect(count(lines(ged), /The second wedding, in the town hall\./)).toBe(1);
+            expect(count(lines(ged), /Married again at the town hall,/)).toBe(1);
         });
 
         it('15 · an age of more than 999 days (AGE 1y 30m 1100d) and a web link (OBJE > FORM URL)', () => {

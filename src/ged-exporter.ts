@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -894,21 +894,21 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // "Back to {prog}": the couple's other records of that program's file
     // (JOINED_TAG), written beside the couple's own; each keeps its xref
     // while no other record has it (once, when two imports kept the same).
-    const joined = new Map<PartnershipId, { xref: string; own: string; from: string; lines: string[] }[]>();
+    const joined = new Map<PartnershipId, { xref: string; own: string; from: string; record: JoinedRecord }[]>();
     if (back.imports.size > 0) {
         const seen = new Set<string>();
         for (const [id, ps] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
             for (const entry of ps?.gedcomExtra ?? []) {
                 if (!back.imports.has(entry.from)) continue;
                 for (const record of joinedRecords(entry.lines)) {
-                    const key = `${id}\n${record.xref}\n${record.lines.join('\n')}`;
+                    const key = `${id}\n${record.xref}\n${record.lines.join('\n')}\n${record.text}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
                     const free = isSafeXref(record.xref) && !taken.has(record.xref.toUpperCase());
                     if (free) taken.add(record.xref.toUpperCase());
                     const list = joined.get(id) ?? [];
                     joined.set(id, list);
-                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, lines: record.lines });
+                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record });
                 }
             }
         }
@@ -1614,7 +1614,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
-        const famNoted = notedOf(partnership, partnership.note);
+        // What the couple's other records gave its note goes back with them (see joined).
+        const joinedHere = joined.get(partnershipId) ?? [];
+        const joinedNote = joinedNoteBack(partnership.note, joinedHere.map(j => j.record));
+        const famNoted = notedOf(partnership, joinedNote.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
         const notedDivorce = notedFact(famNoted.structures, 'DIV');
         const marriageNoted = notedDate(notedMarriage, partnership, 'startDate', partnership.startDate);
@@ -1744,15 +1747,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushGedcomExtra(partnership);
 
         // The couple's other records of the program's file, as it wrote them (see joined).
-        for (const record of joined.get(partnershipId) ?? []) {
-            lines.push(`0 ${record.xref} FAM`);
-            if (knownImports.has(record.from)) {
-                lines.push(`1 ${IMPORT_TAG} ${record.from}`);
-                if (record.own) lines.push(`2 _XREF @${record.own}@`);
+        for (const { xref, own, from, record } of joinedHere) {
+            lines.push(`0 ${xref} FAM`);
+            if (knownImports.has(from)) {
+                lines.push(`1 ${IMPORT_TAG} ${from}`);
+                if (own) lines.push(`2 _XREF @${own}@`);
             }
             if (personIdMap.has(husbId)) lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
             if (personIdMap.has(wifeId)) lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
-            lines.push(...record.lines);
+            // Its notes while the couple's note still has what they gave it (else they stay there).
+            lines.push(...(record.text && !joinedNote.found.has(record) ? withoutJoinedNotes(record.lines) : record.lines));
         }
     }
 

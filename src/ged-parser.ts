@@ -97,7 +97,7 @@ import { researchClaimValue } from './research-claim';
 import {
     addGedcomExtra, addOriginalIds, CITE_TAG, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
-    JOINED_TAG, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
+    JOINED_TAG, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -2157,20 +2157,23 @@ function noteRemarriage(fam: GedcomFamily, line: string): boolean {
  * the one its program gave it). The other kept lines of the record go to the
  * partnership, except those of a wedding or a divorce noted (the block has them).
  */
-function keepJoinedRecord(gedFamId: string, fam: GedcomFamily): boolean {
+function keepJoinedRecord(gedFamId: string, fam: GedcomFamily, marks: JoinedMarks): boolean {
     if (!fam.recordLines) return false;
     const own = fam.importIds?.find(b => b.xref)?.xref ?? gedFamId;
     const xref = /^@([^@]+)@$/.exec(own)?.[1] ?? '';
-    const kept = structuresOf(fam.recordLines)
-        .filter(st => /^1 (MARR|DIV|REFN)( |$)/.test(st[0]) || ORIGINAL_ID_TAGS.has(st[0].split(' ')[1])
-            || KEPT_BOOKKEEPING_TAGS.has(st[0].split(' ')[1]))
-        .map(withoutRecordPointers);
-    const block = joinedBlock(xref.startsWith('__') ? '' : xref, kept.flat());
+    const structures = structuresOf(fam.recordLines)
+        .filter(st => /^1 (MARR|DIV|REFN|NOTE|NCHI)( |$)/.test(st[0]) || ORIGINAL_ID_TAGS.has(st[0].split(' ')[1])
+            || KEPT_BOOKKEEPING_TAGS.has(st[0].split(' ')[1]));
+    const kept = structures.map(withoutRecordPointers);
+    // A note it names by xref (a NOTE record) the block cannot write: its lines stay in the couple's note.
+    const notes = (st: readonly string[]): string[] => st.filter(l => /^(1 (NOTE|NCHI)|2 NOTE)( |$)/.test(l));
+    const noteLost = structures.some((st, i) => notes(st).length !== notes(kept[i]).length);
+    const block = joinedBlock(xref.startsWith('__') ? '' : xref, kept.flat(), noteLost ? {} : marks);
     if (!block) return false;
-    const unionNoted = (e: RawExtra): boolean =>
-        e.tag === NOTED_TAG && /^1 (MARR|DIV)( |$)/.test(notedStructures(e.lines)[0]?.lines[0] ?? '');
-    // Its change stamp (`_UPD`) is the record's own: in the block, not the partnership's.
-    fam.extras = [...(fam.extras ?? []).filter(e => !unionNoted(e) && !KEPT_BOOKKEEPING_TAGS.has(e.tag)),
+    // What of it became lines of the couple's note the block writes itself (its
+    // notes, its weddings and divorces as written); its change stamp (`_UPD`)
+    // is the record's own: in the block, not the partnership's.
+    fam.extras = [...(fam.extras ?? []).filter(e => e.tag !== NOTED_TAG && !KEPT_BOOKKEEPING_TAGS.has(e.tag)),
         { tag: JOINED_TAG, lines: block, quiet: true }];
     return true;
 }
@@ -4884,7 +4887,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
      * record) is the same union: its facts join the first instead of drawing
      * the couple twice.
      */
-    const joinUnion = (into: Partnership, from: Partnership): void => {
+    const joinUnion = (into: Partnership, from: Partnership): JoinedMarks => {
+        const marks: JoinedMarks = {};
         if (!into.startDate && from.startDate) into.startDate = from.startDate;
         if (from.gedcomDates) into.gedcomDates = { ...from.gedcomDates, ...(into.gedcomDates ?? {}) };
         if (!into.startPlace && from.startPlace) into.startPlace = from.startPlace;
@@ -4894,6 +4898,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (from.ages) into.ages = { ...from.ages, ...(into.ages ?? {}) };
         if (from.note && !(into.note ?? '').includes(from.note)) {
             into.note = into.note ? `${into.note}\n${from.note}` : from.note;
+            marks.text = from.note;
         }
         if (from.sourceIds?.length) into.sourceIds = [...new Set([...(into.sourceIds ?? []), ...from.sourceIds])];
         if (from.participants?.length) {
@@ -4907,6 +4912,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (from.events?.length) into.events = [...(into.events ?? []), ...from.events];
         // A marriage in either of the couple's families is one.
         if (!from.marriageUnrecorded) delete into.marriageUnrecorded;
+        return marks;
     };
     const unionOfCouple = new Map<string, PartnershipId>();
     /** The records each partnership was read from, the first one first (more than one: joined, see joinUnion). */
@@ -5015,10 +5021,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         let target: Partnership;
         if (sameCouple) {
             target = partnerships[sameCouple];
-            joinUnion(target, partnership);
+            const marks = joinUnion(target, partnership);
             recordsOfUnion.get(sameCouple)?.push([gedFamId, fam]);
             joinedFamilies++;
-            if (keepJoinedRecord(gedFamId, fam)) joinedKept.add(gedFamId);
+            if (keepJoinedRecord(gedFamId, fam, marks)) joinedKept.add(gedFamId);
         } else {
             recordsOfUnion.set(partnershipId, [[gedFamId, fam]]);
             unionOfCouple.set(coupleKey, partnershipId);
