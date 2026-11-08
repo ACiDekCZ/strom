@@ -407,6 +407,89 @@ export function citeLines(lines: readonly string[]): string[] {
     return block ? block.slice(1).map(l => l.replace(/^(\d+)/, (_, n: string) => String(Number(n) - 1))) : [];
 }
 
+/**
+ * A structure of another program's file that Strom has no field for and the
+ * import wrote into the record's note instead ("Number of children: 3" of
+ * `1 NCHI 3`, "Publication: …" of `1 PUBL …`, "Birth: …" of `1 BIRT` >
+ * `2 NOTE …`, a wedding's `2 NOTE` in the couple's note), kept on the record
+ * among its kept tags as one `1 _STROM_NOTED` block: the note's lines it
+ * became (`2 _TEXT`, a line break as `3 CONT`), then the structure as written
+ * one level deeper (`2 NCHI 3`; of a fact Strom has, its head and only the
+ * lines that went to the note: `2 BIRT` / `3 NOTE …`). "Back to {prog}" writes
+ * the structure again in place of those note lines while the note still has
+ * them; every other export writes the note.
+ */
+export const NOTED_TAG = '_STROM_NOTED';
+
+/** A structure that became lines of a note: those lines, and the structure as written from level 1. */
+export interface NotedStructure {
+    texts: string[];
+    lines: string[];
+}
+
+/** The kept block of a structure that became `texts` in the note (null: not one to keep). */
+export function notedBlock(texts: readonly string[], structure: readonly string[]): string[] | null {
+    if (texts.length === 0 || structure.length === 0 || !/^1 \S/.test(structure[0])) return null;
+    const block = [`1 ${NOTED_TAG}`];
+    for (const text of texts) {
+        const [first, ...rest] = text.split('\n');
+        block.push(first ? `2 _TEXT ${first}` : '2 _TEXT');
+        for (const line of rest) block.push(line ? `3 CONT ${line}` : '3 CONT');
+    }
+    for (const line of structure) block.push(line.replace(/^\d+/, n => String(Number(n) + 1)));
+    return validExtraBlock(block) ? block : null;
+}
+
+/** The structures that became lines of a note, of one import's kept lines. */
+export function notedStructures(lines: readonly string[]): NotedStructure[] {
+    const out: NotedStructure[] = [];
+    for (const block of extraBlocks(lines)) {
+        if (block[0] !== `1 ${NOTED_TAG}`) continue;
+        const texts: string[] = [];
+        const structure: string[] = [];
+        for (const line of block.slice(1)) {
+            if (structure.length === 0 && line.startsWith('2 _TEXT')) texts.push(line.slice(8));
+            else if (structure.length === 0 && /^3 CONT( |$)/.test(line) && texts.length) texts[texts.length - 1] += '\n' + line.slice(7);
+            else structure.push(line.replace(/^\d+/, n => String(Number(n) - 1)));
+        }
+        if (texts.length && structure.length && structure[0].startsWith('1 ')) out.push({ texts, lines: structure });
+    }
+    return out;
+}
+
+/** The kept lines without the structures that became lines of a note (NOTED_TAG). */
+export function withoutNotedLines(lines: readonly string[]): string[] {
+    return extraBlocks(lines).filter(b => b[0] !== `1 ${NOTED_TAG}`).flat();
+}
+
+/**
+ * A note without the lines the structures of `structures` became, and those
+ * structures, each only while the note still has all its lines as the import
+ * wrote them (a line edited or taken out by hand leaves its structure in the
+ * note, as emailsBack and authorBack do).
+ */
+export function notedBack(note: string | undefined, structures: readonly NotedStructure[]): { note: string | undefined; structures: NotedStructure[] } {
+    if (!note || structures.length === 0) return { note, structures: [] };
+    let noteLines = note.split('\n');
+    const back: NotedStructure[] = [];
+    for (const s of structures) {
+        let left = noteLines;
+        const found = s.texts.every(text => {
+            const want = text.split('\n');
+            const at = left.findIndex((_, i) => want.every((w, k) => left[i + k] === w));
+            if (at < 0) return false;
+            left = [...left.slice(0, at), ...left.slice(at + want.length)];
+            return true;
+        });
+        if (!found) continue;
+        noteLines = left;
+        back.push(s);
+    }
+    if (back.length === 0) return { note, structures: [] };
+    const rest = noteLines.join('\n').trim();
+    return { note: rest || undefined, structures: back };
+}
+
 /** The blocks of kept lines, each from its `1 _XXX` line. */
 function extraBlocks(lines: readonly string[]): string[][] {
     const blocks: string[][] = [];

@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, withoutCiteLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -1090,8 +1090,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const written = new Set<string>();
         for (const entry of holder.gedcomExtra) {
             if (!back.imports.has(entry.from)) continue;
-            // (A citation's own lines go under the citation, see pushCitation.)
-            const entryLines = withoutCiteLines(entry.lines);
+            // (A citation's own lines go under the citation, see pushCitation;
+            // a structure that became lines of the note goes in their place, see notedOf.)
+            const entryLines = withoutNotedLines(withoutCiteLines(entry.lines));
             let block: string[] = [];
             const flush = (): void => {
                 const key = block.join('\n');
@@ -1104,6 +1105,26 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             flush();
         }
+    };
+    /**
+     * "Back to {prog}": the structures of its file the import wrote into the
+     * record's note (NOTED_TAG), each while the note still has its lines, and
+     * the note without them. Every other export writes the note as it is.
+     */
+    const notedOf = (holder: ExtraHolder, note: string | undefined): { note: string | undefined; structures: NotedStructure[] } => {
+        if (back.imports.size === 0 || !holder.gedcomExtra) return { note, structures: [] };
+        const seen = new Set<string>();
+        // (The page sources of one record each keep the record's structures: once.)
+        const structures = holder.gedcomExtra.filter(e => back.imports.has(e.from)).flatMap(e => notedStructures(e.lines))
+            .filter(st => !seen.has(st.lines.join('\n')) && !!seen.add(st.lines.join('\n')));
+        return notedBack(note, structures);
+    };
+    /** Those structures of one fact (`1 BIRT` …), and the rest. */
+    const notedFact = (structures: NotedStructure[], tag: string): NotedStructure[] =>
+        structures.filter(st => st.lines[0] === `1 ${tag}` || st.lines[0].startsWith(`1 ${tag} `));
+    /** A structure's lines under the fact Strom writes, or the whole structure where it writes none. */
+    const pushNoted = (structures: NotedStructure[], under: boolean): void => {
+        for (const st of structures) lines.push(...(under ? st.lines.slice(1) : st.lines));
     };
     /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
     const pushFactImport = (holder: FactHolder, fact: string): void => {
@@ -1168,6 +1189,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         lines.push(`0 ${gedcomId} INDI`);
         pushHolderOrigin(person, gedcomId, back.personEntries.get(personId));
+        const links = alsoChildOf.get(personId);
+        const noted = notedOf(person, person.notes && links ? notesWithoutLinks(person.notes, links) : person.notes);
+        const notedBirth = notedFact(noted.structures, 'BIRT');
+        const notedDeath = notedFact(noted.structures, 'DEAT');
 
         // Name. Placeholders are exported with an empty name so they re-import
         // as placeholders (lossless), instead of being dropped.
@@ -1219,8 +1244,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { age: person.birthAge, address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
+            pushNoted(notedBirth, true);
             pushFactImport(person, 'birth');
             pushFactOrigin(person, 'birth');
+        } else {
+            pushNoted(notedBirth, false);
         }
 
         // Death (a cited death without a date or place is a known death: DEAT Y)
@@ -1237,6 +1265,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             pushStatus(lines, person.deathStatus);
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
+            pushNoted(notedDeath, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
         } else if (person.isDeceased === true) {
@@ -1245,8 +1274,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             lines.push('1 DEAT Y');
             // Where that came from goes along (the research's DEAT Y has one).
             pushStatus(lines, person.deathStatus);
+            pushNoted(notedDeath, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
+        } else {
+            pushNoted(notedDeath, false);
         }
 
         // User reference number (id in a paper archive / another program)
@@ -1264,11 +1296,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushStory(lines, 1, person.story, id => sourceIdMap.get(id));
         }
 
-        {
-            const links = alsoChildOf.get(personId);
-            const notes = person.notes && links ? notesWithoutLinks(person.notes, links) : person.notes;
-            if (notes) pushNote(lines, 1, notes);
-        }
+        if (noted.note) pushNote(lines, 1, noted.note);
+        pushNoted(noted.structures.filter(st => !notedBirth.includes(st) && !notedDeath.includes(st)), false);
 
         // Life events. OCCU carries its detail as the tag value; the rest use
         // level-2 DATE/PLAC/NOTE. 'custom'/'military' have no dedicated tag and
@@ -1502,6 +1531,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
+        const famNoted = notedOf(partnership, partnership.note);
+        const notedMarriage = notedFact(famNoted.structures, 'MARR');
+        const notedDivorce = notedFact(famNoted.structures, 'DIV');
         if (hasMarriage) {
             lines.push('1 MARR');
             if (partnership.startDate) {
@@ -1537,8 +1569,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
             for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
+            pushNoted(notedMarriage, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
+        } else {
+            pushNoted(notedMarriage, false);
         }
 
         // Divorce event
@@ -1550,8 +1585,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
+            pushNoted(notedDivorce, true);
             pushFactImport(partnership, 'divorce');
             pushFactOrigin(partnership, 'divorce');
+        } else {
+            pushNoted(notedDivorce, false);
         }
 
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
@@ -1602,9 +1640,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Note
-        if (partnership.note) {
-            pushNote(lines, 1, partnership.note);
-        }
+        if (famNoted.note) pushNote(lines, 1, famNoted.note);
+        pushNoted(famNoted.structures.filter(st => !notedMarriage.includes(st) && !notedDivorce.includes(st)), false);
 
         // Family citations of a couple without a marriage (partners).
         for (const srcId of hasMarriage ? [] : partnership.sourceIds ?? []) {
@@ -1701,7 +1738,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (pageSha && !(source.excerpts ?? []).some(e => normalizeSha256(e.originalSha) === pageSha)) lines.push(`1 _STROM_SHA ${pageSha}`);
         }
         if (source.url) pushWrapped(lines, 1, 'WWW', source.url);
-        if (source.note) pushNote(lines, 1, source.note);
+        const srcNoted = notedOf(members ? { gedcomExtra: members.flatMap(m => m.gedcomExtra ?? []) } : source, source.note);
+        if (srcNoted.note) pushNote(lines, 1, srcNoted.note);
+        pushNoted(srcNoted.structures, false);
         // Crops of the entry, embedded like person media (other programs
         // cannot read data URLs — the content options can leave them out).
         for (const exc of members ? members.flatMap(m => m.excerpts ?? []) : source.excerpts ?? []) {

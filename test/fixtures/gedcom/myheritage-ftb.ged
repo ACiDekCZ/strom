@@ -142,6 +142,7 @@
 1 BIRT
 2 DATE 1910
 2 PLAC Ozubcov
+2 NOTE A twin, the other died young.
 1 FAMC @F1@
 1 FAMC @F5@
 2 PEDI adopted
@@ -281,6 +282,8 @@
 1 MARR
 2 DATE 1905
 2 PLAC Ozubcov
+2 NOTE Married in the old chapel,
+3 CONT the banns read three times.
 2 SOUR @S1@
 3 PAGE fol. 40
 3 QUAY 3

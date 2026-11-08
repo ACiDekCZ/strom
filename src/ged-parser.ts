@@ -95,7 +95,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addGedcomExtra, addOriginalIds, CITE_TAG, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    addGedcomExtra, addOriginalIds, CITE_TAG, NOTED_TAG, notedBlock, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
@@ -712,6 +712,13 @@ const NOTED_INDI_TAGS = new Set(['BLES', 'RETI', 'CAST', 'DSCR', 'IDNO', 'NCHI',
 // The couple's events (banns, a contract, a census…) are events of their own
 // since data version 10 (see coupleEventTypeOfTag); only the count is left.
 const NOTED_FAM_TAGS = new Set(['NCHI']);
+/**
+ * Lines under a birth, a death, a wedding or a divorce that may go to the
+ * record's note (a remark, the denomination at the act, an age, a cause or an
+ * address with no field left for it): kept as written for "Back to {prog}"
+ * when they do (see NOTED_TAG).
+ */
+const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB', 'WIFE']);
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -2543,6 +2550,95 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     };
 
+    /**
+     * A structure of another program's file that becomes lines of the
+     * record's note (NOTED_TAG), being read: the whole structure (`1 NCHI`,
+     * `1 PUBL`), or those lines under a fact Strom has that go to the note
+     * (`2 NOTE` under `1 BIRT`, a wedding's `2 NOTE`). Kept on the record, so
+     * "Back to {prog}" writes them as they were and not as a note; not from
+     * the research's files.
+     */
+    let noted: {
+        target: { extras?: RawExtra[] };
+        note: () => string;
+        /** The structure's level-1 line in the file. */
+        head: number;
+        /** The whole structure became one line of the note: that line, once read. */
+        whole?: () => string;
+        /** The note's lines of the structure's lines read so far, and those lines as written. */
+        texts: string[];
+        body: string[];
+        /** A level-2 line under the fact being read, and the note's length before it. */
+        sub: { start: number; before: number } | null;
+    } | null = null;
+    /** The file's level-1 line being read (the head of a fact's lines). */
+    let notedHead = -1;
+    const lineLevelAt = (i: number): number => {
+        const m = /^\s*(\d+)\s/.exec(lines[i] ?? '');
+        return m ? Number(m[1]) : -1;
+    };
+    /** Line `start` and the lines under it, as written (blank and broken lines left out). */
+    const structureAt = (start: number): string[] => {
+        const level = lineLevelAt(start);
+        const out = [lines[start].trimStart()];
+        for (let i = start + 1; i < lines.length; i++) {
+            const l = lineLevelAt(i);
+            if (l < 0) continue;
+            if (l <= level) break;
+            out.push(lines[i].trimStart());
+        }
+        return out;
+    };
+    const readNoted = (src: number, level: number, tag: string): void => {
+        const open = noted;
+        if (open?.sub && level <= 2) {
+            const text = open.note().slice(open.sub.before).replace(/^\n/, '');
+            if (text) { open.texts.push(text); open.body.push(...structureAt(open.sub.start)); }
+            open.sub = null;
+        }
+        if (open && level <= 1) {
+            noted = null;
+            const texts = open.whole ? [open.whole()].filter(Boolean) : open.texts;
+            const structure = open.whole ? structureAt(open.head) : [lines[open.head].trimStart(), ...open.body];
+            // A pointer in it would name a record by an xref the export renumbers.
+            const block = structure.some(l => /^\d+ @|\s@[^@\s]+@/.test(l)) ? null : notedBlock(texts, structure);
+            if (block) (open.target.extras ??= []).push({ tag: NOTED_TAG, lines: block, quiet: true });
+        }
+        if (level === 1) notedHead = src;
+        if (stromResearch || level === 0) return;
+        if (level === 1 && currentType === 'INDI' && currentRecord && NOTED_INDI_TAGS.has(tag)) {
+            const indi = currentRecord as GedcomIndividual;
+            const at = indi.noteFacts.length;
+            noted = { target: indi, note: () => indi.notes, head: src, texts: [], body: [], sub: null,
+                whole: () => { const fact = indi.noteFacts[at]; return fact ? factToNoteLine(fact) : ''; } };
+        } else if (level === 1 && currentType === 'FAM' && currentRecord && NOTED_FAM_TAGS.has(tag)) {
+            const fam = currentRecord as GedcomFamily;
+            const at = fam.noteFacts.length;
+            noted = { target: fam, note: () => fam.note, head: src, texts: [], body: [], sub: null,
+                whole: () => { const fact = fam.noteFacts[at]; return fact ? factToNoteLine(fact) : ''; } };
+        } else if (level === 1 && currentType === 'SOUR' && currentSource && tag === 'PUBL') {
+            const s = currentSource;
+            const before = s.note.length;
+            noted = { target: s, note: () => s.note, head: src, texts: [], body: [], sub: null,
+                whole: () => s.note.slice(before).replace(/^\n/, '') };
+        } else if (level === 2 && NOTED_DETAIL_TAGS.has(tag) && currentRecord) {
+            // A line under birth, death (the person's note), a wedding or a
+            // divorce (the couple's): whether it went to the note shows once it is read.
+            let target: { extras?: RawExtra[] } | null = null;
+            let note: (() => string) | null = null;
+            if (currentType === 'INDI' && !currentEvent && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT')) {
+                const indi = currentRecord as GedcomIndividual;
+                target = indi; note = () => indi.notes;
+            } else if (currentType === 'FAM' && !currentFamEvent && (currentSubTag === 'MARR' || currentSubTag === 'DIV')) {
+                const fam = currentRecord as GedcomFamily;
+                target = fam; note = () => fam.note;
+            }
+            if (!target || !note) return;
+            noted ??= { target, note, head: notedHead, texts: [], body: [], sub: null };
+            noted.sub = { start: src, before: noted.note().length };
+        }
+    };
+
     const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
     for (const rec of gedLines) {
@@ -2679,6 +2775,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
             if (level <= openDetail.level) flushDetail();
         }
+        readNoted(rec.src, level, tag);
         if (level === 2 && (tag === 'AGE' || tag === 'CAUS' || tag === 'ADDR' || tag === 'DATE')) {
             const sink = factDetailSink();
             if (sink && tag === 'DATE') {
@@ -3840,6 +3937,7 @@ export function parseGedcom(content: string): ParsedGedcom {
 
     // A kept block on the last lines of the file.
     closeExtra(lines.length);
+    readNoted(lines.length, 0, '');
     // A detail line on the very last line of the file has no successor to close it.
     flushDetail();
 

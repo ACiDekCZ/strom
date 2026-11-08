@@ -99,3 +99,68 @@ describe('A citation\'s own lines Strom does not read (066)', () => {
     });
 });
 
+
+describe('What the import wrote into a note goes back as the other program wrote it (066)', () => {
+    const tree = load(FILE, 'myheritage-ftb.ged');
+    const back = backTo(tree);
+    const again = load(back, 'myheritage-ftb-back.ged');
+    const second = backTo(again);
+    const byXref = (xref: string) => Object.values(tree.persons).find(p => p.originalIds?.some(e => e.xref === xref))!;
+
+    it('"Back to" writes NCHI, PUBL and an event\'s NOTE in their place, not as lines of the record\'s note', () => {
+        expect(back).toMatch(/\n1 NCHI 3\n/);
+        expect(back).toContain('1 BIRT\n2 NOTE Born at the mill, says the family.\n');
+        // Under the event Strom writes with its date and place.
+        expect(back).toMatch(/1 BIRT\n2 DATE 1910\n2 PLAC Ozubcov\n2 NOTE A twin, the other died young\.\n/);
+        expect(back).toMatch(/1 MARR\n2 DATE 1905\n[^]*?2 NOTE Married in the old chapel,\n3 CONT the banns read three times\.\n2 _STROM_IMPORT/);
+        expect(back).toContain('1 TITL Parish register Ozubcov\n1 AUTH Ozubcov parish office\n1 PUBL Ozubcov 1880\n');
+        expect(back).not.toMatch(/Number of children|Publication:|Birth:|1 NOTE Married|_STROM_NOTED/);
+    });
+
+    it('the tree and Strom\'s own export keep them as lines of the note', () => {
+        expect(byXref('I1').notes).toContain('Number of children: 3');
+        expect(byXref('I3').notes).toContain('Born at the mill, says the family.');
+        const own = exportToGedcom(tree, 'Ozubec').content;
+        expect(own).toContain('1 NOTE Number of children: 3');
+        expect(own).toContain('Publication: Ozubcov 1880');
+        expect(own).toContain('1 NOTE Married in the old chapel,');
+        expect(own).not.toMatch(/\n1 NCHI|\n1 PUBL|_STROM_NOTED/);
+    });
+
+    it('the file read again has each once, and the next "Back to" equals the first', () => {
+        const i1 = Object.values(again.persons).find(p => p.originalIds?.some(e => e.xref === 'I1'))!;
+        expect(i1.notes?.match(/Number of children/g)).toHaveLength(1);
+        expect(undated(second)).toBe(undated(back));
+    });
+
+    it('a line of the note changed in the tree stays in the note, its structure is not written', () => {
+        const edited = structuredClone(tree);
+        const i1 = Object.values(edited.persons).find(p => p.originalIds?.some(e => e.xref === 'I1'))!;
+        i1.notes = i1.notes!.replace('Number of children: 3', 'Number of children: 4');
+        const out = backTo(edited);
+        expect(out).toContain('Number of children: 4');
+        expect(out).not.toMatch(/\n1 NCHI/);
+        // The other structures still go back.
+        expect(out).toContain('1 BIRT\n2 NOTE Born at the mill, says the family.\n');
+    });
+});
+
+describe('A level-1 citation of a person and of a family with a bare EVEN (066 N3)', () => {
+    const file = [
+        '0 HEAD', '1 SOUR MYHERITAGE', '2 NAME MyHeritage Family Tree Builder', '2 VERS 5.5.1',
+        '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Drnohor /Klepetec/', '1 SEX M', '1 FAMS @F1@',
+        '1 SOUR @S1@', '2 QUAY 3', '2 DATA', '3 TEXT Drnohor, son of the cooper', '4 CONC  of Zvonečkov', '2 EVEN', '3 ROLE CHIL',
+        '0 @I2@ INDI', '1 NAME Mrkvoslava /Klepetcová/', '1 SEX F', '1 FAMS @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '1 SOUR @S1@', '2 QUAY 2', '2 DATA', '3 TEXT The couple named in the banns', '2 EVEN', '3 ROLE HUSB',
+        '0 @S1@ SOUR', '1 TITL Register Zvonečkov',
+        '0 TRLR', '',
+    ].join('\n');
+    const back = backTo(load(file, 'klepetec.ged'));
+
+    it('"Back to" keeps QUAY, DATA > TEXT (with CONC) and the bare EVEN > ROLE of both', () => {
+        expect(back).toContain('1 SOUR @S1@\n2 DATA\n3 TEXT Drnohor, son of the cooper\n4 CONC  of Zvonečkov\n2 QUAY 3\n2 EVEN\n3 ROLE CHIL\n');
+        expect(back).toContain('1 SOUR @S1@\n2 DATA\n3 TEXT The couple named in the banns\n2 QUAY 2\n2 EVEN\n3 ROLE HUSB\n');
+    });
+});

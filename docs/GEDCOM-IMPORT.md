@@ -656,6 +656,14 @@ the record ids, the export to the program the tree came from keeps:
 - `EMAIL` under a fact (`1 RESI` / `2 EMAIL`): shown as a line of the fact's
   note, written back as `2 EMAIL` while that line is there (other exports
   keep the note line);
+- a structure that became lines of the record's note — a fact of the table
+  above (`1 NCHI 3` → "Number of children: 3"), a source's `PUBL` (with its
+  `CONT` / `CONC`), and the `NOTE`, `RELI`, `CAUS`, `AGE`, `ADDR` or
+  `HUSB` / `WIFE` lines under `BIRT`, `DEAT` or `MARR` that found no
+  field (a `1 BIRT` holding only a `2 NOTE`, a wedding's `2 NOTE`): written
+  back as the file had it, under the fact Strom writes or as the whole
+  structure, while the note still has those lines unchanged (a line edited in
+  the app stays in the note); other exports keep the note lines;
 - `GIVN` / `SURN` under the name, made from the name as it is now;
 - a child recorded in two families: Strom hangs it from one (a birth family
   first) and notes the other ("Also recorded as child of …"); every export
