@@ -1058,7 +1058,8 @@ function personFacts(page: PersonPageData, S: S): PersonFact[] {
         const other = u.person1Id === person.id ? u.person2Id : u.person1Id;
         if (protect && page.living.has(other)) continue;
         if (u.startDate || u.startPlace) add(S.personSources.citeUnion(yearOf(u.startDate)), u.startStatus, cited(u.sourceIds));
-        if (u.endDate || u.endPlace) add(withYear(S.fields.divorceRow, u.endDate), u.endStatus, cited(u.sourceIds));
+        // The divorce by its own record, else by the couple's as before.
+        if (u.endDate || u.endPlace) add(withYear(S.fields.divorceRow, u.endDate), u.endStatus, cited(u.divorceSourceIds?.length ? u.divorceSourceIds : u.sourceIds));
         for (const ev of u.events ?? []) {
             if (!ev.date && !ev.place) continue;
             add(withYear(coupleEventLabelIn(ev, S), ev.date), ev.status, cited(ev.sourceIds));
@@ -2571,6 +2572,7 @@ function excerptEvent(c: Ctx, sid: string): { event: PersonPageCaptionEvent | nu
     for (const uid of p.partnerships) {
         const u = c.tree.partnerships[uid];
         if (u?.sourceIds?.includes(sid)) return { event: 'marriage', label: '', year: yearOf(u.startDate), place: u.startPlace?.trim() ?? '' };
+        if (u?.divorceSourceIds?.includes(sid)) return { event: null, label: c.S.fields.divorceRow, year: yearOf(u.endDate), place: u.endPlace?.trim() ?? '' };
     }
     const ev = p.events?.find(e => e.sourceIds?.includes(sid));
     if (ev) return { event: null, label: lifeEventLabel(ev, c.S), year: yearOf(ev.date), place: ev.place?.trim() ?? '' };

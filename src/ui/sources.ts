@@ -39,7 +39,7 @@ import { shownName } from '../person-name.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
-export type CitationContext = { personId: PersonId; eventId?: string; fact?: CitedFact } | { partnershipId: PartnershipId; eventId?: string };
+export type CitationContext = { personId: PersonId; eventId?: string; fact?: CitedFact } | { partnershipId: PartnershipId; eventId?: string; fact?: 'divorce' };
 
 /** An excerpt staged in the editor, with what only lives until the editor closes. */
 export interface ExcerptDraft {
@@ -446,7 +446,13 @@ export const sourcesMethods = uiModule({
         const cites = DataManager.listSourceCitations(src.id).map(ref => {
             if (ref.kind === 'partnership') {
                 const u = DataManager.getData().partnerships[ref.partnershipId];
-                return u ? s.citedPartnership(personName(u.person1Id), personName(u.person2Id)) : '';
+                if (!u) return '';
+                if (ref.fact === 'divorce') {
+                    const year = yearOf(u.endDate);
+                    return strings.partnerEvents.cited(`${strings.fields.divorceRow}${year !== null ? ` (${year})` : ''}`,
+                        strings.partnerEvents.couple(personName(u.person1Id), personName(u.person2Id)));
+                }
+                return s.citedPartnership(personName(u.person1Id), personName(u.person2Id));
             }
             if (ref.kind === 'coupleEvent') {
                 const u = DataManager.getData().partnerships[ref.partnershipId];
@@ -1504,7 +1510,8 @@ export const sourcesMethods = uiModule({
         if (!ctx) return [];
         if ('partnershipId' in ctx) {
             if (ctx.eventId) return DataManager.getCoupleEvent(ctx.partnershipId, ctx.eventId)?.sourceIds ?? [];
-            return DataManager.getData().partnerships[ctx.partnershipId]?.sourceIds ?? [];
+            const u = DataManager.getData().partnerships[ctx.partnershipId];
+            return (ctx.fact === 'divorce' ? u?.divorceSourceIds : u?.sourceIds) ?? [];
         }
         const person = DataManager.getPerson(ctx.personId);
         if (!person) return [];
@@ -1520,7 +1527,7 @@ export const sourcesMethods = uiModule({
         if (!ctx) return;
         if ('partnershipId' in ctx) {
             if (ctx.eventId) DataManager.citeCoupleEvent(ctx.partnershipId, ctx.eventId, sourceId);
-            else DataManager.citePartnership(ctx.partnershipId, sourceId);
+            else DataManager.citePartnership(ctx.partnershipId, sourceId, ctx.fact);
         } else if (ctx.eventId) {
             DataManager.citeEvent(ctx.personId, ctx.eventId, sourceId);
         } else {
@@ -1607,6 +1614,10 @@ export const sourcesMethods = uiModule({
             if (coupleEvent) {
                 return withYear(`${coupleEventLabel(coupleEvent)} – ${strings.partnerEvents.couple(
                     personName(u.person1Id), personName(u.person2Id))}`, coupleEvent.date);
+            }
+            if (ctx.fact === 'divorce') {
+                return withYear(`${strings.fields.divorceRow} – ${strings.partnerEvents.couple(
+                    personName(u.person1Id), personName(u.person2Id))}`, u.endDate);
             }
             return withYear(strings.sources.newTitleMarriage(personName(u.person1Id), personName(u.person2Id)), u.startDate);
         }

@@ -396,7 +396,7 @@ function otherFactsClass(data: StromData, person: Person, opts: CardStatusOption
         ?? (person.partnerships ?? []).map(id => data.partnerships?.[id]).filter((u): u is Partnership => !!u);
     for (const u of unions) {
         holders.push({ holder: u, facts: [
-            { fact: 'marriage', ids: u.sourceIds ?? [] }, { fact: 'divorce', ids: [] }, ...eventFacts(u.events),
+            { fact: 'marriage', ids: u.sourceIds ?? [] }, { fact: 'divorce', ids: u.divorceSourceIds ?? [] }, ...eventFacts(u.events),
         ] });
     }
     let strongest: CardStatusClass | null = null;

@@ -17,7 +17,7 @@ type Strings = typeof appStrings;
 /** Where a citation sits: on the person (or a fact or event of theirs), or on a couple. */
 export type PersonSourceCiteContext =
     | { personId: PersonId; eventId?: string; fact?: 'birth' | 'death' }
-    | { partnershipId: PartnershipId; eventId?: string };
+    | { partnershipId: PartnershipId; eventId?: string; fact?: 'divorce' };
 
 /** One thing a source supports for this person ("Person", "Baptism 1865", "Marriage 1890"). */
 export interface PersonSourceCite {
@@ -93,6 +93,12 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
         add(u.sourceIds, {
             label: S.personSources.citeUnion(year), ctx: { partnershipId: u.id }, year,
             title: S.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
+        });
+        // The divorce's own record: "Divorce 1890".
+        const endYear = yearOf(u.endDate);
+        add(u.divorceSourceIds, {
+            label: withYear(S.fields.divorceRow, endYear), ctx: { partnershipId: u.id, fact: 'divorce' }, year: endYear,
+            title: S.partnerEvents.cited(S.fields.divorceRow, S.partnerEvents.couple(fullName(u.person1Id), fullName(u.person2Id))),
         });
         // The couple's events (banns, a census): "Banns 1888".
         for (const ev of sortCoupleEvents(u.events ?? [])) {

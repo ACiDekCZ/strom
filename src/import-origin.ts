@@ -152,7 +152,7 @@ export function factsOf(holder: FactHolder): string[] {
  */
 export type FactCitationContext =
     | { personId: PersonId; eventId?: string; fact?: 'birth' | 'death' }
-    | { partnershipId: Partnership['id']; eventId?: string };
+    | { partnershipId: Partnership['id']; eventId?: string; fact?: 'divorce' };
 
 const BIRTH_CITE_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
 const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'cremation']);
@@ -160,8 +160,8 @@ const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'crem
 /**
  * The sources cited at one fact, each with where the citation sits: the name by the person's own
  * citations; the birth by its field and the birth / baptism events; the death by its field and the
- * death / burial / cremation events; an event by its own; a couple's marriage and divorce by the
- * couple's citations. A cited id the tree no longer has is skipped; a source cited twice comes once.
+ * death / burial / cremation events; an event by its own; a couple's marriage by the couple's
+ * citations, its divorce by the divorce's own. A cited id the tree no longer has is skipped; a source cited twice comes once.
  */
 export function factCitations(
     data: Pick<StromData, 'sources'>, holder: FactHolder, fact: string,
@@ -181,8 +181,10 @@ export function factCitations(
         if (fact.startsWith('event:')) {
             const ev = eventById(holder, fact.slice(6));
             if (ev) add(ev.sourceIds, { partnershipId, eventId: ev.id });
-        } else if (fact === 'marriage' || fact === 'divorce') {
+        } else if (fact === 'marriage') {
             add(holder.sourceIds, { partnershipId });
+        } else if (fact === 'divorce') {
+            add(holder.divorceSourceIds, { partnershipId, fact: 'divorce' });
         }
         return out;
     }
@@ -588,9 +590,9 @@ export interface JoinedMarks {
     /**
      * Its citations: the source record's xref and the page (`2 _STROM_SOUR S1`
      * / `3 PAGE fol. 7`), and whether the first record cites that page too
-     * (`3 _STROM_ALSO Y`).
+     * (`3 _STROM_ALSO Y`); one under its divorce says so (`3 _STROM_DIV Y`).
      */
-    sources?: { xref: string; page: string; also: boolean }[];
+    sources?: JoinedSource[];
     /** Its events, by what they say (joinedEventKey; `2 _STROM_EVEN`). */
     events?: string[];
     /**
@@ -608,6 +610,9 @@ export interface JoinedMarks {
     took?: JoinedTook[];
 }
 
+/** A citation of another record of the couple (JoinedMarks.sources); `divorce`: under its DIV, else the couple's. */
+export interface JoinedSource { xref: string; page: string; also: boolean; divorce?: boolean }
+
 /** A wedding witness of another record of the couple (JoinedMarks.witnesses): `xref` (without the @ signs) or `name`. */
 export interface JoinedWitness { xref?: string; name?: string; also: boolean }
 
@@ -620,7 +625,7 @@ export interface JoinedRecord {
     lines: string[];
     text: string;
     children: { xref: string; also: boolean }[];
-    sources: { xref: string; page: string; also: boolean }[];
+    sources: JoinedSource[];
     events: string[];
     witnesses: JoinedWitness[];
     took: JoinedTook[];
@@ -650,6 +655,7 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
         block.push(`2 _STROM_SOUR ${src.xref}`);
         if (src.page) block.push(`3 PAGE ${src.page}`);
         if (src.also) block.push('3 _STROM_ALSO Y');
+        if (src.divorce) block.push('3 _STROM_DIV Y');
     }
     for (const key of marks.events ?? []) block.push(`2 _STROM_EVEN ${key}`);
     for (const w of marks.witnesses ?? []) {
@@ -690,6 +696,7 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 if (mark === '_STROM_TEXT' && /^3 CONT( |$)/.test(line)) out.text += '\n' + line.slice(7);
                 else if (src && line.startsWith('3 PAGE ')) src.page = line.slice(7);
                 else if (src && line === '3 _STROM_ALSO Y') src.also = true;
+                else if (src && line === '3 _STROM_DIV Y') src.divorce = true;
                 else if (mark === '_STROM_CHIL' && line === '3 _STROM_ALSO Y' && out.children.length) out.children[out.children.length - 1].also = true;
                 else if ((mark === '_STROM_ASSO' || mark === '_STROM_WITN') && line === '3 _STROM_ALSO Y' && out.witnesses.length) {
                     out.witnesses[out.witnesses.length - 1].also = true;

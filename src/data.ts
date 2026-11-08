@@ -30,7 +30,7 @@ import {
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
-    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
+    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
     FamilyWizardSpec,
@@ -135,7 +135,7 @@ export function personCitationField(fact?: CitedFact | null): PersonCitationFiel
 export type SourceCitationRef =
     | { kind: 'person'; personId: PersonId; fact?: CitedFact }
     | { kind: 'event'; personId: PersonId; eventId: string }
-    | { kind: 'partnership'; partnershipId: PartnershipId }
+    | { kind: 'partnership'; partnershipId: PartnershipId; fact?: 'divorce' }
     | { kind: 'coupleEvent'; partnershipId: PartnershipId; eventId: string };
 
 /**
@@ -2430,7 +2430,12 @@ class DataManagerClass {
             rewriteStorySources(person.story, ids => ids.filter(id => id !== sourceId));
         }
         for (const partnership of Object.values(this.data.partnerships)) {
-            for (const holder of [partnership, ...(partnership.events ?? [])]) {
+            for (const field of PARTNERSHIP_CITATION_FIELDS) {
+                const kept = partnership[field]?.filter(id => id !== sourceId);
+                if (kept?.length) partnership[field] = kept;
+                else delete partnership[field];
+            }
+            for (const holder of partnership.events ?? []) {
                 if (!holder.sourceIds) continue;
                 holder.sourceIds = holder.sourceIds.filter(id => id !== sourceId);
                 if (holder.sourceIds.length === 0) delete holder.sourceIds;
@@ -2461,6 +2466,9 @@ class DataManagerClass {
             if (partnership.sourceIds?.includes(sourceId)) {
                 out.push({ kind: 'partnership', partnershipId: partnership.id });
             }
+            if (partnership.divorceSourceIds?.includes(sourceId)) {
+                out.push({ kind: 'partnership', partnershipId: partnership.id, fact: 'divorce' });
+            }
             for (const ev of partnership.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) {
                     out.push({ kind: 'coupleEvent', partnershipId: partnership.id, eventId: ev.id });
@@ -2482,7 +2490,7 @@ class DataManagerClass {
             add(storySourceIds(person.story));
         }
         for (const partnership of Object.values(this.data.partnerships)) {
-            add(partnership.sourceIds);
+            for (const field of PARTNERSHIP_CITATION_FIELDS) add(partnership[field]);
             for (const ev of partnership.events ?? []) add(ev.sourceIds);
             add(storySourceIds(partnership.story));
         }
@@ -2499,7 +2507,7 @@ class DataManagerClass {
             if (storySourceIds(person.story).includes(sourceId)) count++;
         }
         for (const partnership of Object.values(this.data.partnerships)) {
-            if (partnership.sourceIds?.includes(sourceId)) count++;
+            for (const field of PARTNERSHIP_CITATION_FIELDS) if (partnership[field]?.includes(sourceId)) count++;
             for (const ev of partnership.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) count++;
             }
@@ -2539,31 +2547,33 @@ class DataManagerClass {
         return true;
     }
 
-    /** Add a citation of `sourceId` on a partnership (marriage record etc.). */
-    citePartnership(partnershipId: PartnershipId, sourceId: string): boolean {
+    /** Add a citation of `sourceId` on a partnership (marriage record etc.), or on its divorce. */
+    citePartnership(partnershipId: PartnershipId, sourceId: string, fact?: 'divorce'): boolean {
         const partnership = this.data.partnerships[partnershipId];
         if (!partnership || !this.data.sources?.[sourceId]) return false;
         if (this.isTreeLocked()) return false;
-        if (partnership.sourceIds?.includes(sourceId)) return false;
+        const field = fact === 'divorce' ? 'divorceSourceIds' : 'sourceIds';
+        if (partnership[field]?.includes(sourceId)) return false;
 
         this.beginMutation();
-        if (!partnership.sourceIds) partnership.sourceIds = [];
-        partnership.sourceIds.push(sourceId);
+        partnership[field] = [...(partnership[field] ?? []), sourceId];
         const names = this.partnershipNames(partnership);
         this.commitMutation(strings.undo.cite(names));
         AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(names));
         return true;
     }
 
-    /** Remove a citation of `sourceId` from a partnership. */
-    uncitePartnership(partnershipId: PartnershipId, sourceId: string): boolean {
+    /** Remove a citation of `sourceId` from a partnership (or from its divorce). */
+    uncitePartnership(partnershipId: PartnershipId, sourceId: string, fact?: 'divorce'): boolean {
         const partnership = this.data.partnerships[partnershipId];
-        if (!partnership?.sourceIds?.includes(sourceId)) return false;
+        const field = fact === 'divorce' ? 'divorceSourceIds' : 'sourceIds';
+        if (!partnership?.[field]?.includes(sourceId)) return false;
         if (this.isTreeLocked()) return false;
 
         this.beginMutation();
-        partnership.sourceIds = partnership.sourceIds.filter(id => id !== sourceId);
-        if (partnership.sourceIds.length === 0) delete partnership.sourceIds;
+        const kept = partnership[field]!.filter(id => id !== sourceId);
+        if (kept.length > 0) partnership[field] = kept;
+        else delete partnership[field];
         const names = this.partnershipNames(partnership);
         this.commitMutation(strings.undo.uncite(names));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));

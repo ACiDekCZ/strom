@@ -134,7 +134,7 @@ function factCitations(holder: FactHolder, fact: string): readonly string[] {
         const id = fact.slice(6);
         return (holder.events ?? []).find(e => e?.id === id)?.sourceIds ?? [];
     }
-    if ('person1Id' in holder) return fact === 'marriage' ? holder.sourceIds ?? [] : [];
+    if ('person1Id' in holder) return fact === 'marriage' ? holder.sourceIds ?? [] : fact === 'divorce' ? holder.divorceSourceIds ?? [] : [];
     return fact === 'birth' ? holder.birthSourceIds ?? [] : fact === 'death' ? holder.deathSourceIds ?? [] : [];
 }
 
@@ -768,6 +768,8 @@ interface JoinedBack {
     record: JoinedRecord;
     children: PersonId[];
     sources: string[];
+    /** The sources of its divorce's citations. */
+    divorceSources: string[];
     events: CoupleEvent[];
     /** The witnesses of its wedding (the couple's participants it named). */
     witnesses: EventParticipant[];
@@ -810,7 +812,7 @@ function citedSourceIds(data: StromData): Set<string> {
     }
     for (const ps of Object.values(data.partnerships) as Partnership[]) {
         if (!ps) continue;
-        add(ps.sourceIds);
+        add(ps.sourceIds); add(ps.divorceSourceIds);
         for (const ev of ps.events ?? []) add(ev.sourceIds);
     }
     return out;
@@ -962,7 +964,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                     if (free) taken.add(record.xref.toUpperCase());
                     const list = joined.get(id) ?? [];
                     joined.set(id, list);
-                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record, children: [], sources: [], events: [], witnesses: [] });
+                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record, children: [], sources: [], divorceSources: [], events: [], witnesses: [] });
                 }
             }
         }
@@ -975,6 +977,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     const childElsewhere = new Set<string>();
     /** Sources and events of a couple that go only with its other records. */
     const sourcesElsewhere = new Map<PartnershipId, Set<string>>();
+    const divorceSourcesElsewhere = new Map<PartnershipId, Set<string>>();
     const eventsElsewhere = new Set<CoupleEvent>();
     /** Wedding witnesses of a couple that go only with its other records. */
     const witnessesElsewhere = new Set<EventParticipant>();
@@ -992,11 +995,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (!also) childElsewhere.add(`${id}\n${child}`);
             }
             for (const cite of j.record.sources) {
-                const sid = (ps.sourceIds ?? []).find(s => !j.sources.includes(s) && xrefIs(data.sources?.[s], cite.xref)
+                const [cited, taken, elsewhere] = cite.divorce
+                    ? [ps.divorceSourceIds, j.divorceSources, divorceSourcesElsewhere] : [ps.sourceIds, j.sources, sourcesElsewhere];
+                const sid = (cited ?? []).find(s => !taken.includes(s) && xrefIs(data.sources?.[s], cite.xref)
                     && (data.sources?.[s]?.reference ?? '').trim() === cite.page);
                 if (!sid) continue;
-                j.sources.push(sid);
-                if (!cite.also) (sourcesElsewhere.get(id) ?? sourcesElsewhere.set(id, new Set()).get(id)!).add(sid);
+                taken.push(sid);
+                if (!cite.also) (elsewhere.get(id) ?? elsewhere.set(id, new Set()).get(id)!).add(sid);
             }
             for (const key of j.record.events) {
                 const ev = (ps.events ?? []).find(e => !takenEvents.has(e) && joinedEventKey(e) === key);
@@ -1779,6 +1784,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             || Object.values(ages).some(a => a.trim());
         // What the couple's other records gave its note goes back with them (see joined), and their citations.
         const ownSources = (partnership.sourceIds ?? []).filter(id => !sourcesElsewhere.get(partnershipId)?.has(id));
+        const ownDivorceSources = (partnership.divorceSourceIds ?? []).filter(id => !divorceSourcesElsewhere.get(partnershipId)?.has(id));
+        const hasDivorce = partnership.status === 'divorced' || !!endDate || !!endPlace;
+        // Divorce citations with no divorce written (the couple married again,
+        // say): with the couple's own, rather than lost or a divorce made up.
+        const familySources = hasDivorce ? ownSources : [...new Set([...ownSources, ...ownDivorceSources])];
         const joinedNote = joinedNoteBack(partnership.note, joinedHere.map(j => j.record));
         const famNoted = notedOf(partnership, joinedNote.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
@@ -1809,7 +1819,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             for (const part of ownWitnesses) pushWitness(part);
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
-            for (const srcId of ownSources) pushCitation(2, srcId);
+            for (const srcId of familySources) pushCitation(2, srcId);
             pushNoted(marriageNoted.rest, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
@@ -1819,7 +1829,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Divorce event
-        if (partnership.status === 'divorced' || endDate || endPlace) {
+        if (hasDivorce) {
             const at = lines.length;
             lines.push('1 DIV');
             if (divorceNoted.date.length) {
@@ -1830,6 +1840,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (endPlace) pushPlace(lines, 2, endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
+            // The divorce record's own citations, as the file had them under DIV.
+            for (const srcId of ownDivorceSources) pushCitation(2, srcId);
             pushNoted(divorceNoted.rest, true);
             pushFactImport(partnership, 'divorce');
             pushFactOrigin(partnership, 'divorce');
@@ -1893,14 +1905,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushNoted(famNoted.structures.filter(st => !notedMarriage.includes(st) && !notedDivorce.includes(st)), false);
 
         // Family citations of a couple without a marriage (partners).
-        for (const srcId of hasMarriage ? [] : ownSources) {
+        for (const srcId of hasMarriage ? [] : familySources) {
             pushCitation(1, srcId);
         }
 
         pushGedcomExtra(partnership);
 
         // The couple's other records of the program's file, as it wrote them (see joined).
-        for (const { xref, own, from, record, children, sources, events, witnesses } of joinedHere) {
+        for (const { xref, own, from, record, children, sources, divorceSources, events, witnesses } of joinedHere) {
             lines.push(`0 ${xref} FAM`);
             if (knownImports.has(from)) {
                 lines.push(`1 ${IMPORT_TAG} ${from}`);
@@ -1912,15 +1924,26 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // Its notes while the couple's note still has what they gave it (else they stay there).
             const kept = record.text && !joinedNote.found.has(record) ? withoutJoinedNotes(record.lines) : record.lines;
             // Its citations under its wedding, as the couple's are (else on the record).
-            const marriageAt = kept.findIndex(l => l === '1 MARR' || l.startsWith('1 MARR '));
-            const marriageEnd = marriageAt < 0 ? -1 : kept.findIndex((l, i) => i > marriageAt && l.startsWith('1 '));
-            const cut = marriageAt < 0 ? kept.length : marriageEnd < 0 ? kept.length : marriageEnd;
-            lines.push(...kept.slice(0, cut));
-            if (marriageAt >= 0) for (const part of witnesses) pushWitness(part);
-            if (marriageAt >= 0) for (const srcId of sources) pushCitation(2, srcId);
-            lines.push(...kept.slice(cut));
+            // …and its divorce's under its divorce (with the record's own when it wrote none).
+            const endOf = (tag: string): number => {
+                const at = kept.findIndex(l => l === `1 ${tag}` || l.startsWith(`1 ${tag} `));
+                if (at < 0) return -1;
+                const end = kept.findIndex((l, i) => i > at && l.startsWith('1 '));
+                return end < 0 ? kept.length : end;
+            };
+            const marriageEnd = endOf('MARR');
+            const divorceEnd = endOf('DIV');
+            const recordSources = divorceEnd < 0 ? [...new Set([...sources, ...divorceSources])] : sources;
+            for (let i = 0; i <= kept.length; i++) {
+                if (i === marriageEnd) {
+                    for (const part of witnesses) pushWitness(part);
+                    for (const srcId of recordSources) pushCitation(2, srcId);
+                }
+                if (i === divorceEnd) for (const srcId of divorceSources) pushCitation(2, srcId);
+                if (i < kept.length) lines.push(kept[i]);
+            }
             for (const event of sortCoupleEvents(events)) pushEvent(event);
-            if (marriageAt < 0) for (const srcId of sources) pushCitation(1, srcId);
+            if (marriageEnd < 0) for (const srcId of recordSources) pushCitation(1, srcId);
         }
     }
 

@@ -394,7 +394,7 @@ export function applyPacketOntoData(current: StromData, packet: ChangePacket, ba
 // ---- three-way helpers ----
 
 /** Fields holding lists of ids / plain strings: applied as set add/remove. */
-const ID_LIST_FIELDS = new Set(['parentIds', 'childIds', 'partnerships', 'sourceIds', 'nameVariants']);
+const ID_LIST_FIELDS = new Set(['parentIds', 'childIds', 'partnerships', 'sourceIds', 'divorceSourceIds', 'nameVariants']);
 /** Fields holding lists of records with their own id: applied per record. */
 const RECORD_LIST_FIELDS = new Set(['events', 'attachments', 'participants']);
 /** Plain maps (parentRelTypes): applied per key. */
