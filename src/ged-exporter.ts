@@ -848,6 +848,13 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
             }
         }
     }
+    // A record cited nowhere keeps its xref too, while no cited record has it.
+    for (const src of Object.values(data.sources ?? {}) as Source[]) {
+        if (!src || cited.has(src.id)) continue;
+        const entry = out.sourceEntries.get(src.id);
+        if (!entry?.xref || groups.has(entry.xref.toUpperCase())) continue;
+        claim(entry.xref, rank(entry.from), () => out.sources.set(src.id, entry.xref!));
+    }
     for (const [key, c] of claims) {
         out.reserved.add(key);
         if (c.n === 1) c.assign();

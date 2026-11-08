@@ -193,6 +193,14 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(holdsRun(kvasibor, ['1 SOUR @S1@', '2 PAGE fol. 9'])).toBe(true);
         });
 
+        it('1 · a source record cited nowhere keeps its xref and ids (@S3@)', () => {
+            for (const ged of [first, second]) {
+                expect(record(ged, '@S3@')).toEqual(expect.arrayContaining(['1 TITL Drnkalov estate inventory', '1 RIN MH:S3',
+                    '1 _UPD 8 NOV 2026 10:00:00 GMT -0500']));
+            }
+            expect(count(recordsOf(first, ['SOUR']), /^0 @S4@ /)).toBe(0);
+        });
+
         it('2 · a family of one spouse with nothing but its ids (husband alone, wife alone)', () => {
             expect(record(first, '@F201@')).toEqual(expect.arrayContaining(['1 HUSB @I201@', '1 RIN MH:F201',
                 '1 _UID 02F1B2C3D4E5F60718293A4B5C6D7F01', '1 _UPD 8 NOV 2026 10:00:00 GMT -0500']));
