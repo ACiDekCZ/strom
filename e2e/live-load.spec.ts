@@ -136,7 +136,7 @@ test.describe('live load without a blink (055)', () => {
         // The zoom and the focused person stay (K1.2); the kept card stays where it was on screen.
         const view = () => page.evaluate(() => ({ scale: window.Strom.ZoomPan.getTransform().scale, focus: window.Strom.TreeRenderer.getFocusPersonId() }));
         const before = await view();
-        const anchorAt = async () => (await page.locator('#tree-canvas .person-card[aria-label="Radim Hlohovec"]').boundingBox())!;
+        const anchorAt = async () => (await page.locator('#tree-canvas .person-card[aria-label^="Radim Hlohovec"]').boundingBox())!;
         const was = await anchorAt();
         await load(page, bridge, ONE_MORE);
         await expect(card(page, 'Lubor')).toBeVisible();

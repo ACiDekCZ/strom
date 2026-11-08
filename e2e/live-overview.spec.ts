@@ -980,7 +980,7 @@ test.describe('the agent at work', () => {
         await expect(arc).toHaveCount(1);
         await expect(arc).toHaveCSS('animation-name', 'agSpin');
         await expect(anna.locator('.card-signal')).toHaveCount(0);
-        await expect(anna).toHaveAttribute('aria-label', /research is working on this person$/);
+        await expect(anna).toHaveAttribute('aria-label', /research is working on this person; locked$/);
         await expect(anna.locator('.card-tooltip .tt-agent')).toHaveText('Research working: Sčítání 1921');
         const josef = card(page, 'Josef');
         await expect(josef.locator('.card-agent')).toHaveCount(0);
