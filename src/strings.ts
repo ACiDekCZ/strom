@@ -23611,7 +23611,7 @@ const stringsDE: StringsType = {
         markResearch: 'Angaben der Forschung mit einer Notiz kennzeichnen',
         markResearchSub: (ex: string) => `Eine Angabe, die die Forschung ergänzt oder korrigiert hat, erhält die Notiz „${ex}“.`,
         noteText: (src: string) => `Abgeleitet von der Strom-Forschung (nach: ${src})`,
-        livingNote: (n: number) => `Die Datei enthält Angaben zu ${nDe(n, 'lebenden Person', 'lebenden Personen')}. Sie gehört nur ins eigene Programm.`,
+        livingNote: (n: number) => `Die Datei enthält Angaben zu ${nDe(n, 'lebenden Person', 'lebenden Personen')} und gehört nur ins eigene Programm.`,
         warnLoss: (s: number, c: number) => `Die Datei wird ohne ${nDe(s, 'Quelle', 'Quellen')} und ${nDe(c, 'Zitat', 'Zitate')} sein.`,
         warnLiving: (n: number, c: number) => `Bei ${nDe(n, 'lebenden Person', 'lebenden Personen')} ${plural('de', c, 'entfällt', 'entfallen')} ${nDe(c, 'Zitat', 'Zitate')}. Verstorbene behalten ihre Quellen.`,
         keepSources: 'Quellen behalten',
