@@ -3,6 +3,7 @@ import {
     RELIABILITY_ORDER, reliabilityStep, weakestStep, sameStep, factReliability, personOriginSummary, cardReliability,
     cardStatus, CardStatusOptions, partnershipReliability, wasAccepted, ReliabilityInput, ReliabilityStep, ReliabilityOptions,
 } from '../reliability.js';
+import { factCitations } from '../import-origin.js';
 import type { ImportRecord, Partnership, Person, PersonId, StromData } from '../types.js';
 
 const RESEARCH: ReliabilityOptions = { researchTree: true, originFeature: true };
@@ -394,5 +395,62 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
         expect(cls(tree([I1], ph), ph, opts({ treeHasSources: true }))).toBeNull();
         const f = fromFile();
         expect(cls(tree([I1], f), f, opts({ status: false }))).toBeNull();
+    });
+});
+
+describe('factCitations', () => {
+    const sources = {
+        s1: { id: 's1', title: 'Křestní matrika Lhotka 1850' },
+        s2: { id: 's2', title: 'Pohřební kniha Lhotka' },
+        s3: { id: 's3', title: 'Oddací matrika Lhotka' },
+        s4: { id: 's4', title: 'Sčítání lidu 1880' },
+    } as unknown as StromData['sources'];
+    const data = { sources } as Pick<StromData, 'sources'>;
+    const titles = (rows: { source: { title: string } }[]) => rows.map(r => r.source.title);
+
+    it('the name: the person\'s own citations', () => {
+        const rows = factCitations(data, person({ sourceIds: ['s1'] }), 'name');
+        expect(titles(rows)).toEqual(['Křestní matrika Lhotka 1850']);
+        expect(rows[0].ctx).toEqual({ personId: 'p1' });
+    });
+
+    it('the birth: its field, then a baptism event, a source once', () => {
+        const p = person({
+            birthSourceIds: ['s1'],
+            events: [{ id: 'e1', type: 'baptism', sourceIds: ['s4', 's1'] }, { id: 'e2', type: 'residence', sourceIds: ['s2'] }],
+        } as Partial<Person>);
+        const rows = factCitations(data, p, 'birth');
+        expect(titles(rows)).toEqual(['Křestní matrika Lhotka 1850', 'Sčítání lidu 1880']);
+        expect(rows.map(r => r.ctx)).toEqual([{ personId: 'p1', fact: 'birth' }, { personId: 'p1', eventId: 'e1' }]);
+    });
+
+    it('the death: a burial event counts', () => {
+        const p = person({ events: [{ id: 'e3', type: 'burial', sourceIds: ['s2'] }] } as Partial<Person>);
+        const rows = factCitations(data, p, 'death');
+        expect(titles(rows)).toEqual(['Pohřební kniha Lhotka']);
+        expect(rows[0].ctx).toEqual({ personId: 'p1', eventId: 'e3' });
+    });
+
+    it('an event: its own citations', () => {
+        const p = person({ events: [{ id: 'e4', type: 'residence', sourceIds: ['s4'] }] } as Partial<Person>);
+        const rows = factCitations(data, p, 'event:e4');
+        expect(titles(rows)).toEqual(['Sčítání lidu 1880']);
+        expect(rows[0].ctx).toEqual({ personId: 'p1', eventId: 'e4' });
+        expect(factCitations(data, p, 'event:nope')).toEqual([]);
+    });
+
+    it('a marriage: the couple\'s citations; a couple event its own', () => {
+        const u = {
+            id: 'u1', person1Id: 'p1', person2Id: 'p2', childIds: [], status: 'married', sourceIds: ['s3'],
+            events: [{ id: 'c1', type: 'banns', sourceIds: ['s4'] }],
+        } as unknown as Partnership;
+        const rows = factCitations(data, u, 'marriage');
+        expect(titles(rows)).toEqual(['Oddací matrika Lhotka']);
+        expect(rows[0].ctx).toEqual({ partnershipId: 'u1' });
+        expect(factCitations(data, u, 'event:c1')[0].ctx).toEqual({ partnershipId: 'u1', eventId: 'c1' });
+    });
+
+    it('a cited id the tree no longer has is skipped', () => {
+        expect(titles(factCitations(data, person({ sourceIds: ['gone', 's2'] }), 'name'))).toEqual(['Pohřební kniha Lhotka']);
     });
 });

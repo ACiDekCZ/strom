@@ -25,7 +25,7 @@
 import { eventValueIsOnTag } from './events.js';
 import {
     CoupleEvent, FactOriginKind, FactPart, GedcomExtra, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
-    Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, StromData,
+    Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, Source, StromData,
 } from './types.js';
 
 /** A person or a couple: what carries facts. */
@@ -143,6 +143,61 @@ export function factParts(holder: FactHolder, fact: string): Partial<Record<Fact
 export function factsOf(holder: FactHolder): string[] {
     const base = Object.keys(isPartnership(holder) ? PARTNERSHIP_FACTS : PERSON_FACTS);
     return [...base, ...eventsOf(holder).filter(e => e && typeof e.id === 'string').map(e => `event:${e.id}`)];
+}
+
+/**
+ * Where a citation sits: on a person (as a whole, or at their birth / death), on one of their
+ * events, or on a couple (as a whole, or at one of its events). The same shape as the source
+ * viewer's citation context.
+ */
+export type FactCitationContext =
+    | { personId: PersonId; eventId?: string; fact?: 'birth' | 'death' }
+    | { partnershipId: Partnership['id']; eventId?: string };
+
+const BIRTH_CITE_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
+const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'cremation']);
+
+/**
+ * The sources cited at one fact, each with where the citation sits: the name by the person's own
+ * citations; the birth by its field and the birth / baptism events; the death by its field and the
+ * death / burial / cremation events; an event by its own; a couple's marriage and divorce by the
+ * couple's citations. A cited id the tree no longer has is skipped; a source cited twice comes once.
+ */
+export function factCitations(
+    data: Pick<StromData, 'sources'>, holder: FactHolder, fact: string,
+): { source: Source; ctx: FactCitationContext }[] {
+    const out: { source: Source; ctx: FactCitationContext }[] = [];
+    const seen = new Set<string>();
+    const add = (ids: readonly string[] | undefined, ctx: FactCitationContext): void => {
+        for (const id of ids ?? []) {
+            const source = data.sources?.[id];
+            if (!source || seen.has(id)) continue;
+            seen.add(id);
+            out.push({ source, ctx });
+        }
+    };
+    if (isPartnership(holder)) {
+        const partnershipId = holder.id;
+        if (fact.startsWith('event:')) {
+            const ev = eventById(holder, fact.slice(6));
+            if (ev) add(ev.sourceIds, { partnershipId, eventId: ev.id });
+        } else if (fact === 'marriage' || fact === 'divorce') {
+            add(holder.sourceIds, { partnershipId });
+        }
+        return out;
+    }
+    const personId = holder.id;
+    if (fact === 'name') {
+        add(holder.sourceIds, { personId });
+    } else if (fact === 'birth' || fact === 'death') {
+        add(fact === 'birth' ? holder.birthSourceIds : holder.deathSourceIds, { personId, fact });
+        const types = fact === 'birth' ? BIRTH_CITE_EVENTS : DEATH_CITE_EVENTS;
+        for (const ev of holder.events ?? []) if (ev && types.has(ev.type)) add(ev.sourceIds, { personId, eventId: ev.id });
+    } else if (fact.startsWith('event:')) {
+        const ev = eventById(holder, fact.slice(6));
+        if (ev) add(ev.sourceIds, { personId, eventId: ev.id });
+    }
+    return out;
 }
 
 /** The fact a key belongs to, and its part ("birthDate" -> birth / DATE). */
