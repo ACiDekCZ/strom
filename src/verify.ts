@@ -13,7 +13,7 @@
  */
 
 import type {
-    StromData, FactConfirmation, FactVerifyPending, FactVerifyChecked, ResearchFactVerify,
+    StromData, FactConfirmation, FactVerifyPending, FactVerifyChecked, ResearchFactVerify, Person, Partnership,
 } from './types.js';
 import { FactHolder, factValueSignature, factsOf, isPartnership } from './import-origin.js';
 
@@ -90,6 +90,34 @@ export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo
 export function factVerifyReaders(holder: FactHolder, fact: string): number | undefined {
     const checked = holder.researchVerify?.[fact]?.checked;
     return checked?.result === 'proven' && checked.readers ? checked.readers : undefined;
+}
+
+/** A person's id in the research (its REFN, e.g. "P0012"), or null. */
+export function researchPersonRef(refn: unknown): string | null {
+    return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
+}
+
+/** A family's id in the research (its record, e.g. "F0054"), or null. */
+export function researchFamilyRef(id: unknown): string | null {
+    return typeof id === 'string' && /^F\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/**
+ * The person's id in the research for /verify {person} (its REFN "P0012",
+ * written by the research as `1 REFN` with `2 TYPE strom-research`), or
+ * null: a person made here, or a tree not from the research.
+ */
+export function personResearchRef(person: Pick<Person, 'refn'>): string | null {
+    return researchPersonRef(person.refn);
+}
+
+/**
+ * The couple's id in the research for /verify {family} (its record "F0003",
+ * kept from the research's file in Partnership.researchId), or null: a
+ * couple made here, or a tree not from the research.
+ */
+export function familyResearchRef(partnership: Pick<Partnership, 'researchId'>): string | null {
+    return researchFamilyRef(partnership.researchId);
 }
 
 /** A fact's id in the research ("E0012"), or null. */
@@ -239,5 +267,12 @@ export function cleanFactVerify(data: Pick<StromData, 'persons' | 'partnerships'
         if (!holder || typeof holder !== 'object') continue;
         cleanMap(holder, 'confirmed', cleanConfirmation);
         cleanMap(holder, 'researchVerify', sanitizeResearchVerify);
+    }
+    // The couple's id in the research (Partnership.researchId).
+    for (const ps of Object.values(data.partnerships ?? {})) {
+        if (!ps || typeof ps !== 'object' || ps.researchId === undefined) continue;
+        const id = researchFamilyRef(ps.researchId);
+        if (id) ps.researchId = id;
+        else delete ps.researchId;
     }
 }

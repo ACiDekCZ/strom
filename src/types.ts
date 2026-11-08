@@ -1170,6 +1170,13 @@ export interface Partnership {
     confirmed?: Record<string, FactConfirmation>;
     /** The research's re-verification of each fact, see Person.researchVerify. */
     researchVerify?: Record<string, ResearchFactVerify>;
+    /**
+     * The family's id in the research ("F0003", its record `0 @F0003@ FAM`),
+     * read from the research's own file: what /verify {family} names. Never
+     * sent back (what goes to the research numbers its families afresh) and
+     * no change of the tree; a couple made here has none.
+     */
+    researchId?: string;
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;

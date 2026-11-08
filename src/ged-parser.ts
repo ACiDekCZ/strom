@@ -101,7 +101,7 @@ import {
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
     factValueSignature,
 } from './import-origin';
-import { parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, sanitizeResearchVerify } from './verify';
+import { parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, researchFamilyRef, sanitizeResearchVerify } from './verify';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -5636,6 +5636,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const [gedFamId, fam] of families) {
             const ps = famPartnership.get(gedFamId);
             if (!ps) continue;
+            // The family's id in the research (`0 @F0003@ FAM`), what /verify {family} names.
+            if (gedcom.stromResearch && !ps.researchId) {
+                const id = researchFamilyRef(/^@([^@]+)@$/.exec(gedFamId)?.[1]);
+                if (id) ps.researchId = id;
+            }
             for (const [fact, raw] of Object.entries(fam.factOrigins ?? {})) put(ps, fact, raw);
         }
         for (const ps of Object.values(partnerships)) {

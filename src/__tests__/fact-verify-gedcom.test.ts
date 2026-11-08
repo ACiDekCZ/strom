@@ -9,7 +9,10 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, Person, Partnership } from '../types.js';
-import { factVerifyInfo, factValueSignature, factResearchEid, factPendingPosition } from '../verify.js';
+import {
+    factVerifyInfo, factValueSignature, factResearchEid, factPendingPosition, personResearchRef, familyResearchRef,
+} from '../verify.js';
+import { migrateData } from '../data.js';
 import { contentFingerprint } from '../research-link.js';
 
 const RESEARCH_FILE = `0 HEAD
@@ -197,6 +200,39 @@ describe("the app's own GEDCOM export", () => {
         const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
         expect(ged).not.toContain('_STROM_CONFIRMED');
         expect(exportToGedcom(d, 'Ozubec', {}).content).not.toContain('_STROM_CONFIRMED');
+    });
+});
+
+describe('the ids /verify names for a person and a family', () => {
+    const WITH_REFN = RESEARCH_FILE
+        .replace('1 NAME Hromoslav /Ozubec/', '1 NAME Hromoslav /Ozubec/\n1 REFN P0012\n2 TYPE strom-research')
+        .replace(/@F1@/g, '@F0003@');
+
+    it("a research tree keeps the person's REFN and the family's record", () => {
+        const d = load(WITH_REFN);
+        expect(personResearchRef(person(d, 'Hromoslav'))).toBe('P0012');
+        expect(personResearchRef(person(d, 'Libuna'))).toBeNull();
+        expect(couple(d).researchId).toBe('F0003');
+        expect(familyResearchRef(couple(d))).toBe('F0003');
+    });
+
+    it('a file of the app or of another program gives a couple none', () => {
+        const own = load(WITH_REFN.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR STROM\n2 VERS 3.26.0'));
+        expect(couple(own).researchId).toBeUndefined();
+        const foreign = load(WITH_REFN.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR FTM\n2 VERS 24'));
+        expect(familyResearchRef(couple(foreign))).toBeNull();
+    });
+
+    it('is neither sent back nor a change, and a stored one stays only when valid', () => {
+        const d = load(WITH_REFN);
+        const without = JSON.parse(JSON.stringify(d, (k, v) => (k === 'researchId' ? undefined : v))) as StromData;
+        expect(contentFingerprint(d)).toBe(contentFingerprint(without));
+        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
+        expect(ged).not.toContain('F0003');
+        const stored = JSON.parse(JSON.stringify(d)) as StromData;
+        expect(familyResearchRef(couple(migrateData(stored)))).toBe('F0003');
+        couple(stored).researchId = 'P0012';
+        expect(couple(migrateData(stored)).researchId).toBeUndefined();
     });
 });
 

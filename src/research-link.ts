@@ -17,6 +17,7 @@ import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads
 import { readAgainSaid, waitingProposalsSaid, type ReadSourceProposal, type ReadSourceState } from './research-read-task.js';
 import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js';
 import { verifyStatusSaid, type LiveVerifyStatus } from './research-verify.js';
+import { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef } from './verify.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -156,15 +157,9 @@ export function researchSourceRef(refn: unknown): string | null {
     return typeof refn === 'string' && /^S\d{1,9}$/.test(refn.trim()) ? refn.trim() : null;
 }
 
-/** A person's id in the research (its REFN, e.g. "P0012"), or null. */
-export function researchPersonRef(refn: unknown): string | null {
-    return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
-}
-
-/** A family's id in the research (its record, e.g. "F0054"), or null. */
-export function researchFamilyRef(id: unknown): string | null {
-    return typeof id === 'string' && /^F\d{1,7}$/.test(id.trim()) ? id.trim() : null;
-}
+// The ids of a person and a family in the research live with the
+// re-verification that names them (src/verify.ts).
+export { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef };
 
 /**
  * The partners of each family of the research's GEDCOM, by the family's id
@@ -765,13 +760,13 @@ function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
     return out ?? persons;
 }
 
-/** Couples without their facts confirmed by hand and the research's verification (see withoutAppLocal). */
+/** Couples without their facts confirmed by hand, the research's verification and their id there (see withoutAppLocal). */
 function couplesWithoutAppLocal(partnerships: StromData['partnerships']): StromData['partnerships'] {
     let out: StromData['partnerships'] | null = null;
     for (const [id, ps] of Object.entries(partnerships)) {
-        if (ps?.confirmed === undefined && ps?.researchVerify === undefined) continue;
+        if (ps?.confirmed === undefined && ps?.researchVerify === undefined && ps?.researchId === undefined) continue;
         out ??= { ...partnerships };
-        const { confirmed: _confirmed, researchVerify: _verify, ...rest } = ps;
+        const { confirmed: _confirmed, researchVerify: _verify, researchId: _id, ...rest } = ps;
         out[id as PartnershipId] = rest as Partnership;
     }
     return out ?? partnerships;
