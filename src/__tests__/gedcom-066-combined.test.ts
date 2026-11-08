@@ -297,7 +297,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const couple = Object.values(tree.partnerships).filter(p => tree.persons[p.person1Id]?.firstName === 'Kořenoslav');
             expect(couple).toHaveLength(1);
             expect([couple[0].status, couple[0].startDate, couple[0].endDate]).toEqual(['married', '1911-04-01', undefined]);
-            expect(imported.stats.joinedFamilies).toBe(1);
+            expect(imported.stats.joinedFamilies).toBe(3);
             expect(holdsRun(record(first, '@F1401@'), ['1 MARR', '2 DATE 1 APR 1911', '2 PLAC Drnkalov'])).toBe(true);
             // The wedding's TYPE, read nowhere, goes back under it as written.
             const marriage = record(first, '@F1401@');
@@ -368,6 +368,36 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
         it('17 · a divorce with a NOTE (CONT) under it', () => {
             expect(holdsRun(record(first, '@F1701@'), ['1 DIV', '2 DATE 1905', '2 NOTE By the court of Drnkalov,',
                 '3 CONT the children left with the mother.'])).toBe(true);
+        });
+
+        it('18 · a couple\'s first record without a wedding date: the couple has the second\'s, the first goes back without it', () => {
+            const couple = Object.values(tree.partnerships).find(p => tree.persons[p.person1Id]?.firstName === 'Ťukoslav')!;
+            expect([couple.startDate, couple.startPlace]).toEqual(['1920-05-12', 'Hrbolcov']);
+            expect(Object.values(couple.ages ?? {})).toEqual(['30 years']);
+            for (const ged of [first, second]) {
+                const firstFam = record(ged, '@F1801@');
+                expect(holdsRun(firstFam, ['1 MARR', '2 PLAC Hrbolcov'])).toBe(true);
+                expect(count(firstFam, /^2 (DATE|HUSB)|^3 AGE /)).toBe(0);
+                expect(holdsRun(record(ged, '@F1802@'), ['1 MARR', '2 DATE 12 MAY 1920', '2 PLAC Drnkalov', '2 HUSB', '3 AGE 30y'])).toBe(true);
+            }
+        });
+
+        it('19 · a couple\'s first record without a wedding: it goes back without one', () => {
+            const couple = Object.values(tree.partnerships).find(p => tree.persons[p.person1Id]?.firstName === 'Šimrdoš')!;
+            expect([couple.status, couple.startDate, couple.marriageUnrecorded]).toEqual(['married', '1922-03-03', undefined]);
+            for (const ged of [first, second]) {
+                expect(count(record(ged, '@F1901@'), /^1 MARR|^2 DATE/)).toBe(0);
+                expect(holdsRun(record(ged, '@F1902@'), ['1 MARR', '2 DATE 3 MAR 1922'])).toBe(true);
+            }
+        });
+
+        it('18 · the date taken from the second record changed in the tree: the first record writes it', () => {
+            const edited = structuredClone(tree);
+            const couple = Object.values(edited.partnerships).find(p => edited.persons[p.person1Id]?.firstName === 'Ťukoslav')!;
+            couple.startDate = '1919-05-12';
+            const ged = backTo(edited);
+            expect(holdsRun(record(ged, '@F1801@'), ['1 MARR', '2 DATE 12 MAY 1919', '2 PLAC Hrbolcov'])).toBe(true);
+            expect(holdsRun(record(ged, '@F1802@'), ['1 MARR', '2 DATE 12 MAY 1920'])).toBe(true);
         });
     });
 });

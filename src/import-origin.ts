@@ -503,7 +503,17 @@ export interface JoinedMarks {
     sources?: { xref: string; page: string; also: boolean }[];
     /** Its events, by what they say (joinedEventKey; `2 _STROM_EVEN`). */
     events?: string[];
+    /**
+     * What the first record lacked and took from it: startDate, startPlace,
+     * endDate, endPlace, address, age1 / age2 (the age of person1 / person2 at
+     * the wedding) with the value, or MARR (the first wrote no wedding):
+     * `2 _STROM_TOOK startDate 1914-07-04`.
+     */
+    took?: JoinedTook[];
 }
+
+/** A value the couple's first record took from another of its records (JoinedMarks.took). */
+export interface JoinedTook { key: string; value: string }
 
 /** A record of the couple kept so: its xref ('' unknown), its lines from level 1, and its marks. */
 export interface JoinedRecord {
@@ -513,6 +523,7 @@ export interface JoinedRecord {
     children: string[];
     sources: { xref: string; page: string; also: boolean }[];
     events: string[];
+    took: JoinedTook[];
 }
 
 /** What a couple's event says, to tell it among the couple's events (a JoinedRecord's events). */
@@ -538,13 +549,17 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
         if (src.also) block.push('3 _STROM_ALSO Y');
     }
     for (const key of marks.events ?? []) block.push(`2 _STROM_EVEN ${key}`);
+    for (const { key, value } of marks.took ?? []) {
+        const one = value.replace(/[\r\n]+/g, ' ').trim();
+        block.push(one ? `2 _STROM_TOOK ${key} ${one}` : `2 _STROM_TOOK ${key}`);
+    }
     return validExtraBlock(block) ? block : null;
 }
 
 /** The couple's other records of one import's kept lines. */
 export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
     return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => {
-        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '', children: [], sources: [], events: [] };
+        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '', children: [], sources: [], events: [], took: [] };
         let mark = '';
         for (const line of b.slice(1)) {
             if (JOINED_MARK.test(line)) {
@@ -554,6 +569,10 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 else if (mark === '_STROM_CHIL' && value) out.children.push(value);
                 else if (mark === '_STROM_SOUR' && value) out.sources.push({ xref: value, page: '', also: false });
                 else if (mark === '_STROM_EVEN' && value) out.events.push(value);
+                else if (mark === '_STROM_TOOK' && value) {
+                    const space = value.indexOf(' ');
+                    out.took.push(space < 0 ? { key: value, value: '' } : { key: value.slice(0, space), value: value.slice(space + 1) });
+                }
             } else if (mark && !line.startsWith('2 ')) {
                 const src = mark === '_STROM_SOUR' ? out.sources[out.sources.length - 1] : undefined;
                 if (mark === '_STROM_TEXT' && /^3 CONT( |$)/.test(line)) out.text += '\n' + line.slice(7);

@@ -4889,13 +4889,24 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
      */
     const joinUnion = (into: Partnership, from: Partnership): JoinedMarks => {
         const marks: JoinedMarks = {};
-        if (!into.startDate && from.startDate) into.startDate = from.startDate;
+        // What the first record lacked and takes from this one: the couple shows it,
+        // "Back to {prog}" leaves it in this record (while unchanged).
+        const took: { key: string; value: string }[] = [];
+        for (const key of ['startDate', 'startPlace', 'endDate', 'endPlace', 'address'] as const) {
+            if (into[key] || !from[key]) continue;
+            into[key] = from[key];
+            took.push({ key, value: from[key]! });
+        }
         if (from.gedcomDates) into.gedcomDates = { ...from.gedcomDates, ...(into.gedcomDates ?? {}) };
-        if (!into.startPlace && from.startPlace) into.startPlace = from.startPlace;
-        if (!into.endDate && from.endDate) into.endDate = from.endDate;
-        if (!into.endPlace && from.endPlace) into.endPlace = from.endPlace;
-        if (!into.address && from.address) into.address = from.address;
-        if (from.ages) into.ages = { ...from.ages, ...(into.ages ?? {}) };
+        if (from.ages) {
+            for (const [n, pid] of [[1, into.person1Id], [2, into.person2Id]] as const) {
+                const age = from.ages[pid]?.trim();
+                if (age && !into.ages?.[pid]?.trim()) took.push({ key: `age${n}`, value: age });
+            }
+            into.ages = { ...from.ages, ...(into.ages ?? {}) };
+        }
+        if (into.marriageUnrecorded && !from.marriageUnrecorded) took.push({ key: 'MARR', value: '' });
+        if (took.length) marks.took = took;
         if (from.note && !(into.note ?? '').includes(from.note)) {
             into.note = into.note ? `${into.note}\n${from.note}` : from.note;
             marks.text = from.note;

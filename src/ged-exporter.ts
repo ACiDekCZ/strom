@@ -1669,36 +1669,54 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const withStandIn = (!personIdMap.has(partnership.person1Id) || !personIdMap.has(partnership.person2Id)) && partnership.childIds.length === 1;
         // A couple whose file wrote no MARR gets none either (spec 066 K3.1),
         // unless the wedding has something to say now (its witnesses, its status).
-        const noMarriageSaid = partnership.marriageUnrecorded === true && !partnership.participants?.length && !partnership.startStatus;
-        const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
-            !!partnership.startDate || !!partnership.startPlace || !!partnership.address
-            || Object.values(partnership.ages ?? {}).some(a => a.trim());
-        // What the couple's other records gave its note goes back with them (see joined), and their citations.
+        // What the first record took from the couple's other records stays in them while unchanged (see joined).
         const joinedHere = joined.get(partnershipId) ?? [];
+        const tookAll = joinedHere.flatMap(j => j.record.took);
+        const own = <T extends string | undefined>(key: string, value: T): T | undefined => {
+            const now = (value ?? '').replace(/[\r\n]+/g, ' ').trim();
+            return now && tookAll.some(t => t.key === key && t.value === now) ? undefined : value;
+        };
+        const startDate = own('startDate', partnership.startDate);
+        const startPlace = own('startPlace', partnership.startPlace);
+        const endDate = own('endDate', partnership.endDate);
+        const endPlace = own('endPlace', partnership.endPlace);
+        const address = own('address', partnership.address);
+        const ages: Record<string, string> = {};
+        for (const [n, pid] of [[1, partnership.person1Id], [2, partnership.person2Id]] as const) {
+            const age = own(`age${n}`, partnership.ages?.[pid]);
+            if (age) ages[pid] = age;
+        }
+        const marriageTook = tookAll.some(t => t.key === 'MARR');
+        const noMarriageSaid = (partnership.marriageUnrecorded === true || marriageTook)
+            && !partnership.participants?.length && !partnership.startStatus;
+        const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
+            !!startDate || !!startPlace || !!address
+            || Object.values(ages).some(a => a.trim());
+        // What the couple's other records gave its note goes back with them (see joined), and their citations.
         const ownSources = (partnership.sourceIds ?? []).filter(id => !sourcesElsewhere.get(partnershipId)?.has(id));
         const joinedNote = joinedNoteBack(partnership.note, joinedHere.map(j => j.record));
         const famNoted = notedOf(partnership, joinedNote.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
         const notedDivorce = notedFact(famNoted.structures, 'DIV');
-        const marriageNoted = notedDate(notedMarriage, partnership, 'startDate', partnership.startDate);
-        const divorceNoted = notedDate(notedDivorce, partnership, 'endDate', partnership.endDate);
+        const marriageNoted = notedDate(notedMarriage, partnership, 'startDate', startDate);
+        const divorceNoted = notedDate(notedDivorce, partnership, 'endDate', endDate);
         if (hasMarriage) {
             const at = lines.length;
             lines.push('1 MARR');
             if (marriageNoted.date.length) {
                 lines.push(...marriageNoted.date);
-            } else if (partnership.startDate) {
-                const date = formatGedcomDate(partnership.startDate, partnership.gedcomDates);
+            } else if (startDate) {
+                const date = formatGedcomDate(startDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
-            if (partnership.startPlace) {
-                pushPlace(lines, 2, partnership.startPlace, data.places);
+            if (startPlace) {
+                pushPlace(lines, 2, startPlace, data.places);
             }
-            pushDetails(lines, { address: partnership.address });
+            pushDetails(lines, { address });
             pushStatus(lines, partnership.startStatus);
             // Each partner's age at the wedding, under HUSB / WIFE.
             for (const [role, pid] of [['HUSB', husbId], ['WIFE', wifeId]] as const) {
-                const age = partnership.ages?.[pid]?.trim();
+                const age = ages[pid]?.trim();
                 if (!age) continue;
                 lines.push(`2 ${role}`);
                 pushWrapped(lines, 3, 'AGE', gedcomAge(age));
@@ -1729,16 +1747,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Divorce event
-        if (partnership.status === 'divorced' || partnership.endDate || partnership.endPlace) {
+        if (partnership.status === 'divorced' || endDate || endPlace) {
             const at = lines.length;
             lines.push('1 DIV');
             if (divorceNoted.date.length) {
                 lines.push(...divorceNoted.date);
-            } else if (partnership.endDate) {
-                const date = formatGedcomDate(partnership.endDate, partnership.gedcomDates);
+            } else if (endDate) {
+                const date = formatGedcomDate(endDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
-            if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
+            if (endPlace) pushPlace(lines, 2, endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
             pushNoted(divorceNoted.rest, true);
             pushFactImport(partnership, 'divorce');
