@@ -81,6 +81,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         settingLabel: 'Powiązania między drzewami',
         settingHint: 'Wyświetlanie odznaki, gdy osoba występuje także w innym drzewie',
         moreMatches: (n: number) => `… i jeszcze ${n}`,
+        sameTreeTwice: (tree: string, n: number) => `W drzewie ${tree} ${n} ${plPl(n, 'dopasowanie', 'dopasowania', 'dopasowań')} – może jedna osoba dwa razy`,
         chooserHeader: 'Otwórz w drzewie…',
         matchedBy: (reasons: string) => `Zgodność: ${reasons}`,
         matchReasons: { name: 'imię', birth: 'urodzenie', death: 'zgon', parents: 'rodzice', partner: 'partner' }

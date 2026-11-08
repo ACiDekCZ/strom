@@ -4602,22 +4602,13 @@ class TreeRendererClass {
             if (allTrees && currentTreeId && !person.isPlaceholder) {
                 crossTreeMatches = CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees);
                 if (crossTreeMatches.length > 0) {
-                    const tooltipItems = crossTreeMatches.slice(0, 5).map(m =>
-                        `<div class="cross-tree-tooltip-item">
-                            <div class="cross-tree-tooltip-tree">${this.escapeHtml(m.treeName)}</div>
-                            <div class="cross-tree-tooltip-person">${this.escapeHtml(m.personName)}</div>
-                            <div class="cross-tree-tooltip-reason">${this.escapeHtml(CrossTree.matchReasonsText(m))}</div>
-                        </div>`
-                    ).join('');
-                    const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
-
+                    // Trees, not people: another tree may hold the same person twice (the bubble says so).
+                    const trees = CrossTree.crossTreeCount(crossTreeMatches);
                     // "⇄ N": another tree in the app (no ↗, spec 066 P4 §6), its bubble names the trees and what a click does
-                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}">
-                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
+                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(trees))}">
+                        <span class="pill-glyph">⇄</span><span class="pill-count">${trees}</span>
                         <div class="cross-tree-tooltip">
-                            <div class="cross-tree-tooltip-header">${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}</div>
-                            ${tooltipItems}
-                            ${moreCount > 0 ? `<div class="cross-tree-tooltip-item">${strings.crossTree.moreMatches(moreCount)}</div>` : ''}
+                            ${CrossTree.crossTreeBubbleHtml(crossTreeMatches, t => this.escapeHtml(t))}
                             <div class="cross-tree-tooltip-hint badge-tooltip-action">${strings.focus.crossTreeHint}</div>
                         </div>
                     </div>`;

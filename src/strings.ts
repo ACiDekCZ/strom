@@ -5899,6 +5899,7 @@ const stringsEN = {
         settingLabel: 'Cross-tree connections',
         settingHint: 'Show a badge when a person also appears in another tree',
         moreMatches: (n: number) => `… ${n} more`,
+        sameTreeTwice: (tree: string, n: number) => `In the tree ${tree} ${n} matches – perhaps one person twice`,
         chooserHeader: 'Open in tree…',
         matchedBy: (reasons: string) => `Matched by: ${reasons}`,
         matchReasons: { name: 'name', birth: 'birth', death: 'death', parents: 'parents', partner: 'partner' }
@@ -13775,6 +13776,7 @@ const stringsCZ: StringsType = {
         settingLabel: 'Propojení mezi stromy',
         settingHint: 'Zobrazit odznak, když se osoba vyskytuje i v jiném stromu',
         moreMatches: (n: number) => `… a ${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
+        sameTreeTwice: (tree: string, n: number) => `Ve stromu ${tree} ${n} ${plural('cs', n, 'shoda', 'shody', 'shod')} – možná jedna osoba dvakrát`,
         chooserHeader: 'Otevřít ve stromu…',
         matchedBy: (reasons: string) => `Shoda: ${reasons}`,
         matchReasons: { name: 'jméno', birth: 'narození', death: 'úmrtí', parents: 'rodiče', partner: 'partner' }
@@ -21548,6 +21550,7 @@ const stringsDE: StringsType = {
         settingLabel: 'Stammbaum-übergreifende Verbindungen',
         settingHint: 'Ein Abzeichen anzeigen, wenn eine Person auch in einem anderen Stammbaum vorkommt',
         moreMatches: (n: number) => `… ${n} weitere`,
+        sameTreeTwice: (tree: string, n: number) => `Im Baum ${tree} ${n} Treffer – vielleicht eine Person doppelt`,
         chooserHeader: 'In Stammbaum öffnen…',
         matchedBy: (reasons: string) => `Übereinstimmung: ${reasons}`,
         matchReasons: { name: 'Name', birth: 'Geburt', death: 'Tod', parents: 'Eltern', partner: 'Partner' }

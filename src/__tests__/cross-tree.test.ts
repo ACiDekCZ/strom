@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { findCrossTreeMatches, invalidateCache, matchReasonsText } from '../cross-tree.js';
+import { findCrossTreeMatches, invalidateCache, matchReasonsText, crossTreeCount, groupCrossTreeMatches, crossTreeBubbleHtml } from '../cross-tree.js';
 import { quickMatch } from '../merge/matching.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, PartnershipId, StromData, TreeId } from '../types.js';
@@ -130,6 +130,46 @@ describe('cross-tree matching (T22)', () => {
         const m = matchesOf(a, b);
         expect(m).toHaveLength(1);
         expect(m[0].reasons).toEqual(['name', 'partner']);
+    });
+
+    it('one other tree holding the same person twice counts as one tree, both people in the bubble', () => {
+        // Tree B has Anežka twice: once with her parents, once alone (another import of her).
+        const b = tree('b', { birthDate: '1885-03-12' }, {});
+        const twice = person('b2-b', 'Anežka', 'Lipová', 'female', { birthDate: '1885-03-12' });
+        b.persons[twice.id] = twice;
+        const m = matchesOf(tree('a', { birthDate: '1885-03-12' }, {}), b);
+        expect(m).toHaveLength(2);
+        expect(crossTreeCount(m)).toBe(1);
+        const groups = groupCrossTreeMatches(m);
+        expect(groups).toHaveLength(1);
+        expect(groups[0].treeName).toBe('Tree B');
+        expect(groups[0].matches.map(x => x.personId).sort()).toEqual(['b-b', 'b2-b']);
+        const esc = (t: string) => t;
+        const html = crossTreeBubbleHtml(m, esc);
+        expect(html).toContain('Found in 1 other tree<');
+        // The tree's name once (header + twice note aside), both people under it.
+        expect(html.match(/cross-tree-tooltip-tree/g)).toHaveLength(1);
+        expect(html.match(/cross-tree-tooltip-person/g)).toHaveLength(2);
+        expect(html).toContain('In the tree Tree B 2 matches – perhaps one person twice');
+        setLanguage('cs');
+        const cs = crossTreeBubbleHtml(m, esc);
+        expect(cs).toContain('Nalezeno v 1 jiném stromu<');
+        expect(cs).toContain('Ve stromu Tree B 2 shody – možná jedna osoba dvakrát');
+    });
+
+    it('matches from two trees count two trees and show no twice note', () => {
+        const a = tree('a', { birthDate: '1885-03-12' }, null);
+        const trees = new Map<TreeId, { name: string; data: StromData }>([
+            ['ta' as TreeId, { name: 'Tree A', data: a }],
+            ['tb' as TreeId, { name: 'Tree B', data: tree('b', { birthDate: '1885-03-12' }, null) }],
+            ['tc' as TreeId, { name: 'Tree C', data: tree('c', { birthDate: '1885-03-12' }, null) }],
+        ]);
+        invalidateCache();
+        const m = findCrossTreeMatches('ta' as TreeId, a.persons['a-b' as PersonId], trees);
+        expect(crossTreeCount(m)).toBe(2);
+        const html = crossTreeBubbleHtml(m, t => t);
+        expect(html).toContain('Found in 2 other trees<');
+        expect(html).not.toContain('cross-tree-tooltip-twice');
     });
 
     it('a matching partner adds to the score and the reasons', () => {
