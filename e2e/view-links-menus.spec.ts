@@ -126,8 +126,9 @@ test.describe('linked in the view only: the card’s menu (desktop)', () => {
         await expect(caption).toHaveAttribute('aria-disabled', 'true');
         await expect(caption.locator('.view-link-icon')).toHaveCount(1);
         await expect(caption).not.toHaveAttribute('data-action', /./);
-        await expect(m.locator('.context-menu-item').first()).toHaveClass(/is-strong/);
-        await expect(m.locator('.context-menu-item').first()).toHaveCSS('font-weight', '500');
+        // The first row of the menu (the marks' block above it is no row of actions).
+        await expect(m.locator(':scope > .context-menu-item').first()).toHaveClass(/is-strong/);
+        await expect(m.locator(':scope > .context-menu-item').first()).toHaveCSS('font-weight', '500');
         // A divider between the ghost's block and the usual rows.
         const dividerAfter = await m.locator('[data-action="view-link-about:H0022"] + .context-menu-divider').count();
         expect(dividerAfter).toBe(1);

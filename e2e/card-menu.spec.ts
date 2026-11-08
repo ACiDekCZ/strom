@@ -197,7 +197,7 @@ for (const width of [600, 1024]) {
 test.describe('phone 360 × 640', () => {
     test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
 
-    test('tiles, the whole sheet without scrolling even with a notice; More › and ‹ Back in the same sheet', async ({ page }) => {
+    test('tiles in view with a notice and the marks explained, the sheet scrolling; More › and ‹ Back in the same sheet', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         const id = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons)[0]);
@@ -216,8 +216,15 @@ test.describe('phone 360 × 640', () => {
         expect(tile!.height).toBeGreaterThanOrEqual(63.5);
         const chip = await sheet.locator('.menu-chip').first().boundingBox();
         expect(chip!.height).toBeGreaterThanOrEqual(43.5);
-        const fit = await sheet.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
-        expect(fit.scroll, 'the whole sheet fits').toBeLessThanOrEqual(fit.client + 1);
+        // With the block explaining the marks above the tiles (spec 066 P4 §5) and the
+        // phone's 48px rows (§9) the sheet takes the window's height and scrolls; the
+        // block and the tiles are in view without scrolling.
+        const fit = await sheet.evaluate((el) => ({ bottom: el.getBoundingClientRect().bottom, top: el.getBoundingClientRect().top, overflow: getComputedStyle(el).overflowY }));
+        expect(fit.overflow).toBe('auto');
+        expect(fit.bottom).toBeLessThanOrEqual(641);
+        const tiles = (await sheet.locator('.sheet-tiles').boundingBox())!;
+        expect(tiles.y).toBeGreaterThanOrEqual(fit.top);
+        expect(tiles.y + tiles.height, 'the tiles in view').toBeLessThanOrEqual(fit.bottom);
 
         await sheet.locator('[data-menu="more"]').click();
         const sub = sheet.locator('.sheet-page-sub');

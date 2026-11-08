@@ -694,6 +694,94 @@ test.describe('card signals', () => {
         await context.close();
     });
 
+    test('phone: the sheet\'s rows take 48px; held sideways the menu is a 360px panel at the right, scrolling, closed by a tap beside it (spec 066 P4 §9)', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'en-US' });
+        const page = await context.newPage();
+        await openApp(page);
+        await dropFile(page, researchGed());
+        await expect(card(page, 'Jan')).toBeVisible();
+        // The card is the same on touch: the mark in its place and size.
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveCSS('height', '12px');
+        await expect(mark).toHaveCSS('right', '15px');
+        await card(page, 'Jan').locator('.name').tap();
+        const sheet = page.locator('.bottom-sheet-person');
+        await expect(sheet.locator('.menu-person-state .mps-status .card-status-mark')).toHaveCount(1);
+        await page.waitForTimeout(300);
+        const rows = await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):visible').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
+        expect(rows.length).toBeGreaterThan(0);
+        for (const h of rows) expect(h).toBeGreaterThanOrEqual(47.5);
+        // From the bottom, the whole width.
+        const portrait = (await sheet.boundingBox())!;
+        expect(portrait.x).toBeLessThanOrEqual(1);
+        expect(portrait.y + portrait.height).toBeCloseTo(844, 0);
+        await page.locator('.bottom-sheet-overlay').click({ position: { x: 20, y: 20 } });
+        await expect(sheet).toHaveCount(0);
+
+        // Held sideways: a panel at the right, 360px, over the whole height.
+        await page.setViewportSize({ width: 844, height: 390 });
+        await card(page, 'Jan').evaluate(el => window.Strom.ZoomPan.centerOnPerson((el as HTMLElement).dataset.id as never));
+        await card(page, 'Jan').locator('.name').tap();
+        await expect(sheet.locator('.menu-person-state .mps-status')).toHaveText('Backed by sources · 1 source');
+        await expect.poll(async () => (await sheet.boundingBox())!.x).toBeCloseTo(844 - 360, 0);
+        const side = (await sheet.boundingBox())!;
+        expect(side.width).toBeCloseTo(360, 0);
+        expect(side.y).toBeLessThanOrEqual(0.5);
+        expect(side.height).toBeCloseTo(390, 0);
+        // Taller than the phone: it scrolls; nothing runs off sideways.
+        const scroll = await sheet.evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight, overflow: getComputedStyle(el).overflowY }));
+        expect(scroll.overflow).toBe('auto');
+        expect(scroll.scroll).toBeGreaterThan(scroll.client);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
+        for (const h of await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):visible').evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) {
+            expect(h).toBeGreaterThanOrEqual(47.5);
+        }
+        expect((await sheet.locator('[data-action="marks-help"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // The tree to the left stays in view; a tap there closes the panel.
+        await page.locator('.bottom-sheet-overlay').click({ position: { x: 200, y: 200 } });
+        await expect(sheet).toHaveCount(0);
+        await context.close();
+    });
+
+    test('dark theme: the same shapes in the dark variables (spec 066 P4 §9)', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'en-US' });
+        const page = await context.newPage();
+        await openApp(page);
+        await dropFile(page, researchGed());
+        await expect(card(page, 'Jan')).toBeVisible();
+        const look = (name: string) => card(page, name).locator(':scope > .card-status-mark').evaluate((el) => {
+            const probe = (v: string, prop: 'color' | 'backgroundColor' = 'color') => {
+                const p = document.createElement('span');
+                p.style[prop] = `var(${v})`;
+                el.parentElement!.appendChild(p);
+                const c = getComputedStyle(p)[prop];
+                p.remove();
+                return c;
+            };
+            const cs = getComputedStyle(el);
+            return {
+                bg: cs.backgroundColor, wantBg: probe('--surface-2', 'backgroundColor'),
+                ink: cs.color, wantInk: probe('--text-light'), wantFaint: probe('--text-faint'),
+                frame: cs.borderTopColor, wantFrame: probe('--border'), wantLine: probe('--line-color'), style: cs.borderTopStyle,
+                dark: document.documentElement.dataset.theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+            };
+        });
+        const jan = await look('Jan');
+        expect(jan.dark).toBe('dark');
+        // ●●: the second surface, the light text's dots, the hairline frame.
+        expect(jan.bg).toBe(jan.wantBg);
+        expect(jan.ink).toBe(jan.wantInk);
+        expect(jan.frame).toBe(jan.wantFrame);
+        expect(jan.bg).not.toBe('rgb(246, 242, 234)');
+        // No source: a dotted frame of the line colour, no fill.
+        const josef = await look('Josef');
+        expect(josef.style).toBe('dotted');
+        expect(josef.frame).toBe(josef.wantLine);
+        expect(josef.ink).toBe(josef.wantFaint);
+        expect(josef.bg).toBe('rgba(0, 0, 0, 0)');
+        await context.close();
+    });
+
     test('the tree legend names only the card marks the tree shows, with the help (spec 066 P4 §5)', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => { window.Strom.SettingsManager.setBranchLegend(true); window.Strom.TreeRenderer.render(); });

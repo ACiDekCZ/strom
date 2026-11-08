@@ -15,7 +15,7 @@ import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { ZoomPan, CARD_PAN_THRESHOLD_PX } from '../zoom.js';
-import { isPhoneBar } from '../breakpoints.js';
+import { isPhoneBar, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
@@ -232,6 +232,9 @@ export const bottomSheetMethods = uiModule({
         });
 
         // Swipe down to dismiss; on the second page a swipe right goes back.
+        // A phone held sideways shows the sheet as a panel at the right (spec 066
+        // P4 §9): there a swipe right dismisses it and a swipe down scrolls.
+        const panel = (): boolean => typeof matchMedia === 'function' && matchMedia(MQ_PHONE_LANDSCAPE).matches;
         let dragStartX = 0;
         let dragStartY = 0;
         let dragging = false;
@@ -245,14 +248,17 @@ export const bottomSheetMethods = uiModule({
             if (!dragging) return;
             const dy = e.touches[0].clientY - dragStartY;
             const dx = e.touches[0].clientX - dragStartX;
-            if (dy > 0 && dy > Math.abs(dx)) sheet.style.transform = `translateY(${dy}px)`;
+            if (panel()) {
+                if (sub.hidden && dx > 0 && dx > Math.abs(dy)) sheet.style.transform = `translateX(${dx}px)`;
+            } else if (dy > 0 && dy > Math.abs(dx)) sheet.style.transform = `translateY(${dy}px)`;
         }, { passive: true });
         sheet.addEventListener('touchend', (e) => {
             dragging = false;
             sheet.style.transition = '';
             const dy = e.changedTouches[0].clientY - dragStartY;
             const dx = e.changedTouches[0].clientX - dragStartX;
-            if (dy > SWIPE_CLOSE_PX && dy > Math.abs(dx)) {
+            const away = panel() ? sub.hidden && dx > SWIPE_CLOSE_PX && dx > Math.abs(dy) : dy > SWIPE_CLOSE_PX && dy > Math.abs(dx);
+            if (away) {
                 this.hideBottomSheet();
                 return;
             }

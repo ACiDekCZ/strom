@@ -6,8 +6,10 @@ import { openApp, createFirstPerson, addRelation, card, cardAction, personModal 
  * and narrative without opening the edit form.
  */
 
+/** The menu's actions (not the person page link, nor the help link of the marks' block above them). */
 async function actionsOf(page: Page): Promise<string[]> {
-    return page.locator('.context-menu [data-action]:not([data-action="page"]), .bottom-sheet-person [data-action]:not([data-action="page"])').evaluateAll(
+    const rows = ':not([data-action="page"]):not([data-action="marks-help"])';
+    return page.locator(`.context-menu [data-action]${rows}, .bottom-sheet-person [data-action]${rows}`).evaluateAll(
         (els) => els.map((el) => (el as HTMLElement).dataset.action || ''));
 }
 
