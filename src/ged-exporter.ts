@@ -1255,10 +1255,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Name. Placeholders are exported with an empty name so they re-import
         // as placeholders (lossless), instead of being dropped.
+        const nameParts = back.imports.size > 0 && isBackRecord(person);
         if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
             lines.push('1 NAME //');
         } else {
-            pushName(lines, person, options.titles, back.imports.size > 0 && isBackRecord(person));
+            pushName(lines, person, options.titles, nameParts);
         }
         // Which surname the person goes by (Person.primaryName), Strom's mark
         // under the chosen NAME: the birth name (the first one) or the married
@@ -1271,8 +1272,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // after the primary one (the birth name), as the research writes it;
         // with its own given names when they are not the person's.
         if (married) {
-            pushWrapped(lines, 1, 'NAME', formatGedcomName(person.marriedFirstName?.trim() || person.firstName, married));
+            const marriedFirst = person.marriedFirstName?.trim() || person.firstName;
+            pushWrapped(lines, 1, 'NAME', formatGedcomName(marriedFirst, married));
             lines.push('2 TYPE married');
+            // Its parts too in "Back to", as of the birth name (pushName).
+            if (nameParts) {
+                const first = (marriedFirst ?? '').trim();
+                if (first && !noName(first) && !first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
+                if (!married.includes(',')) pushWrapped(lines, 2, 'SURN', married);
+            }
             if (person.primaryName === 'married') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
         }
         // Other spellings as further NAME lines — the first one above stays the

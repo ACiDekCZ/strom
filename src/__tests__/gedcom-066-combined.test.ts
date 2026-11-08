@@ -160,11 +160,10 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             ['SOUR citation', people, /^\d SOUR @/], ['PAGE', people, /^\d PAGE /], ['QUAY', people, /^\d QUAY /],
             ['TEXT', people, /^\d TEXT /], ['CONC', people, /^\d CONC /], ['ROLE', people, /^\d ROLE /],
             ['AUTH', ['SOUR'], /^1 AUTH /], ['PUBL', ['SOUR'], /^1 PUBL /], ['_TYPE', ['SOUR'], /^1 _TYPE /], ['_MEDI', ['SOUR'], /^1 _MEDI /],
-            // GIVN / SURN under a married name are not written back yet: that record is left out here.
             ['GIVN', people, /^2 GIVN /], ['SURN', people, /^2 SURN /],
         ];
         const tally = (ged: string) => Object.fromEntries(counted.map(([name, types, re]) =>
-            [name, count(recordsOf(ged, types, name === 'GIVN' || name === 'SURN' ? ['@I501@'] : []), re)]));
+            [name, count(recordsOf(ged, types), re)]));
         expect(tally(first)).toEqual(tally(FILE));
     });
 
@@ -221,9 +220,10 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(record(first, '@F401@')).toEqual(expect.arrayContaining(['1 HUSB @I401@', '1 WIFE @I402@', '1 CHIL @I403@']));
         });
 
-        it('5 · a name after marriage with given names of its own (TYPE married)', () => {
+        it('5 · a name after marriage with given names of its own (TYPE married, GIVN, SURN)', () => {
             const rec = record(first, '@I501@');
-            expect(holdsRun(rec, ['1 NAME Duhoslava Věnuna /Hrbolcová/', '2 TYPE married'])).toBe(true);
+            expect(holdsRun(rec, ['1 NAME Duhoslava Věnuna /Hrbolcová/', '2 TYPE married',
+                '2 GIVN Duhoslava Věnuna', '2 SURN Hrbolcová'])).toBe(true);
             expect(rec).toContain('1 NAME Duhoslava /Plotýnková/');
             const person = Object.values(again.persons).find(p => p.firstName === 'Duhoslava')!;
             expect([person.marriedSurname, person.marriedFirstName]).toEqual(['Hrbolcová', 'Duhoslava Věnuna']);
