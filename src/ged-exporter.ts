@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, withoutCiteLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -977,20 +977,40 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             repoIdMap.set(source.repository, freshXref('R'));
         }
     }
+    /**
+     * "Back to {prog}": what the citation said that Strom does not read
+     * (DATA > TEXT, EVEN > ROLE, see CITE_TAG), as written, at levels from 1
+     * under the citation; split into its DATA's lines and the rest.
+     */
+    const keptCiteLines = (src: Source | undefined): { data: string[]; rest: string[] } => {
+        const out = { data: [] as string[], rest: [] as string[] };
+        const entry = back.imports.size ? src?.gedcomExtra?.find(e => back.imports.has(e.from) && citeLines(e.lines).length) : undefined;
+        let inData = false;
+        for (const line of entry ? citeLines(entry.lines) : []) {
+            const level = Number(line.split(' ', 1)[0]);
+            if (level === 1) { inData = line === '1 DATA'; if (inData) continue; }
+            (inData ? out.data : out.rest).push(line);
+        }
+        return out;
+    };
     /** Citation emitter: the source reference belongs on the citation as PAGE. */
     const pushCitation = (level: number, srcId: string): void => {
         const ref = sourceIdMap.get(srcId);
         if (!ref) return;
         lines.push(`${level} SOUR ${ref}`);
         const src = data.sources?.[srcId];
+        const kept = keptCiteLines(src);
+        const at = (line: string): string => line.replace(/^\d+/, n => String(Number(n) + level));
         if (src?.reference) pushLongValue(lines, level + 1, 'PAGE', src.reference);
         // The entry recording date lives on the citation in 5.5.1 (DATA > DATE).
         const recorded = formatGedcomDate(src?.recordDate);
-        if (recorded) {
+        if (recorded || kept.data.length) {
             lines.push(`${level + 1} DATA`);
-            lines.push(`${level + 2} DATE ${recorded}`);
+            if (recorded) lines.push(`${level + 2} DATE ${recorded}`);
+            lines.push(...kept.data.map(at));
         }
         if (src?.quality !== undefined) lines.push(`${level + 1} QUAY ${src.quality}`);
+        lines.push(...kept.rest.map(at));
     };
 
     // Get current date for header
@@ -1070,13 +1090,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const written = new Set<string>();
         for (const entry of holder.gedcomExtra) {
             if (!back.imports.has(entry.from)) continue;
+            // (A citation's own lines go under the citation, see pushCitation.)
+            const entryLines = withoutCiteLines(entry.lines);
             let block: string[] = [];
             const flush = (): void => {
                 const key = block.join('\n');
                 if (block.length > 0 && !written.has(key)) { written.add(key); lines.push(...block); }
                 block = [];
             };
-            for (const line of entry.lines) {
+            for (const line of entryLines) {
                 if (line.startsWith('1 ')) flush();
                 block.push(line);
             }

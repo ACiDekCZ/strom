@@ -378,7 +378,9 @@ export interface Source {
     /**
      * Another program's own level-1 tags of the source record (`1 _TYPE`,
      * `1 _MEDI` of MyHeritage…), kept as the file wrote them for "Back to
-     * {prog}" (spec 066 G8), as Person.gedcomExtra.
+     * {prog}" (spec 066 G8), as Person.gedcomExtra. A `1 _STROM_CITE` block
+     * holds the lines of the citation this entry came from that Strom does
+     * not read (DATA > TEXT, EVEN > ROLE), written under the citation.
      */
     gedcomExtra?: GedcomExtra[];
     /**

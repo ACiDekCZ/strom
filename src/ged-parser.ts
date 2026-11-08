@@ -95,7 +95,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addGedcomExtra, addOriginalIds, type ExtraHolder, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    addGedcomExtra, addOriginalIds, CITE_TAG, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
@@ -997,6 +997,10 @@ interface CitationSlot {
     /** DATA > DATE: when the entry was written. */
     date?: string;
     quay?: number;
+    /** Its DATA > TEXT (with CONC / CONT) as written, levels from the citation's (TEXT = 2). */
+    dataText?: string[];
+    /** Its EVEN (with ROLE) as written, levels from the citation's (EVEN = 1). */
+    even?: string[];
 }
 
 /** Raw GEDCOM source record (0 @Sx@ SOUR). */
@@ -2228,6 +2232,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let citeRef: string | null = null;
     let citeLine = -1;
     let inCiteData = false;
+    /** The citation's unread lines being kept: its DATA > TEXT, its EVEN (see CitationSlot). */
+    let citeKeep: 'text' | 'even' | null = null;
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
     let currentType: 'INDI' | 'FAM' | 'SOUR' | null = null;
@@ -2606,9 +2612,9 @@ export function parseGedcom(content: string): ParsedGedcom {
         // Citation DATA > DATE (the entry recording date) may sit under a
         // citation at any depth — on the person, a name, an event, a family —
         // so it is tracked here by level, apart from the per-record dispatch.
-        if (citeLevel !== null && level <= citeLevel) { citeLevel = null; citeRef = null; inCiteData = false; }
+        if (citeLevel !== null && level <= citeLevel) { citeLevel = null; citeRef = null; inCiteData = false; citeKeep = null; }
         if (tag === 'SOUR' && level > 0 && currentType !== 'SOUR' && GED_POINTER.test(value)) {
-            citeLevel = level; citeRef = value; inCiteData = false; citeLine = rec.src;
+            citeLevel = level; citeRef = value; inCiteData = false; citeLine = rec.src; citeKeep = null;
         } else if (citeLevel !== null && citeRef) {
             if (level === citeLevel + 1) inCiteData = tag === 'DATA';
             else if (level === citeLevel + 2 && inCiteData && tag === 'DATE' && value) {
@@ -2617,6 +2623,16 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // The date of this very citation (one read through cite()).
                 const c = currentCitation as CitationSlot | null;
                 if (c && c.id === citeRef && c.line === citeLine && c.date === undefined) c.date = date;
+            }
+            // What the citation says that Strom does not read (DATA > TEXT, EVEN > ROLE)
+            // is kept as written for "Back to {prog}" (not from the research's files).
+            if (level === citeLevel + 1) citeKeep = tag === 'EVEN' ? 'even' : null;
+            else if (level === citeLevel + 2 && inCiteData) citeKeep = tag === 'TEXT' ? 'text' : null;
+            const c = currentCitation as CitationSlot | null;
+            if (citeKeep && !stromResearch && c && c.id === citeRef && c.line === citeLine) {
+                const kept = lines[rec.src].trimStart().replace(/^\d+/, String(level - citeLevel));
+                if (citeKeep === 'text') (c.dataText ??= []).push(kept);
+                else (c.even ??= []).push(kept);
             }
         }
 
@@ -3934,8 +3950,14 @@ export function parseGedcom(content: string): ParsedGedcom {
     // is the entry's too: the same page cited with another date is another
     // entry, and a citation without one is not given one (spec 066 K3.1).
     const pageSources = new Map<string, string>();
-    /** The date and QUAY the record's own citations carry: the first of them says them. */
-    const ownCite = new Map<string, { date: string; quay: number | undefined }>();
+    /** The date, QUAY and unread lines the record's own citations carry: the first of them says them. */
+    const ownCite = new Map<string, { date: string; quay: number | undefined; kept: string }>();
+    /** A citation's unread lines as a kept block (CITE_TAG): none, or `1 _STROM_CITE` and its lines a level deeper. */
+    const citeBlock = (c: CitationSlot): string[] => {
+        const body = [...(c.dataText?.length ? ['1 DATA', ...c.dataText] : []), ...(c.even ?? [])];
+        const block = body.length ? [`1 ${CITE_TAG}`, ...body.map(l => l.replace(/^\d+/, n => String(Number(n) + 1)))] : [];
+        return validExtraBlock(block) ? block : [];
+    };
     for (const c of citations) {
         const src = sources.get(c.id);
         if (!src || c.list[c.index] !== c.id) continue;
@@ -3943,12 +3965,17 @@ export function parseGedcom(content: string): ParsedGedcom {
         const page = c.page || recordPage.get(c.id) || '';
         const date = c.date ?? '';
         const quay = c.quay ?? recordQuality.get(c.id);
+        const block = citeBlock(c);
+        const kept = block.join('\n');
         if (page === src.reference.trim()) {
-            if (!ownCite.has(c.id)) ownCite.set(c.id, { date, quay });
+            if (!ownCite.has(c.id)) {
+                ownCite.set(c.id, { date, quay, kept });
+                if (block.length) (src.extras ??= []).push({ tag: CITE_TAG, lines: block, quiet: true });
+            }
             const own = ownCite.get(c.id)!;
-            if (own.date === date && own.quay === quay) continue;
+            if (own.date === date && own.quay === quay && own.kept === kept) continue;
         }
-        const key = `${c.id}\u0000${page}\u0000${date}\u0000${quay ?? ''}`;
+        const key = `${c.id}\u0000${page}\u0000${date}\u0000${quay ?? ''}\u0000${kept}`;
         let derived = pageSources.get(key);
         if (!derived) {
             derived = `${c.id}~${pageSources.size + 1}`;
@@ -3963,6 +3990,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 ...(src.importMark ? { importMark: src.importMark } : {}),
                 ...(src.importXref ? { importXref: src.importXref } : {}),
                 ...(src.author !== undefined ? { author: src.author } : {}),
+                ...(block.length ? { extras: [{ tag: CITE_TAG, lines: block, quiet: true }] } : {}),
             });
         }
         c.list[c.index] = derived;
@@ -5030,7 +5058,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const sid = sourceIdMap.get(gedId);
             const base = raw.derivedFrom ? sources[sourceIdMap.get(raw.derivedFrom) ?? ''] : undefined;
             if (!sid || !sources[sid] || !base) continue;
-            for (const entry of base.gedcomExtra ?? []) addGedcomExtra(sources[sid], entry);
+            for (const entry of base.gedcomExtra ?? []) {
+                // (Not the record's own citation's lines: this page's citation has its own.)
+                const lines = withoutCiteLines(entry.lines);
+                if (lines.length) addGedcomExtra(sources[sid], { from: entry.from, lines });
+            }
         }
     }
 

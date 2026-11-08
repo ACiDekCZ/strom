@@ -387,6 +387,26 @@ export function validExtraBlock(block: readonly string[]): boolean {
         && block.every(l => l.length <= EXTRA_MAX_LINE && !/[\r\n\0]/.test(l));
 }
 
+/**
+ * A citation's own lines Strom does not read (`DATA` > `TEXT` with its
+ * `CONC` / `CONT`, `EVEN` > `ROLE`), kept on the source entry the citation
+ * became among its kept tags as one `1 _STROM_CITE` block: the citation's
+ * lines one level deeper (`2 DATA` / `3 TEXT …`, `2 EVEN BIRT` / `3 ROLE CHIL`).
+ * "Back to {prog}" writes them under that citation, not on the record.
+ */
+export const CITE_TAG = '_STROM_CITE';
+
+/** The kept lines without the citation's own (CITE_TAG). */
+export function withoutCiteLines(lines: readonly string[]): string[] {
+    return extraBlocks(lines).filter(b => b[0] !== `1 ${CITE_TAG}`).flat();
+}
+
+/** The citation's own kept lines of one import's entry, at the citation's level 1 and deeper (none: []). */
+export function citeLines(lines: readonly string[]): string[] {
+    const block = extraBlocks(lines).find(b => b[0] === `1 ${CITE_TAG}`);
+    return block ? block.slice(1).map(l => l.replace(/^(\d+)/, (_, n: string) => String(Number(n) - 1))) : [];
+}
+
 /** The blocks of kept lines, each from its `1 _XXX` line. */
 function extraBlocks(lines: readonly string[]): string[][] {
     const blocks: string[][] = [];

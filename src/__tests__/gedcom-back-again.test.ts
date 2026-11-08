@@ -58,3 +58,44 @@ describe('"Back to" read again (066)', () => {
         expect(undated(second)).toBe(undated(first));
     });
 });
+
+describe('A citation\'s own lines Strom does not read (066)', () => {
+    const tree = load(FILE, 'myheritage-ftb.ged');
+    const back = backTo(tree);
+
+    it('"Back to" writes QUAY, DATA > TEXT and EVEN > ROLE under the citation without a PAGE', () => {
+        expect(back).toContain([
+            '1 SOUR @S2@',
+            '2 DATA',
+            '3 TEXT Libuna Šťovíková, born in Mechovka, daughter of the smith',
+            '4 CONC  of Mechovka, married in Ozubcov',
+            '2 QUAY 3',
+            '2 EVEN BIRT',
+            '3 ROLE CHIL',
+        ].join('\n'));
+    });
+
+    it('…and under a citation with its PAGE, the entry\'s date beside its text', () => {
+        expect(back).toContain([
+            '2 SOUR @S1@',
+            '3 PAGE fol. 12',
+            '3 DATA',
+            '4 DATE 4 MAR 1880',
+            '4 TEXT Hromoslav, son of the miller',
+            '3 QUAY 3',
+            '3 EVEN BIRT',
+            '4 ROLE CHIL',
+        ].join('\n'));
+        // A page cited without them gets none of them.
+        expect(back).toMatch(/3 PAGE fol\. 88\n3 DATA\n4 DATE 10 JAN 1950\n3 QUAY 2\n2 _STROM_IMPORT/);
+        expect(back).not.toContain('_STROM_CITE');
+    });
+
+    it('Strom\'s own export leaves them out, as another program\'s own tags', () => {
+        const own = exportToGedcom(tree, 'Ozubec').content;
+        expect(own).not.toContain('ROLE CHIL');
+        expect(own).not.toContain('son of the miller');
+        expect(own).not.toContain('_STROM_CITE');
+    });
+});
+

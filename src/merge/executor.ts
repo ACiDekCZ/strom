@@ -26,7 +26,7 @@ import {
 import { importProgramName } from '../import-next.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
-import { addGedcomExtra, addImportRecords, addOriginalIds, carryMergedImports, pruneImportOrigin, remapHolderImports, remapSourceImports } from '../import-origin.js';
+import { addGedcomExtra, addImportRecords, addOriginalIds, carryMergedImports, citeLines, pruneImportOrigin, remapHolderImports, remapSourceImports } from '../import-origin.js';
 import { mergePlaceRecords } from '../place-records.js';
 import { mergePlaceAliases } from '../place-groups.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
@@ -733,13 +733,14 @@ function sourceKey(src: Source): string {
 }
 
 /**
- * sourceKey with the citation's own date and quality: a file citing one page
- * twice with another QUAY or DATA > DATE gives two entries, and each is kept
- * by its own twin.
+ * sourceKey with the citation's own date, quality and kept lines: a file
+ * citing one page twice with another QUAY, DATA > DATE or DATA > TEXT gives
+ * two entries, and each is kept by its own twin.
  */
 function citationKey(src: Source): string {
     const key = sourceKey(src);
-    return key ? [key, src.recordDate ?? '', src.quality ?? ''].join('\u0001') : '';
+    const said = (src.gedcomExtra ?? []).map(e => citeLines(e.lines)).find(l => l.length) ?? [];
+    return key ? [key, src.recordDate ?? '', src.quality ?? '', said.join('\n')].join('\u0001') : '';
 }
 
 /** Two attachments are the same document when they carry the same bytes. */

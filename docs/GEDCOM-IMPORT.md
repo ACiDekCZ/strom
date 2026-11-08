@@ -506,7 +506,11 @@ Two limits of the model to plan around:
   round trip through the research. Other exports write a record per source.
 - **The words of the entry go on the source, as `1 TEXT`.** `DATA` / `TEXT`
   under a citation is not read: other programs put machine-made summaries of
-  matched records there, which would flood the notes.
+  matched records there, which would flood the notes. In a file imported from
+  another program it is kept as written (with its `CONC` / `CONT`), and so is
+  the citation's `EVEN` with its `ROLE`: "Back to {program}" writes them under
+  that citation again, with or without a `PAGE`; other exports leave them out.
+  The same page cited with another such text is a source entry of its own.
 
 Strom writes all of the above back on export: `TEXT`, `REFN`, the excerpts as
 `OBJE` (unless the export leaves attachments out) and `DATA` / `DATE` on every
