@@ -649,6 +649,19 @@ export interface Person {
      * never from another file, never sent back.
      */
     researchOrigins?: Record<string, ResearchFactOrigin>;
+    /**
+     * Facts a person confirmed by hand ("Verified from the scan", spec 065),
+     * by fact (`name`, `sex`, `birth`, `death`, `event:<id>`). Valid only
+     * while the fact keeps the value it was confirmed with. Kept in JSON and
+     * in Strom's own GEDCOM (`2 _STROM_CONFIRMED <date>` under the fact).
+     */
+    confirmed?: Record<string, FactConfirmation>;
+    /**
+     * What the research says about re-verifying each fact (GEDCOM
+     * `_STROM_CONFIRMED`, `_STROM_VERIFY`, `_STROM_CHECKED`, spec 065), by
+     * fact. Research trees only; read from the research's file, never sent back.
+     */
+    researchVerify?: Record<string, ResearchFactVerify>;
 }
 
 /** One GEDCOM file loaded into the tree (StromData.imports, spec 066). */
@@ -743,6 +756,41 @@ export interface ResearchFactOrigin {
     was?: ResearchFactWas;
     /** Sources cited under the fact (the record a change was made by). */
     sourceIds?: string[];
+}
+
+/** A fact confirmed by hand from a scan of the record (spec 065). */
+export interface FactConfirmation {
+    /** The day of the confirmation, `YYYY-MM-DD`. */
+    at: string;
+    /**
+     * The fact's value when it was confirmed (its parts joined, see
+     * factValueSignature). A later change of the value ends the confirmation.
+     * Absent: valid whatever the value (an older record).
+     */
+    value?: string;
+}
+
+/** Why a fact waits for re-verification in the research (`2 _STROM_VERIFY`). */
+export type FactVerifyPending = 'wait' | 'asked' | 'images' | 'permission';
+
+/** The research's last re-verification of a fact (`2 _STROM_CHECKED`). */
+export interface FactVerifyChecked {
+    /** `proven`: the record confirmed it; `kept`: it stays as it was (see why). */
+    result: 'proven' | 'kept';
+    /** `3 DATE`, `YYYY-MM-DD` (or as written when not a full date). */
+    date?: string;
+    /** `3 _WHY`: why a kept fact stays (kept only). */
+    why?: string;
+    /** `3 _READERS`: how many independent readings agreed. */
+    readers?: number;
+}
+
+/** The research's re-verification state of one fact (Person/Partnership.researchVerify). */
+export interface ResearchFactVerify {
+    /** `2 _STROM_CONFIRMED <date>`: confirmed by a person in the research. */
+    confirmed?: string;
+    pending?: FactVerifyPending;
+    checked?: FactVerifyChecked;
 }
 
 /** What the research knows about one person (see Person.research). */
@@ -1108,6 +1156,10 @@ export interface Partnership {
     gedcomExtra?: GedcomExtra[];
     /** The research's origin of each fact (`marriage`, `divorce`, `event:<id>`), research trees only. */
     researchOrigins?: Record<string, ResearchFactOrigin>;
+    /** Facts confirmed by hand (`marriage`, `divorce`, `event:<id>`), see Person.confirmed. */
+    confirmed?: Record<string, FactConfirmation>;
+    /** The research's re-verification of each fact, see Person.researchVerify. */
+    researchVerify?: Record<string, ResearchFactVerify>;
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
@@ -1266,8 +1318,15 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   way). Additive;
  *   existing trees get no origin and no ids (nothing is guessed). An older
  *   app (v14) would drop imports on a re-save.
+ * v16 (2026-11, spec 065): Person/Partnership.confirmed (facts confirmed by
+ *   hand from a scan, each with its day and the value it was confirmed with)
+ *   and Person/Partnership.researchVerify (the research's re-verification of
+ *   facts: confirmed, waiting, last checked). Additive; existing trees get
+ *   neither. An older app (v15) keeps persons whole but would show a
+ *   confirmed fact as unconfirmed and drop the mark from its GEDCOM export,
+ *   so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 15;
+export const STROM_DATA_VERSION = 16;
 
 /**
  * Manual corrections of the lineages (rody, see src/lineage.ts), by person id.

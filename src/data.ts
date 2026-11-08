@@ -65,6 +65,7 @@ import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
+import { cleanFactVerify, factValueSignature } from './verify.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
@@ -291,6 +292,9 @@ export function migrateData(data: unknown): StromData {
     // links from them (src/import-origin.ts). Only valid records; marks that
     // name no record, no fact or no parent are dropped. Nothing is added.
     cleanImportOrigin(result, d.imports);
+    // v16: the facts confirmed by hand and the research's re-verification of
+    // facts (src/verify.ts); only valid entries of existing facts.
+    cleanFactVerify(result);
 
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {

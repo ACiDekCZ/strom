@@ -746,20 +746,34 @@ function fnv1a(text: string, seed: number): number {
 }
 
 /**
- * People without what the app keeps for itself and never sends (a hidden
- * married surname suggestion): hiding one leaves the tree in step with the
+ * People without what the app keeps for itself and never sends in the file
+ * (a hidden married surname suggestion; a fact confirmed by hand and the
+ * research's verification of facts, spec 065, which go by the bridge):
+ * hiding a suggestion or confirming a fact leaves the tree in step with the
  * research. People without such a field are the same objects, so a tree
  * that has none keeps its fingerprint.
  */
 function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
     let out: StromData['persons'] | null = null;
     for (const [id, p] of Object.entries(persons)) {
-        if (p?.dismissedMarriedSuggestion === undefined) continue;
+        if (p?.dismissedMarriedSuggestion === undefined && p?.confirmed === undefined && p?.researchVerify === undefined) continue;
         out ??= { ...persons };
-        const { dismissedMarriedSuggestion: _local, ...rest } = p;
+        const { dismissedMarriedSuggestion: _local, confirmed: _confirmed, researchVerify: _verify, ...rest } = p;
         out[id as PersonId] = rest as Person;
     }
     return out ?? persons;
+}
+
+/** Couples without their facts confirmed by hand and the research's verification (see withoutAppLocal). */
+function couplesWithoutAppLocal(partnerships: StromData['partnerships']): StromData['partnerships'] {
+    let out: StromData['partnerships'] | null = null;
+    for (const [id, ps] of Object.entries(partnerships)) {
+        if (ps?.confirmed === undefined && ps?.researchVerify === undefined) continue;
+        out ??= { ...partnerships };
+        const { confirmed: _confirmed, researchVerify: _verify, ...rest } = ps;
+        out[id as PartnershipId] = rest as Partnership;
+    }
+    return out ?? partnerships;
 }
 
 /** The parts of a tree the user can change (see contentFingerprint). */
@@ -769,7 +783,7 @@ function fingerprintParts(raw: StromData): unknown[] {
     const data = withoutConvertedStandIns(raw);
     return [
         withoutAppLocal(data.persons ?? {}),
-        data.partnerships ?? {},
+        couplesWithoutAppLocal(data.partnerships ?? {}),
         data.sources ?? null,
         // Without the app's own bookkeeping of a location (who, when, "Keep"):
         // the research never has it, a tree in step stays in step.

@@ -608,6 +608,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 function adoptIncomingMarks(person: Person, personIds: Map<PersonId, PersonId>, importMap: Map<string, string>): void {
     if (person.importedValues) person.importedValues = structuredClone(person.importedValues);
     if (person.researchOrigins) person.researchOrigins = structuredClone(person.researchOrigins);
+    if (person.confirmed) person.confirmed = structuredClone(person.confirmed);
+    if (person.researchVerify) person.researchVerify = structuredClone(person.researchVerify);
     if (person.originalIds) person.originalIds = structuredClone(person.originalIds);
     if (person.importedParents) {
         const out: Record<string, string> = {};
