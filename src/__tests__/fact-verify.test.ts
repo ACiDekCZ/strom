@@ -14,7 +14,7 @@ import { strings } from '../strings.js';
 import {
     factConfirmation, factValueSignature, factVerifyInfo, factVerifyReaders, pendingFacts, factSourceIds,
     sanitizeResearchVerify, parseConfirmedDay, parseVerifyPending, parseCheckedResult, parseReaders,
-    parsePendingPosition, researchFactRef,
+    parsePendingPosition, researchFactRef, confirmationEdits, handedConfirmations,
 } from '../verify.js';
 import { factReliability } from '../reliability.js';
 import { contentFingerprint } from '../research-link.js';
@@ -208,24 +208,67 @@ describe('reliability step from the confirmation (confirmedByHuman)', () => {
     });
 });
 
-describe('neither the fingerprint nor the sync diff counts them', () => {
-    it('confirming a fact leaves the tree in step with the research', () => {
+describe('the fingerprint and the sync diff: only a confirmation made or taken back here', () => {
+    /** The tree as the research's version gave it: its own confirmations and states. */
+    function researchTree(): StromData {
         const d = tree();
-        const before = contentFingerprint(d);
-        d.persons[Z].confirmed = { birth: { at: '2026-11-08', value: 'x' } };
-        d.persons[Z].researchVerify = { death: { pending: 'wait' } };
-        d.partnerships[U].confirmed = { marriage: { at: '2026-11-08' } };
-        d.partnerships[U].researchVerify = { marriage: { confirmed: '2026-11-08' } };
-        expect(contentFingerprint(d)).toBe(before);
+        d.persons[Z].researchVerify = { death: { pending: 'wait', position: 2, eid: 'E3' }, birth: { confirmed: '2026-10-01', eid: 'E1' } };
+        d.partnerships[U].researchVerify = { marriage: { confirmed: '2026-10-02' } };
+        d.partnerships[U].researchId = 'F1';
+        return d;
+    }
+
+    it("the research's own state is no change", () => {
+        expect(contentFingerprint(researchTree())).toBe(contentFingerprint(tree()));
+        // Its verification states, ids and places in the queue are no change.
+        const now = researchTree();
+        now.persons[Z].researchVerify!.death = { pending: 'asked', position: 1 };
+        delete now.partnerships[U].researchId;
+        expect(diffByPerson(researchTree(), now)).toEqual([]);
+        expect(confirmationEdits(researchTree().persons[Z])).toEqual({});
+        expect(handedConfirmations(researchTree().persons[Z])).toEqual({ birth: '2026-10-01' });
     });
 
-    it('the person changes against the base list nothing', () => {
-        const base = tree();
-        const now = tree();
-        now.persons[Z].confirmed = { birth: { at: '2026-11-08', value: 'x' } };
-        now.persons[Z].researchVerify = { death: { pending: 'wait' } };
-        expect(diffByPerson(base, now)).toEqual([]);
-        expect(diffOther(base, now)).toEqual(diffOther(base, tree()));
+    it('a fact confirmed here is a change; taking it back again is none', () => {
+        const base = researchTree();
+        const d = researchTree();
+        const fp = contentFingerprint(d);
+        d.persons[Z].confirmed = { death: { at: '2026-11-08', value: factValueSignature(d.persons[Z], 'death') } };
+        expect(confirmationEdits(d.persons[Z])).toEqual({ death: '2026-11-08' });
+        expect(contentFingerprint(d)).not.toBe(fp);
+        expect(diffByPerson(base, d).map(c => [c.personId, c.kinds])).toEqual([[Z, ['other']]]);
+        delete d.persons[Z].confirmed;
+        expect(contentFingerprint(d)).toBe(fp);
+        expect(diffByPerson(base, d)).toEqual([]);
+    });
+
+    it("a confirmation that ended with a changed value is none (the value's change is)", () => {
+        const d = researchTree();
+        d.persons[Z].confirmed = { death: { at: '2026-11-08', value: 'another value' } };
+        expect(confirmationEdits(d.persons[Z])).toEqual({});
+        expect(contentFingerprint(d)).toBe(contentFingerprint(researchTree()));
+    });
+
+    it("the research's confirmation taken back here is a change, told at both partners for a couple", () => {
+        const base = researchTree();
+        const d = researchTree();
+        const fp = contentFingerprint(d);
+        d.partnerships[U].confirmed = { marriage: { at: '2026-10-02', withdrawn: true } };
+        expect(factVerifyInfo(d.partnerships[U], 'marriage')).toEqual({});
+        expect(confirmationEdits(d.partnerships[U])).toEqual({ marriage: '' });
+        expect(contentFingerprint(d)).not.toBe(fp);
+        expect(diffByPerson(base, d).map(c => c.kinds)).toEqual([['other'], ['other']]);
+        // A take-back of another day (the research confirmed it again since) takes nothing back.
+        d.partnerships[U].confirmed = { marriage: { at: '2026-09-30', withdrawn: true } };
+        expect(factVerifyInfo(d.partnerships[U], 'marriage').confirmedBy).toBe('research');
+        expect(contentFingerprint(d)).toBe(fp);
+    });
+
+    it('the other changes are as they were', () => {
+        const base = researchTree();
+        const now = researchTree();
+        now.persons[Z].researchVerify = { death: { pending: 'asked' } };
+        expect(diffOther(base, now)).toEqual(diffOther(base, researchTree()));
     });
 });
 
@@ -299,6 +342,34 @@ describe('DataManager: "Verified from the scan" and taking it back', () => {
         expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth')).toEqual({});
         expect(DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08')).toBe(true);
         expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth').confirmed).toBe('2026-11-08');
+    });
+
+    it("takes back the research's confirmation here (to go to the research), with undo", () => {
+        const dm = DataManager as unknown as { data: StromData };
+        dm.data.persons[Z].researchVerify = { birth: { confirmed: '2026-10-01', eid: 'E1' } };
+        expect(DataManager.unconfirmFact({ personId: Z }, 'birth')).toBe(true);
+        const z = DataManager.getPerson(Z)!;
+        expect(z.confirmed).toEqual({ birth: { at: '2026-10-01', withdrawn: true } });
+        expect(factVerifyInfo(z, 'birth')).toEqual({});
+        expect(factConfirmation(z, 'birth')).toBeNull();
+        // Nothing more to take back; the research's state itself stays as its version gave it.
+        expect(DataManager.unconfirmFact({ personId: Z }, 'birth')).toBe(false);
+        expect(z.researchVerify?.birth?.confirmed).toBe('2026-10-01');
+        // Confirming it again here replaces the take-back.
+        expect(DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08')).toBe(true);
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth')).toEqual({ confirmed: '2026-11-08', confirmedBy: 'app' });
+        DataManager.undo();
+        DataManager.undo();
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth')).toEqual({ confirmed: '2026-10-01', confirmedBy: 'research' });
+        expect(DataManager.getPerson(Z)!.confirmed).toBeUndefined();
+    });
+
+    it('a take-back survives storing and loading (migrateData)', () => {
+        const d = tree();
+        d.persons[Z].researchVerify = { birth: { confirmed: '2026-10-01' } };
+        d.persons[Z].confirmed = { birth: { at: '2026-10-01', withdrawn: true, value: 'x' } as never };
+        const back = migrateData(JSON.parse(JSON.stringify({ ...d, version: STROM_DATA_VERSION })));
+        expect(back.persons[Z].confirmed).toEqual({ birth: { at: '2026-10-01', withdrawn: true } });
     });
 
     it('a locked person is not confirmed', () => {

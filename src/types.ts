@@ -768,6 +768,13 @@ export interface FactConfirmation {
      * Absent: valid whatever the value (an older record).
      */
     value?: string;
+    /**
+     * Not a confirmation: the research's confirmation of the day `at` is
+     * taken back here (research trees). The fact then goes to the research
+     * without its `_STROM_CONFIRMED`, which the research reads as taking it
+     * back; a version of the research loaded afterwards replaces it.
+     */
+    withdrawn?: true;
 }
 
 /** Why a fact waits for re-verification in the research (`2 _STROM_VERIFY`). */

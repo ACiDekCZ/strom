@@ -8,6 +8,7 @@
 import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { collectPlaces } from './places.js';
+import { handedConfirmations } from './verify.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -138,6 +139,8 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
         return o;
     };
     if (differs(rest(before), rest(after))) kinds.add('other');
+    // A fact confirmed, or a confirmation taken back, goes to the research (`_STROM_CONFIRMED`).
+    if (differs(handedConfirmations(before), handedConfirmations(after))) kinds.add('other');
     if (differs(ownAtts(before).map(a => ({ ...a, dataUrl: undefined })), ownAtts(after).map(a => ({ ...a, dataUrl: undefined })))
         && !kinds.has('attachment') && !kinds.has('attachmentRemoved')) kinds.add('other');
     return kinds;
@@ -201,6 +204,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             if (differs(a.events ?? [], b.events ?? [])) kinds.add('event');
             if (differs(a.sourceIds ?? [], b.sourceIds ?? [])) kinds.add('citation');
             if (differs(a.story, b.story)) kinds.add('other');
+            if (differs(handedConfirmations(a), handedConfirmations(b))) kinds.add('other');
         }
         if (!kinds.size) continue;
         const u = (b ?? a)!;

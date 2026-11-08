@@ -11,6 +11,7 @@ import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, Person, Partnership } from '../types.js';
 import {
     factVerifyInfo, factValueSignature, factResearchEid, factPendingPosition, personResearchRef, familyResearchRef,
+    confirmationEdits, handedConfirmations,
 } from '../verify.js';
 import { migrateData } from '../data.js';
 import { contentFingerprint } from '../research-link.js';
@@ -195,11 +196,90 @@ describe("the app's own GEDCOM export", () => {
         expect(ged).not.toMatch(/1 DEAT[^]*?2 _STROM_CONFIRMED 2026-11-07/);
     });
 
-    it('nothing without the option (what goes to the research, another export)', () => {
+    it('none in a file "Back to {prog}" or without the option', () => {
         const d = confirmedTree();
-        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
-        expect(ged).not.toContain('_STROM_CONFIRMED');
-        expect(exportToGedcom(d, 'Ozubec', {}).content).not.toContain('_STROM_CONFIRMED');
+        d.imports = [{ id: 'R1', file: 'ozubec.ged', program: 'FTM', at: '2026-11-01' } as never];
+        expect(exportToGedcom(d, 'Ozubec', { origins: true, confirmations: true, backTo: 'R1' }).content).not.toContain('_STROM_CONFIRMED');
+        expect(exportToGedcom(d, 'Ozubec', { confirmations: false }).content).not.toContain('_STROM_CONFIRMED');
+    });
+});
+
+describe('confirmations handed over to the research (read against _STROM_HEAD)', () => {
+    const LINK = { id: 'r1', head: 'a'.repeat(40) };
+    /** What the research's file gave: SEX, BIRT, BURI and MARR confirmed there. */
+    const CONFIRMED_FILE = RESEARCH_FILE
+        .replace('1 BURI\n2 DATE 12 JAN 1910', '1 BURI\n2 DATE 12 JAN 1910\n2 _STROM_CONFIRMED 2026-10-03')
+        .replace('2 _STROM_VERIFY permission', '2 _STROM_CONFIRMED 2026-10-04');
+
+    /** The `_STROM_CONFIRMED` days of a GEDCOM, by "<given name or FAM>/<fact tag>". */
+    function confirmedIn(ged: string): Record<string, string> {
+        const out: Record<string, string> = {};
+        let rec = '';
+        let fact = '';
+        for (const line of ged.split('\n')) {
+            const m = /^(\d) (\S+)(?: (.*))?$/.exec(line);
+            if (!m) continue;
+            const [, level, tag, value = ''] = m;
+            if (level === '0') rec = / FAM$/.test(line) ? 'FAM' : '';
+            else if (level === '1') {
+                fact = tag;
+                if (tag === 'NAME' && !rec) rec = value.split(' ')[0];
+            } else if (level === '2' && tag === '_STROM_CONFIRMED') out[`${rec}/${fact}`] = value;
+        }
+        return out;
+    }
+
+    /** What goes to the research (the sync's export: the research's header, no other option). */
+    const send = (d: StromData): string => exportToGedcom(d, 'Ozubec', { research: LINK }).content;
+
+    it("a round trip gives back the research's confirmations as they were: no change", () => {
+        const d = load(CONFIRMED_FILE);
+        const given = { 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BIRT': '2026-11-08', 'Hromoslav/BURI': '2026-10-03', 'FAM/MARR': '2026-10-04' };
+        expect(confirmedIn(CONFIRMED_FILE)).toEqual(given);
+        expect(confirmedIn(send(d))).toEqual(given);
+        for (const h of [...Object.values(d.persons), ...Object.values(d.partnerships)]) expect(confirmationEdits(h)).toEqual({});
+        // The research's own state is not a change of the tree.
+        expect(contentFingerprint(d)).toBe(contentFingerprint(JSON.parse(JSON.stringify(d, (k, v) => (k === 'researchVerify' || k === 'researchId' ? undefined : v)))));
+        // What goes to the research, read again as its file, has the same confirmations.
+        const again = load(send(d).replace(/^1 SOUR STROM\n2 VERS .*$/m, '1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research'));
+        expect(Object.values(handedConfirmations(person(again, 'Hromoslav'))).sort())
+            .toEqual(Object.values(handedConfirmations(person(d, 'Hromoslav'))).sort());
+        expect(confirmedIn(send(again))).toEqual(given);
+    });
+
+    it('a fact confirmed here adds its tag (a change); taking it back removes it again', () => {
+        const d = load(CONFIRMED_FILE);
+        const fp = contentFingerprint(d);
+        const h = person(d, 'Hromoslav');
+        h.confirmed = { death: { at: '2026-11-08', value: factValueSignature(h, 'death') } };
+        expect(confirmedIn(send(d))['Hromoslav/DEAT']).toBe('2026-11-08');
+        expect(contentFingerprint(d)).not.toBe(fp);
+        delete h.confirmed;
+        expect(confirmedIn(send(d))['Hromoslav/DEAT']).toBeUndefined();
+        expect(contentFingerprint(d)).toBe(fp);
+    });
+
+    it("the research's confirmation taken back here leaves its tag out (a change)", () => {
+        const d = load(CONFIRMED_FILE);
+        const fp = contentFingerprint(d);
+        const h = person(d, 'Hromoslav');
+        h.confirmed = { birth: { at: '2026-11-08', withdrawn: true } };
+        couple(d).confirmed = { marriage: { at: '2026-10-04', withdrawn: true } };
+        const sent = confirmedIn(send(d));
+        expect(sent).toEqual({ 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BURI': '2026-10-03' });
+        expect(confirmationEdits(h)).toEqual({ birth: '' });
+        expect(contentFingerprint(d)).not.toBe(fp);
+    });
+
+    it('a tree confirmed in the app alone hands each confirmation over (adoption: no head)', () => {
+        const d = load(RESEARCH_FILE.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR STROM\n2 VERS 3.26.0'));
+        const h = person(d, 'Hromoslav');
+        expect(h.confirmed).toEqual({
+            sex: { at: '2026-10-02', value: factValueSignature(h, 'sex') },
+            birth: { at: '2026-11-08', value: factValueSignature(h, 'birth') },
+        });
+        // The adoption's export (no research header, no other option).
+        expect(confirmedIn(exportToGedcom(d, 'Ozubec', {}).content)).toEqual({ 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BIRT': '2026-11-08' });
     });
 });
 
