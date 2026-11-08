@@ -62,6 +62,7 @@ import { MATERIAL_ASSIGN_FEATURE } from '../materials.js';
 import { rememberedMaterialFeatures } from './materials-ui.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
+import { postBridgeRevert, researchShowsOrigin, RevertRequest, RevertResult } from '../research-revert.js';
 import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -559,6 +560,43 @@ export const researchSyncMethods = uiModule({
         // The research's version after the write: known at once (not only at the next ask).
         const answer = result as DecideResult;
         if (answer.ok && answer.head) {
+            const rt = runtime.get(ctx.link.id);
+            if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head: answer.head } });
+            noteResearchBridgeStatus(ctx.link.id, null, answer.head);
+        }
+        return answer;
+    },
+
+    /**
+     * The active research tree's bridge shows where its values came from and
+     * puts back a family tree's value (`origin` in /status.features). Off
+     * (no bridge, an older research, a tree that is no research's): the
+     * person card shows only the app's own "from family tree" mark, no
+     * "Originally" row and no Revert.
+     */
+    researchShowsOriginNow(): boolean {
+        const id = this.activeResearchId();
+        return researchShowsOrigin(id ? this.researchStatusOf(id)?.features : null);
+    },
+
+    /**
+     * Put back a family tree's value in the active research tree through its
+     * bridge (POST <token>/facts/revert), as the only window doing a research
+     * step for the tree. The answer typed; never throws; no bridge:
+     * `noBridge`. Changes nothing of the tree (the research's new head is
+     * noted); researchRevertFact loads the value.
+     */
+    async postRevert(req: RevertRequest): Promise<RevertResult> {
+        const ctx = this.researchSyncLink();
+        const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
+        let result: RevertResult = { kind: 'noBridge' };
+        if (!ctx || !bridge) return result;
+        const features = this.researchStatusOf(ctx.link.id)?.features;
+        await this.researchWindowLock(ctx.treeId, false, async () => {
+            result = await postBridgeRevert(bridge.base, req, features);
+        });
+        const answer = result as RevertResult;
+        if (answer.kind === 'ok' && answer.head) {
             const rt = runtime.get(ctx.link.id);
             if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head: answer.head } });
             noteResearchBridgeStatus(ctx.link.id, null, answer.head);

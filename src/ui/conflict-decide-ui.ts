@@ -13,17 +13,18 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, ResearchConflict, ResearchConflictValue, StromData } from '../types.js';
+import { FactPart, PartnershipId, PersonId, ResearchConflict, ResearchConflictValue, StromData } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles,
-    researchLinkMark,
+    researchLinkMark, researchPersonRef,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { storedResearchBridge, researchAutoState } from '../research-device.js';
 import { diffValues } from '../research-changes.js';
 import { canDecideInApp, conflictSides, DecideResult } from '../research-decide.js';
+import { otherRevertChanges, revertedFact, RevertResult } from '../research-revert.js';
 import {
     ConflictCardState, ConflictCardView, ConflictDecidedValues, DecidedFact, DECIDED_CARD_MS, conflictCardView, conflictFactParts, conflictSentChanged,
     isDecidedRow, otherLoadChanges,
@@ -429,6 +430,40 @@ export const conflictDecideMethods = uiModule({
         // An edit form open meanwhile shows the value loaded.
         this.syncPersonFormWithData();
         return quiet ? 'quiet' : 'asked';
+    },
+
+    /**
+     * Put back a family tree's value (spec 066 §3 "Revert"): `personId` the
+     * person whose fact it is (a couple's fact: either partner, with
+     * `partnershipId`), `fact` its key (name, sex, birth, death, marriage,
+     * divorce, event:<id>), `ref` the earlier value's `_REF`
+     * (researchOrigins[fact].was.ref), `part` one part (none: every part
+     * changed). Written (or nothing left to put back): the research's version
+     * loads quietly when it changes nothing here but that fact (a backup
+     * first), else it waits as any newer version (`loaded: 'later'`).
+     */
+    async researchRevertFact(personId: PersonId, fact: string, ref: string, part?: FactPart,
+        partnershipId?: PartnershipId): Promise<RevertResult & { loaded?: 'quiet' | 'later' }> {
+        const ctx = this.researchSyncLink();
+        const person = DataManager.getPerson(personId);
+        const refn = researchPersonRef(person?.refn);
+        if (!ctx) return { kind: 'noBridge' };
+        if (!person || !refn) return { kind: 'error', status: 0, code: 'invalid', reason: '' };
+        const { treeId } = ctx;
+        const result = await this.postRevert({ person: refn, ref, ...(part ? { part } : {}) });
+        if (result.kind !== 'ok' && result.kind !== 'nothing') return result;
+        const holder = partnershipId ? DataManager.getData().partnerships[partnershipId] : person;
+        const version = await this.researchVersionRead(true);
+        if (!holder || !version || DataManager.getCurrentTreeId() !== treeId) return { ...result, loaded: 'later' };
+        const here = DataManager.getData();
+        const there = this.researchVersionAsLoaded(version.data);
+        if (otherRevertChanges(diffValues(here, there), revertedFact(holder, fact)) !== 0) return { ...result, loaded: 'later' };
+        if (!await this.ensureLocalUnlocked()) return { ...result, loaded: 'later' };
+        const head = version.header.head || (result.kind === 'ok' ? result.head : '');
+        const done = await this.applyResearch(version.data, version.header, { force: true, quiet: true, ...(head ? { head } : {}) });
+        if (done !== treeId) return { ...result, loaded: 'later' };
+        this.syncPersonFormWithData();
+        return { ...result, loaded: 'quiet' };
     },
 
     /**
