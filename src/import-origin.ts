@@ -457,9 +457,39 @@ export function notedStructures(lines: readonly string[]): NotedStructure[] {
     return out;
 }
 
-/** The kept lines without the structures that became lines of a note (NOTED_TAG). */
+/** The kept lines without the structures that became lines of a note (NOTED_TAG), nor the couple's other records (JOINED_TAG). */
 export function withoutNotedLines(lines: readonly string[]): string[] {
-    return extraBlocks(lines).filter(b => b[0] !== `1 ${NOTED_TAG}`).flat();
+    return extraBlocks(lines).filter(b => b[0] !== `1 ${NOTED_TAG}` && !isJoinedHead(b[0])).flat();
+}
+
+/**
+ * Another family record of the same couple in another program's file (some
+ * programs write one per wedding: a second marriage of the two, a church
+ * wedding beside the civil one). The tree has one partnership for a couple,
+ * so the import joins that record to the first one (its children, notes and
+ * sources go there) and keeps the record's weddings and divorces and its ids
+ * as written, on the partnership among its kept tags as one `1 _STROM_FAM`
+ * block: the record's xref, then those lines one level deeper (`2 MARR` /
+ * `3 DATE 4 JUL 1914`). "Back to {prog}" writes the record again beside the
+ * couple's own, with both partners' FAMS.
+ */
+export const JOINED_TAG = '_STROM_FAM';
+
+const isJoinedHead = (line: string): boolean => line === `1 ${JOINED_TAG}` || line.startsWith(`1 ${JOINED_TAG} `);
+
+/** The kept block of another record of the couple (null: not one to keep); `xref` without the @ signs. */
+export function joinedBlock(xref: string, structure: readonly string[]): string[] | null {
+    const block = [xref ? `1 ${JOINED_TAG} ${xref}` : `1 ${JOINED_TAG}`];
+    for (const line of structure) block.push(line.replace(/^\d+/, n => String(Number(n) + 1)));
+    return validExtraBlock(block) ? block : null;
+}
+
+/** The couple's other records of one import's kept lines: each one's xref ('' unknown) and its lines from level 1. */
+export function joinedRecords(lines: readonly string[]): { xref: string; lines: string[] }[] {
+    return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => ({
+        xref: b[0].slice(JOINED_TAG.length + 3).trim(),
+        lines: b.slice(1).map(l => l.replace(/^\d+/, n => String(Number(n) - 1))),
+    }));
 }
 
 /**

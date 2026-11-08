@@ -95,9 +95,9 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addGedcomExtra, addOriginalIds, CITE_TAG, NOTED_TAG, notedBlock, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    addGedcomExtra, addOriginalIds, CITE_TAG, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
-    ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
+    JOINED_TAG, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -1214,6 +1214,14 @@ interface GedcomFamily {
     importIds?: RawOriginalIds[];
     /** Another program's own level-1 tags kept as written (spec 066 G8). */
     extras?: RawExtra[];
+    /** The record's `0 @F1@ FAM` line in the file. */
+    recordLine?: number;
+    /**
+     * The record's lines as written, from level 1 (not of the research's
+     * files): only of a couple with another record, or of a record that
+     * marries the two again after a divorce (see laterUnionStructures).
+     */
+    recordLines?: string[];
     /** 2 _STROM_IMPORT under MARR and DIV. */
     factImports?: Partial<Record<RawCoupleFact, RawImportMark[]>>;
     /** The research's origin of MARR and DIV (Strom's own files only). */
@@ -1402,6 +1410,12 @@ export interface GedcomConversionResult {
          * on the child.
          */
         otherFamilyLinks: number;
+        /**
+         * Family records of a couple that already has one (a record per
+         * wedding): joined to that couple's partnership, their weddings kept
+         * for "Back to {prog}".
+         */
+        joinedFamilies: number;
         /**
          * Media not carried over: embedded ones of another type (only images and
          * PDFs come in), a link to a media record the file does not have, a
@@ -2062,6 +2076,92 @@ function statusFromStat(value: string | undefined): PartnershipStatus | undefine
     return undefined;
 }
 
+/** The line of the couple's note that says they divorced and married again. */
+function remarriageLine({ divorced, married }: { divorced: string; married: string }): string {
+    return divorced ? strings.gedcomNotes.remarriage(divorced, married) : strings.gedcomNotes.remarriageNoDate(married);
+}
+
+/** A line that names a record by its xref (the export renumbers them; a calendar's escape, `@#DJULIAN@`, is none). */
+const NAMES_A_RECORD = /^\d+ @|\s@[^@#\s][^@\s]*@/;
+
+/** A record's lines from level 1, as one list per level-1 structure. */
+function structuresOf(lines: readonly string[]): string[][] {
+    const out: string[][] = [];
+    for (const line of lines) {
+        if (line.startsWith('1 ')) out.push([line]);
+        else out[out.length - 1]?.push(line);
+    }
+    return out;
+}
+
+/** A structure without its lines that name a record, and the lines under those. */
+function withoutRecordPointers(structure: readonly string[]): string[] {
+    const out: string[] = [];
+    let below = -1;
+    for (const line of structure) {
+        const level = Number(/^(\d+)/.exec(line)?.[1] ?? 0);
+        if (below >= 0 && level > below) continue;
+        below = -1;
+        if (NAMES_A_RECORD.test(line)) { below = level; continue; }
+        out.push(line);
+    }
+    return out;
+}
+
+/**
+ * A family record's weddings and divorces after its first wedding, as
+ * written, while the first of them is a divorce (MARR / DIV / MARR: the
+ * couple married again). null when there is none, or a line names a record.
+ */
+function laterUnionStructures(fam: GedcomFamily): string[] | null {
+    const union = structuresOf(fam.recordLines ?? []).filter(st => /^1 (MARR|DIV)( |$)/.test(st[0]));
+    const first = union.findIndex(st => /^1 MARR( |$)/.test(st[0]));
+    const later = first < 0 ? [] : union.slice(first + 1);
+    if (later.length === 0 || !/^1 DIV( |$)/.test(later[0][0]) || later.flat().some(l => NAMES_A_RECORD.test(l))) return null;
+    return later.flat();
+}
+
+/**
+ * The line a remarriage became in the couple's note, kept with the record's
+ * later weddings and divorces as written (NOTED_TAG): "Back to {prog}"
+ * writes them in place of the line. What a divorce's own details became in
+ * the note (its NOTE, a date the field could not hold) goes with them.
+ * Returns whether it was kept.
+ */
+function noteRemarriage(fam: GedcomFamily, line: string): boolean {
+    const later = laterUnionStructures(fam);
+    if (!later) return false;
+    const divorceOf = (e: RawExtra): boolean =>
+        e.tag === NOTED_TAG && /^1 DIV( |$)/.test(notedStructures(e.lines)[0]?.lines[0] ?? '');
+    const divorces = (fam.extras ?? []).filter(divorceOf);
+    const block = notedBlock([line, ...divorces.flatMap(e => notedStructures(e.lines)[0].texts)], later);
+    if (!block) return false;
+    fam.extras = [...(fam.extras ?? []).filter(e => !divorceOf(e)), { tag: NOTED_TAG, lines: block, quiet: true }];
+    return true;
+}
+
+/**
+ * Another record of a couple the import joins to the first one (see
+ * JOINED_TAG): its weddings, divorces and ids as written, the lines naming
+ * a record left out. Its xref is the one the file gave it (a Strom file's:
+ * the one its program gave it). The other kept lines of the record go to the
+ * partnership, except those of a wedding or a divorce noted (the block has them).
+ */
+function keepJoinedRecord(gedFamId: string, fam: GedcomFamily): boolean {
+    if (!fam.recordLines) return false;
+    const own = fam.importIds?.find(b => b.xref)?.xref ?? gedFamId;
+    const xref = /^@([^@]+)@$/.exec(own)?.[1] ?? '';
+    const kept = structuresOf(fam.recordLines)
+        .filter(st => /^1 (MARR|DIV|REFN)( |$)/.test(st[0]) || ORIGINAL_ID_TAGS.has(st[0].split(' ')[1]))
+        .map(withoutRecordPointers);
+    const block = joinedBlock(xref.startsWith('__') ? '' : xref, kept.flat());
+    if (!block) return false;
+    const unionNoted = (e: RawExtra): boolean =>
+        e.tag === NOTED_TAG && /^1 (MARR|DIV)( |$)/.test(notedStructures(e.lines)[0]?.lines[0] ?? '');
+    fam.extras = [...(fam.extras ?? []).filter(e => !unionNoted(e)), { tag: JOINED_TAG, lines: block, quiet: true }];
+    return true;
+}
+
 /** Put the resolved marriage/divorce outcome onto a partnership. */
 function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
     const outcome = resolveUnionStatus(fam);
@@ -2071,11 +2171,11 @@ function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
     // whose start date rides on MARR (the only place for it) is not married.
     partnership.status = statusFromStat(fam.stat) ?? statusFromStat(fam.relationshipStatus) ?? outcome.status;
     if (outcome.remarriage) {
-        const { divorced, married } = outcome.remarriage;
-        const line = divorced
-            ? strings.gedcomNotes.remarriage(divorced, married)
-            : strings.gedcomNotes.remarriageNoDate(married);
+        const line = remarriageLine(outcome.remarriage);
         partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        // "Back to {prog}" writes the divorce (with its place) and the
+        // wedding again as written, not the line.
+        if (noteRemarriage(fam, line)) { delete partnership.endPlace; delete partnership.endStatus; }
     }
 }
 
@@ -2968,7 +3068,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     sourceRefs: [],
                     marriageParticipants: [],
                     childRels: new Map(),
-                    noteFacts: []
+                    noteFacts: [],
+                    recordLine: rec.src,
                 };
                 currentType = 'FAM';
                 currentSource = null;
@@ -3957,6 +4058,25 @@ export function parseGedcom(content: string): ParsedGedcom {
     // A detail line on the very last line of the file has no successor to close it.
     flushDetail();
 
+    // The lines of a couple's records when the couple has more than one, or
+    // when one record marries the two again after a divorce: kept as written
+    // for "Back to {prog}" (see JOINED_TAG, laterUnionStructures).
+    if (!stromResearch) {
+        const recordsOf = new Map<string, number>();
+        const coupleOf = (fam: GedcomFamily): string => (fam.husb && fam.wife ? [fam.husb, fam.wife].sort().join('|') : '');
+        for (const fam of families.values()) {
+            const key = coupleOf(fam);
+            if (key) recordsOf.set(key, (recordsOf.get(key) ?? 0) + 1);
+        }
+        for (const fam of families.values()) {
+            const key = coupleOf(fam);
+            const again = fam.unionEvents.some((e, i) => e.type === 'marriage' && fam.unionEvents.slice(0, i).some(d => d.type === 'divorce'));
+            if (fam.recordLine !== undefined && ((key && recordsOf.get(key)! > 1) || again)) {
+                fam.recordLines = structureAt(fam.recordLine).slice(1);
+            }
+        }
+    }
+
     // A person's surname here is the birth one (a woman's maiden name). A file
     // that lists her married name first and marks another NAME as the birth
     // one would otherwise file her under her husband's surname: swap them.
@@ -4767,6 +4887,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (!from.marriageUnrecorded) delete into.marriageUnrecorded;
     };
     const unionOfCouple = new Map<string, PartnershipId>();
+    /** The records each partnership was read from, the first one first (more than one: joined, see joinUnion). */
+    const recordsOfUnion = new Map<PartnershipId, [string, GedcomFamily][]>();
+    /** The couple's other records kept as written for "Back to {prog}" (JOINED_TAG): their ids go there, not on the partnership. */
+    const joinedKept = new Set<string>();
+    let joinedFamilies = 0;
 
     /**
      * Hang one child under a partnership (both parents, PEDI, _FREL/_MREL) —
@@ -4869,7 +4994,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (sameCouple) {
             target = partnerships[sameCouple];
             joinUnion(target, partnership);
+            recordsOfUnion.get(sameCouple)?.push([gedFamId, fam]);
+            joinedFamilies++;
+            if (keepJoinedRecord(gedFamId, fam)) joinedKept.add(gedFamId);
         } else {
+            recordsOfUnion.set(partnershipId, [[gedFamId, fam]]);
             unionOfCouple.set(coupleKey, partnershipId);
             partnerships[partnershipId] = partnership;
             target = partnership;
@@ -4881,6 +5010,34 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const childGedId of childrenOf(gedFamId, fam)) {
             linkChild(target, childGedId, gedFamId, fam, { husb: person1Id, wife: person2Id });
         }
+    }
+
+    // A couple divorced in one record and married again in another (a record
+    // per wedding): married, as when one record says both, and the divorce
+    // and the new wedding said in the note. The first record's divorce goes
+    // to "Back to {prog}" as written in place of that line, the new wedding
+    // with its own record (JOINED_TAG).
+    for (const [pid, records] of recordsOfUnion) {
+        const target = partnerships[pid];
+        const fams = records.map(([, fam]) => fam);
+        const first = fams[0];
+        if (fams.length < 2 || target.status !== 'divorced' || resolveUnionStatus(first).remarriage) continue;
+        if (fams.some(f => statusFromStat(f.stat) ?? statusFromStat(f.relationshipStatus))) continue;
+        const outcome = resolveUnionStatus({
+            ...first,
+            unionEvents: fams.flatMap(f => f.unionEvents),
+            divorced: fams.some(f => f.divorced),
+            divorceDate: fams.map(f => f.divorceDate).find(Boolean) ?? '',
+            marriageDate: fams.map(f => f.marriageDate).find(Boolean) ?? '',
+        });
+        if (outcome.status !== 'married' || !outcome.remarriage) continue;
+        const line = remarriageLine(outcome.remarriage);
+        if (!noteRemarriage(first, line)) continue;
+        target.status = 'married';
+        delete target.endDate;
+        delete target.endPlace;
+        delete target.endStatus;
+        target.note = target.note ? `${target.note}\n${line}` : line;
     }
 
     /** A "?" stand-in for a parent the family does not name. */
@@ -5205,7 +5362,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
         for (const [gedFamId, fam] of families) {
             const ps = famPartnership.get(gedFamId);
-            if (ps) put(ps, gedFamId, fam.fileIds);
+            if (ps && !joinedKept.has(gedFamId)) put(ps, gedFamId, fam.fileIds);
         }
         // A source record's xref, on every source it became (one per page cited).
         for (const [gedId, raw] of gedSources) {
@@ -5236,7 +5393,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
         for (const [gedFamId, fam] of families) {
             const ps = famPartnership.get(gedFamId);
-            if (ps) put(ps, fam.importIds);
+            if (ps && !joinedKept.has(gedFamId)) put(ps, fam.importIds);
         }
         // A source record's xref in the file it came from (`2 _XREF` under its `1 _STROM_IMPORT`).
         for (const [gedId, raw] of gedSources) {
@@ -5337,6 +5494,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         ...(importId ? { importId } : {}),
         stats: {
             otherFamilyLinks,
+            joinedFamilies,
             totalPersons: Object.keys(persons).length,
             totalPartnerships: Object.keys(partnerships).length,
             placeholderPersons,

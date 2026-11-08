@@ -4465,6 +4465,9 @@ const stringsEN = {
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'child was' : 'children were'} recorded in more than one family `
             + `(e.g. adopted); shown with the birth family, the rest noted on the person`,
+        joinedFamilies: (n: number, prog?: string) =>
+            `${n} more family ${n === 1 ? 'record' : 'records'} of the same couple (e.g. a second wedding) joined to their partnership`
+            + (prog ? `; kept as written for the export “Back to ${prog}”` : ''),
         photos: 'Photos',
         documents: 'Documents',
         excerpts: 'Excerpts',
@@ -12354,6 +12357,11 @@ const stringsCZ: StringsType = {
         otherFamilyLinks: (n: number) =>
             `${n} ${plural('cs', n, 'dítě je zapsáno', 'děti jsou zapsány', 'dětí je zapsáno')} ve více rodinách `
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
+        joinedFamilies: (n: number, prog?: string) =>
+            `${n} ${plural('cs', n, 'další záznam rodiny téhož páru (např. druhý sňatek) je připojen',
+                'další záznamy rodiny téhož páru (např. druhý sňatek) jsou připojeny',
+                'dalších záznamů rodiny téhož páru (např. druhý sňatek) je připojeno')} k jejich vztahu`
+            + (prog ? `; uchováno pro export „Zpět do ${prog}“` : ''),
         photos: 'Fotografie',
         documents: 'Dokumenty',
         excerpts: 'Výřezy',
@@ -20181,6 +20189,9 @@ const stringsDE: StringsType = {
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'Kind wurde' : 'Kinder wurden'} in mehr als einer Familie erfasst `
             + `(z. B. adoptiert); mit der Geburtsfamilie angezeigt, der Rest bei der Person vermerkt`,
+        joinedFamilies: (n: number, prog?: string) =>
+            `${n} ${n === 1 ? 'weiterer Familiendatensatz' : 'weitere Familiendatensätze'} desselben Paares (z. B. eine zweite Heirat) `
+            + `mit dessen Partnerschaft zusammengeführt` + (prog ? `; für den Export „Zurück zu ${prog}“ aufbewahrt` : ''),
         photos: 'Fotos',
         documents: 'Dokumente',
         excerpts: 'Ausschnitte',

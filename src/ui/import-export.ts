@@ -515,6 +515,8 @@ export const importExportMethods = uiModule({
             const people = [
                 ...(stats.unknownSexPersons > 0 ? [strings.gedcom.unknownSex(stats.unknownSexPersons)] : []),
                 ...(stats.otherFamilyLinks > 0 ? [strings.gedcom.otherFamilyLinks(stats.otherFamilyLinks)] : []),
+                ...(stats.joinedFamilies > 0
+                    ? [strings.gedcom.joinedFamilies(stats.joinedFamilies, keptFrom ? importProgramName(keptFrom) : undefined)] : []),
             ];
             // Nothing lost and nothing to say about people: said out loud —
             // silence reads as "who knows what got lost".

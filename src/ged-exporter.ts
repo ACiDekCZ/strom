@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -881,6 +881,29 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         return `@${prefix}${n}@`;
     };
 
+    // "Back to {prog}": the couple's other records of that program's file
+    // (JOINED_TAG), written beside the couple's own; each keeps its xref
+    // while no other record has it (once, when two imports kept the same).
+    const joined = new Map<PartnershipId, { xref: string; own: string; from: string; lines: string[] }[]>();
+    if (back.imports.size > 0) {
+        const seen = new Set<string>();
+        for (const [id, ps] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
+            for (const entry of ps?.gedcomExtra ?? []) {
+                if (!back.imports.has(entry.from)) continue;
+                for (const record of joinedRecords(entry.lines)) {
+                    const key = `${id}\n${record.xref}\n${record.lines.join('\n')}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    const free = isSafeXref(record.xref) && !taken.has(record.xref.toUpperCase());
+                    if (free) taken.add(record.xref.toUpperCase());
+                    const list = joined.get(id) ?? [];
+                    joined.set(id, list);
+                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, lines: record.lines });
+                }
+            }
+        }
+    }
+
     // Map all persons to GEDCOM IDs — but a "?" stand-in that only marks the
     // unknown other parent of a family with children: no record of its own
     // (other programs would show a nameless spouse). The family keeps the known
@@ -896,6 +919,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const own = back.families.get(partnershipId);
         partnershipIdMap.set(partnershipId, own ? `@${own}@` : freshXref('F'));
     }
+    for (const list of joined.values()) for (const record of list) if (!record.xref) record.xref = freshXref('F');
 
     // The other families a person is also a child of (alsoChildLinks): both
     // ends written, the child's FAMC and the family's CHIL.
@@ -1461,6 +1485,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const famId = partnershipIdMap.get(partnershipId);
             if (famId) {
                 lines.push(`1 FAMS ${famId}`);
+                for (const record of joined.get(partnershipId) ?? []) lines.push(`1 FAMS ${record.xref}`);
             }
         }
 
@@ -1699,6 +1724,18 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         pushGedcomExtra(partnership);
+
+        // The couple's other records of the program's file, as it wrote them (see joined).
+        for (const record of joined.get(partnershipId) ?? []) {
+            lines.push(`0 ${record.xref} FAM`);
+            if (knownImports.has(record.from)) {
+                lines.push(`1 ${IMPORT_TAG} ${record.from}`);
+                if (record.own) lines.push(`2 _XREF @${record.own}@`);
+            }
+            if (personIdMap.has(husbId)) lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
+            if (personIdMap.has(wifeId)) lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
+            lines.push(...record.lines);
+        }
     }
 
     // Parents who are not a couple, with their children (see looseFamilies).

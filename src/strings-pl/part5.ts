@@ -740,6 +740,9 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         otherFamilyLinks: (n: number) =>
             `${n} ${plPl(n, 'dziecko jest zapisane', 'dzieci są zapisane', 'dzieci jest zapisanych')} w kilku rodzinach `
             + `(np. adopcja); pokazano przy rodzinie biologicznej, resztę zapisano w notatce osoby`,
+        joinedFamilies: (n: number, prog?: string) =>
+            `Dołączono do związku tej samej pary: ${nPl(n, 'kolejny rekord rodziny', 'kolejne rekordy rodziny', 'kolejnych rekordów rodziny')} (np. drugi ślub)`
+            + (prog ? `; zachowano do eksportu „Z powrotem do ${prog}”` : ''),
         photos: 'Zdjęcia',
         documents: 'Dokumenty',
         excerpts: 'Wycinki',

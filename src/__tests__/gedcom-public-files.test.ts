@@ -144,3 +144,50 @@ describe('A date GEDCOM allows but Strom cannot read, and a note under a divorce
         expect(Object.values(again.tree.partnerships)[0].note).toContain('Divorce note text');
     });
 });
+
+describe('A second wedding of the same couple in a family record of its own (066 N2, c-remarriage.ged)', () => {
+    const text = fixture('c-remarriage.ged');
+
+    it('the tree has one couple, married again, and the import summary counts the joined record', () => {
+        const result = convertToStrom(parseGedcom(text), { importOrigin: { at: '2026-11-08', file: 'c.ged', encoding: 'utf-8' } });
+        const couples = Object.values(result.data.partnerships);
+        expect(couples).toHaveLength(1);
+        expect(couples[0].status).toBe('married');
+        expect(couples[0].startDate).toBe('1911-04-01');
+        expect(couples[0].endDate).toBeUndefined();
+        expect(couples[0].note).toContain('1914-07-04');
+        expect(result.stats.joinedFamilies).toBe(1);
+    });
+
+    it('"Back to" writes both records with their dates, both partners in both, and no note made of them', () => {
+        const { back, second } = twice(text, 'c-remarriage.ged');
+        expect(back).toMatch(/0 @F1@ FAM\n(?:[1-9].*\n)*?1 MARR\n2 DATE 1 APR 1911\n(?:2 .*\n)*1 DIV\n2 DATE 2 MAY 1912\n0 @F3@ FAM\n/);
+        expect(back).toMatch(/0 @F3@ FAM\n(?:[1-9].*\n)*?1 HUSB @I1@\n1 WIFE @I2@\n1 MARR\n2 DATE 4 JUL 1914\n/);
+        expect(back.match(/1 FAMS @F1@\n1 FAMS @F3@\n/g)).toHaveLength(2);
+        expect(back).not.toMatch(/NOTE .*(Divorced|married again)/);
+        expect(undated(second)).toBe(undated(back));
+    });
+
+    it('a record that marries the two again itself (MARR / DIV / MARR) goes back so, not as a note', () => {
+        const one = text.replace(/1 FAMS @F3@\n/g, '').replace(/0 @F3@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n/, '');
+        const { tree, back, second } = twice(one, 'remarriage1.ged');
+        expect(Object.values(tree.partnerships)[0].status).toBe('married');
+        expect(back).toContain('1 DIV\n2 DATE 2 MAY 1912\n1 MARR\n2 DATE 4 JUL 1914\n');
+        expect(back).not.toMatch(/NOTE .*(Divorced|married again)/);
+        expect(undated(second)).toBe(undated(back));
+    });
+
+    it('a church wedding in its own record keeps its record, its type and its id; the child stays with the couple', () => {
+        const file = text
+            .replace('1 FAMS @F3@\n0 @I2@', '1 FAMS @F3@\n0 @I3@ INDI\n1 NAME C /X/\n1 FAMC @F3@\n0 @I2@')
+            .replace('1 DIV\n2 DATE 2 MAY 1912\n', '1 _UID ABC\n')
+            .replace('1 MARR\n2 DATE 4 JUL 1914\n', '1 CHIL @I3@\n1 MARR\n2 DATE 9 APR 1911\n2 TYPE church\n1 _UID DEF\n');
+        const { tree, back, second } = twice(file, 'church.ged');
+        const couple = Object.values(tree.partnerships)[0];
+        expect(Object.values(tree.partnerships)).toHaveLength(1);
+        expect(couple.childIds).toHaveLength(1);
+        expect(back).toMatch(/0 @F3@ FAM\n(?:[1-9].*\n)*?1 MARR\n2 DATE 9 APR 1911\n2 TYPE church\n1 _UID DEF\n/);
+        expect(back.split('0 @F3@ FAM')[0]).not.toContain('DEF');
+        expect(undated(second)).toBe(undated(back));
+    });
+});
