@@ -37,6 +37,7 @@ import {
     PartnershipConflictField
 } from './types.js';
 import { StorageManager } from '../storage.js';
+import { mergeNoteText } from './notes.js';
 
 // ==================== BACKUP ====================
 
@@ -73,11 +74,12 @@ export async function deleteBackup(key: string): Promise<void> {
  */
 /**
  * UNDECIDED matches auto-confirm only when the score clears the same bar the
- * UI shows as pre-confirmed (✓, score >= 50). Anything weaker without an
- * explicit user decision is treated as REJECTED — a duplicate person is
- * recoverable (person merge exists), a silent wrong merge is not.
+ * UI shows as pre-confirmed (✓, score >= 80). Anything weaker — a match from
+ * 50 to 79 included — is only offered for review (?), and without an explicit
+ * user decision it is treated as REJECTED: a duplicate person is recoverable
+ * (person merge exists), a silent wrong merge is not.
  */
-export const AUTO_CONFIRM_SCORE = 50;
+export const AUTO_CONFIRM_SCORE = 80;
 
 export function isEffectivelyConfirmed(state: MergeState, match: { incomingId: PersonId; score: number }): boolean {
     const decision = state.decisions.get(match.incomingId);
@@ -705,12 +707,15 @@ function mergeSourceCatalogs(
 
 /**
  * A deduplicated incoming source still brings what the kept one lacks: its
- * excerpts (same image = same excerpt) and any empty text field.
+ * excerpts (same image = same excerpt), any empty text field and the parts of
+ * its note the kept note does not say yet.
  */
 function absorbSourceDetails(kept: Source, incoming: Source): void {
     if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
     if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
     if (!kept.refn && incoming.refn) kept.refn = incoming.refn;
+    const sourceNote = mergeNoteText(kept.note, incoming.note);
+    if (sourceNote !== kept.note) kept.note = sourceNote;
     if (!kept.reading && incoming.reading) {
         kept.reading = incoming.reading;
         if (incoming.readingEntry) kept.readingEntry = incoming.readingEntry;
@@ -915,15 +920,10 @@ export function mergePersonData(
     }
 
     // Notes: keep both. Genealogy notes are cheap to store and expensive to
-    // re-research, so when both sides wrote something different we concatenate
-    // rather than silently drop the incoming note.
-    if (incoming.notes && incoming.notes.trim()) {
-        if (!existing.notes || !existing.notes.trim()) {
-            existing.notes = incoming.notes;
-        } else if (existing.notes.trim() !== incoming.notes.trim()) {
-            existing.notes = `${existing.notes}\n---\n${incoming.notes}`;
-        }
-    }
+    // re-research, so the incoming note's parts the existing one does not
+    // already say are appended (mergeNoteText) — never the same text twice.
+    const notes = mergeNoteText(existing.notes, incoming.notes);
+    if (notes !== existing.notes) existing.notes = notes;
 
     // Apply conflict resolutions
     for (const conflict of conflicts) {
@@ -1105,9 +1105,9 @@ export function mergePartnershipData(
         const key = personIdMap?.get(pid as PersonId) ?? pid;
         if (!existing.ages?.[key]) existing.ages = { ...(existing.ages ?? {}), [key]: age };
     }
-    if (!existing.note && incoming.note) {
-        existing.note = incoming.note;
-    }
+    // The couple's note: both sides' text, each part once (mergeNoteText).
+    const note = mergeNoteText(existing.note, incoming.note);
+    if (note !== existing.note) existing.note = note;
     // Source citations: union like persons' sourceIds — a marriage record cited
     // on either side is evidence for the union and must survive the merge.
     if (incoming.sourceIds && incoming.sourceIds.length > 0) {

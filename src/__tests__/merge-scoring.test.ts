@@ -36,7 +36,9 @@ describe('findMatches scoring (behaviour lock)', () => {
         const incoming = data(person('i1', 'JAN', 'Novak', { birthDate: '1880' }));
         const matches = findMatches(existing, incoming);
         expect(matches).toHaveLength(1);
-        expect(matches[0].score).toBeGreaterThanOrEqual(AUTO_CONFIRM_SCORE);
+        // A name and a birth year alone are offered, not pre-confirmed.
+        expect(matches[0].score).toBeGreaterThanOrEqual(50);
+        expect(matches[0].score).toBeLessThan(AUTO_CONFIRM_SCORE);
     });
 
     it('a gender mismatch is a hard gate (no match at any name similarity)', () => {
@@ -77,6 +79,18 @@ describe('undecided matches at execution', () => {
         expect(isEffectivelyConfirmed(state, state.matches[0])).toBe(true);
         const mapping = buildIdMapping(state);
         expect(mapping.persons.get('i1' as PersonId)).toBe('e1');
+    });
+
+    it('the auto-confirm bar is 80: a match of 50 to 79 is only offered', () => {
+        expect(AUTO_CONFIRM_SCORE).toBe(80);
+        for (const score of [50, 65, 79]) {
+            const state = mkState(score);
+            expect(isEffectivelyConfirmed(state, state.matches[0])).toBe(false);
+            expect(buildIdMapping(state).persons.get('i1' as PersonId)).not.toBe('e1');
+        }
+        const confirmed = mkState(65);
+        confirmed.decisions.set('i1' as PersonId, { type: 'confirm' });
+        expect(buildIdMapping(confirmed).persons.get('i1' as PersonId)).toBe('e1');
     });
 
     it('a weak undecided match is NOT merged — the person stays separate', () => {
@@ -122,7 +136,7 @@ describe('smart matching (flex dates + transitive propagation)', () => {
         const incoming = data(person('i1', 'Jan', 'Novák', { birthDate: '~1880' }));
         const matches = findMatches(existing, incoming);
         expect(matches).toHaveLength(1);
-        expect(matches[0].score).toBeGreaterThanOrEqual(AUTO_CONFIRM_SCORE);
+        expect(matches[0].score).toBeGreaterThanOrEqual(50);
     });
 
     it('propagation chains through generations (grandparent resolves via parent)', () => {
