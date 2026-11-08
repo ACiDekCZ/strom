@@ -903,9 +903,14 @@ test.describe('Read a source again: its own entry, a failed comparison, the kind
         const d = await openAgain(page, again(page));
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
+        await expect(d.locator('#read-title')).toHaveText('Reading again');
         b.read!.reads[0].state = 'done';
         b.read!.results.set(READ_ID, res);
-        await poll(page);
+        // A poll asked while the dialog's own poll runs is skipped (see readAndFinish): poll until the reading is over.
+        await expect(async () => {
+            await poll(page);
+            await expect(d.locator('#read-title')).not.toHaveText('Reading again', { timeout: 1000 });
+        }).toPass();
         return d;
     }
     const neighbours = (source: Record<string, unknown>): Record<string, unknown> => ({ ...result(source), entries: THREE });
