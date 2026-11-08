@@ -119,20 +119,51 @@ export interface ReliabilityHtmlOptions {
     facts?: string[];
 }
 
+/** Whose fact a pill marks (a person's or a couple's). */
+export interface FactPillTarget {
+    personId?: string;
+    partnershipId?: string;
+}
+
+/** Whether a fact waits for re-verification (spec 065 §10.1, 10d); set by the verifying UI. */
+export type FactPendingResolver = (target: FactPillTarget, fact: string) => boolean;
+
+let pendingResolver: FactPendingResolver | null = null;
+
+/** Tell the pills which facts wait for re-verification (null: none). */
+export function setFactPendingResolver(resolver: FactPendingResolver | null): void {
+    pendingResolver = resolver;
+}
+
+/** A small clock after the pill's text: the fact waits to be verified. */
+const PENDING_CLOCK = '<span class="fs-clock" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" focusable="false">'
+    + '<circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.1"/>'
+    + '<path d="M5 2.6V5l1.7 1" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>';
+
+/** The pill's facts wait for re-verification (any of the origin row's). */
+function pillPending(opts: ReliabilityHtmlOptions): boolean {
+    if (!pendingResolver || (!opts.personId && !opts.partnershipId)) return false;
+    const facts = opts.facts?.length ? opts.facts : opts.fact ? [opts.fact] : [];
+    const target = { personId: opts.personId, partnershipId: opts.partnershipId };
+    return facts.some(f => pendingResolver!(target, f));
+}
+
 /** A step's pill ('' for none). */
 export function reliabilityHtml(step: ReliabilityStep | null | undefined, title: string, opts: ReliabilityHtmlOptions = {}): string {
     if (!step) return '';
     const label = reliabilityLabel(step.step);
-    const cls = `fact-status fact-status-${step.step}${opts.className ? ` ${opts.className}` : ''}`;
+    const pending = pillPending(opts);
+    const cls = `fact-status fact-status-${step.step}${pending ? ' is-pending' : ''}${opts.className ? ` ${opts.className}` : ''}`;
     const attrs = `class="${cls}" data-fact-status="${step.step}"${step.step === 'proven' ? ` data-dots="${step.dots ?? 1}"` : ''}`
         + `${opts.fact ? ` data-fact="${escAttr(opts.fact)}"` : ''}`;
-    const inner = `${glyphsHtml(step)}<span class="fs-text">${escText(label)}</span>`;
-    if (opts.inert) return `<span ${attrs} title="${escAttr(title)}">${inner}</span>`;
+    const inner = `${glyphsHtml(step)}<span class="fs-text">${escText(label)}</span>${pending ? PENDING_CLOCK : ''}`;
+    const said = pending ? `, ${strings.verify.pendingAria}` : '';
+    if (opts.inert) return `<span ${attrs} title="${escAttr(`${title}${said}`)}">${inner}</span>`;
     // A button's words are its status tip's (no native title over it).
     const holder = `${opts.personId ? ` data-st-person="${escAttr(opts.personId)}"` : ''}`
         + `${opts.partnershipId ? ` data-st-partnership="${escAttr(opts.partnershipId)}"` : ''}`
         + `${opts.facts?.length ? ` data-st-facts="${escAttr(opts.facts.join(','))}"` : ''}`;
-    return `<button type="button" ${attrs}${holder} data-st-title="${escAttr(title)}" aria-label="${escAttr(`${label}: ${title}`)}" aria-expanded="false">${inner}</button>`;
+    return `<button type="button" ${attrs}${holder} data-st-title="${escAttr(title)}" aria-label="${escAttr(`${label}: ${title}${said}`)}" aria-expanded="false">${inner}</button>`;
 }
 
 /** A fact's pill from its reliability ('' for none). */

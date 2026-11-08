@@ -23,6 +23,7 @@ import { uiModule } from './module.js';
 import { TreeRenderer } from '../renderer.js';
 import { HELP_TOPICS } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
+import { keepPinnedStatusTip, verifyLocalEvidence } from './verify-ui.js';
 
 /** What the person card shows of the marks, computed once per drawing. */
 export interface PersonReliabilityView {
@@ -60,12 +61,14 @@ export const personReliabilityMethods = uiModule({
             openHelp: (trigger) => { void openHelp(HELP_TOPICS.reliability, trigger ?? undefined); },
             treeKnowsOrigin: () => TreeRenderer.treeKnowsOriginNow(),
         });
+        this.installVerifyUi();
     },
 
     /** Where the steps come from now: the active research tree and whether its bridge names `origin`. */
     reliabilityOptionsNow(): ReliabilityOptions {
         const originFeature = this.researchShowsOriginNow();
-        return { researchTree: originFeature || !!this.activeResearchId(), originFeature };
+        // A confirmation the research's bridge took shows at once (spec 065, src/ui/verify-ui.ts).
+        return { researchTree: originFeature || !!this.activeResearchId(), originFeature, evidence: verifyLocalEvidence };
     },
 
     /** The person card's marks (null: the setting is off). */
@@ -130,12 +133,15 @@ export const personReliabilityMethods = uiModule({
         if (occupation) put(document.querySelector('#person-modal label[for="input-occupation"]'), this.personFactMarkHtml(view, `event:${occupation.id}`));
     },
 
-    /** The open person card marked again (a setting changed, a research version loaded). */
+    /** The open person card marked again (a setting changed, a research version loaded); a pinned status tip stays. */
     refreshPersonReliability(): void {
         const modal = document.getElementById('person-modal');
         if (!modal?.classList.contains('active') || !this.currentId) return;
-        this.renderPersonReliability(this.currentId);
-        this.renderEventsList();
+        const id = this.currentId;
+        keepPinnedStatusTip(() => {
+            this.renderPersonReliability(id);
+            this.renderEventsList();
+        });
     },
 
     /**
