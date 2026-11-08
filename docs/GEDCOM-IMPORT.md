@@ -368,7 +368,12 @@ not its label, and is kept in the event's note:
   `_UPD`, so "Back to {program}" writes it again with its own date beside the
   first, both partners keeping both `FAMS`; the import summary counts such
   joined records. Its children, note, citations and other events go to the
-  one union (and come back under the first record).
+  one union and come back in that second record: its `CHIL` (the child's
+  `FAMC` naming it), its notes, its citations under its wedding and its
+  events, not under the first record. A wedding date, place, address or age
+  (or the wedding itself) the first record lacked shows on the couple from
+  the second, and the first record goes back with only its own while the
+  value is unchanged.
 - `HUSB` / `WIFE`: Strom writes the man as `HUSB` and the woman as `WIFE`; a
   person of unknown sex takes the role the other partner leaves free, and two
   of one sex (or two unknown) keep the order of the couple. In the tree a
@@ -688,7 +693,10 @@ the record ids, the export to the program the tree came from keeps:
   the app stays in the note); other exports keep the note lines;
 - `GIVN` / `SURN` under the name and under the married name (`TYPE
   married`), made from the name as it is now;
-- a source record's own ids (`RIN`, `_UID`…), back in that record;
+- a source record's own ids (`RIN`, `_UID`…), back in that record; a
+  source record cited nowhere keeps its xref too;
+- a `TYPE` under a wedding, a birth, a death or a divorce (`2 TYPE civil`),
+  read nowhere, back under that fact as written;
 - a child recorded in two families: Strom hangs it from one (a birth family
   first) and notes the other ("Also recorded as child of …"); every export
   writes that second `FAMC` (with its `PEDI`) and the family's `CHIL` instead
