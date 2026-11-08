@@ -24,7 +24,7 @@ import {
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
-import { addImportRecords, carryMergedImports, pruneImportOrigin, remapHolderImports } from '../import-origin.js';
+import { addGedcomExtra, addImportRecords, carryMergedImports, pruneImportOrigin, remapGedcomExtra, remapHolderImports } from '../import-origin.js';
 import { mergePlaceRecords } from '../place-records.js';
 import { mergePlaceAliases } from '../place-groups.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
@@ -233,9 +233,19 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // both share keeps one record); its marks are renamed to the ids here.
         const importMap = addImportRecords(mergedData, state.incomingData.imports);
         const sourceRemap = mergeSourceCatalogs(mergedData, state.incomingData.sources);
-        for (const id of Object.keys(state.incomingData.sources ?? {})) {
-            const src = sourceRemap.has(id) ? undefined : mergedData.sources?.[id];
+        for (const [id, incomingSrc] of Object.entries(state.incomingData.sources ?? {})) {
+            const kept = sourceRemap.get(id);
+            if (kept) {
+                // Deduplicated: the kept entry takes the other program's own tags of both.
+                const into = mergedData.sources?.[kept];
+                for (const entry of incomingSrc.gedcomExtra ?? []) {
+                    if (into) addGedcomExtra(into, { ...entry, from: importMap.get(entry.from) ?? entry.from });
+                }
+                continue;
+            }
+            const src = mergedData.sources?.[id];
             if (src?.importId) src.importId = importMap.get(src.importId) ?? src.importId;
+            if (src) remapGedcomExtra(src, importMap);
         }
 
         // Tree-level registries come along too — the user curated them.
@@ -898,6 +908,8 @@ export function mergePersonData(
     if (!existing.photo && incoming.photo) {
         existing.photo = incoming.photo;
         if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
+        if (incoming.photoDate) existing.photoDate = incoming.photoDate;
+        else delete existing.photoDate;
     }
 
     // Titles of the name: fill when missing. Two different titles are no
@@ -953,6 +965,8 @@ export function mergePersonData(
                     // photoOriginalName always travels WITH the photo it names.
                     if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
                     else delete existing.photoOriginalName;
+                    if (incoming.photoDate) existing.photoDate = incoming.photoDate;
+                    else delete existing.photoDate;
                 }
                 break;
             default:

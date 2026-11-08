@@ -31,6 +31,9 @@ import {
 /** A person or a couple: what carries facts. */
 export type FactHolder = Person | Partnership;
 
+/** A record that keeps another program's own tags (a person, a couple, a source). */
+export type ExtraHolder = { gedcomExtra?: GedcomExtra[] };
+
 const FACT_PARTS: readonly FactPart[] = ['DATE', 'PLAC', 'VAL', 'GIVN', 'SURN', 'SEX'];
 const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research'];
 
@@ -408,7 +411,7 @@ export function cleanGedcomExtra(value: unknown, known: ReadonlySet<string>): Ge
  * Add one import's kept tags to a holder: joined with the entry of the same
  * import (a block it already has is not added again), else a new entry.
  */
-export function addGedcomExtra(holder: FactHolder, entry: GedcomExtra): void {
+export function addGedcomExtra(holder: ExtraHolder, entry: GedcomExtra): void {
     const list = holder.gedcomExtra ??= [];
     const have = list.find(e => e.from === entry.from);
     if (!have) { list.push({ from: entry.from, lines: [...entry.lines] }); return; }
@@ -419,6 +422,36 @@ export function addGedcomExtra(holder: FactHolder, entry: GedcomExtra): void {
         known.add(key);
         have.lines.push(...block);
     }
+}
+
+/** A holder's kept tags with their import ids renamed by `map` (entries that become one join). */
+export function remapGedcomExtra(holder: ExtraHolder, map: Map<string, string>): void {
+    if (!holder.gedcomExtra || map.size === 0) return;
+    const list = holder.gedcomExtra;
+    delete holder.gedcomExtra;
+    for (const entry of list) addGedcomExtra(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
+}
+
+/** The kept tags of a holder, cleaned against the known imports (dropped when nothing valid is left). */
+function cleanHolderExtra(holder: ExtraHolder, known: ReadonlySet<string>): void {
+    if (!('gedcomExtra' in holder)) return;
+    const raw: unknown = holder.gedcomExtra;
+    const list = Array.isArray(raw) ? raw : [];
+    delete holder.gedcomExtra;
+    for (const v of list) {
+        const clean = cleanGedcomExtra(v, known);
+        if (clean) addGedcomExtra(holder, clean);
+    }
+}
+
+/**
+ * A picture's date as kept from a file (`_DATE` under its OBJE, spec 066 G8):
+ * one line, trimmed, at most 100 characters; else nothing is kept.
+ */
+export function mediaDateValue(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const v = value.trim();
+    return v && v.length <= 100 && !/[\u0000-\u001f\u007f]/.test(v) ? v : undefined;
 }
 
 /** Today as an ISO day in local time ("2026-11-08"): when a file was loaded. */
@@ -575,15 +608,7 @@ function cleanHolder(holder: FactHolder, known: Set<string>, sources: StromData[
             if (clean) addOriginalIds(holder, clean);
         }
     }
-    if ('gedcomExtra' in h) {
-        const raw = h.gedcomExtra;
-        const list = Array.isArray(raw) ? raw : [];
-        delete holder.gedcomExtra;
-        for (const v of list) {
-            const clean = cleanGedcomExtra(v, known);
-            if (clean) addGedcomExtra(holder, clean);
-        }
-    }
+    cleanHolderExtra(holder, known);
 }
 
 /**
@@ -616,8 +641,9 @@ export function cleanImportOrigin(data: StromData, rawImports: unknown): void {
         if (ps && typeof ps === 'object') cleanHolder(ps, known, data.sources);
     }
     for (const src of Object.values(data.sources ?? {})) {
-        if (src && typeof src === 'object' && 'importId' in src
-            && (typeof src.importId !== 'string' || !known.has(src.importId))) delete src.importId;
+        if (!src || typeof src !== 'object') continue;
+        if ('importId' in src && (typeof src.importId !== 'string' || !known.has(src.importId))) delete src.importId;
+        cleanHolderExtra(src, known);
     }
 }
 
@@ -721,11 +747,7 @@ export function remapHolderImports(holder: FactHolder, map: Map<string, string>)
         delete holder.originalIds;
         for (const entry of list) addOriginalIds(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
     }
-    if (holder.gedcomExtra) {
-        const list = holder.gedcomExtra;
-        delete holder.gedcomExtra;
-        for (const entry of list) addGedcomExtra(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
-    }
+    remapGedcomExtra(holder, map);
 }
 
 /**
@@ -812,6 +834,8 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
         }
         // Another program's own tags never go to the research: the tree keeps its own.
         for (const entry of from.gedcomExtra ?? []) addGedcomExtra(into, entry);
+        // Nor a picture's date from the file (spec 066 G8): it stays with the same picture.
+        if (!isPartnership(into) && !isPartnership(from)) keepMediaDates(into, from);
     };
     for (const [prevId, nextId] of prevToNext) {
         const before = previous.persons[prevId as PersonId];
@@ -833,5 +857,24 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
         const now = a && b ? nextPairs.get(pair(a, b)) : undefined;
         if (now) keepFacts(now, ps);
     }
+    // The sources' own tags of another program, by the research's record id (REFN), else the same id.
+    const nextSources = Object.values(out.sources ?? {});
+    for (const src of Object.values(previous.sources ?? {})) {
+        if (!src?.gedcomExtra) continue;
+        const now = (src.refn ? nextSources.find(s => s.refn === src.refn) : undefined) ?? out.sources?.[src.id];
+        if (now) for (const entry of src.gedcomExtra) addGedcomExtra(now, entry);
+    }
     return out;
+}
+
+/** A picture's date from the file (photoDate, Attachment.date) back on the same picture of `into`. */
+function keepMediaDates(into: Person, from: Person): void {
+    if (from.photoDate && !into.photoDate && into.photo && into.photo === from.photo) into.photoDate = from.photoDate;
+    for (const att of from.attachments ?? []) {
+        if (!att.date) continue;
+        const same = into.attachments?.find(a => !a.date && (a.id === att.id
+            || (!!a.dataUrl && !a.originalOnly && a.dataUrl === att.dataUrl)
+            || (!!a.original?.sha256 && a.original.sha256 === att.original?.sha256)));
+        if (same) same.date = att.date;
+    }
 }

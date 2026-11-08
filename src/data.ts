@@ -2208,7 +2208,11 @@ class DataManagerClass {
         }
         // isDeceased is tri-state (true / false / undefined); apply verbatim when provided.
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
-        if ('photo' in updates) person.photo = updates.photo || undefined;
+        if ('photo' in updates) {
+            // The date from the file belongs to the picture it came with.
+            if ((updates.photo || undefined) !== person.photo) delete person.photoDate;
+            person.photo = updates.photo || undefined;
+        }
 
         if (JSON.stringify(person) === personBefore) {
             this.pendingBefore = null;   // nothing changed — no undo step, no toast

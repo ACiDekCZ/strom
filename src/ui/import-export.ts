@@ -485,11 +485,13 @@ export const importExportMethods = uiModule({
 
         // Images in the file: offer to leave them out (pre-set from the
         // setting; the choice applies to this import only). The re-render
-        // after a media attach keeps the choice already made.
+        // after a media attach keeps the choice already made. Only images
+        // that are in the data: the files a GEDCOM merely names come in by
+        // the media row below, and before that there is nothing to leave out
+        // ("≈ 0.0 MB").
         if (this.gedcomImportImages === null) this.gedcomImportImages = SettingsManager.isImportImages();
         const imagesRow = document.getElementById('gedcom-images-row');
-        const hasImages = images.photos + images.attachments + images.excerpts > 0
-            || this.gedcomResult.externalMedia.length > 0;
+        const hasImages = images.photos + images.attachments + images.excerpts > 0;
         if (imagesRow) imagesRow.style.display = hasImages ? '' : 'none';
         const imagesCheck = document.getElementById('gedcom-import-images') as HTMLInputElement | null;
         if (imagesCheck) imagesCheck.checked = this.gedcomImportImages;
@@ -500,28 +502,24 @@ export const importExportMethods = uiModule({
         // What exactly was skipped (previously a dead counter — always 0).
         const detailEl = document.getElementById('gedcom-stat-detail');
         if (detailEl) {
-            const parts: string[] = [];
-            if (this.gedcomResult.stats.droppedTagSummary) {
-                // What the number means, before the list it names.
-                parts.push(strings.gedcom.unsupportedHint);
-                parts.push(`${strings.gedcom.skippedTags}: ${this.gedcomResult.stats.droppedTagSummary}`);
-            }
-            if (this.gedcomResult.stats.unknownSexPersons > 0) {
-                parts.push(strings.gedcom.unknownSex(this.gedcomResult.stats.unknownSexPersons));
-            }
-            if (this.gedcomResult.stats.otherFamilyLinks > 0) {
-                parts.push(strings.gedcom.otherFamilyLinks(this.gedcomResult.stats.otherFamilyLinks));
-            }
-            if (parts.length === 0 && this.gedcomResult.stats.unsupportedTags === 0) {
-                // Say it out loud — silence reads as "who knows what got lost".
-                parts.push(strings.gedcom.allImported);
-            }
-            // Another program's own tags, kept for the way back (spec 066 G8).
-            const kept = this.gedcomResult.stats.keptTags;
+            const stats = this.gedcomResult.stats;
+            // What was not carried over: what the number means, before the list it names.
+            const lost = stats.droppedTagSummary
+                ? [strings.gedcom.unsupportedHint, `${strings.gedcom.skippedTags}: ${stats.droppedTagSummary}`] : [];
+            // Another program's own tags, kept for the way back (spec 066 G8):
+            // a line of their own after what was not carried over, never in
+            // the "Unsupported" count.
             const keptFrom = this.gedcomResult.data.imports?.find(r => r.id === this.gedcomResult?.importId);
-            if (kept > 0 && keptFrom) {
-                parts.push(strings.gedcom.keptTags(importProgramName(keptFrom), kept, this.gedcomResult.stats.keptTagSummary));
-            }
+            const kept = stats.keptTags > 0 && keptFrom
+                ? [strings.gedcom.keptTags(importProgramName(keptFrom), stats.keptTags, stats.keptTagSummary)] : [];
+            const people = [
+                ...(stats.unknownSexPersons > 0 ? [strings.gedcom.unknownSex(stats.unknownSexPersons)] : []),
+                ...(stats.otherFamilyLinks > 0 ? [strings.gedcom.otherFamilyLinks(stats.otherFamilyLinks)] : []),
+            ];
+            // Nothing lost and nothing to say about people: said out loud —
+            // silence reads as "who knows what got lost".
+            const all = lost.length === 0 && people.length === 0 && stats.unsupportedTags === 0 ? [strings.gedcom.allImported] : [];
+            const parts = lost.length > 0 ? [...lost, ...kept, ...people] : [...all, ...people, ...kept];
             // One line each: the people of unknown sex were imported, and next to
             // "Skipped records" on the same line they read as skipped people.
             detailEl.replaceChildren(...parts.map(text => {
@@ -611,6 +609,8 @@ export const importExportMethods = uiModule({
         }
 
         this.gedcomResult.externalMedia = remaining;
+        // Files brought in by hand are images wanted in this import.
+        if (matched > 0) this.gedcomImportImages = true;
         this.showToast(matched > 0
             ? strings.gedcom.mediaAttached(matched, total)
             : strings.gedcom.mediaNoMatch);
@@ -618,14 +618,17 @@ export const importExportMethods = uiModule({
     },
 
     /** Attach one picked/downloaded file to the person of a media ref. */
-    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string }, file: File): Promise<boolean> {
+    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string; date?: string }, file: File): Promise<boolean> {
         const person = this.gedcomResult?.data.persons[ref.personId];
         if (!person) return false;
+        // The picture's date from the file goes with it (spec 066 G8).
+        const date = ref.date ? { date: ref.date } : {};
         try {
             if (file.type.startsWith('image/')) {
                 if (!person.photo) {
                     person.photo = await compressPhoto(file);
                     person.photoOriginalName = file.name;
+                    if (ref.date) person.photoDate = ref.date;
                 } else {
                     (person.attachments ??= []).push({
                         id: `att_${Date.now()}_${uniqueIdSuffix()}`,
@@ -633,6 +636,7 @@ export const importExportMethods = uiModule({
                         mimeType: 'image/jpeg',
                         dataUrl: await compressImageAttachment(file),
                         sizeBytes: 0,
+                        ...date,
                     });
                 }
             } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
@@ -642,6 +646,7 @@ export const importExportMethods = uiModule({
                     mimeType: 'application/pdf',
                     dataUrl: await readFileAsDataUrl(file),
                     sizeBytes: file.size,
+                    ...date,
                 });
             } else {
                 return false;
@@ -684,6 +689,7 @@ export const importExportMethods = uiModule({
         if (btn) btn.disabled = false;
 
         this.gedcomResult.externalMedia = refs.filter(r => !succeeded.has(r));
+        if (ok > 0) this.gedcomImportImages = true;
         this.showToast(ok > 0
             ? strings.gedcom.mediaAttached(ok, urlRefs.length)
             : strings.gedcom.mediaNoMatch);
@@ -771,9 +777,16 @@ export const importExportMethods = uiModule({
         this.applyGedcomImagesChoice();
     },
 
-    /** Dim the image tiles and hide the external-media offer when images stay out. */
+    /**
+     * Dim the image tiles and hide the external-media offer when images stay
+     * out — while the checkbox is there to bring them back (with no image in
+     * the data yet, the offer itself is the choice).
+     */
     applyGedcomImagesChoice(): void {
-        const off = this.gedcomImportImages === false;
+        const result = this.gedcomResult;
+        const images = result ? countImages(result.data) : null;
+        const off = this.gedcomImportImages === false
+            && !!images && images.photos + images.attachments + images.excerpts > 0;
         for (const key of ['photos', 'documents', 'excerpts']) {
             document.getElementById(`gedcom-stat-${key}-item`)?.classList.toggle('muted', off);
         }

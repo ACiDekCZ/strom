@@ -95,7 +95,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addGedcomExtra, addOriginalIds, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    addGedcomExtra, addOriginalIds, type ExtraHolder, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
@@ -841,6 +841,8 @@ interface RawMedia {
     sha?: string;
     /** _STROM_ORIENT: that original's EXIF orientation. */
     orient?: number;
+    /** _DATE: the picture's date as written (MyHeritage), kept with the picture (spec 066 G8). */
+    date?: string;
 }
 
 interface RawEvent {
@@ -1015,6 +1017,8 @@ interface RawSource {
     imageHeld?: SourceImageHeld;
     /** Its 2 _STROM_CLIP lines: the left-out excerpts. */
     heldClips?: string[];
+    /** Another program's own level-1 tags kept as written (spec 066 G8). */
+    extras?: RawExtra[];
 }
 
 /** Raw OBJE under a source record. */
@@ -1322,6 +1326,8 @@ export interface ExternalMediaRef {
     isUrl?: boolean;
     /** Platform marked this as the person's primary portrait. */
     primary?: boolean;
+    /** The picture's date as the file wrote it (`_DATE`), for the photo or attachment it becomes. */
+    date?: string;
 }
 
 export interface GedcomConversionResult {
@@ -1881,7 +1887,7 @@ const MEDIA_CUTOUT_TAG = /^_(?:[A-Z0-9]+_)*CUTOUT(?:_[A-Z0-9]+)*$|^_(?:[A-Z0-9]+
  * keeps the list complete: every `'_XXX'` the reader names is in it.
  */
 export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
-    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DRAFT', '_DUP',
+    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DATE', '_DRAFT', '_DUP',
     '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FREL', '_FSFTID', '_GEN', '_HELD', '_HYPO', '_INTREE', '_ISLAND',
     '_JOIN', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI', '_MILT', '_MREL', '_NEXT', '_NORECORDS', '_PAR', '_PART',
     '_PARTIAL', '_PERS', '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PROJECT_GUID', '_QUESTION', '_RECORDS', '_REF',
@@ -2226,6 +2232,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     };
     /** 0 @Rx@ REPO record currently open. */
     let currentRepoId: string | null = null;
+    /** Inside a `0 @N1@ NOTE` record (its text is read ahead, see preprocessGedcomLines). */
+    let inNoteRecord = false;
     /**
      * Where a detail line under the current fact goes: the event's note, the
      * person's note labelled "Birth:"/"Death:" (birth and death are fields,
@@ -2429,6 +2437,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
             else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
             else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
+            else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
             else if (isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
         } else if (level === 2 && objeSubTag === 'FILE' && objeFirstFile) {
             // Data-URL payloads are CONC-wrapped (255-char physical lines).
@@ -2785,6 +2794,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentCitationId = null; currentCitationSlot = null;
             currentPlaceValue = null;
             inHeader = recordType === 'HEAD';
+            inNoteRecord = recordType === 'NOTE' || recordType === 'SNOTE';
             inSurnameNote = false;
             if (recordType !== 'REPO') currentRepoId = null;
         } else if (inHeader) {
@@ -2840,6 +2850,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
+        } else if ((currentRepoId !== null || inNoteRecord) && level === 1) {
+            // A repository is kept as its name, a note record as its text in
+            // the places that cite it: another program's own tag on either
+            // record has nowhere to stay — counted, never lost without a word.
+            if (isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
         } else if (currentType === 'SOUR' && currentSource) {
             // Source record sub-lines. reference <- PAGE (spec mapping), the
             // transcript <- TEXT, refn <- REFN, excerpts <- OBJE.
@@ -2890,6 +2905,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // The short title some programs write beside (or instead of)
                 // TITL: the title when there is no other.
                 else if (tag === 'ABBR') src.abbr = value;
+                // Another program's own tag (MyHeritage's _TYPE, _MEDI): kept as
+                // written for "Back to {prog}" (spec 066 G8), like a person's.
+                else if (tag.startsWith('_') && !stromApp && !stromResearch && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
+                    extraBlock = { target: src, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
+                }
                 // Anything else on the record (DATA, OBJE, REFN …) reached us
                 // and was not read — the contract says so, and so does the summary.
                 else if (!IGNORED_BOOKKEEPING_TAGS.has(tag)) drop(tag);
@@ -3498,6 +3518,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === '_STROM_SHA') currentMedia.sha = normalizeSha256(value) ?? undefined;
                         else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) currentMedia.orient = Number(value.trim());
                         else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
+                        else if (tag === '_DATE') { if (!currentMedia.date) currentMedia.date = mediaDateValue(value); }
                     } else if (NOTED_INDI_TAGS.has(currentSubTag ?? '') && indi.noteFacts.length > 0) {
                         attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
@@ -3906,6 +3927,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         return {
             ...rec, title: m.title || rec.title, stromKind: m.stromKind || rec.stromKind,
             note: m.note ?? rec.note, sourceXref: m.sourceXref ?? rec.sourceXref, sha: m.sha ?? rec.sha, orient: m.orient ?? rec.orient,
+            date: m.date ?? rec.date,
             ...(m.primary || rec.primary ? { primary: true } : {}),
         };
     };
@@ -4207,6 +4229,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (wantsPhoto) {
                     person.photo = media.file;
                     if (media.title) person.photoOriginalName = media.title;
+                    if (media.date) person.photoDate = media.date;
                 } else {
                     const att: Attachment = {
                         id: generateId('att'),
@@ -4216,6 +4239,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                         sizeBytes: Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75),
                     };
                     if (media.note) att.note = media.note;
+                    if (media.date) att.date = media.date;
                     if (media.sha) {
                         att.original = {
                             sha256: media.sha, name: att.name, mimeType: att.mimeType, bytes: 0,
@@ -4235,6 +4259,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     original: { sha256: media.sha, name, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
                 };
                 if (media.note) att.note = media.note;
+                if (media.date) att.date = media.date;
                 const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
                 if (attSource) att.sourceId = attSource;
                 (person.attachments ??= []).push(att);
@@ -4248,6 +4273,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     ...(media.title ? { title: media.title } : {}),
                     ...(isUrl ? { isUrl: true } : {}),
                     ...(media.primary ? { primary: true } : {}),
+                    ...(media.date ? { date: media.date } : {}),
                 };
                 // Primary portraits first so the photo (not a crop) wins.
                 if (media.primary) {
@@ -4763,7 +4789,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     // Another program's own tags with no import to keep them for (the file is
     // not loaded as an import): not carried over, so counted.
     if (!extrasKept) {
-        for (const raw of [...individuals.values(), ...families.values()]) {
+        for (const raw of [...individuals.values(), ...families.values(), ...gedSources.values()]) {
             for (const e of raw.extras ?? []) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
         }
     }
@@ -4774,7 +4800,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
      */
     function applyFileExtras(from: string): void {
         extrasKept = true;
-        const put = (holder: Person | Partnership | undefined, extras: RawExtra[] | undefined): void => {
+        const put = (holder: ExtraHolder | undefined, extras: RawExtra[] | undefined): void => {
             for (const e of extras ?? []) {
                 if (!holder) { droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1); continue; }
                 addGedcomExtra(holder, { from, lines: e.lines });
@@ -4786,6 +4812,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             put(pid ? persons[pid] : undefined, indi.extras);
         }
         for (const [gedFamId, fam] of families) put(famPartnership.get(gedFamId), fam.extras);
+        for (const [gedId, raw] of gedSources) {
+            const sid = sourceIdMap.get(gedId);
+            put(sid ? sources[sid] : undefined, raw.extras);
+        }
     }
 
     /**

@@ -327,6 +327,7 @@ function stripDetails(person: Person): void {
     delete person.story;
     delete person.photo;
     delete person.photoOriginalName;
+    delete person.photoDate;
     // Life events carry places and dates — drop them for living people.
     delete person.events;
     // Source citations may point at sensitive references — drop them too.

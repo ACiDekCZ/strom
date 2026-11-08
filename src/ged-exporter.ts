@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { FactHolder, factImportTags, IMPORT_TAG, XID_TAG } from './import-origin.js';
+import { ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -879,7 +879,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
      * written (the same block from two of its files once). Never in another
      * export: not in Strom's own file, not to the research.
      */
-    const pushGedcomExtra = (holder: FactHolder): void => {
+    const pushGedcomExtra = (holder: ExtraHolder): void => {
         if (back.imports.size === 0 || !holder.gedcomExtra) return;
         const written = new Set<string>();
         for (const entry of holder.gedcomExtra) {
@@ -1134,7 +1134,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Media: portrait first (marked), then attachments. Data URLs are
         // CONC-wrapped to keep physical lines within the spec limit.
-        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string): void => {
+        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string): void => {
             const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
             const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
             lines.push('1 OBJE');
@@ -1154,14 +1154,17 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
             }
             pushWrapped(lines, 2, 'FILE', file);
+            // The picture's date from the program's file (spec 066 G8): back under its OBJE, "Back to {prog}" only.
+            const day = back.imports.size > 0 && date ? mediaDateValue(date) : undefined;
+            if (day) lines.push(`2 _DATE ${day}`);
         };
         if (person.photo) {
-            pushMedia(person.photo, person.photoOriginalName ?? '', 'photo');
+            pushMedia(person.photo, person.photoOriginalName ?? '', 'photo', undefined, undefined, undefined, undefined, person.photoDate);
         }
         for (const att of person.attachments ?? []) {
             // Only the original (the research holds it): the file's name and hash, no data.
-            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, att.sourceId, att.original, att.original?.mimeType ?? att.mimeType);
-            else pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original);
+            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, att.sourceId, att.original, att.original?.mimeType ?? att.mimeType, att.date);
+            else pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original, undefined, att.date);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -1475,6 +1478,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushWrapped(lines, 2, 'FILE', exc.dataUrl);
         }
+        pushGedcomExtra(source);
     }
 
     // ==================== REPOSITORIES ====================

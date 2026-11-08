@@ -348,10 +348,11 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     const ged = [
         '0 HEAD', '1 SOUR MYHERITAGE', '2 NAME MyHeritage Family Tree Builder', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
         '0 @I1@ INDI', '1 NAME Hromoslav /Ozubec/', '1 SEX M', '1 _MHNOTE Žluťoučký kůň 🦉 鳥居', '2 _MHSUB Kořenov',
-        '1 BIRT', '2 DATE 1880', '2 _MHPLACEID 4711', '1 OBJE @O1@', '1 FAMS @F1@',
+        '1 BIRT', '2 DATE 1880', '2 _MHPLACEID 4711', '1 OBJE @O1@', '1 SOUR @S1@', '1 FAMS @F1@',
         '0 @I2@ INDI', '1 NAME Libuna /Mechová/', '1 SEX F', '1 FAMS @F1@',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 _MHSTATUS spolu',
-        '0 @O1@ OBJE', '1 FILE photos/hromoslav.jpg', '2 FORM jpg',
+        '0 @O1@ OBJE', '1 FILE photos/hromoslav.jpg', '2 FORM jpg', '1 _DATE 24 JUL 2007',
+        '0 @S1@ SOUR', '1 TITL Birth register', '1 _TYPE Discovery', '1 _MEDI 45329791-1',
         '0 TRLR', '',
     ].join('\n');
     const p = testInfo.outputPath('myheritage-tags.ged');
@@ -364,8 +365,13 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     await expect(lines).toHaveText([
         /^“Unsupported” counts the parts of the file/,
         'Skipped records: _MHPLACEID ×1',
-        /^Kept for the export “Back to MyHeritage Family Tree Builder”: 2 tags \((_MHNOTE, _MHSTATUS|_MHSTATUS, _MHNOTE)\)$/,
+        /^Kept for the export “Back to MyHeritage Family Tree Builder”: 4 tags \((_[A-Z]+, ){3}_[A-Z]+\)$/,
     ]);
+    for (const tag of ['_MHNOTE', '_MHSTATUS', '_TYPE', '_MEDI']) await expect(lines.nth(2)).toContainText(tag);
+    // The picture's _DATE is read with it, never "unsupported".
+    await expect(result.locator('#gedcom-stat-detail')).not.toContainText('_DATE');
+    // No picture inside the file: no choice about importing pictures (it would say ≈ 0.0 MB).
+    await expect(result.locator('#gedcom-images-row')).toBeHidden();
     await expect(result.locator('#gedcom-media-row')).toBeVisible();
     await expect(result.locator('#gedcom-media-text')).toHaveText(/references 1 external media file\b/);
 
@@ -375,7 +381,7 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
     await expect(result).toBeVisible();
-    await expect(lines.nth(2)).toHaveText(/^Uchováno pro export „Zpět do MyHeritage Family Tree Builder“: 2 značky \(/);
+    await expect(lines.nth(2)).toHaveText(/^Uchováno pro export „Zpět do MyHeritage Family Tree Builder“: 4 značky \(/);
 });
 
 test('GEDCOM result: a file with nothing unsupported has no sentence about it', async ({ page }, testInfo) => {

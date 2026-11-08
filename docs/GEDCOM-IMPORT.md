@@ -538,6 +538,12 @@ original's SHA-256, 64 hex characters) and, for a photo taken turned,
 research (`PUT /media/<sha256>` on its bridge), never into the file. A
 malformed hash or orientation is ignored.
 
+A `_DATE` line directly under an `OBJE` (the person's link or a multimedia
+record, as MyHeritage writes it) is the picture's date. It stays with the
+portrait or document the `OBJE` becomes (one line, at most 100 characters),
+is not shown, and only the export "Back to {program}" writes it again, as
+`2 _DATE` under that picture's `OBJE`. A new portrait drops the old one's date.
+
 Strom's export embeds photos and documents this way unless the export dialog's
 content options leave them out — other programs cannot read data URLs, so a
 file meant for them is best exported without.
@@ -582,6 +588,19 @@ without a word — they say nothing about a person and would only be noise.
 **Any other record or fact is reported as an unsupported tag** — anything at
 level 0 or level 1 that this contract does not name. If your file lists tags
 there, they reached Strom and were not understood.
+
+**Another program's own tags are kept, not counted.** When a file from another
+program is imported as such (its program is recorded on the tree), a level-1
+`_XXX` tag on a person, a family or a source record that Strom does not read is
+kept as written, with every line under it, and the import summary lists it as
+kept for the export "Back to {program}". That export writes it back at the end
+of the same record; Strom's own export, the research's and the way back to any
+other program leave it out. A repository record (`REPO`, kept only as the
+source's repository name), a note record (`NOTE`, whose text goes into the
+place that points to it) and a multimedia record (`OBJE`, which becomes the
+person's portrait or document) are not kept as records, so their own level-1
+`_XXX` tags have nowhere to stay and are counted as unsupported (except the
+picture's `_DATE`, see Media).
 
 **Lines *below* a fact are not counted.** A subordinate tag this contract does
 not name — say `3 ROLE` under a citation, or `2 PHON` under `RESI` — is skipped

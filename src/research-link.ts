@@ -1419,6 +1419,7 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         if (old.photo && !cur.photo) {
             out.photo = old.photo;
             if (old.photoOriginalName) out.photoOriginalName = old.photoOriginalName;
+            if (old.photoDate) out.photoDate = old.photoDate;
             changed = true;
         }
         const have = cur.attachments ?? [];

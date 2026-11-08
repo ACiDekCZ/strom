@@ -109,6 +109,7 @@ export function stripPhotos(data: StromData): StromData {
     for (const person of Object.values(copy.persons)) {
         delete person.photo;
         delete person.photoOriginalName;
+        delete person.photoDate;
     }
     return copy;
 }

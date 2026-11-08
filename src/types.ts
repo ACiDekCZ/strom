@@ -359,6 +359,12 @@ export interface Source {
     heldClips?: string[];
     /** The import (StromData.imports id) the source record came from. */
     importId?: string;
+    /**
+     * Another program's own level-1 tags of the source record (`1 _TYPE`,
+     * `1 _MEDI` of MyHeritage…), kept as the file wrote them for "Back to
+     * {prog}" (spec 066 G8), as Person.gedcomExtra.
+     */
+    gedcomExtra?: GedcomExtra[];
 }
 
 /** Why the research left a source's image out of its file (see Source.imageHeld). */
@@ -409,6 +415,12 @@ export interface Attachment {
      * file by its hash. The research may bring a preview in a later version.
      */
     originalOnly?: true;
+    /**
+     * The picture's date as the file it came from wrote it (GEDCOM `_DATE`
+     * under its OBJE, e.g. MyHeritage's photo date; spec 066 G8). Not shown;
+     * written back by "Back to {prog}" only.
+     */
+    date?: string;
 }
 
 export interface Person {
@@ -520,6 +532,8 @@ export interface Person {
     photo?: string;
     /** Original file name of the uploaded photo (UX only). */
     photoOriginalName?: string;
+    /** The portrait's date as the file it came from wrote it (see Attachment.date); goes with the photo. */
+    photoDate?: string;
     /** Life events other than birth/death (see LifeEvent). */
     events?: LifeEvent[];
     /** This person's chapter in the family book (GEDCOM _STORY on INDI). */
@@ -625,7 +639,7 @@ export interface OriginalIds {
     ids?: OriginalIdLine[];
 }
 
-/** Another program's level-1 tags of a record kept as written (Person/Partnership.gedcomExtra). */
+/** Another program's level-1 tags of a record kept as written (Person/Partnership/Source.gedcomExtra). */
 export interface GedcomExtra {
     /** The import (ImportRecord.id). */
     from: string;
@@ -1182,7 +1196,10 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   ResearchConflict.kind), and the records' ids in the loaded files
  *   (Person/Partnership.originalIds: xref, _UID, RIN, EXID…) and another
  *   program's own level-1 tags kept for "Back to {prog}"
- *   (Person/Partnership.gedcomExtra). Additive;
+ *   (Person/Partnership/Source.gedcomExtra; the source's came after
+ *   3.26.0-beta.1 without a bump: a v15 app keeps sources whole) and a
+ *   picture's date (Attachment.date, Person.photoDate, kept whole the same
+ *   way). Additive;
  *   existing trees get no origin and no ids (nothing is guessed). An older
  *   app (v14) would drop imports on a re-save.
  */

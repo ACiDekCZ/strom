@@ -330,6 +330,7 @@ type OwnedElsewhere =
     | 'deathSourceIds'      // citePerson / uncitePerson with the death
     | 'attachments'         // addAttachment / removeAttachment
     | 'photoOriginalName'   // set with the photo itself (import / upload)
+    | 'photoDate'           // GEDCOM import only (G8): the portrait's date from the file, dropped with a new photo
     | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn
     | 'research'            // written by Strom Research only (GEDCOM import), never edited
     | 'birthStatus'         // the research's status of the birth (GEDCOM import), never edited
@@ -439,6 +440,17 @@ describe('updatePerson applies every field it owns', () => {
         // The two whitelists in one go: edited, then carried through a load.
         const reloaded = migrateData(structuredClone(DataManager.getData()));
         expect(reloaded.persons[created.id]).toEqual(DataManager.getPerson(created.id));
+    });
+
+    it('a new photo drops the date the old one came with from a file; other edits keep it', () => {
+        const created = DataManager.createPerson({ firstName: 'Jan', lastName: 'Novak', gender: 'male' });
+        const p = DataManager.getData().persons[created.id];
+        p.photo = 'data:image/png;base64,AAAA';
+        p.photoDate = '24 JUL 2007';
+        DataManager.updatePerson(created.id, { notes: 'Kept bees.', photo: 'data:image/png;base64,AAAA' });
+        expect(DataManager.getPerson(created.id)?.photoDate).toBe('24 JUL 2007');
+        DataManager.updatePerson(created.id, { photo: 'data:image/png;base64,BBBB' });
+        expect(DataManager.getPerson(created.id)?.photoDate).toBeUndefined();
     });
 });
 
