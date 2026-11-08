@@ -77,11 +77,15 @@ export function readRecordedAge(text?: string): RecordedAge | null {
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
         if (JOINERS.has(t)) continue;
-        if (!/^\d{1,3}$/.test(t)) return null;
+        if (!/^\d{1,5}$/.test(t)) return null;
         const n = Number(t);
         const next = tokens[i + 1];
         const unit = next !== undefined && !/^\d/.test(next) && !JOINERS.has(next) ? unitOf(next) : null;
         if (next !== undefined && !/^\d/.test(next) && !JOINERS.has(next) && !unit) return null;
+        // A bare number is an age only up to 999 (more is a year); with its
+        // unit it may be larger: GEDCOM 7 counts weeks and days past a year
+        // ("1100d", what "100w 400d" becomes in 5.5.1).
+        if (!unit && t.length > 3) return null;
         // A bare number is years ("54"), as GEDCOM reads it too.
         const key = ({ y: 'years', m: 'months', w: 'weeks', d: 'days' } as const)[unit ?? 'y'];
         out[key] += n;

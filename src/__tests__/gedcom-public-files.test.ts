@@ -46,3 +46,22 @@ describe('Picture links by address read again from "Back to" (066 N1, e-obje.ged
         expect(undated(second)).toBe(undated(back));
     });
 });
+
+describe('An age with more than 999 days (066 N3, d-age.ged)', () => {
+    const { tree, back, second } = twice(fixture('d-age.ged'), 'd-age.ged');
+
+    it('goes back as a GEDCOM AGE, not as words, and the next "Back to" equals the first', () => {
+        expect(back).toContain('1 DEAT\n2 DATE 1950\n2 AGE 1y 30m 1100d\n');
+        expect(back).not.toMatch(/AGE .*(year|month|day)/);
+        expect(undated(second)).toBe(undated(back));
+        // The tree shows it in words.
+        expect(Object.values(tree.persons)[0].deathAge).toMatch(/1100/);
+    });
+
+    it('weeks of a GEDCOM 7 age go back as days, read again the same', () => {
+        const file = fixture('d-age.ged').replace('2 AGE 1y 30m 1100d', '2 AGE 1y 30m 100w 400d');
+        const again = twice(file, 'age7.ged');
+        expect(again.back).toContain('2 AGE 1y 30m 1100d\n');
+        expect(undated(again.second)).toBe(undated(again.back));
+    });
+});
