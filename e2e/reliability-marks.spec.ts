@@ -110,6 +110,10 @@ test.describe('reliability marks', () => {
         const cardBox = (await card(page, 'Bonifác').boundingBox())!;
         expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
         expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+        // In words (spec 066 P4 §5): the import's short title, the cited source under it.
+        const ttStatus = card(page, 'Bonifác').locator('.card-tooltip .tt-status');
+        await expect(ttStatus).toContainText('From the family tree (unverified)');
+        await expect(ttStatus.locator('.tt-status-sub')).toContainText('cited in the family tree, not verified in Strom');
 
         await page.evaluate(() => { window.Strom.SettingsManager.setCardSignal('status', false); window.Strom.TreeRenderer.render(); });
         // Off: gone from the cards (the tooltip keeps its words).

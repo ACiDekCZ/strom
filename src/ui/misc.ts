@@ -27,6 +27,9 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { CARD_STATUS_CLASSES } from '../reliability.js';
+import { cardStatusLegendLabel, statusMarkHtml } from './fact-status.js';
+import { storyFoldHtml } from '../card-signals.js';
 import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta } from '../about-links.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -54,6 +57,7 @@ import { forgetCardTypeCopy } from './card-fields-ui.js';
 import { setResearchOpenLabel } from './research-open-mark.js';
 import { helpMark, setHelpMarkTopic } from './help-mark.js';
 import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
+import { openHelp } from './help-ui.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 
@@ -580,6 +584,48 @@ export const miscMethods = uiModule({
         if (legend) {
             legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()
                 && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
+        }
+        if (treeLegend) this.updateLegendMarks(treeLegend);
+    },
+
+    /**
+     * The legend's part on the card marks (spec 066 P4 §5): only the marks the
+     * cards drawn now show (each status mark, the story's two corners, what
+     * waits, ⇄), then "What the marks mean" (the help, in the app).
+     */
+    updateLegendMarks(treeLegend: HTMLElement): void {
+        let part = treeLegend.querySelector<HTMLElement>('#legend-marks');
+        const has = (sel: string): boolean => !!document.querySelector(`#tree-canvas .person-card ${sel}`);
+        const l = strings.card.legend;
+        const rows: [string, string][] = [];
+        for (const cls of CARD_STATUS_CLASSES) {
+            if (has(`> .card-status-mark.${cls}`)) {
+                rows.push([statusMarkHtml({ cls, source: 'evidence', facts: [] }, { className: 'card-status-mark--inline' }), cardStatusLegendLabel(cls)]);
+            }
+        }
+        if (has('> .card-story:not(.couple):not(.draft)')) rows.push([storyFoldHtml({ kind: 'own', final: true }, true), l.storyOwn]);
+        if (has('> .card-story:is(.couple, .draft)')) rows.push([storyFoldHtml({ kind: 'couple', final: true }, true), l.storyOther]);
+        if (has('.card-signal')) rows.push(['<span class="menu-signal-glyph" aria-hidden="true">≠</span>', l.action]);
+        if (has('.cross-tree-badge')) rows.push(['<span class="legend-cross" aria-hidden="true">⇄ 1</span>', l.cross]);
+        treeLegend.classList.toggle('has-marks', rows.length > 0);
+        if (rows.length === 0) { part?.remove(); return; }
+        if (!part) {
+            part = document.createElement('div');
+            part.id = 'legend-marks';
+            part.className = 'legend-marks';
+            treeLegend.appendChild(part);
+        }
+        const esc = (t: string): string => this.escapeHtml(t);
+        const html = `<div class="legend-marks-title">${esc(l.marksTitle)}</div>`
+            + rows.map(([mark, text]) => `<div class="legend-mark-row"><span class="legend-mark">${mark}</span><span>${esc(text)}</span></div>`).join('')
+            + `<button type="button" class="link-button legend-marks-help">${esc(strings.reliability.help)}</button>`;
+        // Rendered again only when it says something else (a render redraws the legend often).
+        if (part.dataset.html !== html) {
+            part.dataset.html = html;
+            part.innerHTML = html;
+            part.querySelector('.legend-marks-help')?.addEventListener('click', (e) => {
+                void openHelp(HELP_TOPICS.reliability, e.currentTarget as HTMLElement);
+            });
         }
     },
 

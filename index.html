@@ -1600,6 +1600,32 @@
             .tree-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 10px; gap: 10px; }
             .branch-legend-group { gap: 10px; }
         }
+        /* The card marks the tree shows (spec 066 P4 §5): the pill turns into a panel. */
+        .tree-legend.has-marks {
+            flex-wrap: wrap; row-gap: 6px; max-width: min(320px, calc(100vw - 48px));
+            border-radius: var(--r-md, 12px); padding: 10px 14px;
+        }
+        .legend-marks {
+            flex: 1 0 100%; display: flex; flex-direction: column; gap: 5px;
+            padding-top: 6px; border-top: 1px solid var(--border);
+        }
+        .legend-marks-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-light); }
+        .legend-mark-row { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 6px; align-items: center; text-wrap: pretty; }
+        .legend-mark { display: flex; align-items: center; }
+        .legend-mark .menu-signal-glyph { width: 14px; height: 14px; font-size: 9px; }
+        .legend-cross {
+            display: inline-flex; align-items: center; height: 14px; padding: 0 4px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+            font-size: 9px; font-weight: 600; color: var(--text-light); white-space: nowrap;
+        }
+        .legend-marks-help {
+            align-self: flex-start; pointer-events: auto; padding: 0; min-height: 22px;
+            font-size: 12px; text-align: left; white-space: normal;
+        }
+        @media (pointer: coarse) { .legend-marks-help { min-height: 44px; } }
+        @media (max-width: 640px) {
+            .tree-legend.has-marks { max-width: calc(100vw - 24px); padding: 8px 10px; }
+        }
         @media print { .tree-legend { display: none !important; } }
 
         /* Interactive tour: dimmed spotlight overlay + bubble */
@@ -3475,8 +3501,8 @@
         .bottom-sheet.bottom-sheet-person { max-height: calc(100dvh - 16px); }
         .bottom-sheet-person .bottom-sheet-handle { margin-bottom: 6px; }
         .bottom-sheet-person .bottom-sheet-section { padding-top: 8px; }
-        .bottom-sheet-person .menu-person-state { padding-bottom: 4px; }
         .bottom-sheet-person .bottom-sheet-items .menu-signal { margin: 2px 12px 6px; }
+        .bottom-sheet-person .bottom-sheet-items .menu-person-state .menu-signal { margin: 0; width: 100%; }
         @media (hover: hover) { .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); } }
         .bottom-sheet-person .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .bottom-sheet-divider { height: 1px; background: var(--divider); margin: 6px 16px; }
@@ -12539,19 +12565,40 @@
         .menu-signal .agent-mark { width: 14px; height: 14px; margin: 2px; }
         /* Tooltip rows: evidence, story, then what waits. */
         .card-tooltip .tt-signals { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-        .card-tooltip .tt-ev, .card-tooltip .tt-story, .card-tooltip .tt-agent { display: flex; align-items: center; gap: 6px; }
+        .card-tooltip .tt-story, .card-tooltip .tt-agent, .card-tooltip .tt-cross { display: flex; align-items: center; gap: 6px; }
+        /* The mark in words (spec 066 P4 §5): the card's pill, the step and its facts, a quieter line of the citations. */
+        .card-tooltip .tt-status { display: flex; align-items: flex-start; gap: 6px; }
+        .card-tooltip .tt-status > .card-status-mark { margin-top: 2px; }
+        .tt-status-text, .mps-text { display: flex; flex-direction: column; min-width: 0; }
+        .tt-status-sub, .mps-sub { font-size: 12px; color: var(--text-faint); }
+        .tt-cross-glyph, .mps-glyph { flex: 0 0 auto; min-width: 18px; text-align: center; color: var(--text-light); font-size: 12px; }
         .card-tooltip .tt-action { color: var(--warning-text); }
         .card-tooltip .tt-line.tt-agent { color: var(--primary-dark); }
         /* Printing the page: never (the poster / image export draws its own cards). */
         body.view-mode-print :is(.card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
         @media print { .card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; } }
 
-        /* Person menu: the badge's signal leads (and on touch the status line). */
+        /* Person menu: its first block explains the card's marks (spec 066 P4 §5),
+           with the bubble's rows; the line under it parts it from the actions. */
         .menu-person-state {
-            display: flex; align-items: center; gap: 8px;
-            padding: 0 16px 8px; font-size: 13px; color: var(--text-light);
+            display: flex; flex-direction: column; gap: 6px;
+            margin: 0 0 6px; padding: 8px 12px; font-size: 13px; color: var(--text-light);
+            background: var(--surface-2); border-bottom: 1px solid var(--border);
         }
-        .context-menu .menu-person-state { padding: 0 12px 6px; }
+        .mps-row { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; align-items: start; }
+        .mps-row .mps-mark { display: flex; justify-content: center; padding-top: 2px; }
+        .mps-row > .mps-link { grid-column: 2; }
+        .menu-person-state .menu-signal { margin: 0; }
+        /* The block's links: plain text links in the app (no mark), full height to tap. */
+        .menu-person-state .mps-link {
+            justify-content: flex-start; width: auto; min-height: 28px; padding: 2px 0; margin: 0;
+            background: none; color: var(--primary-dark); font-size: 13px; font-weight: 600;
+        }
+        .menu-person-state > .mps-link { align-self: flex-start; font-weight: 400; }
+        .bottom-sheet-person .menu-person-state { margin: 0 -8px 6px; padding: 10px 24px; }
+        .bottom-sheet-person .menu-person-state .mps-link { min-height: 44px; font-size: 14px; }
+        @media (hover: hover) { .menu-person-state .mps-link:hover { background: none; text-decoration: underline; } }
+        .menu-person-state .mps-link:focus { background: none; text-decoration: underline; }
         .menu-signal {
             display: flex; align-items: center; gap: 8px;
             margin: 4px 8px 6px; padding: 8px 10px; min-height: 36px; box-sizing: border-box;

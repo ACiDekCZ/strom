@@ -131,9 +131,14 @@ test.describe('card signals', () => {
         await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
         await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Awaiting action: Uložte snímek oddací matriky');
 
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Fíšek, documented by sources, Story (draft), conflicting sources');
         const tt = card(page, 'Jan').locator('.card-tooltip .tt-signals');
-        await expect(tt.locator('.tt-ev')).toHaveText('1 source · birth documented');
+        // The card map's order (spec 066 P4 §5): name, years, the mark in words; then story, what waits.
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Fíšek, 1865 – 1932, documented by sources; Story (draft); conflicting sources');
+        // The mark in words: the card's own pill, then the level and the sources; no title of its own.
+        await expect(tt.locator('.tt-status')).toHaveText('Backed by sources · 1 source');
+        await expect(tt.locator('.tt-status > .card-status-mark.cs-p2')).toHaveCount(1);
+        await expect(card(page, 'Jan').locator('.card-status-mark[title]')).toHaveCount(0);
+        await expect(card(page, 'Jan').locator('.card-tooltip .tt-foot')).toHaveText('Click opens the menu that explains the marks');
         await expect(tt.locator('.tt-story')).toHaveText('Story (draft)');
         await expect(tt.locator('.tt-action')).toHaveText(['1 conflict · 1 hypothesis']);
         await expect(card(page, 'Eva').locator('.card-tooltip .tt-action')).toHaveText(['Awaiting action: Uložte snímek oddací matriky', '1 conflict']);
@@ -305,8 +310,8 @@ test.describe('card signals', () => {
                 await expect(anna.locator('.card-avatar-wrap .card-signal'), why('?')).toHaveText('?');
             }
             // The tooltip and the aria-label say the state as on every card.
-            await expect(jan.locator('.card-tooltip .tt-ev'), why('tooltip')).toHaveCount(1);
-            expect(await jan.getAttribute('aria-label'), why('aria-label')).toContain('documented by sources, Story (draft), conflicting sources');
+            await expect(jan.locator('.card-tooltip .tt-status'), why('tooltip')).toHaveCount(1);
+            expect(await jan.getAttribute('aria-label'), why('aria-label')).toContain('documented by sources; Story (draft); conflicting sources');
             expect(await anna.getAttribute('aria-label'), why('aria-label')).toContain('open question');
         }
         // Zoomed far out (below 0.55): the badges give way to dots on every type.
@@ -339,14 +344,29 @@ test.describe('card signals', () => {
         }
     });
 
-    test('the desktop person menu leads with the signal', async ({ page }) => {
+    test('the desktop person menu leads with the marks explained: the mark, the story, the signal, the help (spec 066 P4 §5)', async ({ page }) => {
         await setup(page);
         await card(page, 'Jan').locator('.name').click();
+        const first = page.locator('.context-menu .menu-person-state');
+        // The bubble's rows in the card map's order, then the help.
+        await expect(first.locator('.mps-status')).toHaveText('Backed by sources · 1 source');
+        await expect(first.locator('.mps-status .card-status-mark.cs-p2')).toHaveCount(1);
+        await expect(first.locator('.mps-story')).toHaveText('story (draft)');
+        expect(await first.evaluate(el => [...el.children].map(c => c.classList[0] === 'mps-row' ? c.classList[1] : c.classList.contains('menu-signal') ? 'signal' : c.classList.contains('mps-link') ? c.dataset.action : '?')))
+            .toEqual(['mps-status', 'mps-story', 'signal', 'marks-help']);
+        await expect(first.locator('[data-action="marks-help"]')).toHaveText('What the marks mean');
+        // The block stands on the second surface with a line under it.
+        expect(await first.evaluate(el => getComputedStyle(el).borderBottomStyle)).toBe('solid');
         const block = page.locator('.context-menu .menu-signal');
         await expect(block).toContainText('1 conflict · 1 hypothesis');
         await expect(block).toContainText('What the research knows ›');
         await block.click();
         await expect(page.locator('#person-research-modal')).toBeVisible();
+        // "What the marks mean" opens the help at the marks (in the app, no mark of a new window).
+        await page.keyboard.press('Escape');
+        await card(page, 'Jan').locator('.name').click();
+        await page.locator('.context-menu [data-action="marks-help"]').click();
+        await expect(page.locator('.help-rule[data-rule="R3.8"]')).toHaveClass(/is-target/);
     });
 
     test('compact: a dot on the card corner; far zoom: dots only', async ({ page }) => {
@@ -393,7 +413,7 @@ test.describe('card signals', () => {
         await expect(preview.locator('.card-status-mark')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveCount(0);
         await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCount(0);
-        await expect(card(page, 'Jan').locator('.card-tooltip .tt-ev')).toHaveCount(1);
+        await expect(card(page, 'Jan').locator('.card-tooltip .tt-status')).toHaveCount(1);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['1 conflict · 1 hypothesis']);
         // Eva still shows the waiting task.
         await expect(card(page, 'Eva').locator('.card-signal')).toHaveText('!');
@@ -463,7 +483,7 @@ test.describe('card signals', () => {
         });
         await expect(card(page, 'Marie')).toBeVisible();
         await expect(card(page, 'Marie').locator('.card-status-mark')).toHaveCount(0);
-        await expect(card(page, 'Marie').locator('.card-tooltip .tt-ev')).toHaveCount(0);
+        await expect(card(page, 'Marie').locator('.card-tooltip .tt-status')).toHaveCount(0);
         await expect(card(page, 'Marie').locator('.card-signal')).toHaveText('?');
         await expect(card(page, 'Marie').locator('.card-tooltip .tt-action')).toHaveText(['Question: Kde se narodila?']);
     });
@@ -563,11 +583,55 @@ test.describe('card signals', () => {
         }
     });
 
-    test('phone: the person menu leads with the status line and the signal', async ({ page }) => {
+    test('phone: the person menu leads with the marks explained and the signal', async ({ page }) => {
         await setup(page, 360);
         await card(page, 'Jan').locator('.name').click();
         const sheet = page.locator('.bottom-sheet-person');
-        await expect(sheet.locator('.menu-person-state')).toHaveText('documented by sources · story (draft)');
-        await expect(sheet.locator('.menu-signal')).toContainText('1 conflict');
+        await expect(sheet.locator('.menu-person-state .mps-status')).toHaveText('Backed by sources · 1 source');
+        await expect(sheet.locator('.menu-person-state .mps-story')).toHaveText('story (draft)');
+        await expect(sheet.locator('.menu-person-state .menu-signal')).toContainText('1 conflict');
+    });
+
+    test('touch: a tap on the card opens the menu with the marks explained; its links take a finger (spec 066 P4 §5, §9)', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'en-US' });
+        const page = await context.newPage();
+        await openApp(page);
+        await dropFile(page, researchGed());
+        await expect(card(page, 'Jan')).toBeVisible();
+        await card(page, 'Jan').locator('.name').tap();
+        const block = page.locator('.bottom-sheet-person .menu-person-state');
+        await expect(block.locator('.mps-status .card-status-mark')).toHaveCount(1);
+        const help = block.locator('[data-action="marks-help"]');
+        await expect(help).toHaveText('What the marks mean');
+        expect((await help.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // Nothing of the sheet runs off the phone's width.
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+        await context.close();
+    });
+
+    test('the tree legend names only the card marks the tree shows, with the help (spec 066 P4 §5)', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => { window.Strom.SettingsManager.setBranchLegend(true); window.Strom.TreeRenderer.render(); });
+        const part = page.locator('#tree-legend #legend-marks');
+        await expect(part.locator('.legend-marks-title')).toHaveText('Card marks');
+        const shown = await page.evaluate(() => {
+            const has = (sel: string) => !!document.querySelector(`#tree-canvas .person-card ${sel}`);
+            return {
+                status: ['cs-human', 'cs-p2', 'cs-p1', 'cs-res', 'cs-import', 'cs-none'].filter(c => has(`> .card-status-mark.${c}`)),
+                legend: [...document.querySelectorAll('#legend-marks .legend-mark .card-status-mark')].map(m => (m as HTMLElement).dataset.status),
+            };
+        });
+        // Each mark the cards show, no other.
+        expect(shown.legend).toEqual(shown.status);
+        expect(shown.legend).toContain('cs-p2');
+        expect(shown.legend).not.toContain('cs-import');
+        await expect(part.locator('.legend-mark-row')).toContainText(['the person\'s story', 'a marriage story or a draft', 'awaiting a decision (!, ≠, ?)']);
+        // No other tree here: no ⇄ row.
+        await expect(part.locator('.legend-cross')).toHaveCount(0);
+        await part.locator('.legend-marks-help').click();
+        await expect(page.locator('.help-rule[data-rule="R3.8"]')).toHaveClass(/is-target/);
+        // Without the legend setting no legend at all.
+        await page.evaluate(() => { window.Strom.SettingsManager.setBranchLegend(false); window.Strom.TreeRenderer.render(); });
+        await expect(page.locator('#tree-legend')).toBeHidden();
     });
 });

@@ -740,6 +740,11 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         settingCardSub: 'Pigułki przy danych w oknie osoby. Karty w drzewie podlegają „Udokumentowanie i wiarygodność”.',
         cardFacts: (facts: string) => `Najsłabsza dana karty: ${facts}`,
         cardFact: { name: 'imię', birth: 'urodzenie', death: 'zgon' },
+        titleImportShort: 'Z drzewa (niezweryfikowane)',
+        citedInImport: 'cytowane w drzewie, w Strom niezweryfikowane',
+        citedInApp: 'cytowane w Strom',
+        notProven: 'badanie jeszcze tego nie potwierdziło',
+        provenPartial: 'częściowo udokumentowane',
     },
 
     origin: {

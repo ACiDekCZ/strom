@@ -196,6 +196,86 @@ export function statusMarkHtml(status: CardStatus | null | undefined, opts: Card
     return `<span class="${cls}" data-status="${status.cls}" aria-hidden="true">${cardStatusGlyphsHtml(status.cls)}</span>`;
 }
 
+const lowerFirst = (t: string): string => (t ? t.charAt(0).toLocaleLowerCase() + t.slice(1) : t);
+
+/** The facts that share the mark's step, in words ("name, birth and death"). */
+function cardStatusFactsText(status: CardStatus): string {
+    const r = strings.reliability;
+    return r.joinParts(status.facts.map(f => r.cardFact[f]));
+}
+
+/** A step of the research that has not proven the fact yet (one hollow dot on the card). */
+const isResearchStep = (step: ReliabilityStepName): boolean => step === 'probable' || step === 'possible' || step === 'lead';
+
+/**
+ * The card's mark in words (spec 066 P4 §5), as the bubble and the person
+ * menu say it: `main` the step (or the level of the citations) and the facts
+ * it stands for, `sub` a quieter line of where the citations came from and
+ * how many there are. `originKnown`: the tree knows where its facts came from
+ * (citations then were made in Strom, unless the step says the family tree).
+ */
+export function cardStatusWords(status: CardStatus, originKnown: boolean): { main: string; sub: string } {
+    const r = strings.reliability;
+    const c = strings.card;
+    const ev = status.evidence;
+    const sources = ev && ev.sources > 0 ? c.ttSources(ev.sources) : '';
+    if (status.source === 'step' && status.step) {
+        const step = status.step;
+        const title = step.step === 'human' ? r.titleHuman
+            : step.step === 'proven' ? (step.dots === 2 ? r.titleProven2 : r.titleProven1)
+            : step.step === 'import' ? r.titleImportShort
+            : step.step === 'none' ? r.titleNone
+            : reliabilityLabel(step.step);
+        const facts = cardStatusFactsText(status);
+        const sub = step.step === 'import'
+            ? (sources ? `${r.citedInImport} · ${sources}` : '')
+            : isResearchStep(step.step) ? [r.notProven, sources].filter(Boolean).join(' · ')
+            : sources;
+        return { main: facts ? `${title} · ${facts}` : title, sub };
+    }
+    const level = ev?.level ?? 'none';
+    const main = sources ? `${c.evTitle[level]} · ${sources}` : c.evTitle[level];
+    const facts: string[] = [];
+    if (ev && level === 'partial') {
+        if (ev.hasBirth) facts.push(ev.birthCited ? c.ttBirthCited : c.ttBirthMissing);
+        if (ev.hasDeath && !ev.deathCited) facts.push(c.ttDeathMissing);
+    }
+    const sub = [originKnown && sources ? r.citedInApp : '', facts.join(', ')].filter(Boolean).join(' · ');
+    return { main, sub };
+}
+
+/**
+ * The mark's step as a label in lower case (the card's aria-label, the tree
+ * legend): "from the family tree (unverified)", "partly proven", "probable".
+ */
+export function cardStatusLabel(status: CardStatus): string {
+    const r = strings.reliability;
+    if (status.source === 'evidence' || !status.step) return strings.card.ariaEv[status.evidence?.level ?? 'none'];
+    const step = status.step;
+    if (step.step === 'proven') return step.dots === 2 ? lowerFirst(r.proven) : r.provenPartial;
+    if (step.step === 'import') return lowerFirst(r.titleImportShort);
+    return lowerFirst(reliabilityLabel(step.step));
+}
+
+/** The mark for a screen reader: "from the family tree (unverified): name, birth and death". */
+export function cardStatusAria(status: CardStatus): string {
+    const facts = cardStatusFactsText(status);
+    return facts ? strings.card.ariaStatus(cardStatusLabel(status), facts) : cardStatusLabel(status);
+}
+
+/** One mark's class in the tree legend's words (the research's three steps say "not yet proven by the research"). */
+export function cardStatusLegendLabel(cls: CardStatusClass): string {
+    const r = strings.reliability;
+    switch (cls) {
+        case 'cs-human': return lowerFirst(r.human);
+        case 'cs-p2': return lowerFirst(r.proven);
+        case 'cs-p1': return r.provenPartial;
+        case 'cs-res': return r.notProven;
+        case 'cs-import': return lowerFirst(r.titleImportShort);
+        default: return lowerFirst(r.none);
+    }
+}
+
 /** The tree card's one mark of a person ('' for none: a placeholder, the switch off, or nothing to say). */
 export function cardStatusMarkHtml(data: StromData, person: Person, opts: CardStatusOptions): string {
     return statusMarkHtml(cardStatus(data, person, opts));

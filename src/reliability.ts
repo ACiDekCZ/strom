@@ -268,6 +268,9 @@ export type CardStatusFact = typeof CARD_STATUS_FACTS[number];
  */
 export type CardStatusClass = 'cs-human' | 'cs-p2' | 'cs-p1' | 'cs-res' | 'cs-import' | 'cs-none';
 
+/** Every mark, strongest first (the tree legend's order). */
+export const CARD_STATUS_CLASSES: readonly CardStatusClass[] = ['cs-human', 'cs-p2', 'cs-p1', 'cs-res', 'cs-import', 'cs-none'];
+
 export interface CardStatus {
     cls: CardStatusClass;
     /** Where it comes from: the weakest step of the card's facts, or the citations alone. */

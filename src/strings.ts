@@ -947,6 +947,12 @@ const stringsEN = {
         /** The tree card's mini mark: which of its facts have the weakest step. */
         cardFacts: (facts: string) => `Weakest fact on the card: ${facts}`,
         cardFact: { name: 'name', birth: 'birth', death: 'death' },
+        // The tree card's one mark in words (bubble, person menu, legend; spec 066 P4 §5).
+        titleImportShort: 'From the family tree (unverified)',
+        citedInImport: 'cited in the family tree, not verified in Strom',
+        citedInApp: 'cited in Strom',
+        notProven: 'not yet proven by the research',
+        provenPartial: 'partly proven',
     },
 
     // "Originally from the family tree" under a fact the research changed, with Revert (spec 066 §3)
@@ -2959,8 +2965,6 @@ const stringsEN = {
         moreChildrenCount: (n: number) => `${n} more ${n === 1 ? 'child' : 'children'}`,
         // After the first three unions on the hover card (T37).
         moreUnions: (n: number) => `and ${n} more`,
-        // Footer of the hover card: the real desktop gesture (click opens the menu).
-        gestureHint: 'Click to open the menu',
     },
 
     // Placeholders
@@ -3808,6 +3812,22 @@ const stringsEN = {
         ttConflicts: (n: number) => nEn(n, 'conflict', 'conflicts'),
         ttHypotheses: (n: number) => nEn(n, 'hypothesis', 'hypotheses'),
         ariaEv: { full: 'documented by sources', partial: 'partly documented', none: 'no source' },
+        // The bubble's and the person menu's words (spec 066 P4 §5).
+        evTitle: { full: 'Backed by sources', partial: 'Partly backed by sources', none: 'No source' },
+        ttCross: (tree: string) => `Also in the tree ${tree}`,
+        ttCrossN: (n: number) => `Also in ${n} other trees`,
+        crossTreeGo: 'Go to the tree',
+        ttFooter: 'Click opens the menu that explains the marks',
+        ariaStatus: (label: string, facts: string) => `${label}: ${facts}`,
+        ariaCross: (n: number) => `also in ${n} other tree${n !== 1 ? 's' : ''}`,
+        // The tree legend's part on the card marks (only the marks the tree shows).
+        legend: {
+            marksTitle: 'Card marks',
+            storyOwn: 'the person\'s story',
+            storyOther: 'a marriage story or a draft',
+            action: 'awaiting a decision (!, ≠, ?)',
+            cross: 'the person is also in another tree',
+        },
         ariaWaiting: 'waiting for an answer',
         ariaConflict: 'conflicting sources',
         ariaQuestion: 'open question',
@@ -8882,6 +8902,11 @@ const stringsCZ: StringsType = {
         settingCardSub: 'Pilulky u údajů v dialogu osoby. Kartičky ve stromu řídí „Doložení a spolehlivost“.',
         cardFacts: (facts: string) => `Nejslabší údaj kartičky: ${facts}`,
         cardFact: { name: 'jméno', birth: 'narození', death: 'úmrtí' },
+        titleImportShort: 'Z rodokmenu (neověřeno)',
+        citedInImport: 'citováno v rodokmenu, ve Stromu neověřeno',
+        citedInApp: 'citováno ve Stromu',
+        notProven: 'výzkum zatím nedoložil',
+        provenPartial: 'doloženo zčásti',
     },
 
     origin: {
@@ -10864,8 +10889,6 @@ const stringsCZ: StringsType = {
         moreChildrenCount: (n: number) => `${n} ${n === 1 ? 'další dítě' : n >= 2 && n <= 4 ? 'další děti' : 'dalších dětí'}`,
         // After the first three unions on the hover card (T37).
         moreUnions: (n: number) => `a ${n} ${n >= 5 ? 'dalších' : 'další'}`,
-        // Footer of the hover card: the real desktop gesture (click opens the menu).
-        gestureHint: 'Klik otevře nabídku',
     },
 
     // Placeholders
@@ -11713,6 +11736,20 @@ const stringsCZ: StringsType = {
         ttConflicts: (n: number) => nCs(n, 'rozpor', 'rozpory', 'rozporů'),
         ttHypotheses: (n: number) => nCs(n, 'hypotéza', 'hypotézy', 'hypotéz'),
         ariaEv: { full: 'doloženo prameny', partial: 'částečně doloženo', none: 'bez pramene' },
+        evTitle: { full: 'Doloženo prameny', partial: 'Částečně doloženo', none: 'Bez pramene' },
+        ttCross: (tree: string) => `Také ve stromu ${tree}`,
+        ttCrossN: (n: number) => `Také v ${n} ${plural('cs', n, 'dalším stromu', 'dalších stromech', 'dalších stromech')}`,
+        crossTreeGo: 'Přejít do stromu',
+        ttFooter: 'Klik otevře nabídku s vysvětlením značek',
+        ariaStatus: (label: string, facts: string) => `${label}: ${facts}`,
+        ariaCross: (n: number) => `i v ${n} ${plural('cs', n, 'dalším stromu', 'dalších stromech', 'dalších stromech')}`,
+        legend: {
+            marksTitle: 'Značky kartiček',
+            storyOwn: 'vyprávění osoby',
+            storyOther: 'vyprávění manželství nebo koncept',
+            action: 'čeká na rozhodnutí (!, ≠, ?)',
+            cross: 'osoba je i v jiném stromu',
+        },
         ariaWaiting: 'čeká na vyřízení',
         ariaConflict: 'rozpor v pramenech',
         ariaQuestion: 'otevřená otázka',
@@ -16710,6 +16747,11 @@ const stringsDE: StringsType = {
         settingCardSub: 'Pillen bei den Angaben im Personendialog. Die Kärtchen im Baum folgen „Belege und Verlässlichkeit“.',
         cardFacts: (facts: string) => `Schwächste Angabe des Kärtchens: ${facts}`,
         cardFact: { name: 'Name', birth: 'Geburt', death: 'Tod' },
+        titleImportShort: 'Aus dem Stammbaum (ungeprüft)',
+        citedInImport: 'im Stammbaum zitiert, in Strom nicht geprüft',
+        citedInApp: 'in Strom zitiert',
+        notProven: 'von der Recherche noch nicht belegt',
+        provenPartial: 'teilweise belegt',
     },
 
     origin: {
@@ -18685,7 +18727,6 @@ const stringsDE: StringsType = {
         childrenCount: (n: number) => `${n} ${n === 1 ? 'Kind' : 'Kinder'}`,
         moreChildrenCount: (n: number) => `${n} ${n === 1 ? 'weiteres Kind' : 'weitere Kinder'}`,
         moreUnions: (n: number) => `und ${n} weitere`,
-        gestureHint: 'Klicken, um das Menü zu öffnen',
     },
 
     // Placeholders
@@ -19526,6 +19567,20 @@ const stringsDE: StringsType = {
         ttConflicts: (n: number) => nDe(n, 'Widerspruch', 'Widersprüche'),
         ttHypotheses: (n: number) => nDe(n, 'Hypothese', 'Hypothesen'),
         ariaEv: { full: 'durch Quellen belegt', partial: 'teilweise belegt', none: 'ohne Quelle' },
+        evTitle: { full: 'Mit Quellen belegt', partial: 'Teilweise belegt', none: 'Ohne Quelle' },
+        ttCross: (tree: string) => `Auch im Baum ${tree}`,
+        ttCrossN: (n: number) => `Auch in ${n} weiteren Bäumen`,
+        crossTreeGo: 'Zum Baum wechseln',
+        ttFooter: 'Klick öffnet das Menü mit der Erklärung der Zeichen',
+        ariaStatus: (label: string, facts: string) => `${label}: ${facts}`,
+        ariaCross: (n: number) => `auch in ${n} ${n === 1 ? 'weiteren Baum' : 'weiteren Bäumen'}`,
+        legend: {
+            marksTitle: 'Zeichen der Kärtchen',
+            storyOwn: 'Erzählung der Person',
+            storyOther: 'Erzählung der Ehe oder Entwurf',
+            action: 'wartet auf Entscheidung (!, ≠, ?)',
+            cross: 'die Person ist auch in einem anderen Baum',
+        },
         ariaWaiting: 'wartet auf Antwort',
         ariaConflict: 'widersprüchliche Quellen',
         ariaQuestion: 'offene Frage',

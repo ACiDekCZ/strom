@@ -5,7 +5,7 @@
 
 import { DataManager } from './data.js';
 import { UI } from './ui.js';
-import { statusMarkHtml } from './ui/fact-status.js';
+import { cardStatusAria, cardStatusWords, statusMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
 import { strings } from './strings.js';
 import {
@@ -29,6 +29,7 @@ import {
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_LEFT, CARD_STATUS_MARK_ROOM, bottomRightPillsRoom,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
+import { treeKnowsOrigin } from './reliability.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
@@ -4238,6 +4239,8 @@ class TreeRendererClass {
         const presumedDeceased = this.computePresumedDeceased();
         // At-a-glance signals (evidence, story, action badge): shared context.
         const signalCtx = this.signalContext();
+        // Citations in a tree that knows its facts' origin were made in Strom (the bubble says so).
+        const originKnown = treeKnowsOrigin(signalCtx.data, signalCtx.reliability);
         this.edgeViews = this.computeEdgeViews(signalCtx);
         const edgeAll = this.researchEdgeMode() === 'all';
         const edgeMotion = this.researchEdgeMotion();
@@ -4309,6 +4312,10 @@ class TreeRendererClass {
                 classes += ' indirect';
             }
             const signals = cardSignalInfo(person, signalCtx);
+            // The other trees the person is also in (the ⇄ pill, its bubble row, the aria-label).
+            const crossTreeMatches: CrossTree.CrossTreeMatch[] = allTrees && currentTreeId && !person.isPlaceholder
+                ? CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees) : [];
+            const crossTreeGroups = CrossTree.groupCrossTreeMatches(crossTreeMatches);
             if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
             // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
             const statusHtml = signals.showStatus ? statusMarkHtml(signals.status) : '';
@@ -4349,7 +4356,11 @@ class TreeRendererClass {
             // plain text (never parsed as HTML).
             card.tabIndex = 0;
             card.setAttribute('role', 'button');
-            card.setAttribute('aria-label', this.cardAriaLabel(person, signals));
+            card.setAttribute('aria-label', this.cardAriaLabel(person, signals, {
+                years: cardFields ? '' : cardYears(person),
+                crossTrees: crossTreeGroups.length,
+                locked: DataManager.isPersonLocked(id),
+            }));
             card.addEventListener('keydown', (e) => {
                 if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
                 e.preventDefault();
@@ -4597,10 +4608,8 @@ class TreeRendererClass {
                 ? addTab('bottom', 'child', strings.contextMenu.addChild, strings.card.addTabChild) : '';
 
             // Cross-tree badge (bottom-right edge slot) if the person exists elsewhere.
-            let crossTreeMatches: CrossTree.CrossTreeMatch[] = [];
             let crossTreeHtml = '';
-            if (allTrees && currentTreeId && !person.isPlaceholder) {
-                crossTreeMatches = CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees);
+            {
                 if (crossTreeMatches.length > 0) {
                     // Trees, not people: another tree may hold the same person twice (the bubble says so).
                     const trees = CrossTree.crossTreeCount(crossTreeMatches);
@@ -4754,7 +4763,7 @@ class TreeRendererClass {
                     : strings.tooltip.childrenCount(ttUnions.otherChildren));
             }
 
-            const ttSignals = this.tooltipSignalRows(signals);
+            const ttSignals = this.tooltipSignalRows(signals, originKnown, crossTreeGroups);
             // A ghost's last row: linked in the view only, by which hypothesis and version.
             const ttViewLink = ghostOf
                 ? `<div class="tt-line tt-view-link"><span class="view-link-icon" aria-hidden="true"></span>${this.escapeHtml(strings.viewLinks.tooltip(ghostOf.hypo, ghostOf.variant))}</div>`
@@ -4770,7 +4779,7 @@ class TreeRendererClass {
                     // The sibling order, shown here only when its pill had to give way (index.html .so-retreat).
                     siblingOrder ? `<div class="tt-line tt-so">${this.escapeHtml(strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total))}</div>` : '',
                     ttViewLink,
-                    `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
+                    `<div class="tt-foot">${this.escapeHtml(strings.card.ttFooter)}</div>`,
                 ].filter(Boolean).join('');
                 // A photo (round 9): reuse the SAME thumbnail the card avatar shows
                 // (person.photo) — no extra load, so the hover card never waits on
@@ -5398,6 +5407,20 @@ class TreeRendererClass {
         this.treeObserver.observe(container);
     }
 
+    /** The other trees a person is also in, as the card's ⇄ pill counts them (none: the pill is off or not shown). */
+    crossTreeMatchesFor(personId: PersonId): CrossTree.CrossTreeMatch[] {
+        const person = DataManager.getPerson(personId);
+        const treeId = DataManager.getCurrentTreeId();
+        if (!person || person.isPlaceholder || !treeId || !this.lastCrossTrees) return [];
+        return CrossTree.findCrossTreeMatches(treeId, person, this.lastCrossTrees);
+    }
+
+    /** Citations in this tree were made in Strom: the tree knows where its facts came from. */
+    treeKnowsOriginNow(): boolean {
+        const ctx = this.signalContext();
+        return treeKnowsOrigin(ctx.data, ctx.reliability);
+    }
+
     /** One person's signals, as their card shows them (the person menu leads with them). */
     cardSignalsFor(personId: PersonId): CardSignalInfo | null {
         const person = DataManager.getPerson(personId);
@@ -5415,16 +5438,20 @@ class TreeRendererClass {
         return c.ttAgent(clip(s.agent ?? ''));
     }
 
-    /** The tooltip's signal rows (HTML): evidence, story and attachments, then what waits. */
-    private tooltipSignalRows(s: CardSignalInfo): string {
+    /**
+     * The tooltip's signal rows (HTML) in the card map's order (spec 066 P4 §5):
+     * the mark in words (and a quieter line of where its citations came from),
+     * the story and attachments, what waits, the other trees.
+     */
+    private tooltipSignalRows(s: CardSignalInfo, originKnown: boolean, crossTrees: readonly CrossTree.CrossTreeGroup[]): string {
         const c = strings.card;
         const rows: string[] = [];
-        if (s.evidence) {
-            const ev = s.evidence;
-            const bits = [ev.sources > 0 ? c.ttSources(ev.sources) : c.ariaEv.none];
-            if (ev.sources > 0 && ev.hasBirth) bits.push(ev.birthCited ? c.ttBirthCited : c.ttBirthMissing);
-            if (ev.sources > 0 && ev.hasDeath && !ev.deathCited) bits.push(c.ttDeathMissing);
-            rows.push(`<div class="tt-line tt-ev">${statusMarkHtml(s.status, { className: 'card-status-mark--inline' })}${this.escapeHtml(bits.join(' · '))}</div>`);
+        // The bubble keeps the mark's words when the card does not show it (Settings → Show on card).
+        if (s.status) {
+            const w = cardStatusWords(s.status, originKnown);
+            rows.push(`<div class="tt-line tt-status">${statusMarkHtml(s.status, { className: 'card-status-mark--inline' })}`
+                + `<span class="tt-status-text"><span>${this.escapeHtml(w.main)}</span>`
+                + `${w.sub ? `<span class="tt-status-sub">${this.escapeHtml(w.sub)}</span>` : ''}</span></div>`);
         }
         // A linked tree that shows materials: "Materials N" in place of the attachments.
         const files = s.materials ?? s.attachments;
@@ -5448,20 +5475,34 @@ class TreeRendererClass {
             `<div class="tt-line tt-agent"><span class="agent-mark" aria-hidden="true"></span>${this.escapeHtml(text)}</div>`;
         if (s.agent) rows.push(agent(this.signalText(s, 'agent')));
         else if (s.queued) rows.push(agent(this.signalText(s, 'queued')));
+        // The other trees (shown with the ⇄ pill only): one by its name, more by their number.
+        if (crossTrees.length > 0) {
+            const text = crossTrees.length === 1 ? c.ttCross(crossTrees[0].treeName) : c.ttCrossN(crossTrees.length);
+            rows.push(`<div class="tt-line tt-cross"><span class="tt-cross-glyph" aria-hidden="true">⇄</span>${this.escapeHtml(text)}</div>`);
+        }
         return rows.join('');
     }
 
-    /** The card's accessible name: the name, then its status and what waits. */
-    private cardAriaLabel(person: Person, s: CardSignalInfo): string {
+    /**
+     * The card's accessible name in the card map's order (spec 066 P4 §5):
+     * the name, the years, the mark in words; then the story, what waits, the
+     * other trees and the lock, each after a semicolon (the mark's facts
+     * are a list of their own).
+     */
+    private cardAriaLabel(person: Person, s: CardSignalInfo, extra: { years?: string; crossTrees?: number; locked?: boolean } = {}): string {
         const c = strings.card;
-        const parts = [shownNameFull(person)];
-        if (s.showStatus && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
-        if (s.showStory && s.story) parts.push(storySignalText(s.story, c.story));
-        if (s.action === 'waiting') parts.push(c.ariaWaiting);
-        else if (s.action === 'conflict') parts.push(c.ariaConflict);
-        else if (s.action === 'question') parts.push(c.ariaQuestion);
-        else if (s.showAgent) parts.push(c.ariaAgent);
-        return parts.join(', ');
+        const head = [shownNameFull(person)];
+        if (extra.years) head.push(extra.years);
+        if (s.showStatus && s.status) head.push(cardStatusAria(s.status));
+        const tail: string[] = [];
+        if (s.showStory && s.story) tail.push(storySignalText(s.story, c.story));
+        if (s.action === 'waiting') tail.push(c.ariaWaiting);
+        else if (s.action === 'conflict') tail.push(c.ariaConflict);
+        else if (s.action === 'question') tail.push(c.ariaQuestion);
+        else if (s.showAgent) tail.push(c.ariaAgent);
+        if (extra.crossTrees) tail.push(c.ariaCross(extra.crossTrees));
+        if (extra.locked) tail.push(strings.lock.lockedTooltip.toLocaleLowerCase());
+        return [head.join(', '), ...tail].join('; ');
     }
 
     /** True when the person is currently rendered on the canvas. */

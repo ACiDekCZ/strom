@@ -10,7 +10,8 @@ import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
 import { getCurrentLanguage, strings } from '../strings.js';
 import { PersonId } from '../types.js';
 import { ActionSignal, CardSignalInfo, ACTION_GLYPH, storyFoldHtml, storySignalInLine, storySignalText } from '../card-signals.js';
-import { statusMarkHtml } from './fact-status.js';
+import { cardStatusWords, statusMarkHtml } from './fact-status.js';
+import { groupCrossTreeMatches } from '../cross-tree.js';
 import { HELP_TOPICS } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
 import { TreeManager } from '../tree-manager.js';
@@ -73,28 +74,57 @@ export const cardSignalsUiMethods = uiModule({
     },
 
     /**
-     * The person menu's first block (HTML): on touch the status line
-     * ("partly documented · story (draft)"), then the badge's signal with
-     * what it leads to. Empty when there is nothing to say.
+     * The person menu's first block (HTML, spec 066 P4 §5): the card's marks
+     * explained with the bubble's rows in the card map's order (the mark in
+     * words, the story, what waits with where it leads, the other trees with
+     * "Go to the tree"), then "What the marks mean" (the help). A block with
+     * only what waits stays as before. Empty when there is nothing to say.
      */
     personSignalsMenuHtml(personId: PersonId, touch: boolean, itemClass: 'context-menu-item' | 'bottom-sheet-item'): string {
         const s = TreeRenderer.cardSignalsFor(personId);
         if (!s) return '';
         const c = strings.card;
-        let html = '';
-        if (touch && (s.showStatus || s.showStory)) {
-            const bits: string[] = [];
-            if (s.showStatus && s.evidence) bits.push(c.ariaEv[s.evidence.level]);
-            if (s.showStory && s.story) {
-                bits.push(storySignalInLine(storySignalText(s.story, c.story), getCurrentLanguage()));
-            }
-            const marks = `${s.showStatus ? statusMarkHtml(s.status, { className: 'card-status-mark--inline' }) : ''}`
-                + `${s.showStory ? storyFoldHtml(s.story, true) : ''}`;
-            html += `<div class="menu-person-state">${marks}${this.escapeHtml(bits.join(' · '))}</div>`;
+        const esc = (t: string): string => this.escapeHtml(t);
+        // A link of the block: a menu item of its own (keyboard and the menu's dispatch reach it).
+        const link = (action: string, text: string): string => itemClass === 'bottom-sheet-item'
+            ? `<button type="button" class="${itemClass} mps-link" role="menuitem" data-action="${action}">${esc(text)}</button>`
+            : `<div class="${itemClass} mps-link" role="menuitem" tabindex="-1" data-action="${action}">${esc(text)}</div>`;
+        const row = (cls: string, mark: string, text: string, sub = '', after = ''): string =>
+            `<div class="mps-row ${cls}"><span class="mps-mark">${mark}</span><span class="mps-text"><span>${esc(text)}</span>`
+            + `${sub ? `<span class="mps-sub">${esc(sub)}</span>` : ''}</span>${after}</div>`;
+        const rows: string[] = [];
+        // As the bubble: the mark and the story in words also when the card does not show them.
+        if (s.status) {
+            const w = cardStatusWords(s.status, TreeRenderer.treeKnowsOriginNow());
+            rows.push(row('mps-status', statusMarkHtml(s.status, { className: 'card-status-mark--inline' }), w.main, w.sub));
         }
-        if (s.action) html += this.personSignalBlockHtml(s, s.action, touch, itemClass);
-        else if (s.showAgent) html += this.personSignalBlockHtml(s, 'agent', touch, itemClass);
-        return html;
+        if (s.story) {
+            rows.push(row('mps-story', storyFoldHtml(s.story, true),
+                storySignalInLine(storySignalText(s.story, c.story), getCurrentLanguage())));
+        }
+        const action = s.action ? this.personSignalBlockHtml(s, s.action, touch, itemClass)
+            : s.showAgent ? this.personSignalBlockHtml(s, 'agent', touch, itemClass) : '';
+        const trees = groupCrossTreeMatches(TreeRenderer.crossTreeMatchesFor(personId));
+        const cross = trees.length === 0 ? ''
+            : row('mps-cross', '<span class="mps-glyph" aria-hidden="true">⇄</span>',
+                trees.length === 1 ? c.ttCross(trees[0].treeName) : c.ttCrossN(trees.length), '', link('cross-tree', c.crossTreeGo));
+        // Only what waits: the block as before (no marks to explain).
+        if (rows.length === 0 && !cross) return action;
+        const help = rows.length > 0 ? link('marks-help', strings.reliability.help) : '';
+        return `<div class="menu-person-state" role="group" aria-label="${esc(c.legend.marksTitle)}">${rows.join('')}${action}${cross}${help}</div>`;
+    },
+
+    /**
+     * The person menu's ⇄ link: one tree with one match switches to it, more
+     * open the chooser of every person (at the card's ⇄ pill, or the card).
+     */
+    openCrossTreeOf(personId: PersonId): void {
+        const matches = TreeRenderer.crossTreeMatchesFor(personId);
+        if (matches.length === 0) return;
+        if (matches.length === 1) { void this.switchToTreeAndFocus(matches[0].treeId, matches[0].personId); return; }
+        const card = document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`);
+        const anchor = card?.querySelector<HTMLElement>('.cross-tree-badge') ?? card;
+        if (anchor) this.showCrossTreeChooser(matches, anchor);
     },
 
     /** The action block of the person menu: what waits, and where it leads. */

@@ -80,8 +80,6 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         moreChildrenCount: (n: number) => nPl(n, 'kolejne dziecko', 'kolejnych dzieci', 'kolejnych dzieci'),
         // After the first three unions on the hover card (T37).
         moreUnions: (n: number) => `i ${n} ${plPl(n, 'kolejny', 'kolejne', 'kolejnych')}`,
-        // Footer of the hover card: the real desktop gesture (click opens the menu).
-        gestureHint: 'Kliknięcie otwiera menu',
     },
 
     // Placeholders

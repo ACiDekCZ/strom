@@ -364,7 +364,8 @@ for (const width of [1440, 390]) {
                 await expect(vaclav.locator(sel), `${type}: ${sel}`).toBeVisible();
             }
             await expect(vaclav.locator(type === 'compact' ? ':scope > .card-signal-dot' : '.card-signal'), `${type}: badge`).toBeVisible();
-            const clash = await vaclav.evaluate((el) => {
+            // Names are fitted a frame after the render (and again once the fonts load): wait for that.
+            const clash = () => vaclav.evaluate((el) => {
                 const parts = [':scope > .card-status-mark', ':scope > .card-story', ':scope > .lock-icon', '.cross-tree-badge',
                     '.hidden-partners-btn', '.sibling-order-pill', '.card-signal', ':scope > .card-signal-dot']
                     .flatMap(sel => [...el.querySelectorAll<HTMLElement>(sel)].filter(e => e.offsetWidth > 0)
@@ -397,7 +398,7 @@ for (const width of [1440, 390]) {
                 }
                 return out;
             });
-            expect(clash, `${type}: parts over each other or over text`).toEqual([]);
+            await expect.poll(clash, { message: `${type}: parts over each other or over text` }).toEqual([]);
             // The bottom edge ends 40px before the corner; the narrow compact card shows a bare ⇄.
             await expect(vaclav.locator('.edge-bottom-right')).toHaveCSS('right', '40px');
             if (type === 'compact') await expect(vaclav.locator('.cross-tree-badge .pill-count')).toBeHidden();

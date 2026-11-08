@@ -350,7 +350,7 @@ test.describe('a story\'s new version', () => {
         await setup(page, ALL, [STORY_ITEM]);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Story · new version waiting');
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['Awaiting action: New version of the story']);
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /Story · new version waiting, waiting for an answer/);
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /Story · new version waiting; waiting for an answer/);
         await card(page, 'Jan').locator('.card-signal').click();
         await expect(page.locator('#story-compare-modal')).toBeVisible();
         await expect(page.locator('.context-menu')).toHaveCount(0);
