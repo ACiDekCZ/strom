@@ -63,7 +63,7 @@ import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, Content
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
-import { carryMergedImports, cleanImportOrigin, dropImportedParent, pruneImportOrigin } from './import-origin.js';
+import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
@@ -3900,6 +3900,8 @@ class DataManagerClass {
                         if (removePartnership.events?.length) {
                             existingPartnership.events = [...(existingPartnership.events ?? []), ...removePartnership.events];
                         }
+                        // The family's ids in the loaded files: those of both records.
+                        mergeOriginalIds(existingPartnership, removePartnership);
                     }
                     // Delete the duplicate partnership
                     const partner = this.data.persons[partnerId];

@@ -62,6 +62,7 @@ import {
     YearSpan,
     SourceImageHeld,
     FactPart,
+    OriginalIdLine,
     ResearchFactOrigin,
     uniqueIdSuffix,
     PrimaryName,
@@ -94,7 +95,8 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    cleanImportOrigin, factPartOf, IMPORT_TAG, markFactImported, markTreeImported, parseImportMark as readImportMark, sanitizeImports,
+    addOriginalIds, cleanImportOrigin, cleanOriginalIds, factPartOf, IMPORT_TAG, markFactImported, markTreeImported,
+    ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -956,6 +958,13 @@ interface RawParticipant {
     note?: string;
 }
 
+/** `1 _STROM_IMPORT Ix` of a person or a family with its `2 _XREF` and id lines (spec 066 K3.2). */
+interface RawOriginalIds {
+    from: string;
+    xref?: string;
+    ids: OriginalIdLine[];
+}
+
 /** Raw GEDCOM source record (0 @Sx@ SOUR). */
 interface RawSource {
     id: string;
@@ -1022,6 +1031,10 @@ interface GedcomIndividual {
     id: string;
     /** 1 _STROM_IMPORT: the import the person came from (app files only). */
     importMark?: string;
+    /** Level-1 `_UID`, `UID`, `RIN`, `EXID` (+ TYPE), `_FSFTID`, `AFN`: the record's ids (another program's file). */
+    fileIds?: OriginalIdLine[];
+    /** The ids under each `1 _STROM_IMPORT Ix` (Strom's own files). */
+    importIds?: RawOriginalIds[];
     /** 2 _STROM_IMPORT under the primary NAME, SEX, BIRT and DEAT. */
     factImports?: Partial<Record<RawPersonFact, RawImportMark[]>>;
     /** The research's origin of the primary NAME, the sex (1 _STROM_SEX_ORIGIN), BIRT and DEAT (Strom's own files only). */
@@ -1133,6 +1146,10 @@ interface GedcomFamily {
     id: string;
     /** 1 _STROM_IMPORT: the import the couple came from (app files only). */
     importMark?: string;
+    /** The family record's ids (see GedcomIndividual.fileIds). */
+    fileIds?: OriginalIdLine[];
+    /** The ids under each `1 _STROM_IMPORT Ix` (Strom's own files). */
+    importIds?: RawOriginalIds[];
     /** 2 _STROM_IMPORT under MARR and DIV. */
     factImports?: Partial<Record<RawCoupleFact, RawImportMark[]>>;
     /** The research's origin of MARR and DIV (Strom's own files only). */
@@ -1801,6 +1818,9 @@ export function imageHeldReason(value: string): SourceImageHeld {
  * own: UID (a record's lasting id), CREA (when the record was created, with
  * DATE/TIME under it) and EXID (the record's id in another system, TYPE under
  * it) — ids and stamps of the program that wrote the file, not of the family.
+ * On a person and a family the ids (`_UID`, `UID`, `RIN`, `EXID`, with
+ * `_FSFTID` and `AFN`) are kept as its original ids (ORIGINAL_ID_TAGS, read
+ * before this set is asked); elsewhere they are ignored.
  */
 const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID',
     'UID', 'CREA', 'EXID']);
@@ -2248,6 +2268,28 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentResearch: OpenResearch | null = null;
     /** The research's `_STROM_WAS` being read (its `3 _STROM_IMPORT`, `_PART`, `_REF` follow). */
     let openWas: { level: number; was: RawFactOrigin['was'][number] } | null = null;
+    /**
+     * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
+     * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
+     * lines are read here and nowhere else.
+     */
+    let idBlock = null as { level: number; entry?: RawOriginalIds; last?: OriginalIdLine } | null;
+    /** A level-1 id line of a person or a family (another program's file keeps them). */
+    const readFileId = (target: { fileIds?: OriginalIdLine[] }, tag: string, value: string): void => {
+        const line: OriginalIdLine = { tag, value: value.trim() };
+        if (line.value) (target.fileIds ??= []).push(line);
+        idBlock = { level: 1, last: line };
+    };
+    /** `1 _STROM_IMPORT Ix` of a person or a family: its import, and the ids that follow under it. */
+    const readRecordImport = (target: { importMark?: string; importIds?: RawOriginalIds[] }, value: string): void => {
+        const mark = readImportMark(value);
+        if (!mark) return;
+        // The first line says where the record came from; a further one only brings ids.
+        target.importMark ??= mark.id;
+        const entry: RawOriginalIds = { from: mark.id, ids: [] };
+        (target.importIds ??= []).push(entry);
+        idBlock = { level: 1, entry };
+    };
     /** The research's origin of the fact being read: an event's, the primary name's, the sex, birth, death, wedding, divorce. */
     const factOriginTarget = (): RawFactOrigin | null => {
         const fresh = (): RawFactOrigin => ({ was: [], sourceRefs: [] });
@@ -2275,6 +2317,27 @@ export function parseGedcom(content: string): ParsedGedcom {
         const level = rec.level;
         const tag = rec.tag;
         let value = rec.value;
+
+        // The lines under a record's id (spec 066 K3.2): `2 _XREF`, `2 _UID`…
+        // under `1 _STROM_IMPORT Ix`, `2 TYPE` under `1 EXID`, `3 TYPE` under
+        // `2 EXID`. Nothing else reads them.
+        if (idBlock && level <= idBlock.level) idBlock = null;
+        if (idBlock) {
+            const block = idBlock;
+            const v = value.trim();
+            if (level === block.level + 1 && block.entry) {
+                block.last = undefined;
+                if (tag === '_XREF') { if (!block.entry.xref && v) block.entry.xref = v; }
+                else if (ORIGINAL_ID_TAGS.has(tag) && v) {
+                    block.last = { tag, value: v };
+                    block.entry.ids.push(block.last);
+                }
+            } else if (tag === 'TYPE' && v && block.last?.tag === 'EXID' && !block.last.type
+                && level === block.level + (block.entry ? 2 : 1)) {
+                block.last.type = v;
+            }
+            continue;
+        }
         // A pointer to a shared note record (1 NOTE @N1@, GEDCOM 7 SNOTE) reads
         // as the note's text wherever a NOTE may stand. A pointer to a note the
         // file never defines says nothing and is read as an empty note.
@@ -2741,12 +2804,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'SEX':
                             indi.sex = value;
                             break;
-                        case IMPORT_TAG: {
-                            // The import the person came from (read from app files only).
-                            const mark = readImportMark(value);
-                            if (mark) indi.importMark = mark.id;
+                        case IMPORT_TAG:
+                            // The import the person came from, with the person's
+                            // ids in it (read from app files only).
+                            readRecordImport(indi, value);
                             break;
-                        }
+                        case '_UID': case 'UID': case 'RIN': case 'EXID': case '_FSFTID': case 'AFN':
+                            // The person's ids in the program that wrote the file.
+                            readFileId(indi, tag, value);
+                            break;
                         case '_STROM_SEX_ORIGIN':
                             // The research's origin of the sex (spec 066), Strom's own files only.
                             if (stromResearch || stromApp) ((indi.factOrigins ??= {}).sex ??= { was: [], sourceRefs: [] }).origin = value;
@@ -2930,11 +2996,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case '_STROM_NO_COUPLE':
                             fam.noCouple = value !== 'N';
                             break;
-                        case IMPORT_TAG: {
-                            const mark = readImportMark(value);
-                            if (mark) fam.importMark = mark.id;
+                        case IMPORT_TAG:
+                            readRecordImport(fam, value);
                             break;
-                        }
+                        case '_UID': case 'UID': case 'RIN': case 'EXID': case '_FSFTID': case 'AFN':
+                            readFileId(fam, tag, value);
+                            break;
                         case 'NOTE':
                             fam.note = fam.note ? `${fam.note}\n${value}` : value;
                             break;
@@ -4438,13 +4505,66 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             data.imports = record;
             importId = record[0].id;
             markTreeImported(data, importId);
+            applyForeignIds(importId);
         }
     } else if (origin) {
         applyFileImportMarks();
+        applyFileOriginalIds();
         if (readOrigins) applyResearchOrigins();
         cleanImportOrigin(data, gedcom.stromImports);
-    } else if (readOrigins && applyResearchOrigins()) {
-        cleanImportOrigin(data, gedcom.stromImports);
+    } else if (readOrigins) {
+        // Both are read; either one is reason to clean against the records.
+        const origins = applyResearchOrigins();
+        const ids = applyFileOriginalIds();
+        if (origins || ids) cleanImportOrigin(data, gedcom.stromImports);
+    }
+
+    /**
+     * Another program's file: each person and family keeps its xref and its id
+     * lines there (spec 066 K3.2), as written. A couple read from two families
+     * keeps the first one's xref and the lines of both.
+     */
+    function applyForeignIds(from: string): void {
+        const known = new Set([from]);
+        const put = (holder: Person | Partnership, gedId: string, lines: OriginalIdLine[] | undefined): void => {
+            const entry = cleanOriginalIds({ from, xref: gedId.startsWith('@__anon') ? undefined : gedId, ids: lines ?? [] }, known);
+            if (entry) addOriginalIds(holder, entry);
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (person) put(person, gedId, indi.fileIds);
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (ps) put(ps, gedFamId, fam.fileIds);
+        }
+    }
+
+    /**
+     * A Strom file's ids of its records in the loaded files (the blocks under
+     * `1 _STROM_IMPORT Ix`), cleaned against its import records afterwards.
+     * Its own xrefs are never original ids. Returns whether there were any.
+     */
+    function applyFileOriginalIds(): boolean {
+        let any = false;
+        const put = (holder: Person | Partnership, blocks: RawOriginalIds[] | undefined): void => {
+            for (const b of blocks ?? []) {
+                if (!b.xref && b.ids.length === 0) continue;
+                addOriginalIds(holder, { from: b.from, ...(b.xref ? { xref: b.xref } : {}), ids: b.ids });
+                any = true;
+            }
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (person) put(person, indi.importIds);
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (ps) put(ps, fam.importIds);
+        }
+        return any;
     }
 
     /**

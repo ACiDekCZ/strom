@@ -561,6 +561,12 @@ export interface Person {
     /** Parent links that came from a loaded GEDCOM file: parent id -> import id. */
     importedParents?: Record<string, string>;
     /**
+     * The person's ids in the loaded GEDCOM files (spec 066 K3.2): one entry
+     * per import the person came from or was merged with, the record's xref
+     * and its id lines as the file wrote them. Written back by "Back to {prog}".
+     */
+    originalIds?: OriginalIds[];
+    /**
      * The research's origin of each fact (GEDCOM `_STROM_ORIGIN`, `_STROM_WAS`,
      * `_STROM_SEX_ORIGIN`), by fact (`name`, `sex`, `birth`, `death`,
      * `event:<id>`). Research trees only; read from the research's file,
@@ -589,6 +595,26 @@ export interface ImportRecord {
     sha?: string;
     /** The "what next" card after this import was closed. */
     nextCardClosed?: boolean;
+}
+
+/** One id line of a record in a loaded GEDCOM file (`1 _UID`, `1 RIN`, `1 EXID` + `2 TYPE`…). */
+export interface OriginalIdLine {
+    /** `_UID`, `UID`, `RIN`, `EXID`, `_FSFTID` or `AFN`. */
+    tag: string;
+    /** The value as written. */
+    value: string;
+    /** EXID > TYPE: the system the id belongs to. */
+    type?: string;
+}
+
+/** A record's ids in one loaded GEDCOM file (Person/Partnership.originalIds). */
+export interface OriginalIds {
+    /** The import (ImportRecord.id). */
+    from: string;
+    /** The record's xref in that file, without the @ signs ("I37"). */
+    xref?: string;
+    /** Its id lines, in file order. */
+    ids?: OriginalIdLine[];
 }
 
 /** A fact's value as it came from a loaded file (Person/Partnership.importedValues). */
@@ -985,6 +1011,8 @@ export interface Partnership {
     importId?: string;
     /** Each fact's value as it came from a loaded file (`startDate`, `startPlace`, `endDate`, `endPlace`, `event:<id>.date|place|value`). */
     importedValues?: Record<string, ImportedValue>;
+    /** The family record's ids in the loaded GEDCOM files (xref, `_UID`…), see Person.originalIds. */
+    originalIds?: OriginalIds[];
     /** The research's origin of each fact (`marriage`, `divorce`, `event:<id>`), research trees only. */
     researchOrigins?: Record<string, ResearchFactOrigin>;
     // Primary partnership flag - when person has multiple partnerships,
@@ -1133,8 +1161,10 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   the tree) and the origin of facts and links from them
  *   (Person/Partnership.importedValues, importId, Person.importedParents,
  *   Source.importId), plus the research's origin of facts (researchOrigins,
- *   ResearchConflict.kind). Additive; existing trees get no origin (nothing
- *   is guessed). An older app (v14) would drop imports on a re-save.
+ *   ResearchConflict.kind), and the records' ids in the loaded files
+ *   (Person/Partnership.originalIds: xref, _UID, RIN, EXID…). Additive;
+ *   existing trees get no origin and no ids (nothing is guessed). An older
+ *   app (v14) would drop imports on a re-save.
  */
 export const STROM_DATA_VERSION = 15;
 

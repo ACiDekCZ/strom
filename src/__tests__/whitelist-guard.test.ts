@@ -338,6 +338,7 @@ type OwnedElsewhere =
     | 'importId'            // GEDCOM import only (spec 066): the import the person came from
     | 'importedValues'      // GEDCOM import only: an edit ends the mark by changing the value
     | 'importedParents'     // GEDCOM import only: the parent links from the file
+    | 'originalIds'         // GEDCOM import only (K3.2): the person's ids in the loaded files
     | 'researchOrigins';    // written by Strom Research only (GEDCOM import), never edited
 
 /**

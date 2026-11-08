@@ -94,6 +94,13 @@ export const exportGedcomMethods = uiModule({
         return purpose === 'back' ? { ...CONTENT_PRESETS.back } : null;
     },
 
+    /** "Back": the import the file goes back to (the tree's last one, as its title says); undefined otherwise. */
+    exportGedcomBackTo(data: Pick<StromData, 'imports'>): string | undefined {
+        if (purpose !== 'back') return undefined;
+        const imports = data.imports ?? [];
+        return imports[imports.length - 1]?.id;
+    },
+
     /** The note text for the research's facts, when "Back" marks them; undefined: no notes. */
     exportGedcomResearchNote(): ((src: string) => string) | undefined {
         if (purpose !== 'back') return undefined;

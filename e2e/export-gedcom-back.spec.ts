@@ -13,10 +13,11 @@ import { openApp } from './helpers.js';
  * person citation), a living couple (the husband cites two sources, the
  * marriage one), loaded from "Ancestral Quill" when `withImport`.
  */
-async function seedTree(page: Page, opts: { sources?: boolean; withImport?: boolean } = {}): Promise<void> {
+async function seedTree(page: Page, opts: { sources?: boolean; withImport?: boolean; ids?: boolean } = {}): Promise<void> {
     const sources = opts.sources ?? true;
     const withImport = opts.withImport ?? true;
-    await page.evaluate(async ({ sources, withImport }) => {
+    const ids = opts.ids ?? false;
+    await page.evaluate(async ({ sources, withImport, ids }) => {
         const cite = (ids: string[]) => (sources ? ids : undefined);
         const persons = {
             d1: {
@@ -50,9 +51,15 @@ async function seedTree(page: Page, opts: { sources?: boolean; withImport?: bool
             };
         }
         if (withImport) data.imports = [{ id: 'I1', program: 'Ancestral Quill', at: '2026-10-01T10:00:00Z', file: 'harrowfield.ged' }];
+        if (withImport && ids) {
+            // Their records in the loaded file (spec 066 K3.2); I-7 is no GEDCOM 5.5.1 xref.
+            Object.assign(persons.d1, { importId: 'I1', originalIds: [{ from: 'I1', xref: 'I500001', ids: [{ tag: '_UID', value: 'AB12CD34EF56AB12CD34EF56AB12CD34' }, { tag: 'RIN', value: '17' }] }] });
+            Object.assign(persons.l2, { importId: 'I1', originalIds: [{ from: 'I1', xref: 'I-7' }] });
+            Object.assign(partnerships.u1, { importId: 'I1', originalIds: [{ from: 'I1', xref: 'F500001' }] });
+        }
         await window.Strom.DataManager.importAsNewTree(data as never, 'Harrowfield');
         await window.Strom.TreeRenderer.setFocus('d1' as never);
-    }, { sources, withImport });
+    }, { sources, withImport, ids });
 }
 
 async function openGedcomExport(page: Page, preset?: 'back') {
@@ -145,6 +152,27 @@ test('"Back": every source and citation of the deceased and the living, no media
     expect(all.find(r => /^0 @F\d+@ FAM/.test(r) && r.includes('MARR'))).toMatch(/SOUR @S\d+@/);
     expect(deceased).toContain('2 NOTE Derived by the Strom research (per: Baptisms Harrowmoor 1840-1860, p. 41)');
     expect((ged.match(/Derived by the Strom research/g) ?? []).length).toBe(1);
+});
+
+test('"Back" gives the program\'s records their own xrefs and ids again; one it cannot use goes as REFN', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, { ids: true });
+    const pwd = await openGedcomExport(page, 'back');
+    await expect(pwd.locator('#export-purpose-back')).toBeChecked();
+    const ged = await download(page);
+    const all = records(ged);
+    const deceased = all.find(r => r.includes('Quorvel'))!;
+    expect(deceased).toMatch(/^0 @I500001@ INDI$/m);
+    expect(deceased).toContain('1 _UID AB12CD34EF56AB12CD34EF56AB12CD34');
+    expect(deceased).toContain('1 RIN 17');
+    const wife = all.find(r => r.includes('Mirabeth'))!;
+    expect(wife).not.toMatch(/^0 @I-7@/m);
+    expect(wife).toContain('1 REFN I-7\n2 TYPE Ancestral Quill xref');
+    const family = all.find(r => /^0 @F500001@ FAM$/m.test(r))!;
+    expect(family).toBeTruthy();
+    expect(family).toMatch(/^1 WIFE @I\d+@$/m);
+    const xrefs = all.map(r => r.split(' ')[1]).filter(x => x?.startsWith('@'));
+    expect(new Set(xrefs).size).toBe(xrefs.length);
 });
 
 test('"Back" without the mark writes no note; "To share" brings the choices back', async ({ page }) => {

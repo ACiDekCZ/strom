@@ -24,7 +24,7 @@
 
 import { eventValueIsOnTag } from './events.js';
 import {
-    CoupleEvent, FactOriginKind, FactPart, ImportRecord, ImportedValue, LifeEvent,
+    CoupleEvent, FactOriginKind, FactPart, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
     Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, StromData,
 } from './types.js';
 
@@ -244,6 +244,94 @@ export function markTreeImported(data: StromData, importId: string): void {
     }
 }
 
+// ==================== ORIGINAL IDS ====================
+
+/**
+ * The level-1 lines of a record that name it in the program that wrote the
+ * file (spec 066 K3.2): kept as written and written back by "Back to {prog}".
+ * `_UID`, `UID`, `_FSFTID`, `AFN` and an `EXID` (with its `TYPE`) name the
+ * same person in any file of that system; `RIN` only inside one tree.
+ */
+export const ORIGINAL_ID_TAGS: ReadonlySet<string> = new Set(['_UID', 'UID', 'RIN', 'EXID', '_FSFTID', 'AFN']);
+
+/** The feature of a research that keeps the records' ids and sends them back (`origin.ids`). */
+export const ORIGIN_IDS_FEATURE = 'origin.ids';
+
+/** Longest id value, xref and EXID type kept (a line stays well under GEDCOM's 255 characters). */
+const ID_VALUE_MAX = 200;
+const XREF_MAX = 80;
+
+/** An xref as stored: without the @ signs, nothing that would break the line. */
+function cleanXref(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const x = value.trim().replace(/^@/, '').replace(/@$/, '');
+    return x && x.length <= XREF_MAX && !/[@\s\p{Cc}]/u.test(x) ? x : undefined;
+}
+
+/** An id value or type as stored: one line, trimmed, not too long. */
+function cleanIdText(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const v = value.trim();
+    return v && v.length <= ID_VALUE_MAX && !/\p{Cc}/u.test(v) ? v : undefined;
+}
+
+/** One id line, valid fields only; null when it is not one. */
+export function cleanOriginalIdLine(value: unknown): OriginalIdLine | null {
+    if (!value || typeof value !== 'object') return null;
+    const r = value as Record<string, unknown>;
+    const tag = typeof r.tag === 'string' ? r.tag.trim().toUpperCase() : '';
+    const v = cleanIdText(r.value);
+    if (!ORIGINAL_ID_TAGS.has(tag) || !v) return null;
+    const type = tag === 'EXID' ? cleanIdText(r.type) : undefined;
+    return { tag, value: v, ...(type ? { type } : {}) };
+}
+
+const sameIdLine = (a: OriginalIdLine, b: OriginalIdLine): boolean =>
+    a.tag === b.tag && a.value === b.value && (a.type ?? '') === (b.type ?? '');
+
+/**
+ * One import's ids of a record, cleaned: null when the import is not known or
+ * nothing is left (no xref, no id line). Duplicate lines are kept once.
+ */
+export function cleanOriginalIds(value: unknown, known: ReadonlySet<string>): OriginalIds | null {
+    if (!value || typeof value !== 'object') return null;
+    const r = value as Record<string, unknown>;
+    if (typeof r.from !== 'string' || !known.has(r.from)) return null;
+    const xref = cleanXref(r.xref);
+    const ids: OriginalIdLine[] = [];
+    if (Array.isArray(r.ids)) {
+        for (const raw of r.ids) {
+            const line = cleanOriginalIdLine(raw);
+            if (line && !ids.some(l => sameIdLine(l, line))) ids.push(line);
+        }
+    }
+    if (!xref && ids.length === 0) return null;
+    return { from: r.from, ...(xref ? { xref } : {}), ...(ids.length > 0 ? { ids } : {}) };
+}
+
+/**
+ * Add one import's ids to a holder: joined with the entry of the same import
+ * (its xref stays, new lines are added, none twice), else a new entry.
+ */
+export function addOriginalIds(holder: FactHolder, entry: OriginalIds): void {
+    const list = holder.originalIds ??= [];
+    const have = list.find(e => e.from === entry.from);
+    if (!have) {
+        list.push({ from: entry.from, ...(entry.xref ? { xref: entry.xref } : {}),
+            ...(entry.ids?.length ? { ids: entry.ids.map(l => ({ ...l })) } : {}) });
+        return;
+    }
+    if (!have.xref && entry.xref) have.xref = entry.xref;
+    for (const line of entry.ids ?? []) {
+        if (!have.ids?.some(l => sameIdLine(l, line))) (have.ids ??= []).push({ ...line });
+    }
+}
+
+/** The ids of `from` added to `into` (import ids renamed by `map`), e.g. after a merge. */
+export function mergeOriginalIds(into: FactHolder, from: FactHolder, map: Map<string, string> = new Map()): void {
+    for (const entry of from.originalIds ?? []) addOriginalIds(into, { ...entry, from: map.get(entry.from) ?? entry.from });
+}
+
 /** Today as an ISO day in local time ("2026-11-08"): when a file was loaded. */
 export function localIsoDay(now: Date = new Date()): string {
     const pad = (n: number): string => String(n).padStart(2, '0');
@@ -389,6 +477,15 @@ function cleanHolder(holder: FactHolder, known: Set<string>, sources: StromData[
         if (Object.keys(out).length > 0) holder.researchOrigins = out;
         else delete holder.researchOrigins;
     }
+    if ('originalIds' in h) {
+        const raw = h.originalIds;
+        const list = Array.isArray(raw) ? raw : [];
+        delete holder.originalIds;
+        for (const v of list) {
+            const clean = cleanOriginalIds(v, known);
+            if (clean) addOriginalIds(holder, clean);
+        }
+    }
 }
 
 /**
@@ -441,9 +538,12 @@ export function pruneImportOrigin(data: StromData): void {
  * gave, so it must not outlive the value it stands for. `changed` also drops
  * the values a person changed since (a living person's original name or date
  * would come back through them), and the research's origins with their
- * earlier values; without it only facts that are gone lose theirs.
+ * earlier values; without it only facts that are gone lose theirs. With
+ * `changed` the record's ids in the loaded files go too: an id like a
+ * FamilySearch one names the hidden person in the other system.
  */
 export function forgetHiddenImports(holder: FactHolder, changed: boolean): void {
+    if (changed) delete holder.originalIds;
     if (holder.importedValues) {
         for (const [key, stored] of Object.entries(holder.importedValues)) {
             const now = factValue(holder, key);
@@ -513,6 +613,12 @@ export function remapHolderImports(holder: FactHolder, map: Map<string, string>)
     if (!isPartnership(holder) && holder.importedParents) {
         for (const [pid, from] of Object.entries(holder.importedParents)) holder.importedParents[pid] = map.get(from) ?? from;
     }
+    if (holder.originalIds) {
+        // Two ids may become one (an import both trees share): their entries join.
+        const list = holder.originalIds;
+        delete holder.originalIds;
+        for (const entry of list) addOriginalIds(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
+    }
 }
 
 /**
@@ -539,6 +645,8 @@ export function carryMergedImports(
         if (had === now) continue;
         (merged.importedValues ??= {})[key] = { from: importMap.get(stored.from) ?? stored.from, value: stored.value };
     }
+    // The merged record is the record of both files: it keeps the ids of each.
+    mergeOriginalIds(merged, incoming, importMap);
 }
 
 /**
@@ -548,11 +656,17 @@ export function carryMergedImports(
  * their two people — this runs before stabilizeIds. Facts the research gives
  * no origin of keep the app's own stored value. Returns `next` itself when
  * there is nothing to keep; neither input is changed.
+ *
+ * The records' ids in the loaded files (originalIds): a research with
+ * `origin.ids` keeps and sends them, so its file is what counts. Before that,
+ * a record keeps its own ids of every import the research's file does not
+ * name for it (a file's ids, when it carries any, come first).
  */
-export function keepImports(next: StromData, previous: StromData): StromData {
+export function keepImports(next: StromData, previous: StromData, features?: readonly string[] | null): StromData {
     const prevImports = previous.imports ?? [];
     if (prevImports.length === 0) return next;
     const out: StromData = structuredClone(next);
+    const researchKeepsIds = !!features?.includes(ORIGIN_IDS_FEATURE);
     // Records: the research's (same id) are completed by the app's.
     const byId = new Map((out.imports ?? []).map(r => [r.id, r] as const));
     for (const rec of prevImports) {
@@ -584,6 +698,11 @@ export function keepImports(next: StromData, previous: StromData): StromData {
             (into.importedValues ??= {})[key] = { ...v };
         }
         if (!into.importId && from.importId) into.importId = from.importId;
+        if (!researchKeepsIds) {
+            for (const entry of from.originalIds ?? []) {
+                if (!into.originalIds?.some(e => e.from === entry.from)) addOriginalIds(into, entry);
+            }
+        }
     };
     for (const [prevId, nextId] of prevToNext) {
         const before = previous.persons[prevId as PersonId];

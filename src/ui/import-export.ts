@@ -267,7 +267,8 @@ export const importExportMethods = uiModule({
             // A faithful export of a research tree names the research and its version.
             const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
                 ? { id: metadata.research.id, head: metadata.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(metadata.research).transcripts } : undefined;
-            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, researchNote });
+            const backTo = this.exportGedcomBackTo(data);
+            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, researchNote, backTo });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });

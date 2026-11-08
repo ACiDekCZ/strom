@@ -652,7 +652,7 @@ export const conflictDecideMethods = uiModule({
         const link = this.researchSyncLink()?.link;
         const here = DataManager.getData();
         const features = link ? this.researchStatusOf(link.id)?.features : null;
-        return stabilizeIds(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here), here);
+        return stabilizeIds(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here, features), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */

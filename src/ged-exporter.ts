@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, PersonId, OriginalIds, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -37,6 +37,7 @@ import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
 import { FactHolder, factImportTags, IMPORT_TAG } from './import-origin.js';
+import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -80,6 +81,31 @@ export interface GedcomExportOptions {
      * reads no `_STROM_*` tag. The text is in the app's language.
      */
     researchNote?: (src: string) => string;
+    /**
+     * "Back to {prog}" (spec 066 K3.2): the import (StromData.imports id) the
+     * file goes back to. People and families from that program's files get
+     * their original xref where it is safe, and their id lines (`_UID`, `RIN`,
+     * `EXID`…) as level-1 lines; an xref that cannot be used goes as
+     * `REFN` + `TYPE {prog} xref`.
+     */
+    backTo?: string;
+}
+
+/**
+ * An xref another program gave that this file can use as it is: GEDCOM
+ * 5.5.1's form (letters, digits, `_`; 22 characters with the @ signs).
+ */
+export function isSafeXref(xref: string): boolean {
+    return /^[A-Za-z0-9_]{1,20}$/.test(xref);
+}
+
+/** A record's ids in one import: `n _XREF @x@` and its id lines, under `n-1 _STROM_IMPORT Ix` or at level 1. */
+function pushOriginalIdLines(lines: string[], level: number, entry: OriginalIds, withXref: boolean): void {
+    if (withXref && entry.xref) lines.push(`${level} _XREF @${entry.xref}@`);
+    for (const id of entry.ids ?? []) {
+        lines.push(`${level} ${id.tag} ${id.value}`);
+        if (id.tag === 'EXID' && id.type) lines.push(`${level + 1} TYPE ${id.type}`);
+    }
 }
 
 /**
@@ -602,6 +628,77 @@ export function countFamilies(data: StromData): number {
  */
 export const STROM_SEX_U_LINE = '1 _STROM_SEX_U Y';
 
+/** What "Back to {prog}" writes of the records' ids (see backToXrefs). */
+interface BackXrefs {
+    /** The program the file goes back to ('' without one). */
+    program: string;
+    /** The original xrefs the file uses (without @), by record. */
+    persons: Map<PersonId, string>;
+    families: Map<PartnershipId, string>;
+    /** The record's ids in that program's file the export writes back. */
+    personEntries: Map<PersonId, OriginalIds>;
+    familyEntries: Map<PartnershipId, OriginalIds>;
+    /** Every original xref of that program (upper case), used or given up: no other record gets one. */
+    reserved: Set<string>;
+}
+
+/**
+ * The records' ids of "Back to {prog}" (spec 066 K3.2). A record's entry is
+ * that of the import the file goes back to, else of the latest other import
+ * from the same program. Its xref is used when it has GEDCOM's form and no
+ * other record claims it as strongly: an entry of the import itself before
+ * one of an older file; two equal claims both give it up (they go as REFN).
+ * Xrefs are compared without regard to case (some programs read them so).
+ * No generated xref takes one of them, used or not: the program would take
+ * that record for the one it once named so.
+ */
+function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
+    const out: BackXrefs = {
+        program: '', persons: new Map(), families: new Map(), personEntries: new Map(), familyEntries: new Map(), reserved: new Set(),
+    };
+    const rec = backTo ? data.imports?.find(r => r.id === backTo) : undefined;
+    if (!rec) return out;
+    out.program = importProgramName(rec);
+    const same = (data.imports ?? []).filter(r => importProgramName(r) === out.program).map(r => r.id);
+    // 0 for the import itself, then the later files before the earlier ones.
+    const rank = (from: string): number => (from === rec.id ? 0 : same.length - same.indexOf(from));
+    const pick = (holder: FactHolder): OriginalIds | undefined => {
+        let best: OriginalIds | undefined;
+        for (const e of holder.originalIds ?? []) {
+            if (!same.includes(e.from)) continue;
+            if (!best || rank(e.from) < rank(best.from)) best = e;
+        }
+        return best;
+    };
+    const claims = new Map<string, { rank: number; n: number; assign: () => void }>();
+    const claim = (xref: string | undefined, r: number, assign: () => void): void => {
+        if (!xref || !isSafeXref(xref) || xref.toUpperCase() === 'SUBM1') return;
+        const key = xref.toUpperCase();
+        const have = claims.get(key);
+        if (!have || r < have.rank) claims.set(key, { rank: r, n: 1, assign });
+        else if (r === have.rank) have.n++;
+    };
+    for (const [id, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        if (!person || standsInOnly(data, id)) continue;
+        const entry = pick(person);
+        if (!entry) continue;
+        out.personEntries.set(id, entry);
+        claim(entry.xref, rank(entry.from), () => out.persons.set(id, entry.xref!));
+    }
+    for (const [id, ps] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
+        if (!ps) continue;
+        const entry = pick(ps);
+        if (!entry) continue;
+        out.familyEntries.set(id, entry);
+        claim(entry.xref, rank(entry.from), () => out.families.set(id, entry.xref!));
+    }
+    for (const [key, c] of claims) {
+        out.reserved.add(key);
+        if (c.n === 1) c.assign();
+    }
+    return out;
+}
+
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
     if (options.content) data = applyContentOptions(data, options.content);
     const writeReadings = options.readings !== false;
@@ -611,8 +708,20 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     const personIdMap = new Map<PersonId, string>();
     const partnershipIdMap = new Map<PartnershipId, string>();
 
-    let personCounter = 1;
-    let familyCounter = 1;
+    // "Back to {prog}" (spec 066 K3.2): the records from that program's files
+    // keep their xref where it is safe; every other xref is made around them.
+    const back = backToXrefs(data, options.backTo);
+    /** Xrefs in use, without the @ signs (people, families, sources, repositories and the submitter share them). */
+    const taken = new Set<string>(['SUBM1', ...back.reserved]);
+    const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1 };
+    /** The next free `@{prefix}n@`. */
+    const freshXref = (prefix: 'I' | 'F' | 'S' | 'R'): string => {
+        let n = counters[prefix];
+        while (taken.has(`${prefix}${n}`)) n++;
+        counters[prefix] = n + 1;
+        taken.add(`${prefix}${n}`);
+        return `@${prefix}${n}@`;
+    };
 
     // Map all persons to GEDCOM IDs — but a "?" stand-in that only marks the
     // unknown other parent of a family with children: no record of its own
@@ -620,14 +729,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // parent and the children; a one-parent family reads back as the stand-in.
     for (const personId of Object.keys(data.persons) as PersonId[]) {
         if (standsInOnly(data, personId)) continue;
-        personIdMap.set(personId, `@I${personCounter}@`);
-        personCounter++;
+        const own = back.persons.get(personId);
+        personIdMap.set(personId, own ? `@${own}@` : freshXref('I'));
     }
 
     // Map all partnerships to GEDCOM IDs
     for (const partnershipId of Object.keys(data.partnerships) as PartnershipId[]) {
-        partnershipIdMap.set(partnershipId, `@F${familyCounter}@`);
-        familyCounter++;
+        const own = back.families.get(partnershipId);
+        partnershipIdMap.set(partnershipId, own ? `@${own}@` : freshXref('F'));
     }
 
     // Parent links outside any partnership (a parent added alone, the other
@@ -650,8 +759,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const key = [...loose].sort().join('|') + (loose.length === 1 ? `|${childId}` : '');
             let family = byParents.get(key);
             if (!family) {
-                family = { gedcomId: `@F${familyCounter}@`, parentIds: loose, childIds: [] };
-                familyCounter++;
+                family = { gedcomId: freshXref('F'), parentIds: loose, childIds: [] };
                 byParents.set(key, family);
                 looseFamilies.push(family);
                 for (const pid of loose) {
@@ -669,18 +777,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
     // Map all sources to GEDCOM IDs (@S1@ ...)
     const sourceIdMap = new Map<string, string>();
-    let sourceCounter = 1;
     for (const sourceId of Object.keys(data.sources ?? {})) {
-        sourceIdMap.set(sourceId, `@S${sourceCounter}@`);
-        sourceCounter++;
+        sourceIdMap.set(sourceId, freshXref('S'));
     }
     // Unique repository names -> @Rx@ records (standard 5.5.1 structure).
     const repoIdMap = new Map<string, string>();
-    let repoCounter = 1;
     for (const source of Object.values(data.sources ?? {})) {
         if (source.repository && !repoIdMap.has(source.repository)) {
-            repoIdMap.set(source.repository, `@R${repoCounter}@`);
-            repoCounter++;
+            repoIdMap.set(source.repository, freshXref('R'));
         }
     }
     /** Citation emitter: the source reference belongs on the citation as PAGE. */
@@ -736,6 +840,29 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     /** `n _STROM_IMPORT Ix` of a record from a known import. */
     const pushRecordImport = (importId: string | undefined): void => {
         if (importId && knownImports.has(importId)) lines.push(`1 ${IMPORT_TAG} ${importId}`);
+    };
+    /**
+     * A person's or a family's imports (spec 066 K3.2): `1 _STROM_IMPORT Ix`
+     * of the import it came from, with its ids there (`2 _XREF`, `2 _UID`…);
+     * the ids of each further import under a line of its own. "Back to {prog}"
+     * adds that program's ids as level-1 lines, and the original xref the
+     * file could not use as a REFN.
+     */
+    const pushHolderOrigin = (holder: FactHolder, xref: string, backEntry: OriginalIds | undefined): void => {
+        const entries = (holder.originalIds ?? []).filter(e => knownImports.has(e.from));
+        const first = holder.importId && knownImports.has(holder.importId) ? holder.importId : undefined;
+        const order = [...new Set([...(first ? [first] : []), ...entries.map(e => e.from)])];
+        for (const from of order) {
+            lines.push(`1 ${IMPORT_TAG} ${from}`);
+            const entry = entries.find(e => e.from === from);
+            if (entry) pushOriginalIdLines(lines, 2, entry, true);
+        }
+        if (!backEntry) return;
+        pushOriginalIdLines(lines, 1, backEntry, false);
+        if (backEntry.xref && `@${backEntry.xref}@` !== xref) {
+            pushWrapped(lines, 1, 'REFN', backEntry.xref);
+            pushWrapped(lines, 2, 'TYPE', `${back.program} xref`);
+        }
     };
     /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
     const pushFactImport = (holder: FactHolder, fact: string): void => {
@@ -799,7 +926,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (!gedcomId) continue;
 
         lines.push(`0 ${gedcomId} INDI`);
-        pushRecordImport(person.importId);
+        pushHolderOrigin(person, gedcomId, back.personEntries.get(personId));
 
         // Name. Placeholders are exported with an empty name so they re-import
         // as placeholders (lossless), instead of being dropped.
@@ -1057,7 +1184,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const person2 = data.persons[partnership.person2Id];
 
         lines.push(`0 ${gedcomId} FAM`);
-        pushRecordImport(partnership.importId);
+        pushHolderOrigin(partnership, gedcomId, back.familyEntries.get(partnershipId));
 
         // Determine HUSB/WIFE by gender (male = HUSB, female = WIFE, a person
         // of unknown sex the role the other one leaves free). For a mixed
