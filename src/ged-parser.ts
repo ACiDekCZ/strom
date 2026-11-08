@@ -64,6 +64,7 @@ import {
     FactPart,
     OriginalIdLine,
     ResearchFactOrigin,
+    ResearchFactVerify,
     uniqueIdSuffix,
     PrimaryName,
 } from './types';
@@ -98,7 +99,9 @@ import {
     addGedcomExtra, addOriginalIds, CITE_TAG, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
+    factValueSignature,
 } from './import-origin';
+import { parseCheckedResult, parseReaders, parseVerifyPending, sanitizeResearchVerify } from './verify';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -318,6 +321,30 @@ function toResearchOrigin(raw: RawFactOrigin, mapRefs: (refs?: string[]) => stri
     const sourceIds = [...new Set(mapRefs(raw.sourceRefs))];
     if (sourceIds.length > 0) out.sourceIds = sourceIds;
     return out.kind || out.was ? out : null;
+}
+
+/**
+ * The research's re-verification of one fact from its lines (spec 065), or
+ * null when it says nothing valid: `_STROM_CONFIRMED` (a day), `_STROM_VERIFY`
+ * (why it waits), `_STROM_CHECKED` with its day, reason and readers.
+ */
+function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | null {
+    if (!raw) return null;
+    const checked = raw.checked ? parseCheckedResult(raw.checked.result) : null;
+    const readers = raw.checked?.readers !== undefined ? parseReaders(raw.checked.readers) : null;
+    const confirmed = raw.confirmed !== undefined ? researchIsoDate(raw.confirmed) : '';
+    return sanitizeResearchVerify({
+        ...(confirmed ? { confirmed } : {}),
+        ...(raw.pending !== undefined ? { pending: parseVerifyPending(raw.pending) ?? undefined } : {}),
+        ...(checked ? {
+            checked: {
+                result: checked,
+                ...(raw.checked?.date ? { date: researchIsoDate(raw.checked.date) || raw.checked.date.trim() } : {}),
+                ...(raw.checked?.why ? { why: raw.checked.why } : {}),
+                ...(readers ? { readers } : {}),
+            },
+        } : {}),
+    });
 }
 
 /** Whose value a conflict proposes to change (GEDCOM 2 _STROM_KIND import | user); anything else says nothing. */
@@ -908,6 +935,15 @@ interface RawFactOrigin {
     origin?: string;
     was: { value: string; importId?: string; parts: string[]; ref?: string }[];
     sourceRefs: string[];
+    /** The research's re-verification of the fact (spec 065), as written. */
+    verify?: RawFactVerify;
+}
+
+/** `2 _STROM_CONFIRMED`, `2 _STROM_VERIFY`, `2 _STROM_CHECKED` (with `3 DATE`, `3 _WHY`, `3 _READERS`) under a fact. */
+interface RawFactVerify {
+    confirmed?: string;
+    pending?: string;
+    checked?: { result: string; date?: string; why?: string; readers?: string };
 }
 
 type RawPersonFact = 'name' | 'sex' | 'birth' | 'death';
@@ -1977,9 +2013,9 @@ export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
     '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DATE', '_DRAFT', '_DUP',
     '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FREL', '_FSFTID', '_GEN', '_HELD', '_HYPO', '_INTREE', '_ISLAND',
     '_JOIN', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI', '_MILT', '_MREL', '_NEXT', '_NORECORDS', '_PAR', '_PART',
-    '_PARTIAL', '_PERS', '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PROJECT_GUID', '_QUESTION', '_RECORDS', '_REF',
+    '_PARTIAL', '_PERS', '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PROJECT_GUID', '_QUESTION', '_READERS', '_RECORDS', '_REF',
     '_RELATIONSHIP_STATUS', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SESSIONS', '_SOUR', '_STAT', '_STORY', '_TASK', '_TEST',
-    '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_WITN', '_XREF',
+    '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_WHY', '_WITN', '_XREF',
 ]);
 
 /** Another program's `_XXX` the reader takes nowhere (and no bookkeeping, no id). */
@@ -2603,6 +2639,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentResearch: OpenResearch | null = null;
     /** The research's `_STROM_WAS` being read (its `3 _STROM_IMPORT`, `_PART`, `_REF` follow). */
     let openWas: { level: number; was: RawFactOrigin['was'][number] } | null = null;
+    /** The research's `_STROM_CHECKED` being read (its `3 DATE`, `_WHY`, `_READERS` follow; `field`: the last of them, for CONC/CONT). */
+    let openChecked: { level: number; checked: NonNullable<RawFactVerify['checked']>; field?: string } | null = null;
     /**
      * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
      * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
@@ -2963,6 +3001,35 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_REF') w.ref = value.trim();
                 else if (tag === 'CONC') w.value += value;
                 else if (tag === 'CONT') w.value += '\n' + value;
+            }
+            continue;
+        }
+        if (openChecked && level <= openChecked.level) openChecked = null;
+        if (openChecked) {
+            const c = openChecked.checked;
+            if (level === openChecked.level + 1) {
+                openChecked.field = tag;
+                if (tag === 'DATE') c.date = value.trim();
+                else if (tag === '_WHY') c.why = value;
+                else if (tag === '_READERS') c.readers = value.trim();
+            } else if (level === openChecked.level + 2 && openChecked.field === '_WHY' && c.why !== undefined) {
+                if (tag === 'CONC') c.why += value;
+                else if (tag === 'CONT') c.why += '\n' + value;
+            }
+            continue;
+        }
+        if ((stromResearch || stromApp) && level === 2 && currentRecord && !currentResearch && (currentType === 'INDI' || currentType === 'FAM')
+            && (tag === '_STROM_CONFIRMED' || tag === '_STROM_VERIFY' || tag === '_STROM_CHECKED')) {
+            // The research's re-verification of the fact (spec 065); whether
+            // the file is trusted with it is the converter's call.
+            const o = factOriginTarget();
+            const v = o ? (o.verify ??= {}) : null;
+            if (tag === '_STROM_CONFIRMED') { if (v) v.confirmed = value.trim(); }
+            else if (tag === '_STROM_VERIFY') { if (v) v.pending = value.trim(); }
+            else {
+                const checked = { result: value.trim() };
+                if (v) v.checked = checked;
+                openChecked = { level, checked };
             }
             continue;
         }
@@ -5398,6 +5465,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         const marks = applyRecordImportMarks();
         if (origins || ids || marks) cleanImportOrigin(data, gedcom.stromImports);
     }
+    // Confirmations and the research's re-verification of facts (spec 065):
+    // only from a file Strom wrote.
+    if (readOrigins) applyFactVerify();
 
     // Another program's own tags with no import to keep them for (the file is
     // not loaded as an import): not carried over, so counted.
@@ -5517,6 +5587,44 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             any = true;
         }
         return any;
+    }
+
+    /**
+     * The re-verification of facts a Strom file carries (spec 065): from the
+     * research's file its whole state (Person/Partnership.researchVerify);
+     * from the app's own export only a confirmation, which becomes the
+     * tree's own, valid for the value the fact has in the file. A family the
+     * file writes twice keeps the first record's.
+     */
+    function applyFactVerify(): void {
+        const put = (holder: Person | Partnership, fact: string, raw: RawFactOrigin | undefined): void => {
+            if (!raw?.verify) return;
+            if (gedcom.stromResearch) {
+                if (holder.researchVerify?.[fact]) return;
+                const v = toResearchVerify(raw.verify);
+                if (v) (holder.researchVerify ??= {})[fact] = v;
+                return;
+            }
+            if (holder.confirmed?.[fact]) return;
+            const at = raw.verify.confirmed !== undefined ? researchIsoDate(raw.verify.confirmed) : '';
+            const value = factValueSignature(holder, fact);
+            if (at && value) (holder.confirmed ??= {})[fact] = { at, value };
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (!person) continue;
+            for (const [fact, raw] of Object.entries(indi.factOrigins ?? {})) put(person, fact, raw);
+            for (const ev of person.events ?? []) put(person, `event:${ev.id}`, eventOrigins.get(ev));
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (!ps) continue;
+            for (const [fact, raw] of Object.entries(fam.factOrigins ?? {})) put(ps, fact, raw);
+        }
+        for (const ps of Object.values(partnerships)) {
+            for (const ev of ps.events ?? []) put(ps, `event:${ev.id}`, eventOrigins.get(ev));
+        }
     }
 
     /**
