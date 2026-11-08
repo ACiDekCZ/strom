@@ -4676,6 +4676,7 @@ const stringsEN = {
             parent_of_matched: 'Parent of matched person',
             partner_similarity: 'Similar partner names',
             unknown_name_relative: 'Unknown given name – matched through a relative',
+            id: 'Same ID in the file',
             manual: 'Manual match'
         },
 
@@ -12544,6 +12545,7 @@ const stringsCZ: StringsType = {
             parent_of_matched: 'Rodič spárované osoby',
             partner_similarity: 'Podobná jména partnerů',
             unknown_name_relative: 'Neznámé křestní jméno – spárováno přes příbuzného',
+            id: 'Stejné ID v souboru',
             manual: 'Ruční přiřazení'
         },
 
@@ -20325,6 +20327,7 @@ const stringsDE: StringsType = {
             parent_of_matched: 'Elternteil einer abgeglichenen Person',
             partner_similarity: 'Ähnliche Partnernamen',
             unknown_name_relative: 'Unbekannter Vorname – über eine verwandte Person zugeordnet',
+            id: 'Gleiche ID in der Datei',
             manual: 'Manueller Abgleich'
         },
 

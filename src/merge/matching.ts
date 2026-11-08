@@ -6,7 +6,8 @@
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
-import { detectPartnershipConflicts } from './executor.js';
+import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
+import { idEvidence } from './id-match.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -311,6 +312,30 @@ interface MatchCandidate {
     reasons: MatchReason[];
 }
 
+/** A pair's score; `cap` bounds it with any bonus added later (only offered, never auto-confirmed). */
+interface ScoreResult {
+    score: number;
+    reasons: MatchReason[];
+    cap?: number;
+}
+
+/** A strong id both files give the person (`_UID`, `_FSFTID`…): the same person. */
+const ID_MATCH_SCORE = 100;
+/** The same strong id on a man and a woman: a candidate to look at, nothing more. */
+const ID_SEX_DIFFERS_SCORE = 60;
+/** The same xref or RIN in files of one program: a contribution to a name match. */
+const WEAK_ID_BONUS = 25;
+
+/** The highest score of a match that is only offered (below the auto-confirm bar). */
+function offerOnlyCap(): number {
+    return AUTO_CONFIRM_SCORE - 1;
+}
+
+/** A base score plus a relationship bonus, within 100 and the base's cap. */
+function withBonus(base: ScoreResult, bonus: number): number {
+    return Math.min(base.score + bonus, base.cap ?? 100);
+}
+
 /**
  * Find matches between incoming persons and existing persons
  * Uses multiple strategies for smart matching
@@ -384,6 +409,31 @@ function findDirectMatches(
     usedIncoming: Set<PersonId>
 ): PersonMatch[] {
     const matches: PersonMatch[] = [];
+
+    // A strong id both files give a person decides first: a name match of
+    // another incoming person must not take the existing person it names.
+    for (const incoming of Object.values(incomingData.persons)) {
+        if (incoming.isPlaceholder || !incoming.originalIds?.length) continue;
+        if (usedIncoming.has(incoming.id)) continue;
+        for (const existing of Object.values(existingData.persons)) {
+            if (existing.isPlaceholder || usedExisting.has(existing.id)) continue;
+            if (!gendersCompatible(existing.gender, incoming.gender)) continue;
+            if (idEvidence(existing, incoming, existingData, incomingData).strong !== 'same') continue;
+            matches.push({
+                existingId: existing.id,
+                incomingId: incoming.id,
+                confidence: scoreToConfidence(ID_MATCH_SCORE),
+                reasons: ['id'],
+                score: ID_MATCH_SCORE,
+                existingPerson: existing,
+                incomingPerson: incoming,
+                conflicts: detectConflicts(existing, incoming)
+            });
+            usedExisting.add(existing.id);
+            usedIncoming.add(incoming.id);
+            break;
+        }
+    }
 
     // Process each incoming person
     for (const incoming of Object.values(incomingData.persons)) {
@@ -478,7 +528,7 @@ function propagateFromMatches(
 
                 // Add bonus for being partner of matched person
                 const partnerBonus = 20;
-                const totalScore = Math.min(baseResult.score + partnerBonus, 100);
+                const totalScore = withBonus(baseResult, partnerBonus);
 
                 // Accept with lower threshold due to relationship context
                 if (totalScore >= 30 || baseResult.score >= 25) {
@@ -525,7 +575,7 @@ function propagateFromMatches(
 
                 // Add bonus for being child of matched person
                 const childBonus = 15;
-                const totalScore = Math.min(baseResult.score + childBonus, 100);
+                const totalScore = withBonus(baseResult, childBonus);
 
                 if (totalScore >= 30 || baseResult.score >= 25) {
                     const confidence = scoreToConfidence(totalScore);
@@ -574,7 +624,7 @@ function propagateFromMatches(
 
                 // Add bonus for being parent of matched person
                 const parentBonus = 15;
-                const totalScore = Math.min(baseResult.score + parentBonus, 100);
+                const totalScore = withBonus(baseResult, parentBonus);
 
                 if (totalScore >= 30 || baseResult.score >= 25) {
                     const confidence = scoreToConfidence(totalScore);
@@ -794,9 +844,19 @@ function calculateMatchScore(
     incoming: Person,
     existingData: StromData,
     incomingData: StromData
-): { score: number; reasons: MatchReason[] } {
+): ScoreResult {
     let score = 0;
     const reasons: MatchReason[] = [];
+
+    // The ids the loaded files gave both records: a shared strong id is the
+    // same person (a man and a woman only a candidate); a strong id that
+    // differs keeps a name match below the auto-confirm bar.
+    const ids = idEvidence(existing, incoming, existingData, incomingData);
+    if (ids.strong === 'same') {
+        return gendersCompatible(existing.gender, incoming.gender)
+            ? { score: ID_MATCH_SCORE, reasons: ['id'] }
+            : { score: ID_SEX_DIFFERS_SCORE, reasons: ['id'], cap: offerOnlyCap() };
+    }
 
     // Gender must match
     if (!gendersCompatible(existing.gender, incoming.gender)) {
@@ -915,11 +975,22 @@ function calculateMatchScore(
         }
     }
 
+    // The same xref or RIN in files of one program: only on top of a name
+    // match (the names passed above), never on its own.
+    if (ids.weak) {
+        score += WEAK_ID_BONUS;
+        reasons.unshift('id');
+    }
+
     // Ensure we have at least one reason
     if (score >= 30 && reasons.length === 0) {
         reasons.push('name_similarity_relationships');
     }
 
+    if (ids.strong === 'differ') {
+        const cap = offerOnlyCap();
+        return { score: Math.min(score, cap), reasons, cap };
+    }
     return { score: Math.min(score, 100), reasons };
 }
 

@@ -34,6 +34,7 @@ export type MatchReason =
     | 'parent_of_matched'             // Parent of already matched person
     | 'partner_similarity'            // Partners have similar names
     | 'unknown_name_relative'         // Unknown given name, paired through a matched relative
+    | 'id'                            // The same id in the loaded files (_UID, _FSFTID…; xref/RIN of one program)
     | 'manual';                       // Manual assignment
 
 /** Person match between existing and incoming data */
