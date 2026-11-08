@@ -483,6 +483,13 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             Object.values(edited.sources!).find(s => s.title === 'Kňouralov parish register online')!.transcript = 'Births 1850-1860';
             expect(record(backTo(edited), '@S5@')).toContain('1 TEXT Births 1850-1860');
         });
+
+        it('24 · two sisters with nothing but a surname: both kept, in their order', () => {
+            const family = Object.values(tree.persons).find(p => p.firstName === 'Ťapkoslav')!;
+            const children = family.childIds.map(id => tree.persons[id]);
+            expect(children.map(c => [c.firstName, c.lastName])).toEqual([['?', 'Čvachtová'], ['?', 'Čvachtová']]);
+            expect(record(first, '@F2401@')).toEqual(expect.arrayContaining(['1 CHIL @I2403@', '1 CHIL @I2404@']));
+        });
     });
 });
 
@@ -499,6 +506,17 @@ describe('The combined 066 file merged into the tree it was imported into', () =
         const size = (d: StromData) => [Object.keys(d.persons).length, Object.keys(d.partnerships).length, Object.keys(d.sources ?? {}).length];
         expect(size(merged)).toEqual(size(tree));
         expect(records(backTo(merged))).toEqual(records(fresh));
+    });
+
+    it('24 · siblings nothing tells apart pair by their place in the family, each with its own record', async () => {
+        const tree = load(FILE, '2026-11-08');
+        const state = createMergeState(tree, load(FILE, '2026-11-09'));
+        const sisters = (d: StromData) => Object.values(d.persons).find(p => p.firstName === 'Ťapkoslav')!.childIds;
+        const pairs = sisters(state.incomingData).map(id => state.matches.find(m => m.incomingId === id)?.existingId);
+        expect(pairs).toEqual(sisters(tree));
+        const merged = (await executeMerge(state)).mergedData!;
+        expect(Object.values(merged.persons).filter(p => p.lastName === 'Čvachtová')).toHaveLength(2);
+        expect(record(backTo(merged), '@F2401@')).toEqual(expect.arrayContaining(['1 CHIL @I2403@', '1 CHIL @I2404@']));
     });
 
     it('22, 23 · a tree imported before these were kept takes them from the file merged again', async () => {

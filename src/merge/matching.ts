@@ -505,7 +505,7 @@ function findMatchesInPass(
     let unknownSeeds = matches;
     for (let round = 0; round < maxRounds; round++) {
         const found = matchUnknownNamedRelatives(
-            existingData, incomingData, unknownSeeds, usedExisting, usedIncoming, unknownBlocked
+            existingData, incomingData, unknownSeeds, usedExisting, usedIncoming, unknownBlocked, matches
         );
         if (found.length === 0) break;
         matches.push(...found);
@@ -891,6 +891,12 @@ const UNKNOWN_NAME_RELATIONS: Array<{
  * incoming side too. Anything ambiguous on any path, or a tree person already
  * taken, leaves the person unmatched (`blocked` remembers that across rounds).
  *
+ * Siblings nothing tells apart (`1 NAME /Legge/` four times in one family,
+ * nothing else): as many in the tree as in the file, each of them the same
+ * as each on the other side, pair by their place among the parent's children
+ * when their matched parents are the same (the same file merged again, or
+ * one more of its program). Without that, they stay unmatched.
+ *
  * Such a match is always 'medium' with a score below AUTO_CONFIRM_SCORE: a
  * surname alone never confirms itself. Every match found by name or by
  * propagation is a seed, an uncertain one too: what comes of it is for review
@@ -904,9 +910,31 @@ function matchUnknownNamedRelatives(
     seeds: PersonMatch[],
     usedExisting: Set<PersonId>,
     usedIncoming: Set<PersonId>,
-    blocked: Set<PersonId>
+    blocked: Set<PersonId>,
+    matched: readonly PersonMatch[] = seeds
 ): PersonMatch[] {
     const proposals = new Map<PersonId, { existing: Person; incoming: Person; reason: MatchReason }>();
+    const matchedTo = new Map<PersonId, PersonId>(matched.map(m => [m.incomingId, m.existingId] as const));
+    /** The incoming child's parents (but a "?") are the existing child's, through the matches so far. */
+    const sameParents = (existing: Person, incoming: Person): boolean => {
+        const named = (ids: readonly PersonId[], data: StromData): PersonId[] =>
+            ids.filter(id => !!data.persons[id] && !data.persons[id].isPlaceholder);
+        const theirs = named(existing.parentIds, existingData);
+        const ours = named(incoming.parentIds, incomingData);
+        return ours.length > 0 && ours.length === theirs.length && ours.every(id => theirs.includes(matchedTo.get(id) as PersonId));
+    };
+    /**
+     * The existing sibling an incoming one is by place among the parent's children, when
+     * `candidates` (≥ 2) and the incoming ones like them are as many, none told apart.
+     */
+    const byPlace = (incoming: Person, candidates: Person[], incomingRelatives: Person[]): Person | undefined => {
+        if (candidates.length < 2) return undefined;
+        const twins = incomingRelatives.filter(i => samePerson(candidates[0], i));
+        if (twins.length !== candidates.length || !twins.includes(incoming)) return undefined;
+        if (!twins.every(t => candidates.every(c => samePerson(c, t)))) return undefined;
+        if (!twins.every((t, k) => sameParents(candidates[k], t))) return undefined;
+        return candidates[twins.indexOf(incoming)];
+    };
 
     const samePerson = (existing: Person, incoming: Person): boolean =>
         existing.gender === incoming.gender
@@ -925,11 +953,12 @@ function matchUnknownNamedRelatives(
             for (const incoming of incomingRelatives) {
                 if (usedIncoming.has(incoming.id) || blocked.has(incoming.id)) continue;
                 const candidates = existingRelatives.filter(e => samePerson(e, incoming));
-                const existing = candidates.length === 1 ? candidates[0] : undefined;
+                const placed = relation.reason === 'child_of_matched' ? byPlace(incoming, candidates, incomingRelatives) : undefined;
+                const existing = placed ?? (candidates.length === 1 ? candidates[0] : undefined);
                 const earlier = proposals.get(incoming.id);
                 if (!existing
                     || usedExisting.has(existing.id)
-                    || incomingRelatives.filter(i => samePerson(existing, i)).length !== 1
+                    || (!placed && incomingRelatives.filter(i => samePerson(existing, i)).length !== 1)
                     || (earlier && earlier.existing.id !== existing.id)) {
                     blocked.add(incoming.id);
                     proposals.delete(incoming.id);
