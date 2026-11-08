@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { FactHolder, factImportTags, IMPORT_TAG } from './import-origin.js';
+import { FactHolder, factImportTags, IMPORT_TAG, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -844,18 +844,23 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     /**
      * A person's or a family's imports (spec 066 K3.2): `1 _STROM_IMPORT Ix`
      * of the import it came from, with its ids there (`2 _XREF`, `2 _UID`…);
-     * the ids of each further import under a line of its own. "Back to {prog}"
-     * adds that program's ids as level-1 lines, and the original xref the
-     * file could not use as a REFN.
+     * the ids of each import it did not come from under `1 _STROM_XID Iy`
+     * (no origin: a person entered by hand stays the person's). "Back to
+     * {prog}" adds that program's ids as level-1 lines, and the original xref
+     * the file could not use as a REFN.
      */
     const pushHolderOrigin = (holder: FactHolder, xref: string, backEntry: OriginalIds | undefined): void => {
         const entries = (holder.originalIds ?? []).filter(e => knownImports.has(e.from));
         const first = holder.importId && knownImports.has(holder.importId) ? holder.importId : undefined;
-        const order = [...new Set([...(first ? [first] : []), ...entries.map(e => e.from)])];
-        for (const from of order) {
-            lines.push(`1 ${IMPORT_TAG} ${from}`);
-            const entry = entries.find(e => e.from === from);
+        if (first) {
+            lines.push(`1 ${IMPORT_TAG} ${first}`);
+            const entry = entries.find(e => e.from === first);
             if (entry) pushOriginalIdLines(lines, 2, entry, true);
+        }
+        for (const entry of entries) {
+            if (entry.from === first) continue;
+            lines.push(`1 ${XID_TAG} ${entry.from}`);
+            pushOriginalIdLines(lines, 2, entry, true);
         }
         if (!backEntry) return;
         pushOriginalIdLines(lines, 1, backEntry, false);

@@ -95,7 +95,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addOriginalIds, cleanImportOrigin, cleanOriginalIds, factPartOf, IMPORT_TAG, markFactImported, markTreeImported,
+    addOriginalIds, cleanImportOrigin, cleanOriginalIds, factPartOf, IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports,
 } from './import-origin';
 
@@ -2281,11 +2281,12 @@ export function parseGedcom(content: string): ParsedGedcom {
         idBlock = { level: 1, last: line };
     };
     /** `1 _STROM_IMPORT Ix` of a person or a family: its import, and the ids that follow under it. */
-    const readRecordImport = (target: { importMark?: string; importIds?: RawOriginalIds[] }, value: string): void => {
+    const readRecordImport = (target: { importMark?: string; importIds?: RawOriginalIds[] }, value: string, idsOnly = false): void => {
         const mark = readImportMark(value);
         if (!mark) return;
-        // The first line says where the record came from; a further one only brings ids.
-        target.importMark ??= mark.id;
+        // The first `_STROM_IMPORT` says where the record came from; a further
+        // one and every `_STROM_XID` only bring ids, never an origin.
+        if (!idsOnly) target.importMark ??= mark.id;
         const entry: RawOriginalIds = { from: mark.id, ids: [] };
         (target.importIds ??= []).push(entry);
         idBlock = { level: 1, entry };
@@ -2809,6 +2810,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // ids in it (read from app files only).
                             readRecordImport(indi, value);
                             break;
+                        case XID_TAG:
+                            // The person's ids in an import it did not come from.
+                            readRecordImport(indi, value, true);
+                            break;
                         case '_UID': case 'UID': case 'RIN': case 'EXID': case '_FSFTID': case 'AFN':
                             // The person's ids in the program that wrote the file.
                             readFileId(indi, tag, value);
@@ -2998,6 +3003,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case IMPORT_TAG:
                             readRecordImport(fam, value);
+                            break;
+                        case XID_TAG:
+                            readRecordImport(fam, value, true);
                             break;
                         case '_UID': case 'UID': case 'RIN': case 'EXID': case '_FSFTID': case 'AFN':
                             readFileId(fam, tag, value);

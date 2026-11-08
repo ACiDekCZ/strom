@@ -242,19 +242,46 @@ describe('Strom’s own file', () => {
         expect(byName(back, 'Quillon').originalIds).toEqual(byName(data, 'Quillon').originalIds);
     });
 
-    it('a second 1 _STROM_IMPORT only brings ids: the person still came from the first', () => {
+    it('ids of an import the person did not come from go under 1 _STROM_XID: the person still came from the first', () => {
         const data = migrateData(load(MYHERITAGE).data);
         data.imports!.push({ id: 'I2', program: 'Gramps', at: '2026-11-09' });
         const h = byName(data, 'Hromoslav');
-        h.originalIds!.push({ from: 'I2', xref: 'I0001' });
+        h.originalIds!.push({ from: 'I2', xref: 'I0001', ids: [{ tag: '_UID', value: 'ABC' }] });
         const ged = exportToGedcom(data).content;
         const rec = personRecord(ged, 'Hromoslav');
-        expect(rec.filter(l => l.startsWith('1 _STROM_IMPORT'))).toEqual(['1 _STROM_IMPORT I1', '1 _STROM_IMPORT I2']);
-        expect(rec[rec.indexOf('1 _STROM_IMPORT I2') + 1]).toBe('2 _XREF @I0001@');
+        expect(rec.filter(l => l.startsWith('1 _STROM_IMPORT'))).toEqual(['1 _STROM_IMPORT I1']);
+        const at = rec.indexOf('1 _STROM_XID I2');
+        expect(rec.slice(at, at + 3)).toEqual(['1 _STROM_XID I2', '2 _XREF @I0001@', '2 _UID ABC']);
         const back = migrateData(load(ged, { at: '2026-12-01' }).data);
         const h2 = byName(back, 'Hromoslav');
         expect(h2.importId).toBe('I1');
         expect(h2.originalIds).toEqual(h.originalIds);
+    });
+
+    it('a person without importId keeps it empty: its ids go under _STROM_XID and come back as ids only', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const h = byName(data, 'Hromoslav');
+        // A person entered by hand that a person of the file was merged into.
+        delete h.importId;
+        delete h.importedValues;
+        const ps = onlyCouple(data);
+        delete ps.importId;
+        const ged = exportToGedcom(data).content;
+        const rec = personRecord(ged, 'Hromoslav');
+        expect(rec.some(l => l.startsWith('1 _STROM_IMPORT'))).toBe(false);
+        expect(rec).toContain('1 _STROM_XID I1');
+        const fam = records(ged).find(r => / FAM$/.test(r[0]))!;
+        expect(fam.some(l => l.startsWith('1 _STROM_IMPORT'))).toBe(false);
+        expect(fam).toContain('1 _STROM_XID I1');
+        const back = migrateData(load(ged, { at: '2026-12-01' }).data);
+        const h2 = byName(back, 'Hromoslav');
+        expect(h2.importId).toBeUndefined();
+        expect(h2.importedValues).toBeUndefined();
+        expect(h2.originalIds).toEqual(h.originalIds);
+        expect(onlyCouple(back).importId).toBeUndefined();
+        expect(onlyCouple(back).originalIds).toEqual(ps.originalIds);
+        // The others still came from the file.
+        expect(byName(back, 'Libuna').importId).toBe('I1');
     });
 
     it('the file for the research carries the same block', () => {

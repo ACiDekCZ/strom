@@ -38,6 +38,14 @@ const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research'];
 export const IMPORT_TAG = '_STROM_IMPORT';
 
 /**
+ * The GEDCOM tag of a record's ids in an import it did NOT come from (spec 066
+ * K3.2): a person merged with one from another file, or a person entered by
+ * hand that a person of a file was merged into. Same lines under it as under
+ * `1 _STROM_IMPORT Ix`, but it never says where the record came from.
+ */
+export const XID_TAG = '_STROM_XID';
+
+/**
  * `I1` or `I1 DATE PLAC` as written after the tag: the import id and, when
  * only some parts are still from it, which. Null for anything else (a list
  * with no part this app knows says nothing it could trust).
