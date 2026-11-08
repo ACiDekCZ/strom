@@ -1854,10 +1854,14 @@ const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJE
     'UID', 'CREA', 'EXID']);
 
 /**
- * MyHeritage's bookkeeping under a photo: its size and its record numbers (of
- * the photo, of the photo a face was cut from). Not counted either.
+ * MyHeritage's bookkeeping under a photo: its size, its record numbers (of
+ * the photo, of the photo a face was cut from) and where a face sits on it
+ * (the cut-out's position, the photo it was cut from). A MyHeritage export
+ * carries several per photo; counted, they made hundreds of "unsupported"
+ * lines out of photos that came in. Not counted either.
  */
-const IGNORED_MEDIA_BOOKKEEPING_TAGS = new Set(['_FILESIZE', '_PHOTO_RIN', '_PARENTRIN']);
+const IGNORED_MEDIA_BOOKKEEPING_TAGS = new Set(['_FILESIZE', '_PHOTO_RIN', '_PARENTRIN',
+    '_POSITION', '_CUTOUT', '_PRIM_CUTOUT', '_PARENTPHOTO', '_PERSONALPHOTO']);
 
 /**
  * The `_` tags this reader takes somewhere (spec 066 G8), Strom's own

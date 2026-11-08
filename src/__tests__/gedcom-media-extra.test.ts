@@ -176,6 +176,29 @@ describe('media records (0 @O1@ OBJE)', () => {
         expect(r.externalMedia).toHaveLength(1);
         expect(r.stats.skippedMedia).toBe(1);
     });
+
+    it('MyHeritage’s face cut-out bookkeeping under a photo is not counted as unsupported', () => {
+        const r = load(`0 HEAD
+1 SOUR MYHERITAGE
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Orsina /Korvalová/
+1 OBJE
+2 FORM jpg
+2 FILE https://www.myheritage.com/photos/cut.jpg
+2 _FILESIZE 4096
+2 _PHOTO_RIN MH:P7
+2 _PARENTRIN MH:P6
+2 _PARENTPHOTO Y
+2 _PERSONALPHOTO Y
+2 _CUTOUT Y
+2 _PRIM_CUTOUT Y
+2 _POSITION 10 20 110 140
+0 TRLR
+`);
+        expect(r.externalMedia).toHaveLength(1);
+        expect(r.stats.droppedTagSummary).toBe('');
+    });
 });
 
 // ---------- another program's own tags ----------
