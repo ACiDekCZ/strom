@@ -368,6 +368,10 @@ export const miscMethods = uiModule({
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
         const titlesToggle = document.getElementById('show-titles-toggle') as HTMLInputElement | null;
         if (titlesToggle) titlesToggle.checked = SettingsManager.isShowTitles();
+        const relCardToggle = document.getElementById('reliability-card-toggle') as HTMLInputElement | null;
+        if (relCardToggle) relCardToggle.checked = SettingsManager.isReliabilityCardEnabled();
+        const relTreeToggle = document.getElementById('reliability-tree-toggle') as HTMLInputElement | null;
+        if (relTreeToggle) relTreeToggle.checked = SettingsManager.isReliabilityTreeEnabled();
         this.syncSurnameDisplaySetting();
         const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
         if (crossTreeToggle) crossTreeToggle.checked = SettingsManager.isCrossTreeBadgesEnabled();

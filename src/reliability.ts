@@ -9,8 +9,10 @@
  * - the research's tree, when its bridge names `origin` (researchShowsOrigin):
  *   the research's `_STROM_ORIGIN` / `_STROM_WAS` (Person/Partnership
  *   .researchOrigins) and its `_STROM_STATUS`;
- * - otherwise only the `import` step: from the app's own record of the file
- *   (StromData.imports + importedValues) while the value equals the file's.
+ * - otherwise the `import` step from the app's own record of the file
+ *   (StromData.imports + importedValues) while the value equals the file's,
+ *   and the research's status a file of the research gave (`_STROM_STATUS`,
+ *   shown before 066 too); the research's origins are not read then.
  * A tree with no import record shows no "from family tree" mark (nothing is guessed).
  */
 
@@ -172,12 +174,17 @@ export function factReliability(data: Pick<StromData, 'imports'>, holder: FactHo
             ...(origin?.sourceIds?.length ? { sourceIds: [...origin.sourceIds] } : {}),
         };
     }
+    // The research's status a file of the research gave (`_STROM_STATUS`, shown
+    // since before 066) stays: with the import's value it is that step "from
+    // the family tree" (a lead of it: from family tree).
+    const status = factStatusOf(holder, fact);
     const parts = factImportParts(holder, fact);
-    if (parts.fromImport.length === 0) return null;
-    const record = importRecordOf(data, parts.importId);
-    if (!record) return null;
-    const step = reliabilityStep({ valueFromImport: true });
-    return step && { ...step, importRecord: record, fromParts: parts.fromImport, changedParts: parts.changed };
+    const record = parts.fromImport.length > 0 ? importRecordOf(data, parts.importId) : undefined;
+    const step = reliabilityStep({ status, valueFromImport: !!record });
+    if (!step) return null;
+    return record
+        ? { ...step, importRecord: record, fromParts: parts.fromImport, changedParts: parts.changed }
+        : { ...step, fromParts: [], changedParts: [] };
 }
 
 /** The GEDCOM tag a conflict names for a person's fact. */

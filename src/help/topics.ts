@@ -23,6 +23,7 @@ export const HELP_TOPICS = {
     nameVariants: 'A4.7',    // Edit person → Other spellings of the name
     eventParticipants: 'A5.5', // the event editor → Godparents & witnesses (a couple's event: Witnesses and others)
     story: 'A7.8',           // Edit person → The story
+    reliability: 'R3.8',     // a fact's reliability mark → its tap tooltip "What the marks mean" (src/ui/fact-status.ts)
 } as const;
 
 export type HelpTopic = keyof typeof HELP_TOPICS;

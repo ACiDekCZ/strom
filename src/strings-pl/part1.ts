@@ -3,7 +3,7 @@ import { nPl, plPl } from './helpers.js';
 
 export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'mobileMenu' | 'emptyState' | 'demo' | 'book'
     | 'fileCopy' | 'snapshots' | 'split' | 'splitFamilies' | 'advanced' | 'surnames' | 'lineage' | 'surnameSuggest'
-    | 'fields' | 'events' | 'factStatus' | 'partnerEvents' | 'sources'> = {
+    | 'fields' | 'events' | 'factStatus' | 'reliability' | 'partnerEvents' | 'sources'> = {
     toolbar: {
         title: 'Strom',
         // The "+" affordance is drawn by the button markup (glyph span), so the
@@ -716,6 +716,30 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         probable: 'Prawdopodobne',
         proven: 'Udokumentowane',
         title: (label: string) => `${label} – tak tę daną prowadzi badanie. Zmieni się, gdy badanie ją udokumentuje.`,
+    },
+
+    reliability: {
+        human: 'Potwierdzone',
+        proven: 'Udokumentowane',
+        import: 'Z drzewa',
+        none: 'Bez źródła',
+        titleHuman: 'Potwierdzone przez człowieka',
+        titleProven2: 'Udokumentowane przez AI: dwóch czytelników zapisu zgodnie',
+        titleProven1: 'Udokumentowane przez AI: jeden czytelnik zapisu',
+        titleImport: (prog: string, date: string) => `Z drzewa (niezweryfikowane): przejęte z ${prog}, plik ${date}`,
+        titleNone: 'Bez źródła',
+        fromImport: (prog: string, date: string) => `· przejęte z drzewa ${prog}, ${date}`,
+        originMixed: (prog: string, date: string, loaded: string) => `Dane oznaczone „z drzewa” pochodzą z ${prog} (plik ${date}, wczytano ${loaded}).`,
+        originAll: (prog: string, date: string, loaded: string) => `Wszystkie dane osoby pochodzą z ${prog} (plik ${date}, wczytano ${loaded}).`,
+        partial: (from: string, changed: string, date?: string) => `${from.charAt(0).toLocaleUpperCase() + from.slice(1)} pochodzi z drzewa, ${changed} zmienił człowiek${date ? ` ${date}` : ''}.`,
+        part: { DATE: 'data', PLAC: 'miejsce', VAL: 'wartość', GIVN: 'imię', SURN: 'nazwisko', SEX: 'płeć' },
+        joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} i ${parts[parts.length - 1]}`),
+        noSourceYet: 'Do tych danych nie ma jeszcze źródła.',
+        help: 'Co oznaczają znaczniki',
+        settingCard: 'Wiarygodność na karcie osoby',
+        settingTree: 'Wiarygodność na kartach w drzewie',
+        cardFacts: (facts: string) => `Najsłabsza dana karty: ${facts}`,
+        cardFact: { name: 'imię', birth: 'urodzenie', death: 'zgon' },
     },
 
     partnerEvents: {

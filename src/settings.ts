@@ -139,6 +139,26 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Display: the reliability marks on the person card (`display.reliabilityCard`), default ON. */
+    isReliabilityCardEnabled(): boolean {
+        return this.settings.reliabilityCard !== false;
+    }
+
+    setReliabilityCard(enabled: boolean): void {
+        this.settings.reliabilityCard = enabled;
+        this.save();
+    }
+
+    /** Display: the reliability mini mark on the cards in the tree (`display.reliabilityTree`), default OFF. */
+    isReliabilityTreeEnabled(): boolean {
+        return this.settings.reliabilityTree === true;
+    }
+
+    setReliabilityTree(enabled: boolean): void {
+        this.settings.reliabilityTree = enabled;
+        this.save();
+    }
+
     /** Which surname names show, default 'both' (married surname with the birth one as a note). */
     getSurnameDisplay(): SurnameDisplay {
         const v = this.settings.surnameDisplay;

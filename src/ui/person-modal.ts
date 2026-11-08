@@ -184,6 +184,7 @@ export const personModalMethods = uiModule({
         // The big title is "New person" until a name is typed (then the typed
         // name, live); no mode subtitle — it would just repeat the title.
         this.updatePersonModalHeader(null, '');
+        this.renderPersonReliability(null);
 
         this.applyAdvancedFieldVisibility(null);
 
@@ -1031,6 +1032,7 @@ export const personModalMethods = uiModule({
         this.disableDuplicateSuggest('person');
         // "conflict ›" at the fields the research has an open conflict about.
         this.markResearchConflicts(id);
+        this.renderPersonReliability(id);
 
         placePersonDeleteLink();
         modal.classList.add('active');
@@ -1985,6 +1987,7 @@ export const personModalMethods = uiModule({
         this.updatePersonModalHeader(person, person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);
         this.renderEventsList();
         this.markResearchConflicts(id);
+        this.renderPersonReliability(id);
     },
 
     /**

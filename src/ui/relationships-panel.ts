@@ -52,7 +52,6 @@ import { iconSvg, chainLinkSvg } from '../icons.js';
 import { extraParticipantRole } from '../godparents.js';
 import { sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
-import { factStatusHtml } from './fact-status.js';
 import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -375,7 +374,7 @@ export const relationshipsPanelMethods = uiModule({
         return `
             <div class="partnership-grid detail-group" data-partnership-id="${id}" data-current-person="${this.escapeHtml(currentPersonId)}">
                 <div class="pg-row">
-                    <span class="pg-label pg-label-start"><span class="pg-label-text">${this.escapeHtml(f.marriageRow)}</span>${factStatusHtml(partnership.startStatus)}</span>
+                    <span class="pg-label pg-label-start"><span class="pg-label-text">${this.escapeHtml(f.marriageRow)}</span>${this.partnershipFactMarkHtml(partnership, 'marriage')}</span>
                     <input type="text" class="partnership-start-date flex-date" autocomplete="off"
                         placeholder="${strings.placeholders.flexDate}"
                         data-partnership-id="${id}"
@@ -387,7 +386,7 @@ export const relationshipsPanelMethods = uiModule({
                         placeholder="${strings.labels.startPlace}" aria-label="${strings.labels.startPlace}">
                 </div>
                 <div class="pg-row pg-end">
-                    <span class="pg-label pg-label-end"><span class="pg-label-text">${this.escapeHtml(f.divorceRow)}</span>${factStatusHtml(partnership.endStatus)}</span>
+                    <span class="pg-label pg-label-end"><span class="pg-label-text">${this.escapeHtml(f.divorceRow)}</span>${this.partnershipFactMarkHtml(partnership, 'divorce')}</span>
                     <input type="text" class="partnership-end-date flex-date" autocomplete="off"
                         placeholder="${strings.placeholders.flexDate}"
                         data-partnership-id="${id}"
@@ -496,6 +495,10 @@ export const relationshipsPanelMethods = uiModule({
 
         const items = persons.map(p => {
             let statusHtml = '';
+            // The link's reliability: a parent or a partner link that came from a loaded family tree.
+            let linkMarkHtml = '';
+            if (type === 'parents') linkMarkHtml = this.relationLinkMarkHtml(DataManager.getPerson(currentPersonId)?.importedParents?.[p.id]);
+            else if (type === 'partners') linkMarkHtml = this.relationLinkMarkHtml(DataManager.getPartnershipBetween(currentPersonId, p.id)?.importId);
             let partnershipDetailsHtml = '';
             // Parent→child relationship type select (parents/children sections).
             let relTypeHtml = '';
@@ -580,7 +583,7 @@ export const relationshipsPanelMethods = uiModule({
                 <div class="rel-item">
                     <span class="rel-item-name">
                         <span class="rel-item-icon">${iconSvg('user', { size: 16 })}</span>
-                        ${this.escapeHtml(shownNameOrEmpty(p))}
+                        ${this.escapeHtml(shownNameOrEmpty(p))}${linkMarkHtml}
                     </span>
                     ${statusHtml}
                     ${relTypeHtml}

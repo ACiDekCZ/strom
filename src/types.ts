@@ -1719,6 +1719,10 @@ export interface AppSettings {
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     showTitles?: boolean;  // default: true - titles before/after the name (Person.titleBefore / titleAfter) shown with it
+    /** Settings `display.reliabilityCard` (spec 066 §2f), default: true - the reliability marks on the person card. */
+    reliabilityCard?: boolean;
+    /** Settings `display.reliabilityTree` (spec 066 §2f), default: false - the reliability mini mark on the cards in the tree. */
+    reliabilityTree?: boolean;
     surnameDisplay?: SurnameDisplay;  // default: 'both' - which surname names show (Person.lastName / marriedSurname)
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder

@@ -5,6 +5,7 @@
 
 import { DataManager } from './data.js';
 import { UI } from './ui.js';
+import { cardReliabilityMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
 import { strings } from './strings.js';
 import {
@@ -4247,6 +4248,9 @@ class TreeRendererClass {
             { positions: this.positions, spouseLines: this.spouseLines }, DataManager.getData(), this.focusPersonId);
         const orderSlots = this.unionOrderSlots(orderBadges, partnershipChildIds, signalCtx);
         const shownHere = this.shownHereIds();
+        // The reliability mini mark (Settings, off by default): its options read once per render.
+        const relOpts = SettingsManager.isReliabilityTreeEnabled() ? UI.reliabilityOptionsNow() : null;
+        const relData = DataManager.getData();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -4299,6 +4303,8 @@ class TreeRendererClass {
             }
             const signals = cardSignalInfo(person, signalCtx);
             if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
+            const relMarkHtml = relOpts && !person.isPlaceholder ? cardReliabilityMarkHtml(relData, person, relOpts) : '';
+            if (relMarkHtml) classes += ' has-rel-mark';
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -4556,7 +4562,7 @@ class TreeRendererClass {
                 </div>
             `;
             // The lock, the status stripes and the corner dot: on every card type, the custom one too (N34).
-            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${stateHtml}${dotHtml}`;
+            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${stateHtml}${dotHtml}${relMarkHtml}`;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
             // to the LEFT of the branch tabs so those (always visible, pinned to

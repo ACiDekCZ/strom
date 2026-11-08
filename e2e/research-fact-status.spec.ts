@@ -10,7 +10,7 @@ import { openApp, card, cardAction } from './helpers.js';
 
 function ged(): string {
     return [
-        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
         '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M',
         '1 BIRT', '2 DATE 1862', '2 PLAC Dolní Lhota', '2 _STROM_STATUS lead',
         '1 OCCU rolník', '2 _STROM_STATUS probable',
@@ -34,8 +34,7 @@ async function setup(page: Page, width = 1440, height = 900): Promise<void> {
         return dt;
     }, ged());
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    // A file of the research (HEAD `1 SOUR STROM_RESEARCH`) opens as a tree at once, with no import record.
     await expect(card(page, 'Jan')).toBeVisible();
 }
 

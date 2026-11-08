@@ -21537,22 +21537,91 @@
         .event-row .event-main { flex: 1; min-width: 0; }
         .event-row .event-type { font-weight: 600; }
         .event-row .event-meta { color: var(--text-secondary, #777); font-size: 13px; }
-        /* The research's status of a fact (lead / possible / probable / proven), beside the fact. */
-        .fact-status {
-            display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
-            font-size: 11px; font-weight: 600; line-height: 16px; vertical-align: 1px; white-space: nowrap;
+        /* One mark of reliability per fact (spec 066 §2): the steps differ by
+           dots, the check and the frame, never by colour (src/ui/fact-status.ts). */
+        .fact-status, .modal button.fact-status {
+            display: inline-flex; align-items: center; gap: 4px; position: relative; box-sizing: border-box;
+            width: auto; min-width: 0; height: 20px; min-height: 0; margin: 0 0 0 6px; padding: 0 7px;
+            border-radius: 999px; box-shadow: none; font-family: inherit;
+            font-size: 11px; font-weight: 600; line-height: 1; vertical-align: 1px; white-space: nowrap;
             background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border);
+            cursor: default; transition: none;
         }
-        .fact-status-lead, .fact-status-possible { background: var(--warning-soft); color: var(--warning-text); border-color: transparent; }
-        .fact-status-proven { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
-        .partnership-grid .pg-label .fact-status { display: table; margin: 3px 0 0; }
+        button.fact-status, .modal button.fact-status { cursor: pointer; }
+        .fact-status-import, .modal button.fact-status-import { border: 1px dashed var(--text-light); }
+        .fact-status-human, .modal button.fact-status-human { border: 1px solid var(--text-light); color: var(--text); }
+        .fact-status-none, .modal button.fact-status-none { border: 1px dotted var(--line-color); background: transparent; color: var(--text-faint); }
+        .fact-status .fs-check { font-size: 10px; line-height: 1; }
+        .fact-status .fs-dots { display: inline-flex; gap: 2px; }
+        .fact-status .fs-dots i {
+            display: block; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%;
+            border: 1px solid currentColor; background: transparent;
+        }
+        .fact-status .fs-dots i.on { background: currentColor; }
+        button.fact-status:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { button.fact-status:hover, .modal button.fact-status:hover { color: var(--text); } }
+        /* Touch: a 44 px target around the pill (the pill stays small). */
+        @media (pointer: coarse) { button.fact-status::after { content: ''; position: absolute; inset: -13px -6px; } }
+        .partnership-grid .pg-label .fact-status { display: flex; width: max-content; margin: 3px 0 0; }
+        .rel-item-name .fact-status { flex: none; }
+        /* At a field's label (name, sex, occupation): beside the label text, under it when it does not fit. */
+        #person-modal .form-group > label > .fact-status { margin: -3px 0 -3px 6px; vertical-align: middle; }
         @media (max-width: 640px) {
-            .fact-status { font-size: 10.5px; padding: 0 6px; }
-            .partnership-grid .pg-label .fact-status { display: inline-block; margin: 0 0 0 6px; }
+            .fact-status, .modal button.fact-status { font-size: 10.5px; height: 18px; padding: 0 6px; }
+            .partnership-grid .pg-label .fact-status { display: inline-flex; margin: 0 0 0 6px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
-            .fact-status { margin-left: 5px; }
+            .fact-status, .modal button.fact-status { margin-left: 5px; }
         }
+        /* The pill's text on a tap (touch) or a click: under its row, with the way into the help. */
+        .fact-status-tip {
+            max-width: 340px; box-sizing: border-box; margin: 6px 0 2px; padding: 9px 12px;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.45; text-align: left; white-space: normal;
+        }
+        .fact-status-tip-head { font-weight: 600; }
+        .fact-status-tip-body { color: var(--text-light); overflow-wrap: anywhere; }
+        .fact-status-tip .fact-status-tip-help, .modal .fact-status-tip button.fact-status-tip-help {
+            display: inline-flex; align-items: center; margin: 4px 0 0; padding: 0; min-height: 0; width: auto;
+            border: 0; background: none; box-shadow: none; font: inherit; font-weight: 500; color: var(--primary);
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        @media (pointer: coarse) { .fact-status-tip .fact-status-tip-help, .modal .fact-status-tip button.fact-status-tip-help { min-height: 44px; } }
+        /* The person card: where its facts came from, under the person's header. */
+        .person-origin {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+            padding: 9px 24px; margin-bottom: 12px; background: var(--surface-2); border-bottom: 1px solid var(--divider);
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light);
+        }
+        .person-origin[hidden] { display: none; }
+        .person-origin .fact-status { margin-left: 0; }
+        .person-origin + .fact-status-tip { margin: 6px 24px; }
+        @media (max-width: 640px) {
+            .person-origin { padding: 9px 16px; }
+            .person-origin + .fact-status-tip { margin: 6px 16px; }
+        }
+        /* The tree card's mini mark (Settings, off by default): the weakest
+           step of the name, the birth and the death, no text. */
+        .card-rel-mark {
+            position: absolute; top: 3px; right: 4px; z-index: 1; box-sizing: border-box;
+            display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+            height: 14px; min-width: 18px; padding: 0 3px; border-radius: 999px;
+            background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border);
+            font-size: 9px; font-weight: 700; line-height: 1; pointer-events: auto;
+        }
+        .card-rel-mark.fact-status-import { border: 1px dashed var(--text-light); }
+        .card-rel-mark.fact-status-human { border: 1px solid var(--text-light); color: var(--text); }
+        .card-rel-mark.fact-status-none { border: 1px dotted var(--line-color); background: transparent; color: var(--text-faint); }
+        .card-rel-mark .fs-check { font-size: 9px; line-height: 1; }
+        .card-rel-mark .fs-dots { display: inline-flex; gap: 2px; }
+        .card-rel-mark .fs-dots i {
+            display: block; width: 5px; height: 5px; box-sizing: border-box; border-radius: 50%;
+            border: 1px solid currentColor; background: transparent;
+        }
+        .card-rel-mark .fs-dots i.on { background: currentColor; }
+        .person-card.locked .card-rel-mark { right: 16px; }
+        #tree-canvas.zoom-far .card-rel-mark,
+        body.view-mode-print .card-rel-mark { display: none; }
         .event-row.readonly { opacity: 0.75; }
         .event-row .event-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .event-row .event-actions button {
@@ -24916,6 +24985,9 @@
                 </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeModal()">&times;</button>
             </div>
+            <!-- Where the person's facts came from (a loaded family tree), with the
+                 reliability mark they all share (src/ui/person-reliability-ui.ts). -->
+            <div class="person-origin" id="pm-origin" hidden></div>
 
             <div class="pm-section">
                 <div class="pm-section-head"><span class="pm-section-title" data-i18n="personModal.sectionBasic"></span></div>
@@ -25773,6 +25845,18 @@
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="titles.settingLabel"></span>
                             <span class="settings-desc" data-i18n="titles.settingHint"></span>
+                        </span>
+                    </label>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="reliability-card-toggle" onchange="window.Strom.UI.toggleReliabilityCard(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="reliability.settingCard"></span>
+                        </span>
+                    </label>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="reliability-tree-toggle" onchange="window.Strom.UI.toggleReliabilityTree(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="reliability.settingTree"></span>
                         </span>
                     </label>
                     <div class="settings-row settings-row-stacked surname-display-setting" id="surname-display-setting">

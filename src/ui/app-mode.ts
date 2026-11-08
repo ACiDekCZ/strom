@@ -737,6 +737,18 @@ export const appModeMethods = uiModule({
         TreeRenderer.render();
     },
 
+    /** The reliability marks on the person card (spec 066 §2f): an open card is marked again. */
+    toggleReliabilityCard(enabled: boolean): void {
+        SettingsManager.setReliabilityCard(enabled);
+        this.refreshPersonReliability();
+    },
+
+    /** The reliability mini mark on the cards in the tree: the view is drawn again. */
+    toggleReliabilityTree(enabled: boolean): void {
+        SettingsManager.setReliabilityTree(enabled);
+        TreeRenderer.render();
+    },
+
     /** Settings > Surname display: redraw everything that shows names. */
     setSurnameDisplay(display: SurnameDisplay): void {
         SettingsManager.setSurnameDisplay(display);

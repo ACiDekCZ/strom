@@ -922,6 +922,33 @@ const stringsEN = {
         title: (label: string) => `${label} — as the research holds this fact. It changes when the research documents it.`,
     },
 
+    // One mark of reliability per fact: steps, tooltips, the person-origin row, Settings (src/ui/fact-status.ts, spec 066 §2).
+    reliability: {
+        human: 'Confirmed',
+        proven: 'Proven',
+        import: 'From family tree',
+        none: 'No source',
+        titleHuman: 'Confirmed by a person',
+        titleProven2: 'Proven by AI: two readers of the record agree',
+        titleProven1: 'Proven by AI: one reader of the record',
+        titleImport: (prog: string, date: string) => `From the family tree (unverified): taken from ${prog}, file ${date}`,
+        titleNone: 'No source',
+        fromImport: (prog: string, date: string) => `· taken from the family tree ${prog}, ${date}`,
+        originMixed: (prog: string, date: string, loaded: string) => `Facts marked “from family tree” come from ${prog} (file ${date}, loaded ${loaded}).`,
+        originAll: (prog: string, date: string, loaded: string) => `All of this person's facts come from ${prog} (file ${date}, loaded ${loaded}).`,
+        /** `date`: the day of the change, when known (left out otherwise). */
+        partial: (from: string, changed: string, date?: string) => `The ${from} is from the family tree; the ${changed} was changed by a person${date ? ` on ${date}` : ''}.`,
+        part: { DATE: 'date', PLAC: 'place', VAL: 'value', GIVN: 'given name', SURN: 'surname', SEX: 'sex' },
+        joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`),
+        noSourceYet: 'There is no source for this fact yet.',
+        help: 'What the marks mean',
+        settingCard: 'Reliability on the person card',
+        settingTree: 'Reliability on the cards in the tree',
+        /** The tree card's mini mark: which of its facts have the weakest step. */
+        cardFacts: (facts: string) => `Weakest fact on the card: ${facts}`,
+        cardFact: { name: 'name', birth: 'birth', death: 'death' },
+    },
+
     // The couple's own events (banns, a census…) — relationships panel, editor, book
     partnerEvents: {
         types: {
@@ -8026,7 +8053,7 @@ const stringsEN = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `How it works: ${topic}`,
         markTitle: (topic: string, id: string) => `How it works: ${topic} (${id})`,
-        topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Awaiting action', now: 'Agent at work', nowPaused: 'Pause', imagesHeld: 'Image only in the research', readDocument: 'Reading a document', hypotheses: 'Who decides the hypotheses', mapLookup: 'Looking up places in the research', following: 'Following in the fan and on the map', nameVariants: 'Other spellings of the name', eventParticipants: 'Godparents and witnesses', story: 'Stories' },
+        topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Awaiting action', now: 'Agent at work', nowPaused: 'Pause', imagesHeld: 'Image only in the research', readDocument: 'Reading a document', hypotheses: 'Who decides the hypotheses', mapLookup: 'Looking up places in the research', following: 'Following in the fan and on the map', nameVariants: 'Other spellings of the name', eventParticipants: 'Godparents and witnesses', story: 'Stories', reliability: 'What the marks mean' },
     },
     // The "What next" card after a GEDCOM import from another program (src/ui/import-next-ui.ts, spec 066 §1).
     importNext: {
@@ -8764,6 +8791,30 @@ const stringsCZ: StringsType = {
         probable: 'Pravděpodobné',
         proven: 'Doložené',
         title: (label: string) => `${label} — tak údaj vede výzkum. Změní se, až ho výzkum doloží.`,
+    },
+
+    reliability: {
+        human: 'Potvrzeno',
+        proven: 'Doloženo',
+        import: 'Z rodokmenu',
+        none: 'Bez pramene',
+        titleHuman: 'Potvrdil člověk',
+        titleProven2: 'Doloženo AI: dva čtenáři záznamu shodně',
+        titleProven1: 'Doloženo AI: jeden čtenář záznamu',
+        titleImport: (prog: string, date: string) => `Z rodokmenu (neověřeno): převzato z rodokmenu ${prog}, soubor ${date}`,
+        titleNone: 'Bez pramene',
+        fromImport: (prog: string, date: string) => `· převzato z rodokmenu ${prog}, ${date}`,
+        originMixed: (prog: string, date: string, loaded: string) => `Údaje se značkou z rodokmenu jsou z ${prog} (soubor ${date}, načteno ${loaded}).`,
+        originAll: (prog: string, date: string, loaded: string) => `Všechny údaje osoby jsou z ${prog} (soubor ${date}, načteno ${loaded}).`,
+        partial: (from: string, changed: string, date?: string) => `${capFirst(from)} je z rodokmenu, ${changed} změnil člověk${date ? ` ${date}` : ''}.`,
+        part: { DATE: 'datum', PLAC: 'místo', VAL: 'hodnota', GIVN: 'křestní jméno', SURN: 'příjmení', SEX: 'pohlaví' },
+        joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} a ${parts[parts.length - 1]}`),
+        noSourceYet: 'Pramen k údaji zatím není.',
+        help: 'Co značky znamenají',
+        settingCard: 'Spolehlivost na kartě osoby',
+        settingTree: 'Spolehlivost na kartičkách ve stromu',
+        cardFacts: (facts: string) => `Nejslabší údaj kartičky: ${facts}`,
+        cardFact: { name: 'jméno', birth: 'narození', death: 'úmrtí' },
     },
 
     partnerEvents: {
@@ -15784,7 +15835,7 @@ const stringsCZ: StringsType = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `Jak to funguje: ${topic}`,
         markTitle: (topic: string, id: string) => `Jak to funguje: ${topic} (${id})`,
-        topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení', imagesHeld: 'Obraz jen ve výzkumu', readDocument: 'Přečtení dokumentu', hypotheses: 'Kdo rozhoduje hypotézy', mapLookup: 'Dohledání míst ve výzkumu', following: 'Sledování ve vějíři a na mapě', nameVariants: 'Další tvary jména', eventParticipants: 'Kmotři a svědci', story: 'Vyprávění' },
+        topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení', imagesHeld: 'Obraz jen ve výzkumu', readDocument: 'Přečtení dokumentu', hypotheses: 'Kdo rozhoduje hypotézy', mapLookup: 'Dohledání míst ve výzkumu', following: 'Sledování ve vějíři a na mapě', nameVariants: 'Další tvary jména', eventParticipants: 'Kmotři a svědci', story: 'Vyprávění', reliability: 'Co značky znamenají' },
     },
     importNext: {
         title: 'Co teď',
@@ -16507,6 +16558,30 @@ const stringsDE: StringsType = {
         probable: 'Wahrscheinlich',
         proven: 'Belegt',
         title: (label: string) => `${label} — so führt die Forschung diese Angabe. Das ändert sich, wenn die Forschung sie belegt.`,
+    },
+
+    reliability: {
+        human: 'Bestätigt',
+        proven: 'Belegt',
+        import: 'Aus dem Stammbaum',
+        none: 'Ohne Quelle',
+        titleHuman: 'Von einem Menschen bestätigt',
+        titleProven2: 'Von KI belegt: zwei Leser des Eintrags übereinstimmend',
+        titleProven1: 'Von KI belegt: ein Leser des Eintrags',
+        titleImport: (prog: string, date: string) => `Aus dem Stammbaum (ungeprüft): übernommen aus ${prog}, Datei vom ${date}`,
+        titleNone: 'Ohne Quelle',
+        fromImport: (prog: string, date: string) => `· übernommen aus ${prog}, ${date}`,
+        originMixed: (prog: string, date: string, loaded: string) => `Angaben mit der Marke „aus dem Stammbaum“ stammen aus ${prog} (Datei vom ${date}, geladen am ${loaded}).`,
+        originAll: (prog: string, date: string, loaded: string) => `Alle Angaben der Person stammen aus ${prog} (Datei vom ${date}, geladen am ${loaded}).`,
+        partial: (from: string, changed: string, date?: string) => `${capFirst(from)} stammt aus dem Stammbaum, ${changed} hat ein Mensch${date ? ` am ${date}` : ''} geändert.`,
+        part: { DATE: 'Datum', PLAC: 'Ort', VAL: 'Wert', GIVN: 'Vorname', SURN: 'Nachname', SEX: 'Geschlecht' },
+        joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1]}`),
+        noSourceYet: 'Eine Quelle zur Angabe gibt es noch nicht.',
+        help: 'Was die Marken bedeuten',
+        settingCard: 'Zuverlässigkeit in der Personenkarte',
+        settingTree: 'Zuverlässigkeit auf den Kärtchen im Stammbaum',
+        cardFacts: (facts: string) => `Schwächste Angabe des Kärtchens: ${facts}`,
+        cardFact: { name: 'Name', birth: 'Geburt', death: 'Tod' },
     },
 
     partnerEvents: {
@@ -23461,7 +23536,7 @@ const stringsDE: StringsType = {
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `So funktioniert es: ${topic}`,
         markTitle: (topic: string, id: string) => `So funktioniert es: ${topic} (${id})`,
-        topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Bearbeitung', now: 'Arbeit des Agenten', nowPaused: 'Pause', imagesHeld: 'Bild nur in der Forschung', readDocument: 'Ein Dokument lesen', hypotheses: 'Wer die Hypothesen entscheidet', mapLookup: 'Orte in der Forschung suchen', following: 'Folgen im Fächer und auf der Karte', nameVariants: 'Andere Schreibweisen des Namens', eventParticipants: 'Paten und Zeugen', story: 'Erzählungen' },
+        topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Bearbeitung', now: 'Arbeit des Agenten', nowPaused: 'Pause', imagesHeld: 'Bild nur in der Forschung', readDocument: 'Ein Dokument lesen', hypotheses: 'Wer die Hypothesen entscheidet', mapLookup: 'Orte in der Forschung suchen', following: 'Folgen im Fächer und auf der Karte', nameVariants: 'Andere Schreibweisen des Namens', eventParticipants: 'Paten und Zeugen', story: 'Erzählungen', reliability: 'Was die Marken bedeuten' },
     },
     importNext: {
         title: 'Wie weiter',

@@ -86,20 +86,27 @@ describe('factReliability without the research', () => {
         expect(factReliability(data, p, 'birth', PLAIN)).toMatchObject({ step: 'import', fromParts: ['PLAC'], changedParts: ['DATE'] });
     });
 
-    it('all changed, no record, or a research status: no mark', () => {
+    it('all changed or no record: no mark', () => {
         const changed = person({ birthDate: '1852', importedValues: { birthDate: { from: 'I1', value: '1851-02-02' } } });
         expect(factReliability(data, changed, 'birth', PLAIN)).toBeNull();
         const noRecord = person({ birthDate: '1851', importedValues: { birthDate: { from: 'I9', value: '1851' } } });
         expect(factReliability(data, noRecord, 'birth', PLAIN)).toBeNull();
         expect(factReliability({}, noRecord, 'birth', PLAIN)).toBeNull();
-        const statusOnly = person({ birthDate: '1851', birthStatus: 'proven' });
-        expect(factReliability(data, statusOnly, 'birth', PLAIN)).toBeNull();
     });
 
-    it('a research tree whose bridge has no origin: only the import step, its origins not read', () => {
+    it('a status a file of the research gave stays, with the import "from family tree" behind it', () => {
+        const statusOnly = person({ birthDate: '1851', birthStatus: 'proven' });
+        expect(factReliability(data, statusOnly, 'birth', PLAIN)).toEqual({ step: 'proven', dots: 1, fromParts: [], changedParts: [] });
+        const leadFromFile = person({ birthDate: '1851', birthStatus: 'lead', importedValues: { birthDate: { from: 'I1', value: '1851' } } });
+        expect(factReliability(data, leadFromFile, 'birth', PLAIN)).toMatchObject({ step: 'import', importRecord: I1 });
+        const leadChanged = person({ birthDate: '1852', birthStatus: 'lead', importedValues: { birthDate: { from: 'I1', value: '1851' } } });
+        expect(factReliability(data, leadChanged, 'birth', PLAIN)).toMatchObject({ step: 'lead', fromParts: [] });
+    });
+
+    it('a research tree whose bridge has no origin: its status and the import, its origins not read', () => {
         const p = person({ birthDate: '1851', birthStatus: 'proven', importedValues: { birthDate: { from: 'I1', value: '1851' } },
             researchOrigins: { birth: { kind: 'user' }, death: { kind: 'import', importId: 'I1' } }, deathDate: '1910' });
-        expect(factReliability(data, p, 'birth', RESEARCH_OLD)).toMatchObject({ step: 'import' });
+        expect(factReliability(data, p, 'birth', RESEARCH_OLD)).toMatchObject({ step: 'proven', fromImport: true, importRecord: I1 });
         expect(factReliability(data, p, 'death', RESEARCH_OLD)).toBeNull();
     });
 });
