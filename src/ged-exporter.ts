@@ -593,6 +593,34 @@ function emailsBack(event: LifeEvent): { event: LifeEvent; emails: string[] } {
 }
 
 /**
+ * An event without the first line(s) of its note the import made of the
+ * value its file wrote on the event's line (`1 EDUC Gymnázium`), and that
+ * value while the note still begins with it; a note edited there stays a note.
+ */
+function lineValueBack(event: LifeEvent): { event: LifeEvent; value?: string } {
+    const value = event.gedcomValue;
+    if (!value || !event.note || eventValueIsOnTag(event.type)) return { event };
+    if (event.note !== value && !event.note.startsWith(`${value}\n`)) return { event };
+    const note = event.note.slice(value.length).replace(/^\n/, '').trim();
+    return { event: { ...event, ...(note ? { note } : { note: undefined }) }, value };
+}
+
+/**
+ * The event's ADDR as its file wrote it (`2 ADDR` / `3 ADR1 Ulice 5`) while
+ * the address is still the one read from it; null when it is not, or when
+ * the lines are not one such structure.
+ */
+function addressBack(event: LifeEvent): string[] | null {
+    const kept = event.gedcomAddress;
+    if (!kept || !event.address || event.address !== kept.value || !Array.isArray(kept.lines)) return null;
+    const [head, ...rest] = kept.lines;
+    if (typeof head !== 'string' || !/^2 ADDR( |$)/.test(head) || rest.length === 0 || rest.length > 20) return null;
+    const all = [head, ...rest];
+    if (!all.every(l => typeof l === 'string' && l.length <= 255 && !/[\r\n\0]/.test(l) && !/\s@[^@#\s][^@\s]*@/.test(l))) return null;
+    return rest.every(l => /^[3-9] [A-Z0-9_]+( |$)/.test(l)) ? all : null;
+}
+
+/**
  * A source without the note line(s) the import made of its AUTH ("Author: …",
  * in the language of the import), and the author while that line is still
  * there; a line taken out or edited by hand stays a note (as emailsBack).
@@ -1470,8 +1498,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         for (const fileEvent of person.events ?? []) {
             // "Back to {prog}": the file's e-mail addresses go back as EMAIL,
             // out of the note while it still has their line (spec 066 K3.1).
-            const { event, emails } = back.imports.size > 0 && isBackRecord(person)
-                ? emailsBack(fileEvent) : { event: fileEvent, emails: [] };
+            const backEvent = back.imports.size > 0 && isBackRecord(person);
+            // …and what it wrote on the event's line goes back there, its ADDR as written.
+            const { event: valued, value: lineValue } = backEvent ? lineValueBack(fileEvent) : { event: fileEvent, value: undefined };
+            const { event, emails } = backEvent ? emailsBack(valued) : { event: valued, emails: [] };
+            const addressLines = backEvent ? addressBack(event) : null;
             const tag = EVENT_TYPE_TO_TAG[event.type];
             let typeLabel: string | null = null;
             if (!tag) {
@@ -1495,6 +1526,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushLongValue(lines, 1, tag, fact);
                 const remark = rest.join('\n').trim();
                 if (remark) pushNote(lines, 2, remark);
+            } else if (lineValue) {
+                pushLongValue(lines, 1, tag ?? 'EVEN', lineValue);
+                if (typeLabel) pushLongValue(lines, 2, 'TYPE', typeLabel);
             } else {
                 lines.push(`1 ${tag ?? 'EVEN'}`);
                 if (typeLabel) pushLongValue(lines, 2, 'TYPE', typeLabel);
@@ -1506,7 +1540,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (event.place) {
                 pushPlace(lines, 2, event.place, data.places);
             }
-            pushDetails(lines, event);
+            pushDetails(lines, addressLines ? { ...event, address: undefined } : event);
+            if (addressLines) lines.push(...addressLines);
             for (const email of emails) pushWrapped(lines, 2, 'EMAIL', email);
             pushStatus(lines, event.status);
             if (event.note && !eventValueIsOnTag(event.type)) {

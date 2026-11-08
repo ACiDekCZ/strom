@@ -116,8 +116,8 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
         const b = evAfter.get(id);
         if (!a || !b) { kinds.add(b?.type === 'birth' || a?.type === 'birth' ? 'birth' : 'event'); if (b?.participants?.length) participantKinds([], b.participants).forEach(k => kinds.add(k)); continue; }
         // gedcomEmails: what the loaded file wrote as EMAIL, kept for "Back to {prog}" only.
-        const { participants: pa, sourceIds: sa, status: _st1, gedcomEmails: _em1, ...restA } = a;
-        const { participants: pb, sourceIds: sb, status: _st2, gedcomEmails: _em2, ...restB } = b;
+        const { participants: pa, sourceIds: sa, status: _st1, gedcomEmails: _em1, gedcomValue: _gv1, gedcomAddress: _ga1, ...restA } = a;
+        const { participants: pb, sourceIds: sb, status: _st2, gedcomEmails: _em2, gedcomValue: _gv2, gedcomAddress: _ga2, ...restB } = b;
         if (differs(restA, restB)) kinds.add('event');
         participantKinds(pa, pb).forEach(k => kinds.add(k));
         if (differs(sa ?? [], sb ?? [])) kinds.add('citation');

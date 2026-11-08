@@ -2,8 +2,8 @@
  * Every case of spec 066 in one file, so a change that breaks any of them
  * shows here (fictional people):
  * - test/gedcom-066-combined.ged: a MyHeritage Family Tree Builder file, one
- *   block of records per case (xrefs @I<case>01@…, @F<case>01@…), the two
- *   source records shared at the end;
+ *   block of records per case (xrefs @I<case>01@…, @F<case>01@…), the
+ *   source records at the end;
  * - test/gedcom-066-combined-research.ged: the research's tree of the same
  *   people, as it writes it (_STROM_IMPORT / _XREF, _STROM_ORIGIN,
  *   _STROM_PRIMARY, REFN).
@@ -443,6 +443,34 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const ged = backTo(edited);
             expect(holdsRun(record(ged, '@F1801@'), ['1 MARR', '2 DATE 12 MAY 1919', '2 PLAC Hrbolcov'])).toBe(true);
             expect(holdsRun(record(ged, '@F1802@'), ['1 MARR', '2 DATE 12 MAY 1920'])).toBe(true);
+        });
+
+        it('22 · text on a fact\'s own line (EDUC, BURI, EVEN with TYPE) and an address of ADR1 / CITY: kept, and back as written', () => {
+            const person = Object.values(tree.persons).find(p => p.firstName === 'Bublislav')!;
+            const of = (type: string) => person.events!.find(e => e.type === type)!;
+            expect(of('education').note).toBe('Kňouralov grammar school');
+            expect(of('burial').note).toBe('Kňouralov churchyard, grave 12');
+            expect(of('custom').note).toBe('Blessing of the new mill');
+            expect(of('residence').address).toBe('Mlýnská 5, Kňouralov');
+            for (const ged of [first, second]) {
+                const rec = record(ged, '@I2201@');
+                expect(holdsRun(rec, ['1 EDUC Kňouralov grammar school', '2 DATE 1862'])).toBe(true);
+                expect(holdsRun(rec, ['1 BURI Kňouralov churchyard, grave 12', '2 DATE 1920'])).toBe(true);
+                expect(holdsRun(rec, ['1 EVEN Blessing of the new mill', '2 TYPE Mill', '2 DATE 1880'])).toBe(true);
+                expect(holdsRun(rec, ['1 RESI', '2 ADDR', '3 ADR1 Mlýnská 5', '3 CITY Kňouralov'])).toBe(true);
+                expect(count(rec, /NOTE/)).toBe(0);
+            }
+        });
+
+        it('22 · the text or the address edited in the tree: the tree\'s goes back', () => {
+            const edited = structuredClone(tree);
+            const person = Object.values(edited.persons).find(p => p.firstName === 'Bublislav')!;
+            person.events!.find(e => e.type === 'education')!.note = 'Kňouralov grammar school\nA prize in Latin';
+            person.events!.find(e => e.type === 'residence')!.address = 'Mlýnská 6, Kňouralov';
+            const rec = record(backTo(edited), '@I2201@');
+            expect(holdsRun(rec, ['1 EDUC Kňouralov grammar school', '2 DATE 1862', '2 NOTE A prize in Latin'])).toBe(true);
+            expect(holdsRun(rec, ['1 RESI', '2 ADDR Mlýnská 6, Kňouralov'])).toBe(true);
+            expect(count(rec, /ADR1/)).toBe(0);
         });
     });
 });

@@ -701,6 +701,19 @@ function eventKey(ev: LifeEvent): string {
 }
 
 /**
+ * The tree's event an incoming one with a value on its line (LifeEvent.gedcomValue)
+ * is when the tree was loaded before that value was kept: the same event with
+ * the note it has without the value, and no value of its own.
+ */
+function lineValueTwin(byContent: ReadonlyMap<string, LifeEvent>, event: LifeEvent): LifeEvent | undefined {
+    const value = event.gedcomValue;
+    if (!value || !event.note || (event.note !== value && !event.note.startsWith(`${value}\n`))) return undefined;
+    const rest = event.note.slice(value.length).replace(/^\n/, '');
+    const twin = byContent.get(eventKey({ ...event, note: rest || undefined }));
+    return twin && !twin.gedcomValue ? twin : undefined;
+}
+
+/**
  * The other families the incoming file recorded a person in as a child
  * (Person.alsoChildOf) follow the person into the merged tree, naming the
  * union each family became there; a link to a family that did not come
@@ -1135,8 +1148,23 @@ export function mergePersonData(
         const byContent = new Map(existing.events.map(e => [eventKey(e), e] as const));
         for (const event of incoming.events) {
             if (seen.has(event.id)) continue;
+            // A tree loaded before the value on the event's line was kept (`1 EDUC Gymnázium`): its
+            // event without it is this one, and takes it.
+            const valued = !byContent.has(eventKey(event)) ? lineValueTwin(byContent, event) : undefined;
+            if (valued) {
+                valued.note = event.note;
+                valued.gedcomValue = event.gedcomValue;
+                byContent.set(eventKey(valued), valued);
+            }
             const twin = byContent.get(eventKey(event));
             if (twin) {
+                // …and so does one without the address it wrote in parts (`2 ADDR` / `3 ADR1 …`).
+                if (!twin.address && event.address && event.gedcomAddress) {
+                    twin.address = event.address;
+                    twin.gedcomAddress = structuredClone(event.gedcomAddress);
+                }
+                if (!twin.gedcomValue && event.gedcomValue && twin.note === event.note) twin.gedcomValue = event.gedcomValue;
+                if (!twin.gedcomAddress && event.gedcomAddress && twin.address === event.address) twin.gedcomAddress = structuredClone(event.gedcomAddress);
                 if (event.sourceIds?.length) {
                     twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
                 }

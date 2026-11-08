@@ -758,6 +758,11 @@ const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB'
  */
 const NOTED_SILENT_TAGS = new Set(['TYPE']);
 
+/** The parts of an address structure (ADDR > ADR1 …), read where the ADDR line has no value. */
+const ADDRESS_PART_TAGS = new Set(['ADR1', 'ADR2', 'ADR3', 'CITY', 'STAE', 'POST', 'CTRY']);
+/** A field's label written as its value (`3 ADR1 Email`, MyHeritage): no address. */
+const ADDRESS_PART_LABEL = /^e-?mail$/i;
+
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
     tag: string;
@@ -914,6 +919,11 @@ interface RawEvent {
     status?: FactStatus;
     /** 2 EMAIL under the event as written (LifeEvent.gedcomEmails). */
     emails?: string[];
+    /** The value written on the event's own line, where Strom has no field for it (LifeEvent.gedcomValue). */
+    lineValue?: string;
+    /** The ADDR structure as written and the address read from it (LifeEvent.gedcomAddress). */
+    addressLines?: string[];
+    addressValue?: string;
     /** 2 _STROM_IMPORT: which import the event's parts still come from (app files only). */
     imports?: RawImportMark[];
     /** The research's origin of the event (Strom's own files only). */
@@ -2572,11 +2582,29 @@ export function parseGedcom(content: string): ParsedGedcom {
      * A detail line being read (AGE, CAUS, ADDR under a fact), open until the
      * next line at its own level or above, so its CONT/CONC lines join it.
      */
-    let openDetail: { level: number; text: string; done: (text: string) => void; sep: string } | null = null;
+    let openDetail: {
+        level: number; text: string; done: (text: string) => void; sep: string;
+        /** ADDR: its ADR1 / CITY / … values, the address when the ADDR line itself has none. */
+        parts?: string[];
+        /** ADDR under a person's event: its line in the file, to keep the structure as written. */
+        start?: number;
+        event?: RawEvent;
+    } | null = null;
     const flushDetail = (): void => {
-        const text = openDetail?.text.trim();
-        if (openDetail && text) openDetail.done(text);
+        const open = openDetail;
         openDetail = null;
+        if (!open) return;
+        const text = open.text.trim() || (open.parts ?? []).join(', ');
+        if (!text) return;
+        const ev = open.event;
+        const had = ev?.address;
+        open.done(text);
+        // The address of an event the file wrote in parts, or over more lines:
+        // the structure as written, for "Back to {prog}" (LifeEvent.gedcomAddress).
+        if (ev && open.start !== undefined && !had && ev.address === text) {
+            const structure = structureAt(open.start);
+            if (structure.length > 1) { ev.addressLines = structure; ev.addressValue = text; }
+        }
     };
     /** Where a finished detail goes: its field (an age in the UI language), else the fact's note, labelled. */
     const detailTarget = (tag: string, partner?: 'HUSB' | 'WIFE'): ((text: string) => void) | null => {
@@ -2967,6 +2995,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                 continue;
             }
             if (level <= openDetail.level) flushDetail();
+            else if (level === openDetail.level + 1 && openDetail.parts && ADDRESS_PART_TAGS.has(tag)
+                && value.trim() && !ADDRESS_PART_LABEL.test(value.trim())) {
+                openDetail.parts.push(value.trim());
+            }
         }
         readNoted(rec.src, level, tag);
         if (level === 2 && (tag === 'AGE' || tag === 'CAUS' || tag === 'ADDR' || tag === 'DATE')) {
@@ -2979,10 +3011,22 @@ export function parseGedcom(content: string): ParsedGedcom {
                 const phrase = gedcomDatePhrase(value);
                 if (phrase) sink(strings.gedcomNotes.datePhrase(phrase));
             } else if (tag !== 'DATE') {
-                // ADDR: only its own value and CONT lines. ADR1/CITY/POST
-                // repeat the place or carry junk ("ADR1 Email", MyHeritage).
+                // ADDR: its own value and CONT lines; its ADR1 / CITY / POST
+                // repeat that, so they are the address only where the ADDR
+                // line has none (MyHeritage writes `2 ADDR` / `3 ADR1 Ulice 5`).
+                // A field's label written as its value ("ADR1 Email",
+                // MyHeritage) is no address.
                 const done = detailTarget(tag);
-                if (done) openDetail = { level, text: value, done, sep: tag === 'ADDR' ? ', ' : '\n' };
+                if (done) {
+                    openDetail = { level, text: value, done, sep: tag === 'ADDR' ? ', ' : '\n' };
+                    if (tag === 'ADDR') {
+                        openDetail.parts = [];
+                        if (currentType === 'INDI' && currentEvent && !stromResearch) {
+                            openDetail.start = rec.src;
+                            openDetail.event = currentEvent;
+                        }
+                    }
+                }
             }
         } else if (level === 3 && tag === 'AGE' && currentType === 'FAM' && currentSubTag === 'MARR'
             && (currentFactSubTag === 'HUSB' || currentFactSubTag === 'WIFE')) {
@@ -3574,6 +3618,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (value && eventValueIsOnTag(evType)) ev.note = value;
                                 // `1 _MILT Army`: the service itself, kept as the note.
                                 else if (value && evType === 'military' && value !== 'Y') ev.note = value;
+                                // What a program wrote on a line GEDCOM gives no value
+                                // (`1 EDUC Gymnázium`, `1 BURI By the church, grave 12`):
+                                // the note's first line, and as written for "Back to {prog}".
+                                else if (value && value !== 'Y') {
+                                    ev.note = value;
+                                    if (!stromResearch) ev.lineValue = value;
+                                }
                                 indi.events.push(ev);
                                 currentEvent = ev;
                             } else if (tag === 'EVEN' || tag === 'CENS') {
@@ -3987,6 +4038,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             const tagValue = currentEvent.tagValue;
                             if (tagValue) {
                                 currentEvent.note = currentEvent.note ? `${tagValue}\n${currentEvent.note}` : tagValue;
+                                if (!stromResearch) currentEvent.lineValue = tagValue;
                                 delete currentEvent.tagValue;
                             }
                         }
@@ -4002,8 +4054,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // more than one line. Without this the tail of a
                             // chunked value was read as nothing and vanished on
                             // the next import.
-                            currentEvent.note = (currentEvent.note ?? '')
-                                + (tag === 'CONT' ? '\n' : '') + value;
+                            const more = (tag === 'CONT' ? '\n' : '') + value;
+                            // (Still the line's own value: it goes back on the line.)
+                            if (currentEvent.lineValue !== undefined && currentEvent.note === currentEvent.lineValue) {
+                                currentEvent.lineValue += more;
+                            }
+                            currentEvent.note = (currentEvent.note ?? '') + more;
                         } else if (tag === 'EMAIL' && value) {
                             // MyHeritage keeps contact e-mail under RESI: a line of
                             // the note to read, the address itself to go back.
@@ -4661,6 +4717,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (ev.note) out.note = ev.note;
                 if (ev.status) out.status = ev.status;
                 if (ev.emails?.length && ev.note) out.gedcomEmails = ev.emails;
+                if (ev.lineValue && ev.note && (ev.note === ev.lineValue || ev.note.startsWith(`${ev.lineValue}\n`))) {
+                    out.gedcomValue = ev.lineValue;
+                }
+                if (ev.addressLines && ev.addressValue && ev.address === ev.addressValue) {
+                    out.gedcomAddress = { value: ev.addressValue, lines: ev.addressLines };
+                }
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
 

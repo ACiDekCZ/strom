@@ -228,6 +228,20 @@ export interface LifeEvent {
      * writes it back as `2 EMAIL` while that line is still in the note.
      */
     gedcomEmails?: string[];
+    /**
+     * What another program's file wrote on the event's own line where
+     * GEDCOM gives it no value (`1 EDUC Gymnázium`, `1 BURI By the church`,
+     * `1 EVEN …` beside its TYPE), as written. It is the first line of the
+     * note, which is what the app shows; "Back to {prog}" writes it on the
+     * line again while the note still begins with it.
+     */
+    gedcomValue?: string;
+    /**
+     * The event's ADDR as the file wrote it, from `2 ADDR` with the lines
+     * under it (`3 ADR1 Ulice 5`), and the address the import read from it.
+     * "Back to {prog}" writes those lines while the address is still that one.
+     */
+    gedcomAddress?: { value: string; lines: string[] };
 }
 
 /**
