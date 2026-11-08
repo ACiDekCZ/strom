@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, decodeGedcomBytes } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
 import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
@@ -63,5 +63,31 @@ describe('An age with more than 999 days (066 N3, d-age.ged)', () => {
         const again = twice(file, 'age7.ged');
         expect(again.back).toContain('2 AGE 1y 30m 1100d\n');
         expect(undated(again.second)).toBe(undated(again.back));
+    });
+});
+
+describe('The LDS extensions of ANSEL (066 N4, the 5.5 torture file)', () => {
+    // NOTE lines as the torture file writes them: the hex code, the name, the character in parentheses.
+    const head = '0 HEAD\n1 SOUR PAF\n1 GEDC\n2 VERS 5.5\n2 FORM LINEAGE-LINKED\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME A /X/\n1 NOTE ANSEL\n';
+    const rows: [number, string, string][] = [
+        [0xBE, 'empty box', '\u25A1'], [0xBF, 'black box', '\u25A0'],
+        [0xCD, 'midline e', 'e'], [0xCE, 'midline o', 'o'], [0xC7, 'eszett', '\u00DF'], [0xC8, 'euro', '\u20AC'],
+    ];
+    const bytes = [...new TextEncoder().encode(head)];
+    for (const [code, name] of rows) bytes.push(...new TextEncoder().encode(`2 CONT ${name} (`), code, 0x29, 0x0A);
+    bytes.push(...new TextEncoder().encode('0 TRLR\n'));
+    const decoded = decodeGedcomBytes(new Uint8Array(bytes).buffer);
+
+    it('read as the characters of the GEDCOM table, none as U+FFFD', () => {
+        expect(decoded.encoding).toBe('ansel');
+        expect(decoded.text).not.toContain('\uFFFD');
+        for (const [, name, char] of rows) expect(decoded.text).toContain(`${name} (${char})`);
+    });
+
+    it('the note keeps them in the tree and in "Back to"', () => {
+        const { tree, back } = twice(decoded.text, 'ansel.ged');
+        expect(Object.values(tree.persons)[0].notes).toContain('empty box (\u25A1)');
+        expect(back).toContain('2 CONT black box (\u25A0)');
+        expect(back).not.toContain('\uFFFD');
     });
 });

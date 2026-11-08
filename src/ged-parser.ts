@@ -1450,7 +1450,7 @@ function generateId(prefix: string): string {
 
 /**
  * ANSEL (ANSI Z39.47 / MARC-8 extended Latin) -> Unicode, spacing characters.
- * Includes the GEDCOM addition 0xCF (ß).
+ * Includes the GEDCOM additions (0xBE, 0xBF, 0xCD, 0xCE and 0xCF ß).
  */
 const ANSEL_SPACING: Record<number, string> = {
     0xA1: 'Ł', 0xA2: 'Ø', 0xA3: 'Đ', 0xA4: 'Þ', 0xA5: 'Æ',
@@ -1459,8 +1459,14 @@ const ANSEL_SPACING: Record<number, string> = {
     0xB0: 'ʻ', 0xB1: 'ł', 0xB2: 'ø', 0xB3: 'đ', 0xB4: 'þ',
     0xB5: 'æ', 0xB6: 'œ', 0xB7: 'ʺ', 0xB8: 'ı', 0xB9: '£',
     0xBA: 'ð', 0xBC: 'ơ', 0xBD: 'ư',
+    // The LDS extensions of the GEDCOM 5.5 ANSEL table: empty and black box,
+    // midline e and o (written as the letters, as Gramps reads them too).
+    0xBE: '\u25A1', 0xBF: '\u25A0',
     0xC0: '°', 0xC1: 'ℓ', 0xC2: '℗', 0xC3: '©', 0xC4: '♯',
-    0xC5: '¿', 0xC6: '¡', 0xCF: 'ß',
+    0xC5: '¿', 0xC6: '¡',
+    // MARC-21's later additions: eszett and the euro sign.
+    0xC7: 'ß', 0xC8: '€',
+    0xCD: 'e', 0xCE: 'o', 0xCF: 'ß',
 };
 
 /**
