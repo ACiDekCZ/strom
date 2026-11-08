@@ -24948,9 +24948,10 @@
         .vfy-error { color: var(--text); }
         .vfy-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
         .vfy-rows > li + li { border-top: 1px solid var(--border); }
-        .vfy-row, .vfy-opt {
-            display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 0; box-sizing: border-box;
-            cursor: pointer; color: var(--text);
+        /* Labels: the longer selector beats `.modal label { display: block }`. */
+        .vfy-modal .vfy-row, .vfy-modal .vfy-opt {
+            display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 0; margin: 0; box-sizing: border-box;
+            cursor: pointer; color: var(--text); font-size: inherit; font-weight: inherit;
         }
         .vfy-row input, .vfy-opt input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
         .vfy-row-main, .vfy-opt-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -24966,7 +24967,7 @@
         .vfy-group-head {
             padding: 0; margin: 0 0 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text);
         }
-        .vfy-try { align-items: flex-start; padding-top: 8px; border-top: 1px solid var(--border); }
+        .vfy-modal .vfy-try { align-items: flex-start; padding-top: 8px; border-top: 1px solid var(--border); }
         .vfy-try input { margin-top: 1px; }
         .vfy-est { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
         .vfy-est:empty { display: none; }
@@ -24998,7 +24999,7 @@
         .status-tip .st-acts > .st-verify-person { max-width: 100%; white-space: normal; text-align: left; }
         .menu-verify-glyph { color: var(--primary); font-weight: 600; }
         @media (pointer: coarse) {
-            .vfy-row, .vfy-opt, .vfy-sec-row { min-height: 48px; }
+            .vfy-modal .vfy-row, .vfy-modal .vfy-opt, .vfy-sec-row { min-height: 48px; }
             .vfy-row input, .vfy-opt input { width: 22px; height: 22px; }
             .vfy-modal .vfy-foot button, .vfy-sec-stop { min-height: 44px; }
         }
@@ -25016,7 +25017,7 @@
             .vfy-modal .vfy-header { padding: 10px 16px 8px; }
             .vfy-heading h2 { font-size: 17px; }
             .vfy-body { padding: 6px 16px 10px; }
-            .vfy-row, .vfy-opt, .vfy-sec-row { min-height: 52px; }
+            .vfy-modal .vfy-row, .vfy-modal .vfy-opt, .vfy-sec-row { min-height: 52px; }
             .vfy-modal .vfy-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
             .vfy-modal .vfy-foot button { width: 100%; min-height: 48px; }
         }

@@ -1133,8 +1133,13 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
             const r = el.getBoundingClientRect();
             const row = el.querySelector('.vfy-row')!.getBoundingClientRect();
             const btns = [...el.querySelectorAll<HTMLElement>('.vfy-foot button')].map(b => b.getBoundingClientRect().height);
-            return { left: r.left, right: r.right, bottom: r.bottom, row: row.height, btns, scroll: el.scrollWidth - el.clientWidth, vw: innerWidth, vh: innerHeight };
+            const box = el.querySelector('.vfy-check')!.getBoundingClientRect();
+            const main = el.querySelector('.vfy-row-main')!.getBoundingClientRect();
+            // The checkbox beside the fact's text (a label of a dialog is no block above it).
+            const beside = box.right <= main.left && box.top < main.bottom && box.bottom > main.top;
+            return { left: r.left, right: r.right, bottom: r.bottom, row: row.height, btns, scroll: el.scrollWidth - el.clientWidth, vw: innerWidth, vh: innerHeight, beside };
         });
+        expect(look.beside).toBe(true);
         expect(look.left).toBe(0);
         expect(Math.round(look.right)).toBe(look.vw);
         expect(Math.round(look.bottom)).toBe(look.vh);
