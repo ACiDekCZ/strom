@@ -2118,6 +2118,20 @@ function withoutRecordPointers(structure: readonly string[]): string[] {
     return out;
 }
 
+/** A wedding's lines without its named witnesses (`2 _WITN Name` / `2 WITN Name` and what is under them). */
+function withoutWitnessLines(structure: readonly string[]): string[] {
+    const out: string[] = [];
+    let below = -1;
+    for (const line of structure) {
+        const level = Number(/^(\d+)/.exec(line)?.[1] ?? 0);
+        if (below >= 0 && level > below) continue;
+        below = -1;
+        if (/^2 _?WITN \S/.test(line)) { below = level; continue; }
+        out.push(line);
+    }
+    return out;
+}
+
 /**
  * A family record's weddings and divorces after its first wedding, as
  * written, while the first of them is a divorce (MARR / DIV / MARR: the
@@ -2168,7 +2182,10 @@ function keepJoinedRecord(gedFamId: string, fam: GedcomFamily, marks: JoinedMark
     // A note it names by xref (a NOTE record) the block cannot write: its lines stay in the couple's note.
     const notes = (st: readonly string[]): string[] => st.filter(l => /^(1 (NOTE|NCHI)|2 NOTE)( |$)/.test(l));
     const noteLost = structures.some((st, i) => notes(st).length !== notes(kept[i]).length);
-    const block = joinedBlock(xref.startsWith('__') ? '' : xref, kept.flat(), noteLost ? {} : marks);
+    // The witnesses of its wedding the marks name are written from the couple's (see JoinedMarks.witnesses).
+    const named = !noteLost && (marks.witnesses?.length ?? 0) > 0;
+    const lines = named ? kept.map(st => /^1 MARR( |$)/.test(st[0]) ? withoutWitnessLines(st) : st) : kept;
+    const block = joinedBlock(xref.startsWith('__') ? '' : xref, lines.flat(), noteLost ? {} : marks);
     if (!block) return false;
     // What of it became lines of the couple's note the block writes itself (its
     // notes, its weddings and divorces as written); its change stamp (`_UPD`)
@@ -5058,6 +5075,18 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (!hangs || (hangs !== gedFamId && coupleOfFamily(hangs) !== coupleKey)) continue;
                 const xref = bare(individuals.get(c)?.importIds?.find(b => b.xref)?.xref ?? c);
                 if (xref) marks.children.push({ xref, also: !!firstFam?.[1].children.includes(c) });
+            }
+            // The witnesses of its wedding go back under it (the first record's
+            // stay there; one both name, in both).
+            const witnessKey = (raw: RawParticipant): string => (raw.ref ? personIdMap.get(raw.ref) : undefined) ?? raw.name ?? '';
+            const firstWitnesses = new Set((firstFam?.[1].marriageParticipants ?? []).map(witnessKey).filter(Boolean));
+            marks.witnesses = [];
+            for (const raw of fam.marriageParticipants) {
+                const also = firstWitnesses.has(witnessKey(raw));
+                if (raw.ref && personIdMap.get(raw.ref)) {
+                    const xref = bare(individuals.get(raw.ref)?.importIds?.find(b => b.xref)?.xref ?? raw.ref);
+                    if (xref && !xref.startsWith('__')) marks.witnesses.push({ xref, also });
+                } else if (raw.name) marks.witnesses.push({ name: raw.name, also });
             }
             const firstRefs = new Set(firstFam ? mapRefs(firstFam[1].sourceRefs) : []);
             const cited = new Set<string>();

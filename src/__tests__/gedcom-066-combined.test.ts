@@ -161,6 +161,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             ['TEXT', people, /^\d TEXT /], ['CONC', people, /^\d CONC /], ['ROLE', people, /^\d ROLE /],
             ['AUTH', ['SOUR'], /^1 AUTH /], ['PUBL', ['SOUR'], /^1 PUBL /], ['_TYPE', ['SOUR'], /^1 _TYPE /], ['_MEDI', ['SOUR'], /^1 _MEDI /],
             ['GIVN', people, /^2 GIVN /], ['SURN', people, /^2 SURN /],
+            ['ASSO', people, /^2 ASSO /], ['_WITN', people, /^2 _WITN /],
         ];
         const tally = (ged: string) => Object.fromEntries(counted.map(([name, types, re]) =>
             [name, count(recordsOf(ged, types), re)]));
@@ -299,7 +300,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const couple = Object.values(tree.partnerships).filter(p => tree.persons[p.person1Id]?.firstName === 'Kořenoslav');
             expect(couple).toHaveLength(1);
             expect([couple[0].status, couple[0].startDate, couple[0].endDate]).toEqual(['married', '1911-04-01', undefined]);
-            expect(imported.stats.joinedFamilies).toBe(4);
+            expect(imported.stats.joinedFamilies).toBe(5);
             expect(holdsRun(record(first, '@F1401@'), ['1 MARR', '2 DATE 1 APR 1911', '2 PLAC Drnkalov'])).toBe(true);
             // The wedding's TYPE, read nowhere, goes back under it as written.
             const marriage = record(first, '@F1401@');
@@ -406,6 +407,33 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
                 expect(holdsRun(record(ged, '@I2003@'), ['1 FAMC @F2001@', '1 FAMC @F2002@'])).toBe(true);
                 expect(count(record(ged, '@I2003@'), /^1 (FAMC|NOTE) /)).toBe(2);
             }
+        });
+
+        it('21 · the witnesses of a couple\'s second wedding go back under it; one both weddings name, under both', () => {
+            const couple = Object.values(tree.partnerships).find(p => tree.persons[p.person1Id]?.firstName === 'Brumislav')!;
+            expect(couple.participants?.map(p => p.personId ? tree.persons[p.personId].firstName : p.name))
+                .toEqual(['Mračoslav Bzučák', 'Vrtimír', 'Čučmíra Ťapková']);
+            const wedding = (rec: string[]): string[] => {
+                const at = rec.indexOf('1 MARR');
+                return rec.slice(at, rec.findIndex((l, i) => i > at && l.startsWith('1 ')));
+            };
+            for (const ged of [first, second]) {
+                const firstWedding = wedding(record(ged, '@F2101@'));
+                const secondWedding = wedding(record(ged, '@F2102@'));
+                expect(firstWedding.filter(l => /^2 (ASSO|_WITN) /.test(l))).toEqual(['2 _WITN Mračoslav Bzučák']);
+                expect(secondWedding.filter(l => /^2 (ASSO|_WITN) /.test(l)))
+                    .toEqual(['2 ASSO @I2103@', '2 _WITN Čučmíra Ťapková', '2 _WITN Mračoslav Bzučák']);
+                expect(holdsRun(secondWedding, ['2 ASSO @I2103@', '3 RELA Witness'])).toBe(true);
+            }
+        });
+
+        it('21 · a witness of the second wedding removed in the tree is not written back', () => {
+            const edited = structuredClone(tree);
+            const couple = Object.values(edited.partnerships).find(p => edited.persons[p.person1Id]?.firstName === 'Brumislav')!;
+            couple.participants = couple.participants!.filter(p => p.name !== 'Čučmíra Ťapková');
+            const ged = backTo(edited);
+            expect(count(lines(ged), /Čučmíra Ťapková/)).toBe(0);
+            expect(record(ged, '@F2102@')).toContain('2 ASSO @I2103@');
         });
 
         it('18 · the date taken from the second record changed in the tree: the first record writes it', () => {

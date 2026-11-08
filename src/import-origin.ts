@@ -507,6 +507,12 @@ export interface JoinedMarks {
     /** Its events, by what they say (joinedEventKey; `2 _STROM_EVEN`). */
     events?: string[];
     /**
+     * The witnesses under its wedding: one with a record of their own by its
+     * xref (`2 _STROM_ASSO I7`), another by the name (`2 _STROM_WITN Name`),
+     * and whether the first record names that witness too (`3 _STROM_ALSO Y`).
+     */
+    witnesses?: JoinedWitness[];
+    /**
      * What the first record lacked and took from it: startDate, startPlace,
      * endDate, endPlace, address, age1 / age2 (the age of person1 / person2 at
      * the wedding) with the value, or MARR (the first wrote no wedding):
@@ -514,6 +520,9 @@ export interface JoinedMarks {
      */
     took?: JoinedTook[];
 }
+
+/** A wedding witness of another record of the couple (JoinedMarks.witnesses): `xref` (without the @ signs) or `name`. */
+export interface JoinedWitness { xref?: string; name?: string; also: boolean }
 
 /** A value the couple's first record took from another of its records (JoinedMarks.took). */
 export interface JoinedTook { key: string; value: string }
@@ -526,6 +535,7 @@ export interface JoinedRecord {
     children: { xref: string; also: boolean }[];
     sources: { xref: string; page: string; also: boolean }[];
     events: string[];
+    witnesses: JoinedWitness[];
     took: JoinedTook[];
 }
 
@@ -555,6 +565,13 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
         if (src.also) block.push('3 _STROM_ALSO Y');
     }
     for (const key of marks.events ?? []) block.push(`2 _STROM_EVEN ${key}`);
+    for (const w of marks.witnesses ?? []) {
+        const name = (w.name ?? '').replace(/[\r\n]+/g, ' ').trim();
+        if (w.xref) block.push(`2 _STROM_ASSO ${w.xref}`);
+        else if (name) block.push(`2 _STROM_WITN ${name}`);
+        else continue;
+        if (w.also) block.push('3 _STROM_ALSO Y');
+    }
     for (const { key, value } of marks.took ?? []) {
         const one = value.replace(/[\r\n]+/g, ' ').trim();
         block.push(one ? `2 _STROM_TOOK ${key} ${one}` : `2 _STROM_TOOK ${key}`);
@@ -565,7 +582,7 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
 /** The couple's other records of one import's kept lines. */
 export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
     return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => {
-        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '', children: [], sources: [], events: [], took: [] };
+        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '', children: [], sources: [], events: [], witnesses: [], took: [] };
         let mark = '';
         for (const line of b.slice(1)) {
             if (JOINED_MARK.test(line)) {
@@ -575,6 +592,8 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 else if (mark === '_STROM_CHIL' && value) out.children.push({ xref: value, also: false });
                 else if (mark === '_STROM_SOUR' && value) out.sources.push({ xref: value, page: '', also: false });
                 else if (mark === '_STROM_EVEN' && value) out.events.push(value);
+                else if (mark === '_STROM_ASSO' && value) out.witnesses.push({ xref: value, also: false });
+                else if (mark === '_STROM_WITN' && value) out.witnesses.push({ name: value, also: false });
                 else if (mark === '_STROM_TOOK' && value) {
                     const space = value.indexOf(' ');
                     out.took.push(space < 0 ? { key: value, value: '' } : { key: value.slice(0, space), value: value.slice(space + 1) });
@@ -585,6 +604,9 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 else if (src && line.startsWith('3 PAGE ')) src.page = line.slice(7);
                 else if (src && line === '3 _STROM_ALSO Y') src.also = true;
                 else if (mark === '_STROM_CHIL' && line === '3 _STROM_ALSO Y' && out.children.length) out.children[out.children.length - 1].also = true;
+                else if ((mark === '_STROM_ASSO' || mark === '_STROM_WITN') && line === '3 _STROM_ALSO Y' && out.witnesses.length) {
+                    out.witnesses[out.witnesses.length - 1].also = true;
+                }
             } else {
                 mark = '';
                 out.lines.push(line.replace(/^\d+/, n => String(Number(n) - 1)));

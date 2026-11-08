@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -729,6 +729,8 @@ interface JoinedBack {
     children: PersonId[];
     sources: string[];
     events: CoupleEvent[];
+    /** The witnesses of its wedding (the couple's participants it named). */
+    witnesses: EventParticipant[];
 }
 
 /** What "Back to {prog}" writes of the records' ids (see backToXrefs). */
@@ -920,7 +922,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                     if (free) taken.add(record.xref.toUpperCase());
                     const list = joined.get(id) ?? [];
                     joined.set(id, list);
-                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record, children: [], sources: [], events: [] });
+                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record, children: [], sources: [], events: [], witnesses: [] });
                 }
             }
         }
@@ -934,6 +936,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     /** Sources and events of a couple that go only with its other records. */
     const sourcesElsewhere = new Map<PartnershipId, Set<string>>();
     const eventsElsewhere = new Set<CoupleEvent>();
+    /** Wedding witnesses of a couple that go only with its other records. */
+    const witnessesElsewhere = new Set<EventParticipant>();
     for (const [id, list] of joined) {
         const ps = data.partnerships[id];
         const xrefIs = (holder: { originalIds?: OriginalIds[] } | undefined, xref: string): boolean =>
@@ -960,6 +964,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 takenEvents.add(ev);
                 eventsElsewhere.add(ev);
                 j.events.push(ev);
+            }
+            // Its wedding's witnesses, while it wrote that wedding: by their record's xref, or by the name.
+            const married = j.record.lines.some(l => l === '1 MARR' || l.startsWith('1 MARR '));
+            for (const w of married ? j.record.witnesses : []) {
+                const part = (ps.participants ?? []).find(p => !j.witnesses.includes(p) && (w.xref
+                    ? !!p.personId && xrefIs(data.persons[p.personId], w.xref)
+                    : !p.personId && (p.name ?? '').replace(/[\r\n]+/g, ' ').trim() === w.name));
+                if (!part) continue;
+                j.witnesses.push(part);
+                if (!w.also) witnessesElsewhere.add(part);
             }
         }
     }
@@ -1634,6 +1648,20 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Children (those only another record of the couple has go with it, see joined)
+        // Witnesses at the wedding, written like the ones on an event: in
+        // the tree → ASSO at their record, otherwise _WITN with the name.
+        const pushWitness = (part: EventParticipant): void => {
+            const xref = part.personId ? personIdMap.get(part.personId) : undefined;
+            if (xref) {
+                lines.push(`2 ASSO ${xref}`);
+            } else if (part.name) {
+                pushWrapped(lines, 2, '_WITN', part.name);
+            } else {
+                return;
+            }
+            lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
+            if (part.note) pushNote(lines, 3, part.note);
+        };
         const pushChild = (childId: PersonId): void => {
             const childGedcomId = personIdMap.get(childId);
             if (childGedcomId) {
@@ -1688,8 +1716,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (age) ages[pid] = age;
         }
         const marriageTook = tookAll.some(t => t.key === 'MARR');
+        // The wedding's witnesses but those only the couple's other records name (see joined).
+        const ownWitnesses = (partnership.participants ?? []).filter(p => !witnessesElsewhere.has(p));
         const noMarriageSaid = (partnership.marriageUnrecorded === true || marriageTook)
-            && !partnership.participants?.length && !partnership.startStatus;
+            && !ownWitnesses.length && !partnership.startStatus;
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
             !!startDate || !!startPlace || !!address
             || Object.values(ages).some(a => a.trim());
@@ -1722,20 +1752,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 lines.push(`2 ${role}`);
                 pushWrapped(lines, 3, 'AGE', gedcomAge(age));
             }
-            // Witnesses at the wedding, written like the ones on an event: in
-            // the tree → ASSO at their record, otherwise _WITN with the name.
-            for (const part of partnership.participants ?? []) {
-                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
-                if (xref) {
-                    lines.push(`2 ASSO ${xref}`);
-                } else if (part.name) {
-                    pushWrapped(lines, 2, '_WITN', part.name);
-                } else {
-                    continue;
-                }
-                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
-                if (part.note) pushNote(lines, 3, part.note);
-            }
+            for (const part of ownWitnesses) pushWitness(part);
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
             for (const srcId of ownSources) pushCitation(2, srcId);
@@ -1829,7 +1846,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushGedcomExtra(partnership);
 
         // The couple's other records of the program's file, as it wrote them (see joined).
-        for (const { xref, own, from, record, children, sources, events } of joinedHere) {
+        for (const { xref, own, from, record, children, sources, events, witnesses } of joinedHere) {
             lines.push(`0 ${xref} FAM`);
             if (knownImports.has(from)) {
                 lines.push(`1 ${IMPORT_TAG} ${from}`);
@@ -1845,6 +1862,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const marriageEnd = marriageAt < 0 ? -1 : kept.findIndex((l, i) => i > marriageAt && l.startsWith('1 '));
             const cut = marriageAt < 0 ? kept.length : marriageEnd < 0 ? kept.length : marriageEnd;
             lines.push(...kept.slice(0, cut));
+            if (marriageAt >= 0) for (const part of witnesses) pushWitness(part);
             if (marriageAt >= 0) for (const srcId of sources) pushCitation(2, srcId);
             lines.push(...kept.slice(cut));
             for (const event of sortCoupleEvents(events)) pushEvent(event);
