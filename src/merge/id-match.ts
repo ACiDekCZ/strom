@@ -5,9 +5,13 @@
  * - Strong ids (`_UID`, `UID`, `_FSFTID`, `AFN`, `EXID` with the same TYPE):
  *   one shared value is the same person. `_UID` and `UID` are one kind (the
  *   same UUID written the GEDCOM 5.5.1 or the GEDCOM 7 way).
+ *   `_FSFTID` and an `EXID` whose TYPE names familysearch.org are one kind
+ *   too (a person's id in FamilySearch).
  * - Only a global id (`_FSFTID`, `AFN`, `EXID` of one TYPE) that differs says
  *   two people. A UUID is made per tree: two trees of one program give the
  *   same person different ones, so a different UUID says nothing.
+ * - A shared strong id is still only a strong hint: the matcher confirms it
+ *   only when the names, the sex and the birth years agree too.
  * - Weak ids (the xref, `RIN`) only hold inside one tree of one program: they
  *   count only when both records come from files the same program wrote, and
  *   only as a contribution to a name match, never on their own.
@@ -24,6 +28,18 @@ const UUID_TAGS: ReadonlySet<string> = new Set(['_UID', 'UID']);
 /** The group of the UUID tags (`_UID`, `UID`): a shared value counts, a different one does not. */
 const UUID_GROUP = 'UUID';
 
+/** The group of a person's FamilySearch id (`_FSFTID`, `EXID` of a familysearch.org TYPE). */
+const FAMILYSEARCH_GROUP = 'FAMILYSEARCH';
+
+/** The kind a strong id belongs to: ids of one kind are compared with each other. */
+function strongGroup(tag: string, type: string | undefined): string {
+    if (UUID_TAGS.has(tag)) return UUID_GROUP;
+    if (tag === '_FSFTID') return FAMILYSEARCH_GROUP;
+    const t = (type ?? '').trim();
+    if (tag === 'EXID' && /familysearch\.org/i.test(t)) return FAMILYSEARCH_GROUP;
+    return `${tag}\u0000${tag === 'EXID' ? t : ''}`;
+}
+
 interface IdKeys {
     /** "tag|type" (the UUID tags: one group) → normalized values. */
     strong: Map<string, Set<string>>;
@@ -36,13 +52,15 @@ interface IdKeys {
 
 /** What the two records' ids say about them being one person. */
 export interface IdEvidence {
-    /** 'same': a strong id is shared; 'differ': a global id of one tag (and type) differs and none is shared. */
-    strong: 'same' | 'differ' | null;
+    /** A strong id of one kind is shared. */
+    same: boolean;
+    /** A global id (`_FSFTID`, `AFN`, `EXID` of one TYPE) both give differs (no value of that kind shared). */
+    globalDiffers: boolean;
     /** The same xref or RIN in files of the same program. */
     weak: boolean;
 }
 
-const NO_EVIDENCE: IdEvidence = { strong: null, weak: false };
+const NO_EVIDENCE: IdEvidence = { same: false, globalDiffers: false, weak: false };
 
 /**
  * A strong id's value as compared: a `_UID` / `UID` without case, hyphens and
@@ -80,7 +98,7 @@ function keysOf(person: Person, data: StromData): IdKeys {
             if (!STRONG_TAGS.has(tag)) continue;
             const value = strongValue(tag, line.value);
             if (!value) continue;
-            const group = UUID_TAGS.has(tag) ? UUID_GROUP : `${tag}\u0000${tag === 'EXID' ? (line.type ?? '').trim() : ''}`;
+            const group = strongGroup(tag, line.type);
             let set = keys.strong.get(group);
             if (!set) keys.strong.set(group, set = new Set());
             set.add(value);
@@ -95,16 +113,17 @@ export function idEvidence(existing: Person, incoming: Person, existingData: Str
     if (!existing.originalIds?.length || !incoming.originalIds?.length) return NO_EVIDENCE;
     const a = keysOf(existing, existingData);
     const b = keysOf(incoming, incomingData);
-    let strong: IdEvidence['strong'] = null;
+    let same = false;
+    let globalDiffers = false;
     for (const [group, values] of a.strong) {
         const other = b.strong.get(group);
         if (!other) continue;
-        if ([...values].some(v => other.has(v))) { strong = 'same'; break; }
-        if (group !== UUID_GROUP) strong = 'differ';
+        if ([...values].some(v => other.has(v))) same = true;
+        else if (group !== UUID_GROUP) globalDiffers = true;
     }
     let weak = false;
     for (const key of a.weak) {
         if (b.weak.has(key)) { weak = true; break; }
     }
-    return { strong, weak };
+    return { same, globalDiffers, weak };
 }
