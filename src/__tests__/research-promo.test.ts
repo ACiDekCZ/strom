@@ -96,6 +96,12 @@ describe('"What\'s new in 3.0" card', () => {
         expect(decideWhatsNewCard({}, { ...card, emptyTree: true })).toBe('mark-shown');
     });
 
+    it('waits while the "What next" card of a GEDCOM import had this run, even for a tree just loaded', () => {
+        expect(decideWhatsNewCard({}, { ...card, importNextOpen: true })).toBe('wait');
+        expect(decideWhatsNewCard({}, { ...card, emptyTree: true, importNextOpen: true })).toBe('wait');
+        expect(decideWhatsNewCard({}, { ...card, importNextOpen: false })).toBe('show');
+    });
+
     it('shows even after "New" went out (the card and the marker are separate)', () => {
         expect(decideWhatsNewCard({ researchNewDismissed: true }, card)).toBe('show');
     });

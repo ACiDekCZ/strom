@@ -1,5 +1,5 @@
 import type { StringsType, PersonPageCaptionEvent, PersonPageRegister } from '../strings.js';
-import { nPl, plPl, capFirstPl, langNamePl, joinAndPl } from './helpers.js';
+import { nPl, plPl, capFirstPl, langNamePl, joinAndPl, pluralCategoryPl } from './helpers.js';
 
 /** Polish month names: genitive (with a day, "2 listopada 1890") and nominative (month and year, "listopad 1890"). */
 const PL_MONTHS_GEN = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
@@ -14,7 +14,7 @@ function romanPl(n: number): string {
     return tens + ones;
 }
 
-export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help'> = {
+export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext'> = {
     history: {
         settingLabel: 'Historia na osi czasu życia',
         settingHint: 'Wydarzenia epoki i miejsc, w których osoba żyła, z wiekiem osoby. Szuka ich badanie, każde ma źródło.',
@@ -1124,5 +1124,24 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         mark: (topic: string) => `Jak to działa: ${topic}`,
         markTitle: (topic: string, id: string) => `Jak to działa: ${topic} (${id})`,
         topics: { queue: 'Kolejka', places: 'Miejsca', placesManager: 'Miejsca w drzewie', conflicts: 'Sprzeczności', personConflicts: 'Sprzeczności', waiting: 'Czeka na decyzję', now: 'Praca agenta', nowPaused: 'Wstrzymanie', imagesHeld: 'Obraz tylko w badaniu', readDocument: 'Odczytanie dokumentu', hypotheses: 'Kto rozstrzyga hipotezy', mapLookup: 'Odszukanie miejsc w badaniu', following: 'Śledzenie w wachlarzu i na mapie', nameVariants: 'Inne formy imienia i nazwiska', eventParticipants: 'Chrzestni i świadkowie', story: 'Opowieść' },
+    },
+    importNext: {
+        title: 'Co dalej',
+        origin: (prog: string, date: string, n: number) => `Drzewo z ${prog} (plik ${date}) · ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        originInsert: (tree: string, n: number, prog: string, date: string) => `Wstawiono do drzewa ${tree}: ${nPl(n, 'osoba', 'osoby', 'osób')} z ${prog} (plik ${date})`,
+        originMerge: (tree: string, a: number, u: number, prog: string, date: string) => `Scalono z drzewem ${tree}: ${nPl(a, 'nowa osoba', 'nowe osoby', 'nowych osób')}, ${nPl(u, 'uzupełniona', 'uzupełnione', 'uzupełnionych')} · z ${prog} (plik ${date})`,
+        checkFound: (n: number) => `Znalazła ${nPl(n, 'rzecz', 'rzeczy', 'rzeczy')} do przejrzenia. Nic nie poprawia się samo.`,
+        checkClean: 'Kontrola danych nie znalazła nic do poprawy.',
+        review: 'Przejrzyj',
+        splitText: (n: number) => `${nPl(n, 'rodzina', 'rodziny', 'rodzin')}, których nic nie łączy. Z każdej może powstać osobne drzewo.`,
+        researchTitle: 'Badanie przodków z tym drzewem',
+        researchText: 'Agent AI na komputerze znajdzie przodków w księgach metrykalnych i archiwach, odczyta skany, odnajdzie miejsca na mapie i sprawdzi dane z drzewa w źródłach.',
+        linkedTitle: 'Badanie z tym drzewem',
+        linkedText: (p: number, n: number) => `W drzewie ${pluralCategoryPl(p) === 'few' ? 'są' : 'jest'} ${nPl(p, 'miejsce', 'miejsca', 'miejsc')} bez położenia i ${nPl(n, 'osoba', 'osoby', 'osób')} z danymi z drzewa.`,
+        places: 'Odszukaj miejsca',
+        verify: 'Sprawdź dane w źródłach',
+        dataNote: 'Badania traktują dane z drzewa jako wskazówki: bez dowodu ze źródła ich nie nadpisują, a zmienione można przywrócić.',
+        backLink: (prog: string) => `Z powrotem do ${prog}: eksport ze źródłami…`,
+        help: 'Drzewo z innego programu',
     },
 };

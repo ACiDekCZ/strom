@@ -8028,6 +8028,26 @@ const stringsEN = {
         markTitle: (topic: string, id: string) => `How it works: ${topic} (${id})`,
         topics: { queue: 'Queue', places: 'Places', placesManager: 'Places in the tree', conflicts: 'Conflicts', personConflicts: 'Conflicts', waiting: 'Awaiting action', now: 'Agent at work', nowPaused: 'Pause', imagesHeld: 'Image only in the research', readDocument: 'Reading a document', hypotheses: 'Who decides the hypotheses', mapLookup: 'Looking up places in the research', following: 'Following in the fan and on the map', nameVariants: 'Other spellings of the name', eventParticipants: 'Godparents and witnesses', story: 'Stories' },
     },
+    // The "What next" card after a GEDCOM import from another program (src/ui/import-next-ui.ts, spec 066 §1).
+    importNext: {
+        title: 'What next',
+        origin: (prog: string, date: string, n: number) => `Tree from ${prog} (file ${date}) · ${nEn(n, 'person', 'people')}`,
+        originInsert: (tree: string, n: number, prog: string, date: string) => `Inserted into the tree ${tree}: ${nEn(n, 'person', 'people')} from ${prog} (file ${date})`,
+        originMerge: (tree: string, a: number, u: number, prog: string, date: string) => `Merged into the tree ${tree}: ${nEn(a, 'new person', 'new people')}, ${u} updated · from ${prog} (file ${date})`,
+        checkFound: (n: number) => `Found ${nEn(n, 'thing', 'things')} worth a look. Nothing is corrected automatically.`,
+        checkClean: 'The data check found nothing to fix.',
+        review: 'Review',
+        splitText: (n: number) => `${n} families with nothing connecting them. Each can become a tree of its own.`,
+        researchTitle: 'Ancestor research with this tree',
+        researchText: 'An AI agent on the computer finds ancestors in parish registers and archives, reads scans, puts places on the map and checks the family tree\'s facts against sources.',
+        linkedTitle: 'Research with this tree',
+        linkedText: (p: number, n: number) => `The tree has ${nEn(p, 'place', 'places')} without a location and ${nEn(n, 'person', 'people')} with facts from the family tree.`,
+        places: 'Find places',
+        verify: 'Check facts against sources',
+        dataNote: 'The research takes facts from the family tree as leads: without proof from a source it does not overwrite them, and changed ones can be reverted.',
+        backLink: (prog: string) => `Back to ${prog}: export with sources…`,
+        help: 'A tree from another program',
+    },
 };
 
 const stringsCZ: StringsType = {
@@ -15766,6 +15786,25 @@ const stringsCZ: StringsType = {
         markTitle: (topic: string, id: string) => `Jak to funguje: ${topic} (${id})`,
         topics: { queue: 'Fronta', places: 'Místa', placesManager: 'Místa ve stromu', conflicts: 'Rozpory', personConflicts: 'Rozpory', waiting: 'Čeká na vyřízení', now: 'Práce agenta', nowPaused: 'Pozastavení', imagesHeld: 'Obraz jen ve výzkumu', readDocument: 'Přečtení dokumentu', hypotheses: 'Kdo rozhoduje hypotézy', mapLookup: 'Dohledání míst ve výzkumu', following: 'Sledování ve vějíři a na mapě', nameVariants: 'Další tvary jména', eventParticipants: 'Kmotři a svědci', story: 'Vyprávění' },
     },
+    importNext: {
+        title: 'Co teď',
+        origin: (prog: string, date: string, n: number) => `Strom z ${prog} (soubor ${date}) · ${nCs(n, 'osoba', 'osoby', 'osob')}`,
+        originInsert: (tree: string, n: number, prog: string, date: string) => `Vloženo do stromu ${tree}: ${nCs(n, 'osoba', 'osoby', 'osob')} z ${prog} (soubor ${date})`,
+        originMerge: (tree: string, a: number, u: number, prog: string, date: string) => `Sloučeno do stromu ${tree}: ${nCs(a, 'nová osoba', 'nové osoby', 'nových osob')}, ${nCs(u, 'doplněná', 'doplněné', 'doplněných')} · z ${prog} (soubor ${date})`,
+        checkFound: (n: number) => `Našla ${nCs(n, 'věc', 'věci', 'věcí')} k prohlédnutí. Nic se samo neopravuje.`,
+        checkClean: 'Kontrola dat nenašla nic k opravě.',
+        review: 'Prohlédnout',
+        splitText: (n: number) => `${nCs(n, 'rodina', 'rodiny', 'rodin')}, které nic nespojuje. Z každé může být samostatný strom.`,
+        researchTitle: 'Výzkum předků s tímto stromem',
+        researchText: 'AI agent na počítači najde předky v matrikách a archivech, přečte skeny, dohledá místa na mapě a ověří údaje z rodokmenu v pramenech.',
+        linkedTitle: 'Výzkum s tímto stromem',
+        linkedText: (p: number, n: number) => `Ve stromu ${pluralCategory('cs', p) === 'few' ? 'jsou' : 'je'} ${nCs(p, 'místo', 'místa', 'míst')} bez polohy a ${nCs(n, 'osoba', 'osoby', 'osob')} s údaji z rodokmenu.`,
+        places: 'Dohledat místa',
+        verify: 'Ověřit údaje v pramenech',
+        dataNote: 'Údaje z rodokmenu bere výzkum jako vodítka: bez dokladu z pramene je nepřepíše a změněné jde vrátit.',
+        backLink: (prog: string) => `Zpět do ${prog}: export s prameny…`,
+        help: 'Strom z jiného programu',
+    },
 };
 
 const stringsDE: StringsType = {
@@ -23423,6 +23462,25 @@ const stringsDE: StringsType = {
         mark: (topic: string) => `So funktioniert es: ${topic}`,
         markTitle: (topic: string, id: string) => `So funktioniert es: ${topic} (${id})`,
         topics: { queue: 'Warteschlange', places: 'Orte', placesManager: 'Orte im Baum', conflicts: 'Widersprüche', personConflicts: 'Widersprüche', waiting: 'Wartet auf Bearbeitung', now: 'Arbeit des Agenten', nowPaused: 'Pause', imagesHeld: 'Bild nur in der Forschung', readDocument: 'Ein Dokument lesen', hypotheses: 'Wer die Hypothesen entscheidet', mapLookup: 'Orte in der Forschung suchen', following: 'Folgen im Fächer und auf der Karte', nameVariants: 'Andere Schreibweisen des Namens', eventParticipants: 'Paten und Zeugen', story: 'Erzählungen' },
+    },
+    importNext: {
+        title: 'Wie weiter',
+        origin: (prog: string, date: string, n: number) => `Stammbaum aus ${prog} (Datei vom ${date}) · ${nDe(n, 'Person', 'Personen')}`,
+        originInsert: (tree: string, n: number, prog: string, date: string) => `In den Stammbaum ${tree} eingefügt: ${nDe(n, 'Person', 'Personen')} aus ${prog} (Datei vom ${date})`,
+        originMerge: (tree: string, a: number, u: number, prog: string, date: string) => `Mit dem Stammbaum ${tree} zusammengeführt: ${nDe(a, 'neue Person', 'neue Personen')}, ${u} ergänzte · aus ${prog} (Datei vom ${date})`,
+        checkFound: (n: number) => `${nDe(n, 'Ding', 'Dinge')} zum Ansehen gefunden. Nichts wird von selbst korrigiert.`,
+        checkClean: 'Die Datenprüfung hat nichts zu korrigieren gefunden.',
+        review: 'Ansehen',
+        splitText: (n: number) => `${n} Familien ohne Verbindung. Aus jeder kann ein eigener Stammbaum werden.`,
+        researchTitle: 'Ahnenforschung mit diesem Stammbaum',
+        researchText: 'Ein KI-Agent auf dem Computer findet Vorfahren in Kirchenbüchern und Archiven, liest Scans, sucht Orte auf der Karte und prüft Angaben aus dem Stammbaum an Quellen.',
+        linkedTitle: 'Forschung mit diesem Stammbaum',
+        linkedText: (p: number, n: number) => `${nDe(p, 'Ort', 'Orte')} ohne Position und ${nDe(n, 'Person', 'Personen')} mit Angaben aus dem Stammbaum.`,
+        places: 'Orte suchen',
+        verify: 'Angaben an Quellen prüfen',
+        dataNote: 'Angaben aus dem Stammbaum nimmt die Forschung als Hinweise: ohne Beleg aus einer Quelle überschreibt sie sie nicht, und Geändertes lässt sich zurücksetzen.',
+        backLink: (prog: string) => `Zurück zu ${prog}: Export mit Quellen…`,
+        help: 'Stammbaum aus einem anderen Programm',
     },
 };
 

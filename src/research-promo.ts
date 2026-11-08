@@ -44,6 +44,8 @@ export interface WhatsNewContext extends ResearchPromoContext {
     busy: boolean;
     /** The interactive tour is running. */
     tourActive: boolean;
+    /** The "What next" card after a GEDCOM import was shown in this run (it waits for a later start). */
+    importNextOpen?: boolean;
 }
 
 /** The menu item and the welcome-screen offer exist at all (not in exports / view mode). */
@@ -96,6 +98,7 @@ export type WhatsNewDecision = 'show' | 'mark-shown' | 'wait';
 export function decideWhatsNewCard(state: ResearchPromoState, ctx: WhatsNewContext): WhatsNewDecision {
     if (state.whatsNew30Shown === true) return 'wait';
     if (!isPromoAvailable(ctx) || ctx.locked || !ctx.treeReady) return 'wait';
+    if (ctx.importNextOpen) return 'wait';
     if (ctx.emptyTree) return 'mark-shown';
     if (ctx.researchTree || ctx.cliOpen || ctx.busy || ctx.tourActive) return 'wait';
     return 'show';

@@ -1531,7 +1531,8 @@ class MergerUIClass {
 
             // If the merge introduced new issues, offer to open validation on
             // the merged tree so the user can review (and fix) them right away.
-            if (newIssueCount > 0) {
+            // A file from another program: its "What next" card carries the data check.
+            if (newIssueCount > 0 && !UI.importNextPendingFor(newTreeId)) {
                 const openValidation = await UI.showConfirm(
                     strings.merge.newIssues(newIssueCount),
                     strings.merge.newIssuesTitle

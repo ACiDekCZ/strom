@@ -236,7 +236,10 @@ export const importExportMethods = uiModule({
     /**
      * Export target tree as GEDCOM file
      */
-    async exportTargetTreeGedcom(): Promise<void> {
+    async exportTargetTreeGedcom(opts: { preset?: 'back' } = {}): Promise<void> {
+        // `preset: 'back'` ("Back to {prog}: export with sources…" of the What next card,
+        // spec 066 §4) preselects the export's choices; until §4 lands it opens the dialog as is.
+        void opts;
         const treeId = this.getExportTargetTreeId();
         if (!treeId) {
             this.closeExportDialog();
@@ -806,9 +809,10 @@ export const importExportMethods = uiModule({
             // Load data directly into current tree
             DataManager.loadStromData(this.gedcomDataForImport());
             TreeRenderer.render();
-            this.showToast(strings.buttons.importComplete);
             this.gedcomResult = null;
             const treeId = DataManager.getCurrentTreeId();
+            // A file from another program gets the "What next" card in place of the toast.
+            if (!importId || !treeId) this.showToast(strings.buttons.importComplete);
             if (treeId) void this.afterImport(treeId, { gedcom: true, path: 'insert', ...(importId ? { importId } : {}) });
             return;
         }
@@ -1415,9 +1419,11 @@ export const importExportMethods = uiModule({
      */
     async afterImport(treeId: TreeId, options: AfterImportOptions = {}): Promise<void> {
         this.lastImport = { treeId, ...options };
-        // Inserting into the current tree and merging asked nothing after the
-        // import so far; what they show next is the import summary's to say.
-        if (options.path === 'insert' || options.path === 'merge') return;
+        // A file from another program (spec 066 §1): the "What next" card on
+        // every path, once per import, instead of the two questions below.
+        if (options.gedcom && this.offerImportNextCard(treeId, options)) return;
+        // Merging asks its own question about new issues.
+        if (options.path === 'merge') return;
         await this.offerPostImportValidation(treeId);
         await this.offerPostImportSplit(treeId);
         // A tree of a research: its places not on the map, once the research here takes them (spec 034 U5 point 7).

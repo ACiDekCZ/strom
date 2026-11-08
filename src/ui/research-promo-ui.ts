@@ -418,6 +418,7 @@ export const researchPromoMethods = uiModule({
                 emptyTree: DataManager.getAllPersons().length === 0,
                 busy: this.isWhatsNewBlocked(),
                 tourActive: this.tourActive,
+                importNextOpen: this.importNextThisRun(),
             });
             if (decision === 'mark-shown') {
                 SettingsManager.setWhatsNew30Shown();

@@ -783,6 +783,11 @@ export const miscMethods = uiModule({
                     this.dismissWhatsNewCard(false);
                     return;
                 }
+                // The "What next" card after a GEDCOM import (not a modal): Escape = Close.
+                if (this.isImportNextOpen() && !this.topActiveOverlay()) {
+                    this.closeImportNextCard();
+                    return;
+                }
                 // The interactive tour takes precedence (it is not a modal).
                 if (this.tourActive) {
                     this.endTour();
