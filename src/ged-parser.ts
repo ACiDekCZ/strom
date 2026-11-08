@@ -4485,6 +4485,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     /** Children this family actually keeps (the others hang from their own). */
     const childrenOf = (gedFamId: string, fam: GedcomFamily): string[] =>
         fam.children.filter(c => childFamily.get(c) === gedFamId);
+    /** Does the family name a child (one the tree has) who hangs from another family? */
+    const recordedElsewhere = (gedFamId: string, fam: GedcomFamily): boolean =>
+        fam.children.some(c => {
+            const id = personIdMap.get(c);
+            return !!id && !!persons[id] && childFamily.get(c) !== gedFamId;
+        });
 
     // Create partnerships and link relationships
     const partnerships: Record<PartnershipId, Partnership> = {};
@@ -4671,6 +4677,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             ...(wife && persons[wife] && wife !== husb ? { wife } : {}),
         };
         if (!real.husb && !real.wife) continue;
+        // One parent and a child recorded here who hangs from another family
+        // (an adoptive father beside the birth parents): the family itself is
+        // kept, the "?" family the app makes of one parent anyway, so the
+        // child's second FAMC has a family to point at (spec 066 K3.1).
+        if (!(real.husb && real.wife) && recordedElsewhere(gedFamId, fam)) continue;
         noCoupleFamilies.add(gedFamId);
         for (const childGedId of childrenOf(gedFamId, fam)) linkChild(null, childGedId, gedFamId, fam, real);
     }
@@ -4762,7 +4773,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // ids go back with "Back to {prog}", and a child recorded in it as well
         // keeps the link (FAMC / CHIL), not a note (spec 066 K3.1/K3.2).
         const fileRecord = (!!options.importOrigin && !ownFile) || !!fam.importMark || (fam.importIds?.length ?? 0) > 0;
-        if (ownChildren.length === 0 && !(parentId && (saysSomething || fileRecord))) continue;
+        // Strom's own file (the research's tree, the app's export) writes such a
+        // family only for a child kept in it besides the one it hangs from: the
+        // link comes back as it went, not as a note the research would take as new.
+        const ownLink = ownFile && recordedElsewhere(gedFamId, fam);
+        if (ownChildren.length === 0 && !(parentId && (saysSomething || fileRecord || ownLink))) continue;
 
         // A family naming children but neither parent still says they are
         // SIBLINGS. The model knows siblings only through shared parents, so

@@ -356,7 +356,10 @@ not its label, and is kept in the event's note:
   `_STROM_IMPORT`): it shows as a marriage to an unknown spouse, and its record
   goes back out with its xref and ids. One that is only the second family of
   a child hanging elsewhere is kept for that child (see the child of two
-  families under "Back to {program}"). A family naming two or more children
+  families under "Back to {program}"), in Strom's own files too (the
+  research's family of one parent marked `_STROM_NO_COUPLE`, an adoptive
+  father beside the birth parents): the child keeps both `FAMC` with its
+  `PEDI`, and no note is made of it. A family naming two or more children
   but no parent at all gets two stand-ins, so the children stay siblings; a
   lone child without parents is left as it is.
 - `PEDI` under a child's `FAMC` marks an adopted, step or foster link.

@@ -562,6 +562,32 @@ describe('a child recorded in two families (N3)', () => {
         expect(count(file, /^2 _XREF /)).toBe(count(RESEARCH_FAMILIES, /^2 _XREF /));
     });
 
+    it('the research’s family of one parent written as no couple (its _STROM_NO_COUPLE), with or without its import, stays a family: the child keeps both FAMC and its PEDI', () => {
+        const noCouple = RESEARCH_FAMILIES.replace('2 _XREF @F500003@\n1 HUSB @I4@\n1 CHIL @I3@\n', '2 _XREF @F500003@\n1 HUSB @I4@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y\n');
+        expect(noCouple).not.toBe(RESEARCH_FAMILIES);
+        // A family the research made itself carries no import.
+        const ownFamily = noCouple.replace('0 @F3@ FAM\n1 _STROM_IMPORT R1\n2 _XREF @F500003@\n', '0 @F3@ FAM\n');
+        const foster = ownFamily.replace('1 FAMC @F3@\n2 PEDI adopted', '1 FAMC @F3@\n2 PEDI foster');
+        const count = (ged: string, re: RegExp) => ged.split('\n').filter(l => re.test(l)).length;
+        for (const [text, pedi] of [[noCouple, 'adopted'], [ownFamily, 'adopted'], [foster, 'foster']] as const) {
+            const data = migrateData(load(text, null).data);
+            const m = byName(data, 'Mlhoň');
+            expect(m.alsoChildOf?.map(l => l.pedi)).toEqual([pedi]);
+            const sync = exportToGedcom(structuredClone(data), 'Ozubec', { research: { id: 'r-test' } }).content;
+            const file = exportToGedcom(structuredClone(data), 'Ozubec', { origins: true }).content;
+            for (const ged of [sync, file]) {
+                expect(count(ged, /^0 @[^@]+@ FAM$/)).toBe(4);
+                expect(count(ged, /^1 FAMC /)).toBe(count(text, /^1 FAMC /));
+                expect(count(ged, /^2 PEDI /)).toBe(1);
+                expect(ged).toMatch(new RegExp(`1 FAMC @F\\d+@\\n2 PEDI ${pedi}\\n`));
+                expect(count(ged, /^1 NOTE (?!Strom surname)/)).toBe(0);
+            }
+            // The app's file read again and written again: the same.
+            const again = exportToGedcom(migrateData(load(file, null).data), 'Ozubec', { origins: true }).content;
+            expect(body(again)).toEqual(body(file));
+        }
+    });
+
     it('a note line deleted in the app drops the link', () => {
         const data = migrateData(load(MYHERITAGE).data);
         const m = byName(data, 'Mlhoň');
