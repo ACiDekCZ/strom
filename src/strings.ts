@@ -953,11 +953,11 @@ const stringsEN = {
         citedInApp: 'cited in Strom',
         notProven: 'not yet proven by the research',
         provenPartial: 'partly proven',
-        /** The card mark's meaning in a tree that knows the origin (legend, aria-label, the words when the facts share no step; K5.1). */
+        /** The card mark's meaning in every tree (legend, aria-label, the words when the facts share no step; K5.1). */
         cardMark: {
             human: 'confirmed by a person',
-            all: 'everything verified',
-            read: 'read from sources, not everything verified',
+            full: 'documented',
+            partial: 'partly documented',
             trace: 'only a trace',
         },
     },
@@ -8920,8 +8920,8 @@ const stringsCZ: StringsType = {
         provenPartial: 'doloženo zčásti',
         cardMark: {
             human: 'potvrdil člověk',
-            all: 'vše ověřené',
-            read: 'přečteno z pramenů, ne vše ověřené',
+            full: 'doloženo',
+            partial: 'doloženo zčásti',
             trace: 'jen stopa',
         },
     },
@@ -16777,8 +16777,8 @@ const stringsDE: StringsType = {
         provenPartial: 'teilweise belegt',
         cardMark: {
             human: 'von einem Menschen bestätigt',
-            all: 'alles geprüft',
-            read: 'aus Quellen gelesen, nicht alles geprüft',
+            full: 'belegt',
+            partial: 'teilweise belegt',
             trace: 'nur eine Spur',
         },
     },

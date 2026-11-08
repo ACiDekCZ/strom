@@ -226,8 +226,15 @@ describe('personOriginSummary and the card mark', () => {
 });
 
 describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', () => {
+    // The cited entries and their QUAY (Source.quality): s1 an original (3), s2 a copy with primary
+    // information (2), s0 a family tree (0), sA an authored work (1), sX a citation without a QUAY.
+    const SOURCES = {
+        s1: { id: 's1', title: 'Křty Lhota 1851', quality: 3 }, s2: { id: 's2', title: 'Opis', quality: 2 },
+        s0: { id: 's0', title: 'Rodokmen', quality: 0 }, sA: { id: 'sA', title: 'Kronika', quality: 1 },
+        sX: { id: 'sX', title: 'Bez QUAY' },
+    };
     const tree = (imports: ImportRecord[], ...persons: Person[]): StromData => ({
-        persons: Object.fromEntries(persons.map(p => [p.id, p])), partnerships: {}, imports,
+        persons: Object.fromEntries(persons.map(p => [p.id, p])), partnerships: {}, imports, sources: SOURCES,
     }) as unknown as StromData;
     const fromFile = (extra: Partial<Person> = {}): Person => {
         const base = person({ birthDate: '1851', ...extra });
@@ -267,33 +274,73 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
             researchOrigins: { name: { kind: 'research' } },
         });
         const s = cardStatus(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true }));
-        expect(s).toMatchObject({ cls: 'cs-p1', source: 'step', facts: ['name', 'birth'] });
-        expect(s?.step).toBeUndefined();
-        // Only a possible birth read from a source: its step stays for the words.
-        const birthOnly = person({ birthDate: '1851', birthStatus: 'possible', birthSourceIds: ['s1'], researchOrigins: { name: { kind: 'user' } } });
+        expect(s).toMatchObject({ cls: 'cs-p1', source: 'step', step: { step: 'probable' }, facts: ['birth'] });
+        // Only a possible birth read from a copy with primary information (QUAY 2): its step stays for the words.
+        const birthOnly = person({ birthDate: '1851', birthStatus: 'possible', birthSourceIds: ['s2'], researchOrigins: { name: { kind: 'user' } } });
         expect(cardStatus(tree([I1], birthOnly), birthOnly, opts(RESEARCH)))
             .toMatchObject({ cls: 'cs-p1', step: { step: 'possible' }, facts: ['birth'] });
         // The record the research changed the fact by is a citation too.
         const bySrc = person({ birthDate: '1851', birthStatus: 'probable',
-            researchOrigins: { name: { kind: 'user' }, birth: { kind: 'research', sourceIds: ['s2'] } } });
+            researchOrigins: { name: { kind: 'user' }, birth: { kind: 'research', sourceIds: ['s1'] } } });
         expect(cls(tree([I1], bySrc), bySrc, opts(RESEARCH))).toBe('cs-p1');
     });
 
-    it('K5.1: a name with neither a step nor a citation, only a lead at the occupation: ○', () => {
-        const p = person({ events: [{ id: 'e1', type: 'occupation', value: 'mlynář', status: 'lead' }] } as unknown as Partial<Person>);
+    it('K5.1: a proven birth and death beside a cited name without a step: ●● (a fact without a step does not count)', () => {
+        const p = person({
+            birthDate: '1851', birthStatus: 'proven', birthSourceIds: ['s1'],
+            deathDate: '1910', deathStatus: 'proven', deathSourceIds: ['s1'], sourceIds: ['s1'],
+            researchOrigins: { name: { kind: 'research' } },
+        });
         expect(cardStatus(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true })))
-            .toMatchObject({ cls: 'cs-res', source: 'step', facts: ['name'] });
-        expect(cls(tree([I1], p), p, opts(RESEARCH))).toBe('cs-res');
-        // A cited name with no step: read from a source.
-        const cited = person({ sourceIds: ['s1'] });
-        expect(cls(tree([I1], cited), cited, opts(RESEARCH))).toBe('cs-p1');
+            .toMatchObject({ cls: 'cs-p2', source: 'step', step: { step: 'proven' }, facts: ['birth', 'death'] });
+        // An uncited name without a step does not count either.
+        const bare = person({ birthDate: '1851', birthStatus: 'proven', deathDate: '1910', deathStatus: 'proven' });
+        expect(cls(tree([I1], bare), bare, opts(RESEARCH))).toBe('cs-p2');
+    });
+
+    it('K5.1: "read from a source" is a citation of QUAY 2 or 3; a family tree, an authored work or no QUAY is only a trace', () => {
+        const birth = (sid: string) => person({ birthDate: '1851', birthStatus: 'probable', birthSourceIds: [sid] });
+        const of = (sid: string) => { const p = birth(sid); return cls(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true })); };
+        expect(['s1', 's2', 's0', 'sA', 'sX', 'missing'].map(of)).toEqual(['cs-p1', 'cs-p1', 'cs-res', 'cs-res', 'cs-res', 'cs-res']);
+        // A baptism event's citation counts for the birth.
+        const baptised = person({ birthDate: '1851', birthStatus: 'possible',
+            events: [{ id: 'b1', type: 'baptism', date: '1851', sourceIds: ['s1'] }] } as unknown as Partial<Person>);
+        expect(cls(tree([I1], baptised), baptised, opts(RESEARCH))).toBe('cs-p1');
+    });
+
+    it('K5.1: name, birth and death without a step: the other facts decide', () => {
+        const residence = (status: string, sid: string) => ({ id: 'r1', type: 'residence', place: 'Lhota 12', status, sourceIds: [sid] });
+        const lead = { id: 'o1', type: 'occupation', value: 'mlynář', status: 'lead' };
+        const at = (events: unknown[], extra: Partial<Person> = {}) => {
+            const p = person({ events, ...extra } as unknown as Partial<Person>);
+            return cardStatus(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true }));
+        };
+        // Known from a record (a residence probable from the original register): ●○, no fact of the card named.
+        expect(at([residence('probable', 's1'), lead])).toMatchObject({ cls: 'cs-p1', source: 'step', facts: [] });
+        expect(at([residence('proven', 's2')])?.cls).toBe('cs-p1');
+        // Only leads: ○; a residence from an authored work or a family tree is only a trace too.
+        expect(at([lead])).toMatchObject({ cls: 'cs-res', facts: [] });
+        expect(at([residence('probable', 'sA')])?.cls).toBe('cs-res');
+        expect(at([residence('possible', 's0')])?.cls).toBe('cs-res');
+        // Nothing: the dotted frame; a citation without a step anywhere: only a trace.
+        expect(at([])?.cls).toBe('cs-none');
+        expect(at([], { sourceIds: ['s1'] })?.cls).toBe('cs-res');
+        // A name and a birth date without a step do not hide the other facts.
+        expect(at([residence('probable', 's1')], { birthDate: '1851', sourceIds: ['s1'] })?.cls).toBe('cs-p1');
+    });
+
+    it('K5.1: a wedding probable from the original register makes the person known (the couple\'s facts count)', () => {
+        const p = person({ partnerships: ['u1'] } as unknown as Partial<Person>);
+        const data = tree([I1], p);
+        data.partnerships = { u1: { id: 'u1', person1Id: 'p1', person2Id: 'p2', startDate: '1875', startStatus: 'probable', sourceIds: ['s1'] } } as unknown as StromData['partnerships'];
+        expect(cardStatus(data, p, opts(RESEARCH))).toMatchObject({ cls: 'cs-p1', facts: [] });
+        (data.partnerships as Record<string, Partnership>).u1.sourceIds = ['s0'];
+        expect(cls(data, p, opts(RESEARCH))).toBe('cs-res');
     });
 
     it('K5.1: only the facts the person has count', () => {
-        const p = person({ sourceIds: ['s1'], deathStatus: 'lead' });
-        expect(cardStatus(tree([I1], p), p, opts(RESEARCH))).toMatchObject({ cls: 'cs-p1', facts: ['name'] });
-        const baptised = person({ sourceIds: ['s1'], events: [{ id: 'b1', type: 'baptism', date: '1851' }] } as unknown as Partial<Person>);
-        expect(cardStatus(tree([I1], baptised), baptised, opts(RESEARCH))).toMatchObject({ cls: 'cs-res', facts: ['birth'] });
+        const p = person({ birthDate: '1851', birthStatus: 'probable', birthSourceIds: ['s1'], deathStatus: 'lead' });
+        expect(cardStatus(tree([I1], p), p, opts(RESEARCH))).toMatchObject({ cls: 'cs-p1', facts: ['birth'] });
     });
 
     it('probable, possible and a lead without a citation: one empty dot', () => {
@@ -328,12 +375,11 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
         expect(cls(data, none, opts({ treeHasSources: true }))).toBe('cs-none');
     });
 
-    it('a person without a step in a tree from a file: the facts speak, not the citations as a whole (K5.1)', () => {
+    it('a person without a step in a tree from a file: not the citations as a whole (K5.1)', () => {
         const p = person({ birthDate: '1851', birthSourceIds: ['s1'], sourceIds: ['s1'] });
-        expect(cardStatus(tree([I1], p), p, opts({ treeHasSources: true }))).toMatchObject({ cls: 'cs-p1', source: 'step', facts: ['name', 'birth'] });
+        expect(cardStatus(tree([I1], p), p, opts({ treeHasSources: true }))).toMatchObject({ cls: 'cs-res', source: 'step', facts: [] });
         const bare = person({ birthDate: '1851' });
-        expect(cardStatus(tree([I1], bare), bare, opts())).toMatchObject({ cls: 'cs-res', source: 'step', facts: ['name', 'birth'] });
-        expect(cls(tree([I1], bare), bare, opts({ treeHasSources: true }))).toBe('cs-res');
+        expect(cardStatus(tree([I1], bare), bare, opts())).toMatchObject({ cls: 'cs-none', source: 'step', facts: [] });
     });
 
     it('the import ○○ is weaker than a proven fact beside it', () => {

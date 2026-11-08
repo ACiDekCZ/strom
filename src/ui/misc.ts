@@ -598,10 +598,9 @@ export const miscMethods = uiModule({
         const has = (sel: string): boolean => !!document.querySelector(`#tree-canvas .person-card ${sel}`);
         const l = strings.card.legend;
         const rows: [string, string][] = [];
-        const originKnown = TreeRenderer.treeKnowsOriginNow();
         for (const cls of CARD_STATUS_CLASSES) {
             if (has(`> .card-status-mark.${cls}`)) {
-                rows.push([statusMarkHtml({ cls, source: 'evidence', facts: [] }, { className: 'card-status-mark--inline' }), cardStatusLegendLabel(cls, originKnown)]);
+                rows.push([statusMarkHtml({ cls, source: 'evidence', facts: [] }, { className: 'card-status-mark--inline' }), cardStatusLegendLabel(cls)]);
             }
         }
         if (has('> .card-story:not(.couple):not(.draft)')) rows.push([storyFoldHtml({ kind: 'own', final: true }, true), l.storyOwn]);

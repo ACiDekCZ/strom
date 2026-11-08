@@ -221,7 +221,7 @@ export function cardStatusWords(status: CardStatus, originKnown: boolean): { mai
     const ev = status.evidence;
     const sources = ev && ev.sources > 0 ? c.ttSources(ev.sources) : '';
     if (status.source === 'step' && !status.step) {
-        // The facts of the mark share no step (one read from a source, one with none): the mark's meaning.
+        // The facts of the mark share no step, or the person's other facts give it: the mark's meaning.
         const facts = cardStatusFactsText(status);
         const title = upperFirst(cardStatusLegendLabel(status.cls));
         return { main: facts ? `${title} · ${facts}` : title, sub: sources };
@@ -253,8 +253,8 @@ export function cardStatusWords(status: CardStatus, originKnown: boolean): { mai
 
 /**
  * The mark as a label in lower case (the card's aria-label): its meaning as the
- * tree legend says it ("read from sources, not everything verified", "from the
- * family tree (unverified)"), or the citations' level in a tree without origin.
+ * tree legend says it ("partly documented", "from the family tree (unverified)"),
+ * or the citations' level in a tree without origin.
  */
 export function cardStatusLabel(status: CardStatus): string {
     if (status.source === 'evidence') return strings.card.ariaEv[status.evidence?.level ?? 'none'];
@@ -268,18 +268,18 @@ export function cardStatusAria(status: CardStatus): string {
 }
 
 /**
- * One mark's class in the tree legend's words (K5.1). `originKnown` (the default): the one
- * meter of a tree that knows the origin (✓ confirmed by a person, ●● everything verified,
- * ●○ read from sources, ○ only a trace); otherwise the citations' level, as before.
+ * One mark's class in the tree legend's words (K5.1), one set for every tree: ✓ confirmed by a
+ * person, ●● documented, ●○ partly documented, ○ only a trace, ○○ from the family tree, no source.
+ * In a tree without the origin ●● and ●○ are all or some of the facts with a source.
  */
-export function cardStatusLegendLabel(cls: CardStatusClass, originKnown = true): string {
+export function cardStatusLegendLabel(cls: CardStatusClass): string {
     const r = strings.reliability;
     const m = r.cardMark;
     switch (cls) {
-        case 'cs-human': return originKnown ? m.human : lowerFirst(r.human);
-        case 'cs-p2': return originKnown ? m.all : lowerFirst(r.proven);
-        case 'cs-p1': return originKnown ? m.read : r.provenPartial;
-        case 'cs-res': return originKnown ? m.trace : r.notProven;
+        case 'cs-human': return m.human;
+        case 'cs-p2': return m.full;
+        case 'cs-p1': return m.partial;
+        case 'cs-res': return m.trace;
         case 'cs-import': return lowerFirst(r.titleImportShort);
         default: return lowerFirst(r.none);
     }

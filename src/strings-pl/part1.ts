@@ -747,8 +747,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         provenPartial: 'częściowo udokumentowane',
         cardMark: {
             human: 'potwierdzone przez człowieka',
-            all: 'wszystko zweryfikowane',
-            read: 'odczytane ze źródeł, nie wszystko zweryfikowane',
+            full: 'udokumentowane',
+            partial: 'częściowo udokumentowane',
             trace: 'tylko ślad',
         },
     },

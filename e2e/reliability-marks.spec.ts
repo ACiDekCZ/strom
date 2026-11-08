@@ -172,8 +172,8 @@ test.describe('reliability marks', () => {
         // One meter (K5.1): proven by one reader is ●● on the card, the legend says what it means.
         const mark = card(page, 'Bonifác').locator(':scope > .card-status-mark');
         await expect(mark).toHaveClass(/\bcs-p2\b/);
-        await expect(card(page, 'Bonifác')).toHaveAttribute('aria-label', /everything verified: birth/);
-        await expect(page.locator('#legend-marks .legend-mark-row')).toContainText(['everything verified']);
+        await expect(card(page, 'Bonifác')).toHaveAttribute('aria-label', /documented: birth/);
+        await expect(page.locator('#legend-marks .legend-mark-row')).toContainText(['documented']);
         await cardAction(page, 'Bonifác', 'edit');
         const modal = personModal(page);
         await expect(modal).toBeVisible();
