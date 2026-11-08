@@ -63,8 +63,9 @@ import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, Content
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
-import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin } from './import-origin.js';
+import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin, factsOf, localIsoDay, FactHolder } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
+import { cleanFactVerify, factConfirmation, factValueSignature } from './verify.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
@@ -97,6 +98,9 @@ export interface DataChangedDetail {
 
 /** Import action types for view mode */
 export type ViewModeImportAction = 'new' | 'update' | 'copy';
+
+/** A person's or a couple's fact (DataManager.confirmFact). */
+export type FactTarget = { personId: PersonId } | { partnershipId: PartnershipId };
 
 /** Format person name for audit log: "FirstName LastName (*year)" or "[unknown]" for placeholders */
 export function auditPersonName(person: Person | null | undefined): string {
@@ -291,6 +295,9 @@ export function migrateData(data: unknown): StromData {
     // links from them (src/import-origin.ts). Only valid records; marks that
     // name no record, no fact or no parent are dropped. Nothing is added.
     cleanImportOrigin(result, d.imports);
+    // v16: the facts confirmed by hand and the research's re-verification of
+    // facts (src/verify.ts); only valid entries of existing facts.
+    cleanFactVerify(result);
 
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {
@@ -2300,6 +2307,55 @@ class DataManagerClass {
         if (person.events.length === 0) delete person.events;
         this.commitMutation(strings.undo.removeEvent(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(person)));
+        return true;
+    }
+
+    // ==================== FACT CONFIRMATION (spec 065) ====================
+
+    /** The person or couple a fact belongs to, with its name for the undo label and the audit log. */
+    private confirmTarget(target: FactTarget): { holder: FactHolder; name: string; locked: boolean } | null {
+        if ('personId' in target) {
+            const person = this.data.persons[target.personId];
+            if (!person) return null;
+            return { holder: person, name: auditPersonName(person), locked: this.isPersonLocked(target.personId) };
+        }
+        const ps = this.data.partnerships[target.partnershipId];
+        if (!ps) return null;
+        const name = `${auditPersonName(this.data.persons[ps.person1Id])} & ${auditPersonName(this.data.persons[ps.person2Id])}`;
+        return { holder: ps, name, locked: this.isTreeLocked() };
+    }
+
+    /**
+     * "Verified from the scan": a person confirms a fact by hand. It holds
+     * while the fact keeps its current value (a later change ends it). Only a
+     * fact with a value; false when nothing changed (already confirmed so).
+     */
+    confirmFact(target: FactTarget, fact: string, at: string = localIsoDay()): boolean {
+        const t = this.confirmTarget(target);
+        if (!t || t.locked || !/^\d{4}-\d{2}-\d{2}$/.test(at)) return false;
+        if (!factsOf(t.holder).includes(fact)) return false;
+        const value = factValueSignature(t.holder, fact);
+        if (!value) return false;
+        const now = factConfirmation(t.holder, fact);
+        if (now && now.at === at && now.value === value) return false;
+
+        this.beginMutation();
+        (t.holder.confirmed ??= {})[fact] = { at, value };
+        this.commitMutation(strings.undo.confirmFact(t.name));
+        AuditLogManager.log(this.currentTreeId, 'fact.confirm', strings.auditLog.confirmedFact(t.name));
+        return true;
+    }
+
+    /** "Take back" a hand confirmation of a fact (also one no longer valid); false when there is none. */
+    unconfirmFact(target: FactTarget, fact: string): boolean {
+        const t = this.confirmTarget(target);
+        if (!t || t.locked || !t.holder.confirmed?.[fact]) return false;
+
+        this.beginMutation();
+        delete t.holder.confirmed[fact];
+        if (Object.keys(t.holder.confirmed).length === 0) delete t.holder.confirmed;
+        this.commitMutation(strings.undo.unconfirmFact(t.name));
+        AuditLogManager.log(this.currentTreeId, 'fact.unconfirm', strings.auditLog.unconfirmedFact(t.name));
         return true;
     }
 

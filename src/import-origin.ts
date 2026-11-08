@@ -231,6 +231,19 @@ export function factValue(holder: FactHolder, key: string): string {
     return raw;
 }
 
+/** Separates the parts of a fact in its value signature (never in a value). */
+const PART_SEPARATOR = '\u001f';
+
+/**
+ * The value of a fact as one string: its parts' values in their order
+ * (DATE, PLAC, VAL; GIVN, SURN…), joined. '' when the fact has no value.
+ * A hand confirmation keeps it (spec 065): a changed value ends it.
+ */
+export function factValueSignature(holder: FactHolder, fact: string): string {
+    const values = Object.values(factParts(holder, fact)).map(key => factValue(holder, key as string));
+    return values.some(v => v !== '') ? values.join(PART_SEPARATOR) : '';
+}
+
 /**
  * The stored import of a fact key while the current value still equals it;
  * null once the value changed (the fact is then a person's).
@@ -1074,6 +1087,22 @@ export function forgetHiddenImports(holder: FactHolder, changed: boolean): void 
             if (!now || (changed && now !== stored.value)) delete holder.importedValues[key];
         }
         if (Object.keys(holder.importedValues).length === 0) delete holder.importedValues;
+    }
+    // A confirmation keeps the value it was confirmed with: one that no
+    // longer stands for the current value (hidden, changed, gone) goes. The
+    // research's verification with its reasons goes with what was hidden.
+    if (holder.confirmed) {
+        for (const [fact, c] of Object.entries(holder.confirmed)) {
+            const now = factValueSignature(holder, fact);
+            if (!now || (c.value !== undefined && c.value !== now)) delete holder.confirmed[fact];
+        }
+        if (Object.keys(holder.confirmed).length === 0) delete holder.confirmed;
+    }
+    if (changed) delete holder.researchVerify;
+    else if (holder.researchVerify) {
+        const facts = new Set(factsOf(holder));
+        for (const fact of Object.keys(holder.researchVerify)) if (!facts.has(fact)) delete holder.researchVerify[fact];
+        if (Object.keys(holder.researchVerify).length === 0) delete holder.researchVerify;
     }
     if (changed) delete holder.researchOrigins;
     else if (holder.researchOrigins) {

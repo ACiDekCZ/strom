@@ -269,7 +269,7 @@ export const importExportMethods = uiModule({
             const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
                 ? { id: metadata.research.id, head: metadata.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(metadata.research).transcripts } : undefined;
             const backTo = this.exportGedcomBackTo(data);
-            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, researchNote, backTo });
+            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, confirmations: true, researchNote, backTo });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });

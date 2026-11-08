@@ -344,7 +344,9 @@ type OwnedElsewhere =
     | 'gedcomExtra'         // GEDCOM import only (G8): another program's own tags, for "Back to {prog}"
     | 'alsoChildOf'         // GEDCOM import only (066): a second family that also lists the person as a child
     | 'marriedFirstName'    // GEDCOM import only (066): the married name's own given names; goes with the married surname
-    | 'researchOrigins';    // written by Strom Research only (GEDCOM import), never edited
+    | 'researchOrigins'     // written by Strom Research only (GEDCOM import), never edited
+    | 'confirmed'           // confirmFact / unconfirmFact (spec 065); a changed value ends it by itself
+    | 'researchVerify';     // written by Strom Research only (GEDCOM import, spec 065), never edited
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

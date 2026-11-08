@@ -37,6 +37,7 @@ import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
 import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { CONFIRMED_TAG, factVerifyInfo } from './verify.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -74,6 +75,13 @@ export interface GedcomExportOptions {
      * goes to the research (it keeps its own).
      */
     origins?: boolean;
+    /**
+     * Write the day a fact was confirmed by a person (`2 _STROM_CONFIRMED
+     * YYYY-MM-DD` under the fact, spec 065): the app's own confirmation while
+     * the value is unchanged, else the research's. Only a file the user
+     * exports, so a file read back keeps it: never in what goes to the research.
+     */
+    confirmations?: boolean;
     /**
      * "Back to {prog}" with "Mark the research's facts with a note" (spec 066
      * §4): under each fact the research added or corrected, a `2 NOTE` with
@@ -1268,6 +1276,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const src = researchNoteSource(data, holder, fact);
             if (src) pushNote(lines, 2, options.researchNote(src));
         }
+        const confirmed = options.confirmations ? factVerifyInfo(holder, fact).confirmed : undefined;
+        if (confirmed) lines.push(`2 ${CONFIRMED_TAG} ${confirmed}`);
         const o = options.origins ? holder.researchOrigins?.[fact] : undefined;
         if (!o) return;
         if (o.kind && fact !== 'sex') lines.push(`2 _STROM_ORIGIN ${researchOriginValue(o)}`);
