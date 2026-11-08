@@ -281,12 +281,17 @@ export function cardStatusMarkHtml(data: StromData, person: Person, opts: CardSt
     return statusMarkHtml(cardStatus(data, person, opts));
 }
 
-/** The row the tap tooltip opens under (inside a form field, after other rows). */
+/**
+ * The row the tap tooltip opens under: the pill's own row first (an event in
+ * the person card's list, which is one form group as a whole, a wedding in
+ * the relationships panel), else its form field (inside it, under the field).
+ */
 function tipAnchor(pill: HTMLElement): { el: HTMLElement; inside: boolean } {
+    const row = pill.closest<HTMLElement>('.event-row, .pg-row, .rel-item, .person-origin, .couple-event-row, .fs-row');
+    if (row) return { el: row, inside: false };
     const field = pill.closest<HTMLElement>('.form-group');
     if (field) return { el: field, inside: true };
-    const row = pill.closest<HTMLElement>('.event-row, .pg-row, .rel-item, .person-origin, .couple-event-row, .fs-row');
-    return { el: row ?? pill.parentElement ?? pill, inside: false };
+    return { el: pill.parentElement ?? pill, inside: false };
 }
 
 let openPill: HTMLElement | null = null;
@@ -328,6 +333,8 @@ function openTip(pill: HTMLElement): void {
     const { el, inside } = tipAnchor(pill);
     if (inside) el.appendChild(tip);
     else el.insertAdjacentElement('afterend', tip);
+    // On screen: a pill at the bottom edge of a scrolled dialog has its text scrolled into view.
+    tip.scrollIntoView?.({ block: 'nearest' });
     pill.setAttribute('aria-expanded', 'true');
     pill.setAttribute('aria-controls', tip.id);
     openPill = pill;
