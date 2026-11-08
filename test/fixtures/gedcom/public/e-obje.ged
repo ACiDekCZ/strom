@@ -1,0 +1,17 @@
+0 HEAD
+1 SOUR GEDitCOM
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME A /X/
+1 OBJE
+2 FORM URL
+2 TITL Web site
+2 FILE http://www.example.com
+1 OBJE
+2 FORM jpeg
+2 TITL Local photo
+2 FILE photo.jpg
+0 TRLR
