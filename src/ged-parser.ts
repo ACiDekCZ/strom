@@ -4422,8 +4422,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     ...(media.date ? { date: media.date } : {}),
                 };
                 // The link as the file wrote it, for "Back to {prog}" while no file
-                // takes its place (spec 066 G8): another program's file only.
-                if (link.rawLines && options.importOrigin && !ownFile && !link.rawLines.some(l => /^\d+ @|\s@[^@\s]+@/.test(l))) {
+                // takes its place (spec 066 G8): another program's file, or Strom's
+                // "Back to" file read again, where it goes back to the import the
+                // record's `1 _STROM_IMPORT Ix` names (never a picture of Strom's own).
+                if (link.rawLines && options.importOrigin && !gedcom.stromResearch
+                    && !link.rawLines.some(l => /^\d+ @|\s@[^@\s]+@|^\d+ _STROM_/.test(l))) {
                     (indi.extras ??= []).push({ tag: 'OBJE', lines: link.rawLines, quiet: true });
                 }
                 // Primary portraits first so the photo (not a crop) wins.

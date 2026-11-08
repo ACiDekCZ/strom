@@ -679,7 +679,10 @@ a fresh import gives.
 
 The "Back to" file read into Strom again keeps the other program's tags of
 each record that carries `1 _STROM_IMPORT Ix`, for that import, so the next
-"Back to" writes them again.
+"Back to" writes them again — the person's picture links by path or address
+(`1 OBJE` with its `FILE`, `_FILESIZE`, `_PHOTO_RIN`, `_DATE`…) included, never
+a picture of Strom's own (a data URL, `_STROM_*` lines). The second "Back to"
+is the first again, but the export date in the header.
 
 **Lines *below* a fact are not counted.** A subordinate tag this contract does
 not name — say `3 ROLE` under a citation, or `2 PHON` under `RESI` — is skipped
