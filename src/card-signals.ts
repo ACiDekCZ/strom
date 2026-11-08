@@ -1,7 +1,7 @@
 /**
  * What a person card shows at a glance, besides the name and years:
- *   - person status (quiet, on every card): the evidence level as stripes and
- *     the story as a folded corner;
+ *   - person status (quiet, on every card): one mark of sources and
+ *     reliability (reliability.ts cardStatus) and the story as a folded corner;
  *   - one action badge (rare, asks for the user): the research waits for them
  *     about this person, a conflict between sources, or an open question;
  *   - while following live, an arc circling the avatar of whom the agent works
@@ -12,8 +12,9 @@
  */
 
 import { Partnership, Person, PersonId, ResearchConflict, StromData } from './types.js';
-import { EvidenceLevel, PersonEvidence, personEvidence } from './evidence-level.js';
+import { PersonEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
+import { CardStatus, ReliabilityOptions, cardStatus } from './reliability.js';
 import { isOpenHypothesis } from './view-links.js';
 import { coupleStories } from './story-text.js';
 
@@ -79,12 +80,16 @@ export interface CardSignalContext {
     unions: Map<string, Partnership[]>;
     /** Any source anywhere in the tree (none: no evidence level is shown). */
     treeHasSources: boolean;
+    /** Where the tree's facts came from (UI.reliabilityOptionsNow), for the card's one mark. */
+    reliability: ReliabilityOptions;
     settings: CardSignals;
     /** The research's word per person REFN. */
     research: Map<string, ResearchCardInfo>;
 }
 
 export interface CardSignalInfo {
+    /** The card's one mark of sources and reliability, whether shown or not (null: none, e.g. a placeholder). */
+    status: CardStatus | null;
     /** The evidence (null: placeholder, or no source anywhere in the tree). */
     evidence: PersonEvidence | null;
     /** The story the corner speaks for (null: none). */
@@ -101,8 +106,8 @@ export interface CardSignalInfo {
     question: string | null;
     agent: string | null;
     queued: string | null;
-    /** Show the evidence stripes on the card. */
-    showEvidence: boolean;
+    /** Show the mark of sources and reliability on the card. */
+    showStatus: boolean;
     /** Show the story's folded corner on the card. */
     showStory: boolean;
     /** The one badge (null: none). */
@@ -165,11 +170,13 @@ export function storySignalInLine(text: string, lang: string): string {
 }
 
 export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInfo {
-    const evidence = ctx.treeHasSources ? personEvidence(p, ctx.data, ctx.unions) : null;
+    const status = cardStatus(ctx.data, p, { ...ctx.reliability, treeHasSources: ctx.treeHasSources, unions: ctx.unions });
+    const evidence = status?.evidence ?? null;
     const story = personStoryState(p, ctx.data);
     const research = p.refn ? ctx.research.get(p.refn) : undefined;
     const conflicts = (researchConflictsProvider?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status !== 'decided').length;
     const info: CardSignalInfo = {
+        status,
         evidence,
         story,
         attachments: p.attachments?.length ?? 0,
@@ -182,13 +189,13 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
         question: p.question?.trim() || null,
         agent: research?.agent ?? null,
         queued: research?.queued ?? null,
-        showEvidence: !!evidence && ctx.settings.evidence,
+        showStatus: !!status && ctx.settings.status,
         showStory: !!story && ctx.settings.story,
         action: null,
         showAgent: false,
         doneSince: null,
     };
-    if (p.isPlaceholder) return { ...info, showEvidence: false, showStory: false };
+    if (p.isPlaceholder) return { ...info, showStatus: false, showStory: false };
     const present: Record<ActionSignal, boolean> = {
         waiting: !!info.waiting,
         conflict: conflicts > 0,
@@ -204,21 +211,14 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
 }
 
 /**
- * The person's status: evidence stripes (2 full, 1 partial, none: nothing)
- * and the story as a folded corner (faint as a draft; hollow for a couple's
- * story alone). Empty when there is nothing to show. On the card the stripes
- * sit in the bottom-right corner (left of the fold when there is one) and the
- * fold covers the card's corner; `inline`: both side by side in a tooltip or
- * menu line.
+ * The story as a folded corner (hollow for a couple's story alone or a
+ * draft, spec 066 P4 §6). Empty when there is none. On the card the fold
+ * covers the card's corner; `inline`: before the words in a tooltip or menu line.
  */
-export function stateStripesHtml(evidence: EvidenceLevel | null, story: StoryMark | null, inline = false): string {
-    const ev = evidence === 'full' ? 2 : evidence === 'partial' ? 1 : 0;
-    const stripes = ev > 0 ? `<span class="st-group st-ev">${'<i></i>'.repeat(ev)}</span>` : '';
-    const fold = story
+export function storyFoldHtml(story: StoryMark | null, inline = false): string {
+    return story
         ? `<span class="card-story${story.final ? '' : ' draft'}${story.kind === 'couple' ? ' couple' : ''}${inline ? ' card-story--inline' : ''}" aria-hidden="true"></span>`
         : '';
-    if (inline) return stripes || fold ? `<span class="card-state card-state--inline" aria-hidden="true">${stripes}${fold}</span>` : '';
-    return (stripes ? `<span class="card-state${story ? ' beside-story' : ''}" aria-hidden="true">${stripes}</span>` : '') + fold;
 }
 
 /** The glyph inside the badge. */

@@ -1793,7 +1793,8 @@ export interface AppSettings {
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
     whatsNewAfterUpdate?: boolean;  // default: true - the "What's new" dialog at the first start of a new version
-    crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
+    /** Before 3.26: the ⇄ pill on cards (default true). Read only once, to bring it to `strom-card-signals.crossTree` (spec 066 P4 §8). */
+    crossTreeBadges?: boolean;
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events (fallback of every tree, see lifelineByTree)
     historyLayer?: boolean;  // default: true (undefined = never chosen) - the research's events of the time in the life timeline (spec 020)
@@ -1820,7 +1821,7 @@ export interface AppSettings {
     showTitles?: boolean;  // default: true - titles before/after the name (Person.titleBefore / titleAfter) shown with it
     /** Settings `display.reliabilityCard` (spec 066 §2f), default: true - the reliability marks on the person card. */
     reliabilityCard?: boolean;
-    /** Settings `display.reliabilityTree` (spec 066 §2f), default: false - the reliability mini mark on the cards in the tree. */
+    /** Before 3.26: the reliability mini mark on the tree cards (default false). Read only once, into `strom-card-signals.status` (spec 066 P4 §8). */
     reliabilityTree?: boolean;
     surnameDisplay?: SurnameDisplay;  // default: 'both' - which surname names show (Person.lastName / marriedSurname)
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person

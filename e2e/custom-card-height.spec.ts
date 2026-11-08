@@ -459,7 +459,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
                 }
                 const pills = [...el.querySelectorAll<HTMLElement>('.hidden-partners-btn, .cross-tree-badge')]
                     .map(p => ({ kind: p.className, rect: box(p.getBoundingClientRect()) }));
-                const state = el.querySelector(':scope > .card-state');
+                const state = el.querySelector(':scope > .card-status-mark');
                 return {
                     id: el.dataset.id!, name: el.querySelector('.name-text')?.textContent ?? '', card: box(el.getBoundingClientRect()),
                     height: el.offsetHeight, classes: el.className, texts, pills, state: state ? box(state.getBoundingClientRect()) : null,
@@ -487,7 +487,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
                 expect(c.pills.length, c.name).toBeGreaterThan(0);
                 for (const p of c.pills) {
                     for (const t of c.texts) expect(hit(p.rect, t.rect), `${c.name}: ${p.kind} over "${t.text}"`).toBe(false);
-                    if (c.state) expect(hit(p.rect, c.state), `${c.name}: ${p.kind} over the stripes`).toBe(false);
+                    if (c.state) expect(hit(p.rect, c.state), `${c.name}: ${p.kind} over the status mark`).toBe(false);
                     for (const q of c.pills) if (q !== p) expect(hit(p.rect, q.rect), `${c.name}: ${p.kind} over ${q.kind}`).toBe(false);
                 }
                 // A card of details as tall as its content keeps the pills' room; the fixed cards do not change.

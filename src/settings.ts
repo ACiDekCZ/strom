@@ -11,11 +11,11 @@ import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from '
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
 
-/** What the card shows at a glance (Settings → "Show on card"). All on by default. */
+/** What the card shows at a glance (Settings → "Show on card"), per device. All on by default (spec 066 P4 §4). */
 export interface CardSignals {
-    /** Person status: the evidence circle. */
-    evidence: boolean;
-    /** Person status: the story leaf. */
+    /** Person status: the one mark of sources and reliability (spec 066 P4 §1). */
+    status: boolean;
+    /** Person status: the story's folded corner. */
     story: boolean;
     /** Action badge: the research waits for the user about this person. */
     waiting: boolean;
@@ -23,9 +23,39 @@ export interface CardSignals {
     question: boolean;
     /** Action badge: the agent works on (or has queued) this person, while live. */
     agent: boolean;
+    /** Links: the ⇄ N pill of a person who is also in another tree on this device. */
+    crossTree: boolean;
 }
 
-export const CARD_SIGNAL_KEYS: (keyof CardSignals)[] = ['evidence', 'story', 'waiting', 'conflict', 'question', 'agent'];
+export const CARD_SIGNAL_DEFAULTS: Readonly<CardSignals> = {
+    status: true, story: true, waiting: true, conflict: true, question: true, agent: true, crossTree: true,
+};
+
+export const CARD_SIGNAL_KEYS = Object.keys(CARD_SIGNAL_DEFAULTS) as (keyof CardSignals)[];
+
+/** The version of the stored card signals: 2 = `status` and `crossTree` (spec 066 P4 §8). */
+export const CARD_SIGNALS_VERSION = 2;
+
+/**
+ * The stored card signals of an older build, brought to version 2 (spec 066 P4 §8), pure:
+ * `status = evidence !== false || reliabilityTree === true` (the evidence stripes, or the
+ * reliability mini mark chosen on purpose), `crossTree` = the general setting `crossTreeBadges`
+ * (missing: on). The old keys stay as they were (older builds read them); a stored version 2
+ * is returned as it is, so a second load changes nothing.
+ */
+export function migrateCardSignals(stored: Record<string, unknown>,
+    app: { reliabilityTree?: boolean; crossTreeBadges?: boolean }): { stored: Record<string, unknown>; changed: boolean } {
+    if (typeof stored.v === 'number' && stored.v >= CARD_SIGNALS_VERSION) return { stored, changed: false };
+    return {
+        stored: {
+            ...stored,
+            status: stored.evidence !== false || app.reliabilityTree === true,
+            crossTree: app.crossTreeBadges !== false,
+            v: CARD_SIGNALS_VERSION,
+        },
+        changed: true,
+    };
+}
 
 /** The person card timeline's default in a tree (spec 020 K4.5). */
 export interface LifelineDefaults {
@@ -146,16 +176,6 @@ class SettingsManagerClass {
 
     setReliabilityCard(enabled: boolean): void {
         this.settings.reliabilityCard = enabled;
-        this.save();
-    }
-
-    /** Display: the reliability mini mark on the cards in the tree (`display.reliabilityTree`), default OFF. */
-    isReliabilityTreeEnabled(): boolean {
-        return this.settings.reliabilityTree === true;
-    }
-
-    setReliabilityTree(enabled: boolean): void {
-        this.settings.reliabilityTree = enabled;
         this.save();
     }
 
@@ -498,14 +518,13 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Cross-tree connection badges (the "+N" on cards). Default ON. */
+    /** The ⇄ N pill of a person also in another tree: Settings → Show on card → Links (per device, spec 066 P4 §8). Default ON. */
     isCrossTreeBadgesEnabled(): boolean {
-        return this.settings.crossTreeBadges !== false;
+        return this.getCardSignals().crossTree;
     }
 
     setCrossTreeBadges(enabled: boolean): void {
-        this.settings.crossTreeBadges = enabled;
-        this.save();
+        this.setCardSignal('crossTree', enabled);
     }
 
     /** Kekulé (ahnentafel) numbers in the fan chart. Default OFF (genealogist tool). */
@@ -574,18 +593,36 @@ class SettingsManagerClass {
         return customCardSize(fields.on.length, fields.years);
     }
 
+    /** The stored card signals as they are (older builds' keys kept), brought to version 2 once (spec 066 P4 §8). */
+    private loadCardSignals(): Record<string, unknown> {
+        let parsed: Record<string, unknown> = {};
+        try {
+            const raw: unknown = JSON.parse(localStorage.getItem(CARD_SIGNALS_KEY) ?? '{}');
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) parsed = raw as Record<string, unknown>;
+        } catch { /* defaults */ }
+        // The older switches as stored (read straight, so the order of start-up does not matter).
+        let app: { reliabilityTree?: boolean; crossTreeBadges?: boolean } = this.settings;
+        try {
+            const raw: unknown = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
+            if (raw && typeof raw === 'object') app = { ...this.settings, ...(raw as typeof app) };
+        } catch { /* the loaded settings */ }
+        const { stored, changed } = migrateCardSignals(parsed, app);
+        if (changed) {
+            try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(stored)); } catch { /* converted again next time */ }
+        }
+        return stored;
+    }
+
     /** What the card shows at a glance, for this device. */
     getCardSignals(): CardSignals {
-        const out: CardSignals = { evidence: true, story: true, waiting: true, conflict: true, question: true, agent: true };
-        try {
-            const parsed = JSON.parse(localStorage.getItem(CARD_SIGNALS_KEY) ?? '{}') as Record<string, unknown>;
-            for (const k of CARD_SIGNAL_KEYS) if (typeof parsed[k] === 'boolean') out[k] = parsed[k] as boolean;
-        } catch { /* defaults */ }
+        const out: CardSignals = { ...CARD_SIGNAL_DEFAULTS };
+        const stored = this.loadCardSignals();
+        for (const k of CARD_SIGNAL_KEYS) if (typeof stored[k] === 'boolean') out[k] = stored[k] as boolean;
         return out;
     }
 
     setCardSignal(key: keyof CardSignals, on: boolean): void {
-        const next = { ...this.getCardSignals(), [key]: on };
+        const next = { ...this.loadCardSignals(), ...this.getCardSignals(), [key]: on, v: CARD_SIGNALS_VERSION };
         try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(next)); } catch { /* not kept */ }
     }
 

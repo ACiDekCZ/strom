@@ -322,11 +322,12 @@
             --sub: #fcfaf5;           /* sub-rows (houses, variants) */
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
             --on-signal-warn: #ffffff;
-            --ev-stripe: #8fae98;     /* card status stripes: evidence */
-            --story-fold: #d3b48e;    /* card status: the story's folded corner */
-            --story-fold-edge: #b8916a;
-            --story-fold-draft: #ecdcc6;
-            --story-fold-draft-edge: #dcc5a6;
+            --dir-gen-fill: #8fae98;  /* the research direction's generation bars */
+            /* The story's folded corner: neutral (spec 066 P4 §6); a draft is hollow like a couple's story. */
+            --story-fold: var(--text-ghost);
+            --story-fold-edge: var(--text-faint);
+            --story-fold-draft: transparent;
+            --story-fold-draft-edge: var(--text-faint);
             --dir-icon-bg: #f1ece1;   /* research directions: kind icon, state chip, generation track */
             --dir-icon-fg: #5c5546;
             --gen-track: #ebe4d6;
@@ -508,11 +509,11 @@
             --sub: #2f2d27;
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
-            --ev-stripe: #6f9a7c;
-            --story-fold: #8a6c4c;
-            --story-fold-edge: #a88560;
-            --story-fold-draft: #4a4032;
-            --story-fold-draft-edge: #5e513f;
+            --dir-gen-fill: #6f9a7c;
+            --story-fold: var(--text-ghost);
+            --story-fold-edge: var(--text-faint);
+            --story-fold-draft: transparent;
+            --story-fold-draft-edge: var(--text-faint);
             --dir-icon-bg: #34302a;
             --dir-icon-fg: #b3aa98;
             --gen-track: #3d3930;
@@ -4124,6 +4125,8 @@
             font-size: 11px;
             line-height: 1;
         }
+        /* ⇄ N is neutral like the status mark (spec 066 P4 §6): colour belongs to the branches and to what waits. */
+        .cross-tree-badge .pill-glyph { color: var(--text-light); }
         .pill-count,
         .pill-text {
             color: var(--text-light);
@@ -4172,11 +4175,10 @@
         /* The kinds of a card's tabs (§2, src/marriage-order.ts branchTabKind):
            the shape says what a click does. In place (▸/▾; ∞ other partners
            too): the round pill above. Focus (◎ at the start): squarer, a
-           fainter outline. Jump (↗ after the word; ⇄ another tree): the
-           canvas's ground, no shadow. */
+           fainter outline. Jump (↗ after the word): the canvas's ground, no
+           shadow. ⇄ another tree stays in the app: a plain pill. */
         .branch-tab.kind-focus { border-radius: 4px; border-color: var(--text-faint); }
-        .branch-tab.kind-jump,
-        .cross-tree-badge.kind-jump { background: var(--bg); box-shadow: none; }
+        .branch-tab.kind-jump { background: var(--bg); box-shadow: none; }
 
         /* A card whose tabs do not fit with their words (tabsForm in
            src/union-order-measure.ts, the whole card at once): the glyph and
@@ -11556,9 +11558,9 @@
         body[data-card-fields][data-card-spouse-line="head"] .person-card .edge-right-center { top: calc(var(--card-head-line, 25px) - 1px); }
         body[data-card-fields][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: calc(var(--card-head-line, 25px) - 2px); }
         /* ==================== CARD SIGNALS ====================
-           At a glance (src/card-signals.ts): the person's status as quiet
-           evidence stripes in the card's bottom-right corner and the story as
-           a folded corner; one action badge on the avatar's corner (a dot on
+           At a glance (src/card-signals.ts): the person's status as one
+           small neutral mark by the card's bottom-right corner and the story
+           as a folded corner; one action badge on the avatar's corner (a dot on
            the card's corner in compact density and when zoomed far out); the
            agent at work as an arc circling the avatar (a ring on the card's
            corner there), the one thing on a card that moves. Count, shape and
@@ -11566,15 +11568,35 @@
         .person-card .birth-date .meta-text {
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .card-state {
-            position: absolute; right: 8px; bottom: 6px; z-index: 1;
-            display: flex; align-items: center; gap: 4px; pointer-events: none;
+        /* The one status mark (spec 066 P4 §1): how the person is backed and
+           who stands behind the facts, as a small pill of the same marks as
+           the person dialog's (✓, ●●, ●○, ○, ○○ in a dashed frame, a dotted
+           empty frame for no source). Neutral colours only; the shape and
+           the frame tell the steps apart. */
+        .card-status-mark {
+            position: absolute; bottom: 4px; right: 15px; z-index: 1; box-sizing: border-box;
+            display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+            height: 12px; min-width: 18px; padding: 0 3px; border-radius: 999px;
+            background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border);
+            font-size: 9px; font-weight: 700; line-height: 1; pointer-events: none;
         }
-        .card-state.beside-story { right: 18px; }
+        .card-status-mark.cs-human { border: 1px solid var(--text-light); color: var(--text); }
+        .card-status-mark.cs-import { border: 1px dashed var(--text-light); }
+        .card-status-mark.cs-none { border: 1px dotted var(--line-color); background: transparent; color: var(--text-faint); }
+        .card-status-mark .fs-check { font-size: 9px; line-height: 1; }
+        .card-status-mark .fs-dots { display: inline-flex; gap: 2px; }
+        .card-status-mark .fs-dots i {
+            display: block; width: 5px; height: 5px; box-sizing: border-box; border-radius: 50%;
+            border: 1px solid currentColor; background: transparent;
+        }
+        .card-status-mark .fs-dots i.on { background: currentColor; }
+        /* In the tooltip, the menu and the Settings' preview: inline, before the words. */
+        .card-status-mark--inline { position: static; flex-shrink: 0; vertical-align: middle; }
         /* A pill in the bottom-right edge slot (⇄ other trees) reaches 9 px into
-           the card: the stripes sit above it, the last text line keeps clear
-           (a margin, not padding: a line's overflow clips at its padding edge). */
-        .person-card.has-edge-br .card-state { bottom: 14px; }
+           the card: the mark sits above it (until the corner map moves ⇄ aside),
+           the last text line keeps clear (a margin, not padding: a line's
+           overflow clips at its padding edge). */
+        .person-card.has-edge-br .card-status-mark { bottom: 14px; }
         .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: var(--edge-br-room, 46px); }
         /* A card of details is never narrowed (its rows were measured for its
            width): with room for the pills its text ends above the stripes; a
@@ -12383,9 +12405,6 @@
         @media (min-width: 641px) and (max-width: 1024px) {
             .research-edge-bubble { width: 300px; }
         }
-        .st-group { display: inline-flex; gap: 2px; }
-        .st-group i { display: block; width: 10px; height: 3px; border-radius: 2px; }
-        .st-ev i { background: var(--ev-stripe); }
         /* The story: the card's corner folded over (the card has no overflow
            clip, so the fold follows the card's radius itself). */
         .card-story {
@@ -12401,22 +12420,22 @@
             background: linear-gradient(135deg, transparent 48%, var(--fold-edge) 50%, transparent 56%);
         }
         /* In the tooltip and the menu: inline, before the words (a 10px fold). */
-        .card-state--inline { position: static; flex-shrink: 0; }
         .card-story--inline {
             position: relative; right: auto; bottom: auto; display: inline-block;
             width: 10px; height: 10px; border-bottom-right-radius: 3px;
         }
         .card-story--inline::after { right: 5px; bottom: 5px; width: 5px; height: 5px; }
-        /* A couple's story alone (spec 027 §5.6): the same corner hollow, a band
-           along the fold in the own story's corner colour with the card's own
-           colour inside (pale as a draft). One corner colour on a card; only the
-           shape (full / hollow) and the paleness differ. */
-        .card-story.couple {
-            background: linear-gradient(135deg, transparent 50%, var(--fold) 50%, var(--fold) 66%, transparent 66%);
+        /* A couple's story alone (spec 027 §5.6) or a draft: the same corner
+           hollow, a band along the fold with the card's own colour inside.
+           One neutral corner colour; only the shape (full / hollow) differs
+           (a pale draft could not be told from a hollow corner, spec 066 P4
+           §6); the tooltip says which. */
+        .card-story:is(.couple, .draft) {
+            background: linear-gradient(135deg, transparent 50%, var(--story-fold) 50%, var(--story-fold) 66%, transparent 66%);
         }
-        .card-story.couple::after { display: none; }
-        .card-story--inline.couple {
-            background: linear-gradient(135deg, transparent 50%, var(--fold) 50%, var(--fold) 70%, transparent 70%);
+        .card-story:is(.couple, .draft)::after { display: none; }
+        .card-story--inline:is(.couple, .draft) {
+            background: linear-gradient(135deg, transparent 50%, var(--story-fold) 50%, var(--story-fold) 70%, transparent 70%);
         }
         .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
         .card-signal {
@@ -12470,7 +12489,7 @@
         body[data-card-density="compact"] .person-card.has-signal .edge-top-right { margin-right: 8px; }
         /* Zoomed far out (< 55%): no status; the badge becomes a dot and the
            arc a ring, both staying at least 8px on screen. */
-        #tree-canvas.zoom-far .card-state, #tree-canvas.zoom-far .card-story { display: none; }
+        #tree-canvas.zoom-far .card-status-mark, #tree-canvas.zoom-far .card-story { display: none; }
         #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far .card-agent { display: none; }
         #tree-canvas.zoom-far .card-signal-dot, #tree-canvas.zoom-far .card-agent-dot {
             display: block;
@@ -12492,8 +12511,8 @@
         .card-tooltip .tt-action { color: var(--warning-text); }
         .card-tooltip .tt-line.tt-agent { color: var(--primary-dark); }
         /* Printing the page: never (the poster / image export draws its own cards). */
-        body.view-mode-print :is(.card-state, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
-        @media print { .card-state, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; } }
+        body.view-mode-print :is(.card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
+        @media print { .card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; } }
 
         /* Person menu: the badge's signal leads (and on touch the status line). */
         .menu-person-state {
@@ -12535,6 +12554,14 @@
         .card-signals-group { display: flex; flex-direction: column; gap: 4px; }
         .card-signals-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-text); }
         .card-signal-option { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .card-signal-option .settings-text { display: flex; flex-direction: column; gap: 2px; }
+        .card-signal-option :is(.settings-name, .settings-desc),
+        .card-signals-foot, .reliability-card-setting .settings-desc { text-wrap: pretty; }
+        /* What is always shown, the links to the branch colours and the help, the hint (spec 066 P4 §3). */
+        .card-signals-foot { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--border); }
+        .card-signals-always { font-size: 13px; color: var(--text-light); }
+        .card-signals-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+        .card-signals-links .link-button { padding: 0; min-height: 22px; font-size: 13px; text-align: left; white-space: normal; }
         .card-signals-preview-wrap { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
         .card-signals-preview-title { font-size: 13px; color: var(--text-light); }
         .card-signals-preview {
@@ -12545,6 +12572,15 @@
         .card-signals-preview .person-card[data-density="compact"] .card-signal-dot { display: block; }
         @media (max-width: 640px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
+            /* The full-screen dialog on a phone: rows a finger can hit, a larger switch. */
+            .modal label.settings-checkbox.card-signal-option { min-height: 48px; }
+            .settings-checkbox.card-signal-option input[type="checkbox"] { width: 44px; height: 26px; }
+            .settings-checkbox.card-signal-option input[type="checkbox"]::before { width: 20px; height: 20px; }
+            .settings-checkbox.card-signal-option input[type="checkbox"]:checked::before { transform: translateX(18px); }
+            .card-signals-links .link-button { min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .card-signals-links .link-button { min-height: 40px; }
         }
         /* The preview under the row of card types (one for the type and the signals). */
         .card-preview-settings { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -18443,7 +18479,7 @@
         .research-direction__gens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; }
         .research-direction__gen { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .research-direction__gen-bar { display: block; height: 4px; border-radius: 2px; background: var(--gen-track); overflow: hidden; }
-        .research-direction__gen-fill { display: block; height: 100%; background: var(--ev-stripe); }
+        .research-direction__gen-fill { display: block; height: 100%; background: var(--dir-gen-fill); }
         .research-direction__gen-text { font-size: 11px; color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .research-direction__last { font-size: 13px; color: var(--text); }
         .research-direction__actions { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-weight: 500; }
@@ -21677,28 +21713,6 @@
             .prc-kind-choices { flex-direction: column; }
             .modal .prc-kind-choices button.prc-choice { width: 100%; }
         }
-        /* The tree card's mini mark (Settings, off by default): the weakest
-           step of the name, the birth and the death, no text. */
-        .card-rel-mark {
-            position: absolute; top: 3px; right: 4px; z-index: 1; box-sizing: border-box;
-            display: inline-flex; align-items: center; justify-content: center; gap: 2px;
-            height: 14px; min-width: 18px; padding: 0 3px; border-radius: 999px;
-            background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border);
-            font-size: 9px; font-weight: 700; line-height: 1; pointer-events: auto;
-        }
-        .card-rel-mark.fact-status-import { border: 1px dashed var(--text-light); }
-        .card-rel-mark.fact-status-human { border: 1px solid var(--text-light); color: var(--text); }
-        .card-rel-mark.fact-status-none { border: 1px dotted var(--line-color); background: transparent; color: var(--text-faint); }
-        .card-rel-mark .fs-check { font-size: 9px; line-height: 1; }
-        .card-rel-mark .fs-dots { display: inline-flex; gap: 2px; }
-        .card-rel-mark .fs-dots i {
-            display: block; width: 5px; height: 5px; box-sizing: border-box; border-radius: 50%;
-            border: 1px solid currentColor; background: transparent;
-        }
-        .card-rel-mark .fs-dots i.on { background: currentColor; }
-        .person-card.locked .card-rel-mark { right: 16px; }
-        #tree-canvas.zoom-far .card-rel-mark,
-        body.view-mode-print .card-rel-mark { display: none; }
         .event-row.readonly { opacity: 0.75; }
         .event-row .event-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .event-row .event-actions button {
@@ -25994,23 +26008,19 @@
                     <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
                     <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
                     <div class="settings-row card-signals-settings" id="card-signals-settings"></div>
+                    <!-- The pills at the facts in the person dialog: its own frame under "Show on card" (spec 066 P4 §3). -->
+                    <label class="settings-checkbox settings-row reliability-card-setting">
+                        <input type="checkbox" id="reliability-card-toggle" onchange="window.Strom.UI.toggleReliabilityCard(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="reliability.settingCard"></span>
+                            <span class="settings-desc" data-i18n="reliability.settingCardSub"></span>
+                        </span>
+                    </label>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="show-titles-toggle" onchange="window.Strom.UI.toggleShowTitles(this.checked)">
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="titles.settingLabel"></span>
                             <span class="settings-desc" data-i18n="titles.settingHint"></span>
-                        </span>
-                    </label>
-                    <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="reliability-card-toggle" onchange="window.Strom.UI.toggleReliabilityCard(this.checked)">
-                        <span class="settings-text">
-                            <span class="settings-name" data-i18n="reliability.settingCard"></span>
-                        </span>
-                    </label>
-                    <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="reliability-tree-toggle" onchange="window.Strom.UI.toggleReliabilityTree(this.checked)">
-                        <span class="settings-text">
-                            <span class="settings-name" data-i18n="reliability.settingTree"></span>
                         </span>
                     </label>
                     <div class="settings-row settings-row-stacked surname-display-setting" id="surname-display-setting">
@@ -26041,13 +26051,6 @@
                         <div class="surname-display-sample" id="surname-display-sample" aria-hidden="true"></div>
                         <span class="settings-desc" data-i18n="settings.surnameHint"></span>
                     </div>
-                    <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="cross-tree-badges-toggle" onchange="window.Strom.UI.toggleCrossTreeBadges(this.checked)">
-                        <span class="settings-text">
-                            <span class="settings-name" data-i18n="crossTree.settingLabel"></span>
-                            <span class="settings-desc" data-i18n="crossTree.settingHint"></span>
-                        </span>
-                    </label>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="advanced-fields-toggle" onchange="window.Strom.UI.toggleAdvancedFields(this.checked)">
                         <span class="settings-text">

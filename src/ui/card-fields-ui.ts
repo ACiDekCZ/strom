@@ -15,7 +15,8 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals } from '../settings.js';
 import { strings } from '../strings.js';
 import { CARD_SIZE, CardDensity, Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
-import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
+import { ActionSignal, ACTION_GLYPH, storyFoldHtml } from '../card-signals.js';
+import { statusMarkHtml } from './fact-status.js';
 import {
     CardFieldKey, CardFieldSettings, CardHeightMode, CardLineStyle, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
     CARD_HEIGHT_MODES, CARD_LINE_STYLES, CARD_MARKS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
@@ -160,7 +161,9 @@ function watchCardPreview(host: HTMLElement): void {
 }
 
 /** No signals: the tiles' small cards (unreadable at a quarter of the size). */
-const NO_SIGNALS: CardSignals = { evidence: false, story: false, waiting: false, conflict: false, question: false, agent: false };
+const NO_SIGNALS: CardSignals = {
+    status: false, story: false, waiting: false, conflict: false, question: false, agent: false, crossTree: false,
+};
 
 /** The scale of the small cards in the row of types (one for every type). */
 const THUMB_SCALE = 0.25;
@@ -201,7 +204,9 @@ export function forgetCardTypeCopy(): void {
  * for `viewWidth`, the drawn view's card width, when given).
  */
 function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | undefined): { html: string; width: number; height: number } {
-    const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? { kind: 'own', final: false } : null);
+    // The status mark of a person with only some citations (●○) and a story's fold.
+    const stripes = (on.status ? statusMarkHtml({ cls: 'cs-p1', source: 'evidence', facts: [] }) : '')
+        + storyFoldHtml(on.story ? { kind: 'own', final: false } : null);
     const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
     const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
     const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';

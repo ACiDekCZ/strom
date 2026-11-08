@@ -16,8 +16,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { importDateText, importProgramLabel } from '../import-next.js';
 import {
-    FactReliability, PersonOriginSummary, ReliabilityOptions, ReliabilityStep, ReliabilityStepName, factReliability,
-    reliabilityStep, sameStep, weakestStep,
+    CardStatus, CardStatusClass, CardStatusOptions, FactReliability, PersonOriginSummary, ReliabilityStep, ReliabilityStepName,
+    cardStatus, reliabilityStep, sameStep,
 } from '../reliability.js';
 import { HELP_TOPICS } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
@@ -166,22 +166,39 @@ export function originRowPillHtml(summary: PersonOriginSummary, step: Reliabilit
     return first ? factReliabilityHtml(first, opts) : reliabilityHtml(step, reliabilityTitle(step, opts));
 }
 
-/** The facts the tree card's mini mark stands for (§2f). */
-const CARD_FACTS = ['name', 'birth', 'death'] as const;
+/** The glyphs of the tree card's mark: ✓, two dots (full or hollow), one hollow dot, or none (a dotted frame alone). */
+function cardStatusGlyphsHtml(cls: CardStatusClass): string {
+    const dots = (...on: boolean[]): string => `<span class="fs-dots" aria-hidden="true">${on.map(o => (o ? '<i class="on"></i>' : '<i></i>')).join('')}</span>`;
+    switch (cls) {
+        case 'cs-human': return '<span class="fs-check" aria-hidden="true">✓</span>';
+        case 'cs-p2': return dots(true, true);
+        case 'cs-p1': return dots(true, false);
+        case 'cs-res': return dots(false);
+        case 'cs-import': return dots(false, false);
+        default: return '';
+    }
+}
+
+export interface CardStatusMarkOptions {
+    /** Extra classes (e.g. inline in a tooltip or a menu row). */
+    className?: string;
+}
 
 /**
- * The tree card's mini mark ('' for none): no text, the weakest step of the
- * name, the birth and the death; its title says the step and which facts.
+ * The tree card's one mark of sources and reliability (spec 066 P4 §1) for a
+ * status ('' for none): a small pill with no text and no title (the card's
+ * bubble, the person menu and the aria-label say it in words). The same pill
+ * stands in the bubble and the menu.
  */
-export function cardReliabilityMarkHtml(data: Pick<StromData, 'imports'>, person: Person, opts: ReliabilityOptions): string {
-    const facts = CARD_FACTS.map(f => ({ f, r: factReliability(data, person, f, opts) }));
-    const weakest = weakestStep(facts.map(x => x.r));
-    if (!weakest) return '';
-    const s = strings.reliability;
-    const which = facts.filter(x => x.r && sameStep(x.r, weakest)).map(x => s.cardFact[x.f]).join(', ');
-    const title = `${reliabilityTitle(weakest, { research: opts.originFeature })} · ${s.cardFacts(which)}`;
-    const glyphs = glyphsHtml(weakest);
-    return `<span class="card-rel-mark fact-status-${weakest.step}" data-fact-status="${weakest.step}" title="${escAttr(title)}">${glyphs}</span>`;
+export function statusMarkHtml(status: CardStatus | null | undefined, opts: CardStatusMarkOptions = {}): string {
+    if (!status) return '';
+    const cls = `card-status-mark ${status.cls}${opts.className ? ` ${opts.className}` : ''}`;
+    return `<span class="${cls}" data-status="${status.cls}" aria-hidden="true">${cardStatusGlyphsHtml(status.cls)}</span>`;
+}
+
+/** The tree card's one mark of a person ('' for none: a placeholder, the switch off, or nothing to say). */
+export function cardStatusMarkHtml(data: StromData, person: Person, opts: CardStatusOptions): string {
+    return statusMarkHtml(cardStatus(data, person, opts));
 }
 
 /** The row the tap tooltip opens under (inside a form field, after other rows). */

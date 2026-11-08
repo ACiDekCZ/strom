@@ -165,8 +165,9 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     expect(stored.refn).toBe('box 12/1880');
     expect(stored.question).toBe('Does anyone know her birth date?');
 
-    // The card gets a subtle open-question marker.
-    await expect(card(page, 'Marie')).toHaveClass(/has-question/);
+    // The card's "?" badge carries the open question (no other marker, spec 066 P4 §6).
+    await expect(card(page, 'Marie').locator('[class*="signal-question"]').first()).toBeVisible();
+    await expect(card(page, 'Marie')).not.toHaveClass(/has-question/);
 
     // Values survive a reopen — and the modal auto-expands because the person
     // now HAS extended data, so the fields are visible without a click.
@@ -175,7 +176,7 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
     await modal.locator('#input-question').fill('');
     await modal.getByRole('button', { name: 'Save' }).click();
-    await expect(card(page, 'Marie')).not.toHaveClass(/has-question/);
+    await expect(card(page, 'Marie').locator('[class*="signal-question"]')).toHaveCount(0);
 });
 
 // "Editing shows the whole record" lives in advanced-fields.spec.ts (a plain

@@ -6,19 +6,22 @@ import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, ca
  * One mark of reliability per fact (spec 066 §2): after a GEDCOM from another
  * program the person card says where the facts came from, with one pill while
  * they all share the step and a pill at each fact once they differ; a tree
- * without an import shows no marks; the tree cards show the weakest step when
- * the setting is on; on a phone a tap opens and closes the mark's text; a
+ * without an import shows no marks; the tree card's one status mark (spec 066
+ * P4 §1) shows the weakest step after an import and the citations in a tree
+ * of the app's own; on a phone a tap opens and closes the mark's text; a
  * research tree with origin shows a person's confirmation and proven facts.
  * Invented data.
  */
 
-function writeGedcom(testInfo: TestInfo): string {
+function writeGedcom(testInfo: TestInfo, cited = false): string {
     const lines = [
         '0 HEAD', '1 SOUR FTM', '2 NAME Family Tree Maker', '2 VERS 24.0', '1 DATE 12 MAR 2024',
         '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
-        '0 @I1@ INDI', '1 NAME Bonifác /Kvapilík/', '1 SEX M', '1 BIRT', '2 DATE 3 FEB 1850', '1 DEAT', '2 DATE 1912', '1 FAMS @F1@',
+        '0 @I1@ INDI', '1 NAME Bonifác /Kvapilík/', '1 SEX M', '1 BIRT', '2 DATE 3 FEB 1850',
+        ...(cited ? ['2 SOUR @S1@'] : []), '1 DEAT', '2 DATE 1912', '1 FAMS @F1@',
         '0 @I2@ INDI', '1 NAME Zdeslava /Kvapilíková/', '1 SEX F', '1 BIRT', '2 DATE 1852', '1 FAMS @F1@',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '2 DATE 1874',
+        ...(cited ? ['0 @S1@ SOUR', '1 TITL Matrika N Bramborov 1840–1870'] : []),
         '0 TRLR', '',
     ];
     const p = testInfo.outputPath('kvapilik.ged');
@@ -26,8 +29,8 @@ function writeGedcom(testInfo: TestInfo): string {
     return p;
 }
 
-async function importTree(page: Page, testInfo: TestInfo): Promise<void> {
-    await page.locator('#gedcom-input').setInputFiles(writeGedcom(testInfo));
+async function importTree(page: Page, testInfo: TestInfo, cited = false): Promise<void> {
+    await page.locator('#gedcom-input').setInputFiles(writeGedcom(testInfo, cited));
     await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
     const importDialog = page.locator('#import-tree-modal');
     await importDialog.locator('#import-tree-name').fill('Kvapilík');
@@ -77,35 +80,74 @@ test.describe('reliability marks', () => {
     test('a tree without an import shows no marks', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Bonifác', 'Kvapilík');
-        await page.evaluate(() => window.Strom.UI.toggleReliabilityTree(true));
         await cardAction(page, 'Bonifác', 'edit');
         const modal = personModal(page);
         await expect(modal).toBeVisible();
         await expect(modal.locator('#pm-origin')).toBeHidden();
         await expect(modal.locator('.fact-status')).toHaveCount(0);
-        await expect(page.locator('.card-rel-mark')).toHaveCount(0);
+        // No sources and no origin: the tree cards say nothing either.
+        await expect(page.locator('.card-status-mark')).toHaveCount(0);
     });
 
-    test('the tree cards show the weakest step once the setting is on', async ({ page }, testInfo) => {
+    test('after an import with sources: the tree card\'s one mark is the import\'s, no stripes', async ({ page }, testInfo) => {
         await openApp(page);
-        await importTree(page, testInfo);
-        await expect(page.locator('.card-rel-mark')).toHaveCount(0);
-        await page.evaluate(() => window.Strom.UI.toggleReliabilityTree(true));
-        const mark = card(page, 'Bonifác').locator('.card-rel-mark');
-        await expect(mark).toBeVisible();
-        await expect(mark).toHaveClass(/fact-status-import/);
-        await expect(mark).toHaveAttribute('title', /^From the family tree \(unverified\): taken from Family Tree Maker.* · Weakest fact on the card: name, birth, death$/);
-        // In the card's own pixels (the tree may be zoomed).
+        await importTree(page, testInfo, true);
+        // On by default (spec 066 P4 §4), the import wins over the citation.
+        const mark = card(page, 'Bonifác').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveCount(1);
+        await expect(mark).toHaveClass(/\bcs-import\b/);
+        await expect(mark.locator('.fs-dots i')).toHaveCount(2);
+        await expect(mark.locator('.fs-dots i.on')).toHaveCount(0);
+        await expect(card(page, 'Zdeslava').locator(':scope > .card-status-mark')).toHaveClass(/\bcs-import\b/);
+        await expect(page.locator('.ev-stripe, .card-state, .card-rel-mark')).toHaveCount(0);
+        // No native title: the words are the tooltip's.
+        await expect(mark).not.toHaveAttribute('title', /.*/);
+        // In the card's own pixels (the tree may be zoomed): a 12px pill inside the card.
         const size = await mark.evaluate((el: HTMLElement) => ({ h: el.offsetHeight, w: el.offsetWidth }));
-        expect(size.h).toBe(14);
+        expect(size.h).toBe(12);
         expect(size.w).toBeGreaterThanOrEqual(18);
         const box = (await mark.boundingBox())!;
         const cardBox = (await card(page, 'Bonifác').boundingBox())!;
         expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
-        expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
 
-        await page.evaluate(() => window.Strom.UI.toggleReliabilityTree(false));
-        await expect(page.locator('.card-rel-mark')).toHaveCount(0);
+        await page.evaluate(() => { window.Strom.SettingsManager.setCardSignal('status', false); window.Strom.TreeRenderer.render(); });
+        // Off: gone from the cards (the tooltip keeps its words).
+        await expect(page.locator('.person-card > .card-status-mark')).toHaveCount(0);
+    });
+
+    test('a tree of the app\'s own with sources: ●● backed, ●○ partly, a dotted frame for none', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const p = (id: string, firstName: string, extra: Record<string, unknown>) => ({
+                id, firstName, lastName: 'Kvapilík', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra,
+            });
+            await window.Strom.DataManager.importAsNewTree({
+                persons: {
+                    a: p('a', 'Bonifác', { birthDate: '1850', birthSourceIds: ['s1'], childIds: ['b', 'c'] }),
+                    b: p('b', 'Radovan', { birthDate: '1872', deathDate: '1920', birthSourceIds: ['s1'], parentIds: ['a'] }),
+                    c: p('c', 'Vavřinec', { birthDate: '1875', parentIds: ['a'] }),
+                },
+                partnerships: {},
+                sources: { s1: { id: 's1', title: 'Matrika N Bramborov 1840–1870' } },
+            } as never, 'Kvapilík');
+        });
+        const mark = (name: string) => card(page, name).locator(':scope > .card-status-mark');
+        await expect(mark('Bonifác')).toHaveClass(/\bcs-p2\b/);
+        await expect(mark('Radovan')).toHaveClass(/\bcs-p1\b/);
+        await expect(mark('Vavřinec')).toHaveClass(/\bcs-none\b/);
+        await expect(mark('Vavřinec').locator('.fs-dots')).toHaveCount(0);
+        // Neutral: the dots take the light text colour, the dotted frame the line colour.
+        const look = await mark('Bonifác').evaluate((el) => {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--text-light)';
+            el.parentElement!.appendChild(probe);
+            const want = getComputedStyle(probe).color;
+            probe.remove();
+            return { color: getComputedStyle(el).color, want };
+        });
+        expect(look.color).toBe(look.want);
     });
 
     test('a research tree with origin: a person\'s confirmation and proven facts', async ({ page }) => {

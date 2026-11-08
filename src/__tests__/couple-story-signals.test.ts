@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { personStoryState, stateStripesHtml, storySignalInLine, storySignalText } from '../card-signals.js';
+import { personStoryState, storyFoldHtml, storySignalInLine, storySignalText } from '../card-signals.js';
 import { strings } from '../strings.js';
 import { coupleStories } from '../story-text.js';
 import { Partnership, Person, PersonId, Story, StromData } from '../types.js';
@@ -62,9 +62,10 @@ describe('the corner and its words (spec 027 §5.6)', () => {
     const words = strings.card.story;
 
     it('own story: a full corner; a couple\'s alone: a hollow one; a draft is pale', () => {
-        expect(stateStripesHtml(null, { kind: 'own', final: true })).toBe('<span class="card-story" aria-hidden="true"></span>');
-        expect(stateStripesHtml(null, { kind: 'couple', final: true })).toBe('<span class="card-story couple" aria-hidden="true"></span>');
-        expect(stateStripesHtml(null, { kind: 'couple', final: false })).toBe('<span class="card-story draft couple" aria-hidden="true"></span>');
+        expect(storyFoldHtml({ kind: 'own', final: true })).toBe('<span class="card-story" aria-hidden="true"></span>');
+        expect(storyFoldHtml({ kind: 'couple', final: true })).toBe('<span class="card-story couple" aria-hidden="true"></span>');
+        expect(storyFoldHtml({ kind: 'couple', final: false })).toBe('<span class="card-story draft couple" aria-hidden="true"></span>');
+        expect(storyFoldHtml(null)).toBe('');
     });
 
     it('the hollow corner keeps the own story\'s corner colour, never --accent (round 2, point 11)', () => {

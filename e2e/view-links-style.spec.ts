@@ -188,14 +188,14 @@ test.describe('linked in the view only: the look', () => {
                 const s = getComputedStyle(node);
                 return { html: node.outerHTML, bg: s.backgroundColor, color: s.color, opacity: s.opacity, display: s.display };
             };
-            return { stripes: el.querySelectorAll('.card-state .st-ev i').length, state: look('.card-state'), stripe: look('.card-state .st-ev i'), badge: look('.card-signal') };
+            return { marks: el.querySelectorAll(':scope > .card-status-mark').length, state: look('.card-status-mark'), dot: look('.card-status-mark .fs-dots i'), badge: look('.card-signal') };
         });
         // The family's own view (not linked): its cards.
         await show(page, [], 'P0125');
         await expect(card(page, 'Jakub')).toHaveClass(/research-island/);
         await expect(card(page, 'Jakub')).not.toHaveClass(/view-ghost/);
         const own = await signals();
-        expect(own.stripes).toBeGreaterThan(0);
+        expect(own.marks).toBe(1);
         expect(own.badge).not.toBeNull();
         // Shown as linked: a ghost, the same signals, drawn the same.
         await show(page, [B]);

@@ -2,12 +2,12 @@
  * The reliability marks as HTML (spec 066 §2): the pill's glyphs and classes,
  * its title (a partial import, the family tree's note, the research's note),
  * where the person card shows the marks ("same marks" rule) and the tree
- * card's mini mark. Invented data only.
+ * card's one status mark (spec 066 P4 §1). Invented data only.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
-    reliabilityHtml, reliabilityTitle, factStatusHtml, personMarksLayout, cardReliabilityMarkHtml, reliabilityLabel,
+    reliabilityHtml, reliabilityTitle, factStatusHtml, personMarksLayout, cardStatusMarkHtml, statusMarkHtml, reliabilityLabel,
 } from '../ui/fact-status.js';
 import { personOriginSummary, ReliabilityOptions } from '../reliability.js';
 import type { ImportRecord, Person, StromData } from '../types.js';
@@ -152,24 +152,36 @@ describe('personMarksLayout', () => {
     });
 });
 
-describe('cardReliabilityMarkHtml', () => {
-    it('the weakest of the name, the birth and the death, with which facts', () => {
-        const p = fromFile({ birthDate: '1851-02-03', birthStatus: 'lead' } as Partial<Person>);
-        const el = parse(cardReliabilityMarkHtml(DATA, p, PLAIN));
-        expect(el.classes).toContain('card-rel-mark');
-        expect(el.attrs['data-fact-status']).toBe('lead');
-        expect(el.attrs.title).toMatch(/· Weakest fact on the card: birth$/);
-        expect(el.text).toBe('');
-    });
-
-    it('all from the family tree: two empty dots, name and birth named', () => {
-        const el = parse(cardReliabilityMarkHtml(DATA, fromFile(), PLAIN));
-        expect(el.attrs['data-fact-status']).toBe('import');
+describe('cardStatusMarkHtml: the tree card\'s one mark', () => {
+    it('from the family tree: two empty dots, a class for the dashed frame, no title', () => {
+        const html = cardStatusMarkHtml(DATA as StromData, fromFile(), { ...PLAIN, treeHasSources: false });
+        const el = parse(html);
+        expect(el.classes).toEqual(['card-status-mark', 'cs-import']);
+        expect(el.attrs['data-status']).toBe('cs-import');
+        expect(el.attrs['aria-hidden']).toBe('true');
+        expect(el.attrs.title).toBeUndefined();
         expect(el.dots).toBe(2);
-        expect(el.attrs.title).toMatch(/Weakest fact on the card: name, birth$/);
+        expect(el.dotsOn).toBe(0);
     });
 
-    it('a tree without marks: nothing', () => {
-        expect(cardReliabilityMarkHtml({ imports: [] }, person({ birthDate: '1851' }), PLAIN)).toBe('');
+    it('the glyphs of each class: ✓, ●●, ●○, ○, ○○ and none for a person without sources', () => {
+        const mark = (cls: 'cs-human' | 'cs-p2' | 'cs-p1' | 'cs-res' | 'cs-import' | 'cs-none') =>
+            parse(statusMarkHtml({ cls, source: 'step', facts: [] }));
+        expect(mark('cs-human').check).toBe(true);
+        expect([mark('cs-p2').dots, mark('cs-p2').dotsOn]).toEqual([2, 2]);
+        expect([mark('cs-p1').dots, mark('cs-p1').dotsOn]).toEqual([2, 1]);
+        expect([mark('cs-res').dots, mark('cs-res').dotsOn]).toEqual([1, 0]);
+        expect([mark('cs-import').dots, mark('cs-import').dotsOn]).toEqual([2, 0]);
+        expect([mark('cs-none').dots, mark('cs-none').check]).toEqual([0, false]);
+    });
+
+    it('inline in a tooltip or a menu: an extra class', () => {
+        expect(parse(statusMarkHtml({ cls: 'cs-p1', source: 'evidence', facts: [] }, { className: 'card-status-mark--inline' })).classes)
+            .toEqual(['card-status-mark', 'cs-p1', 'card-status-mark--inline']);
+    });
+
+    it('nothing to say: no mark', () => {
+        expect(statusMarkHtml(null)).toBe('');
+        expect(cardStatusMarkHtml({ imports: [], persons: {} } as unknown as StromData, person({ birthDate: '1851' }), { ...PLAIN, treeHasSources: false })).toBe('');
     });
 });

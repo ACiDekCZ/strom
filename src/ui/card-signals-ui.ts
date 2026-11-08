@@ -9,7 +9,10 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
 import { getCurrentLanguage, strings } from '../strings.js';
 import { PersonId } from '../types.js';
-import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml, storySignalInLine, storySignalText } from '../card-signals.js';
+import { ActionSignal, CardSignalInfo, ACTION_GLYPH, storyFoldHtml, storySignalInLine, storySignalText } from '../card-signals.js';
+import { statusMarkHtml } from './fact-status.js';
+import { HELP_TOPICS } from '../help/topics.js';
+import { openHelp } from './help-ui.js';
 import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { researchConflictRef } from '../research-link.js';
@@ -17,15 +20,22 @@ import { uiModule } from './module.js';
 import { DataManager } from '../data.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
 
-const STATE_KEYS: (keyof CardSignals)[] = ['evidence', 'story'];
+const STATE_KEYS: (keyof CardSignals)[] = ['status', 'story'];
 const ACTION_KEYS: (keyof CardSignals)[] = ['waiting', 'conflict', 'question', 'agent'];
+const LINK_KEYS: (keyof CardSignals)[] = ['crossTree'];
 
 function signalLabel(key: keyof CardSignals): string {
     const d = strings.cardDensity;
     return {
-        evidence: d.cardEvidence, story: d.cardStory, waiting: d.cardWaiting,
-        conflict: d.cardConflict, question: d.cardQuestion, agent: d.cardAgent,
+        status: d.cardStatus, story: d.cardStory, waiting: d.cardWaiting,
+        conflict: d.cardConflict, question: d.cardQuestion, agent: d.cardAgent, crossTree: strings.crossTree.settingLabel,
     }[key];
+}
+
+/** The line under a switch that needs one ('' for none). */
+function signalSub(key: keyof CardSignals): string {
+    const d = strings.cardDensity;
+    return key === 'status' ? d.cardStatusSub : key === 'crossTree' ? d.cardCrossTreeSub : '';
 }
 
 export const cardSignalsUiMethods = uiModule({
@@ -72,14 +82,15 @@ export const cardSignalsUiMethods = uiModule({
         if (!s) return '';
         const c = strings.card;
         let html = '';
-        if (touch && (s.showEvidence || s.showStory)) {
+        if (touch && (s.showStatus || s.showStory)) {
             const bits: string[] = [];
-            if (s.showEvidence && s.evidence) bits.push(c.ariaEv[s.evidence.level]);
+            if (s.showStatus && s.evidence) bits.push(c.ariaEv[s.evidence.level]);
             if (s.showStory && s.story) {
                 bits.push(storySignalInLine(storySignalText(s.story, c.story), getCurrentLanguage()));
             }
-            const stripes = stateStripesHtml(s.showEvidence && s.evidence ? s.evidence.level : null, s.showStory ? s.story : null, true);
-            html += `<div class="menu-person-state">${stripes}${this.escapeHtml(bits.join(' · '))}</div>`;
+            const marks = `${s.showStatus ? statusMarkHtml(s.status, { className: 'card-status-mark--inline' }) : ''}`
+                + `${s.showStory ? storyFoldHtml(s.story, true) : ''}`;
+            html += `<div class="menu-person-state">${marks}${this.escapeHtml(bits.join(' · '))}</div>`;
         }
         if (s.action) html += this.personSignalBlockHtml(s, s.action, touch, itemClass);
         else if (s.showAgent) html += this.personSignalBlockHtml(s, 'agent', touch, itemClass);
@@ -120,7 +131,12 @@ export const cardSignalsUiMethods = uiModule({
             : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="signal-${action}">${body}</div>`;
     },
 
-    /** Settings → "Show on card": two groups of checkboxes (the preview card is above, see card-fields-ui). */
+    /**
+     * Settings → "Show on card" (spec 066 P4 §3): three groups of switches
+     * (person status, awaiting a decision, links), what is always shown, a
+     * link to the branch colours in the Tree group, the help on the marks;
+     * the preview card is above (see card-fields-ui).
+     */
     renderCardSignalSettings(): void {
         const host = document.getElementById('card-signals-settings');
         if (!host) return;
@@ -131,24 +147,37 @@ export const cardSignalsUiMethods = uiModule({
         const research = TreeManager.getTrees().some(t => !!t.research?.id);
         // (An archive has no agent: no badge for its work there.)
         const connected = research && announcedResearchLinks().length > 0 && !this.activeResearchAgentless();
-        const box = (key: keyof CardSignals): string => `
+        const box = (key: keyof CardSignals): string => {
+            const sub = signalSub(key);
+            return `
             <label class="settings-checkbox card-signal-option">
                 <input type="checkbox" data-signal="${key}"${on[key] ? ' checked' : ''}>
-                <span>${this.escapeHtml(signalLabel(key))}</span>
+                <span class="settings-text">
+                    <span class="settings-name">${this.escapeHtml(signalLabel(key))}</span>
+                    ${sub ? `<span class="settings-desc">${this.escapeHtml(sub)}</span>` : ''}
+                </span>
             </label>`;
+        };
+        const group = (cls: string, title: string, keys: (keyof CardSignals)[]): string => `
+                <div class="card-signals-group card-signals-group--${cls}" role="group" aria-label="${this.escapeHtml(title)}">
+                    <div class="card-signals-group-title">${this.escapeHtml(title)}</div>
+                    ${keys.map(box).join('')}
+                </div>`;
         const actionKeys = ACTION_KEYS.filter(k => (k !== 'waiting' || research) && (k !== 'agent' || connected));
         host.innerHTML = `
             <div class="card-signals-options">
                 <div class="settings-name">${this.escapeHtml(d.cardShow)}</div>
-                <div class="card-signals-group" role="group" aria-label="${this.escapeHtml(d.cardGroupState)}">
-                    <div class="card-signals-group-title">${this.escapeHtml(d.cardGroupState)}</div>
-                    ${STATE_KEYS.map(box).join('')}
+                ${group('state', d.cardGroupState, STATE_KEYS)}
+                ${group('action', d.cardGroupAction, actionKeys)}
+                ${group('links', d.cardGroupLinks, LINK_KEYS)}
+                <div class="card-signals-foot">
+                    <div class="card-signals-always">${this.escapeHtml(d.cardAlways)}</div>
+                    <div class="card-signals-links">
+                        <button type="button" class="link-button card-signals-branch-link">${this.escapeHtml(d.cardBranchLink)}</button>
+                        <button type="button" class="link-button card-signals-help-link">${this.escapeHtml(strings.reliability.help)}</button>
+                    </div>
+                    <div class="settings-desc card-signals-hint">${this.escapeHtml(`${d.cardShowHint} ${d.sameEverywhere}`)}</div>
                 </div>
-                <div class="card-signals-group" role="group" aria-label="${this.escapeHtml(d.cardGroupAction)}">
-                    <div class="card-signals-group-title">${this.escapeHtml(d.cardGroupAction)}</div>
-                    ${actionKeys.map(box).join('')}
-                </div>
-                <div class="settings-desc">${this.escapeHtml(`${d.cardShowHint} ${d.sameEverywhere}`)}</div>
             </div>`;
         // The row of card types, one preview for the type and the signals
         // under it, the custom type's details below it.
@@ -164,5 +193,18 @@ export const cardSignalsUiMethods = uiModule({
                 TreeRenderer.render();
             };
         });
+        const branch = host.querySelector<HTMLButtonElement>('.card-signals-branch-link');
+        if (branch) branch.onclick = () => this.showBranchColorsSetting();
+        const help = host.querySelector<HTMLButtonElement>('.card-signals-help-link');
+        if (help) help.onclick = () => { void openHelp(HELP_TOPICS.reliability, help); };
+    },
+
+    /** "Branch colours: Tree settings ›": the Settings scroll to the branch colours' switch, which takes the focus. */
+    showBranchColorsSetting(): void {
+        const toggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
+        const row = toggle?.closest<HTMLElement>('.settings-row');
+        if (!toggle || !row) return;
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        toggle.focus({ preventScroll: true });
     },
 });

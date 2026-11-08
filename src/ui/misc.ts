@@ -370,11 +370,7 @@ export const miscMethods = uiModule({
         if (titlesToggle) titlesToggle.checked = SettingsManager.isShowTitles();
         const relCardToggle = document.getElementById('reliability-card-toggle') as HTMLInputElement | null;
         if (relCardToggle) relCardToggle.checked = SettingsManager.isReliabilityCardEnabled();
-        const relTreeToggle = document.getElementById('reliability-tree-toggle') as HTMLInputElement | null;
-        if (relTreeToggle) relTreeToggle.checked = SettingsManager.isReliabilityTreeEnabled();
         this.syncSurnameDisplaySetting();
-        const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
-        if (crossTreeToggle) crossTreeToggle.checked = SettingsManager.isCrossTreeBadgesEnabled();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;

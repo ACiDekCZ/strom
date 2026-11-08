@@ -5,7 +5,7 @@
 
 import { DataManager } from './data.js';
 import { UI } from './ui.js';
-import { cardReliabilityMarkHtml } from './ui/fact-status.js';
+import { statusMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
 import { strings } from './strings.js';
 import {
@@ -29,7 +29,7 @@ import {
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT, CARD_EDGE_PILL_LEFT,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
-import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml, storySignalText } from './card-signals.js';
+import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
@@ -4175,7 +4175,7 @@ class TreeRendererClass {
         // Don't do cross-tree matching in view mode, or when the user turned
         // the connection badges off (also skips the per-tree decrypt cost).
         if (DataManager.isViewMode()) return null;
-        if (!SettingsManager.isCrossTreeBadgesEnabled()) return null;
+        if (!SettingsManager.getCardSignals().crossTree) return null;
 
         // Cached per tree (stamped by lastModifiedAt): loading + decrypting
         // every tree's data on every render was a real cost on big setups.
@@ -4248,9 +4248,6 @@ class TreeRendererClass {
             { positions: this.positions, spouseLines: this.spouseLines }, DataManager.getData(), this.focusPersonId);
         const orderSlots = this.unionOrderSlots(orderBadges, partnershipChildIds, signalCtx);
         const shownHere = this.shownHereIds();
-        // The reliability mini mark (Settings, off by default): its options read once per render.
-        const relOpts = SettingsManager.isReliabilityTreeEnabled() ? UI.reliabilityOptionsNow() : null;
-        const relData = DataManager.getData();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -4297,14 +4294,11 @@ class TreeRendererClass {
             if (indirectIds?.has(id)) {
                 classes += ' indirect';
             }
-            // An open question about this person (collaboration hint).
-            if (person.question?.trim() && !person.isPlaceholder) {
-                classes += ' has-question';
-            }
             const signals = cardSignalInfo(person, signalCtx);
             if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
-            const relMarkHtml = relOpts && !person.isPlaceholder ? cardReliabilityMarkHtml(relData, person, relOpts) : '';
-            if (relMarkHtml) classes += ' has-rel-mark';
+            // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
+            const statusHtml = signals.showStatus ? statusMarkHtml(signals.status) : '';
+            if (statusHtml) classes += ' has-status';
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -4502,11 +4496,9 @@ class TreeRendererClass {
             // Normal cards pack "years · place" onto one ellipsized meta row.
             const metaText = [metaYears, metaPlace].filter(Boolean).join(' · ');
 
-            // Person status: quiet stripes in the card's bottom-right corner, in
+            // Person status: the story's fold in the card's bottom-right corner, in
             // every density (decoration; the tooltip and aria-label say it).
-            const stateHtml = stateStripesHtml(
-                signals.showEvidence && signals.evidence ? signals.evidence.level : null,
-                signals.showStory ? signals.story : null);
+            const stateHtml = storyFoldHtml(signals.showStory ? signals.story : null);
             // The action badge on the avatar's corner (a dot on the card's
             // corner where there is no avatar, or when zoomed far out). Without
             // a badge: the agent's arc circling the avatar (a small ring at the
@@ -4562,7 +4554,7 @@ class TreeRendererClass {
                 </div>
             `;
             // The lock, the status stripes and the corner dot: on every card type, the custom one too (N34).
-            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${stateHtml}${dotHtml}${relMarkHtml}`;
+            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${statusHtml}${stateHtml}${dotHtml}`;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
             // to the LEFT of the branch tabs so those (always visible, pinned to
@@ -4601,9 +4593,9 @@ class TreeRendererClass {
                     ).join('');
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
 
-                    // A jump (§2): "⇄ N ↗" in the jump's look, its bubble names the trees and what a click does
-                    crossTreeHtml = `<div class="cross-tree-badge kind-jump" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}">
-                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span><span class="pill-glyph pill-jump" aria-hidden="true">↗</span>
+                    // "⇄ N": another tree in the app (no ↗, spec 066 P4 §6), its bubble names the trees and what a click does
+                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}">
+                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
                         <div class="cross-tree-tooltip">
                             <div class="cross-tree-tooltip-header">${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}</div>
                             ${tooltipItems}
@@ -5352,6 +5344,7 @@ class TreeRendererClass {
             data,
             unions: unionsByPerson(data),
             treeHasSources: treeHasAnySource(data),
+            reliability: UI.reliabilityOptionsNow(),
             settings: SettingsManager.getCardSignals(),
             research: researchCardInfoNow(),
         };
@@ -5400,7 +5393,7 @@ class TreeRendererClass {
             const bits = [ev.sources > 0 ? c.ttSources(ev.sources) : c.ariaEv.none];
             if (ev.sources > 0 && ev.hasBirth) bits.push(ev.birthCited ? c.ttBirthCited : c.ttBirthMissing);
             if (ev.sources > 0 && ev.hasDeath && !ev.deathCited) bits.push(c.ttDeathMissing);
-            rows.push(`<div class="tt-line tt-ev">${stateStripesHtml(ev.level, null, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
+            rows.push(`<div class="tt-line tt-ev">${statusMarkHtml(s.status, { className: 'card-status-mark--inline' })}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
         // A linked tree that shows materials: "Materials N" in place of the attachments.
         const files = s.materials ?? s.attachments;
@@ -5408,7 +5401,7 @@ class TreeRendererClass {
             const bits: string[] = [];
             if (s.story) bits.push(storySignalText(s.story, c.story));
             if (files > 0) bits.push(s.materials !== null ? c.ttMaterials(files) : c.ttAttachments(files));
-            rows.push(`<div class="tt-line tt-story">${stateStripesHtml(null, s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
+            rows.push(`<div class="tt-line tt-story">${storyFoldHtml(s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
         const action = (text: string): string => `<div class="tt-line tt-action">${this.escapeHtml(text)}</div>`;
         if (s.waiting) rows.push(action(this.signalText(s, 'waiting')));
@@ -5431,7 +5424,7 @@ class TreeRendererClass {
     private cardAriaLabel(person: Person, s: CardSignalInfo): string {
         const c = strings.card;
         const parts = [shownNameFull(person)];
-        if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
+        if (s.showStatus && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
         if (s.showStory && s.story) parts.push(storySignalText(s.story, c.story));
         if (s.action === 'waiting') parts.push(c.ariaWaiting);
         else if (s.action === 'conflict') parts.push(c.ariaConflict);

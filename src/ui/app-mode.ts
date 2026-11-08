@@ -743,12 +743,6 @@ export const appModeMethods = uiModule({
         this.refreshPersonReliability();
     },
 
-    /** The reliability mini mark on the cards in the tree: the view is drawn again. */
-    toggleReliabilityTree(enabled: boolean): void {
-        SettingsManager.setReliabilityTree(enabled);
-        TreeRenderer.render();
-    },
-
     /** Settings > Surname display: redraw everything that shows names. */
     setSurnameDisplay(display: SurnameDisplay): void {
         SettingsManager.setSurnameDisplay(display);
@@ -758,8 +752,11 @@ export const appModeMethods = uiModule({
         if (this.relationshipsPanelPersonId) this.refreshRelationshipsPanel();
     },
 
+    /** The ⇄ N pill (Settings → Show on card → Links): the switch there follows, the view is drawn again. */
     toggleCrossTreeBadges(enabled: boolean): void {
         SettingsManager.setCrossTreeBadges(enabled);
+        const box = document.querySelector<HTMLInputElement>('#card-signals-settings input[data-signal="crossTree"]');
+        if (box) box.checked = enabled;
         TreeRenderer.render();
     },
 

@@ -52,7 +52,8 @@ test.describe('birth and death citations', () => {
         expect((await person(page, 'j'))?.birthSourceIds).toEqual(['s1']);
         await expect(page.locator('#birth-sources-group .source-chip')).toHaveCount(1);
         await page.keyboard.press('Escape');
-        await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev i')).toHaveCount(2);
+        // Born cited, no death: fully backed, the status mark's two full dots.
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark.cs-p2 .fs-dots i.on')).toHaveCount(2);
     });
 
     test('"Another page" of a book in the picker: a new source with its title, archive, link, note and quality — its own page, cited there; nothing else copied', async ({ page }) => {

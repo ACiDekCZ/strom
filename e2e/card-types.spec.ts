@@ -44,7 +44,7 @@ test('five tiles with a small card each, one chosen with its sentence; a click c
     await expect(row(page).locator('[role="radio"][tabindex="-1"]')).toHaveCount(4);
     // A real card a tile, hidden from the reader, without signals (unreadable that small).
     await expect(row(page).locator('.card-type-thumb[aria-hidden="true"] .person-card')).toHaveCount(5);
-    await expect(row(page).locator('.card-type-thumb .card-signal, .card-type-thumb .card-signal-dot, .card-type-thumb .card-state')).toHaveCount(0);
+    await expect(row(page).locator('.card-type-thumb .card-signal, .card-type-thumb .card-signal-dot, .card-type-thumb .card-status-mark')).toHaveCount(0);
     // A quarter of the card: Normal's 188 × 64 box drawn 47 × 16.
     const normalThumb = await tile(page, 'Normal').locator('.card-type-thumb-box').boundingBox();
     expect([Math.round(normalThumb!.width), Math.round(normalThumb!.height)]).toEqual([47, 16]);

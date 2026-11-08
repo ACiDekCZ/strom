@@ -96,7 +96,8 @@ describe('the card’s signal', () => {
         const { data, id } = loadHypothesisLinksTree();
         const ctx = {
             data, unions: unionsByPerson(data), treeHasSources: true, research: new Map(),
-            settings: { evidence: true, story: true, waiting: true, conflict: true, question: true, agent: true },
+            reliability: { researchTree: false, originFeature: false },
+            settings: { status: true, story: true, waiting: true, conflict: true, question: true, agent: true, crossTree: true },
         };
         const count = (refn: string) => cardSignalInfo(data.persons[id(refn)], ctx).hypotheses;
         // Rozálie: H0024 open, H0026 decided. Karel: H0025 open, H0027 abandoned. Antonín: H0026 decided, H0028 open.
