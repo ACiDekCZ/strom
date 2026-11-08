@@ -9,6 +9,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
 import { keepImports } from '../import-origin.js';
+import { resolveContentOptions } from '../privacy.js';
 import { Person, StromData } from '../types.js';
 
 const SHA = 'cd'.repeat(32);
@@ -259,5 +260,77 @@ describe('a research version over the tree keeps the app\'s import records', () 
         expect(kept.imports?.map(r => r.id).sort()).toEqual(['I1', 'R1']);
         expect(byName(kept, 'Hostivít').researchOrigins).toEqual(byName(next, 'Hostivít').researchOrigins);
         expect(next.imports?.map(r => r.id)).toEqual(['R1']);
+    });
+});
+
+/**
+ * The research's file through the app and back out (066 N-B): every fact the
+ * app keeps keeps its origin, also one without a date or a place — a known
+ * death (`DEAT Y`), a wedding said only by its status, an event with only a
+ * remark, an address or a label.
+ */
+const BARE_FACTS_GED = `${HEAD_RESEARCH}
+0 @I1@ INDI
+1 NAME Bořivoj /Kmínek/
+2 _STROM_ORIGIN import R1
+1 SEX M
+1 _STROM_SEX_ORIGIN import R1
+1 BIRT
+2 DATE 1840
+2 _STROM_ORIGIN import R1
+1 EDUC
+2 _STROM_ORIGIN import R1
+2 NOTE obecná škola
+1 RESI
+2 ADDR čp. 12
+2 _STROM_ORIGIN import R1
+1 DEAT Y
+2 SOUR @S1@
+3 PAGE fol. 7
+3 QUAY 1
+2 _STROM_STATUS lead
+2 _STROM_ORIGIN import R1
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Ludmila /Kmínková/
+2 _STROM_ORIGIN import R1
+1 SEX F
+1 _STROM_SEX_ORIGIN import R1
+1 DEAT Y
+2 _STROM_STATUS proven
+2 _STROM_ORIGIN research
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR Y
+2 _STROM_STATUS lead
+2 _STROM_ORIGIN import R1
+1 EVEN
+2 TYPE Zasnoubení
+2 _STROM_STATUS lead
+2 _STROM_ORIGIN import R1
+0 @S1@ SOUR
+1 TITL Matrika Kmínkov
+0 TRLR`;
+
+describe('a fact without a date or a place keeps its origin through the app (066 N-B)', () => {
+    const count = (text: string, re: RegExp): number => text.split(/\r?\n/).filter(l => re.test(l)).length;
+    const data = convertToStrom(parseGedcom(BARE_FACTS_GED)).data;
+
+    for (const [label, content] of [['the file export (every content)', resolveContentOptions(true)], ['no content choice', undefined]] as const) {
+        it(`${label}: as many _STROM_ORIGIN lines go out as came in`, () => {
+            const out = exportToGedcom(structuredClone(data), 'Kmínkovi', { origins: true, ...(content ? { content } : {}) }).content;
+            expect(count(out, /^2 _STROM_ORIGIN /)).toBe(count(BARE_FACTS_GED, /^2 _STROM_ORIGIN /));
+            expect(count(out, /^1 _STROM_SEX_ORIGIN /)).toBe(2);
+            // The known death with its citation says where it came from.
+            expect(out).toMatch(/1 DEAT Y\n2 _STROM_STATUS lead\n2 SOUR @S\d+@\n3 PAGE fol\. 7\n3 QUAY 1\n2 _STROM_ORIGIN import R1/);
+        });
+    }
+
+    it('a fact the content choice leaves out takes its origin with it', () => {
+        // Leaving the notes out keeps every fact: the birth keeps its origin.
+        const out = exportToGedcom(structuredClone(data), 'Kmínkovi', { origins: true, content: { ...resolveContentOptions(true), notes: false } }).content;
+        expect(out).toMatch(/1 BIRT\n2 DATE 1840\n2 _STROM_ORIGIN import R1/);
     });
 });

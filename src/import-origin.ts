@@ -728,11 +728,32 @@ export function forgetHiddenImports(holder: FactHolder, changed: boolean): void 
     else if (holder.researchOrigins) {
         const facts = new Set(factsOf(holder));
         for (const fact of Object.keys(holder.researchOrigins)) {
-            const hasValue = Object.values(factParts(holder, fact)).some(key => !!factValue(holder, key!));
-            if (!facts.has(fact) || !hasValue) delete holder.researchOrigins[fact];
+            if (!facts.has(fact) || !factStands(holder, fact)) delete holder.researchOrigins[fact];
         }
         if (Object.keys(holder.researchOrigins).length === 0) delete holder.researchOrigins;
     }
+}
+
+/**
+ * Whether a fact is still there to be written: a value of one of its parts,
+ * or what says it without one — a known death (`DEAT Y`), a cited birth, a
+ * wedding said by the couple's status, an event of the person or the couple
+ * (one with only a remark, an address or a label is still the event).
+ */
+function factStands(holder: FactHolder, fact: string): boolean {
+    if (Object.values(factParts(holder, fact)).some(key => !!factValue(holder, key!))) return true;
+    if (fact.startsWith('event:')) return !!eventById(holder, fact.slice(6));
+    if (isPartnership(holder)) {
+        if (fact === 'marriage') return holder.status === 'married' || holder.status === 'divorced'
+            || !!holder.sourceIds?.length || !!holder.participants?.length || !!holder.address;
+        if (fact === 'divorce') return holder.status === 'divorced';
+        return false;
+    }
+    const person = holder as Person;
+    if (fact === 'death') return person.isDeceased === true || !!person.deathSourceIds?.length
+        || !!person.deathCause || !!person.deathAge || !!person.deathAddress;
+    if (fact === 'birth') return !!person.birthSourceIds?.length || !!person.birthAddress;
+    return false;
 }
 
 /** A parent link that is gone loses its import mark too. */
