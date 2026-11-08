@@ -107,6 +107,9 @@ const signalsCache = new WeakMap<StromData, TreeSignals>();
 
 /** What the tree's surnames say about its language, worked out once per tree size. */
 function treeSignals(data: StromData): TreeSignals {
+    // Inside one pass over the tree the tree does not change: no recount.
+    const pass = passOf(data);
+    if (pass) return pass.signals;
     const personCount = Object.keys(data.persons).length;
     const cached = signalsCache.get(data);
     if (cached && cached.personCount === personCount) return cached;
@@ -137,22 +140,43 @@ function treeSignals(data: StromData): TreeSignals {
  */
 export function czechRulesApply(data: StromData): boolean {
     // Inside one pass over the tree (a search): asked once for it, not per person.
-    if (rulesPass && rulesPass.data === data) return rulesPass.relevant;
+    const pass = passOf(data);
+    if (pass) return pass.relevant;
     const s = treeSignals(data);
     if (s.polish > s.czechLetters + s.czechOva) return false;
     return getCurrentLanguage() === 'cs' || s.czechLetters > 0;
 }
 
-let rulesPass: { data: StromData; relevant: boolean } | null = null;
+/** A pass over one tree (withSurnameRules); passes nest, one per tree (a merge reads two). */
+interface RulesPass {
+    data: StromData;
+    relevant: boolean;
+    signals: TreeSignals;
+    /** The keys of a surname's forms by the rules (sameSurname), worked out once per surname. */
+    forms: Map<string, string[]>;
+    outer: RulesPass | null;
+}
+
+let rulesPass: RulesPass | null = null;
+
+/** The pass running over this tree, if any. */
+function passOf(data: StromData): RulesPass | null {
+    for (let pass = rulesPass; pass; pass = pass.outer) {
+        if (pass.data === data) return pass;
+    }
+    return null;
+}
 
 /**
- * Run `fn` as one pass over the tree: czechRulesApply is worked out once for
- * it. Counting the people on every call made a search grow with the square of
- * the tree (90 ms a keystroke at 2 500 people outside the Czech UI).
+ * Run `fn` as one pass over the tree: czechRulesApply and the tree's surname
+ * signals are worked out once for it (the tree must not change inside).
+ * Counting the people on every call made a search grow with the square of
+ * the tree (90 ms a keystroke at 2 500 people outside the Czech UI), and a
+ * merge of two trees of 2 400 people took minutes. Passes over two trees nest.
  */
 export function withSurnameRules<T>(data: StromData, fn: () => T): T {
     const prev = rulesPass;
-    rulesPass = { data, relevant: czechRulesApply(data) };
+    rulesPass = { data, relevant: czechRulesApply(data), signals: treeSignals(data), forms: new Map(), outer: prev };
     try {
         return fn();
     } finally {
@@ -312,9 +336,14 @@ export function sameSurname(a: string, b: string, data: StromData): boolean {
 
     // Fíšek and Fíšková are one family; nobody should have to say so — but only
     // where the rules apply at all (see genderRulesApply above).
+    const pass = passOf(data);
     const formsOf = (s: string): string[] => {
+        const known = pass?.forms.get(s);
+        if (known) return known;
         const rule = ruleForms(s, data);
-        return [s, ...rule.masculine, rule.feminine ?? ''].map(surnameKey).filter(Boolean);
+        const forms = [s, ...rule.masculine, rule.feminine ?? ''].map(surnameKey).filter(Boolean);
+        pass?.forms.set(s, forms);
+        return forms;
     };
     const formsA = formsOf(a);
     const formsB = formsOf(b);

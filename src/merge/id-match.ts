@@ -129,6 +129,44 @@ export function idEvidence(existing: Person, incoming: Person, existingData: Str
 }
 
 /**
+ * The persons of a tree by their strong ids: which of them share a strong id
+ * of one kind with a record (`idEvidence(...).same`), without comparing the
+ * record with every person of the tree.
+ */
+export interface StrongIdIndex {
+    /** Positions in `persons` (ascending) of those sharing a strong id of one kind with `person`. */
+    sharing(person: Person, data: StromData): number[];
+}
+
+export function strongIdIndex(persons: readonly Person[], data: StromData): StrongIdIndex {
+    const byGroup = new Map<string, Map<string, number[]>>();
+    persons.forEach((person, at) => {
+        if (!person.originalIds?.length) return;
+        for (const [group, values] of keysOf(person, data).strong) {
+            let byValue = byGroup.get(group);
+            if (!byValue) byGroup.set(group, byValue = new Map());
+            for (const value of values) {
+                const list = byValue.get(value);
+                if (!list) byValue.set(value, [at]);
+                else if (list[list.length - 1] !== at) list.push(at);
+            }
+        }
+    });
+    return {
+        sharing(person: Person, personData: StromData): number[] {
+            if (!person.originalIds?.length) return [];
+            const found = new Set<number>();
+            for (const [group, values] of keysOf(person, personData).strong) {
+                const byValue = byGroup.get(group);
+                if (!byValue) continue;
+                for (const value of values) for (const at of byValue.get(value) ?? []) found.add(at);
+            }
+            return [...found].sort((a, b) => a - b);
+        },
+    };
+}
+
+/**
  * The two records were one record (one xref) of files the same program wrote:
  * a family of a file merged again into a tree loaded from it before.
  */

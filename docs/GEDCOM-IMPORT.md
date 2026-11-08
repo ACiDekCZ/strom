@@ -711,7 +711,10 @@ second family link comes along. A source entry read by an older build (one
 `QUAY` for every page of a source record) takes each page's own `QUAY`, and a
 page cited twice with another `QUAY` or `DATA` / `DATE` keeps each citation
 on its own entry. So "Back to {program}" after such a merge gives the records
-a fresh import gives.
+a fresh import gives. Finding the pairs takes seconds on a file of a few
+thousand people (one matching pass works out the tree's surname rules once and
+remembers the names and surname pairs it has compared); the pairs are the
+ones the earlier, slower search found.
 
 The "Back to" file read into Strom again keeps the other program's tags of
 each record that carries `1 _STROM_IMPORT Ix`, for that import, so the next
