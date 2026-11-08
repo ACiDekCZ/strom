@@ -849,8 +849,9 @@ function calculateMatchScore(
     const reasons: MatchReason[] = [];
 
     // The ids the loaded files gave both records: a shared strong id is the
-    // same person (a man and a woman only a candidate); a strong id that
-    // differs keeps a name match below the auto-confirm bar.
+    // same person (a man and a woman only a candidate); a global id
+    // (_FSFTID, AFN, EXID) that differs keeps a name match below the
+    // auto-confirm bar.
     const ids = idEvidence(existing, incoming, existingData, incomingData);
     if (ids.strong === 'same') {
         return gendersCompatible(existing.gender, incoming.gender)

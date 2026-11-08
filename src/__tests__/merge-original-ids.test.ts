@@ -2,8 +2,10 @@
  * Merging by the ids the loaded GEDCOM files gave a record (spec 066 K3.2):
  * a strong id (`_UID`, `UID`, `_FSFTID`, `AFN`, `EXID` + TYPE) both files give
  * is the same person whatever the names say (a man and a woman only a
- * candidate); a strong id that differs keeps a name match below the
- * auto-confirm bar; an xref or RIN counts only between files of one program,
+ * candidate; `_UID` and `UID` one kind); a global id (`_FSFTID`, `AFN`,
+ * `EXID` + TYPE) that differs keeps a name match below the auto-confirm bar,
+ * a UUID that differs says nothing; an xref or RIN counts only between files
+ * of one program,
  * only on top of a name match.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -117,12 +119,29 @@ describe('strong ids', () => {
         expect(isEffectivelyConfirmed(state, match!)).toBe(false);
     });
 
-    it('a _UID that differs keeps an exact name and birth date match below the bar: it is offered', () => {
-        const person = (uid: string): string => ged('MyHeritage Family Tree Builder', [
-            { xref: 'I1', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '2 FEB 1880', lines: [`1 _UID ${uid}`] },
+    it('a _UID that differs says nothing: two MyHeritage trees give one person different UUIDs, the match confirms itself', () => {
+        // Different xrefs too: two trees, nothing of one tree's numbering in common.
+        const person = (xref: string, uid: string): string => ged('MyHeritage Family Tree Builder', [
+            { xref, name: 'Hromoslav /Ozubec/', sex: 'M', birth: '2 FEB 1880', lines: [`1 _UID ${uid}`] },
         ]);
-        const existing = load(person(UID), 'a.ged');
-        const incoming = load(person('9D3A1B2C3D4E5F60718293A4B5C6D7E8'), 'b.ged');
+        const existing = load(person('I500001', UID), 'a.ged');
+        const incoming = load(person('I700042', '9D3A1B2C3D4E5F60718293A4B5C6D7E8'), 'b.ged');
+        const state = createMergeState(existing, incoming);
+        const match = matchOf(state, byName(incoming, 'Hromoslav'));
+        expect(match!.score).toBeGreaterThanOrEqual(AUTO_CONFIRM_SCORE);
+        expect(isEffectivelyConfirmed(state, match!)).toBe(true);
+        // The same as without ids.
+        delete byName(existing, 'Hromoslav').originalIds;
+        const plain = createMergeState(existing, incoming);
+        expect(matchOf(plain, byName(incoming, 'Hromoslav'))!.score).toBe(match!.score);
+    });
+
+    it('an _FSFTID that differs keeps an exact name and birth date match below the bar: it is offered', () => {
+        const person = (uid: string, fsid: string): string => ged('MyHeritage Family Tree Builder', [
+            { xref: 'I1', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '2 FEB 1880', lines: [`1 _UID ${uid}`, `1 _FSFTID ${fsid}`] },
+        ]);
+        const existing = load(person(UID, 'KWCB-HZ2'), 'a.ged');
+        const incoming = load(person('9D3A1B2C3D4E5F60718293A4B5C6D7E8', 'LZ7M-Q41'), 'b.ged');
         const state = createMergeState(existing, incoming);
         const match = matchOf(state, byName(incoming, 'Hromoslav'));
         expect(match).toBeDefined();
@@ -132,6 +151,18 @@ describe('strong ids', () => {
         delete byName(existing, 'Hromoslav').originalIds;
         const plain = createMergeState(existing, incoming);
         expect(isEffectivelyConfirmed(plain, matchOf(plain, byName(incoming, 'Hromoslav'))!)).toBe(true);
+    });
+
+    it('_UID and UID are one kind: the same UUID written the GEDCOM 5.5.1 and the GEDCOM 7 way is the same person', () => {
+        const existing = load(ged('Legacy', [
+            { xref: 'I1', name: 'Hromoslav /Ozubec/', sex: 'M', lines: [`1 _UID ${UID}`] },
+        ]), 'a.ged');
+        const incoming = load(ged('GEDCOM 7 Program', [
+            { xref: 'I9', name: 'Mlhoň /Šťovík/', sex: 'M', lines: ['1 UID 5f3a1b2c-3d4e-5f60-7182-93a4b5c6d7e8'] },
+        ]), 'b.ged');
+        const match = matchOf(createMergeState(existing, incoming), byName(incoming, 'Mlhoň'));
+        expect(match?.existingId).toBe(byName(existing, 'Hromoslav').id);
+        expect(match?.score).toBe(100);
     });
 
     it('the id decides before a name: another person with the same name does not take the one the id names', () => {
