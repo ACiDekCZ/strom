@@ -26,7 +26,7 @@ import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo } from '
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT, CARD_EDGE_PILL_LEFT,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_LEFT, CARD_STATUS_MARK_ROOM, bottomRightPillsRoom,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText } from './card-signals.js';
@@ -148,6 +148,8 @@ interface CustomCardsMeasure {
     edgeRightIds: Set<PersonId>;
     /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
     edgeLeftIds: Set<PersonId>;
+    /** The cards whose last line was wrapped clear of the status mark (CARD_STATUS_MARK_ROOM) and of no pill. */
+    statusRoomIds: Set<PersonId>;
 }
 /**
  * What the outputs draw (the poster, the book's tree, the people of the
@@ -285,8 +287,6 @@ function markChangedRows(old: HTMLElement, fresh: HTMLElement): void {
         if (was === undefined && text.trim()) el.classList.add('live-field');
     }
 }
-/** Room the sibling-order pill ("3 of 5") takes on a card's bottom-right edge, with its inset (px). */
-const SIBLING_ORDER_PILL_RIGHT = 60;
 
 /** A bubble's own height, not the one its max-height cuts it to. */
 function bubbleOwnHeight(bubble: HTMLElement): number {
@@ -357,6 +357,8 @@ class TreeRendererClass {
     private edgeRightIds = new Set<PersonId>();
     /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
     private edgeLeftIds = new Set<PersonId>();
+    /** The cards whose last line was wrapped clear of the status mark alone (CARD_STATUS_MARK_ROOM). */
+    private statusRoomIds = new Set<PersonId>();
     /** The other trees the last cards were matched against (the ⇄ pill); the next measure reads them. */
     private lastCrossTrees: Map<TreeId, { name: string; data: StromData }> | null = null;
     /** The last render was the one more render asked for by pills measured otherwise (never twice in a row). */
@@ -772,6 +774,7 @@ class TreeRendererClass {
             this.edgeRoomIds.clear();
             this.edgeRightIds.clear();
             this.edgeLeftIds.clear();
+            this.statusRoomIds.clear();
             this.customLines.clear();
             this.customRows.clear();
             this.customHeads.clear();
@@ -1329,6 +1332,7 @@ class TreeRendererClass {
         this.edgeRoomIds = measured.edgeRoomIds;
         this.edgeRightIds = measured.edgeRightIds;
         this.edgeLeftIds = measured.edgeLeftIds;
+        this.statusRoomIds = measured.statusRoomIds;
         return measured.metrics;
     }
 
@@ -1346,6 +1350,10 @@ class TreeRendererClass {
         // wrapped that much narrower.
         const edgeRightIds = new Set<PersonId>();
         const edgeLeftIds = new Set<PersonId>();
+        // The status mark in the bottom-right corner (spec 066 P4 §2): a last line
+        // that may reach its height keeps 22px clear of it (pills keep more).
+        const statusRoomIds = new Set<PersonId>();
+        const signalCtx = this.signalContext();
         const visible = (pid: PersonId) => positions.has(pid);
         let anyBirth = false;
         for (const id of positions.keys()) {
@@ -1360,6 +1368,12 @@ class TreeRendererClass {
             const reserve = fields.height !== 'content' && personLines.length > 0 && (crossPill || siblingPill || partnersPill);
             if (reserve && (crossPill || siblingPill)) edgeRightIds.add(id);
             if (reserve && partnersPill) edgeLeftIds.add(id);
+            // The status mark: unless the pills' room already covers it (a card of one height
+            // keeps theirs on the last line; a card as tall as its content grows below its text).
+            const pillsGrow = fields.height === 'content' && (crossPill || siblingPill || partnersPill);
+            const statusRoom = personLines.length > 0 && !(reserve && (crossPill || siblingPill)) && !pillsGrow
+                && cardSignalInfo(person, signalCtx).showStatus;
+            if (statusRoom) statusRoomIds.add(id);
             // The birth surname under the name (src/person-name.ts): its row never widens the card.
             const birth = birthNoteText(shownNameParts(person, '?').birthNote);
             if (birth) anyBirth = true;
@@ -1367,8 +1381,8 @@ class TreeRendererClass {
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(birth ? { birth } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
-                ...(reserve ? { lastLineReserve: (crossPill ? CARD_EDGE_PILL_RIGHT : 0) + (siblingPill ? SIBLING_ORDER_PILL_RIGHT : 0)
-                    + (partnersPill ? CARD_EDGE_PILL_LEFT : 0) } : {}),
+                ...(reserve || statusRoom ? { lastLineReserve: (reserve ? bottomRightPillsRoom(crossPill, siblingPill)
+                    + (partnersPill ? CARD_EDGE_PILL_LEFT : 0) : 0) + (statusRoom ? CARD_STATUS_MARK_ROOM : 0) } : {}),
             });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
@@ -1378,7 +1392,7 @@ class TreeRendererClass {
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
         const measured = {
             lines, rows, wrapped: fields.lines !== 1, style: fields.style,
-            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds, edgeLeftIds,
+            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds, edgeLeftIds, statusRoomIds,
         };
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
@@ -4299,6 +4313,8 @@ class TreeRendererClass {
             // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
             const statusHtml = signals.showStatus ? statusMarkHtml(signals.status) : '';
             if (statusHtml) classes += ' has-status';
+            // A narrow card (compact): the bottom-right edge's pills take their short forms (spec 066 P4 §2).
+            if (this.config.cardWidth < 160) classes += ' edge-narrow';
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -4499,6 +4515,8 @@ class TreeRendererClass {
             // Person status: the story's fold in the card's bottom-right corner, in
             // every density (decoration; the tooltip and aria-label say it).
             const stateHtml = storyFoldHtml(signals.showStory ? signals.story : null);
+            // The fold takes the very corner; without it the status mark moves into it (index.html).
+            if (stateHtml) card.classList.add('has-story');
             // The action badge on the avatar's corner (a dot on the card's
             // corner where there is no avatar, or when zoomed far out). Without
             // a badge: the agent's arc circling the avatar (a small ring at the
@@ -4553,7 +4571,7 @@ class TreeRendererClass {
                     ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
                 </div>
             `;
-            // The lock, the status stripes and the corner dot: on every card type, the custom one too (N34).
+            // The lock, the status mark, the fold and the corner dot: on every card type, the custom one too (N34).
             html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${statusHtml}${stateHtml}${dotHtml}`;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
@@ -4637,6 +4655,7 @@ class TreeRendererClass {
             const siblingOrder = this.siblingOrderOf(id);
             const siblingOrderHtml = siblingOrder
                 ? `<span class="sibling-order-pill" aria-hidden="true"><span class="so-text">${this.escapeHtml(strings.focus.siblingOrderPill(siblingOrder.n, siblingOrder.total))}</span>`
+                    + `<span class="so-short">${this.escapeHtml(strings.focus.siblingOrderPillShort(siblingOrder.n, siblingOrder.total))}</span>`
                     + `<span class="badge-tooltip so-tip">${this.escapeHtml(strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total))}</span></span>`
                 : '';
             if (siblingOrder) card.setAttribute('aria-label', `${card.getAttribute('aria-label') ?? ''}. ${strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total)}`);
@@ -4644,17 +4663,19 @@ class TreeRendererClass {
             const siblingRoom = this.siblingOrderCandidate(id);
             if (crossTreeHtml || siblingOrderHtml) {
                 html += `<div class="card-edge edge-bottom-right">${siblingOrderHtml}${crossTreeHtml}</div>`;
-                // The pill reaches 9 px into the card: the status stripes rise above it.
+                // The pills reach 9 px into the card, 40 px before its corner (the status mark stays there).
                 card.classList.add('has-edge-br');
             }
             // The room on the card: where the pill stands, or where a card of one height was wrapped for it
             if (siblingOrderHtml || (siblingRoom && this.edgeRightIds.has(id))) {
                 card.classList.add('has-edge-br');
-                card.style.setProperty('--edge-br-room', `${SIBLING_ORDER_PILL_RIGHT + (crossTreeHtml ? CARD_EDGE_PILL_RIGHT : 0)}px`);
+                card.style.setProperty('--edge-br-room', `${bottomRightPillsRoom(!!crossTreeHtml, true)}px`);
             }
             const rightPills = !!crossTreeHtml || siblingRoom;
             // A card of details measured with the pills' room keeps its text above them (index.html .has-edge-room).
             if (this.edgeRoomIds.has(id)) card.classList.add('has-edge-room');
+            // Its last line wrapped clear of the status mark alone (index.html .has-status-room).
+            if (this.statusRoomIds.has(id)) card.classList.add('has-status-room');
             if (measuresEdgeRoom && this.edgeRoomIds.has(id) !== !!(hiddenIndicatorsHtml || rightPills)) edgeRoomStale = true;
             // A card of one height: its last line wrapped clear of the ⇄ pill exactly when the pill is there.
             if (customLines?.length && !measuresEdgeRoom && this.edgeRightIds.has(id) !== rightPills) edgeRoomStale = true;
@@ -4755,6 +4776,8 @@ class TreeRendererClass {
                     ttRecorded ? `<div class="tt-line tt-warn">${this.escapeHtml(ttRecorded)}</div>` : '',
                     ...ttRelLines.map(line => `<div class="tt-line tt-rel">${line}</div>`),
                     ttSignals ? `<div class="tt-signals">${ttSignals}</div>` : '',
+                    // The sibling order, shown here only when its pill had to give way (index.html .so-retreat).
+                    siblingOrder ? `<div class="tt-line tt-so">${this.escapeHtml(strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total))}</div>` : '',
                     ttViewLink,
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
                 ].filter(Boolean).join('');
@@ -4894,11 +4917,28 @@ class TreeRendererClass {
 
             this.placeCard(canvas, card, id, live);
         }
+        this.yieldSiblingOrderPills(canvas);
         // Measure again with the pills as drawn (once: the second render knows them).
         if (edgeRoomStale && !this.edgeRoomRetried) {
             this.edgeRoomRetried = true;
             this.edgeRoomRerenderSeq = this.renderSeq;
         } else this.edgeRoomRetried = false;
+    }
+
+    /**
+     * The bottom edge of a card (spec 066 P4 §2): when the bottom-right pills
+     * (⇄ N, the sibling order) reach the ∞ pills on the left, the sibling
+     * order gives way to the card's bubble. Only cards with pills on both
+     * sides are read.
+     */
+    private yieldSiblingOrderPills(canvas: HTMLElement): void {
+        for (const card of canvas.querySelectorAll<HTMLElement>(':scope > .person-card.has-edge-bl')) {
+            const pill = card.querySelector<HTMLElement>(':scope > .edge-bottom-right .sibling-order-pill');
+            const left = card.querySelector<HTMLElement>(':scope > .edge-bottom-left');
+            card.classList.remove('so-retreat');
+            if (!pill || !left) continue;
+            if (left.getBoundingClientRect().right + 4 > pill.getBoundingClientRect().left) card.classList.add('so-retreat');
+        }
     }
 
     /**

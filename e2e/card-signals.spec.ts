@@ -215,7 +215,7 @@ test.describe('card signals', () => {
         await expect(jan.locator(':scope > .card-signal-dot')).toBeVisible();
     });
 
-    test('the ⇄ other-trees pill: neutral, no ↗; the status mark rises above it, the text keeps clear', async ({ page }) => {
+    test('the ⇄ other-trees pill: neutral, no ↗, 40px from the corner; the status mark stays in the corner, the text keeps clear (spec 066 P4 §2)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);
         // The same documented Jan in two trees: his card carries the ⇄ pill.
@@ -238,10 +238,12 @@ test.describe('card signals', () => {
             await expect(jan.locator('.cross-tree-badge')).not.toContainText('↗');
             await expect(jan.locator('.cross-tree-badge')).not.toHaveClass(/kind-jump/);
             const stripes = jan.locator(':scope > .card-status-mark');
-            await expect(stripes).toHaveCSS('bottom', '14px');
+            await expect(stripes).toHaveCSS('bottom', '4px');
             const sBox = (await stripes.boundingBox())!;
             const pill = (await jan.locator('.cross-tree-badge').boundingBox())!;
             expect(overlap(sBox, pill), `${density}: status mark under the pill`).toBe(false);
+            // The bottom edge ends 40px before the card's right edge (the corner is the status).
+            await expect(jan.locator('.edge-bottom-right')).toHaveCSS('right', '40px');
             const fields = density === 'custom' || density === 'detailed' || density === 'register';
             if (fields) {
                 // A card of details is not narrowed: it was measured 12px taller (padding 10 → 22),
@@ -251,9 +253,6 @@ test.describe('card signals', () => {
                 await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '0px');
                 await expect(jan.locator('.card-lines > :last-child')).toHaveCSS('padding-right', '0px');
                 await expect(jan.locator('.card-line [title]')).toHaveCount(0);
-            } else {
-                // The last text line (the name in compact) ends before the stripes.
-                await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '46px');
             }
             // Text lines clip at their own box: no box reaches under the stripes.
             for (const sel of ['.name', '.birth-date', '.card-line']) {
@@ -268,6 +267,7 @@ test.describe('card signals', () => {
         await expect(jan.locator('.cross-tree-badge')).toHaveCount(0);
         await expect(jan).not.toHaveClass(/has-edge-br/);
         await expect(jan.locator(':scope > .card-status-mark')).toHaveCSS('bottom', '4px');
+        await expect(jan.locator(':scope > .card-status-mark')).toHaveCSS('right', '5px');
         // The Register card no longer keeps the pills' room.
         await expect(jan).not.toHaveClass(/has-edge-room/);
         await expect(jan).toHaveCSS('padding-bottom', '10px');

@@ -42,6 +42,15 @@ test('one match: the badge shows, the setting hides it, a click switches directl
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible();
     // The bubble says what the match was found by.
     await expect(page.locator('.cross-tree-tooltip-reason').first()).toHaveText('Matched by: name, birth');
+    // The corner map (spec 066 P4 §2): ⇄ ends 40px before the card's right edge, no ↗ (another tree is in the app).
+    await expect(card(page, 'Jan').locator('.edge-bottom-right')).toHaveCSS('right', '40px');
+    const pill = await card(page, 'Jan').evaluate((el) => {
+        const b = el.querySelector<HTMLElement>('.cross-tree-badge')!;
+        const edge = b.parentElement!.getBoundingClientRect();
+        return { atEnd: Math.abs(edge.right - b.getBoundingClientRect().right) < 1, text: b.textContent ?? '' };
+    });
+    expect(pill.atEnd).toBe(true);
+    expect(pill.text).not.toContain('↗');
 
     await page.locator('.cross-tree-badge').first().click();
 

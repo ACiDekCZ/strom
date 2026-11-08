@@ -311,3 +311,99 @@ test('Czech and German texts of the row, the notice and the note', async ({ page
     await expect(host(page).locator('.card-type-notice-text')).toHaveText('Eigene hat jetzt die Einstellungen von Detailliert.');
     await expect(host(page).getByRole('button', { name: 'Vorherige wiederherstellen' })).toBeVisible();
 });
+
+/**
+ * The corner map of a card (spec 066 P4 §2): the fullest card — the status
+ * mark, the story's fold, the lock, the action badge, ⇄ N on the bottom edge
+ * and ∞ N at its left — in every type, on a computer and on a 390px phone.
+ * Nothing of it covers another part or a text of the card. Václav (invented)
+ * married three times; one partner without children is not drawn ("▸ ∞ 1");
+ * the tree is imported twice, so he is in another tree (⇄ 1).
+ */
+async function fullestCard(page: Page, width: number): Promise<void> {
+    await page.setViewportSize({ width, height: width < 641 ? 844 : 900 });
+    await openApp(page);
+    await page.evaluate(async () => {
+        const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+        const persons = {
+            g1: P('g1', { firstName: 'Václav Bonifác', lastName: 'Kvapilík-Vlčinský', birthDate: '1800', birthPlace: 'Horní Lhota u Bystřice nad Pernštejnem',
+                deathDate: '1870', deathPlace: 'Horní Lhota', partnerships: ['u1', 'u2', 'u4'], childIds: ['p1', 'x1'], birthSourceIds: ['s1'],
+                story: { text: 'Hospodařil na čp. 12.', status: 'final' }, question: 'Kdy se oženil podruhé?', isLocked: true }),
+            g2: P('g2', { firstName: 'Anna', lastName: 'Vlková', gender: 'female', birthDate: '1805', partnerships: ['u1'], childIds: ['p1'] }),
+            gx: P('gx', { firstName: 'Rozálie', lastName: 'Dvořáková', gender: 'female', birthDate: '1810', partnerships: ['u2'], childIds: ['x1'] }),
+            gy: P('gy', { firstName: 'Kateřina', lastName: 'Malá', gender: 'female', birthDate: '1815', partnerships: ['u4'] }),
+            x1: P('x1', { firstName: 'Matěj', lastName: 'Vlk', birthDate: '1835', parentIds: ['g1', 'gx'] }),
+            p1: P('p1', { firstName: 'Jan', lastName: 'Vlk', birthDate: '1830', parentIds: ['g1', 'g2'], partnerships: ['u3'], childIds: ['f'] }),
+            p2: P('p2', { firstName: 'Marie', lastName: 'Nová', gender: 'female', birthDate: '1835', partnerships: ['u3'], childIds: ['f'] }),
+            f: P('f', { firstName: 'Josef', lastName: 'Vlk', birthDate: '1860', parentIds: ['p1', 'p2'] }),
+        };
+        const partnerships = {
+            u1: { id: 'u1', person1Id: 'g1', person2Id: 'g2', childIds: ['p1'], status: 'married', isPrimary: true },
+            u2: { id: 'u2', person1Id: 'g1', person2Id: 'gx', childIds: ['x1'], status: 'married' },
+            u3: { id: 'u3', person1Id: 'p1', person2Id: 'p2', childIds: ['f'], status: 'married', startDate: '1858' },
+            u4: { id: 'u4', person1Id: 'g1', person2Id: 'gy', childIds: [], status: 'married', startDate: '1850' },
+        };
+        const sources = { s1: { id: 's1', title: 'Matrika' } };
+        const dm = window.Strom.DataManager;
+        await dm.importAsNewTree({ persons, partnerships, sources } as never, 'Vlkovi A');
+        await dm.importAsNewTree({ persons, partnerships, sources } as never, 'Vlkovi B');
+        window.Strom.TreeRenderer.setFocus('f' as never);
+    });
+    await expect(card(page, 'Václav')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+}
+
+for (const width of [1440, 390]) {
+    test(`${width}px: the corner map of the fullest card in every type — mark, fold, lock, badge, ⇄ and ∞ over nothing else (spec 066 P4 §2)`, async ({ page }) => {
+        await fullestCard(page, width);
+        const vaclav = card(page, 'Václav');
+        for (const type of ['compact', 'normal', 'detailed', 'register', 'custom']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), type);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', type);
+            for (const sel of [':scope > .card-status-mark', ':scope > .card-story', ':scope > .lock-icon', '.cross-tree-badge', '.hidden-partners-btn']) {
+                await expect(vaclav.locator(sel), `${type}: ${sel}`).toBeVisible();
+            }
+            await expect(vaclav.locator(type === 'compact' ? ':scope > .card-signal-dot' : '.card-signal'), `${type}: badge`).toBeVisible();
+            const clash = await vaclav.evaluate((el) => {
+                const parts = [':scope > .card-status-mark', ':scope > .card-story', ':scope > .lock-icon', '.cross-tree-badge',
+                    '.hidden-partners-btn', '.sibling-order-pill', '.card-signal', ':scope > .card-signal-dot']
+                    .flatMap(sel => [...el.querySelectorAll<HTMLElement>(sel)].filter(e => e.offsetWidth > 0)
+                        .map(e => ({ sel, r: e.getBoundingClientRect() })));
+                const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+                const out: string[] = [];
+                for (let i = 0; i < parts.length; i++) {
+                    for (let k = i + 1; k < parts.length; k++) if (hit(parts[i].r, parts[k].r)) out.push(`${parts[i].sel} × ${parts[k].sel}`);
+                }
+                // No text of the card under the corner's parts (the badge sits on the avatar, not on text).
+                const walker = document.createTreeWalker(el.querySelector('.card-body')!, NodeFilter.SHOW_TEXT);
+                for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                    if (!n.textContent?.trim()) continue;
+                    const range = document.createRange();
+                    range.selectNodeContents(n);
+                    // A text cut with "…" is seen only inside the boxes that clip it.
+                    let clip = new DOMRect(-1e6, -1e6, 2e6, 2e6);
+                    for (let e = n.parentElement; e && e !== el; e = e.parentElement) {
+                        if (getComputedStyle(e).overflowX === 'visible') continue;
+                        const b = e.getBoundingClientRect();
+                        const l = Math.max(clip.left, b.left), t = Math.max(clip.top, b.top);
+                        clip = new DOMRect(l, t, Math.min(clip.right, b.right) - l, Math.min(clip.bottom, b.bottom) - t);
+                    }
+                    for (const raw of range.getClientRects()) {
+                        const l = Math.max(raw.left, clip.left), t = Math.max(raw.top, clip.top);
+                        const r = new DOMRect(l, t, Math.min(raw.right, clip.right) - l, Math.min(raw.bottom, clip.bottom) - t);
+                        if (r.width <= 0 || r.height <= 0) continue;
+                        for (const p of parts) if (p.sel !== '.card-signal' && hit(r, p.r)) out.push(`"${n.textContent.trim()}" × ${p.sel}`);
+                    }
+                }
+                return out;
+            });
+            expect(clash, `${type}: parts over each other or over text`).toEqual([]);
+            // The bottom edge ends 40px before the corner; the narrow compact card shows a bare ⇄.
+            await expect(vaclav.locator('.edge-bottom-right')).toHaveCSS('right', '40px');
+            if (type === 'compact') await expect(vaclav.locator('.cross-tree-badge .pill-count')).toBeHidden();
+            else await expect(vaclav.locator('.cross-tree-badge .pill-count')).toHaveText('1');
+        }
+        // A phone: no sideways scroll of the page.
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}

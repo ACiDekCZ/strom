@@ -250,6 +250,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         childrenElsewhereHint: 'Kliknięcie imienia przesuwa widok do karty.',
         childrenElsewhereAria: (name: string) => `Przesuń widok do karty osoby ${name}`,
         siblingOrderPill: (n: number, total: number) => `${n}. z ${total}`,
+        siblingOrderPillShort: (n: number, total: number) => `${n}/${total}`,
         siblingOrderTooltip: (n: number, total: number) => `Według urodzenia ${n}. z ${total}. Na skraju z powodu linii, która biegnie stąd dalej.`,
         parentsFoldedHeader: 'Rodzice tymczasowo ukryci',
         parentsFoldedBody: (name: string) => `Zwolnili miejsce dla dzieci osoby ${name}.`,

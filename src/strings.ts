@@ -3944,6 +3944,7 @@ const stringsEN = {
         childrenElsewhereAria: (name: string) => `Move the view to the card of ${name}`,
         // The direct line stands at the end of its siblings' row: its place by birth.
         siblingOrderPill: (n: number, total: number) => `${n} of ${total}`,
+        siblingOrderPillShort: (n: number, total: number) => `${n}/${total}`,
         siblingOrderTooltip: (n: number, total: number) => `By birth ${n} of ${total}. At the end because the line continues from here.`,
         // Parents folded away for the time being to make room for shown children.
         parentsFoldedHeader: 'Parents hidden for now',
@@ -11838,6 +11839,7 @@ const stringsCZ: StringsType = {
         childrenElsewhereHint: 'Kliknutí na jméno posune pohled na kartu.',
         childrenElsewhereAria: (name: string) => `Posunout pohled na kartu osoby ${name}`,
         siblingOrderPill: (n: number, total: number) => `${n}. z ${total}`,
+        siblingOrderPillShort: (n: number, total: number) => `${n}/${total}`,
         siblingOrderTooltip: (n: number, total: number) => `Podle narození ${n}. z ${total}. Na kraji kvůli linii, která odtud pokračuje.`,
         parentsFoldedHeader: 'Rodiče dočasně skrytí',
         parentsFoldedBody: (name: string) => `Uvolnili místo pro děti osoby ${name}.`,
@@ -19646,6 +19648,7 @@ const stringsDE: StringsType = {
         childrenElsewhereHint: 'Ein Klick auf einen Namen verschiebt die Ansicht zur Karte.',
         childrenElsewhereAria: (name: string) => `Ansicht zur Karte von ${name} verschieben`,
         siblingOrderPill: (n: number, total: number) => `${n}. von ${total}`,
+        siblingOrderPillShort: (n: number, total: number) => `${n}/${total}`,
         siblingOrderTooltip: (n: number, total: number) => `Nach Geburt ${n}. von ${total}. Am Rand, weil die Linie hier weitergeht.`,
         parentsFoldedHeader: 'Eltern vorübergehend ausgeblendet',
         parentsFoldedBody: (name: string) => `Sie machen Platz für die Kinder von ${name}.`,

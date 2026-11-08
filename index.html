@@ -1963,7 +1963,9 @@
         /* The marriage-order pill above the tabs (its left set by the renderer). */
         .edge-top-above    { top: -29px; }
         .edge-bottom-left  { bottom: -9px; left: 12px; }
-        .edge-bottom-right { bottom: -9px; right: 12px; }
+        /* The bottom-right edge ends 40px before the corner (spec 066 P4 §2): the
+           corner is the person's status (the mark and the story's fold). */
+        .edge-bottom-right { bottom: -9px; right: 40px; }
         .edge-right-center { top: 50%; left: 100%; transform: translate(-9px, -50%); }
         .edge-bottom-center{ bottom: -9px; left: 50%; transform: translateX(-50%); }
 
@@ -8445,10 +8447,11 @@
         /* Lock styles */
         .person-card.locked .add-btn { display: none !important; }
         .person-card.locked .rel-link-icon { display: none !important; }
+        /* The top-right corner inside the card holds the lock alone (spec 066 P4 §2). */
         .lock-icon {
             position: absolute;
-            top: 2px;
-            right: 4px;
+            top: 5px;
+            right: 6px;
             font-size: 10px;
             opacity: 0.5;
             pointer-events: none;
@@ -11592,18 +11595,40 @@
         .card-status-mark .fs-dots i.on { background: currentColor; }
         /* In the tooltip, the menu and the Settings' preview: inline, before the words. */
         .card-status-mark--inline { position: static; flex-shrink: 0; vertical-align: middle; }
-        /* A pill in the bottom-right edge slot (⇄ other trees) reaches 9 px into
-           the card: the mark sits above it (until the corner map moves ⇄ aside),
-           the last text line keeps clear (a margin, not padding: a line's
+        /* The corner map (spec 066 P4 §2): the fold takes the very corner, the
+           mark stands 15px in from the right; without a fold it moves to 5px.
+           The pills of the bottom edge end 40px before the corner, so they
+           never meet. A focused card's 2px border moves both 1px inwards. */
+        .person-card:not(.has-story) > .card-status-mark { right: 5px; }
+        /* Text may reach the corner only above the mark: the last row that
+           could run under it keeps clear (a margin, not padding: a line's
            overflow clips at its padding edge). */
-        .person-card.has-edge-br .card-status-mark { bottom: 14px; }
-        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: var(--edge-br-room, 46px); }
+        .person-card.has-status .card-body:not(.card-body--custom) > .birth-date:last-child { margin-right: 28px; }
+        /* Compact: the name stands in the middle of a low card, beside the mark and the lock. */
+        body[data-card-density="compact"] .person-card:is(.has-status, .locked) { padding-right: 36px; }
+        body[data-card-density="compact"] .person-card.has-signal .lock-icon { right: 10px; }
         /* A card of details is never narrowed (its rows were measured for its
-           width): with room for the pills its text ends above the stripes; a
-           card of one height for the view keeps its last line clear of them
-           (its rows were wrapped 46px narrower, CARD_EDGE_PILL_RIGHT, so a
-           place fits or ends in "…", never clipped under the pill). */
-        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 46px); }
+           width): with room for the pills its text ends above them; a card of
+           one height for the view keeps its last line clear of them (its rows
+           were wrapped narrower, CARD_EDGE_PILL_RIGHT, so a place fits or ends
+           in "…", never clipped under the pill), or of the status mark alone
+           (22px, CARD_STATUS_MARK_ROOM). */
+        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 62px); }
+        .person-card.has-status-room:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: 22px; }
+        /* The lock in the top-right corner (B): a locked card's name ends before it ("…"). */
+        body[data-card-fields] .person-card.locked .card-head-text > .name { padding-right: 5px; }
+        body[data-card-fields] .person-card.locked .name--rows .name-row { text-overflow: ellipsis; }
+        /* A narrow card (< 160px, compact): "2/5" and a bare ⇄ (the count in its
+           bubble); a sibling order that cannot fit between the ∞ pill and the
+           corner gives way to the card's bubble. The mark, the lock and the
+           badge never give way. */
+        .sibling-order-pill .so-short { display: none; }
+        .person-card.edge-narrow .sibling-order-pill .so-text { display: none; }
+        .person-card.edge-narrow .sibling-order-pill .so-short { display: inline; }
+        .person-card.edge-narrow .cross-tree-badge .pill-count { display: none; }
+        .person-card.so-retreat .edge-bottom-right .sibling-order-pill { display: none; }
+        .card-tooltip .tt-line.tt-so { display: none; }
+        .person-card.so-retreat .card-tooltip .tt-line.tt-so { display: block; }
         /* The same at the left for the ∞ pill ("▸ ∞ 2", CARD_EDGE_PILL_LEFT). */
         .person-card.edge-bl-room:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-left: 52px; }
 

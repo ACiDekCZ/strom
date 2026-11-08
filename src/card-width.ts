@@ -102,7 +102,8 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
     /**
      * The room (px) the last line keeps free beside the pills on the bottom
      * edge of a card of one height for the view: the ⇄ pill on the right
-     * (CARD_EDGE_PILL_RIGHT), the ∞ pill on the left (CARD_EDGE_PILL_LEFT).
+     * (CARD_EDGE_PILL_RIGHT), the ∞ pill on the left (CARD_EDGE_PILL_LEFT),
+     * the status mark (CARD_STATUS_MARK_ROOM).
      * Its rows are wrapped that much narrower, so a text either fits beside
      * the pills or ends in "…".
      */
@@ -547,11 +548,31 @@ export const CARD_DETAIL_GAP = 3;
  */
 export const CARD_EDGE_PILL_ROOM = 12;
 /**
+ * The bottom-right edge (⇄ N, then the sibling order) starts this far from
+ * the card's right edge (index.html .edge-bottom-right, spec 066 P4 §2): the
+ * corner itself belongs to the status mark and the story's fold.
+ */
+export const CARD_EDGE_RIGHT_INSET = 40;
+/**
  * The room the last line of a card of one height for the view keeps at its
  * right for the ⇄ pill on the bottom-right edge (index.html .has-edge-br,
- * the same 46px as the line's padding there: "⇄ N ↗").
+ * the line's padding there): the 40px inset and the "⇄ N" pill, less the
+ * card's 12px padding.
  */
-export const CARD_EDGE_PILL_RIGHT = 46;
+export const CARD_EDGE_PILL_RIGHT = CARD_EDGE_RIGHT_INSET - 12 + 34;
+/** The same for the sibling-order pill ("2 of 5") and the 4px before it. */
+const SIBLING_ORDER_PILL_ROOM = 48;
+/** The last line's room for the pills on the bottom-right edge: ⇄ N, the sibling order, or both. */
+export function bottomRightPillsRoom(crossTree: boolean, siblingOrder: boolean): number {
+    if (!crossTree && !siblingOrder) return 0;
+    return CARD_EDGE_RIGHT_INSET - 12 + (crossTree ? 34 : 0) + (siblingOrder ? SIBLING_ORDER_PILL_ROOM + (crossTree ? 4 : 0) : 0);
+}
+/**
+ * The room a line of a card of details keeps at its right where it may reach
+ * the height of the status mark in the bottom-right corner (index.html
+ * .has-status-room, spec 066 P4 §2: padding-right 22px).
+ */
+export const CARD_STATUS_MARK_ROOM = 22;
 /**
  * The same at the left for the ∞ pill on the bottom-left edge ("▸ ∞ 2",
  * index.html .edge-bl-room: the line's padding there).
