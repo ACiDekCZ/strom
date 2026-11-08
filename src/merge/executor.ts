@@ -21,7 +21,9 @@ import {
     generatePersonId,
     generatePartnershipId,
     PERSON_CITATION_FIELDS, isGender, mergedPrimaryName,
+    ImportRecord,
 } from '../types.js';
+import { importProgramName } from '../import-next.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
 import { addGedcomExtra, addImportRecords, addOriginalIds, carryMergedImports, pruneImportOrigin, remapHolderImports, remapSourceImports } from '../import-origin.js';
@@ -457,6 +459,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     }
                 }
                 carryMergedImports(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership, importMap);
+                takeUnrecordedMarriage(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership,
+                    state.existingData.imports, state.incomingData.imports);
             } else {
                 // Create new partnership with remapped IDs. Cloned wholesale so
                 // nothing (witnesses, story, citations) stays shared with the
@@ -725,6 +729,31 @@ function mergeSourceCatalogs(
  * excerpts (same image = same excerpt), any empty text field and the parts of
  * its note the kept note does not say yet.
  */
+/**
+ * The same family record of a file of the same program merged again, which
+ * wrote no marriage for the couple (no MARR): a tree loaded before that was
+ * noted (marriageUnrecorded) takes it, while it says nothing else of the
+ * wedding and has the same status — "Back to {prog}" then adds no empty MARR.
+ */
+function takeUnrecordedMarriage(
+    merged: Partnership,
+    before: Partnership | undefined,
+    incoming: Partnership,
+    existingImports: readonly ImportRecord[] | undefined,
+    incomingImports: readonly ImportRecord[] | undefined,
+): void {
+    if (!before || before.marriageUnrecorded || !incoming.marriageUnrecorded) return;
+    if (merged.status !== incoming.status || before.status !== incoming.status) return;
+    if (merged.startDate || merged.startPlace || merged.address || merged.participants?.length || merged.startStatus) return;
+    const program = (list: readonly ImportRecord[] | undefined, id: string): string | undefined => {
+        const rec = list?.find(r => r.id === id);
+        return rec ? importProgramName(rec) : undefined;
+    };
+    const sameRecord = (incoming.originalIds ?? []).some(inc => inc.xref && (before.originalIds ?? []).some(ex =>
+        ex.xref === inc.xref && program(existingImports, ex.from) !== undefined && program(existingImports, ex.from) === program(incomingImports, inc.from)));
+    if (sameRecord) merged.marriageUnrecorded = true;
+}
+
 function absorbSourceDetails(kept: Source, incoming: Source): void {
     if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
     if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
@@ -1011,6 +1040,8 @@ export function mergePersonData(
                 if (event.sourceIds?.length) {
                     twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
                 }
+                // The e-mail the file wrote (its note line is the same): a tree loaded before it was kept takes it.
+                if (!twin.gedcomEmails?.length && event.gedcomEmails?.length) twin.gedcomEmails = [...event.gedcomEmails];
                 continue;
             }
             // Wholesale clone: participants and sourceIds must not stay

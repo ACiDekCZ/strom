@@ -400,6 +400,29 @@ describe('"Back to MyHeritage": one source record cited at many pages (N-A)', ()
     });
 });
 
+describe('a tree loaded before e-mail and couples without MARR were kept, merged with the same file again (P-c)', () => {
+    it('takes them: "Back to MyHeritage" gives the e-mail and no empty MARR', async () => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+        const existing = migrateData(load(MYHERITAGE).data);
+        for (const p of Object.values(existing.persons)) for (const ev of p.events ?? []) delete ev.gedcomEmails;
+        for (const ps of Object.values(existing.partnerships)) delete ps.marriageUnrecorded;
+        const before = counts(backTo(existing));
+        expect([before.EMAIL, before.MARR]).toEqual([0, 3]);
+        const incoming = migrateData(load(MYHERITAGE, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
+        const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
+        expect(counts(backTo(merged))).toEqual(counts(MYHERITAGE));
+    });
+
+    it('a couple whose wedding the tree says something of keeps its MARR', async () => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+        const existing = migrateData(load(MYHERITAGE).data);
+        for (const ps of Object.values(existing.partnerships)) { delete ps.marriageUnrecorded; ps.startPlace = 'Mechovka'; }
+        const incoming = migrateData(load(MYHERITAGE, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
+        const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
+        expect(Object.values(merged.partnerships).some(ps => ps.marriageUnrecorded)).toBe(false);
+    });
+});
+
 describe('a couple without MARR in its file', () => {
     it('is noted on import, a couple with one is not', () => {
         const data = load(MYHERITAGE).data;

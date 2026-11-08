@@ -431,14 +431,18 @@ function findDirectMatches(
 
     // A strong id both files give a person decides first: a name match of
     // another incoming person must not take the existing person it names.
+    // A nameless record of the file (a MyHeritage spouse known by its ids alone,
+    // read as a "?") pairs only with such a record of the same id: the same
+    // file merged again, its couples then are the same couples (P-c, spec 066).
     for (const incoming of Object.values(incomingData.persons)) {
-        if (incoming.isPlaceholder || !incoming.originalIds?.length) continue;
+        if (!incoming.originalIds?.length) continue;
         if (usedIncoming.has(incoming.id)) continue;
         for (const existing of Object.values(existingData.persons)) {
-            if (existing.isPlaceholder || usedExisting.has(existing.id)) continue;
+            if (!!existing.isPlaceholder !== !!incoming.isPlaceholder || usedExisting.has(existing.id)) continue;
             if (!gendersCompatible(existing.gender, incoming.gender)) continue;
             if (!idEvidence(existing, incoming, existingData, incomingData).same) continue;
-            if (!calculateMatchScore(existing, incoming, existingData, incomingData).idConfirmed) continue;
+            // (No name to compare for a nameless one: its strong id is all the file says of it.)
+            if (!incoming.isPlaceholder && !calculateMatchScore(existing, incoming, existingData, incomingData).idConfirmed) continue;
             matches.push({
                 existingId: existing.id,
                 incomingId: incoming.id,
