@@ -9,7 +9,7 @@
 
 import { strings } from '../strings.js';
 import { researchOpenSvg } from '../history-symbols.js';
-import { researchUrlMark, type ResearchActionMark } from '../research-link.js';
+import { researchUrlMark, RESEARCH_BRIDGE_MARKS, type ResearchActionMark, type ResearchBridgeAction } from '../research-link.js';
 
 export type ResearchOpenMarkSize = 12 | 14 | 16;
 
@@ -107,6 +107,11 @@ export function researchBridgeAgentLabel(label: string): string {
     const badge = `<span class="research-open-sr">${esc(`, ${r.aiBadge}`)}</span>`
         + `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>`;
     return `<span class="research-open-text">${esc(head)}<span class="research-open-nowrap">${esc(last)}${badge}</span></span>`;
+}
+
+/** An action asked through the bridge (`RESEARCH_BRIDGE_MARKS`): its label with the AI badge alone, or plain. */
+export function researchBridgeActionLabel(label: string, action: ResearchBridgeAction): string {
+    return RESEARCH_BRIDGE_MARKS[action] === 'bridgeAgent' ? researchBridgeAgentLabel(label) : esc(researchLabelText(label));
 }
 
 /** The same for an element built in the DOM: its text replaced by the label with the mark of its group. */

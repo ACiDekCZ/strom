@@ -8,8 +8,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
+    RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS,
 } from '../research-link.js';
-import { researchActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
+import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
 import { strings, setLanguage, type Language } from '../strings.js';
 
@@ -94,6 +95,22 @@ describe('the map of research actions to their marks', () => {
         // The badge stays with the last word; the hidden words name it.
         expect(label).toContain('<span class="research-open-nowrap">research<span class="research-open-sr">, AI</span>');
     });
+
+    it('gives every action asked through the bridge its group: verifying is the AI badge alone, the rest nothing (spec 065)', () => {
+        expect(Object.keys(RESEARCH_BRIDGE_MARKS).sort()).toEqual([...RESEARCH_BRIDGE_ACTIONS].sort());
+        expect(RESEARCH_BRIDGE_MARKS.verify).toBe('bridgeAgent');
+        expect(RESEARCH_BRIDGE_MARKS['verify-bulk']).toBe('bridgeAgent');
+        expect(RESEARCH_BRIDGE_MARKS['fact-confirm']).toBe('none');
+        expect(RESEARCH_BRIDGE_MARKS['verify-stop']).toBe('none');
+        const verify = researchBridgeActionLabel(strings.verify.start, 'verify');
+        expect(verify).toContain('research-ai-badge');
+        expect(verify).not.toContain('research-open-mark');
+        const bulk = researchBridgeActionLabel(strings.verify.tryN(5), 'verify-bulk');
+        expect(bulk).toContain('research-ai-badge');
+        expect(bulk).not.toContain('research-open-mark');
+        expect(researchBridgeActionLabel(strings.verify.scan, 'fact-confirm')).toBe(strings.verify.scan);
+        expect(researchBridgeActionLabel(strings.verify.stop, 'verify-stop')).toBe(strings.verify.stop);
+    });
 });
 
 describe('texts of the research actions', () => {
@@ -115,7 +132,7 @@ describe('texts of the research actions', () => {
     }
 
     it('carry no ↗ at their end and no ◆ at their start, in any language', () => {
-        const sections = ['research', 'places', 'history', 'live', 'sync', 'read'] as const;
+        const sections = ['research', 'places', 'history', 'live', 'sync', 'read', 'verify'] as const;
         // The web in a new window keeps its ↗ (an archive's site, the research's changes on the web, the browser extension's page).
         const web = /\.(waitingOpenWeb|openWeb|archiveWeb|researchFullChangelog|fullChangelog|web|openPdf|extLink)$/;
         for (const lang of ['en', 'cs', 'de'] as Language[]) {
