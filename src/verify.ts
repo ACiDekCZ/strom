@@ -30,6 +30,8 @@ export const EID_TAG = '_STROM_EID';
 export const VERIFY_FEATURE = 'verify';
 export const VERIFY_BULK_FEATURE = 'verify.bulk';
 export const FACTS_CONFIRM_FEATURE = 'facts.confirm';
+/** POST /verify/stop: drop the re-verification tasks not yet begun. */
+export const VERIFY_STOP_FEATURE = 'verify.stop';
 
 export const VERIFY_PENDING: readonly FactVerifyPending[] = ['wait', 'asked', 'images', 'permission'];
 

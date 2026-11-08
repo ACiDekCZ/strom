@@ -7,6 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     postVerify, postVerifyBulk, postFactConfirm, verifyRequestBody, verifyBulkRequestBody, factConfirmRequestBody,
     verifyReply, verifyBulkReply, factConfirmReply, verifyStatusSaid, researchFactRef, researchLineageRef,
+    postVerifyStop, verifyStopRequestBody, verifyStopReply, VERIFY_STOP_FEATURE,
 } from '../research-verify.js';
 import { sanitizeLiveStatus } from '../research-link.js';
 
@@ -98,6 +99,66 @@ describe('requests', () => {
         const res = await postVerify(BASE, { fact: 'E7' }, { features: ALL, dry: true });
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ fact: 'E7', dry: true });
         expect(res).toEqual({ ok: true, task: null, facts: [], estimate: { sessions: 2 }, head: HEAD });
+    });
+
+    it('each fact says the record it goes by, and a task made its place in the queue', async () => {
+        const record = { source: 'S0042', title: 'Parish register of Kvasilov, births 1840–1860', page: 'img. 112' };
+        stubFetch(200, {
+            ok: true, task: 'T0043', position: 2, head: HEAD,
+            facts: [
+                { fact: 'E1', kind: 'BIRT', how: 'read', record },
+                { fact: 'E2', kind: 'DEAT', how: 'search', record: { source: 'S7', title: 'Family tree of the Ozubec family' } },
+                // A record with no source of the research, or no title, is not said.
+                { fact: 'E3', kind: 'BURI', how: 'search', record: { source: 'x', title: 'Something' } },
+                { fact: 'E4', kind: 'CHR', how: 'read', record: { source: 'S8', title: '' } },
+            ],
+            estimate: { sessions: 1 },
+        });
+        expect(await postVerify(BASE, { person: 'P12' }, { features: ALL })).toEqual({
+            ok: true, task: 'T0043', position: 2, head: HEAD,
+            facts: [
+                { fact: 'E1', kind: 'BIRT', how: 'read', record },
+                { fact: 'E2', kind: 'DEAT', how: 'search', record: { source: 'S7', title: 'Family tree of the Ozubec family' } },
+                { fact: 'E3', kind: 'BURI', how: 'search' },
+                { fact: 'E4', kind: 'CHR', how: 'read' },
+            ],
+            estimate: { sessions: 1 },
+        });
+        // A dry run has the records too, and no place (no task made); a place that is not a whole number ≥ 1 is not one.
+        expect(verifyReply(200, { ok: true, task: null, position: 1, facts: [{ fact: 'E1', kind: 'BIRT', how: 'read', record }], estimate: {} }))
+            .toEqual({ ok: true, task: null, facts: [{ fact: 'E1', kind: 'BIRT', how: 'read', record }], estimate: { sessions: 0 }, head: '' });
+        for (const position of [0, -1, 1.5, '2']) {
+            const res = verifyReply(200, { ok: true, task: 'T1', position, facts: [], estimate: {} });
+            expect(res.ok && res.position).toBeUndefined();
+        }
+    });
+
+    it('POST /verify/stop: all by default, or the bulk tasks only', async () => {
+        expect(VERIFY_STOP_FEATURE).toBe('verify.stop');
+        const features = [...ALL, VERIFY_STOP_FEATURE];
+        const calls = stubFetch(200, { ok: true, dropped: 3, facts: 14, head: HEAD, parent: PARENT });
+        expect(await postVerifyStop(BASE, { features })).toEqual({ ok: true, dropped: 3, facts: 14, head: HEAD, parent: PARENT });
+        expect(calls[0].url.startsWith(`${BASE}/verify/stop`)).toBe(true);
+        expect(calls[0].init.method).toBe('POST');
+        expect(JSON.parse(calls[0].init.body as string)).toEqual({});
+        const bulk = stubFetch(200, { ok: true, dropped: 0, facts: 0, head: HEAD });
+        expect(await postVerifyStop(BASE, { features, scope: 'bulk' })).toEqual({ ok: true, dropped: 0, facts: 0, head: HEAD });
+        expect(JSON.parse(bulk[0].init.body as string)).toEqual({ scope: 'bulk' });
+        // Refusals.
+        stubFetch(409, { ok: false, code: 'verify.archive', text: 'An archive does not verify.' });
+        expect(await postVerifyStop(BASE, { features, scope: 'all' }))
+            .toEqual({ ok: false, code: 'verify.archive', status: 409, reason: 'An archive does not verify.' });
+        stubFetch(503, { ok: false, code: 'research.busy' });
+        expect(await postVerifyStop(BASE, { features })).toMatchObject({ ok: false, code: 'busy', status: 503 });
+        stubFetch(409, { ok: false, code: 'verify.nothing' });
+        expect(await postVerifyStop(BASE, { features })).toMatchObject({ ok: false, code: 'unknown', status: 409 });
+        // Not sent without the feature, or with a scope the research does not take.
+        const none = stubFetch(200, { ok: true });
+        expect(await postVerifyStop(BASE, { features: ALL })).toEqual({ ok: false, code: 'unsupported', status: 0, reason: '' });
+        expect(await postVerifyStop(BASE, { features, scope: 'line' as never })).toEqual({ ok: false, code: 'invalid', status: 0, reason: '' });
+        expect(none).toHaveLength(0);
+        expect(verifyStopRequestBody()).toEqual({});
+        expect(verifyStopReply(200, { ok: true, dropped: -2, facts: 'x' })).toEqual({ ok: true, dropped: 0, facts: 0, head: '' });
     });
 
     it('POST /verify/bulk', async () => {
@@ -210,6 +271,22 @@ describe('/status verify', () => {
         expect(verifyStatusSaid({ verify: { waiting: 'x', asked: -1, confirmed: 2 } }, ['verify']))
             .toEqual({ verify: { waiting: 0, asked: 0, images: 0, permission: 0, kept: 0, confirmed: 2 } });
         expect(verifyStatusSaid({ verify: { ...verify, fix: { at: 'never' } } }, ['verify']).verify?.fix).toBeUndefined();
+    });
+
+    it('a run of re-verification only with an ISO UTC time and whole counts', () => {
+        const fixOf = (fix: unknown) => verifyStatusSaid({ verify: { ...verify, fix } }, ['verify']).verify?.fix;
+        expect(fixOf({ at: '2026-11-08T22:41:07.123Z', facts: 0, people: 0 })).toEqual({ at: '2026-11-08T22:41:07.123Z', facts: 0, people: 0 });
+        // A day alone, a local time, an offset or a date in another shape is not it.
+        expect(fixOf({ at: '2026-11-08', facts: 12, people: 3 })).toBeUndefined();
+        expect(fixOf({ at: '2026-11-08T22:41:07', facts: 12, people: 3 })).toBeUndefined();
+        expect(fixOf({ at: '2026-11-08T22:41:07+01:00', facts: 12, people: 3 })).toBeUndefined();
+        expect(fixOf({ at: 'Sun, 08 Nov 2026 22:41:07 GMT', facts: 12, people: 3 })).toBeUndefined();
+        expect(fixOf({ at: '2026-13-40T22:41:07Z', facts: 12, people: 3 })).toBeUndefined();
+        // Counts must be whole numbers ≥ 0.
+        expect(fixOf({ at: '2026-11-08T22:41:07Z', facts: 1.5, people: 3 })).toBeUndefined();
+        expect(fixOf({ at: '2026-11-08T22:41:07Z', facts: 12, people: -1 })).toBeUndefined();
+        expect(fixOf({ at: '2026-11-08T22:41:07Z', facts: '12', people: 3 })).toBeUndefined();
+        expect(fixOf({ at: '2026-11-08T22:41:07Z', facts: 12 })).toBeUndefined();
     });
 
     it('not without the feature, nor for an archive or a waiting tree', () => {
