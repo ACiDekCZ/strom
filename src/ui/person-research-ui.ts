@@ -200,7 +200,9 @@ export const personResearchMethods = uiModule({
         const conflicts = this.researchConflictsShown(personId);
         // The person's open question (the card's "?"): its own section, first.
         const question = person?.question?.trim() ?? '';
-        const research = person?.research ?? (conflicts.length || question ? {} : undefined);
+        // Facts waiting to be verified (spec 065 §10k): the "Verifying" section, even with nothing else to say.
+        const verifyWaiting = (this.personVerifyState(personId)?.pending ?? 0) > 0;
+        const research = person?.research ?? (conflicts.length || question || verifyWaiting ? {} : undefined);
         if (!person || !research) return;
         const r = strings.research;
         const asOf = DataManager.getData().researchAsOf;
@@ -278,6 +280,7 @@ export const personResearchMethods = uiModule({
                                 <td>${x.result ? `<span class="person-research-result person-research-result--${x.result}">${esc(x.result === 'found' ? r.found : r.none)}</span>` : ''}</td>
                             </tr>`).join('')}</tbody>
                         </table>` : '')}
+                    ${this.personVerifySectionHtml(personId)}
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" id="person-research-close" data-dismiss>${esc(strings.buttons.close)}</button>
@@ -321,6 +324,8 @@ export const personResearchMethods = uiModule({
                 if (url) this.launchResearchLink(url, agent ? 'agent' : 'terminal');
             }
         });
+        const verifySection = overlay.querySelector<HTMLElement>('[data-verify-section="person"]');
+        if (verifySection) this.bindVerifySection(verifySection, () => this.closePersonResearchDialog());
         this.bindResearchEdgeSection(overlay, personId);
         this.bindResearchHypotheses(overlay, personId);
         this.bindResearchHypothesesOffer(overlay);

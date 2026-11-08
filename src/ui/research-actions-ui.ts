@@ -366,6 +366,9 @@ export const researchActionsMethods = uiModule({
         // Linked in the view only: the list, with how many are shown (a tree whose research says what a variant connects).
         const viewLinks: SubmenuItem[] = this.viewLinksListOffered()
             ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
+        // Verify facts in the tree (spec 065 §10l): through the bridge, the AI badge alone; not in an archive.
+        const verifyRow: SubmenuItem[] = !noAgent && this.verifyBulkAvailable()
+            ? [{ id: 'research-item-verify', label: strings.verify.bulkRow, method: 'showVerifyBulkDialog', ai: true }] : [];
         let first: SubmenuItem[];
         let more: SubmenuItem[];
         // Read a document (spec 013): now and then, the first item of "Other actions" (its link and badge as they are).
@@ -394,7 +397,7 @@ export const researchActionsMethods = uiModule({
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }];
             first = [...startRow, ...sendRow.map(i => ({ ...i, ext: false }))];
-            more = [...changesRow, ...viewLinks, ...materials, ...phone];
+            more = [...changesRow, ...verifyRow, ...viewLinks, ...materials, ...phone];
             moreQuiet = [...treeSettings, ...aboutRow];
         } else {
             // First: what waits, the agent, following live, the research itself, the send.
@@ -431,6 +434,7 @@ export const researchActionsMethods = uiModule({
             // "Tree fixes" (§7): a list of its own in the app, so here and not among the research tools (§8 rule 5).
             const fixes = this.researchFixesMenuEntry();
             if (fixes) more.push({ id: 'research-item-fixes', method: 'researchActionFixes', ...fixes });
+            more.push(...verifyRow);
             // "Research tools ›" (§8): the actions the research announced that have no place of their own here.
             tools = RESEARCH_TOOL_ACTIONS.filter(t => this.researchLinkAvailable(t.action) && !(t.ai && noAgent));
             if (tools.length) more.push({ id: 'research-item-tools', label: strings.research.tools.title, method: 'openResearchTools', submenu: true });

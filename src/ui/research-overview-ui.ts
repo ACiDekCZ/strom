@@ -1541,10 +1541,16 @@ export const researchOverviewMethods = uiModule({
                 rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false });
             }
         }
-        if (rows.length === 0) return;
+        // The tree's "Verifying" (spec 065 §10k): waiting facts, Stop, the bulk verification.
+        const verify = this.treeVerifyBlock(() => { if (mode === 'sheet') this.closeResearchOverview(); });
+        if (rows.length === 0 && !verify) return;
         rows.sort((a, b) => Number(b.conflict) - Number(a.conflict));
         const conflicts = rows.filter(r => r.conflict).length;
-        const host = liveSection(body, { ...fold, title: L.knowsTitle, summary: L.knowsSum(conflicts, rows.length - conflicts) });
+        const host = liveSection(body, { ...fold, title: L.knowsTitle, ...(rows.length > 0 ? { summary: L.knowsSum(conflicts, rows.length - conflicts) } : {}) });
+        if (rows.length === 0) {
+            host.appendChild(verify!);
+            return;
+        }
         const list = el('ul', 'live-panel-list research-overview__knows');
         for (const row of rows) {
             const li = el('li');
@@ -1559,6 +1565,7 @@ export const researchOverviewMethods = uiModule({
             list.appendChild(li);
         }
         host.appendChild(list);
+        if (verify) host.appendChild(verify);
     },
 
     /** Foot: where evidence is missing (the tree overview's Data quality), Open the research (research). */

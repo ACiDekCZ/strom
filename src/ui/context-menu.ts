@@ -233,7 +233,9 @@ export const contextMenuMethods = uiModule({
 
         // "Research ›": what the research knows, then its actions — on every
         // variant of the menu (nothing there changes the app).
-        const knows = this.personResearchKnows(personId);
+        // The person's signals above already lead there with the conflicts and the question (signal-knows).
+        const signals = TreeRenderer.cardSignalsFor(personId);
+        const knows = signals && (signals.conflicts > 0 || signals.question) ? null : this.personResearchKnows(personId);
         const researchActions = this.personResearchActions(personId);
         // Files about the person, to the research (right after what it knows).
         // In an archive whose materials are shown: "Add material…" (it is kept, not sent to an agent).
@@ -570,6 +572,13 @@ export const contextMenuMethods = uiModule({
             case 'signal-knows':
                 this.clearDialogStack();
                 this.openPersonResearchKnows(personId);
+                break;
+            case 'signal-verify':
+                this.showVerifyPersonDialog(personId);
+                break;
+            case 'signal-verify-pending':
+                this.clearDialogStack();
+                this.showPersonResearchDialog(personId);
                 break;
             case 'cross-tree':
                 this.openCrossTreeOf(personId);
