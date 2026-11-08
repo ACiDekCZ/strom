@@ -2147,7 +2147,7 @@ function noteRemarriage(fam: GedcomFamily, line: string): boolean {
 /**
  * Another record of a couple the import joins to the first one (see
  * JOINED_TAG): its weddings, divorces and ids as written, the lines naming
- * a record left out. Its xref is the one the file gave it (a Strom file's:
+ * a record left out, and its change stamp. Its xref is the one the file gave it (a Strom file's:
  * the one its program gave it). The other kept lines of the record go to the
  * partnership, except those of a wedding or a divorce noted (the block has them).
  */
@@ -2156,13 +2156,16 @@ function keepJoinedRecord(gedFamId: string, fam: GedcomFamily): boolean {
     const own = fam.importIds?.find(b => b.xref)?.xref ?? gedFamId;
     const xref = /^@([^@]+)@$/.exec(own)?.[1] ?? '';
     const kept = structuresOf(fam.recordLines)
-        .filter(st => /^1 (MARR|DIV|REFN)( |$)/.test(st[0]) || ORIGINAL_ID_TAGS.has(st[0].split(' ')[1]))
+        .filter(st => /^1 (MARR|DIV|REFN)( |$)/.test(st[0]) || ORIGINAL_ID_TAGS.has(st[0].split(' ')[1])
+            || KEPT_BOOKKEEPING_TAGS.has(st[0].split(' ')[1]))
         .map(withoutRecordPointers);
     const block = joinedBlock(xref.startsWith('__') ? '' : xref, kept.flat());
     if (!block) return false;
     const unionNoted = (e: RawExtra): boolean =>
         e.tag === NOTED_TAG && /^1 (MARR|DIV)( |$)/.test(notedStructures(e.lines)[0]?.lines[0] ?? '');
-    fam.extras = [...(fam.extras ?? []).filter(e => !unionNoted(e)), { tag: JOINED_TAG, lines: block, quiet: true }];
+    // Its change stamp (`_UPD`) is the record's own: in the block, not the partnership's.
+    fam.extras = [...(fam.extras ?? []).filter(e => !unionNoted(e) && !KEPT_BOOKKEEPING_TAGS.has(e.tag)),
+        { tag: JOINED_TAG, lines: block, quiet: true }];
     return true;
 }
 

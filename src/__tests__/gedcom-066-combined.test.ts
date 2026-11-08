@@ -284,6 +284,42 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(holdsRun(rec, ['1 RESI', '2 ADDR Drnkalov 7', '2 EMAIL bystron@@example.org'])).toBe(true);
             expect(holdsRun(rec, ['1 NAME Bystroň /Drnkal/', '2 GIVN Bystroň', '2 SURN Drnkal'])).toBe(true);
         });
+
+        it('14 · a couple divorced in one family record and married again in another: one couple, both records back', () => {
+            const couple = Object.values(tree.partnerships).filter(p => tree.persons[p.person1Id]?.firstName === 'Kořenoslav');
+            expect(couple).toHaveLength(1);
+            expect([couple[0].status, couple[0].startDate, couple[0].endDate]).toEqual(['married', '1911-04-01', undefined]);
+            expect(imported.stats.joinedFamilies).toBe(1);
+            expect(holdsRun(record(first, '@F1401@'), ['1 MARR', '2 DATE 1 APR 1911', '2 PLAC Drnkalov'])).toBe(true);
+            expect(holdsRun(record(first, '@F1401@'), ['1 DIV', '2 DATE 2 MAY 1912'])).toBe(true);
+            const remarried = record(first, '@F1402@');
+            expect(remarried).toEqual(expect.arrayContaining(['1 HUSB @I1401@', '1 WIFE @I1402@', '1 RIN MH:F1402',
+                '1 _UID 14F1B2C3D4E5F60718293A4B5C6D7F02', '1 _UPD 8 NOV 2026 10:00:00 GMT -0500']));
+            expect(holdsRun(remarried, ['1 MARR', '2 DATE 4 JUL 1914', '2 PLAC Hrbolcov'])).toBe(true);
+            for (const xref of ['@I1401@', '@I1402@']) {
+                expect(holdsRun(record(first, xref), ['1 FAMS @F1401@', '1 FAMS @F1402@']), xref).toBe(true);
+            }
+        });
+
+        it('15 · an age of more than 999 days (AGE 1y 30m 1100d) and a web link (OBJE > FORM URL)', () => {
+            const rec = record(first, '@I1501@');
+            expect(holdsRun(rec, ['1 DEAT', '2 DATE 1896', '2 AGE 1y 30m 1100d'])).toBe(true);
+            expect(holdsRun(rec, ['1 OBJE', '2 FORM URL', '2 TITL Drnkalov chronicle online',
+                '2 FILE https://www.example.org/drnkalov/chronicle'])).toBe(true);
+        });
+
+        it('16 · dates Strom cannot read (10 JAN, 1735/1736, the Julian calendar), also as the only date of an event', () => {
+            const he = record(first, '@I1601@');
+            expect(holdsRun(he, ['1 BIRT', '2 DATE 10 JAN'])).toBe(true);
+            expect(holdsRun(he, ['1 DEAT', '2 DATE @#DJULIAN@ 3 MAR 1790', '2 PLAC Hrbolcov'])).toBe(true);
+            expect(holdsRun(record(first, '@I1602@'), ['1 BIRT', '2 DATE 1735/1736', '2 PLAC Drnkalov'])).toBe(true);
+            expect(holdsRun(record(first, '@F1601@'), ['1 MARR', '2 DATE 1755/1756'])).toBe(true);
+        });
+
+        it('17 · a divorce with a NOTE (CONT) under it', () => {
+            expect(holdsRun(record(first, '@F1701@'), ['1 DIV', '2 DATE 1905', '2 NOTE By the court of Drnkalov,',
+                '3 CONT the children left with the mother.'])).toBe(true);
+        });
     });
 });
 
