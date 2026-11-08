@@ -687,6 +687,8 @@
 1 _UPD 8 NOV 2026 10:00:00 GMT -0500
 1 TITL Drnkalov chronicle
 1 RIN MH:S2
+1 EXID 7741
+2 TYPE https://chronicle.example.org
 0 @S3@ SOUR
 1 _UPD 8 NOV 2026 10:00:00 GMT -0500
 1 TITL Drnkalov estate inventory

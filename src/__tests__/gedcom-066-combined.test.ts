@@ -183,6 +183,8 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             for (const ged of [first, second]) {
                 expect(record(ged, '@S1@')).toContain('1 RIN MH:S1');
                 expect(record(ged, '@S2@')).toContain('1 RIN MH:S2');
+                // An EXID with its TYPE (GEDCOM 7) as written, after the file is read again too.
+                expect(holdsRun(record(ged, '@S2@'), ['1 EXID 7741', '2 TYPE https://chronicle.example.org'])).toBe(true);
             }
             const kvasibor = record(first, '@I101@');
             expect(holdsRun(kvasibor, ['2 SOUR @S1@', '3 PAGE fol. 3', '3 DATA', '4 DATE 3 FEB 1860',

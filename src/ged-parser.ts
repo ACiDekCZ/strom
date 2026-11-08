@@ -2397,6 +2397,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentMediaSubTag: string | null = null;
     /** Level-2 tag inside an OBJE on a source record (FILE continuations). */
     let sourceMediaSubTag: string | null = null;
+    /** The tag of the source record's level-2 line being read (a `3 TYPE` belongs to `2 EXID`). */
+    let sourceLevel2Tag: string | null = null;
     /** @Sx@ of the most recent citation (PAGE lines attach to it). */
     let currentCitationId: string | null = null;
     /** Where that citation's pointer was written (its PAGE may point it to a source of its own). */
@@ -3237,6 +3239,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // and was not read — the contract says so, and so does the summary.
                 else if (!IGNORED_BOOKKEEPING_TAGS.has(tag)) drop(tag);
             } else if (level === 2) {
+                sourceLevel2Tag = tag;
                 // Multi-line continuations for title / note / the labelled lines.
                 if (currentSubTag === 'TITL') {
                     if (tag === 'CONT') src.title += '\n' + value;
@@ -3287,6 +3290,10 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level === 3 && currentSubTag === 'OBJE' && sourceMediaSubTag === 'FILE'
                 && tag === 'CONC' && src.media.length > 0) {
                 src.media[src.media.length - 1].file += value;
+            } else if (level === 3 && currentSubTag === IMPORT_TAG && tag === 'TYPE' && value.trim()) {
+                // `3 TYPE` under `2 EXID` of the record's `1 _STROM_IMPORT`: the system of that id.
+                const last = src.importIdLines?.[src.importIdLines.length - 1];
+                if (last?.tag === 'EXID' && !last.type && sourceLevel2Tag === 'EXID') last.type = value.trim();
             }
         } else if (currentRecord) {
             if (level === 1) {
