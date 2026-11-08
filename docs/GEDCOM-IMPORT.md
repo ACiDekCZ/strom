@@ -584,6 +584,9 @@ Discarded outright is the bookkeeping of the program that wrote the file:
 `ANCI` `DESI` `RFN` `AFN` `RESN` are reported in the import summary, while the
 platform sync ids (`RIN`, `_UID`, `CHAN`, `_UPD` and their kind) are skipped
 without a word — they say nothing about a person and would only be noise.
+(The ids are kept as the record's ids in that file, and `_UPD`, the change
+stamp of a person, family or source record, is kept for the export "Back to
+{program}" like the tags below — never named in the summary.)
 
 **Any other record or fact is reported as an unsupported tag** — anything at
 level 0 or level 1 that this contract does not name. If your file lists tags
@@ -601,6 +604,29 @@ place that points to it) and a multimedia record (`OBJE`, which becomes the
 person's portrait or document) are not kept as records, so their own level-1
 `_XXX` tags have nowhere to stay and are counted as unsupported (except the
 picture's `_DATE`, see Media).
+
+**"Back to {program}" gives back what the file had.** Besides those tags and
+the record ids, the export to the program the tree came from keeps:
+
+- a person the file names only as a spouse, without a name (`1 NAME //`,
+  `1 SEX U`, only `FAMS` — MyHeritage writes them): Strom shows a `?`, the
+  export writes the record with its xref and ids, so both partners of the
+  family stay (in every export; with the living hidden, without its ids);
+- a family without `MARR`: Strom reads the couple as married, but no export
+  adds a `MARR` the file did not have, unless the wedding gets a date, a
+  place, witnesses or a status in the app, or the couple's status is changed;
+- `EMAIL` under a fact (`1 RESI` / `2 EMAIL`): shown as a line of the fact's
+  note, written back as `2 EMAIL` while that line is there (other exports
+  keep the note line);
+- `GIVN` / `SURN` under the name, made from the name as it is now;
+- a child recorded in two families: Strom hangs it from one (a birth family
+  first) and notes the other ("Also recorded as child of …"); every export
+  writes that second `FAMC` (with its `PEDI`) and the family's `CHIL` instead
+  of the note line, while the line is there and the family exists.
+
+The "Back to" file read into Strom again keeps the other program's tags of
+each record that carries `1 _STROM_IMPORT Ix`, for that import, so the next
+"Back to" writes them again.
 
 **Lines *below* a fact are not counted.** A subordinate tag this contract does
 not name — say `3 ROLE` under a citation, or `2 PHON` under `RESI` — is skipped

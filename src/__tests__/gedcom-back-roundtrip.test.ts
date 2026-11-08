@@ -1,0 +1,358 @@
+/**
+ * "Back to {prog}" gives back what the import brought (spec 066 K3.1/K3.2),
+ * on a file shaped like MyHeritage's (Family Tree Builder, GEDCOM 5.5.1):
+ * nameless people with SEX U and only FAMS, EMAIL, GIVN/SURN, the _UPD stamp,
+ * families without MARR, a child recorded in two families. And the research's
+ * file read and written again keeps where its records and facts came from.
+ * Invented data.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { parseGedcom, convertToStrom, GedcomImportOrigin } from '../ged-parser.js';
+import { exportToGedcom } from '../ged-exporter.js';
+import { DataManager, migrateData } from '../data.js';
+import { applyLivingPrivacy, CONTENT_PRESETS, PrivacyMode } from '../privacy.js';
+import { TreeManager } from '../tree-manager.js';
+import { AuditLogManager } from '../audit-log.js';
+import { UndoManager } from '../undo.js';
+import { Partnership, Person, StromData, TreeId } from '../types.js';
+
+const ORIGIN: GedcomImportOrigin = { at: '2026-11-08', file: 'family.ged', encoding: 'utf-8' };
+
+const MYHERITAGE = `0 HEAD
+1 SOUR MYHERITAGE
+2 NAME MyHeritage Family Tree Builder
+2 VERS 5.5.1
+1 DATE 2 OCT 2026
+1 CHAR UTF-8
+0 @I500001@ INDI
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 NAME Hromoslav /Ozubec/
+2 GIVN Hromoslav
+2 SURN Ozubec
+1 SEX M
+1 BIRT
+2 DATE 1880
+1 RESI
+2 EMAIL hromoslav@@example.org
+1 FAMS @F500001@
+1 RIN MH:I500001
+1 _UID 5F3A1B2C3D4E5F60718293A4B5C6D7E8
+0 @I500002@ INDI
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 NAME Libuna /Šťovíková/
+2 GIVN Libuna
+2 SURN Šťovíková
+1 SEX F
+1 BIRT
+2 DATE 1884
+1 FAMS @F500001@
+1 RIN MH:I500002
+1 _UID 6A3A1B2C3D4E5F60718293A4B5C6D7E9
+0 @I500003@ INDI
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 NAME Mlhoň /Ozubec/
+2 GIVN Mlhoň
+2 SURN Ozubec
+1 SEX M
+1 BIRT
+2 DATE 1906
+1 FAMC @F500001@
+1 FAMC @F500002@
+2 PEDI adopted
+1 FAMS @F500003@
+1 RIN MH:I500003
+1 _UID 7B3A1B2C3D4E5F60718293A4B5C6D7EA
+0 @I500004@ INDI
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 NAME //
+1 SEX U
+1 FAMS @F500002@
+1 RIN MH:I500004
+1 _UID 9D3A1B2C3D4E5F60718293A4B5C6D7EC
+0 @I500005@ INDI
+1 NAME Zbyhoň /Pražmouk/
+2 GIVN Zbyhoň
+2 SURN Pražmouk
+1 SEX M
+1 BIRT
+2 DATE 1875
+1 FAMS @F500002@
+1 RIN MH:I500005
+1 _UID AE3A1B2C3D4E5F60718293A4B5C6D7ED
+0 @I500006@ INDI
+1 NAME //
+1 SEX U
+1 FAMS @F500003@
+1 RIN MH:I500006
+1 _UID BF3A1B2C3D4E5F60718293A4B5C6D7EE
+0 @F500001@ FAM
+1 _UPD 2 OCT 2026 10:00:00 GMT -0500
+1 HUSB @I500001@
+1 WIFE @I500002@
+1 CHIL @I500003@
+1 MARR
+2 DATE 1905
+1 RIN MH:F500001
+1 _UID 8C3A1B2C3D4E5F60718293A4B5C6D7EB
+0 @F500002@ FAM
+1 HUSB @I500005@
+1 WIFE @I500004@
+1 CHIL @I500003@
+1 RIN MH:F500002
+1 _UID CA3A1B2C3D4E5F60718293A4B5C6D7EF
+0 @F500003@ FAM
+1 HUSB @I500003@
+1 WIFE @I500006@
+1 RIN MH:F500003
+1 _UID DB3A1B2C3D4E5F60718293A4B5C6D7F0
+0 TRLR`;
+
+/** The tags the "done when" counts, each at the level the file writes it. */
+const COUNTED: [string, RegExp][] = [
+    ['INDI', /^0 @[^@]+@ INDI$/], ['FAM', /^0 @[^@]+@ FAM$/],
+    ['_UID', /^1 _UID /], ['RIN', /^1 RIN /], ['HUSB', /^1 HUSB /], ['WIFE', /^1 WIFE /],
+    ['CHIL', /^1 CHIL /], ['FAMC', /^1 FAMC /], ['PEDI', /^2 PEDI /], ['EMAIL', /^2 EMAIL /],
+    ['GIVN', /^2 GIVN /], ['SURN', /^2 SURN /], ['MARR', /^1 MARR$/], ['_UPD', /^1 _UPD /],
+];
+
+function counts(ged: string): Record<string, number> {
+    const lines = ged.split(/\r?\n/);
+    return Object.fromEntries(COUNTED.map(([tag, re]) => [tag, lines.filter(l => re.test(l)).length]));
+}
+
+function load(text: string, origin: GedcomImportOrigin | null = ORIGIN) {
+    return convertToStrom(parseGedcom(text), origin ? { importOrigin: origin } : {});
+}
+
+/** The export "Back to {prog}" as the app makes it (import-export.ts), for the tree's first import. */
+function backTo(data: StromData, privacy: PrivacyMode = 'full'): string {
+    const out = applyLivingPrivacy(data, privacy, 2026, { keepDeceasedSources: true });
+    return exportToGedcom(out, 'Ozubec', { content: CONTENT_PRESETS.back, origins: true, backTo: data.imports![0].id }).content;
+}
+
+/** One record's lines, by its xref. */
+function record(ged: string, xref: string): string[] {
+    const lines = ged.split('\n');
+    const start = lines.indexOf(`0 ${xref} ${xref.startsWith('@F') ? 'FAM' : 'INDI'}`);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = lines.findIndex((l, i) => i > start && l.startsWith('0 '));
+    return lines.slice(start, end);
+}
+
+const body = (ged: string): string[] => ged.split('\n').slice(ged.split('\n').findIndex(l => /^0 @(?!SUBM)/.test(l)));
+
+const byName = (data: StromData, first: string): Person =>
+    Object.values(data.persons).find(p => p.firstName === first)!;
+
+describe('"Back to MyHeritage" gives back what the file brought', () => {
+    it('the same people, families, ids, links, e-mail and name parts, and no MARR the file did not have', () => {
+        const r = load(MYHERITAGE);
+        const ged = backTo(migrateData(r.data));
+        expect(counts(ged)).toEqual(counts(MYHERITAGE));
+        // The nameless people are records of their own, with their xref.
+        expect(record(ged, '@I500004@')).toEqual(expect.arrayContaining(['1 NAME //', '1 SEX U', '1 FAMS @F500002@', '1 _UID 9D3A1B2C3D4E5F60718293A4B5C6D7EC']));
+        expect(record(ged, '@F500003@')).toEqual(expect.arrayContaining(['1 HUSB @I500003@', '1 WIFE @I500006@']));
+        expect(record(ged, '@F500002@')).not.toContain('1 MARR');
+        expect(record(ged, '@F500001@')).toContain('1 MARR');
+        // The e-mail as written, not as a line of a note.
+        expect(record(ged, '@I500001@')).toContain('2 EMAIL hromoslav@@example.org');
+        expect(ged).not.toMatch(/NOTE .*hromoslav@/);
+    });
+
+    it('a "?" the import made up for a parent the file does not name stays out, as before', () => {
+        const oneParent = MYHERITAGE.replace('0 TRLR', [
+            '0 @I500007@ INDI', '1 NAME Bořivoj /Ozubec/', '2 GIVN Bořivoj', '2 SURN Ozubec', '1 SEX M', '1 FAMC @F500004@', '1 _UID C03A1B2C3D4E5F60718293A4B5C6D7F1',
+            '0 @F500004@ FAM', '1 HUSB @I500001@', '1 CHIL @I500007@', '1 _UID C13A1B2C3D4E5F60718293A4B5C6D7F2', '0 TRLR',
+        ].join('\n'));
+        const data = migrateData(load(oneParent).data);
+        expect(Object.values(data.persons).filter(p => p.isPlaceholder)).toHaveLength(3);
+        const ged = backTo(data);
+        expect(counts(ged)).toEqual(counts(oneParent));
+        expect(record(ged, '@F500004@').some(l => l.startsWith('1 WIFE'))).toBe(false);
+    });
+
+    it('the stamp _UPD is kept and goes back, but the summary never names it', () => {
+        const r = load(MYHERITAGE);
+        expect(r.stats.droppedTagSummary).not.toContain('_UPD');
+        expect(r.stats.keptTagSummary).not.toContain('_UPD');
+        expect(record(backTo(migrateData(r.data)), '@F500001@')).toContain('1 _UPD 2 OCT 2026 10:00:00 GMT -0500');
+    });
+
+    it('a second pass (the file read again, written again) takes nothing away', () => {
+        const first = backTo(migrateData(load(MYHERITAGE).data));
+        const again = migrateData(load(first, { at: '2026-11-09', file: 'back.ged', encoding: 'utf-8' }).data);
+        const second = backTo(again);
+        expect(counts(second)).toEqual(counts(MYHERITAGE));
+        expect(body(second)).toEqual(body(first));
+    });
+
+    it('with the initials of the living the families stay whole: every person and both partners of each family', () => {
+        const ged = backTo(migrateData(load(MYHERITAGE).data), 'initials');
+        const c = counts(ged);
+        expect([c.INDI, c.FAM, c.HUSB, c.WIFE]).toEqual([6, 3, 3, 3]);
+        // The nameless partners count as living: no id of theirs in the other program.
+        expect(ged).not.toContain('9D3A1B2C3D4E5F60718293A4B5C6D7EC');
+        expect(ged).not.toContain('BF3A1B2C3D4E5F60718293A4B5C6D7EE');
+    });
+
+    it('GIVN/SURN come from the name as it is now; e-mail only while its line is in the note', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const h = byName(data, 'Hromoslav');
+        h.firstName = 'Hromislav';
+        const resi = h.events!.find(e => e.type === 'residence')!;
+        resi.note = undefined;
+        const rec = record(backTo(data), '@I500001@');
+        expect(rec).toEqual(expect.arrayContaining(['1 NAME Hromislav /Ozubec/', '2 GIVN Hromislav', '2 SURN Ozubec']));
+        expect(rec.some(l => l.includes('EMAIL'))).toBe(false);
+    });
+
+    it('another export (Strom’s own file, the research) writes the e-mail as the note line and no GIVN/SURN of its own', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const ged = exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, origins: true }).content;
+        expect(ged).not.toContain('2 EMAIL');
+        expect(ged).toMatch(/2 NOTE .*hromoslav@@example\.org/);
+    });
+});
+
+describe('a couple without MARR in its file', () => {
+    it('is noted on import, a couple with one is not', () => {
+        const data = load(MYHERITAGE).data;
+        const marked = Object.values(data.partnerships).filter(p => p.marriageUnrecorded).length;
+        expect(marked).toBe(2);
+    });
+
+    it('a couple entered by hand, married, still gets its MARR in every export', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        for (const p of Object.values(data.partnerships)) delete p.marriageUnrecorded;
+        expect(counts(backTo(data)).MARR).toBe(3);
+    });
+
+    it('a wedding detail added later writes it', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const ps = Object.values(data.partnerships).find(p => p.marriageUnrecorded)!;
+        ps.startPlace = 'Mechovka';
+        expect(counts(backTo(data)).MARR).toBe(2);
+    });
+
+    it('a status set in the app is said, not the file’s default any more', () => {
+        const TREE = 'back-roundtrip-tree' as TreeId;
+        vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
+        vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+        const dm = DataManager as unknown as { data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null };
+        dm.data = migrateData(load(MYHERITAGE).data);
+        dm.currentTreeId = TREE;
+        dm.viewMode = false;
+        dm.pendingBefore = null;
+        UndoManager.setActiveTree(null);
+        UndoManager.setActiveTree(TREE);
+        const [a, b] = Object.values(dm.data.partnerships).filter(p => p.marriageUnrecorded) as Partnership[];
+        DataManager.updatePartnershipStatus(a.id, 'divorced');
+        DataManager.updatePartnership(b.id, { status: 'divorced' });
+        expect(dm.data.partnerships[a.id].marriageUnrecorded).toBeUndefined();
+        expect(dm.data.partnerships[b.id].marriageUnrecorded).toBeUndefined();
+        vi.restoreAllMocks();
+    });
+});
+
+describe('a child recorded in two families (N3)', () => {
+    it('goes back as the second FAMC with its PEDI and the family’s CHIL, not as a note', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const m = byName(data, 'Mlhoň');
+        expect(m.alsoChildOf).toHaveLength(1);
+        for (const ged of [backTo(data), exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, origins: true }).content]) {
+            const lines = ged.split('\n');
+            const rec = record(ged, ged.includes('0 @I500003@ INDI') ? '@I500003@' : lines.find(l => /^0 @I\d+@ INDI$/.test(l) && record(ged, l.split(' ')[1]).includes('1 NAME Mlhoň /Ozubec/'))!.split(' ')[1]);
+            const famc = rec.filter(l => l.startsWith('1 FAMC '));
+            expect(famc).toHaveLength(2);
+            expect(rec[rec.indexOf(famc[1]) + 1]).toBe('2 PEDI adopted');
+            expect(record(ged, famc[1].slice(7))).toContain(`1 CHIL ${rec[0].split(' ')[1]}`);
+            expect(rec.some(l => l.startsWith('1 NOTE'))).toBe(false);
+        }
+    });
+
+    it('read back, the child hangs from the same family and keeps the other one', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const again = migrateData(load(backTo(data), { at: '2026-11-09', file: 'back.ged', encoding: 'utf-8' }).data);
+        const m = byName(again, 'Mlhoň');
+        const parents = m.parentIds.map(id => again.persons[id].firstName).sort();
+        expect(parents).toEqual(['Hromoslav', 'Libuna']);
+        expect(m.alsoChildOf).toHaveLength(1);
+        expect(m.notes?.split('\n')).toHaveLength(1);
+    });
+
+    it('a note line deleted in the app drops the link', () => {
+        const data = migrateData(load(MYHERITAGE).data);
+        const m = byName(data, 'Mlhoň');
+        m.notes = undefined;
+        const ged = backTo(data);
+        expect(record(ged, '@I500003@').filter(l => l.startsWith('1 FAMC '))).toEqual(['1 FAMC @F500001@']);
+        expect(record(ged, '@F500002@')).not.toContain('1 CHIL @I500003@');
+    });
+});
+
+/** The research's tree as it writes it: record and fact origins, a death known without a date. */
+const RESEARCH = `0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.30.0
+2 NAME Strom Research
+1 DATE 8 NOV 2026
+1 _STROM_TREE 11111111-2222-3333-4444-555555555555
+1 _STROM_IMPORT R1
+2 SOUR MyHeritage Family Tree Builder
+2 VERS 5.5.1
+2 DATE 2 OCT 2026
+2 _AT 2026-11-08
+2 FILE family.ged
+1 CHAR UTF-8
+0 @I1@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500001@
+2 RIN MH:I500001
+2 _UID 5F3A1B2C3D4E5F60718293A4B5C6D7E8
+1 NAME Hromoslav /Ozubec/
+2 GIVN Hromoslav
+2 SURN Ozubec
+2 _STROM_ORIGIN import R1
+1 SEX M
+1 _STROM_SEX_ORIGIN import R1
+1 BIRT
+2 DATE 1880
+2 _STROM_ORIGIN import R1
+1 DEAT Y
+2 _STROM_ORIGIN import R1
+1 FAMS @F1@
+0 @I2@ INDI
+1 _STROM_IMPORT R1
+2 _XREF @I500002@
+1 NAME Libuna /Šťovíková/
+2 _STROM_ORIGIN import R1
+1 SEX F
+1 _STROM_SEX_ORIGIN import R1
+1 DEAT
+2 PLAC Mechovka
+2 _STROM_ORIGIN import R1
+1 FAMS @F1@
+0 @F1@ FAM
+1 _STROM_IMPORT R1
+2 _XREF @F500001@
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1905
+2 _STROM_ORIGIN import R1
+0 TRLR`;
+
+describe('the research’s file read and written again (P2)', () => {
+    const count = (ged: string, re: RegExp) => ged.split('\n').filter(l => re.test(l)).length;
+
+    it('each record keeps the import it came from and each fact its origin, a death without a date too', () => {
+        const data = load(RESEARCH, null).data;
+        expect(byName(data, 'Hromoslav').importId).toBe('R1');
+        const ged = exportToGedcom(data, 'Ozubec', { origins: true }).content;
+        expect(count(ged, /^1 _STROM_IMPORT R1$/)).toBe(count(RESEARCH, /^1 _STROM_IMPORT R1$/));
+        expect(count(ged, /^1 _STROM_XID /)).toBe(0);
+        expect(count(ged, /^2 _STROM_ORIGIN /)).toBe(count(RESEARCH, /^2 _STROM_ORIGIN /));
+        const lines = ged.split('\n');
+        expect(lines[lines.indexOf('1 DEAT Y') + 1]).toBe('2 _STROM_ORIGIN import R1');
+    });
+});

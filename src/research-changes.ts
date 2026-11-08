@@ -33,7 +33,7 @@ const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause',
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
 /** Not the user's: the research's own knowledge and statuses, and what the app keeps for itself. */
 const IGNORED_FIELDS = new Set<string>(['research', 'birthStatus', 'deathStatus', 'photoOriginalName', 'photoDate', 'partnerships', 'childIds', 'isLocked',
-    'dismissedMarriedSuggestion', 'importId', 'importedValues', 'importedParents', 'researchOrigins', 'originalIds', 'gedcomExtra']);
+    'dismissedMarriedSuggestion', 'importId', 'importedValues', 'importedParents', 'researchOrigins', 'originalIds', 'gedcomExtra', 'alsoChildOf']);
 const MARRIAGE_FIELDS: (keyof Partnership)[] = ['status', 'startDate', 'startPlace', 'endDate', 'endPlace', 'address', 'ages', 'note'];
 
 /** JSON with sorted keys and images reduced to their length (two copies of one tree compare equal). */
@@ -113,8 +113,9 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
         const a = evBefore.get(id);
         const b = evAfter.get(id);
         if (!a || !b) { kinds.add(b?.type === 'birth' || a?.type === 'birth' ? 'birth' : 'event'); if (b?.participants?.length) participantKinds([], b.participants).forEach(k => kinds.add(k)); continue; }
-        const { participants: pa, sourceIds: sa, status: _st1, ...restA } = a;
-        const { participants: pb, sourceIds: sb, status: _st2, ...restB } = b;
+        // gedcomEmails: what the loaded file wrote as EMAIL, kept for "Back to {prog}" only.
+        const { participants: pa, sourceIds: sa, status: _st1, gedcomEmails: _em1, ...restA } = a;
+        const { participants: pb, sourceIds: sb, status: _st2, gedcomEmails: _em2, ...restB } = b;
         if (differs(restA, restB)) kinds.add('event');
         participantKinds(pa, pb).forEach(k => kinds.add(k));
         if (differs(sa ?? [], sb ?? [])) kinds.add('citation');

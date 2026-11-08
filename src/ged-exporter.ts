@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, PersonId, OriginalIds, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -337,9 +337,10 @@ function pushPlace(lines: string[], level: number, place: string, places?: Recor
  * One more name gets its GIVN and SURN: a person of no name ("?") with the
  * surname Unknown, so no reader takes it for no surname. `titles` (see
  * GedcomExportOptions.titles): 'tags' keeps the titles out of the line,
- * 'none' writes the name as if it had none.
+ * 'none' writes the name as if it had none. `parts` writes GIVN / SURN
+ * under every name ("Back to {prog}", whose file had them, spec 066 K3.1).
  */
-function pushName(lines: string[], person: Person, titles: TitlesInGedcom = 'line'): void {
+function pushName(lines: string[], person: Person, titles: TitlesInGedcom = 'line', parts = false): void {
     const before = titles === 'none' ? '' : person.titleBefore?.trim() ?? '';
     const after = titles === 'none' ? '' : person.titleAfter?.trim() ?? '';
     const name = formatGedcomName(person.firstName, person.lastName);
@@ -353,6 +354,10 @@ function pushName(lines: string[], person: Person, titles: TitlesInGedcom = 'lin
         if (noName(first) && last === 'Unknown') {
             if (!first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
             pushWrapped(lines, 2, 'SURN', last);
+        } else if (parts) {
+            // The parts of the name as it is now (as the file had them while unchanged).
+            if (first && !noName(first) && !first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
+            if (last && !last.includes(',')) pushWrapped(lines, 2, 'SURN', last);
         }
         return;
     }
@@ -553,6 +558,28 @@ function pushDetails(lines: string[], d: { cause?: string; age?: string; address
  * The research's status of a fact (`2 _STROM_STATUS`), written back as it
  * came so a tree round-trips through the app unchanged.
  */
+/**
+ * An event without the note lines the import made of its `2 EMAIL` lines
+ * ("E-mail: …", in the language of the import), and the addresses whose line
+ * is still there; one taken out or edited by hand stays a note.
+ */
+function emailsBack(event: LifeEvent): { event: LifeEvent; emails: string[] } {
+    if (!event.gedcomEmails?.length || !event.note || eventValueIsOnTag(event.type)) return { event, emails: [] };
+    const noteLines = event.note.split('\n');
+    const emails: string[] = [];
+    for (const email of event.gedcomEmails) {
+        const i = noteLines.findIndex(l => {
+            const at = l.indexOf(': ');
+            return at > 0 && !l.slice(0, at).includes('@') && l.slice(at + 2).trim() === email;
+        });
+        if (i < 0) continue;
+        noteLines.splice(i, 1);
+        emails.push(email);
+    }
+    const note = noteLines.join('\n').trim();
+    return { event: { ...event, ...(note ? { note } : { note: undefined }) }, emails };
+}
+
 function pushStatus(lines: string[], status: FactStatus | undefined): void {
     if (status) lines.push(`2 _STROM_STATUS ${status}`);
 }
@@ -580,6 +607,46 @@ function pushStory(lines: string[], level: number, story: Story, sourceRef: (id:
 }
 
 /**
+ * The other families a person was also recorded in as a child (spec 066 K3.1),
+ * written back as FAMC / CHIL instead of the "Also recorded as…" note line —
+ * while that line is still in the notes (deleting it drops the link) and the
+ * family still exists without the person among its own children.
+ */
+function alsoChildLinks(data: StromData): Map<PersonId, AlsoChildOf[]> {
+    const out = new Map<PersonId, AlsoChildOf[]>();
+    for (const [id, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        if (!person.alsoChildOf?.length) continue;
+        const noteLines = (person.notes ?? '').split('\n').map(l => l.trimEnd());
+        const links = person.alsoChildOf.filter((l, i, all) =>
+            noteLines.includes(l.note)
+            && data.partnerships[l.partnershipId] && !data.partnerships[l.partnershipId].childIds.includes(id)
+            && all.findIndex(o => o.partnershipId === l.partnershipId) === i);
+        if (links.length) out.set(id, links);
+    }
+    return out;
+}
+
+/** The notes without the lines its written links stand for (alsoChildLinks). */
+function notesWithoutLinks(notes: string, links: AlsoChildOf[]): string {
+    const lines = notes.split('\n');
+    for (const link of links) {
+        const at = lines.findIndex(l => l.trimEnd() === link.note);
+        if (at >= 0) lines.splice(at, 1);
+    }
+    return lines.join('\n').trim();
+}
+
+/**
+ * Whether a person is a record of a loaded file of the tree: it has its entry
+ * there (xref, ids). Not the import mark alone — a whole imported tree carries
+ * it, the "?" stand-ins the import made up for a missing parent too.
+ */
+function isFileRecord(data: StromData, p: Person): boolean {
+    const known = new Set((data.imports ?? []).map(r => r.id));
+    return (p.originalIds ?? []).some(e => known.has(e.from));
+}
+
+/**
  * A "?" stand-in with nothing of its own, whose children are all in its
  * families: left out of GEDCOM (other programs would show a nameless
  * spouse). Its families read back as one-parent families with a stand-in;
@@ -590,6 +657,10 @@ function pushStory(lines: string[], level: number, story: Story, sourceRef: (id:
 function standsInOnly(data: StromData, id: PersonId): boolean {
     if (!isPurePlaceholder(data, id)) return false;
     const p = data.persons[id];
+    // A record of a loaded file (a MyHeritage person known only as a spouse,
+    // `1 NAME //`, `1 SEX U`): the file had it, with its ids, so it goes out
+    // as its own record and its families keep both partners (spec 066 K3.2).
+    if (isFileRecord(data, p)) return false;
     const unions = p.partnerships.map(uid => data.partnerships[uid]).filter(Boolean);
     return unions.length > 0 && p.childIds.every(cid => unions.some(u => u.childIds.includes(cid)));
 }
@@ -704,6 +775,8 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
 }
 
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
+    // Before the content options: a family link stays even without the notes.
+    const alsoChild = alsoChildLinks(data);
     if (options.content) data = applyContentOptions(data, options.content);
     const writeReadings = options.readings !== false;
     const lines: string[] = [];
@@ -715,6 +788,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // "Back to {prog}" (spec 066 K3.2): the records from that program's files
     // keep their xref where it is safe; every other xref is made around them.
     const back = backToXrefs(data, options.backTo);
+    /** A person or a family of that program's files ("Back to {prog}"). */
+    const isBackRecord = (holder: FactHolder): boolean =>
+        (!!holder.importId && back.imports.has(holder.importId)) || (holder.originalIds ?? []).some(e => back.imports.has(e.from));
     /** Xrefs in use, without the @ signs (people, families, sources, repositories and the submitter share them). */
     const taken = new Set<string>(['SUBM1', ...back.reserved]);
     const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1 };
@@ -741,6 +817,22 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     for (const partnershipId of Object.keys(data.partnerships) as PartnershipId[]) {
         const own = back.families.get(partnershipId);
         partnershipIdMap.set(partnershipId, own ? `@${own}@` : freshXref('F'));
+    }
+
+    // The other families a person is also a child of (alsoChildLinks): both
+    // ends written, the child's FAMC and the family's CHIL.
+    const alsoChildOf = new Map<PersonId, AlsoChildOf[]>();
+    const alsoChildren = new Map<PartnershipId, PersonId[]>();
+    for (const [personId, links] of alsoChild) {
+        if (!personIdMap.has(personId)) continue;
+        const written = links.filter(l => partnershipIdMap.has(l.partnershipId)
+            && !data.partnerships[l.partnershipId]?.childIds.includes(personId));
+        if (!written.length) continue;
+        alsoChildOf.set(personId, written);
+        for (const l of written) {
+            const list = alsoChildren.get(l.partnershipId);
+            if (list) list.push(personId); else alsoChildren.set(l.partnershipId, [personId]);
+        }
     }
 
     // Parent links outside any partnership (a parent added alone, the other
@@ -966,7 +1058,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
             lines.push('1 NAME //');
         } else {
-            pushName(lines, person, options.titles);
+            pushName(lines, person, options.titles, back.imports.size > 0 && isBackRecord(person));
         }
         // Which surname the person goes by (Person.primaryName), Strom's mark
         // under the chosen NAME: the birth name (the first one) or the married
@@ -1034,6 +1126,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // Known to be dead, date unknown: the standard way to say so.
             // Without it the person came back as possibly living.
             lines.push('1 DEAT Y');
+            // Where that came from goes along (the research's DEAT Y has one).
+            pushStatus(lines, person.deathStatus);
+            pushFactImport(person, 'death');
+            pushFactOrigin(person, 'death');
         }
 
         // User reference number (id in a paper archive / another program)
@@ -1051,14 +1147,20 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushStory(lines, 1, person.story, id => sourceIdMap.get(id));
         }
 
-        if (person.notes) {
-            pushNote(lines, 1, person.notes);
+        {
+            const links = alsoChildOf.get(personId);
+            const notes = person.notes && links ? notesWithoutLinks(person.notes, links) : person.notes;
+            if (notes) pushNote(lines, 1, notes);
         }
 
         // Life events. OCCU carries its detail as the tag value; the rest use
         // level-2 DATE/PLAC/NOTE. 'custom'/'military' have no dedicated tag and
         // ride on the generic EVEN with a TYPE label, so nothing is dropped.
-        for (const event of person.events ?? []) {
+        for (const fileEvent of person.events ?? []) {
+            // "Back to {prog}": the file's e-mail addresses go back as EMAIL,
+            // out of the note while it still has their line (spec 066 K3.1).
+            const { event, emails } = back.imports.size > 0 && isBackRecord(person)
+                ? emailsBack(fileEvent) : { event: fileEvent, emails: [] };
             const tag = EVENT_TYPE_TO_TAG[event.type];
             let typeLabel: string | null = null;
             if (!tag) {
@@ -1094,6 +1196,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushPlace(lines, 2, event.place, data.places);
             }
             pushDetails(lines, event);
+            for (const email of emails) pushWrapped(lines, 2, 'EMAIL', email);
             pushStatus(lines, event.status);
             if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
@@ -1209,6 +1312,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 }
             }
         }
+        // …and the families it was also recorded in, after the one it hangs from.
+        for (const link of alsoChildOf.get(personId) ?? []) {
+            lines.push(`1 FAMC ${partnershipIdMap.get(link.partnershipId)}`);
+            if (link.pedi) lines.push(`2 PEDI ${link.pedi}`);
+        }
 
         pushGedcomExtra(person);
     }
@@ -1262,6 +1370,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (linkImport) lines.push(`2 ${IMPORT_TAG} ${linkImport}`);
             }
         }
+        // Children that hang from another family but were also recorded in this one (alsoChildLinks).
+        for (const childId of alsoChildren.get(partnershipId) ?? []) lines.push(`1 CHIL ${personIdMap.get(childId)}`);
 
         // Marriage event (for married or divorced status) — not the bare status of a family whose other
         // parent is only a "?" stand-in (it would read as a wedding to someone unknown).
@@ -1269,7 +1379,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // childless one ("married, the spouse unknown") and one of siblings say it: with siblings it is what
         // keeps them one family there and back (R1 of the N1 round: split into a family per child).
         const withStandIn = (!personIdMap.has(partnership.person1Id) || !personIdMap.has(partnership.person2Id)) && partnership.childIds.length === 1;
-        const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn) ||
+        // A couple whose file wrote no MARR gets none either (spec 066 K3.1),
+        // unless the wedding has something to say now (its witnesses, its status).
+        const noMarriageSaid = partnership.marriageUnrecorded === true && !partnership.participants?.length && !partnership.startStatus;
+        const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
         if (hasMarriage) {

@@ -191,6 +191,15 @@ export function parseFactStatus(value: string | undefined): FactStatus | undefin
     return (FACT_STATUSES as readonly string[]).includes(v ?? '') ? v as FactStatus : undefined;
 }
 
+/** One more family a GEDCOM file recorded a person in as a child (Person.alsoChildOf). */
+export interface AlsoChildOf {
+    partnershipId: PartnershipId;
+    /** FAMC > PEDI as the file gave it (lower case), when it gave one. */
+    pedi?: string;
+    /** The line of the person's note the import wrote for it. */
+    note: string;
+}
+
 export interface LifeEvent {
     id: string;
     type: LifeEventType;
@@ -212,6 +221,13 @@ export interface LifeEvent {
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
     status?: FactStatus;
+    /**
+     * The e-mail addresses the GEDCOM file gave under the event (`2 EMAIL`,
+     * MyHeritage's contact under RESI), as written. Each is also a line of
+     * the note ("E-mail: …"), which is what the app shows; "Back to {prog}"
+     * writes it back as `2 EMAIL` while that line is still in the note.
+     */
+    gedcomEmails?: string[];
 }
 
 /**
@@ -528,6 +544,15 @@ export interface Person {
      * undefined = fall back to the age heuristic.
      */
     isDeceased?: boolean;
+    /**
+     * Families the GEDCOM file also recorded the person in as a child, besides
+     * the one the person hangs from here (a person has one pair of parents):
+     * each with the line of the note that says so ("Also recorded as child
+     * of …", in the language of the import). While that line is in the note,
+     * an export writes the link back (`1 FAMC` + PEDI, the family's `1 CHIL`)
+     * instead of the line (spec 066 K3.1).
+     */
+    alsoChildOf?: AlsoChildOf[];
     /** Compressed square JPEG portrait as a data URL (see src/photo.ts). */
     photo?: string;
     /** Original file name of the uploaded photo (UX only). */
@@ -1039,6 +1064,13 @@ export interface Partnership {
     events?: CoupleEvent[];
     /** The import (StromData.imports id) the partner link came from. */
     importId?: string;
+    /**
+     * The GEDCOM file the couple was read from wrote no marriage for it (no
+     * MARR; "married", or "divorced" by a DIV alone, is only how a couple is
+     * read). An export then adds no empty MARR the file never had (spec 066
+     * K3.1); a wedding detail (date, place, witnesses…) writes one as before.
+     */
+    marriageUnrecorded?: boolean;
     /** Each fact's value as it came from a loaded file (`startDate`, `startPlace`, `endDate`, `endPlace`, `event:<id>.date|place|value`). */
     importedValues?: Record<string, ImportedValue>;
     /** The family record's ids in the loaded GEDCOM files (xref, `_UID`…), see Person.originalIds. */

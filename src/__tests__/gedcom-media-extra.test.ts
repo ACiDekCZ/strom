@@ -283,7 +283,8 @@ ${LONG}
 0 TRLR
 `;
 
-const HROMOSLAV_KEPT = [LONG, '2 CONC  a ještě kousek 🦉', '2 _MHSUB Kořenov', '3 _MHDEEPER 1', '1 _MHFLAG'];
+// The change stamp (_UPD) first, as written: back with the record, never counted.
+const HROMOSLAV_KEPT = ['1 _UPD 2 OCT 2026 10:00:00 GMT -0500', LONG, '2 CONC  a ještě kousek 🦉', '2 _MHSUB Kořenov', '3 _MHDEEPER 1', '1 _MHFLAG'];
 const COUPLE_KEPT = ['1 _MHSTATUS Spolu na statku', '2 _MHSINCE 1905'];
 
 describe('another program’s level-1 tags', () => {

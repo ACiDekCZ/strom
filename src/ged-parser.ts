@@ -864,6 +864,8 @@ interface RawEvent {
     tagValue?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
+    /** 2 EMAIL under the event as written (LifeEvent.gedcomEmails). */
+    emails?: string[];
     /** 2 _STROM_IMPORT: which import the event's parts still come from (app files only). */
     imports?: RawImportMark[];
     /** The research's origin of the event (Strom's own files only). */
@@ -967,6 +969,8 @@ interface RawParticipant {
 interface RawExtra {
     tag: string;
     lines: string[];
+    /** Bookkeeping kept only to go back (`_UPD`): not named in the import's summary. */
+    quiet?: boolean;
 }
 
 /** `1 _STROM_IMPORT Ix` of a person or a family with its `2 _XREF` and id lines (spec 066 K3.2). */
@@ -1860,6 +1864,14 @@ const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJE
     'UID', 'CREA', 'EXID']);
 
 /**
+ * Bookkeeping another program wants back on its records: MyHeritage's change
+ * stamp (`1 _UPD`) of a person, a family, a source. Kept as written for "Back
+ * to {prog}" like the program's other own tags, but, being bookkeeping, never
+ * named in the import's summary (spec 066 K3.1).
+ */
+const KEPT_BOOKKEEPING_TAGS: ReadonlySet<string> = new Set(['_UPD']);
+
+/**
  * MyHeritage's bookkeeping under a photo: its size, its record numbers (of
  * the photo, of the photo a face was cut from) and where a face sits on it
  * (the cut-out's position, the photo it was cut from). A MyHeritage export
@@ -2172,7 +2184,7 @@ export function parseGedcom(content: string): ParsedGedcom {
      * (spec 066 G8): from its line in the file down; a pointer under it (an
      * xref the reader renumbers) means the block cannot be kept as written.
      */
-    let extraBlock: { target: { extras?: RawExtra[] }; tag: string; start: number; pointer: boolean } | null = null;
+    let extraBlock: { target: { extras?: RawExtra[] }; tag: string; start: number; pointer: boolean; quiet?: boolean } | null = null;
     /** Citation DATA > DATE -> the source's record date (first wins, like PAGE). */
     const citationDates = new Map<string, string>();
     let citeLevel: number | null = null;
@@ -2354,6 +2366,13 @@ export function parseGedcom(content: string): ParsedGedcom {
     let stromResearch = false;
     /** Written by the Strom app itself (HEAD > SOUR STROM). */
     let stromApp = false;
+    /**
+     * Whether a level-1 `_XXX` tag is another program's, kept as written for
+     * "Back to {prog}" (spec 066 G8): in its file, and in Strom's own "Back to"
+     * file that carried it there (taken back by the record's import mark) —
+     * never Strom's own tags nor the research's.
+     */
+    const keepsExtra = (tag: string): boolean => !stromResearch && !(stromApp && /^_STROM_/.test(tag));
     /** The app's version under it (HEAD > SOUR STROM > VERS; the older apps wrote a fixed "1.0"). */
     let stromAppVersion: string | undefined;
     /** The header line being read is under HEAD > SOUR STROM. */
@@ -2459,8 +2478,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (!block) return;
         const raw = lines.slice(block.start, end).filter(l => l.trim() !== '');
         if (!block.pointer && validExtraBlock(raw) && !raw.some(l => DATA_URL_IN_LINE.test(l))) {
-            (block.target.extras ??= []).push({ tag: block.tag, lines: raw });
-        } else {
+            (block.target.extras ??= []).push({ tag: block.tag, lines: raw, ...(block.quiet ? { quiet: true } : {}) });
+        } else if (!block.quiet) {
             count(block.tag);
         }
     };
@@ -2907,8 +2926,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === 'ABBR') src.abbr = value;
                 // Another program's own tag (MyHeritage's _TYPE, _MEDI): kept as
                 // written for "Back to {prog}" (spec 066 G8), like a person's.
-                else if (tag.startsWith('_') && !stromApp && !stromResearch && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
-                    extraBlock = { target: src, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
+                else if (tag.startsWith('_') && keepsExtra(tag) && (!IGNORED_BOOKKEEPING_TAGS.has(tag) || KEPT_BOOKKEEPING_TAGS.has(tag))) {
+                    extraBlock = { target: src, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()), quiet: KEPT_BOOKKEEPING_TAGS.has(tag) };
                 }
                 // Anything else on the record (DATA, OBJE, REFN …) reached us
                 // and was not read — the contract says so, and so does the summary.
@@ -3154,11 +3173,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 // No field of its own, but the register said it:
                                 // keep it as a labelled line in the note.
                                 indi.noteFacts.push({ tag, value, date: '', place: '' });
+                            } else if (KEPT_BOOKKEEPING_TAGS.has(tag) && keepsExtra(tag)) {
+                                // Its change stamp: back with the record, never in the summary.
+                                extraBlock = { target: indi, tag, start: rec.src, pointer: false, quiet: true };
                             } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT'
                                 && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 // Another program's own tag: kept as written for
                                 // "Back to {prog}" (spec 066 G8); anything else counted.
-                                if (tag.startsWith('_') && !stromApp && !stromResearch) {
+                                if (tag.startsWith('_') && keepsExtra(tag)) {
                                     extraBlock = { target: indi, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
                                 } else {
                                     drop(tag);
@@ -3254,9 +3276,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             } else if (tag === 'OBJE' && GED_POINTER.test(value.trim())) {
                                 // A family's link to a media record: the record is
                                 // counted once if nothing else takes it (convertToStrom).
-                            } else if (tag.startsWith('_') && !KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)
-                                && !stromApp && !stromResearch) {
-                                extraBlock = { target: fam, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
+                            } else if (tag.startsWith('_') && !KNOWN_FAM_TAGS.has(tag)
+                                && (!IGNORED_BOOKKEEPING_TAGS.has(tag) || KEPT_BOOKKEEPING_TAGS.has(tag)) && keepsExtra(tag)) {
+                                extraBlock = { target: fam, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()), quiet: KEPT_BOOKKEEPING_TAGS.has(tag) };
                             } else if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
                             }
@@ -3563,10 +3585,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             currentEvent.note = (currentEvent.note ?? '')
                                 + (tag === 'CONT' ? '\n' : '') + value;
                         } else if (tag === 'EMAIL' && value) {
-                            // MyHeritage keeps contact e-mail under RESI.
+                            // MyHeritage keeps contact e-mail under RESI: a line of
+                            // the note to read, the address itself to go back.
                             const line = strings.gedcomNotes.email(value);
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${line}` : line;
+                            (currentEvent.emails ??= []).push(value.trim());
                         } else if (tag === 'ASSO' && value) {
                             // Godparent/witness who has a record of their own.
                             (currentEvent.participants ??= []).push({ ref: value });
@@ -4121,6 +4145,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
                 if (ev.status) out.status = ev.status;
+                if (ev.emails?.length && ev.note) out.gedcomEmails = ev.emails;
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
 
@@ -4315,13 +4340,25 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
      * rather than silently thrown away.
      */
     const childFamily = new Map<string, string>();
+    /**
+     * Where the child's own FAMC lines put a family (-1: none). The app writes
+     * the family a child hangs from first, its other ones after (alsoChildOf):
+     * in its own file that order decides between two of one kind.
+     */
+    const famcRank = (childGedId: string, famGedId: string): number =>
+        individuals.get(childGedId)?.famcLinks.findIndex(l => l.famId === famGedId) ?? -1;
     for (const [gedFamId, fam] of families) {
         for (const childGedId of fam.children) {
             const chosen = childFamily.get(childGedId);
             if (!chosen) { childFamily.set(childGedId, gedFamId); continue; }
-            if (isBirthLink(pediFor(childGedId, gedFamId))
-                && !isBirthLink(pediFor(childGedId, chosen))) {
+            const birth = isBirthLink(pediFor(childGedId, gedFamId));
+            const chosenBirth = isBirthLink(pediFor(childGedId, chosen));
+            if (birth && !chosenBirth) {
                 childFamily.set(childGedId, gedFamId);
+            } else if (gedcom.stromApp && birth === chosenBirth) {
+                const rank = famcRank(childGedId, gedFamId);
+                const chosenRank = famcRank(childGedId, chosen);
+                if (rank >= 0 && (chosenRank < 0 || rank < chosenRank)) childFamily.set(childGedId, gedFamId);
             }
         }
     }
@@ -4369,6 +4406,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (Object.keys(ages).length > 0) partnership.ages = ages;
         if (fam.note) partnership.note = fam.note;
         applyUnionOutcome(partnership, fam);
+        // No MARR in the family record: "married" (or "divorced" by a DIV
+        // alone) is only how a couple is read. Noted, so no export adds an
+        // empty MARR the file never had (spec 066 K3.1); Strom's own files
+        // write one for every couple said to be married, so theirs agree.
+        if (!fam.unionEvents.some(e => e.type === 'marriage') && (partnership.status === 'married' || partnership.status === 'divorced')) {
+            partnership.marriageUnrecorded = true;
+        }
         const dateForms = keptDateForms(fam.dateForms);
         if (dateForms) partnership.gedcomDates = dateForms;
 
@@ -4442,6 +4486,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
         if (!into.story && from.story) into.story = from.story;
         if (from.events?.length) into.events = [...(into.events ?? []), ...from.events];
+        // A marriage in either of the couple's families is one.
+        if (!from.marriageUnrecorded) delete into.marriageUnrecorded;
     };
     const unionOfCouple = new Map<string, PartnershipId>();
 
@@ -4692,6 +4738,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const child = persons[childId];
             child.notes = child.notes ? `${child.notes}\n${line}` : line;
             otherFamilyLinks++;
+            // The family itself, when it is one here: an export writes the
+            // link back (FAMC / CHIL) instead of this line (spec 066 K3.1).
+            const other = famPartnership.get(gedFamId);
+            if (other) (child.alsoChildOf ??= []).push({ partnershipId: other.id, ...(pedi ? { pedi } : {}), note: line });
         }
     }
 
@@ -4777,44 +4827,53 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     } else if (origin) {
         applyFileImportMarks();
         applyFileOriginalIds();
+        applyFileExtras();
         if (readOrigins) applyResearchOrigins();
         cleanImportOrigin(data, gedcom.stromImports);
     } else if (readOrigins) {
-        // Both are read; either one is reason to clean against the records.
+        // All three are read; any one is reason to clean against the records.
+        // The record's own import (`1 _STROM_IMPORT Rx`) too: without it an
+        // export wrote it back as an import the record did not come from.
         const origins = applyResearchOrigins();
         const ids = applyFileOriginalIds();
-        if (origins || ids) cleanImportOrigin(data, gedcom.stromImports);
+        const marks = applyRecordImportMarks();
+        if (origins || ids || marks) cleanImportOrigin(data, gedcom.stromImports);
     }
 
     // Another program's own tags with no import to keep them for (the file is
     // not loaded as an import): not carried over, so counted.
     if (!extrasKept) {
         for (const raw of [...individuals.values(), ...families.values(), ...gedSources.values()]) {
-            for (const e of raw.extras ?? []) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
+            for (const e of raw.extras ?? []) if (!e.quiet) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
         }
     }
 
     /**
-     * Another program's level-1 `_XXX` tags of each person and family, kept as
-     * written for "Back to {prog}" (spec 066 G8).
+     * Another program's level-1 `_XXX` tags of each person, family and source,
+     * kept as written for "Back to {prog}" (spec 066 G8): from its file, all of
+     * them for that import (`from`); from Strom's own "Back to" file read
+     * again, a record's go back to the import its `1 _STROM_IMPORT Ix` mark
+     * names (cleaned against the records afterwards). A record with no import
+     * to keep them for keeps none, and they are counted.
      */
-    function applyFileExtras(from: string): void {
+    function applyFileExtras(from?: string): void {
         extrasKept = true;
-        const put = (holder: ExtraHolder | undefined, extras: RawExtra[] | undefined): void => {
+        const put = (holder: ExtraHolder | undefined, mark: string | undefined, extras: RawExtra[] | undefined): void => {
             for (const e of extras ?? []) {
-                if (!holder) { droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1); continue; }
-                addGedcomExtra(holder, { from, lines: e.lines });
-                keptTags.set(e.tag, (keptTags.get(e.tag) ?? 0) + 1);
+                const to = from ?? mark;
+                if (!holder || !to) { if (!e.quiet) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1); continue; }
+                addGedcomExtra(holder, { from: to, lines: e.lines });
+                if (!e.quiet) keptTags.set(e.tag, (keptTags.get(e.tag) ?? 0) + 1);
             }
         };
         for (const [gedId, indi] of individuals) {
             const pid = personIdMap.get(gedId);
-            put(pid ? persons[pid] : undefined, indi.extras);
+            put(pid ? persons[pid] : undefined, indi.importMark, indi.extras);
         }
-        for (const [gedFamId, fam] of families) put(famPartnership.get(gedFamId), fam.extras);
+        for (const [gedFamId, fam] of families) put(famPartnership.get(gedFamId), fam.importMark, fam.extras);
         for (const [gedId, raw] of gedSources) {
             const sid = sourceIdMap.get(gedId);
-            put(sid ? sources[sid] : undefined, raw.extras);
+            put(sid ? sources[sid] : undefined, raw.importMark, raw.extras);
         }
     }
 
@@ -4910,18 +4969,17 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         const markFact = (holder: Person | Partnership, fact: string, marks: RawImportMark[] | undefined): void => {
             for (const mark of marks ?? []) markFactImported(holder, fact, mark.id, mark.parts);
         };
+        applyRecordImportMarks();
         for (const [gedId, indi] of individuals) {
             const pid = personIdMap.get(gedId);
             const person = pid ? persons[pid] : undefined;
             if (!person) continue;
-            if (indi.importMark) person.importId = indi.importMark;
             for (const [fact, marks] of Object.entries(indi.factImports ?? {})) markFact(person, fact, marks);
             for (const ev of person.events ?? []) markFact(person, `event:${ev.id}`, eventMarks.get(ev));
         }
         for (const [gedFamId, fam] of families) {
             const ps = famPartnership.get(gedFamId);
             if (!ps) continue;
-            if (fam.importMark && !ps.importId) ps.importId = fam.importMark;
             for (const [fact, marks] of Object.entries(fam.factImports ?? {})) markFact(ps, fact, marks);
         }
         for (const ps of Object.values(partnerships)) {
@@ -4932,10 +4990,29 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (!child) continue;
             for (const pid of parents) if (child.parentIds.includes(pid)) (child.importedParents ??= {})[pid] = from;
         }
+    }
+
+    /**
+     * The import each record came from, as a Strom file (the app's or the
+     * research's) carries it: `1 _STROM_IMPORT Ix` on the person, the family,
+     * the source. Returns whether there was any.
+     */
+    function applyRecordImportMarks(): boolean {
+        let any = false;
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (person && indi.importMark) { person.importId = indi.importMark; any = true; }
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (ps && fam.importMark && !ps.importId) { ps.importId = fam.importMark; any = true; }
+        }
         for (const [gedId, raw] of gedSources) {
             const sid = sourceIdMap.get(gedId);
-            if (raw.importMark && sid && sources[sid]) sources[sid].importId = raw.importMark;
+            if (raw.importMark && sid && sources[sid]) { sources[sid].importId = raw.importMark; any = true; }
         }
+        return any;
     }
 
     const result: GedcomConversionResult = {

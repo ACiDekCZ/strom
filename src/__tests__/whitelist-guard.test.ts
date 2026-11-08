@@ -341,6 +341,7 @@ type OwnedElsewhere =
     | 'importedParents'     // GEDCOM import only: the parent links from the file
     | 'originalIds'         // GEDCOM import only (K3.2): the person's ids in the loaded files
     | 'gedcomExtra'         // GEDCOM import only (G8): another program's own tags, for "Back to {prog}"
+    | 'alsoChildOf'         // GEDCOM import only (066): a second family that also lists the person as a child
     | 'researchOrigins';    // written by Strom Research only (GEDCOM import), never edited
 
 /**

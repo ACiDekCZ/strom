@@ -477,6 +477,17 @@ export function applyLivingPrivacy(
         // The file's values of what was just hidden must not stay behind.
         forgetHiddenImports(person, true);
     }
+    // A "?" of a loaded file (a spouse the file names without a name) goes out
+    // as its record, with nothing of its own to hide but its ids there, which
+    // name the person in the other program: gone when it may be living. Which
+    // files it was a record of stays (no id in it), so it is not taken for a
+    // stand-in the app made up and its family keeps both partners.
+    for (const person of Object.values(copy.persons)) {
+        if (!person.isPlaceholder || !person.originalIds || !isLivingPerson(person, currentYear, bounds)) continue;
+        const files = person.originalIds.map(e => ({ from: e.from, ids: [] }));
+        forgetHiddenImports(person, true);
+        person.originalIds = files;
+    }
 
     // The living lost their citations above; a source only they cited goes too.
     if (options.keepDeceasedSources && copy.sources) {

@@ -100,7 +100,8 @@ const MYHERITAGE = `0 HEAD
 0 TRLR
 `;
 
-const SOURCE_KEPT = ['1 _TYPE Discovery', '1 _MEDI 45329791-1'];
+// The change stamp too (_UPD): back with the record, never counted.
+const SOURCE_KEPT = ['1 _UPD 18 JUL 2018 11:47:11 GMT -0500', '1 _TYPE Discovery', '1 _MEDI 45329791-1'];
 
 describe('a source record’s own tags of another program', () => {
     it('are kept on the source as written, with the import they came from, and never counted as unsupported', () => {
@@ -133,7 +134,7 @@ describe('a source record’s own tags of another program', () => {
         const ged = exportToGedcom(data, 'Řepíček', { backTo: 'I1' }).content;
         const rec = sourceRecord(ged, 'Birth register');
         expect(rec.slice(-SOURCE_KEPT.length)).toEqual(SOURCE_KEPT);
-        expect(ged.split('\n').filter(l => l.startsWith('1 _TYPE') || l.startsWith('1 _MEDI'))).toEqual(SOURCE_KEPT);
+        expect(ged.split('\n').filter(l => l.startsWith('1 _TYPE') || l.startsWith('1 _MEDI'))).toEqual(SOURCE_KEPT.slice(1));
     });
 
     it('Strom’s own export, the research’s, and back to another program write none of them', () => {

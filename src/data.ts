@@ -2893,6 +2893,8 @@ class DataManagerClass {
         if (partnership.status === status) return true;
         this.beginMutation();
         partnership.status = status;
+        // A status set here is said, not the file's default: it is written (spec 066).
+        delete partnership.marriageUnrecorded;
         const sp1 = this.data.persons[partnership.person1Id];
         const sp2 = this.data.persons[partnership.person2Id];
         this.commitMutation(strings.undo.editPartnership(auditPersonName(sp1), auditPersonName(sp2)));
@@ -2907,7 +2909,7 @@ class DataManagerClass {
 
         // Track actual changes
         let changed = false;
-        if (updates.status !== undefined && updates.status !== partnership.status) { partnership.status = updates.status; changed = true; }
+        if (updates.status !== undefined && updates.status !== partnership.status) { partnership.status = updates.status; delete partnership.marriageUnrecorded; changed = true; }
         if (updates.startDate !== undefined && (updates.startDate || undefined) !== partnership.startDate) { partnership.startDate = updates.startDate || undefined; changed = true; }
         if (updates.startPlace !== undefined && (updates.startPlace || undefined) !== partnership.startPlace) { partnership.startPlace = updates.startPlace || undefined; changed = true; }
         if (updates.endDate !== undefined && (updates.endDate || undefined) !== partnership.endDate) { partnership.endDate = updates.endDate || undefined; changed = true; }
