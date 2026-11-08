@@ -25,6 +25,12 @@ export interface Version {
     janDeathPlace?: string;
     /** More facts of Jan (e.g. ['1 OCCU weaver', '2 DATE 1865']). */
     janFacts?: string[];
+    /** More lines under Jan's birth (e.g. its origin: ['2 _STROM_ORIGIN research', '2 _STROM_WAS 1865', …]). */
+    janBirthExtra?: string[];
+    /** Jan's birth conflict of a kind (2 _STROM_KIND): about a family tree's value or a person's. */
+    janBirthKind?: 'import' | 'user';
+    /** More lines of the header (e.g. an import record: ['1 _STROM_IMPORT I1', '2 SOUR Rodokmenar', …]). */
+    headExtra?: string[];
     /** Jan's name in that version (GEDCOM), his titles and his sex. */
     janName?: string;
     janTitles?: { npfx?: string; nsfx?: string };
@@ -70,7 +76,7 @@ export function conflictGed(v: Version = {}): string {
     const birth = v.noBirthConflict ? []
         : v.sources ? ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${state}`, '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '2 VAL 1865']
         : v.takeNoSides ? ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${state}`, '2 _STROM_TAKE Y', '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '2 VAL 1865']
-        : [...conflictOf('X0007', 'BIRT', '3 FEB 1865', '1865', undefined, state),
+        : [...conflictOf('X0007', 'BIRT', '3 FEB 1865', '1865', undefined, state).flatMap((l, i) => i === 3 && v.janBirthKind ? [l, `2 _STROM_KIND ${v.janBirthKind}`] : [l]),
             ...(state === 'decided' ? [`2 DECI ${v.janDecision ?? '1865'}`] : [])];
     const family = v.familyConflicts ?? (v.familyConflict ? [
         ...conflictOf('X0009', 'MARR', '3 FEB 1875', '1876', undefined, v.familyConflict),
@@ -80,11 +86,11 @@ export function conflictGed(v: Version = {}): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 9 OCT 2026',
         `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${v.head ?? HEAD}`, `1 _STROM_LINKS ${(v.links ?? LINKS).join(' ')}`,
-        ...(v.archive ? ['1 _STROM_MODE archive'] : []), '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        ...(v.archive ? ['1 _STROM_MODE archive'] : []), ...(v.headExtra ?? []), '1 CHAR UTF-8', '1 NOTE Fíškovi',
         '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
         '0 @P0003@ INDI', `1 NAME ${v.janName ?? 'Jan /Fíšek/'}`, ...titles, `1 SEX ${v.janSex ?? 'M'}`, '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
-        '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy',
+        '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy', ...(v.janBirthExtra ?? []),
         '1 DEAT', ...(v.janDeath === '' ? [] : [`2 DATE ${v.janDeath ?? '1932'}`]), ...(v.janDeathPlace ? [`2 PLAC ${v.janDeathPlace}`] : []),
         ...(v.janFacts ?? []),
         ...birth,

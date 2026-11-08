@@ -88,6 +88,10 @@ export const personEventsMethods = uiModule({
         const rows: string[] = [];
         // One reliability mark per fact (none at the facts when the origin row stands for them all).
         const marks = this.personReliabilityView(person);
+        // "Originally from the family tree" and the research's proposal under a fact (src/ui/fact-origin-ui.ts).
+        const originBridge = this.researchOriginBridge();
+        const proposals = this.originProposalsOf(person);
+        const origin = (fact: string): string => this.factOriginHtml(person, fact, originBridge, proposals);
 
         // Birth and death rows are read-only (never editable as events); all
         // rows stand in the order of the life (T31: a burial after the death).
@@ -101,17 +105,17 @@ export const personEventsMethods = uiModule({
             if (entry.kind === 'birth') {
                 rows.push(this.eventRowHtml(strings.events.types.birth,
                     eventMeta(person.birthDate, person.birthPlace), null, '',
-                    eventDetailLine({ address: person.birthAddress }), this.personFactMarkHtml(marks, 'birth')));
+                    eventDetailLine({ address: person.birthAddress }), this.personFactMarkHtml(marks, 'birth'), origin('birth')));
             } else if (entry.kind === 'death') {
                 rows.push(this.eventRowHtml(strings.events.types.death,
                     eventMeta(person.deathDate, person.deathPlace), null, '',
-                    eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }), this.personFactMarkHtml(marks, 'death')));
+                    eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }), this.personFactMarkHtml(marks, 'death'), origin('death')));
             } else {
                 const event = entry.event;
                 rows.push(this.eventRowHtml(eventTypeLabel(event),
                     eventMeta(event.date, event.place, eventOwnSubject(event)),
                     locked ? null : event.id,
-                    this.participantsSummary(event), eventDetailLine(event), this.personFactMarkHtml(marks, `event:${event.id}`)));
+                    this.participantsSummary(event), eventDetailLine(event), this.personFactMarkHtml(marks, `event:${event.id}`), origin(`event:${event.id}`)));
             }
         }
 
@@ -152,8 +156,8 @@ export const personEventsMethods = uiModule({
         }).join('  ·  ');
     },
 
-    /** `participantsHtml`: participantsSummary's HTML (escaped already). */
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participantsHtml = '', details = '', markHtml = ''): string {
+    /** `participantsHtml`: participantsSummary's HTML (escaped already); `belowHtml`: the fact's origin rows (HTML, escaped already). */
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participantsHtml = '', details = '', markHtml = '', belowHtml = ''): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
@@ -170,6 +174,7 @@ export const personEventsMethods = uiModule({
             <div class="event-row${eventId === null ? ' readonly' : ''}">
                 <div class="event-main">
                     <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}${markHtml}</div>
+                    ${belowHtml}
                     ${detailsHtml}
                     ${peopleHtml}
                 </div>

@@ -176,6 +176,10 @@ export const conflictDecideMethods = uiModule({
         const decidedValues = state && 'values' in state ? state.values : this.researchConflictDecidedValues(c);
         const sources = DataManager.getData().sources ?? {};
         const ctx = this.researchSyncLink();
+        // A conflict about a family tree's value or a person's (spec 066 §3): its sentence, its sides, one row of choices.
+        const o = strings.origin;
+        const kind = c.kind === 'import' || c.kind === 'user' ? c.kind : null;
+        const kindLine = kind && view.body === 'sides' ? `<p class="prc-kind">${esc(kind === 'import' ? o.proposeImport : o.proposeUser)}.</p>` : '';
 
         const tag = view.tag === 'busy'
             ? `<span class="person-research-open-tag prc-tag prc-tag--busy"><span class="prc-spinner prc-spinner--tag" aria-hidden="true"></span>${esc(k.busyTag)}</span>`
@@ -219,32 +223,38 @@ export const conflictDecideMethods = uiModule({
                 const busy = view.busyTake === which;
                 const off = view.disabled || (view.busyTake !== null && !busy);
                 const value = which === 'user' && view.unsent ? this.researchConflictValueNow(personId, c) : sideText(c, v);
+                const importSource = which === 'user' && kind === 'import' ? this.originConflictImportSource(personId, c) : '';
                 const meta = which === 'research'
                     ? sourceLink(v, 'source')
+                    : importSource
+                        ? `<span class="prc-meta">${esc(importSource)}</span>`
                     : view.unsent
                         ? `<span class="prc-meta">${esc(k.appUnsent(dayOf(ctx ? TreeManager.getTreeMetadata(ctx.treeId)?.changedAt : undefined) || dayOf(new Date().toISOString())))}</span>
                            <span class="prc-knows">${esc(k.researchKnows(said(sideText(c, v))))}</span>`
                         : `<span class="prc-meta">${esc(k.appSource(dayOf(ctx?.link.sent?.at)))}</span>`;
                 let choice = '';
-                if (view.choices === 'buttons') {
+                if (kind) {
+                    // A conflict of a kind: the choices stand in one row under both sides (kindRow).
+                } else if (view.choices === 'buttons') {
                     choice = `<button type="button" class="prc-choice" data-decide="${which}" data-focus="choice-${which}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${busy
                         ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busy)}`
                         : esc(which === 'user' ? k.keep : k.take)}</button>`;
                 } else if (view.choices === 'links') {
                     choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(which === 'user' ? k.keepLink : k.takeLink, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
                 }
-                const note = view.notes && view.choices !== 'none'
+                const note = !kind && view.notes && view.choices !== 'none'
                     ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
                 return `
                     <div class="prc-side" data-side="${which}">
-                        <span class="prc-side-label">${esc(which === 'user' ? k.sideApp : k.sideResearch)}</span>
+                        <span class="prc-side-label">${esc(which === 'research' ? (kind ? o.sideProposal : k.sideResearch)
+                            : kind === 'import' ? o.sideImport : kind === 'user' ? o.sideUser : k.sideApp)}</span>
                         <span class="prc-side-main"><span class="prc-value">${conflictValueHtml(value)}</span>
                         <span class="prc-side-meta">${meta}</span></span>
                         ${choice}${note}
                     </div>`;
             };
             body = `
-                <div class="prc-sides${view.choices === 'none' ? ' prc-sides--plain' : ''}">${side('user')}${side('research')}</div>
+                <div class="prc-sides${view.choices === 'none' || kind ? ' prc-sides--plain' : ''}">${side('user')}${side('research')}</div>${kind ? this.originConflictChoicesHtml(c, view, id) : ''}
                 ${view.linkNote ? `<p class="prc-link-note">${esc(k.linkNote)}</p>` : ''}`;
         } else if (view.body === 'decided' && state && state.kind !== 'busy' && state.kind !== 'error' && state.kind !== 'gone') {
             const take: ResearchConflictTake | undefined = state.kind === 'kept' ? 'user' : state.kind === 'taken' ? 'research'
@@ -281,7 +291,7 @@ export const conflictDecideMethods = uiModule({
                     <span class="person-research-fact">${esc(researchConflictTitle(c))}</span>
                     ${tag}
                 </div>
-                ${notice}${body}${links}
+                ${kindLine}${notice}${body}${links}
             </div>`;
     },
 

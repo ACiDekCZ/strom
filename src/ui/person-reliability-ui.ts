@@ -74,6 +74,8 @@ export const personReliabilityMethods = uiModule({
                 if (layout.row.step) row.insertAdjacentHTML('beforeend', originRowPillHtml(view.summary, layout.row.step, { research: view.opts.originFeature }));
             }
         }
+        // "Originally from the family tree" under the name and the sex (not marks: whatever the setting says).
+        this.renderPersonFactOrigins(personId);
         if (!person || !view?.atFacts) return;
         const put = (label: Element | null | undefined, html: string): void => {
             if (!label || !html) return;

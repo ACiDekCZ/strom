@@ -21600,6 +21600,83 @@
             .person-origin { padding: 9px 16px; }
             .person-origin + .fact-status-tip { margin: 6px 16px; }
         }
+        /* "Originally from the family tree:" under a fact the research changed,
+           its Revert, a refusal under it, the research's proposal in a box
+           (spec 066 §3, src/ui/fact-origin-ui.ts). */
+        .fact-origin { display: flex; flex-direction: column; gap: 4px; margin-top: 3px; min-width: 0; }
+        .fact-origin-slot { margin: -4px 0 12px; }
+        .fact-was, .fact-proposal, .fact-was-note {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0;
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light);
+        }
+        .fact-was > *, .fact-proposal > * { min-width: 0; overflow-wrap: anywhere; }
+        .fact-was-key, .fact-proposal-lead { color: var(--text); font-weight: 500; }
+        .fact-was-accepted { color: var(--text-light); }
+        .fact-was-note { color: var(--read-amber-text); }
+        .fact-was-note--faint { color: var(--text-faint); }
+        .fact-proposal {
+            padding: 7px 10px; border-radius: 8px;
+            background: var(--read-amber-bg); border: 1px solid var(--read-amber-line);
+        }
+        .fact-origin .fact-origin-link, .modal .fact-origin button.fact-origin-link,
+        .fact-origin .fact-origin-act, .modal .fact-origin button.fact-origin-act {
+            display: inline-flex; align-items: center; gap: 5px; position: relative;
+            width: auto; min-width: 0; min-height: 0; height: auto; margin: 0; padding: 0;
+            border: 0; border-radius: 0; background: none; box-shadow: none;
+            font: inherit; line-height: inherit; text-align: left; white-space: normal; cursor: pointer;
+        }
+        .fact-origin .fact-origin-link, .modal .fact-origin button.fact-origin-link {
+            color: var(--primary); text-decoration: underline; text-underline-offset: 2px;
+        }
+        .fact-origin .fact-origin-act, .modal .fact-origin button.fact-origin-act { color: var(--primary); font-weight: 600; }
+        .modal .fact-origin button.fact-origin-act:disabled { color: var(--text-ghost); cursor: default; }
+        .fact-origin button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+        @media (hover: hover) {
+            .modal .fact-origin button.fact-origin-act:not(:disabled):hover { text-decoration: underline; text-underline-offset: 2px; }
+            .modal .fact-origin button.fact-origin-link:hover { text-decoration-thickness: 2px; }
+        }
+        .fact-was-live { display: inline-flex; align-items: center; gap: 5px; color: var(--text); }
+        .fact-was-live i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: fact-was-pulse 1.2s ease-in-out infinite; }
+        @keyframes fact-was-pulse { 50% { opacity: 0.35; } }
+        @media (prefers-reduced-motion: reduce) { .fact-was-live i { animation: none; } }
+        /* Touch: 44 px targets around the small text buttons and links. */
+        @media (pointer: coarse) {
+            .modal .fact-origin button.fact-origin-act { min-height: 44px; }
+            .modal .fact-origin button.fact-origin-link::after { content: ''; position: absolute; inset: -12px 0; }
+        }
+        @media (max-width: 640px) {
+            .fact-was, .fact-proposal, .fact-was-note { gap: 2px 10px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .fact-was, .fact-proposal, .fact-was-note { gap: 2px 10px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .fact-origin { gap: 2px; }
+        }
+        /* A conflict about a family tree's value or a person's: its sentence, one row of choices, what accepting leaves. */
+        .prc-kind { margin: -4px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .prc-panel .prc-kind { margin: 0; }
+        .prc-panel-meta { font-size: 12.5px; color: var(--text-faint); }
+        .prc-kind-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .prc-kind-choices button.prc-choice { width: auto; flex: 0 1 auto; padding: 6px 14px; }
+        .modal button.prc-choice.prc-kind-choice--primary, .prc-panel-choice.prc-kind-choice--primary {
+            background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 600;
+        }
+        @media (hover: hover) {
+            .modal button.prc-choice.prc-kind-choice--primary:not(:disabled):not([aria-busy="true"]):hover,
+            .prc-panel-choice.prc-kind-choice--primary:not(:disabled):not([aria-busy="true"]):hover { background: var(--primary-dark); }
+        }
+        .modal button.prc-choice.prc-kind-choice--primary:disabled, .prc-panel-choice.prc-kind-choice--primary:disabled {
+            background: var(--surface); color: var(--text-ghost); border-color: var(--border);
+        }
+        .modal button.prc-choice.prc-kind-choice--primary[aria-busy="true"], .prc-panel-choice.prc-kind-choice--primary[aria-busy="true"] {
+            background: var(--primary-soft); color: var(--primary-dark);
+        }
+        .prc-kind-note { margin: -2px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-faint); }
+        @media (max-width: 640px) {
+            .prc-kind-choices { flex-direction: column; }
+            .modal .prc-kind-choices button.prc-choice { width: 100%; }
+        }
         /* The tree card's mini mark (Settings, off by default): the weakest
            step of the name, the birth and the death, no text. */
         .card-rel-mark {

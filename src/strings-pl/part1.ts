@@ -3,7 +3,7 @@ import { nPl, plPl } from './helpers.js';
 
 export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'mobileMenu' | 'emptyState' | 'demo' | 'book'
     | 'fileCopy' | 'snapshots' | 'split' | 'splitFamilies' | 'advanced' | 'surnames' | 'lineage' | 'surnameSuggest'
-    | 'fields' | 'events' | 'factStatus' | 'reliability' | 'partnerEvents' | 'sources'> = {
+    | 'fields' | 'events' | 'factStatus' | 'reliability' | 'origin' | 'partnerEvents' | 'sources'> = {
     toolbar: {
         title: 'Strom',
         // The "+" affordance is drawn by the button markup (glyph span), so the
@@ -740,6 +740,38 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         settingTree: 'Wiarygodność na kartach w drzewie',
         cardFacts: (facts: string) => `Najsłabsza dana karty: ${facts}`,
         cardFact: { name: 'imię', birth: 'urodzenie', death: 'zgon' },
+    },
+
+    origin: {
+        was: 'Pierwotnie z drzewa:',
+        by: (src: string) => `według ${src}`,
+        accepted: '(przyjęta propozycja)',
+        partsDatePlace: '(data i miejsce)',
+        partsName: '(imię i nazwisko)',
+        revert: 'Przywróć',
+        reverting: 'Przywracanie…',
+        confirmTitle: 'Przywrócić dane z drzewa?',
+        confirmText: (f: string, now: string, src: string, before: string) => `${f} ${now}${src ? ` (według ${src})` : ''} zostanie zastąpione wartością z drzewa ${before}.`,
+        confirmNote: 'Przywrócone dane będą wpisane przez człowieka i badania same ich już nie zmienią. Zapis pozostanie przy źródle.',
+        toast: (f: string) => `${f} przywrócono do danych z drzewa. Badania same ich już nie zmienią.`,
+        held: (pc: string) => `Przywrócenie nie jest teraz możliwe: zapis do badań trzyma inny komputer${pc ? ` (${pc})` : ''}.`,
+        busy: 'Badania teraz pracują, przywrócenie będzie możliwe za chwilę.',
+        already: 'Dane są już przywrócone.',
+        gone: 'Tych danych nie ma już w badaniach; wiersz zniknie po wczytaniu nowej wersji.',
+        noBridge: 'Przywrócić można, gdy badania działają na tym komputerze.',
+        phone: 'Przywrócić można w aplikacji na komputerze z badaniami.',
+        error: 'Przywrócenie się nie udało; nic się nie zmieniło.',
+        proposeImport: 'Badania proponują zmienić dane z drzewa',
+        proposeImportPart: (p: string) => `Badania proponują zmienić ${p} z drzewa`,
+        proposeUser: 'Badania proponują zmienić dane wpisane przez człowieka',
+        conflictOpen: 'Sprzeczność ›',
+        sideImport: 'Teraz · z drzewa',
+        sideUser: 'Teraz · wpisane przez człowieka',
+        sideProposal: 'Propozycja badań',
+        sourceImport: (prog: string, date: string) => `${prog}, plik ${date}`,
+        keepImport: 'Zachowaj z drzewa',
+        accept: 'Przyjmij propozycję',
+        acceptNote: (before: string) => `Po przyjęciu dane są potwierdzone przez człowieka; „Pierwotnie z drzewa: ${before}” zostaje z Przywróć.`,
     },
 
     partnerEvents: {
