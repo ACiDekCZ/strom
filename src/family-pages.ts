@@ -902,7 +902,10 @@ export function pageSetImages(set: PageSet): PageSetImage[] {
         add(p.photo, 'photo');
         for (const a of p.attachments ?? []) if (a.mimeType?.startsWith('image/')) add(a.dataUrl, 'photo');
         for (const s of personSourceIds(p)) sources.add(s);
-        for (const uid of p.partnerships ?? []) for (const s of tree.partnerships[uid]?.sourceIds ?? []) sources.add(s);
+        for (const uid of p.partnerships ?? []) {
+            const u = tree.partnerships[uid];
+            for (const s of [...(u?.sourceIds ?? []), ...(u?.divorceSourceIds ?? [])]) sources.add(s);
+        }
     }
     for (const sid of sources) for (const x of tree.sources?.[sid]?.excerpts ?? []) add(x.dataUrl, 'clip', x.width, x.height);
     return out;

@@ -25,7 +25,9 @@ import { researchGedcom } from '../ui/research-ui.js';
 import { StorageManager } from '../storage.js';
 import { createMergeState } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
-import { StromData } from '../types.js';
+import { validateJsonImport } from '../merge/validation.js';
+import { factCitations } from '../import-origin.js';
+import { StromData, STROM_DATA_VERSION, Partnership } from '../types.js';
 
 const FILE = readFileSync(join(process.cwd(), 'test', 'gedcom-066-combined.ged'), 'utf-8');
 const RESEARCH = readFileSync(join(process.cwd(), 'test', 'gedcom-066-combined-research.ged'), 'utf-8');
@@ -490,8 +492,36 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(children.map(c => [c.firstName, c.lastName])).toEqual([['?', 'Čvachtová'], ['?', 'Čvachtová']]);
             expect(record(first, '@F2401@')).toEqual(expect.arrayContaining(['1 CHIL @I2403@', '1 CHIL @I2404@']));
         });
+
+        it('25 · a divorce\'s citations (PAGE, DATA > TEXT with CONC, QUAY) are its own, and back under DIV as written', () => {
+            const couple = divorcedCouple(tree);
+            const cited = (ids?: string[]) => (ids ?? []).map(id => [tree.sources![id].title, tree.sources![id].reference ?? '', tree.sources![id].quality]);
+            expect(cited(couple.sourceIds)).toEqual([['Parish register Hrbolcov', 'fol. 41', undefined]]);
+            expect(cited(couple.divorceSourceIds)).toEqual([['Parish register Hrbolcov', 'fol. 78', 2], ['Drnkalov chronicle', '', 1]]);
+            expect(factCitations(tree, couple, 'divorce')).toEqual(couple.divorceSourceIds!.map(id =>
+                ({ source: tree.sources![id], ctx: { partnershipId: couple.id, fact: 'divorce' } })));
+            expect(factCitations(tree, couple, 'marriage').map(c => c.source.id)).toEqual(couple.sourceIds);
+            for (const ged of [first, second]) {
+                const rec = record(ged, '@F2501@');
+                expect(holdsRun(rec, ['1 MARR', '2 DATE 1885', '2 PLAC Hrbolcov', '2 SOUR @S1@', '3 PAGE fol. 41'])).toBe(true);
+                expect(count(rec, /^\d SOUR /)).toBe(3);
+                expect(holdsRun(rec, ['1 DIV', '2 DATE 1890', '2 PLAC Drnkalov', '2 SOUR @S1@', '3 PAGE fol. 78', '3 DATA',
+                    '4 TEXT The marriage of Mračoslav and Kapradina dissolved', '5 CONC  by the court of Drnkalov.', '3 QUAY 2',
+                    '2 SOUR @S2@', '3 QUAY 1'])).toBe(true);
+            }
+        });
+
+        it('25 · the divorce\'s citations go through the tree\'s JSON (export, import) unchanged', () => {
+            const json = validateJsonImport(JSON.stringify({ version: STROM_DATA_VERSION, ...tree })).data!;
+            expect(divorcedCouple(json).divorceSourceIds).toEqual(divorcedCouple(tree).divorceSourceIds);
+            expect(undated(backTo(json))).toBe(undated(first));
+        });
     });
 });
+
+/** The couple of case 25 (divorced, the divorce cited). */
+const divorcedCouple = (data: StromData): Partnership =>
+    Object.values(data.partnerships).find(p => data.persons[p.person1Id]?.firstName === 'Mračoslav')!;
 
 describe('The combined 066 file merged into the tree it was imported into', () => {
     beforeEach(() => { vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never); });
@@ -543,6 +573,26 @@ describe('The combined 066 file merged into the tree it was imported into', () =
             .toBe('Births 1850-1860, scan 7 (https://www.example.org/register/7), also at https://archive.example.org');
         const ofCase = (ged: string) => records(ged).filter(r => /^0 @(I2201|S5)@ /.test(r));
         expect(ofCase(backTo(merged))).toEqual(ofCase(fresh));
+    });
+
+    it('25 · a tree imported before the divorce\'s citations were read takes them from the file merged again, once', async () => {
+        const fresh = load(FILE, '2026-11-08');
+        // What an earlier import of the file made of case 25: no divorce citations, no sources of theirs.
+        const tree = load(FILE, '2026-11-08');
+        const couple = divorcedCouple(tree);
+        for (const id of couple.divorceSourceIds!) delete tree.sources![id];
+        delete couple.divorceSourceIds;
+
+        const merged = (await executeMerge(createMergeState(tree, load(FILE, '2026-11-09')))).mergedData!;
+        const titles = (d: StromData) => divorcedCouple(d).divorceSourceIds!.map(id => [d.sources![id].reference ?? '', d.sources![id].quality]);
+        expect(titles(merged)).toEqual(titles(fresh));
+        expect(Object.keys(merged.sources!)).toHaveLength(Object.keys(fresh.sources!).length);
+        const ofCase = (ged: string) => records(ged).filter(r => /^0 @F2501@ /.test(r));
+        expect(ofCase(backTo(merged))).toEqual(ofCase(backTo(fresh)));
+        // Merged once more: nothing doubled.
+        const again = (await executeMerge(createMergeState(merged, load(FILE, '2026-11-10')))).mergedData!;
+        expect(divorcedCouple(again).divorceSourceIds).toEqual(divorcedCouple(merged).divorceSourceIds);
+        expect(Object.keys(again.sources!)).toHaveLength(Object.keys(fresh.sources!).length);
     });
 });
 
@@ -613,5 +663,28 @@ describe('The research\'s file of the same people → the app → the GEDCOM for
         // Read again and written again: the same.
         const twice = exportToGedcom(migrateData(convertToStrom(parseGedcom(file)).data), 'Hrbolec', { origins: true }).content;
         expect(undated(twice)).toBe(undated(file));
+    });
+});
+
+describe('A divorce cited by a source written in place (2 SOUR text)', () => {
+    const GED = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Mračoslav /Kroupal/', '1 SEX M', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME Kapradina /Mlaskalová/', '1 SEX F', '1 FAMS @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '2 DATE 1885',
+        '1 DIV', '2 DATE 1890', '2 SOUR Court register of Drnkalov', '0 TRLR', ''].join('\n');
+
+    it('takes it as the divorce\'s source and writes it back under DIV', () => {
+        const tree = load(GED, '2026-11-09');
+        const couple = divorcedCouple(tree);
+        expect(couple.sourceIds ?? []).toEqual([]);
+        expect((couple.divorceSourceIds ?? []).map(id => tree.sources![id].title)).toEqual(['Court register of Drnkalov']);
+        for (const ged of [backTo(tree), exportToGedcom(tree, 'Hrbolec').content]) {
+            const rec = record(ged, '@F1@');
+            const marr = rec.indexOf('1 MARR');
+            const div = rec.indexOf('1 DIV');
+            expect(div).toBeGreaterThan(marr);
+            expect(rec.slice(div + 1).some(l => /^2 SOUR /.test(l))).toBe(true);
+            expect(rec.slice(marr, div).some(l => /SOUR/.test(l))).toBe(false);
+        }
     });
 });

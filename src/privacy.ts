@@ -134,6 +134,7 @@ export function stripSources(data: StromData): StromData {
     }
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.sourceIds;
+        delete partnership.divorceSourceIds;
         for (const ev of partnership.events ?? []) delete ev.sourceIds;
         rewriteStorySources(partnership.story, () => []);
     }
@@ -378,6 +379,7 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.participants;
     delete partnership.story;
     delete partnership.sourceIds;
+    delete partnership.divorceSourceIds;
     // The banns, the household at a census: dates, places, witnesses.
     delete partnership.events;
     if (startYear !== null) partnership.startDate = String(startYear);
@@ -421,6 +423,7 @@ export function applyLivingPrivacy(
         }
         for (const partnership of Object.values(copy.partnerships)) {
             delete partnership.sourceIds;
+            delete partnership.divorceSourceIds;
             for (const ev of partnership.events ?? []) delete ev.sourceIds;
             rewriteStorySources(partnership.story, () => []);
         }
@@ -505,6 +508,7 @@ export function applyLivingPrivacy(
         }
         for (const u of Object.values(copy.partnerships)) {
             cite(u.sourceIds);
+            cite(u.divorceSourceIds);
             for (const ev of u.events ?? []) cite(ev.sourceIds);
             cite(storySourceIds(u.story));
         }
@@ -531,6 +535,7 @@ export function countCitations(data: StromData): number {
     }
     for (const u of Object.values(data.partnerships)) {
         count(u.sourceIds);
+        count(u.divorceSourceIds);
         for (const ev of u.events ?? []) count(ev.sourceIds);
         count(storySourceIds(u.story));
     }

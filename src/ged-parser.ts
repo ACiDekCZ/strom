@@ -1324,6 +1324,8 @@ interface GedcomFamily {
     noteFacts: RawNoteFact[];
     /** 1 SOUR citations on the family (marriage record etc.). */
     sourceRefs: string[];
+    /** 2 SOUR citations under DIV (the divorce's own record). */
+    divorceSourceRefs: string[];
     /** Witnesses named under 1 MARR (2 ASSO / 2 _WITN). */
     marriageParticipants: RawParticipant[];
     /**
@@ -3230,6 +3232,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     note: '',
                     events: [],
                     sourceRefs: [],
+                    divorceSourceRefs: [],
                     marriageParticipants: [],
                     childRels: new Map(),
                     noteFacts: [],
@@ -4105,6 +4108,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.marriageParticipants.push({ name: value, rela: WITNESS_RELA });
                         }
                     } else if (currentSubTag === 'DIV') {
+                        currentFactSubTag = tag;
+                        // The divorce record's own citation (with its PAGE, QUAY
+                        // and DATA below): the divorce's, not the wedding's.
+                        if (tag === 'SOUR' && value) cite(fam.divorceSourceRefs, value);
                         // A remark on the divorce: a line of the couple's note,
                         // with its CONT / CONC (it was not read at all).
                         if (tag === 'NOTE' && !GED_POINTER.test(value)) {
@@ -4161,7 +4168,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 }
             } else if (level === 3 && currentFactSubTag
                 && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT' || currentSubTag === 'MARR'
-                    || (currentSubTag === 'NAME' && currentFactSubTag === 'SOUR'))) {
+                    || ((currentSubTag === 'NAME' || currentSubTag === 'DIV') && currentFactSubTag === 'SOUR'))) {
                 // Level-3 lines under the field-backed facts: the citation's
                 // PAGE/QUAY, a witness's RELA/NOTE, a note's continuation.
                 const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual : null;
@@ -5044,6 +5051,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
         const famRefs = mapRefs(fam.sourceRefs);
         if (famRefs.length > 0) partnership.sourceIds = [...new Set(famRefs)];
+        const divorceRefs = mapRefs(fam.divorceSourceRefs);
+        if (divorceRefs.length > 0) partnership.divorceSourceIds = [...new Set(divorceRefs)];
 
         // Witnesses at the wedding, named under 1 MARR.
         const witnesses = fam.marriageParticipants.map(toWitness)
@@ -5084,6 +5093,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             marks.text = from.note;
         }
         if (from.sourceIds?.length) into.sourceIds = [...new Set([...(into.sourceIds ?? []), ...from.sourceIds])];
+        if (from.divorceSourceIds?.length) into.divorceSourceIds = [...new Set([...(into.divorceSourceIds ?? []), ...from.divorceSourceIds])];
         if (from.participants?.length) {
             const seen = new Set((into.participants ?? []).map(p => p.personId ?? p.name));
             for (const part of from.participants) {
@@ -5157,7 +5167,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     for (const [gedFamId, fam] of families) {
         if (!fam.noCouple) continue;
         if (fam.unionEvents.length || fam.events.length || fam.note || fam.noteFacts.length
-            || fam.sourceRefs.length || fam.marriageParticipants.length || fam.story || fam.stat || fam.relationshipStatus) continue;
+            || fam.sourceRefs.length || fam.divorceSourceRefs.length || fam.marriageParticipants.length || fam.story || fam.stat || fam.relationshipStatus) continue;
         const husb = fam.husb ? personIdMap.get(fam.husb) : undefined;
         const wife = fam.wife ? personIdMap.get(fam.wife) : undefined;
         const real = {
@@ -5236,16 +5246,22 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     if (xref && !xref.startsWith('__')) marks.witnesses.push({ xref, also });
                 } else if (raw.name) marks.witnesses.push({ name: raw.name, also });
             }
-            const firstRefs = new Set(firstFam ? mapRefs(firstFam[1].sourceRefs) : []);
-            const cited = new Set<string>();
+            // Its divorce's citations likewise, marked so (they go back under its DIV).
             marks.sources = [];
-            for (const ref of fam.sourceRefs) {
-                const sid = sourceIdMap.get(ref);
-                const raw = gedSources.get(ref);
-                if (!sid || !raw || cited.has(sid)) continue;
-                cited.add(sid);
-                const xref = bare(raw.importXref ?? raw.derivedFrom ?? ref);
-                if (xref && !xref.startsWith('__')) marks.sources.push({ xref, page: (raw.reference ?? '').trim(), also: firstRefs.has(sid) });
+            for (const divorce of [false, true]) {
+                const refsOf = (f: GedcomFamily): string[] => divorce ? f.divorceSourceRefs : f.sourceRefs;
+                const firstRefs = new Set(firstFam ? mapRefs(refsOf(firstFam[1])) : []);
+                const cited = new Set<string>();
+                for (const ref of refsOf(fam)) {
+                    const sid = sourceIdMap.get(ref);
+                    const raw = gedSources.get(ref);
+                    if (!sid || !raw || cited.has(sid)) continue;
+                    cited.add(sid);
+                    const xref = bare(raw.importXref ?? raw.derivedFrom ?? ref);
+                    if (xref && !xref.startsWith('__')) {
+                        marks.sources.push({ xref, page: (raw.reference ?? '').trim(), also: firstRefs.has(sid), ...(divorce ? { divorce } : {}) });
+                    }
+                }
             }
             marks.events = (partnership.events ?? []).map(joinedEventKey);
             recordsOfUnion.get(sameCouple)?.push([gedFamId, fam]);
@@ -5328,7 +5344,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // divorce, even undated, a status, a note, a source…): Strom writes a "?" partner's family so,
         // without a record for the "?" ("married, the spouse unknown").
         const saysSomething = fam.unionEvents.length > 0 || fam.divorced || !!fam.stat || !!fam.relationshipStatus || !!fam.marriageDate || !!fam.marriagePlace
-            || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0
+            || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0 || fam.divorceSourceRefs.length > 0
             || fam.marriageParticipants.length > 0 || !!fam.story;
         // A record of a loaded file (an import that keeps where its records came
         // from, or the research's tree marking it so) is kept too, with nothing

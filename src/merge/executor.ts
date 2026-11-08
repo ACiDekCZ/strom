@@ -20,7 +20,7 @@ import {
     Source,
     generatePersonId,
     generatePartnershipId,
-    PERSON_CITATION_FIELDS, isGender, mergedPrimaryName,
+    PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, mergedPrimaryName,
     ImportRecord,
 } from '../types.js';
 import { importProgramName } from '../import-next.js';
@@ -803,7 +803,14 @@ function mergeSourceCatalogs(
         const key = sourceKey(src);
         const cite = citationKey(src);
         const twin = cite ? byCitation.get(cite) : undefined;
-        const kept = (src.refn ? byRefn.get(src.refn) : undefined) ?? twin ?? (key ? byKey.get(key) : undefined);
+        const byTitle = key ? byKey.get(key) : undefined;
+        // A citation of the same file record at another QUAY than the entry the tree kept of
+        // it (both read with the file's ids and a QUAY) is a citation of its own: folding it in
+        // lost its QUAY. An entry kept without a QUAY still takes the incoming one's details.
+        const keptByTitle = byTitle ? catalog[byTitle] : undefined;
+        const otherCitation = !twin && !!keptByTitle && !!src.originalIds?.length && !!keptByTitle.originalIds?.length
+            && src.quality !== undefined && keptByTitle.quality !== undefined && src.quality !== keptByTitle.quality;
+        const kept = (src.refn ? byRefn.get(src.refn) : undefined) ?? twin ?? (otherCitation ? undefined : byTitle);
         if (kept && kept !== id && !catalog[id]) {
             remap.set(id, kept);
             if (kept !== twin) takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
@@ -915,7 +922,7 @@ function remapSourceReferences(data: StromData, remap: Map<string, string>): voi
         rewriteStorySources(person.story, ids => ids.map(id => remap.get(id) ?? id));
     }
     for (const partnership of Object.values(data.partnerships)) {
-        if (partnership.sourceIds) partnership.sourceIds = fix(partnership.sourceIds);
+        for (const field of PARTNERSHIP_CITATION_FIELDS) if (partnership[field]) partnership[field] = fix(partnership[field]);
         for (const ev of partnership.events ?? []) {
             if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
         }
@@ -1294,9 +1301,10 @@ export function mergePartnershipData(
     if (note !== existing.note) existing.note = note;
     // Source citations: union like persons' sourceIds — a marriage record cited
     // on either side is evidence for the union and must survive the merge.
-    if (incoming.sourceIds && incoming.sourceIds.length > 0) {
-        const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
-        existing.sourceIds = [...merged];
+    // The divorce's own the same way (a tree loaded before they were read takes them).
+    for (const field of PARTNERSHIP_CITATION_FIELDS) {
+        const ids = incoming[field];
+        if (ids && ids.length > 0) existing[field] = [...new Set([...(existing[field] ?? []), ...ids])];
     }
     // status is required, so a well-formed partnership always has one; fill only
     // if the existing side somehow lacks it. isPrimary is deliberately left

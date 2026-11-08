@@ -1165,6 +1165,13 @@ export interface Partnership {
     /** Ids of Source entries citing this partnership (marriage record etc.). */
     sourceIds?: string[];
     /**
+     * Ids of Source entries citing the divorce (GEDCOM DIV > SOUR), each
+     * citation's page, quality and entry text kept like the wedding's (a
+     * source of its own per page). Optional, no data version bump: an older
+     * app keeps partnerships whole and only does not show them.
+     */
+    divorceSourceIds?: string[];
+    /**
      * Witnesses at the wedding (see EventParticipant). A marriage entry names
      * them the way a baptism names godparents, and they are the same kind of
      * lead — the model has no union event to hang them on, so they live here.
@@ -1267,9 +1274,13 @@ export function personSourceIds(p: Pick<Person, PersonCitationField>): string[] 
     return [...new Set(PERSON_CITATION_FIELDS.flatMap(f => p[f] ?? []))];
 }
 
-/** Every source a couple's citations name (the union itself and each of its events), once each. */
-export function partnershipSourceIds(u: Pick<Partnership, 'sourceIds' | 'events'>): string[] {
-    return [...new Set([...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])];
+/** A couple's citation lists: the union itself (the wedding), the divorce. */
+export const PARTNERSHIP_CITATION_FIELDS = ['sourceIds', 'divorceSourceIds'] as const;
+export type PartnershipCitationField = typeof PARTNERSHIP_CITATION_FIELDS[number];
+
+/** Every source a couple's citations name (the union itself, the divorce and each of its events), once each. */
+export function partnershipSourceIds(u: Partial<Pick<Partnership, PartnershipCitationField | 'events'>>): string[] {
+    return [...new Set([...PARTNERSHIP_CITATION_FIELDS.flatMap(f => u[f] ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])];
 }
 
 /** Everyone a couple's records name: the wedding witnesses and the people at each of its events. */

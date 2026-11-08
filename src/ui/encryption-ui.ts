@@ -776,6 +776,7 @@ export const encryptionUiMethods = uiModule({
         for (const partnership of Object.values(data.partnerships)) {
             if (partnership.note) notesSlice.push(partnership.note);
             if (partnership.sourceIds) sourcesSlice.push(partnership.sourceIds);
+            if (partnership.divorceSourceIds) sourcesSlice.push(partnership.divorceSourceIds);
             for (const ev of partnership.events ?? []) {
                 if (ev.note) notesSlice.push(ev.note);
                 if (ev.sourceIds) sourcesSlice.push(ev.sourceIds);

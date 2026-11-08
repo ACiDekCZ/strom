@@ -202,7 +202,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             if (MARRIAGE_FIELDS.some(f => differs(a[f], b[f]))) kinds.add('marriage');
             participantKinds(a.participants, b.participants).forEach(k => kinds.add(k));
             if (differs(a.events ?? [], b.events ?? [])) kinds.add('event');
-            if (differs(a.sourceIds ?? [], b.sourceIds ?? [])) kinds.add('citation');
+            if (differs(a.sourceIds ?? [], b.sourceIds ?? []) || differs(a.divorceSourceIds ?? [], b.divorceSourceIds ?? [])) kinds.add('citation');
             if (differs(a.story, b.story)) kinds.add('other');
             if (differs(handedConfirmations(a), handedConfirmations(b))) kinds.add('other');
         }
@@ -293,9 +293,9 @@ function personCites(p: Person): string[] {
     return [...(p.sourceIds ?? []), ...(p.birthSourceIds ?? []), ...(p.deathSourceIds ?? []), ...(p.events ?? []).flatMap(e => e.sourceIds ?? [])];
 }
 
-/** Every source a couple cites (the couple, its events). */
+/** Every source a couple cites (the couple, the divorce, its events). */
 function coupleCites(u: Partnership): string[] {
-    return [...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])];
+    return [...(u.sourceIds ?? []), ...(u.divorceSourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])];
 }
 
 /**
