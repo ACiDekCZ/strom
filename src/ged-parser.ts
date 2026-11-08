@@ -1864,6 +1864,16 @@ const IGNORED_MEDIA_BOOKKEEPING_TAGS = new Set(['_FILESIZE', '_PHOTO_RIN', '_PAR
     '_POSITION', '_CUTOUT', '_PRIM_CUTOUT', '_PARENTPHOTO', '_PERSONALPHOTO']);
 
 /**
+ * Where a face sits on a photo, under any photo (of a person, an event, a
+ * family): MyHeritage names these after the photo they belong to
+ * (`_MH_EVENT_PHOTO_CUTOUT_POSITION` under an event's photo), so a rule
+ * takes them, not a list — every `_` tag with a CUTOUT part, and every one
+ * with a PHOTO part that ends in POSITION. A POSITION without a photo in its
+ * name (a job's, a rank's) stays counted.
+ */
+const MEDIA_CUTOUT_TAG = /^_(?:[A-Z0-9]+_)*CUTOUT(?:_[A-Z0-9]+)*$|^_(?:[A-Z0-9]+_)*PHOTO(?:_[A-Z0-9]+)*_POSITION$/;
+
+/**
  * The `_` tags this reader takes somewhere (spec 066 G8), Strom's own
  * `_STROM_…` aside. A deeper `_XXX` (level 2 or more) of another program's
  * file that is none of them, and not under a line already kept or counted,
@@ -1882,7 +1892,8 @@ export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
 /** Another program's `_XXX` the reader takes nowhere (and no bookkeeping, no id). */
 export function isUnreadUnderscoreTag(tag: string): boolean {
     return tag.startsWith('_') && !tag.startsWith('_STROM_') && !GEDCOM_READ_UNDERSCORE_TAGS.has(tag)
-        && !IGNORED_BOOKKEEPING_TAGS.has(tag) && !IGNORED_MEDIA_BOOKKEEPING_TAGS.has(tag) && !ORIGINAL_ID_TAGS.has(tag);
+        && !IGNORED_BOOKKEEPING_TAGS.has(tag) && !IGNORED_MEDIA_BOOKKEEPING_TAGS.has(tag) && !MEDIA_CUTOUT_TAG.test(tag)
+        && !ORIGINAL_ID_TAGS.has(tag);
 }
 
 /** A data URL inside a line: never kept outside the photos and attachments it makes. */

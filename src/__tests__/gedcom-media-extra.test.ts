@@ -199,6 +199,42 @@ describe('media records (0 @O1@ OBJE)', () => {
         expect(r.externalMedia).toHaveLength(1);
         expect(r.stats.droppedTagSummary).toBe('');
     });
+
+    it('a face cut-out under an event’s or a family’s photo is not counted either, a position without a photo is', () => {
+        const r = load(`0 HEAD
+1 SOUR MYHERITAGE
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Orsina /Korvalová/
+1 BIRT
+2 DATE 1901
+2 OBJE
+3 FORM jpg
+3 FILE https://www.myheritage.com/photos/event.jpg
+3 _MH_EVENT_PHOTO_CUTOUT_POSITION 10 20 110 140
+3 _MH_EVENT_PHOTO_CUTOUT Y
+3 _MH_EVENT_PHOTO_POSITION 5 5 50 50
+1 OCCU Hajný
+2 _JOB_POSITION Nadlesní
+1 FAMS @F1@
+0 @F1@ FAM
+1 WIFE @I1@
+1 OBJE
+2 FORM jpg
+2 FILE https://www.myheritage.com/photos/family.jpg
+2 _MH_FAMILY_PHOTO_CUTOUT_POSITION 1 2 3 4
+2 _PRIM_CUTOUT Y
+0 TRLR
+`);
+        expect(r.stats.droppedTagSummary).not.toMatch(/CUTOUT|PHOTO/);
+        expect(r.stats.droppedTagSummary).toContain('_JOB_POSITION');
+        for (const t of ['_MH_EVENT_PHOTO_CUTOUT_POSITION', '_MH_FAMILY_PHOTO_CUTOUT_POSITION', '_MH_EVENT_PHOTO_POSITION',
+            '_CUTOUT', '_PRIM_CUTOUT']) {
+            expect(isUnreadUnderscoreTag(t)).toBe(false);
+        }
+        expect(isUnreadUnderscoreTag('_JOB_POSITION')).toBe(true);
+        expect(isUnreadUnderscoreTag('_CUTOUTS')).toBe(true);
+    });
 });
 
 // ---------- another program's own tags ----------
