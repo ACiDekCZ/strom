@@ -1742,6 +1742,8 @@ export type AuditAction =
     | 'place.split'
     | 'quality.dismiss'
     | 'quality.restore'
+    | 'fact.confirm'
+    | 'fact.unconfirm'
     | 'surname.reject'
     | 'surname.unreject'
     | 'surname.accept'

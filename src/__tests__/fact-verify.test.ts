@@ -4,9 +4,13 @@
  * read per fact, the migration only cleans, the reliability step follows,
  * and neither the content fingerprint nor the sync diff counts them.
  */
-import { describe, it, expect } from 'vitest';
-import { migrateData } from '../data.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { migrateData, DataManager } from '../data.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { TreeManager } from '../tree-manager.js';
+import { AuditLogManager } from '../audit-log.js';
+import { UndoManager } from '../undo.js';
+import { strings } from '../strings.js';
 import {
     factConfirmation, factValueSignature, factVerifyInfo, factVerifyReaders, pendingFacts, factSourceIds,
     sanitizeResearchVerify, parseConfirmedDay, parseVerifyPending, parseCheckedResult, parseReaders,
@@ -224,5 +228,66 @@ describe('privacy: a confirmation does not carry a hidden value', () => {
         expect(out.persons[B].confirmed).toBeUndefined();
         expect(out.persons[B].researchVerify).toBeUndefined();
         expect(out.persons[B].birthDate).toBeUndefined();
+    });
+});
+
+describe('DataManager: "Verified from the scan" and taking it back', () => {
+    const TREE = 'verify-test' as TreeId;
+    let audit: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+        vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
+        audit = vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+        const dm = DataManager as unknown as { data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null };
+        dm.data = tree();
+        dm.currentTreeId = TREE;
+        dm.viewMode = false;
+        dm.pendingBefore = null;
+        UndoManager.setActiveTree(null);
+        UndoManager.setActiveTree(TREE);
+    });
+
+    it('confirms a person fact with the day and its value, undo takes it away', () => {
+        expect(DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08')).toBe(true);
+        const z = DataManager.getPerson(Z)!;
+        expect(z.confirmed).toEqual({ birth: { at: '2026-11-08', value: '1850-01-01\u001fKvasilov' } });
+        expect(factReliability({}, z, 'birth', OPTS)?.step).toBe('human');
+        expect(audit).toHaveBeenCalledWith(TREE, 'fact.confirm', strings.auditLog.confirmedFact('Zbyhněv Lanýžek (*1850)'));
+        DataManager.undo();
+        expect(DataManager.getPerson(Z)!.confirmed).toBeUndefined();
+        DataManager.redo();
+        expect(DataManager.getPerson(Z)!.confirmed?.birth?.at).toBe('2026-11-08');
+    });
+
+    it('confirms a couple fact; take back removes it with undo', () => {
+        expect(DataManager.confirmFact({ partnershipId: U }, 'marriage', '2026-11-08')).toBe(true);
+        expect(DataManager.getPartnership(U)!.confirmed?.marriage?.value).toBe('1875-05-02\u001fÚlehle');
+        expect(DataManager.unconfirmFact({ partnershipId: U }, 'marriage')).toBe(true);
+        expect(DataManager.getPartnership(U)!.confirmed).toBeUndefined();
+        expect(audit).toHaveBeenLastCalledWith(TREE, 'fact.unconfirm', strings.auditLog.unconfirmedFact('Zbyhněv Lanýžek (*1850) & Bořislava Hvězdoňová (*2001)'));
+        DataManager.undo();
+        expect(DataManager.getPartnership(U)!.confirmed?.marriage?.at).toBe('2026-11-08');
+    });
+
+    it('refuses a fact with no value, an unknown fact, a bad day, nothing to take back', () => {
+        expect(DataManager.confirmFact({ personId: Z }, 'divorce', '2026-11-08')).toBe(false);
+        expect(DataManager.confirmFact({ partnershipId: U }, 'divorce', '2026-11-08')).toBe(false);
+        expect(DataManager.confirmFact({ personId: B }, 'death', '2026-11-08')).toBe(false);
+        expect(DataManager.confirmFact({ personId: Z }, 'birth', '8. 11. 2026')).toBe(false);
+        expect(DataManager.unconfirmFact({ personId: Z }, 'birth')).toBe(false);
+        expect(DataManager.confirmFact({ personId: Z }, 'event:ev_bap', '2026-11-08')).toBe(true);
+        expect(DataManager.confirmFact({ personId: Z }, 'event:ev_bap', '2026-11-08')).toBe(false);   // already so
+    });
+
+    it('an edit of the value ends the confirmation; confirming again takes the new value', () => {
+        DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08');
+        DataManager.updatePerson(Z, { birthDate: '1850-01-02' });
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth')).toEqual({});
+        expect(DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08')).toBe(true);
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'birth').confirmed).toBe('2026-11-08');
+    });
+
+    it('a locked person is not confirmed', () => {
+        (DataManager as unknown as { data: StromData }).data.persons[Z].isLocked = true;
+        expect(DataManager.confirmFact({ personId: Z }, 'birth', '2026-11-08')).toBe(false);
     });
 });
