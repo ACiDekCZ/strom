@@ -14,6 +14,7 @@ import { strings } from '../strings.js';
 import {
     factConfirmation, factValueSignature, factVerifyInfo, factVerifyReaders, pendingFacts, factSourceIds,
     sanitizeResearchVerify, parseConfirmedDay, parseVerifyPending, parseCheckedResult, parseReaders,
+    parsePendingPosition, researchFactRef,
 } from '../verify.js';
 import { factReliability } from '../reliability.js';
 import { contentFingerprint } from '../research-link.js';
@@ -154,6 +155,20 @@ describe('the research state of a fact (factVerifyInfo)', () => {
         expect(parseReaders('0')).toBeNull();
         expect(parseReaders('two')).toBeNull();
         expect(sanitizeResearchVerify({})).toBeNull();
+        expect(parsePendingPosition(' 3 ')).toBe(3);
+        expect(parsePendingPosition('0')).toBeNull();
+        expect(parsePendingPosition('first')).toBeNull();
+        expect(researchFactRef(' E0012 ')).toBe('E0012');
+        expect(researchFactRef('P0012')).toBeNull();
+    });
+
+    it('keeps the id alone, and a place only while the agent is to take the fact', () => {
+        expect(sanitizeResearchVerify({ eid: 'E7' })).toEqual({ eid: 'E7' });
+        expect(sanitizeResearchVerify({ eid: 'F7' })).toBeNull();
+        expect(sanitizeResearchVerify({ pending: 'wait', position: 2 })).toEqual({ pending: 'wait', position: 2 });
+        expect(sanitizeResearchVerify({ pending: 'images', position: 2 })).toEqual({ pending: 'images' });
+        expect(sanitizeResearchVerify({ pending: 'asked', position: 1.5 })).toEqual({ pending: 'asked' });
+        expect(sanitizeResearchVerify({ position: 2 })).toBeNull();
     });
 });
 

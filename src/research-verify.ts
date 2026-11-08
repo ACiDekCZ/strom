@@ -16,20 +16,15 @@ import {
     LiveStatus, researchPersonRef, researchFamilyRef, researchTaskRef, isResearchHead, cleanText, withAppVersion,
     TREE_STATE_FEATURE, TREE_KIND_FEATURE,
 } from './research-link.js';
-import { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE } from './verify.js';
+import { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE, researchFactRef } from './verify.js';
 
-export { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE };
+export { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE, researchFactRef };
 
 /** How long the research has to answer (it may plan the work and commit). */
 export const VERIFY_TIMEOUT_MS = 30_000;
 
 const asRecord = (v: unknown): Record<string, unknown> | null =>
     v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
-
-/** A fact's id in the research ("E0012"), or null. */
-export function researchFactRef(id: unknown): string | null {
-    return typeof id === 'string' && /^E\d{1,9}$/.test(id.trim()) ? id.trim() : null;
-}
 
 /** A lineage's id in the research ("G3"), or null. */
 export function researchLineageRef(id: unknown): string | null {

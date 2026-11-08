@@ -790,7 +790,17 @@ export interface ResearchFactVerify {
     /** `2 _STROM_CONFIRMED <date>`: confirmed by a person in the research. */
     confirmed?: string;
     pending?: FactVerifyPending;
+    /**
+     * `3 _POS n` under `_STROM_VERIFY wait|asked`: the fact's task is the
+     * n-th the research's next session would take (1 = next), as of the file.
+     */
+    position?: number;
     checked?: FactVerifyChecked;
+    /**
+     * `2 _STROM_EID E0012`: the fact's id in the research (what /verify and
+     * /facts/confirm name). Never sent back; a fact copied or made here has none.
+     */
+    eid?: string;
 }
 
 /** What the research knows about one person (see Person.research). */

@@ -101,7 +101,7 @@ import {
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
     factValueSignature,
 } from './import-origin';
-import { parseCheckedResult, parseReaders, parseVerifyPending, sanitizeResearchVerify } from './verify';
+import { parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, sanitizeResearchVerify } from './verify';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -333,9 +333,13 @@ function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | 
     const checked = raw.checked ? parseCheckedResult(raw.checked.result) : null;
     const readers = raw.checked?.readers !== undefined ? parseReaders(raw.checked.readers) : null;
     const confirmed = raw.confirmed !== undefined ? researchIsoDate(raw.confirmed) : '';
+    const position = raw.position !== undefined ? parsePendingPosition(raw.position) : null;
+    const eid = raw.eid !== undefined ? researchFactRef(raw.eid) : null;
     return sanitizeResearchVerify({
         ...(confirmed ? { confirmed } : {}),
         ...(raw.pending !== undefined ? { pending: parseVerifyPending(raw.pending) ?? undefined } : {}),
+        ...(position ? { position } : {}),
+        ...(eid ? { eid } : {}),
         ...(checked ? {
             checked: {
                 result: checked,
@@ -939,10 +943,12 @@ interface RawFactOrigin {
     verify?: RawFactVerify;
 }
 
-/** `2 _STROM_CONFIRMED`, `2 _STROM_VERIFY`, `2 _STROM_CHECKED` (with `3 DATE`, `3 _WHY`, `3 _READERS`) under a fact. */
+/** `2 _STROM_CONFIRMED`, `2 _STROM_VERIFY` (with `3 _POS`), `2 _STROM_CHECKED` (with `3 DATE`, `3 _WHY`, `3 _READERS`), `2 _STROM_EID` under a fact. */
 interface RawFactVerify {
     confirmed?: string;
     pending?: string;
+    position?: string;
+    eid?: string;
     checked?: { result: string; date?: string; why?: string; readers?: string };
 }
 
@@ -2641,6 +2647,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let openWas: { level: number; was: RawFactOrigin['was'][number] } | null = null;
     /** The research's `_STROM_CHECKED` being read (its `3 DATE`, `_WHY`, `_READERS` follow; `field`: the last of them, for CONC/CONT). */
     let openChecked: { level: number; checked: NonNullable<RawFactVerify['checked']>; field?: string } | null = null;
+    /** The research's `_STROM_VERIFY` being read (its `3 _POS` follows). */
+    let openPending: { level: number; verify: RawFactVerify | null } | null = null;
     /**
      * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
      * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
@@ -3018,15 +3026,23 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
             continue;
         }
+        if (openPending && level <= openPending.level) openPending = null;
+        if (openPending) {
+            if (level === openPending.level + 1 && tag === '_POS' && openPending.verify) openPending.verify.position = value.trim();
+            continue;
+        }
         if ((stromResearch || stromApp) && level === 2 && currentRecord && !currentResearch && (currentType === 'INDI' || currentType === 'FAM')
-            && (tag === '_STROM_CONFIRMED' || tag === '_STROM_VERIFY' || tag === '_STROM_CHECKED')) {
-            // The research's re-verification of the fact (spec 065); whether
-            // the file is trusted with it is the converter's call.
+            && (tag === '_STROM_CONFIRMED' || tag === '_STROM_VERIFY' || tag === '_STROM_CHECKED' || tag === '_STROM_EID')) {
+            // The research's re-verification of the fact and its id there
+            // (spec 065); whether the file is trusted with it is the converter's call.
             const o = factOriginTarget();
             const v = o ? (o.verify ??= {}) : null;
             if (tag === '_STROM_CONFIRMED') { if (v) v.confirmed = value.trim(); }
-            else if (tag === '_STROM_VERIFY') { if (v) v.pending = value.trim(); }
-            else {
+            else if (tag === '_STROM_EID') { if (v) v.eid = value.trim(); }
+            else if (tag === '_STROM_VERIFY') {
+                if (v) v.pending = value.trim();
+                openPending = { level, verify: v };
+            } else {
                 const checked = { result: value.trim() };
                 if (v) v.checked = checked;
                 openChecked = { level, checked };

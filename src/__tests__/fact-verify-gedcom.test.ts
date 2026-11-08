@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, Person, Partnership } from '../types.js';
-import { factVerifyInfo, factValueSignature } from '../verify.js';
+import { factVerifyInfo, factValueSignature, factResearchEid, factPendingPosition } from '../verify.js';
 import { contentFingerprint } from '../research-link.js';
 
 const RESEARCH_FILE = `0 HEAD
@@ -197,5 +197,57 @@ describe("the app's own GEDCOM export", () => {
         const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
         expect(ged).not.toContain('_STROM_CONFIRMED');
         expect(exportToGedcom(d, 'Ozubec', {}).content).not.toContain('_STROM_CONFIRMED');
+    });
+});
+
+describe("the fact's id in the research and its place in the queue", () => {
+    const WITH_IDS = RESEARCH_FILE
+        .replace('1 BIRT\n2 DATE 3 MAR 1850', '1 BIRT\n2 DATE 3 MAR 1850\n2 _STROM_EID E0012')
+        .replace('1 DEAT\n2 DATE 1910\n2 _STROM_VERIFY asked', '1 DEAT\n2 DATE 1910\n2 _STROM_VERIFY asked\n3 _POS 3\n2 _STROM_EID E0013')
+        .replace('2 _STROM_VERIFY permission', '2 _STROM_VERIFY permission\n3 _POS 1\n2 _STROM_EID E0020')
+        .replace('1 CHR\n', '1 CHR\n2 _STROM_EID E0014\n');
+
+    it('keeps the id per fact and the place of a fact its agent is to take', () => {
+        const d = load(WITH_IDS);
+        const h = person(d, 'Hromoslav');
+        expect(factResearchEid(h, 'birth')).toBe('E0012');
+        expect(factResearchEid(h, 'death')).toBe('E0013');
+        expect(factResearchEid(h, eventFact(h, 'baptism'))).toBe('E0014');
+        expect(factResearchEid(couple(d), 'marriage')).toBe('E0020');
+        expect(factResearchEid(h, 'sex')).toBeNull();
+        expect(factPendingPosition(h, 'death')).toBe(3);
+        expect(h.researchVerify?.death).toEqual({ pending: 'asked', position: 3, eid: 'E0013' });
+        // Waiting for a person: no place in the agent's queue.
+        expect(factPendingPosition(couple(d), 'marriage')).toBeNull();
+        expect(couple(d).researchVerify?.marriage).toEqual({ pending: 'permission', eid: 'E0020' });
+        // The birth keeps both its confirmation and its id.
+        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08', eid: 'E0012' });
+    });
+
+    it('counts neither tag as unsupported and changes no fact', () => {
+        const result = convertToStrom(parseGedcom(WITH_IDS));
+        expect(result.stats.droppedTagSummary).not.toMatch(/_STROM_EID|_POS/);
+        const h = person(result.data, 'Hromoslav');
+        expect(h.deathDate).toBe('1910');
+        expect(h.events!.find(e => e.type === 'baptism')!.date).toBe('1850-03-05');
+    });
+
+    it('drops an id or a place that is not valid', () => {
+        const d = load(WITH_IDS.replace('_STROM_EID E0012', '_STROM_EID P0012').replace('3 _POS 3', '3 _POS first'));
+        const h = person(d, 'Hromoslav');
+        expect(factResearchEid(h, 'birth')).toBeNull();
+        expect(factPendingPosition(h, 'death')).toBeNull();
+        expect(h.researchVerify?.death).toEqual({ pending: 'asked', eid: 'E0013' });
+    });
+
+    it('is neither sent back nor a change', () => {
+        const d = load(WITH_IDS);
+        // The same tree without the ids and places (ids of records are fresh on every load).
+        const plain = JSON.parse(JSON.stringify(d, (k, v) => (k === 'eid' || k === 'position' ? undefined : v))) as StromData;
+        expect(contentFingerprint(d)).toBe(contentFingerprint(plain));
+        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
+        expect(ged).not.toMatch(/_STROM_EID|_POS/);
+        const own = exportToGedcom(d, 'Ozubec', { origins: true, confirmations: true }).content;
+        expect(own).not.toMatch(/_STROM_EID|_POS/);
     });
 });

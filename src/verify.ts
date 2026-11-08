@@ -23,6 +23,8 @@ export { factValueSignature };
 export const CONFIRMED_TAG = '_STROM_CONFIRMED';
 export const VERIFY_TAG = '_STROM_VERIFY';
 export const CHECKED_TAG = '_STROM_CHECKED';
+/** The fact's id in the research (`2 _STROM_EID E0012`), research files only. */
+export const EID_TAG = '_STROM_EID';
 
 /** The bridge features of 065 (in /status.features). */
 export const VERIFY_FEATURE = 'verify';
@@ -33,6 +35,8 @@ export const VERIFY_PENDING: readonly FactVerifyPending[] = ['wait', 'asked', 'i
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const READERS_MAX = 99;
+/** The highest place in the research's queue kept (`3 _POS n`). */
+const POSITION_MAX = 1_000_000;
 const WHY_MAX = 1000;
 const DATE_MAX = 40;
 
@@ -88,6 +92,30 @@ export function factVerifyReaders(holder: FactHolder, fact: string): number | un
     return checked?.result === 'proven' && checked.readers ? checked.readers : undefined;
 }
 
+/** A fact's id in the research ("E0012"), or null. */
+export function researchFactRef(id: unknown): string | null {
+    return typeof id === 'string' && /^E\d{1,9}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/**
+ * The fact's id in the research (`2 _STROM_EID`), for /verify {fact} and
+ * /facts/confirm; null when the research's file gave none (a fact made or
+ * copied here, a file of a research before 065, another file).
+ */
+export function factResearchEid(holder: FactHolder, fact: string): string | null {
+    return researchFactRef(holder.researchVerify?.[fact]?.eid);
+}
+
+/**
+ * The fact's place in the research's queue of re-verification (`3 _POS n`
+ * under `_STROM_VERIFY wait|asked`: 1 = the next session takes it), as of
+ * the research's last file; null when it waits for a person or is not said.
+ */
+export function factPendingPosition(holder: FactHolder, fact: string): number | null {
+    const v = holder.researchVerify?.[fact];
+    return v?.position && (v.pending === 'wait' || v.pending === 'asked') ? v.position : null;
+}
+
 /** The facts of a holder that wait for re-verification in the research. */
 export function pendingFacts(holder: FactHolder): string[] {
     return Object.entries(holder.researchVerify ?? {}).filter(([, v]) => !!v?.pending).map(([fact]) => fact);
@@ -128,6 +156,14 @@ export function parseCheckedResult(value: string): FactVerifyChecked['result'] |
     return v === 'proven' || v === 'kept' ? v : null;
 }
 
+/** `3 _POS n` (a positive whole number), or null. */
+export function parsePendingPosition(value: string): number | null {
+    const v = value.trim();
+    if (!/^\d{1,7}$/.test(v)) return null;
+    const n = Number(v);
+    return n >= 1 && n <= POSITION_MAX ? n : null;
+}
+
 /** `3 _READERS n` (a positive whole number), or null. */
 export function parseReaders(value: string): number | null {
     const v = value.trim();
@@ -155,6 +191,9 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
     if (typeof v.confirmed === 'string' && ISO_DAY.test(v.confirmed)) out.confirmed = v.confirmed;
     if (typeof v.pending === 'string' && (VERIFY_PENDING as readonly string[]).includes(v.pending)) {
         out.pending = v.pending as FactVerifyPending;
+        // A place in the queue only while the research's agent is to take it (not waiting for a person).
+        if ((out.pending === 'wait' || out.pending === 'asked') && typeof v.position === 'number' && Number.isInteger(v.position)
+            && v.position >= 1 && v.position <= POSITION_MAX) out.position = v.position;
     }
     if (v.checked && typeof v.checked === 'object') {
         const c = v.checked as Record<string, unknown>;
@@ -168,7 +207,9 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
             out.checked = checked;
         }
     }
-    return out.confirmed || out.pending || out.checked ? out : null;
+    const eid = researchFactRef(v.eid);
+    if (eid) out.eid = eid;
+    return out.confirmed || out.pending || out.checked || out.eid ? out : null;
 }
 
 function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', clean: (v: unknown) => T | null): void {
