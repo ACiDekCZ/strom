@@ -118,12 +118,14 @@ export const personSourcesMethods = uiModule({
 
     // ==================== SOURCES ====================
 
-    showPersonSourcesDialog(personId: PersonId): void {
+    /** `focusSourceIds`: the sources of one fact (a status tip's "and N more"), marked in the list, the first scrolled into view. */
+    showPersonSourcesDialog(personId: PersonId, focusSourceIds: string[] = []): void {
         // Replace an open one; the stack entry (pushed by the caller) stays.
         document.getElementById(SOURCES_ID)?.remove();
         if (!DataManager.getPerson(personId)) return;
         this.personSourcesId = personId;
         this.personSourcesShown = null;
+        this.personSourcesFocus = focusSourceIds.length > 0 ? new Set(focusSourceIds) : null;
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
@@ -160,6 +162,7 @@ export const personSourcesMethods = uiModule({
         const box = overlay.querySelector('.modal') as HTMLElement;
         box.setAttribute('tabindex', '-1');
         box.focus({ preventScroll: true });
+        overlay.querySelector('.person-source-row.is-focus')?.scrollIntoView?.({ block: 'nearest' });
     },
 
     closePersonSourcesDialog(): void {
@@ -167,6 +170,7 @@ export const personSourcesMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(d => d !== SOURCES_ID);
         this.personSourcesId = null;
         this.personSourcesShown = null;
+        this.personSourcesFocus = null;
     },
 
     /** (Re)draw the list — also after a citation made from the dialog. */
@@ -202,9 +206,10 @@ export const personSourcesMethods = uiModule({
             const q = qualityLabel(r.source.quality);
             const labels = r.cites.map(c => c.title
                 ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label)).join(' · ');
-            const cls = before !== null && !before.has(key(r)) ? 'person-source-row is-new' : 'person-source-row';
+            const focus = this.personSourcesFocus?.has(r.source.id) ?? false;
+            const cls = `person-source-row${before !== null && !before.has(key(r)) ? ' is-new' : ''}${focus ? ' is-focus' : ''}`;
             const row = `
-                <button type="button" class="${cls}" data-row="${i}">
+                <button type="button" class="${cls}" data-row="${i}"${focus ? ' aria-current="true"' : ''}>
                     ${sourceThumbHtml(r.source, 'picker')}
                     <span class="person-source-text">
                         <span class="person-source-title">${esc(r.source.title)}</span>

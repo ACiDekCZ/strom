@@ -20,6 +20,9 @@ import {
     ReliabilityHtmlOptions,
 } from './fact-status.js';
 import { uiModule } from './module.js';
+import { TreeRenderer } from '../renderer.js';
+import { HELP_TOPICS } from '../help/topics.js';
+import { openHelp } from './help-ui.js';
 
 /** What the person card shows of the marks, computed once per drawing. */
 export interface PersonReliabilityView {
@@ -27,9 +30,38 @@ export interface PersonReliabilityView {
     /** Pills at the facts (false: the one pill of the origin row stands for them all, or the setting is off). */
     atFacts: boolean;
     opts: ReliabilityOptions;
+    /** Whose facts (the pills' status tips list the fact's sources). */
+    personId: PersonId;
 }
 
 export const personReliabilityMethods = uiModule({
+    /**
+     * The status tip of every reliability pill and card mark (status-tip.ts):
+     * installed at start, told where the tree's data is and what its links open.
+     */
+    installStatusTipHost(): void {
+        const ui = this;
+        installReliabilityTips({
+            data: () => DataManager.getData(),
+            options: () => ui.reliabilityOptionsNow(),
+            cardStatus: (id) => TreeRenderer.cardSignalsFor(id as PersonId)?.status ?? null,
+            story: (id) => {
+                const sig = TreeRenderer.cardSignalsFor(id as PersonId);
+                return sig?.showStory ? sig.story : null;
+            },
+            personSourceCount: (id) => ui.personSourceCount(id as PersonId),
+            openSource: (id, ctx) => { if (id) ui.showSourceViewer(id, ctx); },
+            openPersonSources: (id, focus) => {
+                if (ui.dialogStack.length === 0) ui.clearDialogStack();
+                ui.pushDialog('person-sources-modal');
+                ui.showPersonSourcesDialog(id as PersonId, focus);
+            },
+            openStory: (id) => ui.openPersonStory(id as PersonId),
+            openHelp: (trigger) => { void openHelp(HELP_TOPICS.reliability, trigger ?? undefined); },
+            treeKnowsOrigin: () => TreeRenderer.treeKnowsOriginNow(),
+        });
+    },
+
     /** Where the steps come from now: the active research tree and whether its bridge names `origin`. */
     reliabilityOptionsNow(): ReliabilityOptions {
         const originFeature = this.researchShowsOriginNow();
@@ -41,14 +73,14 @@ export const personReliabilityMethods = uiModule({
         if (!SettingsManager.isReliabilityCardEnabled()) return null;
         const opts = this.reliabilityOptionsNow();
         const summary = personOriginSummary(DataManager.getData(), person, opts);
-        return { summary, atFacts: personMarksLayout(summary).atFacts, opts };
+        return { summary, atFacts: personMarksLayout(summary).atFacts, opts, personId: person.id };
     },
 
     /** One fact's pill on the person card ('' where none stands). */
     personFactMarkHtml(view: PersonReliabilityView | null, fact: string, extra: ReliabilityHtmlOptions = {}): string {
         if (!view || !view.atFacts) return '';
         const r = view.summary.facts.find(f => f.fact === fact);
-        return r ? factReliabilityHtml(r, { research: view.opts.originFeature, fact, ...extra }) : '';
+        return r ? factReliabilityHtml(r, { research: view.opts.originFeature, fact, personId: view.personId, ...extra }) : '';
     },
 
     /**
@@ -56,7 +88,7 @@ export const personReliabilityMethods = uiModule({
      * occupation); the events list draws its own. Null: none (a new person).
      */
     renderPersonReliability(personId: PersonId | null): void {
-        installReliabilityTips();
+        this.installStatusTipHost();
         const modal = document.getElementById('person-modal');
         modal?.querySelectorAll('.form-group > label > .fact-status').forEach(n => n.remove());
         const row = document.getElementById('pm-origin');
@@ -71,7 +103,7 @@ export const personReliabilityMethods = uiModule({
                 text.className = 'person-origin-text';
                 text.textContent = layout.row.text;
                 row.appendChild(text);
-                if (layout.row.step) row.insertAdjacentHTML('beforeend', originRowPillHtml(view.summary, layout.row.step, { research: view.opts.originFeature }));
+                if (layout.row.step) row.insertAdjacentHTML('beforeend', originRowPillHtml(view.summary, layout.row.step, { research: view.opts.originFeature, personId: view.personId }));
             }
         }
         // "Originally from the family tree" under the name and the sex (not marks: whatever the setting says).
@@ -116,7 +148,7 @@ export const personReliabilityMethods = uiModule({
         const record = importRecordOf(DataManager.getData(), importId);
         const step = record ? reliabilityStep({ valueFromImport: true }) : null;
         if (!step || !record) return '';
-        installReliabilityTips();
+        this.installStatusTipHost();
         return reliabilityHtml(step, reliabilityTitle({ ...step, importRecord: record }));
     },
 
@@ -126,7 +158,7 @@ export const personReliabilityMethods = uiModule({
         const opts = this.reliabilityOptionsNow();
         const r: FactReliability | null = factReliability(DataManager.getData(), ps, fact, opts);
         if (!r) return '';
-        if (!extra.inert) installReliabilityTips();
-        return factReliabilityHtml(r, { research: opts.originFeature, fact, ...extra });
+        if (!extra.inert) this.installStatusTipHost();
+        return factReliabilityHtml(r, { research: opts.originFeature, fact, partnershipId: ps.id, ...extra });
     },
 });

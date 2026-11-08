@@ -361,6 +361,8 @@ export class UIClass {
     /** The person whose "Sources" dialog is open, and the person-level rows it last drew. */
     personSourcesId: PersonId | null = null;
     personSourcesShown: Set<string> | null = null;
+    /** The sources the open person-sources dialog marks (a status tip's way to all of a fact's sources). */
+    personSourcesFocus: Set<string> | null = null;
     /** Ends the open "Hand the tree to the research?" dialog as "Don't hand over". */
     researchAdoptResolve: (() => void) | null = null;
     /** Cancel of the open "Load the research version?" (research-load-ui.ts). */

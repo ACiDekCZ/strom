@@ -93,7 +93,9 @@ describe('reliabilityHtml', () => {
         const el = parse(factStatusHtml('probable'));
         expect(el.classes).toContain('fact-status-probable');
         expect(el.text).toBe('Probable');
-        expect(el.attrs.title).toMatch(/as the research holds this fact/);
+        // The words go to the status tip, not to a native title (spec 065 round 2).
+        expect(el.attrs['data-st-title']).toMatch(/as the research holds this fact/);
+        expect(el.attrs.title).toBeUndefined();
     });
 });
 

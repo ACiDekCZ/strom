@@ -4321,7 +4321,7 @@ class TreeRendererClass {
             const crossTreeGroups = CrossTree.groupCrossTreeMatches(crossTreeMatches);
             if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
             // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
-            const statusHtml = signals.showStatus ? statusMarkHtml(signals.status) : '';
+            const statusHtml = signals.showStatus ? statusMarkHtml(signals.status, { mark: true }) : '';
             if (statusHtml) classes += ' has-status';
             // A narrow card (compact): the bottom-right edge's pills take their short forms (spec 066 P4 §2).
             if (this.config.cardWidth < 160) classes += ' edge-narrow';
@@ -4344,12 +4344,23 @@ class TreeRendererClass {
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
                 if (target.closest('.hidden-partners-btn')) return;
-                // The badge opens what it signals (touch: the person menu, which leads with it).
-                const badge = target.closest<HTMLElement>('.card-signal');
-                if (badge && !window.matchMedia?.('(pointer: coarse)').matches) {
-                    e.stopPropagation();
-                    UI.openCardSignal(id, badge.dataset.signal ?? '');
-                    return;
+                // A mark of the card (spec 066 P4 §5 round 2): by touch its bubble with its action;
+                // with a mouse what it signals — the badge, the agent, the story — and the lock and
+                // the sibling order as the card. The status mark is the status tip's (status-tip.ts).
+                const mark = target.closest<HTMLElement>('[data-mark]');
+                const kind = mark?.dataset.mark;
+                if (mark && kind !== 'status') {
+                    if (window.matchMedia?.('(pointer: coarse)').matches) {
+                        e.stopPropagation();
+                        UI.openCardMarkTip(id, mark);
+                        return;
+                    }
+                    if (kind === 'badge' || kind === 'agent' || kind === 'story') {
+                        e.stopPropagation();
+                        if (kind === 'story') UI.openPersonStory(id);
+                        else UI.openCardSignal(id, kind === 'agent' ? 'agent' : mark.dataset.signal ?? '');
+                        return;
+                    }
                 }
                 UI.showContextMenu(id, e);
             };
@@ -4530,7 +4541,18 @@ class TreeRendererClass {
 
             // Person status: the story's fold in the card's bottom-right corner, in
             // every density (decoration; the tooltip and aria-label say it).
-            const stateHtml = storyFoldHtml(signals.showStory ? signals.story : null);
+            const stateHtml = storyFoldHtml(signals.showStory ? signals.story : null, false, true);
+            const c = strings.card;
+            // Each mark's own bubble (spec 066 P4 §5 round 2): a mouse over the mark shows it, the card's bubble steps aside.
+            const markTip = (kind: string, head: string, lines: string[], click: string, below = false): string =>
+                `<span class="badge-tooltip mark-tip mt-${kind}${below ? ' below' : ''}" id="mt-${kind}-${this.escapeHtml(id)}" role="tooltip">`
+                + `<span class="badge-tooltip-header">${this.escapeHtml(head)}</span>`
+                + lines.filter(Boolean).map(l => `<span class="badge-tooltip-body">${this.escapeHtml(l)}</span>`).join('')
+                + (click ? `<span class="badge-tooltip-action">${this.escapeHtml(click)}</span>` : '')
+                + '</span>';
+            const clipText = (t: string, n = 120): string => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+            const storyTip = stateHtml && signals.story
+                ? markTip('story', c.story.own(''), [storySignalText(signals.story, c.story), c.tipStoryKind], c.tipClickStory, true) : '';
             // The fold takes the very corner; without it the status mark moves into it (index.html).
             if (stateHtml) card.classList.add('has-story');
             // The action badge on the avatar's corner (a dot on the card's
@@ -4541,10 +4563,25 @@ class TreeRendererClass {
             let badgeHtml = '';
             let dotHtml = '';
             if (signals.action) {
-                badgeHtml = `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" aria-label="${this.escapeHtml(signalLabel)}">${ACTION_GLYPH[signals.action]}</button>`;
+                // The badge's bubble: what waits, and what else does ("Also 2 conflicts, 1 question").
+                const also = (parts: string[]): string => (parts.length > 0 ? c.tipAlso(parts.join(', ')) : '');
+                const knowsParts = [
+                    signals.conflicts > 0 ? c.ttConflicts(signals.conflicts) : '',
+                    signals.question ? c.menuQuestions(1) : '',
+                ].filter(Boolean);
+                const tip = signals.action === 'waiting'
+                    ? markTip('badge', strings.cardDensity.cardWaiting, [clipText(signals.waiting ?? ''), also(knowsParts)], c.tipClickAnswer)
+                    : signals.action === 'conflict'
+                        ? markTip('badge', c.tipConflictHead, [
+                            [c.ttConflicts(signals.conflicts), signals.hypotheses > 0 ? c.ttHypotheses(signals.hypotheses) : ''].filter(Boolean).join(' · '),
+                            also(signals.question ? [c.menuQuestions(1)] : []),
+                        ], c.tipClickKnows)
+                        : markTip('badge', c.tipQuestionHead, [clipText(signals.question ?? '')], c.tipClickKnows);
+                badgeHtml = `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" data-mark="badge" aria-label="${this.escapeHtml(signalLabel)}" aria-describedby="mt-badge-${this.escapeHtml(id)}">${ACTION_GLYPH[signals.action]}</button>${tip}`;
                 dotHtml = `<span class="card-signal-dot signal-${signals.action}" aria-hidden="true"></span>`;
             } else if (signals.showAgent) {
-                badgeHtml = `<span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span>`;
+                badgeHtml = `<span class="card-agent-mark" data-mark="agent"><span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span></span>`
+                    + markTip('agent', c.tipAgentHead, [clipText(signals.agent ?? '')], c.tipClickAgent);
                 dotHtml = `<span class="card-agent-dot" style="animation-delay:${spinDelay}" aria-hidden="true"></span>`;
             } else if (signals.doneSince !== null) {
                 const since = Math.min(renderedAt - signals.doneSince, AGENT_DONE_MS + AGENT_DONE_FADE_MS);
@@ -4588,7 +4625,9 @@ class TreeRendererClass {
                 </div>
             `;
             // The lock, the status mark, the fold and the corner dot: on every card type, the custom one too (N34).
-            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${statusHtml}${stateHtml}${dotHtml}`;
+            const lockHtml = isLocked
+                ? `<span class="lock-icon" data-mark="lock">${iconSvg('lock', { size: 10 })}</span>${markTip('lock', c.tipLockHead, [c.tipLock], '')}` : '';
+            html += `${lockHtml}${statusHtml}${stateHtml}${storyTip}${dotHtml}`;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
             // to the LEFT of the branch tabs so those (always visible, pinned to
@@ -4619,7 +4658,7 @@ class TreeRendererClass {
                     // Trees, not people: another tree may hold the same person twice (the bubble says so).
                     const trees = CrossTree.crossTreeCount(crossTreeMatches);
                     // "⇄ N": another tree in the app (no ↗, spec 066 P4 §6), its bubble names the trees and what a click does
-                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(trees))}">
+                    crossTreeHtml = `<div class="cross-tree-badge" data-mark="cross" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(trees))}">
                         <span class="pill-glyph">⇄</span><span class="pill-count">${trees}</span>
                         <div class="cross-tree-tooltip">
                             ${CrossTree.crossTreeBubbleHtml(crossTreeMatches, t => this.escapeHtml(t))}
@@ -4659,9 +4698,10 @@ class TreeRendererClass {
             // The sibling-order pill (§3): the direct-line card out of its birth place among the shown siblings
             const siblingOrder = this.siblingOrderOf(id);
             const siblingOrderHtml = siblingOrder
-                ? `<span class="sibling-order-pill" aria-hidden="true"><span class="so-text">${this.escapeHtml(strings.focus.siblingOrderPill(siblingOrder.n, siblingOrder.total))}</span>`
+                ? `<span class="sibling-order-pill" data-mark="order" aria-hidden="true"><span class="so-text">${this.escapeHtml(strings.focus.siblingOrderPill(siblingOrder.n, siblingOrder.total))}</span>`
                     + `<span class="so-short">${this.escapeHtml(strings.focus.siblingOrderPillShort(siblingOrder.n, siblingOrder.total))}</span>`
-                    + `<span class="badge-tooltip so-tip">${this.escapeHtml(strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total))}</span></span>`
+                    + `<span class="badge-tooltip so-tip below"><span class="badge-tooltip-header">${this.escapeHtml(strings.card.tipSibHead)}</span>`
+                    + `<span class="badge-tooltip-body">${this.escapeHtml(strings.card.tipSib(siblingOrder.n, siblingOrder.total))}</span></span></span>`
                 : '';
             if (siblingOrder) card.setAttribute('aria-label', `${card.getAttribute('aria-label') ?? ''}. ${strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total)}`);
             // A candidate keeps the pill's room whether or not the pill is drawn (measured before the layout)
@@ -4912,6 +4952,11 @@ class TreeRendererClass {
             if (crossTreeBadge && currentTreeId && crossTreeMatches.length > 0) {
                 crossTreeBadge.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    // By touch its bubble first, with "Go to the tree" as its button.
+                    if (window.matchMedia?.('(pointer: coarse)').matches) {
+                        UI.openCardMarkTip(id, crossTreeBadge as HTMLElement);
+                        return;
+                    }
                     if (crossTreeMatches.length === 1) {
                         UI.switchToTreeAndFocus(crossTreeMatches[0].treeId, crossTreeMatches[0].personId);
                     } else {

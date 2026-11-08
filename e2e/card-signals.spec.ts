@@ -160,7 +160,7 @@ test.describe('card signals', () => {
         await expect(tt.locator('.tt-status')).toHaveText('Backed by sources · 1 source');
         await expect(tt.locator('.tt-status > .card-status-mark.cs-p2')).toHaveCount(1);
         await expect(card(page, 'Jan').locator('.card-status-mark[title]')).toHaveCount(0);
-        await expect(card(page, 'Jan').locator('.card-tooltip .tt-foot')).toHaveText('Click opens the menu that explains the marks');
+        await expect(card(page, 'Jan').locator('.card-tooltip .tt-foot')).toHaveText('Click opens the person menu');
         await expect(tt.locator('.tt-story')).toHaveText('Story (draft)');
         await expect(tt.locator('.tt-action')).toHaveText(['1 conflict · 1 hypothesis']);
         await expect(card(page, 'Eva').locator('.card-tooltip .tt-action')).toHaveText(['Awaiting action: Uložte snímek oddací matriky', '1 conflict']);
@@ -194,8 +194,8 @@ test.describe('card signals', () => {
                 }
             }
         }
-        // Decoration only: a click there is a click on the card.
-        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('pointer-events', 'none');
+        // The mark answers the mouse: a click there opens its status tip, not the card menu.
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('pointer-events', 'auto');
     });
 
     test('every card type draws the lock, the status mark, the story fold and the corner dot, the custom one too (N34)', async ({ page }) => {
@@ -368,29 +368,134 @@ test.describe('card signals', () => {
         }
     });
 
-    test('the desktop person menu leads with the marks explained: the mark, the story, the signal, the help (spec 066 P4 §5)', async ({ page }) => {
+    test('the desktop person menu starts with what there is to do: ordinary items with the mark\'s glyph, no block explaining the marks (spec 065 round 2)', async ({ page }) => {
         await setup(page);
         await card(page, 'Jan').locator('.name').click();
-        const first = page.locator('.context-menu .menu-person-state');
-        // The bubble's rows in the card map's order, then the help.
-        await expect(first.locator('.mps-status')).toHaveText('Backed by sources · 1 source');
-        await expect(first.locator('.mps-status .card-status-mark.cs-p2')).toHaveCount(1);
-        await expect(first.locator('.mps-story')).toHaveText('story (draft)');
-        expect(await first.evaluate(el => [...el.children].map(c => c.classList[0] === 'mps-row' ? c.classList[1] : c.classList.contains('menu-signal') ? 'signal' : c.classList.contains('mps-link') ? c.dataset.action : '?')))
-            .toEqual(['mps-status', 'mps-story', 'signal', 'marks-help']);
-        await expect(first.locator('[data-action="marks-help"]')).toHaveText('What the marks mean');
-        // The block stands on the second surface with a line under it.
-        expect(await first.evaluate(el => getComputedStyle(el).borderBottomStyle)).toBe('solid');
-        const block = page.locator('.context-menu .menu-signal');
-        await expect(block).toContainText('1 conflict · 1 hypothesis');
-        await expect(block).toContainText('What the research knows ›');
-        await block.click();
+        const menu = page.locator('.context-menu');
+        await expect(menu).toBeVisible();
+        await expect(menu.locator('.menu-person-state, [data-action="marks-help"]')).toHaveCount(0);
+        // Jan: the open conflict and the hypothesis, one item right after the header.
+        const acts = menu.locator('.menu-act');
+        await expect(acts).toHaveCount(1);
+        await expect(acts.first()).toHaveAttribute('data-action', 'signal-knows');
+        await expect(acts.first().locator('.menu-act-text')).toHaveText('What the research knows · 1 conflict, 1 hypothesis ›');
+        await expect(acts.first().locator('.menu-signal-glyph')).toHaveText('≠');
+        expect(await menu.evaluate(el => el.querySelector('.context-menu-item')?.classList.contains('menu-act'))).toBe(true);
+        // An ordinary item: no warning background of its own; its glyph in the kind column
+        // (◎ of Focus), its text in line with the other items' text.
+        const look = await acts.first().evaluate((el) => {
+            const kind = el.parentElement!.querySelector<HTMLElement>('.context-menu-item:has(> .menu-item-kind)')!;
+            const plain = el.parentElement!.querySelector<HTMLElement>('.context-menu-item:not(.menu-act):not(:has(> .menu-item-kind))')!;
+            const textX = (row: HTMLElement) => {
+                const r = document.createRange();
+                const t = [...row.querySelectorAll('*'), row].flatMap(n => [...n.childNodes]).find(n => n.nodeType === 3 && n.textContent!.trim().length > 2)!;
+                r.selectNodeContents(t);
+                return Math.round(r.getBoundingClientRect().left);
+            };
+            const glyphX = (g: Element) => Math.round(g.getBoundingClientRect().left + g.getBoundingClientRect().width / 2);
+            return {
+                bg: getComputedStyle(el).backgroundColor, plainBg: getComputedStyle(plain).backgroundColor,
+                glyph: glyphX(el.querySelector('.menu-signal-glyph')!), kind: glyphX(kind.querySelector('.menu-item-kind')!),
+                text: textX(el.querySelector('.menu-act-text')!), plainText: textX(plain),
+            };
+        });
+        expect(look.bg).toBe(look.plainBg);
+        expect(Math.abs(look.glyph - look.kind), JSON.stringify(look)).toBeLessThanOrEqual(1);
+        expect(Math.abs(look.text - look.plainText)).toBeLessThanOrEqual(1);
+        await acts.first().click();
         await expect(page.locator('#person-research-modal')).toBeVisible();
-        // "What the marks mean" opens the help at the marks (in the app, no mark of a new window).
         await page.keyboard.press('Escape');
-        await card(page, 'Jan').locator('.name').click();
-        await page.locator('.context-menu [data-action="marks-help"]').click();
-        await expect(page.locator('.help-rule[data-rule="R3.8"]')).toHaveClass(/is-target/);
+
+        // Eva: the task waiting for an answer comes first, then what the research knows.
+        await card(page, 'Eva').locator('.name').click();
+        await expect(menu.locator('.menu-act')).toHaveCount(2);
+        await expect(menu.locator('.menu-act').first()).toHaveAttribute('data-action', 'signal-waiting');
+        await expect(menu.locator('.menu-act .menu-act-text')).toHaveText(['Answer · 1 waiting', 'What the research knows · 1 conflict ›']);
+        await page.keyboard.press('Escape');
+
+        // Josef: nothing to do, no such item.
+        await card(page, 'Josef').locator('.name').click();
+        await expect(menu).toBeVisible();
+        await expect(menu.locator('.menu-act')).toHaveCount(0);
+    });
+
+    test('desktop: each mark has its own bubble over it, the card\'s bubble steps aside; a click does what the bubble says (spec 065 round 2)', async ({ page }) => {
+        await setup(page);
+        const jan = card(page, 'Jan');
+        const cardTip = jan.locator('.card-tooltip');
+        const hoverTip = async (mark: string, tip: string, head: string, action: string, side: 'above' | 'below') => {
+            const m = jan.locator(mark);
+            await m.hover();
+            const t = jan.locator(tip);
+            await expect(t, mark).toBeVisible();
+            await expect(t.locator('.badge-tooltip-header')).toHaveText(head);
+            if (action) await expect(t.locator('.badge-tooltip-action')).toHaveText(action);
+            await expect(t).toHaveAttribute('role', 'tooltip');
+            const mb = (await m.boundingBox())!;
+            const tb = (await t.boundingBox())!;
+            if (side === 'above') expect(tb.y + tb.height, `${mark}: above`).toBeLessThanOrEqual(mb.y);
+            else expect(tb.y, `${mark}: below`).toBeGreaterThanOrEqual(mb.y + mb.height - 1);
+            // The card's own bubble does not open over a mark.
+            await page.waitForTimeout(700);
+            await expect(cardTip).toBeHidden();
+        };
+        await hoverTip('.card-signal', '.mt-badge', 'Conflict in sources', 'Click: what the research knows', 'above');
+        await expect(jan.locator('.mt-badge .badge-tooltip-body').first()).toHaveText('1 conflict · 1 hypothesis');
+        await expect(jan.locator('.card-signal')).toHaveAttribute('aria-describedby', /^mt-badge-/);
+        await hoverTip(':scope > .card-story', '.mt-story', 'Story', 'Click: open the story', 'below');
+        // Away from the marks the card's bubble comes back.
+        await jan.locator('.name').hover();
+        await expect(cardTip).toBeVisible();
+
+        // The story's corner opens the story, not the card menu.
+        await jan.locator(':scope > .card-story').click();
+        await expect(page.locator('#person-story-modal')).toBeVisible();
+        await expect(page.locator('.context-menu')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        // The lock: its bubble above, a click is the card's.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const id = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan')!.id;
+            dm.updatePerson(id, { isLocked: true });
+            window.Strom.TreeRenderer.render();
+        });
+        await hoverTip(':scope > .lock-icon', '.mt-lock', 'Locked', '', 'above');
+        await expect(jan.locator(':scope > .lock-icon[title]')).toHaveCount(0);
+        await jan.locator(':scope > .lock-icon').click();
+        await expect(page.locator('.context-menu')).toBeVisible();
+    });
+
+    test('keyboard: the badge\'s focus shows its bubble as the mouse does (spec 065 round 2)', async ({ page }) => {
+        await setup(page);
+        const badge = card(page, 'Jan').locator('.card-signal');
+        await badge.focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        await expect(badge).toBeFocused();
+        await expect(card(page, 'Jan').locator('.mt-badge')).toBeVisible();
+    });
+
+    test('desktop: a click on the ? opens what the research knows at the question', async ({ page }) => {
+        await setup(page);
+        const id = await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const p = Object.values(dm.getData().persons).find((x: any) => x.firstName === 'Josef')!;
+            dm.updatePerson(p.id, { question: 'Kde hospodařil před svatbou?' } as never);
+            window.Strom.TreeRenderer.render();
+            return p.id;
+        });
+        expect(id).toBeTruthy();
+        const badge = card(page, 'Josef').locator('.card-signal');
+        await expect(badge).toHaveText('?');
+        await badge.hover();
+        await expect(card(page, 'Josef').locator('.mt-badge .badge-tooltip-header')).toHaveText('Open question');
+        await badge.click();
+        const modal = page.locator('#person-research-modal');
+        await expect(modal).toBeVisible();
+        await expect(modal.locator('.person-research-question')).toHaveText('Kde hospodařil před svatbou?');
+        await expect(modal.locator('.person-research-question')).toBeFocused();
+        await expect(page.locator('.context-menu')).toHaveCount(0);
     });
 
     test('compact: a dot on the card corner; far zoom: dots only', async ({ page }) => {
@@ -711,28 +816,56 @@ test.describe('card signals', () => {
         }
     });
 
-    test('phone: the person menu leads with the marks explained and the signal', async ({ page }) => {
+    test('phone: the person sheet starts with what there is to do, no block explaining the marks', async ({ page }) => {
         await setup(page, 360);
         await card(page, 'Jan').locator('.name').click();
         const sheet = page.locator('.bottom-sheet-person');
-        await expect(sheet.locator('.menu-person-state .mps-status')).toHaveText('Backed by sources · 1 source');
-        await expect(sheet.locator('.menu-person-state .mps-story')).toHaveText('story (draft)');
-        await expect(sheet.locator('.menu-person-state .menu-signal')).toContainText('1 conflict');
+        await expect(sheet.locator('.menu-person-state')).toHaveCount(0);
+        await expect(sheet.locator('.menu-act .menu-act-text')).toHaveText(['What the research knows · 1 conflict, 1 hypothesis ›']);
     });
 
-    test('touch: a tap on the card opens the menu with the marks explained; its links take a finger (spec 066 P4 §5, §9)', async ({ browser }) => {
+    test('touch: a tap on a mark opens its tip pinned with the action as a 44px button; the status mark\'s tip carries the story (spec 065 round 2, §9)', async ({ browser }) => {
         const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'en-US' });
         const page = await context.newPage();
         await openApp(page);
         await dropFile(page, researchGed());
-        await expect(card(page, 'Jan')).toBeVisible();
-        await card(page, 'Jan').locator('.name').tap();
-        const block = page.locator('.bottom-sheet-person .menu-person-state');
-        await expect(block.locator('.mps-status .card-status-mark')).toHaveCount(1);
-        const help = block.locator('[data-action="marks-help"]');
-        await expect(help).toHaveText('What the marks mean');
-        expect((await help.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-        // Nothing of the sheet runs off the phone's width.
+        const jan = card(page, 'Jan');
+        await expect(jan).toBeVisible();
+        await jan.evaluate(el => window.Strom.ZoomPan.centerOnPerson((el as HTMLElement).dataset.id as never));
+        await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
+        const tip = page.locator('#status-tip');
+        const tapAt = async (x: number, y: number) => { await page.touchscreen.tap(x, y); };
+        const box = (await jan.boundingBox())!;
+
+        // D: the card's bottom-right corner — the status tip, with the story's row.
+        await tapAt(box.x + box.width - 6, box.y + box.height - 3);
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-head')).toContainText('Backed by sources');
+        const story = tip.getByRole('button', { name: /^Story/ });
+        await expect(story).toBeVisible();
+        expect((await story.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
+        await story.tap();
+        await expect(page.locator('#person-story-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-story-modal')).toBeHidden();
+
+        // C: the badge — its bubble pinned with the action.
+        const badge = (await jan.locator('.card-signal').boundingBox())!;
+        await tapAt(badge.x + badge.width / 2, badge.y + badge.height / 2);
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-head')).toHaveText('Conflict in sources');
+        const act = tip.locator('.st-mark-action');
+        await expect(act).toHaveCount(1);
+        expect((await act.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await expect(page.locator('#person-research-modal')).toHaveCount(0);
+        await act.tap();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+
+        // The card's middle: the person sheet as before.
+        await jan.locator('.name').tap();
+        await expect(page.locator('.bottom-sheet-person')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
         await context.close();
     });
@@ -749,15 +882,11 @@ test.describe('card signals', () => {
         await expect(mark).toHaveCSS('right', '15px');
         await card(page, 'Jan').locator('.name').tap();
         const sheet = page.locator('.bottom-sheet-person');
-        await expect(sheet.locator('.menu-person-state .mps-status .card-status-mark')).toHaveCount(1);
+        await expect(sheet.locator('.menu-act')).toHaveCount(1);
         await page.waitForTimeout(300);
         const rows = await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):visible').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
         expect(rows.length).toBeGreaterThan(0);
         for (const h of rows) expect(h).toBeGreaterThanOrEqual(47.5);
-        // The marks block's link: its text where the block's text starts, no menu indent.
-        const help = sheet.locator('.menu-person-state [data-action="marks-help"]');
-        await expect(help).toHaveCSS('padding-left', '0px');
-        expect((await help.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         // From the bottom, the whole width.
         const portrait = (await sheet.boundingBox())!;
         expect(portrait.x).toBeLessThanOrEqual(1);
@@ -769,7 +898,7 @@ test.describe('card signals', () => {
         await page.setViewportSize({ width: 844, height: 390 });
         await card(page, 'Jan').evaluate(el => window.Strom.ZoomPan.centerOnPerson((el as HTMLElement).dataset.id as never));
         await card(page, 'Jan').locator('.name').tap();
-        await expect(sheet.locator('.menu-person-state .mps-status')).toHaveText('Backed by sources · 1 source');
+        await expect(sheet.locator('.menu-act')).toHaveCount(1);
         await expect.poll(async () => (await sheet.boundingBox())!.x).toBeCloseTo(844 - 360, 0);
         const side = (await sheet.boundingBox())!;
         expect(side.width).toBeCloseTo(360, 0);
@@ -783,7 +912,6 @@ test.describe('card signals', () => {
         for (const h of await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):visible').evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) {
             expect(h).toBeGreaterThanOrEqual(47.5);
         }
-        expect((await sheet.locator('[data-action="marks-help"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
         // The tree to the left stays in view; a tap there closes the panel.
         await page.locator('.bottom-sheet-overlay').click({ position: { x: 200, y: 200 } });
         await expect(sheet).toHaveCount(0);

@@ -6,8 +6,6 @@
  */
 
 import { researchOpenMark } from './research-open-mark.js';
-import { HELP_TOPICS } from '../help/topics.js';
-import { openHelp } from './help-ui.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
@@ -563,11 +561,18 @@ export const contextMenuMethods = uiModule({
             case 'signal-agent':
                 this.openCardSignal(personId, action.slice('signal-'.length));
                 break;
+            case 'signal-waiting-list':
+                this.showResearchWaiting();
+                break;
+            case 'signal-story-compare':
+                if (!this.openWaitingStoryCompare(personId)) this.showResearchWaiting();
+                break;
+            case 'signal-knows':
+                this.clearDialogStack();
+                this.openPersonResearchKnows(personId);
+                break;
             case 'cross-tree':
                 this.openCrossTreeOf(personId);
-                break;
-            case 'marks-help':
-                void openHelp(HELP_TOPICS.reliability);
                 break;
             case 'research-knows':
                 this.clearDialogStack();

@@ -1,16 +1,14 @@
 /**
  * The card's at-a-glance signals outside the card: the badge opens what it
- * signals (desktop), the person menu leads with it (and, on phones and
- * tablets, with the person's status line), and Settings → "Show on card"
- * chooses which signals cards show, with a live preview card.
+ * signals (desktop), the person menu leads with what there is to do, and
+ * Settings → "Show on card" chooses which signals cards show, with a live preview card.
  */
 
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
-import { getCurrentLanguage, strings } from '../strings.js';
+import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
-import { ActionSignal, CardSignalInfo, ACTION_GLYPH, storyFoldHtml, storySignalInLine, storySignalText } from '../card-signals.js';
-import { cardStatusWords, statusMarkHtml } from './fact-status.js';
+import { ActionSignal, ACTION_GLYPH, storyFoldHtml } from '../card-signals.js';
 import { groupCrossTreeMatches } from '../cross-tree.js';
 import { HELP_TOPICS } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
@@ -18,6 +16,7 @@ import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { researchConflictRef } from '../research-link.js';
 import { uiModule } from './module.js';
+import { openMarkTip } from './status-tip.js';
 import { DataManager } from '../data.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
 
@@ -51,11 +50,8 @@ export const cardSignalsUiMethods = uiModule({
             this.showPersonResearchDialog(personId, first ? { conflict: first } : {});
         }
         else if (signal === 'agent') this.showLiveResearchNow();
-        else {
-            // The question: the person menu, which leads with it.
-            const card = document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`);
-            card?.click();
-        }
+        // The question: what the research knows, at the question.
+        else this.showPersonResearchDialog(personId, { questions: true });
     },
 
     /**
@@ -73,45 +69,115 @@ export const cardSignalsUiMethods = uiModule({
         return true;
     },
 
+    /** How many items of Waiting for you name the person (at least 1 while the card says one waits). */
+    waitingCountOf(personId: PersonId): number {
+        const refn = DataManager.getPerson(personId)?.refn;
+        const n = refn ? (this.researchWaiting()?.items.filter(w => w.person === refn || w.partner === refn).length ?? 0) : 0;
+        return Math.max(1, n);
+    },
+
     /**
-     * The person menu's first block (HTML, spec 066 P4 §5): the card's marks
-     * explained with the bubble's rows in the card map's order (the mark in
-     * words, the story, what waits with where it leads, the other trees with
-     * "Go to the tree"), then "What the marks mean" (the help). A block with
-     * only what waits stays as before. Empty when there is nothing to say.
+     * The person menu's first items (HTML, spec 066 P4 §5 round 2): only what
+     * there is to do, right under the header, each an ordinary menu item with
+     * its glyph — answer (desktop) or Waiting for you (touch), compare the
+     * story's new version, what the research knows (conflicts, hypotheses, the
+     * question), follow the research, go to the other tree. The marks
+     * themselves are explained by their own bubbles. Empty when there is nothing.
      */
     personSignalsMenuHtml(personId: PersonId, touch: boolean, itemClass: 'context-menu-item' | 'bottom-sheet-item'): string {
         const s = TreeRenderer.cardSignalsFor(personId);
         if (!s) return '';
         const c = strings.card;
         const esc = (t: string): string => this.escapeHtml(t);
-        // A link of the block: a menu item of its own (keyboard and the menu's dispatch reach it).
-        const link = (action: string, text: string): string => itemClass === 'bottom-sheet-item'
-            ? `<button type="button" class="${itemClass} mps-link" role="menuitem" data-action="${action}">${esc(text)}</button>`
-            : `<div class="${itemClass} mps-link" role="menuitem" tabindex="-1" data-action="${action}">${esc(text)}</div>`;
-        const row = (cls: string, mark: string, text: string, sub = '', after = ''): string =>
-            `<div class="mps-row ${cls}"><span class="mps-mark">${mark}</span><span class="mps-text"><span>${esc(text)}</span>`
-            + `${sub ? `<span class="mps-sub">${esc(sub)}</span>` : ''}</span>${after}</div>`;
-        const rows: string[] = [];
-        // As the bubble: the mark and the story in words also when the card does not show them.
-        if (s.status) {
-            const w = cardStatusWords(s.status, TreeRenderer.treeKnowsOriginNow());
-            rows.push(row('mps-status', statusMarkHtml(s.status, { className: 'card-status-mark--inline' }), w.main, w.sub));
+        const item = (action: string, kind: string, glyph: string, text: string): string => {
+            const cls = `${itemClass} menu-act menu-signal-${kind}`;
+            const body = `${glyph}<span class="menu-act-text">${esc(text)}</span>`;
+            return itemClass === 'bottom-sheet-item'
+                ? `<button type="button" class="${cls}" role="menuitem" data-action="${action}">${body}</button>`
+                : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="${action}">${body}</div>`;
+        };
+        const glyph = (a: ActionSignal): string => `<span class="menu-signal-glyph signal-${a}" aria-hidden="true">${ACTION_GLYPH[a]}</span>`;
+        const items: string[] = [];
+        if (s.waiting) {
+            const n = this.waitingCountOf(personId);
+            items.push(touch ? item('signal-waiting-list', 'waiting', glyph('waiting'), c.menuWaiting(n))
+                : item('signal-waiting', 'waiting', glyph('waiting'), c.menuAnswer(n)));
         }
-        if (s.story) {
-            rows.push(row('mps-story', storyFoldHtml(s.story, true),
-                storySignalInLine(storySignalText(s.story, c.story), getCurrentLanguage())));
+        if (s.waitingStory) items.push(item('signal-story-compare', 'story', storyFoldHtml(s.story, true) || glyph('waiting'), strings.story.compare));
+        if (s.conflicts > 0 || s.question) {
+            const parts = [
+                s.conflicts > 0 ? c.ttConflicts(s.conflicts) : '',
+                s.hypotheses > 0 ? c.ttHypotheses(s.hypotheses) : '',
+                s.question ? c.menuQuestions(1) : '',
+            ].filter(Boolean);
+            const kind: ActionSignal = s.conflicts > 0 ? 'conflict' : 'question';
+            items.push(item('signal-knows', kind, glyph(kind), c.menuKnows(parts.join(', '))));
         }
-        const action = s.action ? this.personSignalBlockHtml(s, s.action, touch, itemClass)
-            : s.showAgent ? this.personSignalBlockHtml(s, 'agent', touch, itemClass) : '';
+        if (s.showAgent) items.push(item('signal-agent', 'agent', '<span class="agent-mark" aria-hidden="true"></span>', c.menuAgent));
         const trees = groupCrossTreeMatches(TreeRenderer.crossTreeMatchesFor(personId));
-        const cross = trees.length === 0 ? ''
-            : row('mps-cross', '<span class="mps-glyph" aria-hidden="true">⇄</span>',
-                trees.length === 1 ? c.ttCross(trees[0].treeName) : c.ttCrossN(trees.length), '', link('cross-tree', c.crossTreeGo));
-        // Only what waits: the block as before (no marks to explain).
-        if (rows.length === 0 && !cross) return action;
-        const help = rows.length > 0 ? link('marks-help', strings.reliability.help) : '';
-        return `<div class="menu-person-state" role="group" aria-label="${esc(c.legend.marksTitle)}">${rows.join('')}${action}${cross}${help}</div>`;
+        if (trees.length > 0) {
+            items.push(item('cross-tree', 'cross', '<span class="menu-act-glyph" aria-hidden="true">⇄</span>',
+                trees.length === 1 ? `${c.crossTreeGo} ${trees[0].treeName}` : c.menuCrossN(trees.length)));
+        }
+        return items.join('');
+    },
+
+    /** The person's story (the card's corner, a status tip's story row). */
+    openPersonStory(personId: PersonId): void {
+        this.hideContextMenu();
+        this.clearDialogStack();
+        this.pushDialog('person-story-modal');
+        this.showPersonStoryDialog(personId);
+    },
+
+    /**
+     * A tap on a card's mark (touch, spec 066 P4 §9 round 2): its bubble,
+     * pinned, with the mark's action as a 44 px button — what waits, what
+     * the research knows, follow the research, the story, the other tree;
+     * the lock and the sibling order only say what they mean.
+     */
+    openCardMarkTip(personId: PersonId, mark: HTMLElement): void {
+        this.hideContextMenu();
+        const kind = mark.dataset.mark ?? '';
+        const c = strings.card;
+        const bubble = kind === 'cross' ? mark.querySelector<HTMLElement>('.cross-tree-tooltip')
+            : kind === 'order' ? mark.querySelector<HTMLElement>('.so-tip')
+            : mark.parentElement?.querySelector<HTMLElement>(`:scope > .mark-tip.mt-${CSS.escape(kind)}`) ?? null;
+        if (!bubble) return;
+        const words = bubble.cloneNode(true) as HTMLElement;
+        const headEl = words.querySelector('.badge-tooltip-header, .cross-tree-tooltip-header');
+        const head = headEl?.textContent?.trim() ?? '';
+        headEl?.remove();
+        // "Click: …" is the button here.
+        words.querySelectorAll('.badge-tooltip-action').forEach(n => n.remove());
+        const s = TreeRenderer.cardSignalsFor(personId);
+        let button: { label: string; run: () => void } | undefined;
+        if (kind === 'badge') {
+            const signal = mark.dataset.signal ?? '';
+            button = signal === 'waiting'
+                ? { label: `${strings.cardDensity.cardWaiting} ›`, run: () => this.openCardSignal(personId, 'waiting') }
+                : { label: `${strings.research.knows} ›`, run: () => this.openPersonResearchKnows(personId) };
+        } else if (kind === 'agent') {
+            button = { label: c.menuAgent, run: () => this.showLiveResearchNow() };
+        } else if (kind === 'story') {
+            button = { label: c.tipStoryRow(s?.story?.title ?? ''), run: () => this.openPersonStory(personId) };
+        } else if (kind === 'cross') {
+            const trees = groupCrossTreeMatches(TreeRenderer.crossTreeMatchesFor(personId));
+            if (trees.length > 0) {
+                button = {
+                    label: trees.length === 1 ? `${c.crossTreeGo} ${trees[0].treeName}` : c.menuCrossN(trees.length),
+                    run: () => this.openCrossTreeOf(personId),
+                };
+            }
+        }
+        openMarkTip(mark, { head, bodyHtml: words.innerHTML, button });
+    },
+
+    /** "What the research knows" of the person: at the first open conflict, else at the question. */
+    openPersonResearchKnows(personId: PersonId): void {
+        this.hideContextMenu();
+        const first = researchConflictRef(this.personOpenConflicts(personId)[0]?.id);
+        this.showPersonResearchDialog(personId, first ? { conflict: first } : { questions: true });
     },
 
     /**
@@ -125,40 +191,6 @@ export const cardSignalsUiMethods = uiModule({
         const card = document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`);
         const anchor = card?.querySelector<HTMLElement>('.cross-tree-badge') ?? card;
         if (anchor) this.showCrossTreeChooser(matches, anchor);
-    },
-
-    /** The action block of the person menu: what waits, and where it leads. */
-    personSignalBlockHtml(s: CardSignalInfo, action: ActionSignal | 'agent', touch: boolean, itemClass: string): string {
-        const c = strings.card;
-        const r = strings.research;
-        // The agent's mark is its arc, still (it turns on the card only).
-        const glyph = action === 'agent'
-            ? '<span class="agent-mark" aria-hidden="true"></span>'
-            : `<span class="menu-signal-glyph signal-${action}" aria-hidden="true">${ACTION_GLYPH[action]}</span>`;
-        let text = '';
-        let go = '';
-        if (action === 'waiting') {
-            text = c.ttWaiting(s.waiting ?? '');
-            // A story's new version is compared here, on touch too.
-            if (s.waitingStory) go = strings.story.compare;
-            else if (!touch) go = r.answer;
-        } else if (action === 'conflict') {
-            text = [c.ttConflicts(s.conflicts), s.hypotheses > 0 ? c.ttHypotheses(s.hypotheses) : ''].filter(Boolean).join(' · ');
-            go = `${r.knows} ›`;
-        } else if (action === 'question') {
-            text = c.ttQuestion(s.question ?? '');
-        } else {
-            text = c.ttAgent(s.agent ?? '');
-        }
-        // Two lines at most (CSS); the whole text in the tooltip and behind the link.
-        const body = `${glyph}<span class="menu-signal-text" title="${this.escapeHtml(text)}">${this.escapeHtml(text)}</span>${go ? `<span class="menu-signal-go">${this.escapeHtml(go)}</span>` : ''}`;
-        // Only a block that leads somewhere is a menu item (keyboard reaches it);
-        // it runs through the menu's own action dispatch ("signal-…").
-        if (!go && action !== 'agent') return `<div class="menu-signal menu-signal-${action}" role="note">${body}</div>`;
-        const cls = `${itemClass} menu-signal menu-signal-${action}`;
-        return itemClass === 'bottom-sheet-item'
-            ? `<button type="button" class="${cls}" role="menuitem" data-action="signal-${action}">${body}</button>`
-            : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="signal-${action}">${body}</div>`;
     },
 
     /**

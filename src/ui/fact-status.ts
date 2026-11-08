@@ -19,8 +19,7 @@ import {
     CardStatus, CardStatusClass, CardStatusOptions, FactReliability, PersonOriginSummary, ReliabilityStep, ReliabilityStepName,
     cardStatus, reliabilityStep, sameStep,
 } from '../reliability.js';
-import { HELP_TOPICS } from '../help/topics.js';
-import { openHelp } from './help-ui.js';
+import { StatusTipHost, closeStatusTip, installStatusTips } from './status-tip.js';
 
 const escText = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s: string): string => escText(s).replace(/"/g, '&quot;');
@@ -112,6 +111,12 @@ export interface ReliabilityHtmlOptions {
     className?: string;
     /** The fact it marks (data-fact), for the places that look it up. */
     fact?: string;
+    /** The person whose fact it marks (the status tip lists the fact's sources). */
+    personId?: string;
+    /** The couple whose fact it marks (a wedding, a couple's event). */
+    partnershipId?: string;
+    /** The person-origin row's pill: the facts sharing its step (the tip says what it applies to). */
+    facts?: string[];
 }
 
 /** A step's pill ('' for none). */
@@ -120,11 +125,14 @@ export function reliabilityHtml(step: ReliabilityStep | null | undefined, title:
     const label = reliabilityLabel(step.step);
     const cls = `fact-status fact-status-${step.step}${opts.className ? ` ${opts.className}` : ''}`;
     const attrs = `class="${cls}" data-fact-status="${step.step}"${step.step === 'proven' ? ` data-dots="${step.dots ?? 1}"` : ''}`
-        + `${opts.fact ? ` data-fact="${escAttr(opts.fact)}"` : ''} title="${escAttr(title)}"`;
+        + `${opts.fact ? ` data-fact="${escAttr(opts.fact)}"` : ''}`;
     const inner = `${glyphsHtml(step)}<span class="fs-text">${escText(label)}</span>`;
-    return opts.inert
-        ? `<span ${attrs}>${inner}</span>`
-        : `<button type="button" ${attrs} aria-label="${escAttr(`${label}: ${title}`)}" aria-expanded="false">${inner}</button>`;
+    if (opts.inert) return `<span ${attrs} title="${escAttr(title)}">${inner}</span>`;
+    // A button's words are its status tip's (no native title over it).
+    const holder = `${opts.personId ? ` data-st-person="${escAttr(opts.personId)}"` : ''}`
+        + `${opts.partnershipId ? ` data-st-partnership="${escAttr(opts.partnershipId)}"` : ''}`
+        + `${opts.facts?.length ? ` data-st-facts="${escAttr(opts.facts.join(','))}"` : ''}`;
+    return `<button type="button" ${attrs}${holder} data-st-title="${escAttr(title)}" aria-label="${escAttr(`${label}: ${title}`)}" aria-expanded="false">${inner}</button>`;
 }
 
 /** A fact's pill from its reliability ('' for none). */
@@ -161,9 +169,13 @@ export function personMarksLayout(summary: PersonOriginSummary): {
 }
 
 /** The pill of the person-origin row: the step every fact shares, said with the record. */
-export function originRowPillHtml(summary: PersonOriginSummary, step: ReliabilityStep, opts: ReliabilityTitleOptions = {}): string {
-    const first = summary.facts.find(f => sameStep(f, step));
-    return first ? factReliabilityHtml(first, opts) : reliabilityHtml(step, reliabilityTitle(step, opts));
+export function originRowPillHtml(summary: PersonOriginSummary, step: ReliabilityStep,
+    opts: ReliabilityTitleOptions & Pick<ReliabilityHtmlOptions, 'personId'> = {}): string {
+    const sharing = summary.facts.filter(f => sameStep(f, step));
+    const first = sharing[0];
+    const facts = sharing.map(f => f.fact);
+    const html = { ...opts, facts: facts.length > 0 ? facts : undefined, fact: facts[0] };
+    return first ? factReliabilityHtml(first, html) : reliabilityHtml(step, reliabilityTitle(step, opts), html);
 }
 
 /** The glyphs of the tree card's mark: ✓, two dots (full or hollow), one hollow dot, or none (a dotted frame alone). */
@@ -182,6 +194,8 @@ function cardStatusGlyphsHtml(cls: CardStatusClass): string {
 export interface CardStatusMarkOptions {
     /** Extra classes (e.g. inline in a tooltip or a menu row). */
     className?: string;
+    /** The tree card's own mark: it opens the status tip (data-mark="status"). */
+    mark?: boolean;
 }
 
 /**
@@ -193,7 +207,7 @@ export interface CardStatusMarkOptions {
 export function statusMarkHtml(status: CardStatus | null | undefined, opts: CardStatusMarkOptions = {}): string {
     if (!status) return '';
     const cls = `card-status-mark ${status.cls}${opts.className ? ` ${opts.className}` : ''}`;
-    return `<span class="${cls}" data-status="${status.cls}" aria-hidden="true">${cardStatusGlyphsHtml(status.cls)}</span>`;
+    return `<span class="${cls}" data-status="${status.cls}"${opts.mark ? ' data-mark="status"' : ''} aria-hidden="true">${cardStatusGlyphsHtml(status.cls)}</span>`;
 }
 
 const lowerFirst = (t: string): string => (t ? t.charAt(0).toLocaleLowerCase() + t.slice(1) : t);
@@ -290,93 +304,16 @@ export function cardStatusMarkHtml(data: StromData, person: Person, opts: CardSt
     return statusMarkHtml(cardStatus(data, person, opts));
 }
 
-/**
- * The row the tap tooltip opens under: the pill's own row first (an event in
- * the person card's list, which is one form group as a whole, a wedding in
- * the relationships panel), else its form field (inside it, under the field).
- */
-function tipAnchor(pill: HTMLElement): { el: HTMLElement; inside: boolean } {
-    const row = pill.closest<HTMLElement>('.event-row, .pg-row, .rel-item, .person-origin, .couple-event-row, .fs-row');
-    if (row) return { el: row, inside: false };
-    const field = pill.closest<HTMLElement>('.form-group');
-    if (field) return { el: field, inside: true };
-    return { el: pill.parentElement ?? pill, inside: false };
-}
-
-let openPill: HTMLElement | null = null;
-
-/** Close the open tap tooltip, if any. */
+/** Close the open status tip, if any. */
 export function closeReliabilityTip(): void {
-    const pill = openPill;
-    openPill = null;
-    if (!pill) return;
-    pill.setAttribute('aria-expanded', 'false');
-    document.getElementById('fact-status-tip')?.remove();
+    closeStatusTip();
 }
-
-function openTip(pill: HTMLElement): void {
-    closeReliabilityTip();
-    const title = pill.getAttribute('title') ?? '';
-    const step = (pill.dataset.factStatus ?? 'lead') as ReliabilityStepName;
-    const tip = document.createElement('div');
-    tip.className = 'fact-status-tip';
-    tip.id = 'fact-status-tip';
-    tip.setAttribute('role', 'note');
-    const head = document.createElement('div');
-    head.className = 'fact-status-tip-head';
-    head.textContent = reliabilityLabel(step);
-    const body = document.createElement('div');
-    body.className = 'fact-status-tip-body';
-    body.textContent = title;
-    const help = document.createElement('button');
-    help.type = 'button';
-    help.className = 'fact-status-tip-help';
-    help.textContent = strings.reliability.help;
-    help.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeReliabilityTip();
-        void openHelp(HELP_TOPICS.reliability, pill);
-    });
-    tip.append(head, body, help);
-    const { el, inside } = tipAnchor(pill);
-    if (inside) el.appendChild(tip);
-    else el.insertAdjacentElement('afterend', tip);
-    // On screen: a pill at the bottom edge of a scrolled dialog has its text scrolled into view.
-    tip.scrollIntoView?.({ block: 'nearest' });
-    pill.setAttribute('aria-expanded', 'true');
-    pill.setAttribute('aria-controls', tip.id);
-    openPill = pill;
-}
-
-let installed = false;
 
 /**
- * The tap tooltip of every pill (one listener on the document, installed
- * once): a click on a pill opens or closes its text, a click elsewhere or
- * Esc closes it.
+ * The status tip of every pill and card mark (listeners on the document,
+ * installed once, status-tip.ts); the UI gives it the host once, later calls
+ * from the dialogs only make sure it is there.
  */
-export function installReliabilityTips(): void {
-    if (installed || typeof document === 'undefined') return;
-    installed = true;
-    document.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement | null;
-        const pill = target?.closest<HTMLElement>('button.fact-status');
-        if (pill) {
-            // Inside a label: never focus its field; inside a row: never open the row.
-            e.preventDefault();
-            e.stopPropagation();
-            if (openPill === pill) closeReliabilityTip();
-            else openTip(pill);
-            return;
-        }
-        if (openPill && !target?.closest('.fact-status-tip')) closeReliabilityTip();
-    }, true);
-    document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape' || !openPill) return;
-        const pill = openPill;
-        e.stopPropagation();
-        closeReliabilityTip();
-        if (pill.isConnected) pill.focus({ preventScroll: true });
-    }, true);
+export function installReliabilityTips(host?: StatusTipHost): void {
+    if (host) installStatusTips(host);
 }

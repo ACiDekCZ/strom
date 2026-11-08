@@ -215,9 +215,9 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
  * draft, spec 066 P4 §6). Empty when there is none. On the card the fold
  * covers the card's corner; `inline`: before the words in a tooltip or menu line.
  */
-export function storyFoldHtml(story: StoryMark | null, inline = false): string {
+export function storyFoldHtml(story: StoryMark | null, inline = false, mark = false): string {
     return story
-        ? `<span class="card-story${story.final ? '' : ' draft'}${story.kind === 'couple' ? ' couple' : ''}${inline ? ' card-story--inline' : ''}" aria-hidden="true"></span>`
+        ? `<span class="card-story${story.final ? '' : ' draft'}${story.kind === 'couple' ? ' couple' : ''}${inline ? ' card-story--inline' : ''}"${mark ? ' data-mark="story"' : ''} aria-hidden="true"></span>`
         : '';
 }
 

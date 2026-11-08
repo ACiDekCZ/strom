@@ -209,7 +209,7 @@ test.describe('phone 360 × 640', () => {
         const sheet = page.locator('.bottom-sheet-person');
         await expect(sheet).toBeVisible();
         await expect(sheet.locator('.sheet-tile')).toHaveText(['Edit', 'Focus', 'Sources', 'Story']);
-        await expect(sheet.locator('.menu-signal')).toBeVisible();
+        await expect(sheet.locator('.menu-act[data-action="signal-knows"]')).toBeVisible();
         // Measured once the sheet has slid up.
         await page.waitForTimeout(300);
         const tile = await sheet.locator('.sheet-tile').first().boundingBox();
@@ -238,7 +238,7 @@ test.describe('phone 360 × 640', () => {
         await expect(sheet).toBeVisible();
     });
 
-    test('a notice of 200 characters takes two lines at most; the whole text is its tooltip', async ({ page }) => {
+    test('a question of 200 characters: the sheet\'s item stays one short line, the question itself is in what the research knows (spec 065 round 2)', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         const text = 'Which parish kept the record of his baptism: the register of Voss says nothing, the emigrant list names Bergen, and the census of 1870 gives a third place altogether.';
@@ -248,12 +248,14 @@ test.describe('phone 360 × 640', () => {
             window.Strom.TreeRenderer.render();
         }, [id, text.padEnd(200, '.')]);
         await card(page, 'Jan').click();
-        const signal = page.locator('.bottom-sheet-person .menu-signal-text');
-        await expect(signal).toHaveAttribute('title', `Question: ${text.padEnd(200, '.')}`);
-        // Two lines of the notice's text, not more (one line ≈ 1.2–1.5 × the font size).
-        const geo = await signal.evaluate((el) => ({ height: el.getBoundingClientRect().height, font: parseFloat(getComputedStyle(el).fontSize) }));
-        expect(geo.height).toBeGreaterThan(geo.font * 2);
-        expect(geo.height).toBeLessThanOrEqual(geo.font * 3.2);
+        const item = page.locator('.bottom-sheet-person .menu-act[data-action="signal-knows"]');
+        await expect(item.locator('.menu-act-text')).toHaveText('What the research knows · 1 question ›');
+        const geo = await item.locator('.menu-act-text').evaluate((el) => ({ height: el.getBoundingClientRect().height, font: parseFloat(getComputedStyle(el).fontSize) }));
+        expect(geo.height).toBeLessThanOrEqual(geo.font * 1.6);
+        await item.click();
+        const question = page.locator('#person-research-modal .person-research-question');
+        await expect(question).toHaveText(text.padEnd(200, '.'));
+        await expect(question).toBeFocused();
     });
 });
 

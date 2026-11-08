@@ -2,10 +2,10 @@ import { test, expect, Page, Locator } from '@playwright/test';
 import { openApp, card, cardAction, personModal } from './helpers.js';
 
 /**
- * The text of a reliability pill opens right at the pill and on screen: under
- * the pill's own row in the person card's long list of events (not under the
- * whole section, off screen), under the occupation field's label as before,
- * and under its row in the relationships panel. Invented data.
+ * The status tip of a reliability pill opens right at the pill and on screen:
+ * a floating bubble under the pill (above it when there is no room below) in
+ * the person card's long list of events, at the occupation field's label and
+ * in the relationships panel; the dialog's scroll never clips it. Invented data.
  */
 
 function ged(): string {
@@ -46,21 +46,25 @@ async function setup(page: Page): Promise<void> {
     await expect(card(page, 'Bonifác')).toBeVisible();
 }
 
-/** A click on the pill: its text right under `row` (less than one row's height away) and inside the viewport. */
-async function expectTipUnder(page: Page, pill: Locator, row: Locator, what: string): Promise<void> {
+/** A click on the pill: its tip right at the pill (under it, or above it without room) and inside the viewport. */
+async function expectTipAt(page: Page, pill: Locator, what: string): Promise<void> {
     await pill.scrollIntoViewIfNeeded();
     await pill.click();
-    const tip = page.locator('#fact-status-tip');
+    const tip = page.locator('#status-tip');
     await expect(tip).toBeVisible();
     await expect(pill).toHaveAttribute('aria-expanded', 'true');
-    const r = (await row.boundingBox())!;
+    // In the page's top layer: never inside the dialog's scrolling body.
+    expect(await tip.evaluate((el) => el.parentElement === document.body), `${what}: the tip floats`).toBe(true);
+    const p = (await pill.boundingBox())!;
     const t = (await tip.boundingBox())!;
-    const gap = t.y - (r.y + r.height);
-    expect(gap, `${what}: the text below its row`).toBeGreaterThanOrEqual(-1);
-    expect(gap, `${what}: the text right under its row`).toBeLessThan(r.height);
+    const below = t.y - (p.y + p.height);
+    const above = p.y - (t.y + t.height);
+    expect(Math.min(Math.abs(below - 8), Math.abs(above - 8)), `${what}: the tip right at its pill`).toBeLessThanOrEqual(2);
     const vp = page.viewportSize()!;
-    expect(t.y, `${what}: the text on screen`).toBeGreaterThanOrEqual(0);
-    expect(t.y + t.height, `${what}: the text on screen`).toBeLessThanOrEqual(vp.height);
+    expect(t.y, `${what}: the tip on screen`).toBeGreaterThanOrEqual(0);
+    expect(t.y + t.height, `${what}: the tip on screen`).toBeLessThanOrEqual(vp.height);
+    expect(t.x, `${what}: the tip on screen`).toBeGreaterThanOrEqual(0);
+    expect(t.x + t.width, `${what}: the tip on screen`).toBeLessThanOrEqual(vp.width);
     await pill.click();
     await expect(tip).toHaveCount(0);
 }
@@ -69,38 +73,30 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]
     test.describe(`the pill's text on a ${name}`, () => {
         test.use({ viewport: { width, height } });
 
-        test('in the list of events: under the row of the pill', async ({ page }) => {
+        test('in the list of events: at the pill of the row', async ({ page }) => {
             await setup(page);
             await cardAction(page, 'Bonifác', 'edit');
             const modal = personModal(page);
             const rows = modal.locator('#events-list .event-row');
             expect(await rows.count()).toBeGreaterThanOrEqual(10);
-            for (const i of [1, 4]) {
+            for (const i of [1, 4, 11]) {
                 const row = rows.nth(i);
-                await expectTipUnder(page, row.locator('.fact-status'), row, `event row ${i + 1}`);
+                await expectTipAt(page, row.locator('.fact-status'), `event row ${i + 1}`);
             }
         });
 
-        test('at the occupation field: under its label, as before', async ({ page }) => {
+        test('at the occupation field: at its label\'s pill', async ({ page }) => {
             await setup(page);
             await cardAction(page, 'Bonifác', 'edit');
             const modal = personModal(page);
-            const label = modal.locator('label[for="input-occupation"]');
-            const pill = label.locator('.fact-status');
+            const pill = modal.locator('label[for="input-occupation"] .fact-status');
             await expect(pill).toHaveCount(1);
-            // The text goes into the field's group, under the field (the field is the row here).
-            const group = label.locator('xpath=..');
-            await pill.scrollIntoViewIfNeeded();
-            await pill.click();
-            const tip = page.locator('#fact-status-tip');
-            await expect(tip).toBeVisible();
-            expect(await tip.evaluate((el) => el.parentElement?.classList.contains('form-group'))).toBe(true);
-            await pill.click();
-            await expect(tip).toHaveCount(0);
-            await expectTipUnder(page, pill, group.locator('#input-occupation'), 'occupation');
+            await expectTipAt(page, pill, 'occupation');
+            // A click on the pill never focuses the label's field.
+            await expect(modal.locator('#input-occupation')).not.toBeFocused();
         });
 
-        test('in the relationships panel: under the wedding\'s and the divorce\'s row', async ({ page }) => {
+        test('in the relationships panel: at the wedding\'s and the divorce\'s pill', async ({ page }) => {
             await setup(page);
             const id = await page.evaluate(() =>
                 window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Bonifác')!.id);
@@ -108,8 +104,7 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]
             const modal = page.locator('#relationships-modal');
             await expect(modal).toBeVisible();
             for (const cls of ['.pg-label-start', '.pg-label-end']) {
-                const row = modal.locator('.pg-row').filter({ has: page.locator(cls) });
-                await expectTipUnder(page, row.locator(`${cls} .fact-status`), row, `relationships ${cls}`);
+                await expectTipAt(page, modal.locator(`.pg-row ${cls} .fact-status`).first(), `relationships ${cls}`);
             }
         });
     });

@@ -408,3 +408,77 @@ for (const width of [1440, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 }
+
+/**
+ * Touch (spec 065 round 2, §9): the areas a finger hits on the fullest card,
+ * the tree at 100 %, probed point by point with elementFromPoint — C the badge
+ * 32 × 32, D the status mark 44 × 32 in the bottom-right corner (the story's
+ * corner gives its taps to it), E ⇄ 40 × 32 below the card, B the lock 28 × 24;
+ * each area whole, none over another.
+ */
+test.describe('touch: the marks\' areas', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('C, D, E and B take a finger each and keep apart in every type with an avatar', async ({ page }) => {
+        await fullestCard(page, 390);
+        const vaclav = card(page, 'Václav');
+        for (const type of ['normal', 'detailed', 'register', 'custom']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), type);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', type);
+            await vaclav.evaluate((el) => {
+                const c = el as HTMLElement;
+                window.Strom.ZoomPan.centerOnPerson(c.dataset.id as never);
+                const wx = parseFloat(c.style.left) + c.offsetWidth / 2;
+                const wy = parseFloat(c.style.top) + c.offsetHeight / 2;
+                window.Strom.ZoomPan.zoomAroundWorldPoint(wx, wy, 1, 0, (t: number) => t);
+            });
+            await expect.poll(() => vaclav.evaluate((el) => {
+                const r = el.getBoundingClientRect();
+                return r.left >= 14 && r.right <= window.innerWidth - 14 ? 'in view' : `${r.left}–${r.right}`;
+            }), `${type}: the card in view`).toBe('in view');
+            await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
+            await expect(vaclav.locator('.card-signal')).toBeVisible();
+            const areas = await vaclav.evaluate((el) => {
+                const r = el.getBoundingClientRect();
+                const out: Record<string, { n: number; l: number; r: number; t: number; b: number }> = {};
+                // The edge's pills (▸ children, ∞ …) are controls of their own over the card's top
+                // and bottom edge: where one stands, a mark's area gives way to it.
+                const pills: [number, number][] = [];
+                for (let y = Math.floor(r.top - 30); y <= r.bottom + 45; y++) {
+                    for (let x = Math.floor(r.left - 30); x <= r.right + 30; x++) {
+                        const hit = document.elementFromPoint(x + 0.5, y + 0.5);
+                        const m = hit?.closest<HTMLElement>('[data-mark]');
+                        if (!m && hit?.closest('.card-edge')) pills.push([x, y]);
+                        if (!m || !el.contains(m)) continue;
+                        const k = m.dataset.mark!;
+                        const a = out[k] ??= { n: 0, l: x, r: x, t: y, b: y };
+                        a.n++; a.l = Math.min(a.l, x); a.r = Math.max(a.r, x); a.t = Math.min(a.t, y); a.b = Math.max(a.b, y);
+                    }
+                }
+                return Object.fromEntries(Object.entries(out).map(([k, a]) => {
+                    const w = a.r - a.l + 1, h = a.b - a.t + 1;
+                    const pill = pills.filter(([x, y]) => x >= a.l && x <= a.r && y >= a.t && y <= a.b).length;
+                    return [k, { l: a.l, t: a.t, w, h, fill: a.n / (w * h - pill) }];
+                }));
+            });
+            const want: Record<string, [number, number]> = { badge: [32, 32], status: [44, 32], cross: [40, 32], lock: [28, 24] };
+            for (const [k, [w, h]] of Object.entries(want)) {
+                const a = areas[k];
+                expect(a, `${type}: ${k} takes a tap (${JSON.stringify(areas)})`).toBeTruthy();
+                expect(a.w, `${type}: ${k} wide enough`).toBeGreaterThanOrEqual(w - 1);
+                expect(a.h, `${type}: ${k} high enough`).toBeGreaterThanOrEqual(h - 1);
+                expect(a.fill, `${type}: ${k} whole, nothing over it`).toBeGreaterThanOrEqual(0.85);
+            }
+            // The story's corner gives its taps to the status mark (one tip with a story row).
+            expect(areas.story, `${type}: the story under the status mark's area`).toBeUndefined();
+            const keys = Object.keys(want);
+            for (let i = 0; i < keys.length; i++) {
+                for (let k = i + 1; k < keys.length; k++) {
+                    const a = areas[keys[i]], b = areas[keys[k]];
+                    const meet = a.l < b.l + b.w && b.l < a.l + a.w && a.t < b.t + b.h && b.t < a.t + a.h;
+                    expect(meet, `${type}: ${keys[i]} × ${keys[k]}`).toBe(false);
+                }
+            }
+        }
+    });
+});

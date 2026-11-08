@@ -374,6 +374,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     ZoomPan.init();
     // A touch tap on a card beside its edge pills stays the card's
     installCardTapTarget();
+    // The status tip of every reliability pill and card mark
+    UI.installStatusTipHost();
 
     // Overview minimap (wires ZoomPan.onChange + canvas handlers)
     UI.initMinimap();

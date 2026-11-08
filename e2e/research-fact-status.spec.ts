@@ -53,7 +53,7 @@ test.describe('the research\'s status of a fact', () => {
         await expect(rows.filter({ hasText: 'Birth' }).locator('.fact-status')).toHaveText('Lead');
         await expect(rows.filter({ hasText: 'Occupation' }).locator('.fact-status')).toHaveText('Probable');
         await expect(rows.filter({ hasText: 'Death' }).locator('.fact-status')).toHaveText('Proven');
-        await expect(rows.filter({ hasText: 'Birth' }).locator('.fact-status')).toHaveAttribute('title', /as the research holds this fact/);
+        await expect(rows.filter({ hasText: 'Birth' }).locator('.fact-status')).toHaveAttribute('aria-label', /as the research holds this fact/);
     });
 
     test('a value the app does not know shows no label', async ({ page }) => {

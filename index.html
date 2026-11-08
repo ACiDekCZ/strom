@@ -3502,15 +3502,13 @@
         .bottom-sheet.bottom-sheet-person { max-height: calc(100dvh - 16px); }
         .bottom-sheet-person .bottom-sheet-handle { margin-bottom: 6px; }
         .bottom-sheet-person .bottom-sheet-section { padding-top: 8px; }
-        .bottom-sheet-person .bottom-sheet-items .menu-signal { margin: 2px 12px 6px; }
-        .bottom-sheet-person .bottom-sheet-items .menu-person-state .menu-signal { margin: 0; width: 100%; }
         @media (hover: hover) { .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); } }
         .bottom-sheet-person .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* A phone (spec 066 P4 §9): the person sheet's rows 48px, either way up
            (the tiles, the chips and the marks block's links keep their own
            size; a tablet keeps 44px). */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .bottom-sheet-person .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(.mps-link) { min-height: 48px; }
+            .bottom-sheet-person .bottom-sheet-item:not(.sheet-tile):not(.menu-chip) { min-height: 48px; }
         }
         /* A phone held sideways: the person sheet is a 360px panel at the
            right over the whole height, scrolling; the tree stays in view to
@@ -8522,9 +8520,10 @@
             top: 5px;
             right: 6px;
             font-size: 10px;
-            opacity: 0.5;
+            line-height: 0;
             pointer-events: none;
         }
+        .lock-icon > svg { opacity: 0.5; }
         body.tree-locked .add-person-round { display: none !important; }
         body.tree-locked .toolbar-buttons button[onclick*="showAddPersonModal"],
         body.tree-locked #toolbar-family-btn { display: none !important; }
@@ -12560,6 +12559,9 @@
             animation: agSpin 1.4s linear infinite;
         }
         .card-agent { inset: -4px; z-index: 1; }
+        /* The agent's mark (its bubble, a click follows the research): the arc's box around the avatar. */
+        .card-agent-mark { position: absolute; inset: -4px; z-index: 1; border-radius: 50%; cursor: pointer; }
+        .card-agent-mark > .card-agent { inset: 0; }
         .card-agent-dot {
             display: none; top: -5px; right: -5px; z-index: 2; width: 12px; height: 12px;
             background: var(--surface);
@@ -12599,7 +12601,7 @@
         #tree-canvas.zoom-far .person-card.has-status > .card-edge.edge-bottom-right { right: max(40px, calc(9px + 17px / var(--tree-zoom, 1))); }
         #tree-canvas.zoom-far .person-card > .lock-icon { display: none; }
         #tree-canvas.zoom-tiny .person-card > .card-edge, #tree-canvas.zoom-tiny .card-agent-dot { display: none; }
-        #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far .card-agent { display: none; }
+        #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far :is(.card-agent, .card-agent-mark) { display: none; }
         #tree-canvas.zoom-far .card-signal-dot, #tree-canvas.zoom-far .card-agent-dot {
             display: block;
             width: max(12px, calc(8px * var(--zoom-inv, 1)));
@@ -12613,7 +12615,72 @@
             border-radius: 50%; border: 2px solid color-mix(in srgb, var(--primary) 18%, transparent);
             border-top-color: var(--primary); border-right-color: var(--primary);
         }
-        .menu-signal .agent-mark { width: 14px; height: 14px; margin: 2px; }
+        /* Each mark of the card has its own bubble (spec 066 P4 §5 round 2): a header, a line or
+           two, what a click does. A mouse over the mark (or the keyboard's focus on the badge)
+           shows it and the card's bubble steps aside; the top marks (badge, agent, lock) open
+           above, the bottom ones (story; ⇄ and the sibling order below the card) below. The
+           status mark has the status tip (status-tip.ts). Mouse areas: status 26 × 20, story
+           20 × 20, badge 20 × 20 (24 by its ::before), lock 14 × 14, ⇄ and the order their pill. */
+        .mark-tip { min-width: 180px; }
+        .mark-tip > :is(.badge-tooltip-header, .badge-tooltip-body, .badge-tooltip-action) { display: block; }
+        .mark-tip > .badge-tooltip-body { color: var(--text); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+        .mark-tip > .badge-tooltip-body + .badge-tooltip-body { margin-top: 2px; color: var(--text-light); font-size: 11.5px; }
+        .card-avatar-wrap > .mark-tip { left: calc(100% - 3px); }
+        .person-card > .mark-tip.mt-lock { left: auto; right: -4px; transform: none; }
+        .person-card > .mark-tip.mt-lock::after { left: auto; right: 12px; }
+        .person-card > .mark-tip.mt-story { left: auto; right: -8px; transform: none; }
+        .person-card > .mark-tip.mt-story::after { left: auto; right: 12px; }
+        .so-tip > :is(.badge-tooltip-header, .badge-tooltip-body) { display: block; }
+        .so-tip > .badge-tooltip-body { color: var(--text); }
+        /* ⇄ on the bottom edge: its bubble below the card too. */
+        .edge-bottom-right .cross-tree-badge .cross-tree-tooltip { bottom: auto; top: 100%; margin: 8px 0 0; }
+        .edge-bottom-right .cross-tree-badge .cross-tree-tooltip::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
+        #tree-canvas .person-card > .lock-icon[data-mark] { pointer-events: auto; z-index: 2; }
+        #tree-canvas .person-card > .lock-icon[data-mark]::before {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%);
+        }
+        #tree-canvas .person-card > .card-story[data-mark] { pointer-events: auto; cursor: pointer; }
+        #tree-canvas .person-card > .card-story[data-mark]::before { content: ''; position: absolute; inset: -3px; }
+        #tree-canvas .person-card > .card-status-mark[data-mark] { pointer-events: auto; cursor: pointer; }
+        #tree-canvas .person-card > .card-status-mark[data-mark]::before {
+            content: ''; position: absolute; top: 50%; right: -4px; width: 26px; height: 20px; transform: translateY(-50%);
+        }
+        /* Beside the story's corner: the area stops where the corner's begins. */
+        #tree-canvas .person-card.has-story > .card-status-mark[data-mark]::before { right: 1px; }
+        #tree-canvas .person-card > .card-status-mark.st-pinned { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .person-card > [data-mark]:is(:hover, :focus-visible) + .mark-tip,
+            .card-avatar-wrap > [data-mark]:is(:hover, :focus-visible) + .mark-tip { display: block; }
+            .person-card:has([data-mark]:hover) .card-tooltip {
+                opacity: 0 !important; visibility: hidden !important; transition: none !important;
+            }
+        }
+        /* Touch (§9 round 2): a tap on a mark opens its bubble; the areas a finger hits, none over another:
+           C the badge 32 × 32 (the agent: the avatar), D 44 × 32 in the card's bottom-right corner (the
+           status mark's, with the story in its tip; the story's own without a status mark), E ⇄ and the
+           order below the card (their pills' areas), B the lock 28 × 24. */
+        @media (pointer: coarse) {
+            .card-signal::before { inset: -9px; border-radius: 0; }  /* 14px inside the border + 18 = 32 */
+            #tree-canvas .person-card > .lock-icon[data-mark]::before { width: 28px; height: 24px; }
+            /* D from 33px inside the card's right edge to 11px out of it and down to the card's
+               bottom edge: clear of the bottom edge's pills, which end 40px before the corner
+               (their areas right-aligned below). */
+            #tree-canvas .person-card > .card-status-mark[data-mark]::before,
+            #tree-canvas .person-card.has-story > .card-status-mark[data-mark]::before {
+                top: auto; bottom: -8px; right: -16px; width: 44px; height: 32px; transform: none;
+            }
+            #tree-canvas .person-card.has-story > .card-status-mark[data-mark]::before { right: -26px; }
+            #tree-canvas .person-card.has-status > .card-story[data-mark] { pointer-events: none; }
+            #tree-canvas .person-card:not(.has-status) > .card-story[data-mark]::before { inset: auto; right: 0; bottom: 0; width: 44px; height: 32px; }
+            .card-edge > .sibling-order-pill { position: relative; }
+            .edge-bottom-right > :is(.cross-tree-badge, .sibling-order-pill)::before {
+                content: ''; position: absolute; z-index: -1; left: auto; right: 0; top: 50%;
+                width: 100%; min-width: 40px; height: 32px; transform: none;
+            }
+        }
+        /* Zoomed far out the marks are too small to point at: the card's. */
+        #tree-canvas.zoom-far .person-card > :is(.card-status-mark, .card-story)[data-mark] { pointer-events: none; }
+
         /* Tooltip rows: evidence, story, then what waits. */
         .card-tooltip .tt-signals { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
         .card-tooltip .tt-story, .card-tooltip .tt-agent, .card-tooltip .tt-cross { display: flex; align-items: center; gap: 6px; }
@@ -12628,63 +12695,28 @@
         /* Printing the page (spec 066 P4 §7): the status mark and the story's
            fold, at their own size whatever the zoom; the badges, the agent
            and the lock stay on screen. */
-        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-dot, .person-card > .lock-icon) { display: none !important; }
+        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip) { display: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-story { display: block !important; }
         @media print {
-            .card-signal, .card-signal-dot, .card-agent, .card-agent-dot, .person-card > .lock-icon { display: none !important; }
+            .card-signal, .card-signal-dot, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip { display: none !important; }
             #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
             #tree-canvas .person-card > .card-story { display: block !important; }
         }
 
-        /* Person menu: its first block explains the card's marks (spec 066 P4 §5),
-           with the bubble's rows; the line under it parts it from the actions. */
-        .menu-person-state {
-            display: flex; flex-direction: column; gap: 6px;
-            margin: 0 0 6px; padding: 8px 12px; font-size: 13px; color: var(--text-light);
-            background: var(--surface-2); border-bottom: 1px solid var(--border);
-        }
-        .mps-row { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; align-items: start; }
-        .mps-row .mps-mark { display: flex; justify-content: center; padding-top: 2px; }
-        .mps-row > .mps-link { grid-column: 2; }
-        .menu-person-state .menu-signal { margin: 0; }
-        /* The block's links: plain text links in the app (no mark), full height to tap. */
-        .menu-person-state .mps-link {
-            justify-content: flex-start; width: auto; min-height: 28px; padding: 2px 0; margin: 0;
-            background: none; color: var(--primary-dark); font-size: 13px; font-weight: 600;
-        }
-        .menu-person-state > .mps-link { align-self: flex-start; font-weight: 400; }
-        .bottom-sheet-person .menu-person-state { margin: 0 -8px 6px; padding: 10px 24px; }
-        .bottom-sheet-person .menu-person-state .mps-link { min-height: 44px; font-size: 14px; }
-        @media (hover: hover) { .menu-person-state .mps-link:hover { background: none; text-decoration: underline; } }
-        .menu-person-state .mps-link:focus { background: none; text-decoration: underline; }
-        .menu-signal {
-            display: flex; align-items: center; gap: 8px;
-            margin: 4px 8px 6px; padding: 8px 10px; min-height: 36px; box-sizing: border-box;
-            background: var(--warning-soft); color: var(--warning-text);
-            border-radius: 10px; font-size: 13px; text-align: left; width: auto;
-        }
-        .bottom-sheet-items .menu-signal { min-height: 44px; margin: 4px 12px 8px; width: calc(100% - 24px); border: 0; }
-        .menu-signal.menu-signal-agent { background: var(--primary-soft); color: var(--primary-dark); }
+        /* Person menu: its first items are what there is to do about the card's marks
+           (spec 066 P4 §5 round 2), ordinary items with the mark's glyph in front. */
+        .menu-act { display: flex; align-items: center; }
+        /* The badge's glyph in a menu line or the legend: the card's round badge. */
         .menu-signal-glyph {
-            flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%;
+            flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
             display: inline-flex; align-items: center; justify-content: center;
             background: var(--signal-warn); color: var(--on-signal-warn); font-weight: 700; font-size: 11px;
         }
-        /* Two lines at most; the whole text is in the tooltip and behind the link. */
-        .menu-signal-text {
-            flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
-            display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
-        }
-        .menu-signal-go { flex: 0 0 auto; font-weight: 600; white-space: nowrap; }
-        /* In the person menu (one width) the link goes under the text, level with it. */
-        .person-menu .menu-signal, .bottom-sheet-person .menu-signal {
-            display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: start;
-        }
-        .person-menu .menu-signal > :first-child, .bottom-sheet-person .menu-signal > :first-child { grid-row: span 2; margin-top: 1px; }
-        .person-menu .menu-signal-go, .bottom-sheet-person .menu-signal-go { grid-column: 2; justify-self: start; }
-        .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }
-        @media (hover: hover) { .context-menu-item.menu-signal:hover { background: var(--warning-soft); filter: brightness(0.97); } }
+        .menu-act-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .menu-act > .menu-signal-glyph, .menu-act > .menu-act-glyph, .menu-act > .agent-mark, .menu-act > .card-story { flex: 0 0 auto; }
+        .menu-act > .agent-mark { width: 14px; height: 14px; margin: 2px; }
+        .menu-act-glyph { min-width: 18px; text-align: center; color: var(--text-light); font-size: 13px; }
 
         /* Settings → "Show on card": options left, preview card right. */
         .card-signals-settings { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
@@ -19095,6 +19127,10 @@
         /* "What the research knows". */
         .person-research-body { display: flex; flex-direction: column; gap: 14px; }
         .person-research-section .menu-section-header { padding: 0 0 6px; margin: 0; }
+        /* The person's open question (the card's "?"), first in the dialog. */
+        .person-research-question { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; border-radius: 4px; }
+        .person-research-question:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .person-research-question:focus:not(:focus-visible) { outline: none; }
         .person-research-section-head { display: flex; align-items: center; padding: 0 0 6px; }
         .person-research-section-head > .menu-section-header { flex: 1 1 auto; min-width: 0; padding: 0; overflow-wrap: anywhere; }
         .person-research-conflict {
@@ -21747,20 +21783,80 @@
         @media (min-width: 641px) and (max-width: 1024px) {
             .fact-status, .modal button.fact-status { margin-left: 5px; }
         }
-        /* The pill's text on a tap (touch) or a click: under its row, with the way into the help. */
-        .fact-status-tip {
-            max-width: 340px; box-sizing: border-box; margin: 6px 0 2px; padding: 9px 12px;
-            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
-            box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.45; text-align: left; white-space: normal;
+        /* The status tip (src/ui/status-tip.ts): one floating bubble for a fact's pill, the
+           origin row's pill and the tree card's status mark — the step, its sentence, what it
+           applies to, the sources cited at it, the way into the help. Appended to the body
+           and fixed (a dialog's scroll and mask never clip it), under its mark, its right
+           edge at the mark's, its arrow at --st-arrow-x; above the mark without room below. */
+        .status-tip {
+            position: fixed; z-index: 10050; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px);
+            max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto;
+            padding: 10px 12px; background: var(--surface); color: var(--text-light);
+            border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans); font-size: 12.5px; font-weight: normal; line-height: 1.45;
+            text-align: left; white-space: normal; overflow-wrap: anywhere;
         }
-        .fact-status-tip-head { font-weight: 600; }
-        .fact-status-tip-body { color: var(--text-light); overflow-wrap: anywhere; }
-        .fact-status-tip .fact-status-tip-help, .modal .fact-status-tip button.fact-status-tip-help {
-            display: inline-flex; align-items: center; margin: 4px 0 0; padding: 0; min-height: 0; width: auto;
+        .status-tip[hidden] { display: none; }
+        .status-tip::before {
+            content: ''; position: absolute; top: -5px; left: var(--st-arrow-x, 50%); width: 8px; height: 8px; margin-left: -4px;
+            background: var(--surface); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg);
+        }
+        .status-tip.st-above::before { top: auto; bottom: -5px; transform: rotate(225deg); }
+        /* The pointer crosses the gap to the tip without closing it (a mouse). */
+        .status-tip::after { content: ''; position: absolute; left: 0; right: 0; top: -9px; height: 9px; }
+        .status-tip.st-above::after { top: auto; bottom: -9px; }
+        .status-tip .st-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .status-tip .st-head .fact-status { margin: 0; height: 16px; padding: 0 5px; flex: none; }
+        .status-tip .st-head .card-status-mark { position: static; flex: none; }
+        .status-tip .st-sentence { color: var(--text); font-size: 12.5px; }
+        .status-tip .st-applies { margin-top: 3px; color: var(--text-light); font-size: 12px; }
+        .status-tip .st-reason:not([hidden]) { margin-top: 6px; }
+        .status-tip .st-sources { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--divider); }
+        .status-tip .st-src-head {
+            margin-bottom: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint);
+        }
+        .status-tip .st-src-none { color: var(--text-faint); font-size: 12px; }
+        .status-tip .st-src, .modal .status-tip button.st-src {
+            display: flex; align-items: flex-start; gap: 7px; width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 4px 4px;
+            border: 0; border-radius: 6px; background: none; box-shadow: none; font: inherit; color: var(--text);
+            text-align: left; cursor: pointer;
+        }
+        .status-tip .st-src-icon { flex: none; margin-top: 1px; color: var(--text-faint); display: inline-flex; }
+        .status-tip .st-src-text { display: flex; flex-direction: column; min-width: 0; }
+        .status-tip .st-src-title { color: var(--primary); font-weight: 500; }
+        .status-tip .st-src-sub { color: var(--text-faint); font-size: 11.5px; }
+        .status-tip .st-link, .modal .status-tip button.st-link {
+            display: inline-flex; align-items: center; width: auto; min-width: 0; min-height: 0; margin: 4px 0 0; padding: 0;
             border: 0; background: none; box-shadow: none; font: inherit; font-weight: 500; color: var(--primary);
-            text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+            text-decoration: underline; text-underline-offset: 2px; text-align: left; cursor: pointer;
         }
-        @media (pointer: coarse) { .fact-status-tip .fact-status-tip-help, .modal .fact-status-tip button.fact-status-tip-help { min-height: 44px; } }
+        .status-tip .st-more { display: flex; margin-top: 2px; padding-left: 4px; }
+        .status-tip .st-story { display: flex; margin-top: 8px; }
+        /* The actions an extension puts in (spec 065 round 3). */
+        .status-tip .st-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .status-tip .st-acts[hidden] { display: none; }
+        .status-tip .st-help { display: flex; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--divider); width: 100%; text-decoration: none; }
+        .status-tip :is(.st-src, .st-link):focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .status-tip .st-src:hover { background: var(--surface-2); }
+            .status-tip .st-link:hover { text-decoration-thickness: 2px; }
+        }
+        /* A card mark's words by touch (the mark's action as a button). */
+        .status-tip .st-body { color: var(--text); }
+        .status-tip .st-body .tt-sub, .status-tip .st-body .badge-tooltip-item { color: var(--text-light); }
+        .status-tip .st-mark-action { display: flex; margin-top: 8px; }
+        /* The pill or mark it is pinned to. */
+        button.fact-status.st-pinned { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) {
+            .status-tip .st-src, .modal .status-tip button.st-src { min-height: 44px; align-items: center; }
+            .status-tip .st-link, .modal .status-tip button.st-link { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .status-tip { width: calc(100vw - 32px); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .status-tip { width: 320px; }
+        }
         /* The person card: where its facts came from, under the person's header. */
         .person-origin {
             display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
@@ -21769,10 +21865,8 @@
         }
         .person-origin[hidden] { display: none; }
         .person-origin .fact-status { margin-left: 0; }
-        .person-origin + .fact-status-tip { margin: 6px 24px; }
         @media (max-width: 640px) {
             .person-origin { padding: 9px 16px; }
-            .person-origin + .fact-status-tip { margin: 6px 16px; }
         }
         /* "Originally from the family tree:" under a fact the research changed,
            its Revert, a refusal under it, the research's proposal in a box
@@ -22136,9 +22230,9 @@
             background: var(--primary-soft); color: var(--primary-dark);
         }
         :is(.context-menu-item, .bottom-sheet-item):has(> .menu-item-kind[data-kind="placeOpen"]) .menu-item-kind { color: var(--primary-dark); }
-        .context-menu:has(.menu-item-kind) > .context-menu-item:not(:has(> .menu-item-kind)),
+        .context-menu:has(.menu-item-kind) > .context-menu-item:not(.menu-act):not(:has(> .menu-item-kind)),
         .context-menu:has(.menu-item-kind) > .menu-section-header { padding-left: 44px; }
-        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(.mps-link):not(:has(> .menu-item-kind)),
+        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(.menu-act):not(:has(> .menu-item-kind)),
         .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-section { padding-left: 46px; }
         /* A nested expansion's "◎ Focus on …" under its "Hide … shown here" row (§6). */
         .bottom-sheet-item[data-action="nested-focus"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
@@ -22534,6 +22628,8 @@
         @media (hover: hover) { .person-source-row:hover { background: var(--surface-2); } }
         .person-source-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .person-source-row.is-new { animation: person-source-new 1.2s ease-out; }
+        /* The sources of the fact a status tip came from. */
+        .person-source-row.is-focus { background: var(--accent-soft, var(--surface-2)); box-shadow: inset 3px 0 0 var(--accent, var(--primary)); }
         @keyframes person-source-new { from { background: var(--primary-soft); } to { background: transparent; } }
         @media (prefers-reduced-motion: reduce) { .person-source-row.is-new { animation: none; } }
         .person-source-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

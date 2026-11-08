@@ -10,7 +10,8 @@ import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, ca
  * P4 §1) shows the weakest step after an import and the citations in a tree
  * of the app's own; on a phone a tap opens and closes the mark's text; a
  * research tree with origin shows a person's confirmation and proven facts.
- * Invented data.
+ * The status tip names the sources cited at the fact: one, three of five and
+ * the rest behind a link, none (spec 065 round 2). Invented data.
  */
 
 function writeGedcom(testInfo: TestInfo, cited = false): string {
@@ -200,14 +201,15 @@ test.describe('the mark on a phone', () => {
         expect(box.height).toBeLessThanOrEqual(20);
 
         await pill.tap();
-        const tip = page.locator('#fact-status-tip');
+        const tip = page.locator('#status-tip');
         await expect(tip).toBeVisible();
-        await expect(tip).toContainText('From the family tree (unverified)');
-        await expect(tip.locator('.fact-status-tip-help')).toHaveText('What the marks mean');
+        await expect(tip.locator('.st-head')).toContainText('From the family tree (unverified)');
+        await expect(tip.locator('.st-help')).toHaveText('What the marks mean');
         await expect(pill).toHaveAttribute('aria-expanded', 'true');
         const tipBox = (await tip.boundingBox())!;
-        expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(390);
-        expect((await tip.locator('.fact-status-tip-help').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect(tipBox.x).toBeGreaterThanOrEqual(16);
+        expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(390 - 16);
+        expect((await tip.locator('.st-help').boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
         await pill.tap();
         await expect(tip).toHaveCount(0);
@@ -218,5 +220,119 @@ test.describe('the mark on a phone', () => {
         await modal.locator('.pm-header').tap({ position: { x: 10, y: 10 } });
         await expect(tip).toHaveCount(0);
         await expect(modal).toBeVisible();
+    });
+});
+
+/** A research tree: the birth cited in five records, the death in one of them, the burial in none. */
+function citedGed(): string {
+    const src = (n: number) => [`0 @S${n}@ SOUR`, `1 TITL Matrika Dolní Bramborov ${1840 + n}`, `1 REFN S00${n}`];
+    return [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        ...[1, 2, 3, 4, 5].flatMap(src),
+        '0 @I1@ INDI', '1 NAME Bonifác /Kvapilík/', '1 SEX M', '1 REFN P0001',
+        '1 BIRT', '2 DATE 3 FEB 1850', '2 _STROM_STATUS probable', ...[1, 2, 3, 4, 5].map(n => `2 SOUR @S${n}@`),
+        '1 DEAT', '2 DATE 1912', '2 _STROM_STATUS probable', '2 SOUR @S1@',
+        '1 BURI', '2 DATE 1912', '2 _STROM_STATUS possible',
+        '0 TRLR',
+    ].join('\n');
+}
+
+async function dropCited(page: Page): Promise<void> {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    const dataTransfer = await page.evaluateHandle((content) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([content], 'kvapilik.ged', { type: 'text/plain' }));
+        return dt;
+    }, citedGed());
+    for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
+    await expect(card(page, 'Bonifác')).toBeVisible();
+}
+
+test.describe('the status tip names the sources (spec 065 round 2)', () => {
+    test('one source: its link; five: three and "and 2 more ›"; none: "No source"', async ({ page }) => {
+        await dropCited(page);
+        await cardAction(page, 'Bonifác', 'edit');
+        const modal = personModal(page);
+        const rows = modal.locator('#events-list .event-row');
+        const tip = page.locator('#status-tip');
+        const pillOf = (what: string) => rows.filter({ hasText: what }).locator('.fact-status').first();
+
+        await pillOf('Death').click();
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-src-head')).toHaveText('Source');
+        await expect(tip.locator('.st-src .st-src-title')).toHaveText(['Matrika Dolní Bramborov 1841']);
+        await expect(tip.locator('.st-more')).toHaveCount(0);
+        // No native title on the pill: the words are the tip's.
+        await expect(pillOf('Death')).not.toHaveAttribute('title', /.*/);
+        await pillOf('Death').click();
+        await expect(tip).toHaveCount(0);
+
+        await pillOf('Birth').click();
+        await expect(tip.locator('.st-src-head')).toHaveText('Sources (5)');
+        await expect(tip.locator('.st-src')).toHaveCount(3);
+        await expect(tip.locator('.st-more')).toHaveText('and 2 more ›');
+        await pillOf('Birth').click();
+        await expect(tip).toHaveCount(0);
+
+        await pillOf('Burial').click();
+        await expect(tip.locator('.st-src')).toHaveCount(0);
+        await expect(tip.locator('.st-src-none')).toHaveText('No source');
+        // Esc closes the tip and gives the focus back to its pill.
+        await page.keyboard.press('Escape');
+        await expect(tip).toHaveCount(0);
+        await expect(pillOf('Burial')).toBeFocused();
+        await expect(modal).toBeVisible();
+    });
+
+    test('a source\'s link opens it in the source viewer; "and 2 more ›" the person\'s sources at those records', async ({ page }) => {
+        await dropCited(page);
+        await cardAction(page, 'Bonifác', 'edit');
+        const modal = personModal(page);
+        const birth = modal.locator('#events-list .event-row').filter({ hasText: 'Birth' }).locator('.fact-status').first();
+        const tip = page.locator('#status-tip');
+        await birth.click();
+        await tip.locator('.st-src').first().click();
+        await expect(tip).toHaveCount(0);
+        await expect(page.locator('#source-viewer-modal')).toHaveClass(/active/);
+        await expect(page.locator('#source-viewer-modal')).toContainText('Matrika Dolní Bramborov');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#source-viewer-modal')).not.toHaveClass(/active/);
+
+        await birth.click();
+        await tip.locator('.st-more').click();
+        const sources = page.locator('#person-sources-modal');
+        await expect(sources).toBeVisible();
+        await expect(sources.locator('.person-source-row.is-focus')).toHaveCount(5);
+    });
+
+    test('the tree card\'s mark: its sources, and "Person\'s sources (n) ›" opens them with the cited ones marked', async ({ page }) => {
+        await dropCited(page);
+        const mark = card(page, 'Bonifác').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveAttribute('data-mark', 'status');
+        await mark.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        // A click on the mark is the tip's, not the card menu's.
+        await expect(page.locator('.context-menu')).toHaveCount(0);
+        await expect(tip.locator('.st-src')).toHaveCount(3);
+        const more = tip.locator('.st-more');
+        await expect(more).toHaveText("Person's sources (5) ›");
+        await more.click();
+        const sources = page.locator('#person-sources-modal');
+        await expect(sources).toBeVisible();
+        expect(await sources.locator('.person-source-row.is-focus').count()).toBeGreaterThanOrEqual(3);
+        await expect(sources.locator('.person-source-row.is-focus').first()).toHaveAttribute('aria-current', 'true');
+    });
+
+    test('an import with a citation: the origin pill\'s tip says it was cited in the family tree', async ({ page }, testInfo) => {
+        await openApp(page);
+        await importTree(page, testInfo, true);
+        await cardAction(page, 'Bonifác', 'edit');
+        const pill = personModal(page).locator('#pm-origin .fact-status');
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip.locator('.st-src-head')).toHaveText('Cited in the family tree, not verified in Strom');
+        await expect(tip.locator('.st-src .st-src-title')).toHaveText(['Matrika N Bramborov 1840–1870']);
     });
 });

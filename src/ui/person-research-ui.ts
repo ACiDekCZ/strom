@@ -186,8 +186,10 @@ export const personResearchMethods = uiModule({
      * hypotheses' own section.
      * `conflict`: a conflict's card (by its id, "X0007") comes into view and
      * its first choice takes the keyboard (the card when none is on).
+     * `questions`: opened from the card's "?" (or the person menu without a
+     * conflict) — the person's open question comes into view and takes the focus.
      */
-    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string }; conflict?: string } = {}): void {
+    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string }; conflict?: string; questions?: boolean } = {}): void {
         // Drawn again from inside itself: the one that opened it first keeps it.
         const active = document.activeElement as HTMLElement | null;
         if (active && active !== document.body && !active.closest(`#${DIALOG_ID}`)) dialogOpener = active;
@@ -196,7 +198,9 @@ export const personResearchMethods = uiModule({
         // The conflicts as the research has them now (its version not loaded may say more, finding 40),
         // and one decided from here whose card still says so.
         const conflicts = this.researchConflictsShown(personId);
-        const research = person?.research ?? (conflicts.length ? {} : undefined);
+        // The person's open question (the card's "?"): its own section, first.
+        const question = person?.question?.trim() ?? '';
+        const research = person?.research ?? (conflicts.length || question ? {} : undefined);
         if (!person || !research) return;
         const r = strings.research;
         const asOf = DataManager.getData().researchAsOf;
@@ -261,6 +265,7 @@ export const personResearchMethods = uiModule({
                     <button type="button" class="close-btn" id="person-research-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="person-research-body">
+                    ${question ? `<section class="person-research-section person-research-question-section"><h3 class="menu-section-header">${esc(strings.card.tipQuestionHead)}</h3><p class="person-research-question" tabindex="-1">${esc(question)}</p></section>` : ''}
                     ${this.researchEdgeSectionHtml(personId)}
                     ${section(r.conflicts, openHtml + decidedHtml, 'personConflicts')}
                     ${section(r.hypotheses, hypotheses.length > 0 ? `${this.researchHypothesesOfferHtml()}<div class="person-research-hypos">${this.researchHypothesesHtml(personId, hypotheses)}</div>` : '', 'hypotheses')}
@@ -331,6 +336,10 @@ export const personResearchMethods = uiModule({
             setTimeout(() => overlay.querySelector(`[data-conflict-card="${CSS.escape(opts.conflict!)}"]`)?.classList.remove('prc--highlight'), CONFLICT_HIGHLIGHT_MS);
         } else if (opts.hypo && this.openResearchHypothesis(overlay, opts.hypo.id, opts.hypo.variant)) {
             // Opened from a line's label (or the edge's bubble): at the hypothesis, open, its version unfolded.
+        } else if (opts.questions && overlay.querySelector('.person-research-question')) {
+            const q = overlay.querySelector<HTMLElement>('.person-research-question')!;
+            q.scrollIntoView({ block: 'nearest' });
+            q.focus({ preventScroll: true });
         } else if (edgeHead) {
             edgeHead.focus({ preventScroll: true });
             edgeHead.scrollIntoView({ block: 'start' });
