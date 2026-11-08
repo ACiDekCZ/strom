@@ -715,10 +715,11 @@ const NOTED_FAM_TAGS = new Set(['NCHI']);
 /**
  * Lines under a birth, a death, a wedding or a divorce that may go to the
  * record's note (a remark, the denomination at the act, an age, a cause or an
- * address with no field left for it): kept as written for "Back to {prog}"
- * when they do (see NOTED_TAG).
+ * address with no field left for it, a date the date field cannot hold
+ * whole — "1815/1816", "10 JAN", another calendar): kept as written for
+ * "Back to {prog}" when they do (see NOTED_TAG).
  */
-const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB', 'WIFE']);
+const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB', 'WIFE', 'DATE']);
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -2340,6 +2341,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         } else if (currentType === 'FAM' && currentRecord
             && (currentSubTag === 'MARR' || currentSubTag === 'DIV')) {
             const fam = currentRecord as GedcomFamily;
+            // A divorce's line says it is the divorce's (a wedding's is the couple's own).
+            if (currentSubTag === 'DIV') return line => { fam.note = join(fam.note, strings.gedcomNotes.divorceNote(line)); };
             return line => { fam.note = join(fam.note, line); };
         }
         return null;
@@ -2606,8 +2609,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             noted = null;
             const texts = open.whole ? [open.whole()].filter(Boolean) : open.texts;
             const structure = open.whole ? structureAt(open.head) : [lines[open.head].trimStart(), ...open.body];
-            // A pointer in it would name a record by an xref the export renumbers.
-            const block = structure.some(l => /^\d+ @|\s@[^@\s]+@/.test(l)) ? null : notedBlock(texts, structure);
+            // A pointer in it would name a record by an xref the export renumbers
+            // (a calendar's escape, `@#DJULIAN@`, is none).
+            const block = structure.some(l => /^\d+ @|\s@[^@#\s][^@\s]*@/.test(l)) ? null : notedBlock(texts, structure);
             if (block) (open.target.extras ??= []).push({ tag: NOTED_TAG, lines: block, quiet: true });
         }
         if (level === 1) notedHead = src;
@@ -3814,6 +3818,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.marriageParticipants.push({ name: value, rela: WITNESS_RELA });
                         }
                     } else if (currentSubTag === 'DIV') {
+                        // A remark on the divorce: a line of the couple's note,
+                        // with its CONT / CONC (it was not read at all).
+                        if (tag === 'NOTE' && !GED_POINTER.test(value)) {
+                            const sink = factDetailSink();
+                            if (sink) openDetail = { level, text: value, done: sink, sep: '\n' };
+                        }
                         if (tag === 'PLAC' && value && !fam.divorcePlace) fam.divorcePlace = value;
                         if (tag === '_STROM_STATUS' && !fam.divorceStatus) fam.divorceStatus = parseFactStatus(value);
                         if (tag === 'DATE') {

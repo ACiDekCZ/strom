@@ -91,3 +91,56 @@ describe('The LDS extensions of ANSEL (066 N4, the 5.5 torture file)', () => {
         expect(back).not.toContain('\uFFFD');
     });
 });
+
+describe('A date GEDCOM allows but Strom cannot read, and a note under a divorce (066 N4, f-dual.ged, a-div-note.ged)', () => {
+    it('the date goes back under its birth as the file wrote it, with no note made of it', () => {
+        const { tree, back, second } = twice(fixture('f-dual.ged'), 'f-dual.ged');
+        expect(back).toContain('1 BIRT\n2 DATE 1815/1816\n2 PLAC London\n');
+        expect(back).toContain('1 BIRT\n2 DATE 10 JAN\n');
+        expect(back).not.toMatch(/as written/i);
+        expect(undated(second)).toBe(undated(back));
+        // The tree keeps showing it in the note.
+        const notes = Object.values(tree.persons).map(p => p.notes ?? '').join('\n');
+        expect(notes).toContain('1815/1816');
+        expect(notes).toContain('10 JAN');
+    });
+
+    it('a death, a wedding and a divorce with only such a date keep their event and date', () => {
+        const file = fixture('a-div-note.ged')
+            .replace('1 SEX M\n', '1 SEX M\n1 BIRT\n2 DATE @#DJULIAN@ 12 MAR 1875\n2 PLAC Kyiv\n1 DEAT\n2 DATE 8 MAR 1137/1138\n2 SOUR @S1@\n')
+            .replace('1 MARR\n2 DATE 1900\n1 DIV Y\n', '1 MARR\n2 DATE 20 JUL\n1 DIV\n2 DATE 1380/1381\n')
+            .replace('0 TRLR', '0 @S1@ SOUR\n1 TITL Reg\n0 TRLR');
+        const { back, second } = twice(file, 'dates.ged');
+        expect(back).toContain('1 BIRT\n2 DATE @#DJULIAN@ 12 MAR 1875\n2 PLAC Kyiv\n');
+        expect(back).toContain('1 DEAT\n2 DATE 8 MAR 1137/1138\n2 SOUR @S1@\n');
+        expect(back).toContain('1 MARR\n2 DATE 20 JUL\n');
+        expect(back).toContain('1 DIV\n2 DATE 1380/1381\n');
+        expect(back).not.toMatch(/NOTE .*(as written|Julian calendar|Divorce:)/i);
+        expect(undated(second)).toBe(undated(back));
+    });
+
+    it('a date changed in the tree wins over the one the file wrote', () => {
+        const tree = load(fixture('f-dual.ged'), 'f-dual.ged');
+        const c = Object.values(tree.persons).find(p => p.firstName === 'C')!;
+        c.birthDate = '1820';
+        const back = backTo(tree);
+        expect(back).toContain('1 BIRT\n2 DATE 1820\n');
+        expect(back).not.toContain('2 DATE 10 JAN');
+    });
+
+    it('a divorce without a date stays `1 DIV Y`, and its NOTE goes back under it, not as a note of the family', () => {
+        const { back, second } = twice(fixture('a-div-note.ged'), 'a-div-note.ged');
+        expect(back).toContain('1 MARR\n2 DATE 1900\n');
+        expect(back).toMatch(/\n1 DIV Y\n/);
+        expect(undated(second)).toBe(undated(back));
+
+        const file = fixture('a-div-note.ged')
+            .replace('1 DIV Y\n', '1 DIV Y\n2 NOTE Divorce note text\n3 CONT second line\n');
+        const again = twice(file, 'div-note.ged');
+        expect(again.back).toContain('1 DIV Y\n2 NOTE Divorce note text\n3 CONT second line\n');
+        expect(again.back).not.toContain('Divorce:');
+        expect(undated(again.second)).toBe(undated(again.back));
+        // The tree shows it in the family's note.
+        expect(Object.values(again.tree.partnerships)[0].note).toContain('Divorce note text');
+    });
+});

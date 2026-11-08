@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, IMPORT_TAG, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -1126,6 +1126,38 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     const pushNoted = (structures: NotedStructure[], under: boolean): void => {
         for (const st of structures) lines.push(...(under ? st.lines.slice(1) : st.lines));
     };
+    /**
+     * A fact's DATE the date field could not hold whole ("1815/1816", "10 JAN",
+     * another calendar), as the file wrote it with the lines under it, and the
+     * fact's other noted lines. It goes in place of the field's DATE while the
+     * field is empty or still has the date the import read from it; a date
+     * changed in the app wins.
+     */
+    const notedDate = (structures: NotedStructure[], holder: FactHolder, key: string, value: string | undefined): { date: string[]; rest: NotedStructure[] } => {
+        let date: string[] = [];
+        const rest: NotedStructure[] = [];
+        for (const st of structures) {
+            const at = st.lines.findIndex(l => l === '2 DATE' || l.startsWith('2 DATE '));
+            if (at < 0 || date.length) { rest.push(st); continue; }
+            let end = at + 1;
+            while (end < st.lines.length && !/^[0-2] /.test(st.lines[end])) end++;
+            date = st.lines.slice(at, end);
+            const left = [...st.lines.slice(0, at), ...st.lines.slice(end)];
+            if (left.length > 1) rest.push({ texts: st.texts, lines: left });
+        }
+        const kept = !value || importedValueOf(holder, key)?.value === value;
+        return { date: kept ? date : [], rest };
+    };
+    /**
+     * "Back to {prog}": a divorce with no date or place under it is said
+     * with Y (`1 DIV Y`), as GEDCOM asks of such an event. A bare
+     * wedding stays `1 MARR`: a couple entered as married writes it so.
+     */
+    const sayOccurred = (at: number): void => {
+        if (back.imports.size === 0 || lines[at] !== '1 DIV') return;
+        if (lines.slice(at + 1).some(l => /^2 (DATE|PLAC)\b/.test(l))) return;
+        lines[at] += ' Y';
+    };
     /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
     const pushFactImport = (holder: FactHolder, fact: string): void => {
         for (const tag of factImportTags(holder, fact)) {
@@ -1232,9 +1264,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (lineTag) lines.push(`1 ${STROM_LINE_TAG} ${lineTag}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
+        const birthNoted = notedDate(notedBirth, person, 'birthDate', person.birthDate);
         if (person.birthDate || person.birthPlace || person.birthAddress || person.birthAge || person.birthSourceIds?.length) {
             lines.push('1 BIRT');
-            if (person.birthDate) {
+            if (birthNoted.date.length) {
+                lines.push(...birthNoted.date);
+            } else if (person.birthDate) {
                 const date = formatGedcomDate(person.birthDate, person.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
@@ -1244,7 +1279,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { age: person.birthAge, address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
-            pushNoted(notedBirth, true);
+            pushNoted(birthNoted.rest, true);
             pushFactImport(person, 'birth');
             pushFactOrigin(person, 'birth');
         } else {
@@ -1253,9 +1288,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Death (a cited death without a date or place is a known death: DEAT Y)
         const deathDetail = person.deathCause || person.deathAge || person.deathAddress;
+        const deathNoted = notedDate(notedDeath, person, 'deathDate', person.deathDate);
         if (person.deathDate || person.deathPlace || deathDetail || person.deathSourceIds?.length) {
-            lines.push(person.deathDate || person.deathPlace || deathDetail ? '1 DEAT' : '1 DEAT Y');
-            if (person.deathDate) {
+            lines.push(person.deathDate || person.deathPlace || deathDetail || deathNoted.date.length ? '1 DEAT' : '1 DEAT Y');
+            if (deathNoted.date.length) {
+                lines.push(...deathNoted.date);
+            } else if (person.deathDate) {
                 const date = formatGedcomDate(person.deathDate, person.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
@@ -1265,16 +1303,18 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             pushStatus(lines, person.deathStatus);
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
-            pushNoted(notedDeath, true);
+            pushNoted(deathNoted.rest, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
-            // Without it the person came back as possibly living.
-            lines.push('1 DEAT Y');
+            // Without it the person came back as possibly living. (A date
+            // the file wrote that the field could not hold goes in its place.)
+            lines.push(deathNoted.date.length ? '1 DEAT' : '1 DEAT Y');
+            lines.push(...deathNoted.date);
             // Where that came from goes along (the research's DEAT Y has one).
             pushStatus(lines, person.deathStatus);
-            pushNoted(notedDeath, true);
+            pushNoted(deathNoted.rest, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
         } else {
@@ -1534,9 +1574,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const famNoted = notedOf(partnership, partnership.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
         const notedDivorce = notedFact(famNoted.structures, 'DIV');
+        const marriageNoted = notedDate(notedMarriage, partnership, 'startDate', partnership.startDate);
+        const divorceNoted = notedDate(notedDivorce, partnership, 'endDate', partnership.endDate);
         if (hasMarriage) {
+            const at = lines.length;
             lines.push('1 MARR');
-            if (partnership.startDate) {
+            if (marriageNoted.date.length) {
+                lines.push(...marriageNoted.date);
+            } else if (partnership.startDate) {
                 const date = formatGedcomDate(partnership.startDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
@@ -1569,25 +1614,30 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
             for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
-            pushNoted(notedMarriage, true);
+            pushNoted(marriageNoted.rest, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
+            sayOccurred(at);
         } else {
             pushNoted(notedMarriage, false);
         }
 
         // Divorce event
         if (partnership.status === 'divorced' || partnership.endDate || partnership.endPlace) {
+            const at = lines.length;
             lines.push('1 DIV');
-            if (partnership.endDate) {
+            if (divorceNoted.date.length) {
+                lines.push(...divorceNoted.date);
+            } else if (partnership.endDate) {
                 const date = formatGedcomDate(partnership.endDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
-            pushNoted(notedDivorce, true);
+            pushNoted(divorceNoted.rest, true);
             pushFactImport(partnership, 'divorce');
             pushFactOrigin(partnership, 'divorce');
+            sayOccurred(at);
         } else {
             pushNoted(notedDivorce, false);
         }

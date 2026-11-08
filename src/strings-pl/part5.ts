@@ -803,6 +803,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         deathRecord: 'Akt zgonu',
         birthNote: (text: string) => `Urodzenie: ${text}`,
         deathNote: (text: string) => `Zgon: ${text}`,
+        divorceNote: (text: string) => `Rozwód: ${text}`,
         remarriage: (divorced: string, married: string) => `Rozwód ${divorced}, ponowny ślub ${married}`,
         remarriageNoDate: (married: string) => `Rozwód, ponowny ślub ${married}`,
         association: (name: string, label: string) => `Relacja: ${name} (${label})`,
