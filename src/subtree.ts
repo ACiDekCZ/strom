@@ -16,6 +16,7 @@ import { dismissalsWithin } from './quality-dismiss.js';
 import { cleanLineageOverrides } from './lineage.js';
 import { placeRecordsFor } from './place-records.js';
 import { placeAliasesFor } from './place-groups.js';
+import { pruneImportOrigin } from './import-origin.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -143,6 +144,10 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     const lineage = cleanLineageOverrides(result, data.lineageOverrides);
     if (lineage) result.lineageOverrides = lineage;
     if (data.researchAsOf) result.researchAsOf = data.researchAsOf;
+    // The GEDCOM files the tree was loaded from come along; marks of parent
+    // links to people left behind go (pruneImportOrigin).
+    if (data.imports?.length) result.imports = structuredClone(data.imports);
+    pruneImportOrigin(result);
     return result;
 }
 

@@ -357,6 +357,8 @@ export interface Source {
      * mark as an excerpt's `clip`; `input` = the whole input of a document).
      */
     heldClips?: string[];
+    /** The import (StromData.imports id) the source record came from. */
+    importId?: string;
 }
 
 /** Why the research left a source's image out of its file (see Source.imageHeld). */
@@ -543,6 +545,88 @@ export interface Person {
      * whole by each new version.
      */
     research?: PersonResearch;
+    /**
+     * Origin from a loaded GEDCOM file (spec 066, data version 15): the
+     * import (StromData.imports id) the person came from. Absent: entered here.
+     */
+    importId?: string;
+    /**
+     * Each fact's value as it came from a loaded GEDCOM file, by fact key
+     * (`firstName`, `lastName`, `gender`, `birthDate`, `birthPlace`,
+     * `deathDate`, `deathPlace`, `event:<id>.date|place|value`, see
+     * src/import-origin.ts). A fact is "from the family tree" only while its
+     * value equals the stored one; an edit ends it, nothing is switched by hand.
+     */
+    importedValues?: Record<string, ImportedValue>;
+    /** Parent links that came from a loaded GEDCOM file: parent id -> import id. */
+    importedParents?: Record<string, string>;
+    /**
+     * The research's origin of each fact (GEDCOM `_STROM_ORIGIN`, `_STROM_WAS`,
+     * `_STROM_SEX_ORIGIN`), by fact (`name`, `sex`, `birth`, `death`,
+     * `event:<id>`). Research trees only; read from the research's file,
+     * never from another file, never sent back.
+     */
+    researchOrigins?: Record<string, ResearchFactOrigin>;
+}
+
+/** One GEDCOM file loaded into the tree (StromData.imports, spec 066). */
+export interface ImportRecord {
+    /** "I1", "I2"… (the app's), "R1"… (an import the research made). */
+    id: string;
+    /** The program that wrote the file (HEAD > SOUR > NAME, else the SOUR value). */
+    program: string;
+    /** HEAD > SOUR > VERS. */
+    version?: string;
+    /** HEAD > DATE as written. */
+    fileDate?: string;
+    /** When it was loaded into Strom (ISO date). */
+    at: string;
+    /** The file's name. */
+    file?: string;
+    /** The encoding the file was read in (e.g. "windows-1250"). */
+    encoding?: string;
+    /** SHA-256 of the file's bytes (lowercase hex). */
+    sha?: string;
+    /** The "what next" card after this import was closed. */
+    nextCardClosed?: boolean;
+}
+
+/** A fact's value as it came from a loaded file (Person/Partnership.importedValues). */
+export interface ImportedValue {
+    /** The import (ImportRecord.id). */
+    from: string;
+    value: string;
+}
+
+/** Whose a fact is according to the research (GEDCOM `_STROM_ORIGIN`). */
+export type FactOriginKind = 'import' | 'user' | 'research';
+
+/** A part of a fact (GEDCOM `_PART`, the parts list of `_STROM_IMPORT` / `_STROM_ORIGIN`). */
+export type FactPart = 'DATE' | 'PLAC' | 'VAL' | 'GIVN' | 'SURN' | 'SEX';
+
+/** What the fact was before the research changed it (GEDCOM `_STROM_WAS`). */
+export interface ResearchFactWas {
+    /** The family tree's value, as the research wrote it. */
+    value: string;
+    /** `3 _STROM_IMPORT`: the import the value came from. */
+    importId?: string;
+    /** `3 _PART`: which parts changed (none listed: the whole fact). */
+    parts?: FactPart[];
+    /** `3 _REF`: the research's key of the fact, sent back in /facts/revert. */
+    ref?: string;
+}
+
+/** The research's origin of one fact (Person/Partnership.researchOrigins). */
+export interface ResearchFactOrigin {
+    /** `_STROM_ORIGIN`; absent when the research sent only `_STROM_WAS`. */
+    kind?: FactOriginKind;
+    /** The import of an `import` origin. */
+    importId?: string;
+    /** The parts from the import (none listed: the whole fact). */
+    parts?: FactPart[];
+    was?: ResearchFactWas;
+    /** Sources cited under the fact (the record a change was made by). */
+    sourceIds?: string[];
 }
 
 /** What the research knows about one person (see Person.research). */
@@ -700,6 +784,8 @@ export interface ResearchConflict {
      * the bridge's JSON). Missing: decided in the research only.
      */
     take?: true;
+    /** Whose value the research proposes to change (GEDCOM 2 _STROM_KIND): from the family tree, or entered by a person. */
+    kind?: 'import' | 'user';
 }
 
 /** A question the research works with ("Father: Václav, or Jan?"). */
@@ -889,6 +975,12 @@ export interface Partnership {
      * (which stay fields above): banns, a contract, a census of the household…
      */
     events?: CoupleEvent[];
+    /** The import (StromData.imports id) the partner link came from. */
+    importId?: string;
+    /** Each fact's value as it came from a loaded file (`startDate`, `startPlace`, `endDate`, `endPlace`, `event:<id>.date|place|value`). */
+    importedValues?: Record<string, ImportedValue>;
+    /** The research's origin of each fact (`marriage`, `divorce`, `event:<id>`), research trees only. */
+    researchOrigins?: Record<string, ResearchFactOrigin>;
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
@@ -1031,8 +1123,14 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   founder moved down, a line split off by hand). A tree-level field; an
  *   older app (v13) would drop it on a re-save (migrateData builds field by
  *   field), so the bump makes it warn first.
+ * v15 (2026-11, spec 066): StromData.imports (the GEDCOM files loaded into
+ *   the tree) and the origin of facts and links from them
+ *   (Person/Partnership.importedValues, importId, Person.importedParents,
+ *   Source.importId), plus the research's origin of facts (researchOrigins,
+ *   ResearchConflict.kind). Additive; existing trees get no origin (nothing
+ *   is guessed). An older app (v14) would drop imports on a re-save.
  */
-export const STROM_DATA_VERSION = 14;
+export const STROM_DATA_VERSION = 15;
 
 /**
  * Manual corrections of the lineages (rody, see src/lineage.ts), by person id.
@@ -1256,6 +1354,12 @@ export interface StromData {
      * header `_STROM_ASOF`, ISO date): "as of". Research trees only.
      */
     researchAsOf?: string;
+
+    /**
+     * The GEDCOM files loaded into this tree (data version 15, spec 066),
+     * oldest first. People, facts, links and sources name them by id.
+     */
+    imports?: ImportRecord[];
 
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;

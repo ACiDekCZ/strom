@@ -375,8 +375,8 @@ describe('a union with an empty partner slot (person2Id null)', () => {
 });
 
 describe('data version 14: lineageOverrides through a load, a split and GEDCOM', () => {
-    it('is 14', () => {
-        expect(STROM_DATA_VERSION).toBe(14);
+    it('is 14 or later', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(14);
     });
 
     it('a v13 tree loads unchanged, without the field', () => {

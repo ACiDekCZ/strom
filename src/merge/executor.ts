@@ -24,6 +24,7 @@ import {
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
+import { addImportRecords, carryMergedImports, pruneImportOrigin, remapHolderImports } from '../import-origin.js';
 import { mergePlaceRecords } from '../place-records.js';
 import { mergePlaceAliases } from '../place-groups.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
@@ -226,7 +227,14 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // import mints fresh ids, so re-merging the same file would otherwise
         // double the catalog) is not added again: its citations are pointed at
         // the kept entry once the merge is done (remapSourceReferences).
+        // The incoming tree's GEDCOM imports join the tree's own (an import
+        // both share keeps one record); its marks are renamed to the ids here.
+        const importMap = addImportRecords(mergedData, state.incomingData.imports);
         const sourceRemap = mergeSourceCatalogs(mergedData, state.incomingData.sources);
+        for (const id of Object.keys(state.incomingData.sources ?? {})) {
+            const src = sourceRemap.has(id) ? undefined : mergedData.sources?.[id];
+            if (src?.importId) src.importId = importMap.get(src.importId) ?? src.importId;
+        }
 
         // Tree-level registries come along too — the user curated them.
         // Coordinates: union, the existing tree wins where both know a place.
@@ -276,12 +284,14 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
                     mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons, state.incomingData.persons);
+                    carryMergedImports(existingPerson, state.existingData.persons[match.existingId], match.incomingPerson, importMap);
                     mergedCount++;
                 }
             } else if (decision?.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
                     mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons, state.incomingData.persons);
+                    carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], match.incomingPerson, importMap);
                     mergedCount++;
                 }
             }
@@ -347,6 +357,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 newPerson.events = structuredClone(newPerson.events);
                 remapEventParticipants(newPerson.events, mapping.persons, state.incomingData.persons);
             }
+            adoptIncomingMarks(newPerson, mapping.persons, importMap);
 
             mergedData.persons[newId] = newPerson;
             addedCount++;
@@ -387,6 +398,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                         newPerson.events = structuredClone(newPerson.events);
                         remapEventParticipants(newPerson.events, mapping.persons, state.incomingData.persons);
                     }
+                    adoptIncomingMarks(newPerson, mapping.persons, importMap);
                     mergedData.persons[newId] = newPerson;
                 }
             }
@@ -427,6 +439,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                         else if (partnership[field]) existingPartnership[field] = partnership[field];
                     }
                 }
+                carryMergedImports(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership, importMap);
             } else {
                 // Create new partnership with remapped IDs. Cloned wholesale so
                 // nothing (witnesses, story, citations) stays shared with the
@@ -454,6 +467,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 for (const ev of newPartnership.events ?? []) {
                     remapCoupleEvent(ev, mapping.persons, state.incomingData.persons);
                 }
+                remapHolderImports(newPartnership, importMap);
 
                 mergedData.partnerships[newPshipId] = newPartnership;
 
@@ -498,6 +512,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // left behind is dropped); the existing tree's own marks stay.
         mergeTreeDecisions(mergedData, state.incomingData, mapping.persons);
 
+        // Parent links the incoming file gave a person already in the tree:
+        // from that import when the link is new here.
+        carryMergedParentLinks(mergedData, state, mapping.persons, importMap);
+        // Marks of links or facts the merge did not keep go.
+        pruneImportOrigin(mergedData);
+
         // Citations of a source that was already in the tree now name the kept entry.
         remapSourceReferences(mergedData, sourceRemap);
         unlinkOrphanExcerpts(mergedData);
@@ -532,6 +552,50 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 }
 
 // ==================== HELPER FUNCTIONS ====================
+
+/**
+ * An incoming person added as new: its import marks become its own copies
+ * (the spread shares them), parent links keyed by the merged ids, import ids
+ * renamed to the merged tree's.
+ */
+function adoptIncomingMarks(person: Person, personIds: Map<PersonId, PersonId>, importMap: Map<string, string>): void {
+    if (person.importedValues) person.importedValues = structuredClone(person.importedValues);
+    if (person.researchOrigins) person.researchOrigins = structuredClone(person.researchOrigins);
+    if (person.importedParents) {
+        const out: Record<string, string> = {};
+        for (const [pid, from] of Object.entries(person.importedParents)) {
+            const mapped = personIds.get(pid as PersonId);
+            if (mapped) out[mapped] = from;
+        }
+        person.importedParents = out;
+    }
+    remapHolderImports(person, importMap);
+}
+
+/**
+ * A matched person's parent links the incoming file gave: a link the tree did
+ * not have before the merge is from that file's import; one it had keeps its
+ * own (a person's link never becomes an import's).
+ */
+function carryMergedParentLinks(
+    merged: StromData,
+    state: MergeState,
+    personIds: Map<PersonId, PersonId>,
+    importMap: Map<string, string>,
+): void {
+    for (const [incomingId, incoming] of Object.entries(state.incomingData.persons)) {
+        if (!incoming.importedParents) continue;
+        const childId = personIds.get(incomingId as PersonId);
+        const before = childId ? state.existingData.persons[childId] : undefined;
+        const child = childId ? merged.persons[childId] : undefined;
+        if (!child || !before) continue;
+        for (const [parent, from] of Object.entries(incoming.importedParents)) {
+            const parentId = personIds.get(parent as PersonId);
+            if (!parentId || !child.parentIds.includes(parentId) || before.parentIds.includes(parentId)) continue;
+            (child.importedParents ??= {})[parentId] = importMap.get(from) ?? from;
+        }
+    }
+}
 
 /**
  * Remap event participants to the merged tree's ids, and snapshot the written

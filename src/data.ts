@@ -63,6 +63,7 @@ import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, Content
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
+import { carryMergedImports, cleanImportOrigin, dropImportedParent, pruneImportOrigin } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
@@ -278,6 +279,11 @@ export function migrateData(data: unknown): StromData {
         const clean = cleanLineageOverrides(result, { founders: list(o.founders), notCarriers: list(o.notCarriers) });
         if (clean) result.lineageOverrides = clean;
     }
+
+    // v15: the GEDCOM files loaded into the tree and the origin of facts and
+    // links from them (src/import-origin.ts). Only valid records; marks that
+    // name no record, no fact or no parent are dropped. Nothing is added.
+    cleanImportOrigin(result, d.imports);
 
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {
@@ -2800,6 +2806,7 @@ class DataManagerClass {
                     delete child.parentRelTypes[id];
                     if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
                 }
+                dropImportedParent(child, id);
             }
         }
 
@@ -3163,6 +3170,7 @@ class DataManagerClass {
             delete child.parentRelTypes[parentId];
             if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
         }
+        dropImportedParent(child, parentId);
 
         // Also remove from any partnership's childIds
         for (const partnership of Object.values(this.data.partnerships)) {
@@ -3753,6 +3761,10 @@ class DataManagerClass {
         if (resolvedFields.deathDate !== undefined && resolvedFields.deathDate !== (keepPerson.deathDate || '')) mergeDetails.push(`${strings.labels.deathDate}: ${resolvedFields.deathDate || '–'}`);
         if (resolvedFields.deathPlace !== undefined && resolvedFields.deathPlace !== (keepPerson.deathPlace || '')) mergeDetails.push(`${strings.labels.deathPlace}: ${resolvedFields.deathPlace || '–'}`);
 
+        // The kept person as it was: a fact taken over from the removed one
+        // keeps that one's import mark (carryMergedImports below).
+        const keepBefore = structuredClone(keepPerson);
+
         // 1. Apply resolved field values
         if (resolvedFields.firstName !== undefined) keepPerson.firstName = resolvedFields.firstName;
         if (resolvedFields.lastName !== undefined) keepPerson.lastName = resolvedFields.lastName;
@@ -4001,6 +4013,24 @@ class DataManagerClass {
                 else parts[i].personId = keepId;
             }
         }
+
+        // 6d. Origin from a GEDCOM import (spec 066): facts and parent links
+        // taken over from the removed person keep its marks; the children's
+        // marks of the removed parent now name the kept one.
+        carryMergedImports(keepPerson, keepBefore, removePerson, new Map());
+        if (!keepPerson.importId && removePerson.importId) keepPerson.importId = removePerson.importId;
+        for (const [pid, from] of Object.entries(removePerson.importedParents ?? {})) {
+            if (keepPerson.parentIds.includes(pid as PersonId) && !keepBefore.parentIds.includes(pid as PersonId)) {
+                (keepPerson.importedParents ??= {})[pid] = from;
+            }
+        }
+        for (const child of Object.values(this.data.persons)) {
+            const from = child?.importedParents?.[removeId];
+            if (!from) continue;
+            delete child.importedParents![removeId];
+            if (child.parentIds.includes(keepId) && !child.importedParents![keepId]) child.importedParents![keepId] = from;
+        }
+        pruneImportOrigin(this.data);
 
         // 7. Delete the removed person
         delete this.data.persons[removeId];

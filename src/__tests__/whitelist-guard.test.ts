@@ -75,10 +75,10 @@ function fullTree(): Required<StromData> {
                 id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
                 original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
-            }] },
+            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } } },
             [BOB]: person(BOB, 'Bob'),
         },
-        partnerships: { [UNION]: partnership() },
+        partnerships: { [UNION]: { ...partnership(), importId: 'I1' } },
         sources: {
             s1: {
                 id: 's1', title: 'Parish register, Kolín', quality: 3,
@@ -110,6 +110,7 @@ function fullTree(): Required<StromData> {
         qualityDismissed: [{ kind: 'possibleDuplicate', persons: [ALICE, BOB].sort(), at: '2026-10-21T09:00:00.000Z', sync: 'sent' }],
         lineageOverrides: { founders: [BOB], notCarriers: [ALICE] },
         researchAsOf: '2026-09-20',
+        imports: [{ id: 'I1', program: 'Rodokmenář 5', version: '5.2', fileDate: '12 MAR 2024', at: '2026-11-08', file: 'rodokmen.ged', encoding: 'windows-1250' }],
         defaultPersonId: LAST_FOCUSED,
         defaultView: 'last',
         lastFocusPersonId: ALICE,
@@ -333,7 +334,11 @@ type OwnedElsewhere =
     | 'research'            // written by Strom Research only (GEDCOM import), never edited
     | 'birthStatus'         // the research's status of the birth (GEDCOM import), never edited
     | 'deathStatus'         // …and of the death
-    | 'gedcomDates';        // GEDCOM import only; a changed date simply has no entry
+    | 'gedcomDates'         // GEDCOM import only; a changed date simply has no entry
+    | 'importId'            // GEDCOM import only (spec 066): the import the person came from
+    | 'importedValues'      // GEDCOM import only: an edit ends the mark by changing the value
+    | 'importedParents'     // GEDCOM import only: the parent links from the file
+    | 'researchOrigins';    // written by Strom Research only (GEDCOM import), never edited
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a
