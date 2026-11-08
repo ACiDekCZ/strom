@@ -16,6 +16,7 @@ import { yearOf } from '../dates.js';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_TOOL_ACTIONS, RESEARCH_TOOL_GROUPS, ResearchLinkAction, ResearchReviewScope, ResearchStoryDo,
     ResearchToolAction, researchPersonRef, researchLinkMark, type ResearchActionMark,
+    RESEARCH_BRIDGE_MARKS,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer, updateBusyText } from './research-ui.js';
@@ -368,7 +369,7 @@ export const researchActionsMethods = uiModule({
             ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
         // Verify facts in the tree (spec 065 §10l): through the bridge, the AI badge alone; not in an archive.
         const verifyRow: SubmenuItem[] = !noAgent && this.verifyBulkAvailable()
-            ? [{ id: 'research-item-verify', label: strings.verify.bulkRow, method: 'showVerifyBulkDialog', ai: true }] : [];
+            ? [{ id: 'research-item-verify', label: strings.verify.bulkRow, method: 'showVerifyBulkDialog', ai: RESEARCH_BRIDGE_MARKS['verify-bulk'] === 'bridgeAgent' }] : [];
         let first: SubmenuItem[];
         let more: SubmenuItem[];
         // Read a document (spec 013): now and then, the first item of "Other actions" (its link and badge as they are).
