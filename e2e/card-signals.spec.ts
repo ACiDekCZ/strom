@@ -442,6 +442,37 @@ test.describe('card signals', () => {
         await expect(mark).toHaveCSS('right', '15px');
     });
 
+    test('zoomed out: the ⇄ pill keeps clear of the grown mark, the lock goes; under 30 % the edge pills go too (spec 066 P4 §7)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+            const S = window.Strom;
+            await S.DataManager.importAsNewTree({ persons: { a: P('a', { firstName: 'Hostivít', lastName: 'Kvapilík', birthDate: '1878' }) }, partnerships: {} }, 'Jinde');
+            await S.DataManager.importAsNewTree({ persons: {
+                a: P('a', { firstName: 'Hostivít', lastName: 'Kvapilík', birthDate: '1878', birthSourceIds: ['s1'], isLocked: true }),
+            }, partnerships: {}, sources: { s1: { id: 's1', title: 'Matrika' } } }, 'Karty');
+        });
+        const h = card(page, 'Hostivít');
+        await expect(h.locator('.cross-tree-badge')).toBeVisible();
+        await expect(h.locator(':scope > .lock-icon')).toBeVisible();
+        const apart = () => h.evaluate((el) => {
+            const m = el.querySelector(':scope > .card-status-mark')!.getBoundingClientRect();
+            const x = el.querySelector('.cross-tree-badge')!.getBoundingClientRect();
+            return m.left - x.right;
+        });
+        for (const s of [0.5, 0.4, 0.32]) {
+            await zoomTo(page, s, 'Hostivít');
+            expect(await apart()).toBeGreaterThan(0);
+            await expect(h.locator(':scope > .lock-icon')).toBeHidden();
+        }
+        await zoomTo(page, 0.25, 'Hostivít');
+        await expect(h.locator('.cross-tree-badge')).toBeHidden();
+        await zoomTo(page, 1, 'Hostivít');
+        await expect(h.locator('.cross-tree-badge')).toBeVisible();
+        await expect(h.locator(':scope > .lock-icon')).toBeVisible();
+    });
+
     test('printing the page: the status mark and the fold, no badge, whatever the zoom (spec 066 P4 §7)', async ({ page }) => {
         await setup(page);
         await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
@@ -711,6 +742,10 @@ test.describe('card signals', () => {
         const rows = await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):visible').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
         expect(rows.length).toBeGreaterThan(0);
         for (const h of rows) expect(h).toBeGreaterThanOrEqual(47.5);
+        // The marks block's link: its text where the block's text starts, no menu indent.
+        const help = sheet.locator('.menu-person-state [data-action="marks-help"]');
+        await expect(help).toHaveCSS('padding-left', '0px');
+        expect((await help.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         // From the bottom, the whole width.
         const portrait = (await sheet.boundingBox())!;
         expect(portrait.x).toBeLessThanOrEqual(1);

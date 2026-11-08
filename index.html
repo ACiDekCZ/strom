@@ -3507,9 +3507,10 @@
         @media (hover: hover) { .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); } }
         .bottom-sheet-person .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* A phone (spec 066 P4 §9): the person sheet's rows 48px, either way up
-           (the tiles and the chips keep their own size; a tablet keeps 44px). */
+           (the tiles, the chips and the marks block's links keep their own
+           size; a tablet keeps 44px). */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .bottom-sheet-person .bottom-sheet-item:not(.sheet-tile):not(.menu-chip) { min-height: 48px; }
+            .bottom-sheet-person .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(.mps-link) { min-height: 48px; }
         }
         /* A phone held sideways: the person sheet is a 360px panel at the
            right over the whole height, scrolling; the tree stays in view to
@@ -12577,6 +12578,12 @@
             }
         }
         #tree-canvas.zoom-tiny .person-card > .card-status-mark { display: none; }
+        /* The ⇄ pill keeps clear of the grown mark (17px on screen wide,
+           5px from the corner); the lock goes; below 30% the edge pills
+           (⇄, branches, relations, ∞) and the agent's ring go too. */
+        #tree-canvas.zoom-far .person-card.has-status > .card-edge.edge-bottom-right { right: max(40px, calc(9px + 17px / var(--tree-zoom, 1))); }
+        #tree-canvas.zoom-far .person-card > .lock-icon { display: none; }
+        #tree-canvas.zoom-tiny .person-card > .card-edge, #tree-canvas.zoom-tiny .card-agent-dot { display: none; }
         #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far .card-agent { display: none; }
         #tree-canvas.zoom-far .card-signal-dot, #tree-canvas.zoom-far .card-agent-dot {
             display: block;
@@ -12604,13 +12611,13 @@
         .card-tooltip .tt-action { color: var(--warning-text); }
         .card-tooltip .tt-line.tt-agent { color: var(--primary-dark); }
         /* Printing the page (spec 066 P4 §7): the status mark and the story's
-           fold, at their own size whatever the zoom; the badges and the agent
-           are this device's state and stay on screen. */
-        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
+           fold, at their own size whatever the zoom; the badges, the agent
+           and the lock stay on screen. */
+        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-dot, .person-card > .lock-icon) { display: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-story { display: block !important; }
         @media print {
-            .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; }
+            .card-signal, .card-signal-dot, .card-agent, .card-agent-dot, .person-card > .lock-icon { display: none !important; }
             #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
             #tree-canvas .person-card > .card-story { display: block !important; }
         }
@@ -22116,7 +22123,7 @@
         :is(.context-menu-item, .bottom-sheet-item):has(> .menu-item-kind[data-kind="placeOpen"]) .menu-item-kind { color: var(--primary-dark); }
         .context-menu:has(.menu-item-kind) > .context-menu-item:not(:has(> .menu-item-kind)),
         .context-menu:has(.menu-item-kind) > .menu-section-header { padding-left: 44px; }
-        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(:has(> .menu-item-kind)),
+        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(.mps-link):not(:has(> .menu-item-kind)),
         .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-section { padding-left: 46px; }
         /* A nested expansion's "◎ Focus on …" under its "Hide … shown here" row (§6). */
         .bottom-sheet-item[data-action="nested-focus"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
