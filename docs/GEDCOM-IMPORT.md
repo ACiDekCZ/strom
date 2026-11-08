@@ -35,6 +35,9 @@ field for it, but only if it arrives under a tag the importer knows.
   encoding was guessed or is a single-byte one and the file has non-ASCII
   text, the import summary shows a sample of names and a menu to read the
   file in another encoding.
+  ANSEL reads the LDS extensions of the GEDCOM table too (0xBE empty box,
+  0xBF black box, 0xCD midline e, 0xCE midline o) and MARC-21's eszett and
+  euro sign (0xC7, 0xC8).
 - **255 bytes per physical line**, counted in *bytes*, not characters. Czech or
   German text reaches that limit at roughly 130 characters. Split with `CONC`
   and `CONT` (below).
@@ -196,6 +199,13 @@ its meaning, so it gets no "Date as written" line; it is written back with the
 GEDCOM keyword. A year after a word Strom does not know (`Nejspíš 1919`) is
 taken as an estimate (about 1919) and keeps the "Date as written" line.
 
+A date GEDCOM allows but the date field cannot hold — a dual year
+(`1815/1816`), a day without a year (`10 JAN`), another calendar — keeps what
+can be read and the line in the fact's note. "Back to {program}" writes the
+date as the file wrote it under its own event while that line is unchanged,
+also when it is the event's only date (a birth, death, wedding or divorce
+with nothing else does not vanish).
+
 ### What hangs under BIRT, DEAT and MARR
 
 These blocks carry the register entry itself, and all of it is read:
@@ -239,7 +249,9 @@ Detail the register gives about a fact beyond its date and place is read under
   `STILLBORN`, `CHILD`, and a bare number as years. It is stored in words of the
   UI language ("61 let") and the app compares it with the age the dates give.
   Written back the standard way when it can be read (`54 let` → `54y`,
-  `kojenec` → `INFANT`), as written otherwise.
+  `kojenec` → `INFANT`), as written otherwise. More than 999 days or weeks
+  (`1y 30m 1100d`, what GEDCOM 7's `100w 400d` becomes) is still an age and
+  goes back as `AGE 1y 30m 1100d`.
 - `CAUS` — the cause, as written (on any event; the app offers it for a death).
 - `ADDR` — the house or address **on the `ADDR` line itself**, with `CONT`
   lines. `ADR1`, `CITY` and the other address parts are not read: `CITY`
@@ -248,7 +260,9 @@ Detail the register gives about a fact beyond its date and place is read under
   `2 PLAC Vavřinec 13` — or every house becomes a place and a pin of its own.
 - `2 HUSB` / `2 WIFE` with a `3 AGE` under `MARR` — each partner's age at the
   wedding; `ADDR` under `MARR` — the house of the wedding (usually the bride's).
-- `PLAC` under `DIV` — the place of the divorce.
+- `PLAC` under `DIV` — the place of the divorce; a `NOTE` under `DIV` (with
+  `CONT`) becomes a "Divorce: …" line of the family's note and goes back under
+  the `DIV` in "Back to {program}".
 - A date in another calendar (`@#DJULIAN@`, `@#DHEBREW@`, `@#DFRENCH R@`) keeps
   its numbers as the date and adds a line saying which calendar they are in.
   Convert to Gregorian yourself if you want the date field to be exact.
@@ -347,6 +361,14 @@ not its label, and is kept in the event's note:
   either one is enough. The same `CHIL` twice counts once, and a second `FAM`
   of the same two people is read as the same union (children, citations,
   witnesses and missing dates join the first).
+- A couple divorced in one family record and married again in another (one
+  record per wedding, as some programs write it) reads as married, the divorce
+  and the new wedding said in the note as for `MARR` / `DIV` / `MARR` in one
+  family. The second record is kept with its weddings, divorces, ids and
+  `_UPD`, so "Back to {program}" writes it again with its own date beside the
+  first, both partners keeping both `FAMS`; the import summary counts such
+  joined records. Its children, note, citations and other events go to the
+  one union (and come back under the first record).
 - `HUSB` / `WIFE`: Strom writes the man as `HUSB` and the woman as `WIFE`; a
   person of unknown sex takes the role the other partner leaves free, and two
   of one sex (or two unknown) keep the order of the couple. In the tree a
@@ -664,7 +686,9 @@ the record ids, the export to the program the tree came from keeps:
   back as the file had it, under the fact Strom writes or as the whole
   structure, while the note still has those lines unchanged (a line edited in
   the app stays in the note); other exports keep the note lines;
-- `GIVN` / `SURN` under the name, made from the name as it is now;
+- `GIVN` / `SURN` under the name and under the married name (`TYPE
+  married`), made from the name as it is now;
+- a source record's own ids (`RIN`, `_UID`…), back in that record;
 - a child recorded in two families: Strom hangs it from one (a birth family
   first) and notes the other ("Also recorded as child of …"); every export
   writes that second `FAMC` (with its `PEDI`) and the family's `CHIL` instead
