@@ -803,14 +803,14 @@ export function cleanImportOrigin(data: StromData, rawImports: unknown): void {
     }
 }
 
-/** A source's xref in the loaded files (Source.originalIds): the xref only, of known imports. */
+/** A source's xref in the loaded files (Source.originalIds) with its ids there (`RIN MH:S1`), of known imports. */
 function cleanSourceXrefs(src: IdsHolder, known: ReadonlySet<string>): void {
     if (!('originalIds' in src)) return;
     const raw: unknown = src.originalIds;
     delete src.originalIds;
     for (const v of Array.isArray(raw) ? raw : []) {
         const clean = cleanOriginalIds(v, known);
-        if (clean?.xref) addOriginalIds(src, { from: clean.from, xref: clean.xref });
+        if (clean?.xref) addOriginalIds(src, clean);
     }
 }
 

@@ -741,6 +741,8 @@ interface BackXrefs {
     sourceGroups: Map<string, string>;
     /** The original xref a group uses (without @), by its first member. */
     sources: Map<string, string>;
+    /** A source's entry of that program's ids (`1 RIN MH:S1` goes back), by source. */
+    sourceEntries: Map<string, OriginalIds>;
 }
 
 /** Every source a citation names (what pushCitation writes): of a person, a fact, an event, a couple. */
@@ -778,7 +780,7 @@ const sameSourceRecord = (a: Source, b: Source): boolean =>
 function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     const out: BackXrefs = {
         program: '', persons: new Map(), families: new Map(), personEntries: new Map(), familyEntries: new Map(), reserved: new Set(),
-        imports: new Set(), sourceGroups: new Map(), sources: new Map(),
+        imports: new Set(), sourceGroups: new Map(), sources: new Map(), sourceEntries: new Map(),
     };
     const rec = backTo ? data.imports?.find(r => r.id === backTo) : undefined;
     if (!rec) return out;
@@ -824,6 +826,7 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     for (const src of Object.values(data.sources ?? {}) as Source[]) {
         if (!src) continue;
         const entry = pick(src);
+        if (entry) out.sourceEntries.set(src.id, entry);
         if (!entry?.xref) continue;
         out.reserved.add(entry.xref.toUpperCase());
         if (!cited.has(src.id)) continue;
@@ -1795,7 +1798,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // (a file export; the research keeps the app's own, see keepImports).
         const fromEntry = !options.research && source.importId && knownImports.has(source.importId)
             ? source.originalIds?.find(e => e.from === source.importId && e.xref) : undefined;
-        if (fromEntry) lines.push(`2 _XREF @${fromEntry.xref}@`);
+        if (fromEntry) pushOriginalIdLines(lines, 2, fromEntry, true);
+        // "Back to {prog}": the record's ids in that program (`1 RIN MH:S1`).
+        const backIds = back.sourceEntries.get(sourceId);
+        if (backIds) pushOriginalIdLines(lines, 1, backIds, false);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
         if (author) pushLongValue(lines, 1, 'AUTH', author);
         if (source.repository) {

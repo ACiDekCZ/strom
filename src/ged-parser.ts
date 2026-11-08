@@ -1058,6 +1058,10 @@ interface RawSource {
     author?: string;
     /** `2 _XREF` under the record's `1 _STROM_IMPORT`: its xref in the file it came from (app files only). */
     importXref?: string;
+    /** The id lines under the record's `1 _STROM_IMPORT` (`2 RIN`, `2 _UID`…): its ids in that file (app files only). */
+    importIdLines?: OriginalIdLine[];
+    /** The record's ids in the program that wrote the file (`1 RIN`, `1 _UID`…; see GedcomIndividual.fileIds). */
+    fileIds?: OriginalIdLine[];
     /** A page's source of its own: the record (xref) it was cut from. */
     derivedFrom?: string;
 }
@@ -3197,6 +3201,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
                 else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
                 else if (tag === IMPORT_TAG) { const mark = readImportMark(value); if (mark) src.importMark = mark.id; }
+                // The record's ids in the program that wrote the file (`1 RIN MH:S1`), for "Back to {prog}".
+                else if (ORIGINAL_ID_TAGS.has(tag)) readFileId(src, tag, value);
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '', ...(GED_POINTER.test(value.trim()) ? { ref: value.trim() } : {}) });
                 else if (tag === '_STROM_IMG_OMITTED') src.imageHeld = imageHeldReason(value);
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
@@ -3233,6 +3239,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentSubTag === IMPORT_TAG && tag === '_XREF') {
                     const xref = value.trim();
                     if (GED_POINTER.test(xref) && src.importXref === undefined) src.importXref = xref.slice(1, -1);
+                } else if (currentSubTag === IMPORT_TAG && ORIGINAL_ID_TAGS.has(tag) && value.trim()
+                    && (src.importIdLines?.length ?? 0) < ID_LINES_MAX) {
+                    (src.importIdLines ??= []).push({ tag, value: value.trim() });
                 } else if (currentSubTag === '_STROM_IMG_OMITTED' && tag === '_STROM_CLIP') {
                     const mark = value.trim();
                     if (/^[A-Za-z0-9-]{1,32}$/.test(mark) && !src.heldClips?.includes(mark)) {
@@ -4223,6 +4232,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 ...(date ? { recordDate: date } : {}),
                 ...(src.importMark ? { importMark: src.importMark } : {}),
                 ...(src.importXref ? { importXref: src.importXref } : {}),
+                ...(src.importIdLines ? { importIdLines: src.importIdLines } : {}),
+                ...(src.fileIds ? { fileIds: src.fileIds } : {}),
                 ...(src.author !== undefined ? { author: src.author } : {}),
                 ...(block.length ? { extras: [{ tag: CITE_TAG, lines: block, quiet: true }] } : {}),
             });
@@ -5368,7 +5379,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const [gedId, raw] of gedSources) {
             const sid = sourceIdMap.get(gedId);
             const xref = (raw.derivedFrom ?? gedId).match(/^@([^@]+)@$/)?.[1];
-            if (sid && sources[sid] && xref && !xref.startsWith('__')) addOriginalIds(sources[sid], { from, xref });
+            if (!sid || !sources[sid] || !xref || xref.startsWith('__')) continue;
+            // The record's ids (`1 RIN MH:S1`), on a page's source of its own too.
+            const ids = (raw.derivedFrom ? gedSources.get(raw.derivedFrom)?.fileIds : raw.fileIds) ?? [];
+            const entry = cleanOriginalIds({ from, xref, ids }, known);
+            if (entry) addOriginalIds(sources[sid], entry);
         }
     }
 
@@ -5399,7 +5414,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const [gedId, raw] of gedSources) {
             const sid = sourceIdMap.get(gedId);
             if (!sid || !sources[sid] || !raw.importMark || !raw.importXref) continue;
-            addOriginalIds(sources[sid], { from: raw.importMark, xref: raw.importXref });
+            addOriginalIds(sources[sid], { from: raw.importMark, xref: raw.importXref, ids: raw.importIdLines ?? [] });
             any = true;
         }
         return any;

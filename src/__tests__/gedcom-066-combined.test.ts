@@ -152,7 +152,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             ['HUSB', people, /^1 HUSB /], ['WIFE', people, /^1 WIFE /], ['CHIL', people, /^1 CHIL /],
             ['FAMC', people, /^1 FAMC /], ['FAMS', people, /^1 FAMS /], ['PEDI', people, /^2 PEDI /],
             ['NAME', people, /^1 NAME/], ['TYPE married', people, /^2 TYPE married$/],
-            ['RIN', people, /^1 RIN /], ['_UID', people, /^1 _UID /], ['_UPD', ['INDI', 'FAM', 'SOUR'], /^1 _UPD /],
+            ['RIN', ['INDI', 'FAM', 'SOUR'], /^1 RIN /], ['_UID', people, /^1 _UID /], ['_UPD', ['INDI', 'FAM', 'SOUR'], /^1 _UPD /],
             ['BIRT', people, /^1 BIRT$/], ['DEAT', people, /^1 DEAT( Y)?$/], ['MARR', people, /^1 MARR$/],
             ['RESI', people, /^1 RESI$/], ['EMAIL', people, /^2 EMAIL /], ['NCHI', people, /^1 NCHI /],
             ['AGE', people, /^2 AGE /], ['NOTE', people, /^\d NOTE /], ['CONT', people, /^\d CONT /],
@@ -180,6 +180,11 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
                 '1 AUTH Hrbolcov parish office', '1 PUBL Hrbolcov 1860', '1 _TYPE Parish register', '1 _MEDI Book',
                 '1 _UPD 8 NOV 2026 10:00:00 GMT -0500']));
             expect(count(record(first, '@S1@'), /^1 (PAGE|NOTE) /)).toBe(0);
+            // The source records' own ids (RIN, _UID) go back to them, in both "Back to" files.
+            for (const ged of [first, second]) {
+                expect(record(ged, '@S1@')).toContain('1 RIN MH:S1');
+                expect(record(ged, '@S2@')).toContain('1 RIN MH:S2');
+            }
             const kvasibor = record(first, '@I101@');
             expect(holdsRun(kvasibor, ['2 SOUR @S1@', '3 PAGE fol. 3', '3 DATA', '4 DATE 3 FEB 1860',
                 '4 TEXT Kvasibor, son of the potter', '5 CONC  of Hrbolcov', '3 QUAY 3', '3 EVEN BIRT', '4 ROLE CHIL'])).toBe(true);
