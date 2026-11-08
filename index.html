@@ -21882,12 +21882,16 @@
         .status-tip .st-v-note.is-error { color: var(--danger); }
         .status-tip .st-v-aside { color: var(--text-faint); font-size: 12px; }
         .status-tip .st-v-aside .st-link { display: inline-flex; margin: 2px 0 0; font-size: 12px; }
+        /* One grid for all rows: the labels' column as wide as the longest label ("Schätzung"), never broken. */
         .status-tip .st-preview {
-            display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); font-size: 12px;
+            display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 8px; padding: 10px;
+            border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px;
         }
+        .status-tip .st-preview > * { grid-column: 1 / -1; }
         .status-tip .st-preview-head { font-size: 12.5px; font-weight: 600; color: var(--text); }
-        .status-tip .st-preview-row { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 8px; }
+        .status-tip .st-preview > .st-preview-row { display: contents; }
+        .status-tip .st-preview-label { grid-column: 1; overflow-wrap: normal; }
+        .status-tip .st-preview-value { grid-column: 2; }
         .status-tip .st-preview-label { color: var(--text-faint); }
         .status-tip .st-preview-value { min-width: 0; }
         .status-tip .st-preview-sub { display: block; color: var(--text-faint); font-size: 11.5px; }
@@ -21917,13 +21921,12 @@
         }
         @media (max-width: 640px) {
             .status-tip .st-preview { padding: 8px; }
-            .status-tip .st-preview-row { grid-template-columns: 56px minmax(0, 1fr); }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             .status-tip .st-v-btn, .modal .status-tip button.st-v-btn { padding: 5px 10px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .status-tip .st-preview { gap: 3px; padding: 8px; }
+            .status-tip .st-preview { gap: 3px 8px; padding: 8px; }
         }
         [data-theme="dark"] .status-tip .st-v-box { background: var(--surface-2); border: 1px solid var(--divider); }
         /* An Undo of the scan is made in the person editor or the relationships panel: its toast (with Redo) is above the dialog's overlay. */

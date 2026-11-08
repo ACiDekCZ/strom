@@ -435,6 +435,13 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(tip.locator('.st-v-state')).toHaveText("Waiting to be verified · 2nd in the research's queue");
         await expect(vAct(page, 'verify')).toHaveCount(0);
         await expect(vAct(page, 'scan')).toBeVisible();
+
+        // Confirmed from the scan while waiting: the research drops it from its task, the clock goes.
+        await vAct(page, 'scan').click();
+        await expect(pill).toHaveClass(/fact-status-human/);
+        await expect(pill).not.toHaveClass(/\bis-pending\b/);
+        await expect(pill.locator('.fs-clock')).toHaveCount(0);
+        await expect(tip.locator('.st-v-state')).toHaveCount(0);
     });
 
     test('a fact waiting by the research\'s file: the clock and its place, no Verify', async ({ page }) => {
@@ -519,6 +526,32 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await vAct(page, 'undo').click();
         await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-probable/);
         await expect(page.locator('.toast', { hasText: 'Confirmation undone' }).locator('.toast-action')).toHaveText('Redo');
+    });
+});
+
+test.describe('verify facts at one fact in German', () => {
+    test.use({ locale: 'de-DE', viewport: { width: 1440, height: 900 } });
+
+    test('the preview\'s labels stand in one column, "Schätzung" unbroken', async ({ page }) => {
+        await openVerifyTree(page);
+        await personModal(page).locator('#events-list .event-row .fact-status').first().click();
+        await vAct(page, 'verify').click();
+        const labels = page.locator('#status-tip .st-preview-label');
+        await expect(labels).toHaveText(['Was', 'Wie', 'Schätzung']);
+        const boxes = await labels.evaluateAll(els => els.map(el => {
+            const r = el.getBoundingClientRect();
+            const value = el.nextElementSibling!.getBoundingClientRect();
+            const text = document.createRange();
+            text.selectNodeContents(el);
+            const lines = new Set(Array.from(text.getClientRects()).map(q => Math.round(q.top))).size;
+            return { x: r.left, w: r.width, scroll: el.scrollWidth, valueX: value.left, lines };
+        }));
+        for (const b of boxes) {
+            expect(b.lines).toBe(1);
+            expect(b.x).toBeCloseTo(boxes[0].x, 0);
+            expect(b.valueX).toBeCloseTo(boxes[0].valueX, 0);
+            expect(b.scroll).toBeLessThanOrEqual(Math.ceil(b.w));
+        }
     });
 });
 

@@ -96,9 +96,16 @@ function setLocal(holder: FactHolder, fact: string, patch: Partial<Omit<LocalSta
     local.set(key, { ...base, ...patch, holder });
 }
 
-/** Whether a fact waits for re-verification: started here, or as the research's file says. */
+/**
+ * Whether a fact waits for re-verification: started here, or as the research's
+ * file says — unless it was confirmed or taken back through the bridge since
+ * (the research closes its task at a confirmation and does not queue it again).
+ */
 export function factWaitsForVerify(holder: FactHolder, fact: string): boolean {
-    return !!localOf(holder, fact)?.pending || !!holder.researchVerify?.[fact]?.pending;
+    const s = localOf(holder, fact);
+    if (s?.pending) return true;
+    if (s && s.confirmed !== undefined) return false;
+    return !!holder.researchVerify?.[fact]?.pending;
 }
 
 /**
@@ -117,9 +124,11 @@ function infoWithLocal(holder: FactHolder, fact: string): FactVerifyInfo {
     const info = factVerifyInfo(holder, fact);
     const s = localOf(holder, fact);
     if (!s || s.confirmed === undefined) return info;
-    if (s.confirmed) return { ...info, confirmed: s.confirmed, confirmedBy: 'research' };
-    if (info.confirmedBy !== 'research') return info;
-    const { confirmed: _c, confirmedBy: _b, ...rest } = info;
+    // Confirmed or taken back through the bridge: the file's wait is over (factWaitsForVerify).
+    const { pending: _p, ...settled } = info;
+    if (s.confirmed) return { ...settled, confirmed: s.confirmed, confirmedBy: 'research' };
+    if (settled.confirmedBy !== 'research') return settled;
+    const { confirmed: _c, confirmedBy: _b, ...rest } = settled;
     return rest;
 }
 
@@ -533,7 +542,8 @@ export const verifyUiMethods = uiModule({
             return;
         }
         const holder = holderOf(v.target);
-        if (holder) setLocal(holder, v.fact, { confirmed: confirm ? result.confirmed ?? localIsoDay() : null });
+        // A confirmation closes the fact's waiting (the research drops it from its task).
+        if (holder) setLocal(holder, v.fact, { confirmed: confirm ? result.confirmed ?? localIsoDay() : null, ...(confirm ? { pending: undefined } : {}) });
         this.verifyRedraw(confirm ? 'undo' : 'scan');
         done();
     },
