@@ -16,6 +16,7 @@ import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { researchConflictRef } from '../research-link.js';
 import { uiModule } from './module.js';
+import { researchBridgeActionLabel } from './research-open-mark.js';
 import { openMarkTip } from './status-tip.js';
 import { DataManager } from '../data.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
@@ -89,9 +90,9 @@ export const cardSignalsUiMethods = uiModule({
         if (!s) return '';
         const c = strings.card;
         const esc = (t: string): string => this.escapeHtml(t);
-        const item = (action: string, kind: string, glyph: string, text: string): string => {
+        const item = (action: string, kind: string, glyph: string, text: string, textHtml?: string): string => {
             const cls = `${itemClass} menu-act menu-signal-${kind}`;
-            const body = `${glyph}<span class="menu-act-text">${esc(text)}</span>`;
+            const body = `${glyph}<span class="menu-act-text">${textHtml ?? esc(text)}</span>`;
             return itemClass === 'bottom-sheet-item'
                 ? `<button type="button" class="${cls}" role="menuitem" data-action="${action}">${body}</button>`
                 : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="${action}">${body}</div>`;
@@ -112,6 +113,15 @@ export const cardSignalsUiMethods = uiModule({
             ].filter(Boolean);
             const kind: ActionSignal = s.conflicts > 0 ? 'conflict' : 'question';
             items.push(item('signal-knows', kind, glyph(kind), c.menuKnows(parts.join(', '))));
+        }
+        // Verifying the person's facts (spec 065 §10i): through the bridge, the AI badge alone;
+        // facts already waiting lead to "What the research knows", no mark.
+        const verify = this.personVerifyMenu(personId);
+        if (verify) {
+            const verifyGlyph = '<span class="menu-act-glyph menu-verify-glyph" aria-hidden="true">✓</span>';
+            items.push(verify.kind === 'verify'
+                ? item('signal-verify', 'verify', verifyGlyph, '', researchBridgeActionLabel(strings.verify.menu(verify.n), 'verify'))
+                : item('signal-verify-pending', 'verify-pending', verifyGlyph, strings.verify.menuPending(verify.n)));
         }
         if (s.showAgent) items.push(item('signal-agent', 'agent', '<span class="agent-mark" aria-hidden="true"></span>', c.menuAgent));
         const trees = groupCrossTreeMatches(TreeRenderer.crossTreeMatchesFor(personId));

@@ -374,26 +374,25 @@ test.describe('live panel: up next, update, spend', () => {
 });
 
 test.describe('What the research knows', () => {
-    test('first in "Research ›" only with data, its conflict tag on the row too; Find descendants under Find ancestors', async ({ page }) => {
+    test('first in "Research ›" only with data and without the signal above; Find descendants under Find ancestors', async ({ page }) => {
         await setup(page);
+        // Jan: his conflicts lead there from the signal at the top (signal-knows), so "Research ›" does not repeat it.
         const actions = await menuActions(page, 'Jan');
         expect(actions).not.toContain('research-knows');
+        expect(actions).toContain('signal-knows');
         const row = page.locator('.context-menu [data-menu="research"]');
-        await expect(row.locator('.menu-item-tag')).toHaveText('2 conflicts');
-        await expect(row).toHaveAttribute('aria-label', 'Research, 2 conflicts');
+        await expect(row.locator('.menu-item-tag')).toHaveCount(0);
         const sub = await openPersonSubmenu(page, 'research');
         expect(await sub.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action)))
-            .toEqual(['research-knows', 'research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
-        const knows = sub.locator('[data-action="research-knows"]');
-        await expect(knows.locator('.menu-item-tag')).toHaveText('2 conflicts');
-        await expect(knows).toHaveAttribute('aria-label', 'What the research knows, 2 conflicts');
+            .toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
         await sub.locator('[data-action="research-descendants"]').click();
         expect(await launched(page)).toEqual([`strom-research://research?tree=${UUID}&person=P0012&direction=descendants`]);
 
-        // Anna: searched only — no tag. Eva: nothing — not in the submenu.
+        // Anna: searched only — first in the submenu, no tag. Eva: nothing — not in the submenu.
         await menuActions(page, 'Anna');
         await expect(page.locator('.context-menu [data-menu="research"] .menu-item-tag')).toHaveCount(0);
         await openPersonSubmenu(page, 'research');
+        await expect(page.locator('.context-submenu [data-action]').first()).toHaveAttribute('data-action', 'research-knows');
         await expect(page.locator('.context-submenu [data-action="research-knows"] .menu-item-tag')).toHaveCount(0);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
@@ -477,11 +476,12 @@ test.describe('What the research knows', () => {
         await dropFile(page, researchGed());
         await expect(card(page, 'Jan')).toBeVisible();
         await card(page, 'Jan').click();
-        // No research links on a phone: "What the research knows" alone stays on the first level.
+        // No research links on a phone; Jan's conflicts lead to "What the research knows" from the signal at the top.
         await expect(page.locator('.bottom-sheet [data-menu="research"]')).toHaveCount(0);
-        const item = page.locator('.bottom-sheet [data-action="research-knows"]');
+        await expect(page.locator('.bottom-sheet [data-action="research-knows"]')).toHaveCount(0);
+        const item = page.locator('.bottom-sheet [data-action="signal-knows"]');
         await expect(item).toBeVisible();
-        await expect(item.locator('.menu-item-tag')).toHaveText('2 conflicts');
+        await expect(item).toContainText('2 conflicts');
         await item.click();
         await expect(page.locator('#person-research-modal')).toBeVisible();
         // No research links on a phone, the content is there.

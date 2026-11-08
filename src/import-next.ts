@@ -43,11 +43,10 @@ export function importNextResearchState(input: ImportNextResearchInput): ImportN
 
 /**
  * "Check facts against sources" (065, bulk verification): offered only when
- * the research's bridge names the feature. 065 is not built yet, so no bridge
- * names it and the button is absent; once 065 settles its feature name, list
- * it here and give the action its group in RESEARCH_LINK_MARKS.
+ * the research's bridge names the feature (`verify.bulk`); the button opens
+ * the bulk dialog, through the bridge with the AI badge alone.
  */
-export const IMPORT_NEXT_VERIFY_FEATURES: readonly string[] = [];
+export const IMPORT_NEXT_VERIFY_FEATURES: readonly string[] = ['verify.bulk'];
 
 /** The bridge's /status.features offer the bulk verification of 065. */
 export function importNextVerifyAvailable(features: readonly string[] | null | undefined): boolean {

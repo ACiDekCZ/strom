@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
+import { FakeBridge, fakeBridge, openResearch, poll, touchScreenNow } from './research-bridge.js';
+import { FakeVerify, VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
 /**
  * What a card shows at a glance: the one status mark (spec 066 P4 §1) and the
@@ -981,5 +983,171 @@ test.describe('card signals', () => {
         // Without the legend setting no legend at all.
         await page.evaluate(() => { window.Strom.SettingsManager.setBranchLegend(false); window.Strom.TreeRenderer.render(); });
         await expect(page.locator('#tree-legend')).toBeHidden();
+    });
+});
+
+test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () => {
+    const FIX = { at: '2026-11-08T22:41:07Z', facts: 3, people: 2 };
+    const LINE = { id: 'G0001', name: 'Fíšek line', state: 'active', focus: 'P0003' };
+    const COUNTS = { asked: 0, images: 0, permission: 0, kept: 0, confirmed: 0 };
+
+    async function verifySetup(page: Page, statusExtra: Record<string, unknown> = {}): Promise<{ bridge: FakeBridge; verify: FakeVerify; jan: string }> {
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: verifyGed(), statusExtra: { researches: [LINE], ...statusExtra } });
+        const verify = await fakeVerify(page, bridge);
+        await openResearch(page, { ged: verifyGed() });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+        return { bridge, verify, jan };
+    }
+
+    test('the person menu has one "Verify facts · N" with the AI badge alone; the preview recounts, 0 checked cannot start; a start makes it "Verifying · N"', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const { verify } = await verifySetup(page);
+        await card(page, 'Jan').locator('.name').click();
+        const menu = page.locator('.context-menu');
+        const item = menu.locator('[data-action="signal-verify"]');
+        await expect(item).toHaveCount(1);
+        await expect(menu.locator('.menu-act', { hasText: 'Verify facts' })).toHaveCount(1);
+        await expect(item.locator('.menu-act-text')).toContainText('Verify facts · 2');
+        await expect(item.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(item.locator('svg')).toHaveCount(0);
+        await item.click();
+
+        const dialog = page.locator('#verify-person-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('.vfy-check')).toHaveCount(2);
+        expect(verify.posts[0]).toEqual({ route: 'verify', body: { person: 'P0003', dry: true } });
+        const est = dialog.locator('.vfy-est-head');
+        const start = dialog.locator('[data-vfy="start"]');
+        await expect(est).toHaveText('Estimate: 1 low, 1 higher');
+        await expect(start).toContainText('Verify (2)');
+        await expect(start.locator('.research-ai-badge')).toHaveCount(1);
+        // The kind's rule: × in the header, Cancel right before the one primary.
+        await expect(dialog.locator('.close-btn')).toHaveCount(1);
+        expect(await dialog.locator('.buttons [data-dismiss]').evaluate(el => el.nextElementSibling?.classList.contains('primary'))).toBe(true);
+        // The research's answer drew the content again: the focus stayed in the dialog.
+        await expect(dialog.locator('[data-dismiss]')).toBeFocused();
+
+        await dialog.locator('.vfy-check').nth(1).uncheck();
+        await expect(est).toHaveText('Estimate: 1 low, 0 higher');
+        await expect(start).toContainText('Verify (1)');
+        await dialog.locator('.vfy-check').nth(0).uncheck();
+        await expect(est).toHaveText('Estimate: 0 low, 0 higher');
+        await expect(start).toBeDisabled();
+        await dialog.locator('.vfy-check').nth(0).check();
+        await dialog.locator('.vfy-check').nth(1).check();
+        await expect(start).toBeEnabled();
+        await start.click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: '2 facts queued for verification.' })).toBeVisible();
+        expect(verify.posts.filter(p => !p.body.dry)).toEqual([{ route: 'verify', body: { person: 'P0003' } }]);
+
+        // Both facts wait now: no "Verify facts"; "Verifying · 2" leads to what the research knows.
+        await card(page, 'Jan').locator('.name').click();
+        await expect(menu.locator('[data-action="signal-verify"]')).toHaveCount(0);
+        const pending = menu.locator('[data-action="signal-verify-pending"]');
+        await expect(pending.locator('.menu-act-text')).toHaveText('Verifying · 2');
+        await expect(pending.locator('.research-ai-badge')).toHaveCount(0);
+        await pending.click();
+        const knows = page.locator('#person-research-modal [data-verify-section="person"]');
+        await expect(knows).toBeVisible();
+        await expect(knows.locator('.vfy-sec-pending')).toContainText('Waiting to be verified: 2 facts');
+        await expect(knows.locator('[data-verify-act="bulk"] .research-ai-badge')).toHaveCount(1);
+        await knows.locator('[data-verify-act="bulk"]').click();
+        await expect(page.locator('#person-research-modal')).toHaveCount(0);
+        await expect(page.locator('#verify-bulk-modal')).toBeVisible();
+    });
+
+    test('the tree\'s Verifying: Stop, then the bulk dialog with the line, nearest ancestors first and a try on 5 people; the estimate follows the choice', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const { verify } = await verifySetup(page, { verify: { waiting: 2, ...COUNTS } });
+        await page.evaluate(() => window.Strom.UI.showVerifyTreeDialog());
+        const tree = page.locator('#verify-tree-modal');
+        await expect(tree.locator('.vfy-sec-pending')).toContainText('Waiting to be verified: 2 facts');
+        const stop = tree.locator('[data-verify-act="stop"]');
+        await expect(stop).toHaveText('Stop');
+        await expect(stop.locator('.research-ai-badge')).toHaveCount(0);
+        await stop.click();
+        await expect(page.locator('.toast', { hasText: 'Verification stopped.' })).toBeVisible();
+        expect(verify.posts.at(-1)).toEqual({ route: 'verify/stop', body: {} });
+        await tree.locator('[data-verify-act="bulk"]').click();
+        await expect(tree).toHaveCount(0);
+
+        const bulk = page.locator('#verify-bulk-modal');
+        await expect(bulk).toBeVisible();
+        const scopes = bulk.locator('input[name="vfy-scope"]');
+        await expect(scopes).toHaveCount(3);
+        await expect(scopes.first()).toBeChecked();
+        await expect(bulk.locator('.vfy-opt').first()).toContainText('Line: Fíšek line');
+        await expect(bulk.locator('[data-scope-count="line"]')).toHaveText('4 facts');
+        await expect(bulk.locator('[data-scope-count="tree"]')).toHaveText('30 facts');
+        await expect(bulk.locator('input[name="vfy-order"][value="ancestors"]')).toBeChecked();
+        await expect(bulk.locator('input[name="vfy-try"]')).toBeChecked();
+        const start = bulk.locator('[data-vfy="start"]');
+        await expect(start).toContainText('Try on 5');
+        await expect(start.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(bulk.locator('.vfy-est-head')).toContainText('4 facts');
+        expect(verify.posts.some(p => p.route === 'verify/bulk' && p.body.scope === 'line' && p.body.of === 'G0001'
+            && p.body.order === 'ancestors' && p.body.try === 5 && p.body.dry === true)).toBe(true);
+
+        // The whole tree without a try: 30 facts.
+        await scopes.nth(2).check();
+        await bulk.locator('input[name="vfy-try"]').uncheck();
+        await expect(start).toContainText('Verify (30)');
+        await expect(bulk.locator('.vfy-est-head')).toContainText('30 facts');
+        await start.click();
+        await expect(bulk).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: '30 facts queued for verification.' })).toBeVisible();
+        expect(verify.posts.at(-1)).toEqual({ route: 'verify/bulk', body: { scope: 'tree', order: 'ancestors' } });
+    });
+
+    test('the toast after a run of re-verification comes once per run', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const { bridge } = await verifySetup(page, { verify: { waiting: 3, ...COUNTS, fix: FIX } });
+        const toast = page.locator('.toast[data-kind="verify-queued"]');
+        await expect(toast).toHaveCount(1);
+        await expect(toast).toContainText('3 facts with an original are waiting to be verified');
+        await toast.locator('button', { hasText: 'Details' }).click();
+        await expect(page.locator('#verify-tree-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#verify-tree-modal')).toHaveCount(0);
+        await poll(page);
+        await poll(page);
+        await expect(toast).toHaveCount(0);
+        // Another run: the toast again.
+        bridge.statusExtra = { ...bridge.statusExtra, verify: { waiting: 1, ...COUNTS, fix: { ...FIX, at: '2026-11-09T08:00:00Z', facts: 1 } } };
+        await poll(page);
+        await expect(toast).toHaveCount(1);
+        await expect(toast).toContainText('1 fact with an original is waiting');
+    });
+
+    test('phone 390 × 844 with touch: the preview is a bottom sheet, its rows 52 px, its buttons 48 px, nothing wider than the screen', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        const { jan } = await verifySetup(page);
+        await touchScreenNow(page);
+        await page.evaluate((id) => window.Strom.UI.showVerifyPersonDialog(id as never), jan);
+        const modal = page.locator('#verify-person-modal .vfy-modal');
+        await expect(modal.locator('.vfy-check')).toHaveCount(2);
+        const look = await modal.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const row = el.querySelector('.vfy-row')!.getBoundingClientRect();
+            const btns = [...el.querySelectorAll<HTMLElement>('.vfy-foot button')].map(b => b.getBoundingClientRect().height);
+            const box = el.querySelector('.vfy-check')!.getBoundingClientRect();
+            const main = el.querySelector('.vfy-row-main')!.getBoundingClientRect();
+            // The checkbox beside the fact's text (a label of a dialog is no block above it).
+            const beside = box.right <= main.left && box.top < main.bottom && box.bottom > main.top;
+            return { left: r.left, right: r.right, bottom: r.bottom, row: row.height, btns, scroll: el.scrollWidth - el.clientWidth, vw: innerWidth, vh: innerHeight, beside };
+        });
+        expect(look.beside).toBe(true);
+        expect(look.left).toBe(0);
+        expect(Math.round(look.right)).toBe(look.vw);
+        expect(Math.round(look.bottom)).toBe(look.vh);
+        expect(look.row).toBeGreaterThanOrEqual(52);
+        expect(Math.min(...look.btns)).toBeGreaterThanOrEqual(48);
+        expect(look.scroll).toBeLessThanOrEqual(0);
+        // Opened without a menu, drawn again with the answer: Esc still closes it.
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#verify-person-modal')).toHaveCount(0);
     });
 });

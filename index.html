@@ -24935,6 +24935,114 @@
         @media (hover: hover) {
             .about-help:hover { background: var(--primary-soft); border-color: var(--primary); }
         }
+        /* Verify facts: person and bulk (spec 065 §10 h–m, src/ui/verify-person-ui.ts).
+           The person's preview (400px), the bulk dialog (460px), the tree's small dialog,
+           the "Verifying" section of "What the research knows", the card tip's button and
+           the person menu's item. Phones: a bottom sheet, rows 52px, buttons 48px. */
+        .modal.vfy-modal {
+            width: 400px; max-width: min(400px, 94vw); min-width: 0; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+            display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--surface);
+        }
+        .modal.vfy-modal.vfy-bulk { width: 460px; max-width: min(460px, 94vw); }
+        .vfy-modal .vfy-header { flex: none; align-items: flex-start; gap: 10px; padding: 18px 20px 10px; background: var(--surface); }
+        .vfy-heading { flex: 1 1 auto; min-width: 0; }
+        .vfy-heading h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; text-wrap: pretty; }
+        .vfy-sub { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .vfy-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 10px; }
+        .vfy-loading, .vfy-error { margin: 8px 0; font-size: 14px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .vfy-error { color: var(--text); }
+        .vfy-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .vfy-rows > li + li { border-top: 1px solid var(--border); }
+        /* Labels: the longer selector beats `.modal label { display: block }`. */
+        .vfy-modal .vfy-row, .vfy-modal .vfy-opt {
+            display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 0; margin: 0; box-sizing: border-box;
+            cursor: pointer; color: var(--text); font-size: inherit; font-weight: inherit;
+        }
+        .vfy-row input, .vfy-opt input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+        .vfy-row-main, .vfy-opt-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .vfy-row-title, .vfy-opt-title { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+        .vfy-row-sub, .vfy-opt-sub { font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .vfy-cost {
+            flex: none; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+            font-size: 12px; line-height: 1.4; white-space: nowrap; color: var(--text-light); background: var(--surface-2);
+        }
+        .vfy-cost.is-high { color: var(--accent-text); }
+        .vfy-opt-count { flex: none; font-size: 12.5px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .vfy-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+        .vfy-group-head {
+            padding: 0; margin: 0 0 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text);
+        }
+        .vfy-modal .vfy-try { align-items: flex-start; padding-top: 8px; border-top: 1px solid var(--border); }
+        .vfy-try input { margin-top: 1px; }
+        .vfy-est { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+        .vfy-est:empty { display: none; }
+        .vfy-est p { margin: 0; overflow-wrap: anywhere; }
+        .vfy-est-head { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--text); }
+        .vfy-est p.vfy-est-left { margin-top: 2px; font-size: 13px; color: var(--text-light); }
+        .vfy-est p.vfy-est-note { margin-top: 4px; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .vfy-est .vfy-loading, .vfy-est .vfy-error { margin: 0; }
+        .vfy-modal .vfy-foot { flex: none; }
+        .vfy-modal .vfy-foot button { width: auto; white-space: normal; }
+        .vfy-modal .vfy-foot button:disabled { opacity: 0.55; cursor: default; }
+        /* The "Verifying" section (the person's and the tree's "What the research knows"). */
+        .vfy-section { display: flex; flex-direction: column; gap: 4px; }
+        .vfy-section--tree { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+        .vfy-section-head { margin: 0 0 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text); }
+        .vfy-sec-row {
+            display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 0; box-sizing: border-box;
+            border: 0; background: none; color: var(--text); font: inherit; text-align: left;
+        }
+        .vfy-sec-row + .vfy-sec-row { border-top: 1px solid var(--border); }
+        button.vfy-sec-row { cursor: pointer; padding: 6px 4px; border-radius: 8px; }
+        .vfy-sec-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .vfy-sec-title { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+        .vfy-sec-sub { font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .vfy-sec-stop { flex: none; white-space: nowrap; }
+        button.vfy-sec-row:focus-visible, .vfy-sec-stop:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The card tip: "N facts waiting to be verified" when there is nothing to start. */
+        .status-tip .st-acts > .st-verify-pending { flex: 1 1 100%; font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
+        .status-tip .st-acts > .st-verify-person { max-width: 100%; white-space: normal; text-align: left; }
+        .menu-verify-glyph { color: var(--primary); font-weight: 600; }
+        @media (pointer: coarse) {
+            .vfy-modal .vfy-row, .vfy-modal .vfy-opt, .vfy-sec-row { min-height: 48px; }
+            .vfy-row input, .vfy-opt input { width: 22px; height: 22px; }
+            .vfy-modal .vfy-foot button, .vfy-sec-stop { min-height: 44px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .vfy-modal .vfy-header { padding: 16px 18px 10px; }
+            .vfy-body { padding: 8px 18px 12px; }
+        }
+        @media (max-width: 640px) {
+            /* A bottom sheet as high as its content, its footer stuck to the bottom. */
+            .modal-overlay.vfy-overlay { align-items: flex-end; padding: 0; }
+            .modal.vfy-modal, .modal.vfy-modal.vfy-bulk {
+                width: 100%; max-width: 100vw; max-height: 90%; border-radius: 18px 18px 0 0; margin: 0;
+            }
+            .vfy-modal::before { content: ''; flex: none; align-self: center; width: 36px; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--border); }
+            .vfy-modal .vfy-header { padding: 10px 16px 8px; }
+            .vfy-heading h2 { font-size: 17px; }
+            .vfy-body { padding: 6px 16px 10px; }
+            .vfy-modal .vfy-row, .vfy-modal .vfy-opt, .vfy-sec-row { min-height: 52px; }
+            .vfy-modal .vfy-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
+            .vfy-modal .vfy-foot button { width: 100%; min-height: 48px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* Little height: a sheet from the top that scrolls as a whole (the footer goes with it). */
+            .modal-overlay.vfy-overlay { align-items: flex-start; padding: 0; }
+            .modal.vfy-modal, .modal.vfy-modal.vfy-bulk {
+                width: min(520px, calc(100% - 24px)); max-width: none; margin-top: 8px;
+                max-height: calc(100vh - 8px); max-height: calc(100dvh - 8px);
+                border-radius: 14px 14px 0 0; overflow-y: auto; display: block;
+            }
+            .vfy-modal::before { display: none; }
+            .vfy-modal .vfy-header { padding: 10px 16px 6px; }
+            .vfy-body { overflow: visible; padding: 4px 16px 8px; }
+            .vfy-modal .vfy-foot { padding: 8px 16px 10px; }
+        }
+        @media (hover: hover) {
+            .vfy-row:hover .vfy-row-title, .vfy-opt:hover .vfy-opt-title { color: var(--primary); }
+            button.vfy-sec-row:hover { background: var(--surface-2); }
+        }
     </style>
 </head>
 <body>

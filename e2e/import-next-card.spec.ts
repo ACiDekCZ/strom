@@ -1,6 +1,8 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
 import { openApp, createFirstPerson, waitForPersist } from './helpers.js';
+import { fakeBridge, openResearch, poll } from './research-bridge.js';
+import { VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
 /**
  * The "What next" card after a GEDCOM import from another program (spec 066
@@ -242,6 +244,28 @@ test('Strom\'s own GEDCOM (exported, then loaded again) is no import from anothe
     await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
     await expect(page.locator('#confirmation-modal')).toContainText(/worth a look/);
     await expect(nextCard(page)).toHaveCount(0);
+});
+
+test('a research tree whose bridge verifies in bulk: the card offers the bulk verification with the AI badge alone', async ({ page }) => {
+    const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: verifyGed() });
+    await fakeVerify(page, bridge);
+    await openResearch(page, { ged: verifyGed() });
+    await poll(page);
+    // As after a GEDCOM inserted into the research's tree: its import record, then the card.
+    await page.evaluate(() => {
+        const data = window.Strom.DataManager.getData();
+        data.imports = [...(data.imports ?? []), { id: 'I1', program: 'Family Tree Maker', at: '2026-11-01' }];
+        window.Strom.UI.offerImportNextCard(window.Strom.TreeManager.getActiveTreeId()!, { importId: 'I1', path: 'insert' });
+    });
+    const card = nextCard(page);
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAttribute('data-research', 'linked');
+    const verify = card.locator('.import-next-verify');
+    await expect(verify).toContainText('Check facts against sources');
+    await expect(verify.locator('.research-ai-badge')).toHaveCount(1);
+    await expect(verify.locator('.research-open-mark')).toHaveCount(0);
+    await verify.click();
+    await expect(page.locator('#verify-bulk-modal')).toBeVisible();
 });
 
 test.describe('phone', () => {

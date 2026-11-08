@@ -21,7 +21,7 @@ import {
     type ImportNextRow, type ImportNextPath,
 } from '../import-next.js';
 import { isMobile, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
-import { setResearchActionLabel } from './research-open-mark.js';
+import { researchBridgeActionLabel, setResearchActionLabel } from './research-open-mark.js';
 import { onComputer } from './research-ui.js';
 import { isHelpOpen } from './help-ui.js';
 import { uiModule } from './module.js';
@@ -300,10 +300,10 @@ export const importNextMethods = uiModule({
             const look = setResearchActionLabel(button('import-next-btn import-next-places', ''), s.places, researchLinkMark('places'));
             add(look, () => this.openPlacesLookAll(), { places: true });
             if (row.verify && researchId) {
-                // 065 (bulk verification) brings its own link and its group in RESEARCH_LINK_MARKS; until
-                // then importNextVerifyAvailable is false and this button is never drawn (placeholder: open the research).
-                const verify = setResearchActionLabel(button('import-next-btn import-next-verify', ''), s.verify, researchLinkMark('open'));
-                add(verify, () => this.researchSyncAction('openResearch'));
+                // The bulk verification (065): through the bridge, the AI badge alone, no terminal.
+                const verify = button('import-next-btn import-next-verify', '');
+                verify.innerHTML = researchBridgeActionLabel(s.verify, 'verify-bulk');
+                add(verify, () => this.showVerifyBulkDialog());
             }
         } else {
             text.append(el('div', 'import-next-row-title', s.researchTitle),
