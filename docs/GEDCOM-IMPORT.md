@@ -247,7 +247,11 @@ Detail the register gives about a fact beyond its date and place is read under
 
 A detail the model has no field for — the cause of a birth, the age at a
 divorce, a second marriage of the same couple giving its own house — becomes
-one labelled line in the note of that fact, so nothing is lost. On export the
+one labelled line in the note of that fact, so nothing is lost. An `AGE` under
+`BIRT` in a file Strom wrote (the research's or the app's own) is the
+exception: it is kept without being shown and written back as `2 AGE` under
+`BIRT`, so a note made of it never comes back to the research as something
+new. On export the
 fields come back as the same tags (`AGE`, `CAUS`, `ADDR`, `HUSB`/`WIFE` >
 `AGE`, `DIV` > `PLAC`), never as a `NOTE`.
 
@@ -346,7 +350,13 @@ not its label, and is kept in the event's note:
   role. A third partner line is left out (counted as a dropped tag).
 - A family with one parent gets a "?" stand-in for the other (of the opposite
   sex; of unknown sex for a parent of unknown sex), and keeps its
-  witnesses, story and everything else. A family naming two or more children
+  witnesses, story and everything else. A family of one spouse and no
+  children of its own is kept as well when it says something (a marriage, an
+  event, a note) or is a record of the file (ids, `_UID`, the research's
+  `_STROM_IMPORT`): it shows as a marriage to an unknown spouse, and its record
+  goes back out with its xref and ids. One that is only the second family of
+  a child hanging elsewhere is kept for that child (see the child of two
+  families under "Back to {program}"). A family naming two or more children
   but no parent at all gets two stand-ins, so the children stay siblings; a
   lone child without parents is left as it is.
 - `PEDI` under a child's `FAMC` marks an adopted, step or foster link.
@@ -474,9 +484,15 @@ labelled ("Author: …", "Call number: …").
 Two limits of the model to plan around:
 
 - **`PAGE`, `QUAY` and the entry date belong to the source, not to each
-  citation.** The first citation read decides them. If one book is cited at
-  different pages for different facts, give each entry a source of its own —
-  which is what a source is meant to be anyway.
+  citation.** A source in Strom is one entry: one source record cited at
+  different pages (or with different `QUAY` or `DATA` / `DATE`) becomes one
+  source per page, each with the record's title, author and other lines. A
+  citation without a `PAGE` is a source of its own with no page (a `1 PAGE`
+  on the record itself is its page), never the page of another citation.
+  "Back to {program}" writes such a set as the one record again, with its
+  xref, `AUTH` and own tags once, and each citation's `PAGE`, `QUAY` and
+  `DATA` / `DATE` under the citation; the same holds after a merge and after a
+  round trip through the research. Other exports write a record per source.
 - **The words of the entry go on the source, as `1 TEXT`.** `DATA` / `TEXT`
   under a citation is not read: other programs put machine-made summaries of
   matched records there, which would flood the notes.
@@ -543,6 +559,13 @@ record, as MyHeritage writes it) is the picture's date. It stays with the
 portrait or document the `OBJE` becomes (one line, at most 100 characters),
 is not shown, and only the export "Back to {program}" writes it again, as
 `2 _DATE` under that picture's `OBJE`. A new portrait drops the old one's date.
+
+A person's `1 OBJE` written in place whose `FILE` is a path or an address (no
+picture in the file) is kept as written, its `_DATE` and other lines included,
+while its file is not taken in: "Back to {program}" writes that block back on
+the person. Once the user picks the file for it, the picture is the tree's and
+the kept block goes. A link to a multimedia record (`1 OBJE @O1@`) whose file
+is not in the file is not kept.
 
 Strom's export embeds photos and documents this way unless the export dialog's
 content options leave them out — other programs cannot read data URLs, so a
@@ -622,7 +645,17 @@ the record ids, the export to the program the tree came from keeps:
 - a child recorded in two families: Strom hangs it from one (a birth family
   first) and notes the other ("Also recorded as child of …"); every export
   writes that second `FAMC` (with its `PEDI`) and the family's `CHIL` instead
-  of the note line, while the line is there and the family exists.
+  of the note line, while the line is there and the family exists — a second
+  family of one parent too;
+- a source record cited at several pages: one record with its xref and
+  `AUTH`, a citation per page (see Sources);
+- a person's picture linked by a path or an address and not taken in (see
+  Media).
+
+Merging the same file into the tree again fills what the earlier import did
+not keep: the e-mail lines of a fact and a couple without `MARR` in the file
+(only for the same family record of the same program). People without a name
+pair with each other by the id they have in the file.
 
 The "Back to" file read into Strom again keeps the other program's tags of
 each record that carries `1 _STROM_IMPORT Ix`, for that import, so the next
