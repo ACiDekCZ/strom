@@ -2,6 +2,19 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.26.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **GEDCOM z programů pro Windows**: soubor ze středoevropského programu pro Windows (*CP1250*, *ANSI* nebo bez uvedeného kódování) se načte se správnou diakritikou. Souhrn importu ukáže pod *Kódování textu* ukázku jmen; když jsou znaky zkomolené (è místo č), jde zvolit jiné kódování a soubor se načte znovu.
+- **Odkud údaje jsou**: strom z GEDCOM souboru si pamatuje, ze kterého souboru který údaj pochází (program, datum souboru). Každý údaj nese jednu značku spolehlivosti, *Potvrzeno*, *Doloženo*, *Z rodokmenu* nebo *Bez pramene*, a klepnutí řekne, co značka znamená. Karta osoby jednou řekne, odkud její údaje jsou, a *Nastavení* umí ukázat nejslabší značku na kartičkách ve stromu.
+- **Co teď po importu**: po GEDCOM z jiného programu ukáže karta *Co teď*, odkud osoby přišly, kontrolu dat, rodiny, které nic nespojuje se zbytkem, a výzkum předků s tímto stromem, jednou za import. Vložení GEDCOM do otevřeného stromu nejdřív uloží verzi *Před importem*.
+- **Export podle účelu**: export GEDCOM se ptá, *K čemu soubor je*. *Zpět do {programu}* (třeba *Zpět do MyHeritage*) nese celý strom se všemi prameny a citacemi, údaje výzkumu volitelně označené poznámkou; *Ke sdílení s ostatními* chrání žijící osoby a zemřelým prameny nechá. Patička říká, kolik pramenů a citací volba vynechá, s *Ponechat prameny*.
+- **ID a značky jiných programů zůstávají**: ID, která jiný program dal osobám a rodinám, a jeho vlastní značky u osoby či rodiny zůstanou ve stromu a *Zpět do {programu}* je zapíše zpět; souhrn importu uchované značky jmenuje. Načtou se i záznamy médií odkazované z osob a pramenů a výřezy obličejů, které MyHeritage píše pod fotky, se už nepočítají jako nepodporované.
+- **Slučování**: opakované sloučení téhož souboru už nezdvojuje poznámky, přidá se jen to, co strom ještě neříká. Samy se potvrdí jen shody od skóre 80, shody 50 až 79 se nabídnou ke kontrole. Osoby se stejným ID v obou souborech se spárují jako *Stejné ID v souboru*, když sedí jména, pohlaví a roky narození.
+- **Návrat k hodnotě z rodokmenu**: s výzkumem, který to podporuje, ukáže údaj změněný výzkumem *Původně z rodokmenu* s dřívější hodnotou a *Vrátit*. Návrh výzkumu změnit údaj z rodokmenu nebo zapsaný člověkem stojí u údaje s *Ponechat z rodokmenu* a *Přijmout návrh*.
+- **Texty**: německá poznámka o žijících osobách v exportu už neoslovuje čtenáře.
+
 ## 3.25.0
 
 *Vydáno 8. listopadu 2026.*

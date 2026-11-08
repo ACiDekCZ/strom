@@ -2,6 +2,19 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.26.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **GEDCOM from Windows programs**: a file from a Central European Windows program (*CP1250*, *ANSI* or without a stated encoding) is read with its accented letters intact. The import summary shows sample names under *Text encoding*; when letters look garbled (è instead of č), another encoding can be chosen and the file is read again.
+- **Where facts came from**: a tree from a GEDCOM file remembers which file each fact came from (program, file date). Each fact shows one reliability mark, *Confirmed*, *Proven*, *From family tree* or *No source*, and a tap says what the mark means. The person card says once where its facts came from, and *Settings* can show the weakest mark on the cards in the tree.
+- **What next after an import**: after a GEDCOM from another program a *What next* card shows where the people came from, the data check, the families nothing connects with the rest and ancestor research with this tree, once per import. Inserting a GEDCOM into an open tree saves a version *Before import* first.
+- **Export by purpose**: a GEDCOM export asks *What the file is for*. *Back to {program}* (for example *Back to MyHeritage*) carries the whole tree with every source and citation, the research's facts optionally marked with a note; *To share with others* protects living people while the deceased keep their sources. The footer says how many sources and citations a choice leaves out, with *Keep sources*.
+- **Ids and tags of other programs kept**: the ids another program gave its people and families, and its own tags at a person or family, stay in the tree, and *Back to {program}* writes them back; the import summary names the kept tags. Media records linked from people and sources are read, and the face cut-outs MyHeritage writes under photos no longer count as unsupported.
+- **Merging**: merging the same file again no longer doubles notes, only what the tree does not say yet is added. Only matches scoring 80 or more confirm themselves, 50 to 79 are offered for review. People with the same id in both files pair up as *Same ID in the file*, when their names, sex and birth years agree.
+- **Back to the family tree's value**: with a research that supports it, a fact the research changed shows *Originally from the family tree* with the earlier value and *Revert*. The research's proposal to change a fact from the family tree or entered by a person sits at the fact with *Keep the family tree's* and *Accept the proposal*.
+- **Texts**: the German note about living people in the export no longer addresses the reader.
+
 ## 3.25.0
 
 *Released 8 November 2026.*
