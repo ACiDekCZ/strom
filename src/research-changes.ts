@@ -33,7 +33,7 @@ const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause',
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
 /** Not the user's: the research's own knowledge and statuses, and what the app keeps for itself. */
 const IGNORED_FIELDS = new Set<string>(['research', 'birthStatus', 'deathStatus', 'photoOriginalName', 'partnerships', 'childIds', 'isLocked',
-    'dismissedMarriedSuggestion']);
+    'dismissedMarriedSuggestion', 'importId', 'importedValues', 'importedParents', 'researchOrigins']);
 const MARRIAGE_FIELDS: (keyof Partnership)[] = ['status', 'startDate', 'startPlace', 'endDate', 'endPlace', 'address', 'ages', 'note'];
 
 /** JSON with sorted keys and images reduced to their length (two copies of one tree compare equal). */

@@ -46,6 +46,7 @@ import {
     LiveQueueCounts, QUEUE_PAGE_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
+import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace } from '../research-link.js';
@@ -1786,7 +1787,7 @@ export const researchUiMethods = uiModule({
                 // knows them never got (B18-1): never asked about, never lost. The surname after marriage
                 // likewise, from a research that does not keep a name's kind, and the surname-variant groups
                 // from a version that carries none.
-                data = keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(existing.research, features)), previous, features), previous), previous);
+                data = keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(existing.research, features)), previous, features), previous), previous), previous);
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -3061,7 +3062,7 @@ export const researchUiMethods = uiModule({
         const features = this.researchStatusOf(s.researchId)?.features;
         const knowsTitles = !!features?.includes(TITLES_FEATURE);
         const link = TreeManager.getTreeMetadata(s.treeId)?.research;
-        const known = previous ? keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(link, features)), previous, features), previous), previous) : data;
+        const known = previous ? keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(link, features)), previous, features), previous), previous), previous) : data;
         const kept = previous ? carryOverMedia(stabilizeIds(known, previous), previous).data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {

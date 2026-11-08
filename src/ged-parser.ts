@@ -62,6 +62,7 @@ import {
     YearSpan,
     SourceImageHeld,
     FactPart,
+    ResearchFactOrigin,
     uniqueIdSuffix,
     PrimaryName,
 } from './types';
@@ -93,7 +94,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    cleanImportOrigin, IMPORT_TAG, markFactImported, markTreeImported, parseImportMark as readImportMark, sanitizeImports,
+    cleanImportOrigin, factPartOf, IMPORT_TAG, markFactImported, markTreeImported, parseImportMark as readImportMark, sanitizeImports,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -198,7 +199,7 @@ function toStory(raw: RawStory | undefined, mapRefs: (refs?: string[]) => string
  * only): conflicting sources, hypotheses, what was searched.
  */
 interface RawResearch {
-    conflicts: { id: string; fact: string; title: string; stat: string; take: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
+    conflicts: { id: string; fact: string; title: string; stat: string; take: string; kind?: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
     hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; by: string; deci: string; at: string; variants: RawResearchVariant[] }[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
@@ -271,6 +272,57 @@ function researchIsoDate(value: string): string {
 }
 
 /** Raw research lines → the person's `research`, citations resolved (undefined: nothing kept). */
+/**
+ * The research's origin of one fact from its lines (see RawFactOrigin), or
+ * null when it says nothing the app knows. Several `_STROM_WAS` (one per
+ * changed part) become one earlier value with each part's own value.
+ */
+function toResearchOrigin(raw: RawFactOrigin, mapRefs: (refs?: string[]) => string[]): ResearchFactOrigin | null {
+    const out: ResearchFactOrigin = {};
+    const words = (raw.origin ?? '').trim().split(/\s+/).filter(Boolean);
+    const kind = words[0]?.toLowerCase();
+    if (kind === 'import') {
+        out.kind = 'import';
+        const mark = words.length > 1 ? readImportMark(words.slice(1).join(' ')) : null;
+        if (mark) {
+            out.importId = mark.id;
+            if (mark.parts) out.parts = mark.parts;
+        }
+    } else if (kind === 'user' || kind === 'research') {
+        out.kind = kind;
+    }
+    if (raw.was.length > 0) {
+        const parts: FactPart[] = [];
+        const partValues: Partial<Record<FactPart, string>> = {};
+        for (const w of raw.was) {
+            for (const p of w.parts.map(factPartOf)) {
+                if (!p || parts.includes(p)) continue;
+                parts.push(p);
+                partValues[p] = w.value.trim();
+            }
+        }
+        const first = raw.was[0];
+        const importId = raw.was.map(w => w.importId?.trim()).find(Boolean);
+        const ref = raw.was.map(w => w.ref?.trim()).find(Boolean);
+        out.was = {
+            value: first.value.trim(),
+            ...(importId ? { importId } : {}),
+            ...(parts.length > 0 ? { parts } : {}),
+            ...(ref ? { ref } : {}),
+            ...(raw.was.length > 1 && parts.length > 1 ? { partValues } : {}),
+        };
+    }
+    const sourceIds = [...new Set(mapRefs(raw.sourceRefs))];
+    if (sourceIds.length > 0) out.sourceIds = sourceIds;
+    return out.kind || out.was ? out : null;
+}
+
+/** Whose value a conflict proposes to change (GEDCOM 2 _STROM_KIND import | user); anything else says nothing. */
+function conflictKindOf(value: string | undefined): 'import' | 'user' | undefined {
+    const v = value?.trim().toLowerCase();
+    return v === 'import' || v === 'user' ? v : undefined;
+}
+
 function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]) => string[], refs?: ResearchRefs): PersonResearch | undefined {
     if (!raw) return undefined;
     const value = (v: RawResearchValue): ResearchConflictValue => {
@@ -308,6 +360,7 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
                 values: c.values.filter(v => v.value || sideOf(v)).map(v => claim(v, fact)),
                 ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
                 ...(c.take.trim().toUpperCase() === 'Y' ? { take: true as const } : {}),
+                ...(conflictKindOf(c.kind) ? { kind: conflictKindOf(c.kind)! } : {}),
             };
         })
         .filter(c => c.values.some(v => v.value));
@@ -806,6 +859,8 @@ interface RawEvent {
     status?: FactStatus;
     /** 2 _STROM_IMPORT: which import the event's parts still come from (app files only). */
     imports?: RawImportMark[];
+    /** The research's origin of the event (Strom's own files only). */
+    origin?: RawFactOrigin;
 }
 
 /**
@@ -816,6 +871,21 @@ interface RawImportMark {
     id: string;
     parts?: FactPart[];
 }
+
+/**
+ * The research's origin of one fact as its file gives it (research files
+ * only, spec 066): `2 _STROM_ORIGIN import I1 [DATE PLAC…] | user | research`,
+ * each `2 _STROM_WAS <value>` (one per changed part) with its `3 _STROM_IMPORT`,
+ * `3 _PART` and `3 _REF`, and the `2 SOUR @S…@` cited under the fact.
+ */
+interface RawFactOrigin {
+    origin?: string;
+    was: { value: string; importId?: string; parts: string[]; ref?: string }[];
+    sourceRefs: string[];
+}
+
+type RawPersonFact = 'name' | 'sex' | 'birth' | 'death';
+type RawCoupleFact = 'marriage' | 'divorce';
 
 /** An event of the couple under FAM (MARB, CENS, EVEN…), as the file gave it. */
 interface RawCoupleEvent {
@@ -837,6 +907,8 @@ interface RawCoupleEvent {
     status?: FactStatus;
     /** 2 _STROM_IMPORT (app files only). */
     imports?: RawImportMark[];
+    /** The research's origin of the event (Strom's own files only). */
+    origin?: RawFactOrigin;
 }
 
 /**
@@ -951,7 +1023,9 @@ interface GedcomIndividual {
     /** 1 _STROM_IMPORT: the import the person came from (app files only). */
     importMark?: string;
     /** 2 _STROM_IMPORT under the primary NAME, SEX, BIRT and DEAT. */
-    factImports?: Partial<Record<'name' | 'sex' | 'birth' | 'death', RawImportMark[]>>;
+    factImports?: Partial<Record<RawPersonFact, RawImportMark[]>>;
+    /** The research's origin of the primary NAME, the sex (1 _STROM_SEX_ORIGIN), BIRT and DEAT (Strom's own files only). */
+    factOrigins?: Partial<Record<RawPersonFact, RawFactOrigin>>;
     /** Every DATE of the birth, death and events as written, by flex value (see noteDateForm). */
     dateForms?: Record<string, string>;
     name: string;
@@ -1060,7 +1134,9 @@ interface GedcomFamily {
     /** 1 _STROM_IMPORT: the import the couple came from (app files only). */
     importMark?: string;
     /** 2 _STROM_IMPORT under MARR and DIV. */
-    factImports?: Partial<Record<'marriage' | 'divorce', RawImportMark[]>>;
+    factImports?: Partial<Record<RawCoupleFact, RawImportMark[]>>;
+    /** The research's origin of MARR and DIV (Strom's own files only). */
+    factOrigins?: Partial<Record<RawCoupleFact, RawFactOrigin>>;
     /** CHIL > 2 _STROM_IMPORT: the import a child's link to these parents came from, by child. */
     childImports?: Map<string, string>;
     /** Every DATE of the wedding, divorce and events as written, by flex value (see noteDateForm). */
@@ -2170,6 +2246,28 @@ export function parseGedcom(content: string): ParsedGedcom {
     let lineageMarker = false;
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
+    /** The research's `_STROM_WAS` being read (its `3 _STROM_IMPORT`, `_PART`, `_REF` follow). */
+    let openWas: { level: number; was: RawFactOrigin['was'][number] } | null = null;
+    /** The research's origin of the fact being read: an event's, the primary name's, the sex, birth, death, wedding, divorce. */
+    const factOriginTarget = (): RawFactOrigin | null => {
+        const fresh = (): RawFactOrigin => ({ was: [], sourceRefs: [] });
+        if (currentType === 'INDI') {
+            if (currentEvent) return currentEvent.origin ??= fresh();
+            const indi = currentRecord as GedcomIndividual;
+            const fact: RawPersonFact | null = currentSubTag === 'NAME' ? (currentNameSlot === -1 ? 'name' : null)
+                : currentSubTag === 'SEX' || currentSubTag === '_STROM_SEX_ORIGIN' ? 'sex'
+                : currentSubTag === 'BIRT' ? 'birth'
+                : currentSubTag === 'DEAT' ? 'death' : null;
+            return fact ? ((indi.factOrigins ??= {})[fact] ??= fresh()) : null;
+        }
+        if (currentType === 'FAM') {
+            if (currentFamEvent) return currentFamEvent.origin ??= fresh();
+            const fam = currentRecord as GedcomFamily;
+            const fact: RawCoupleFact | null = currentSubTag === 'MARR' ? 'marriage' : currentSubTag === 'DIV' ? 'divorce' : null;
+            return fact ? ((fam.factOrigins ??= {})[fact] ??= fresh()) : null;
+        }
+        return null;
+    };
 
     const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
@@ -2277,6 +2375,39 @@ export function parseGedcom(content: string): ParsedGedcom {
             // 1 MARB / 2 HUSB / 3 AGE 25y — each partner's age at the banns.
             const done = detailTarget(tag, currentFamEventSubTag);
             if (done) openDetail = { level, text: value, done, sep: ' ' };
+        }
+
+        // The research's origin of a fact (spec 066): read from a file Strom
+        // wrote (the research's, or the app's own export carrying it back; the
+        // header comes first), apart from the fact's own lines. Another
+        // program's file reads these lines as before (an unknown tag).
+        if (openWas && level <= openWas.level) openWas = null;
+        if (openWas) {
+            if (level === openWas.level + 1) {
+                const w = openWas.was;
+                if (tag === IMPORT_TAG) w.importId = value.trim();
+                else if (tag === '_PART') w.parts.push(value.trim());
+                else if (tag === '_REF') w.ref = value.trim();
+                else if (tag === 'CONC') w.value += value;
+                else if (tag === 'CONT') w.value += '\n' + value;
+            }
+            continue;
+        }
+        if ((stromResearch || stromApp) && level === 2 && currentRecord && !currentResearch && (currentType === 'INDI' || currentType === 'FAM')
+            && (tag === '_STROM_ORIGIN' || tag === '_STROM_WAS' || (tag === 'SOUR' && GED_POINTER.test(value)))) {
+            const o = factOriginTarget();
+            if (tag === '_STROM_ORIGIN') {
+                if (o) o.origin = value;
+                continue;
+            }
+            if (tag === '_STROM_WAS') {
+                const was = { value, parts: [] as string[] };
+                if (o) o.was.push(was);
+                openWas = { level, was };
+                continue;
+            }
+            // The citation stays the fact's own as well (read below).
+            if (o) o.sourceRefs.push(value.trim());
         }
 
         // 2 _STROM_IMPORT under a fact of a person or a couple: which import the
@@ -2616,6 +2747,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (mark) indi.importMark = mark.id;
                             break;
                         }
+                        case '_STROM_SEX_ORIGIN':
+                            // The research's origin of the sex (spec 066), Strom's own files only.
+                            if (stromResearch || stromApp) ((indi.factOrigins ??= {}).sex ??= { was: [], sourceRefs: [] }).origin = value;
+                            else drop(tag);
+                            break;
                         case '_STROM_LINE': {
                             // The person's lineage correction (data v14); an
                             // unknown value is ignored.
@@ -2860,6 +2996,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'TITL') c.title = value;
                         else if (tag === 'STAT') c.stat = value;
                         else if (tag === '_STROM_TAKE') c.take = value;
+                        else if (tag === '_STROM_KIND') c.kind = value;
                         else if (tag === 'VAL') c.values.push({ value: value.trim(), sourceRefs: [] });
                         else if (tag === 'DECI') c.decision = { value: value.trim(), sourceRefs: [] };
                     } else if (level === 3) {
@@ -3460,6 +3597,14 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     /** A file the app or the research wrote keeps the import marks it carries (spec 066). */
     const ownFile = !!(gedcom.stromApp || gedcom.stromResearch);
     const readMarks = !!options.importOrigin && ownFile;
+    /**
+     * Strom's own file (the research's tree, or the app's export coming back)
+     * keeps the research's origin of facts as it carries it (spec 066).
+     * Another program's file never gives one, whatever it says.
+     */
+    const readOrigins = ownFile;
+    /** The research's origin of each event made from the file, until the end (Strom's own files only). */
+    const eventOrigins = new WeakMap<LifeEvent | CoupleEvent, RawFactOrigin>();
     /** The marks of each event made from the file, until the end (app files only). */
     const eventMarks = new WeakMap<LifeEvent | CoupleEvent, RawImportMark[]>();
     /** The partnership each family became (the same couple's second family: the first one's). */
@@ -3663,6 +3808,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     .map(toParticipant).filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
                 if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
+                if (readOrigins && ev.origin) eventOrigins.set(out, ev.origin);
                 return out;
             });
         }
@@ -3917,6 +4063,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     .filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
                 if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
+                if (readOrigins && ev.origin) eventOrigins.set(out, ev.origin);
                 return out;
             });
         }
@@ -4294,7 +4441,42 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
     } else if (origin) {
         applyFileImportMarks();
+        if (readOrigins) applyResearchOrigins();
         cleanImportOrigin(data, gedcom.stromImports);
+    } else if (readOrigins && applyResearchOrigins()) {
+        cleanImportOrigin(data, gedcom.stromImports);
+    }
+
+    /**
+     * The research's origin of the facts (`_STROM_ORIGIN`, `_STROM_WAS`,
+     * `_STROM_SEX_ORIGIN`) and its import records (HEAD `1 _STROM_IMPORT R1`).
+     * Returns whether there was anything (a research without the feature
+     * writes none of it: nothing is added then).
+     */
+    function applyResearchOrigins(): boolean {
+        let any = (gedcom.stromImports?.length ?? 0) > 0;
+        const put = (holder: Person | Partnership, fact: string, raw: RawFactOrigin | undefined): void => {
+            const o = raw ? toResearchOrigin(raw, mapRefs) : null;
+            if (!o) return;
+            (holder.researchOrigins ??= {})[fact] = o;
+            any = true;
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (!person) continue;
+            for (const [fact, raw] of Object.entries(indi.factOrigins ?? {})) put(person, fact, raw);
+            for (const ev of person.events ?? []) put(person, `event:${ev.id}`, eventOrigins.get(ev));
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (!ps) continue;
+            for (const [fact, raw] of Object.entries(fam.factOrigins ?? {})) if (!ps.researchOrigins?.[fact]) put(ps, fact, raw);
+        }
+        for (const ps of Object.values(partnerships)) {
+            for (const ev of ps.events ?? []) put(ps, `event:${ev.id}`, eventOrigins.get(ev));
+        }
+        return any;
     }
 
     /** A Strom file's own marks, as it carries them (cleaned against its records afterwards). */

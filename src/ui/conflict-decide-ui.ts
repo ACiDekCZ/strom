@@ -20,6 +20,7 @@ import {
     researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles,
     researchLinkMark,
 } from '../research-link.js';
+import { keepImports } from '../import-origin.js';
 import { storedResearchBridge, researchAutoState } from '../research-device.js';
 import { diffValues } from '../research-changes.js';
 import { canDecideInApp, conflictSides, DecideResult } from '../research-decide.js';
@@ -606,7 +607,7 @@ export const conflictDecideMethods = uiModule({
         const link = this.researchSyncLink()?.link;
         const here = DataManager.getData();
         const features = link ? this.researchStatusOf(link.id)?.features : null;
-        return stabilizeIds(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here);
+        return stabilizeIds(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */

@@ -340,6 +340,14 @@ export function sanitizeResearchOrigin(value: unknown, sources: StromData['sourc
             if (parts) was.parts = parts;
             const ref = text(w.ref, 100);
             if (ref) was.ref = ref;
+            if (w.partValues && typeof w.partValues === 'object' && was.parts) {
+                const values: Partial<Record<FactPart, string>> = {};
+                for (const part of was.parts) {
+                    const pv = (w.partValues as Record<string, unknown>)[part];
+                    if (typeof pv === 'string') values[part] = pv;
+                }
+                if (Object.keys(values).length > 1) was.partValues = values;
+            }
             out.was = was;
         }
     }

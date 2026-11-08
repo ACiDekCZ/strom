@@ -261,13 +261,15 @@ describe('Strom’s own file', () => {
         expect(JSON.stringify(back)).not.toMatch(/importId|importedValues|importedParents/);
     });
 
-    it('origin and earlier values of the research are not read from a file', () => {
+    it('origin and earlier values of the research come back from Strom’s own file, with no new record', () => {
         const data = migrateData(load(FOREIGN).data);
         const ged = exportToGedcom(data).content
             .replace(/(1 BIRT\n)/, '$12 _STROM_ORIGIN user\n2 _STROM_WAS 3 JAN 1850\n3 _STROM_IMPORT I1\n3 _PART DATE\n');
         const back = load(ged).data;
-        expect(JSON.stringify(back)).not.toContain('researchOrigins');
-        expect(isFromImport(byName(back, 'Zbyhněv'), 'birthDate')).toBe(true);
+        expect(back.imports?.map(r => r.id)).toEqual(['I1']);
+        const z = byName(back, 'Zbyhněv');
+        expect(z.researchOrigins?.birth).toEqual({ kind: 'user', was: { value: '3 JAN 1850', importId: 'I1', parts: ['DATE'] } });
+        expect(isFromImport(z, 'birthDate')).toBe(true);
     });
 });
 

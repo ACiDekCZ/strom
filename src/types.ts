@@ -614,6 +614,12 @@ export interface ResearchFactWas {
     parts?: FactPart[];
     /** `3 _REF`: the research's key of the fact, sent back in /facts/revert. */
     ref?: string;
+    /**
+     * Each changed part's own value when more than one part changed (the
+     * research writes one `2 _STROM_WAS` per part; a place holds commas, so
+     * the values are never joined). `value` is then the first part's.
+     */
+    partValues?: Partial<Record<FactPart, string>>;
 }
 
 /** The research's origin of one fact (Person/Partnership.researchOrigins). */

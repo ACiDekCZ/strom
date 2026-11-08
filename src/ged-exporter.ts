@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -66,6 +66,13 @@ export interface GedcomExportOptions {
      * a research that does not take them (`read.sync`, see researchSendsReadings).
      */
     readings?: boolean;
+    /**
+     * Write the research's origin of facts (`_STROM_ORIGIN`, `_STROM_SEX_ORIGIN`,
+     * `_STROM_WAS` with its `_STROM_IMPORT`, `_PART`, `_REF`), so a file export
+     * read back keeps it (spec 066). Only a file the user exports: never in what
+     * goes to the research (it keeps its own).
+     */
+    origins?: boolean;
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -417,6 +424,26 @@ function pushLongValue(lines: string[], level: number, tag: string, text: string
     });
 }
 
+/** The value of `_STROM_ORIGIN`: `import I1 [DATE PLAC…]`, `user` or `research`. */
+function researchOriginValue(o: ResearchFactOrigin): string {
+    return o.kind === 'import' ? ['import', o.importId ?? '', ...(o.importId ? o.parts ?? [] : [])].filter(Boolean).join(' ') : o.kind ?? '';
+}
+
+/** The family tree's earlier value of a fact: one `_STROM_WAS` per changed part when each has its own value. */
+function pushResearchWas(lines: string[], level: number, was: ResearchFactWas | undefined): void {
+    if (!was) return;
+    const parts = was.parts ?? [];
+    const each: { value: string; parts: string[] }[] = was.partValues && parts.length > 1
+        ? parts.map(p => ({ value: was.partValues![p] ?? '', parts: [p] }))
+        : [{ value: was.value, parts }];
+    for (const w of each) {
+        pushLongValue(lines, level, '_STROM_WAS', w.value);
+        if (was.importId) lines.push(`${level + 1} _STROM_IMPORT ${was.importId}`);
+        for (const p of w.parts) lines.push(`${level + 1} _PART ${p}`);
+        if (was.ref) lines.push(`${level + 1} _REF ${was.ref}`);
+    }
+}
+
 /** Emit a NOTE structure (see pushLongValue). */
 function pushNote(lines: string[], level: number, text: string): void {
     pushLongValue(lines, level, 'NOTE', text);
@@ -653,6 +680,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (knownImports.has(tag.split(' ')[0])) lines.push(`2 ${IMPORT_TAG} ${tag}`);
         }
     };
+    /** The research's origin of a fact under it (`2 _STROM_ORIGIN`, `2 _STROM_WAS`), file exports only. */
+    const pushFactOrigin = (holder: FactHolder, fact: string): void => {
+        const o = options.origins ? holder.researchOrigins?.[fact] : undefined;
+        if (!o) return;
+        if (o.kind && fact !== 'sex') lines.push(`2 _STROM_ORIGIN ${researchOriginValue(o)}`);
+        pushResearchWas(lines, 2, o.was);
+    };
     /** The import of a child's link to the given parents (all of them from it), or none. */
     const childLinkImport = (childId: PersonId, parentIds: readonly PersonId[]): string | undefined => {
         const marks = data.persons[childId]?.importedParents;
@@ -713,6 +747,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const married = person.marriedSurname?.trim();
         if (married && person.primaryName === 'birth') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
         pushFactImport(person, 'name');
+        pushFactOrigin(person, 'name');
         // The surname after marriage as the name she had after it, right
         // after the primary one (the birth name), as the research writes it.
         if (married) {
@@ -729,6 +764,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Sex: M, F, or U for a sex the records do not give.
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : person.gender === 'female' ? 'F' : 'U'}`);
         pushFactImport(person, 'sex');
+        pushFactOrigin(person, 'sex');
+        const sexOrigin = options.origins ? person.researchOrigins?.sex : undefined;
+        if (sexOrigin?.kind) lines.push(`1 _STROM_SEX_ORIGIN ${researchOriginValue(sexOrigin)}`);
         const lineTag = lineTagOf(personId);
         if (lineTag) lines.push(`1 ${STROM_LINE_TAG} ${lineTag}`);
 
@@ -746,6 +784,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(person, 'birth');
+            pushFactOrigin(person, 'birth');
         }
 
         // Death (a cited death without a date or place is a known death: DEAT Y)
@@ -763,6 +802,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushStatus(lines, person.deathStatus);
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(person, 'death');
+            pushFactOrigin(person, 'death');
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
             // Without it the person came back as possibly living.
@@ -857,6 +897,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushCitation(2, srcId);
             }
             pushFactImport(person, `event:${event.id}`);
+            pushFactOrigin(person, `event:${event.id}`);
         }
 
         // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).
@@ -1035,6 +1076,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // other programs and Strom Research read a marriage's evidence.
             for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(partnership, 'marriage');
+            pushFactOrigin(partnership, 'marriage');
         }
 
         // Divorce event
@@ -1047,6 +1089,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
             pushFactImport(partnership, 'divorce');
+            pushFactOrigin(partnership, 'divorce');
         }
 
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
@@ -1085,6 +1128,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(partnership, `event:${event.id}`);
+            pushFactOrigin(partnership, `event:${event.id}`);
         }
 
         // A status MARR/DIV cannot say (partners, separated).
