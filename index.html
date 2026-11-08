@@ -13043,6 +13043,24 @@
             overflow-wrap: anywhere;
         }
         .gedcom-stat-line { display: block; }
+        /* Text encoding of the GEDCOM file (ANSI / no CHAR): sample names + switch. */
+        .gedcom-encoding-row {
+            background: var(--surface-2); border-radius: 8px;
+            padding: 10px 12px; margin: 0 0 12px; font-size: 13px;
+        }
+        .gedcom-encoding-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+        .modal .gedcom-encoding-head label { margin: 0; font-size: 14px; font-weight: 500; color: var(--text); }
+        .modal .gedcom-encoding-head select { width: auto; max-width: 100%; min-width: 0; margin: 0; flex: 0 1 auto; }
+        .gedcom-encoding-sample { margin: 8px 0 0; color: var(--text); overflow-wrap: anywhere; }
+        .gedcom-encoding-sample-label { color: var(--text-light); }
+        .gedcom-encoding-row .field-hint { margin: 6px 0 0; overflow-wrap: anywhere; }
+        @media (max-width: 640px) {
+            .modal .gedcom-encoding-head select { flex: 1 1 100%; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .gedcom-encoding-row { padding: 8px 10px; margin-bottom: 8px; }
+            .gedcom-encoding-sample { margin-top: 4px; }
+        }
         .gedcom-stat-line + .gedcom-stat-line { margin-top: 2px; }
         /* Tiles share a row evenly but never get narrower than the longest word
            of their label (min-content): one-word labels such as "Partnerschaften"
@@ -26312,6 +26330,15 @@
                 </div>
             </div>
             <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
+            <!-- Text encoding of a file that does not state it plainly (ANSI, no CHAR …): a sample of names and a switch. -->
+            <div id="gedcom-encoding-row" class="gedcom-encoding-row" style="display:none;">
+                <div class="gedcom-encoding-head">
+                    <label for="gedcom-encoding-select" data-i18n="gedcom.encodingLabel"></label>
+                    <select id="gedcom-encoding-select" onchange="window.Strom.UI.setGedcomEncoding(this.value)"></select>
+                </div>
+                <p class="gedcom-encoding-sample"><span class="gedcom-encoding-sample-label" data-i18n="gedcom.encodingSample"></span> <span id="gedcom-encoding-names"></span></p>
+                <p id="gedcom-encoding-how" class="field-hint"></p>
+            </div>
             <!-- Leave images out of this import (text of sources always stays). -->
             <div id="gedcom-images-row" class="import-images-row" style="display:none;">
                 <label class="import-images-check">

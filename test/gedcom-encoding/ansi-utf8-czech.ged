@@ -1,0 +1,31 @@
+0 HEAD
+1 SOUR FICTIONAL
+1 GEDC
+2 VERS 5.5.1
+1 CHAR ANSI
+0 @I1@ INDI
+1 NAME Vojtěch /Dvořák/
+1 SEX M
+1 BIRT
+2 PLAC Hradec Králové
+0 @I2@ INDI
+1 NAME Zdeňka /Pokorná/
+1 SEX F
+1 BIRT
+2 PLAC Česká Třebová
+0 @I3@ INDI
+1 NAME Řehoř /Kučera/
+1 SEX M
+1 BIRT
+2 PLAC Žďár nad Sázavou
+0 @I4@ INDI
+1 NAME Ludmila /Šťastná/
+1 SEX F
+1 BIRT
+2 PLAC Uherské Hradiště
+0 @I5@ INDI
+1 NAME Matěj /Vlček/
+1 SEX M
+1 BIRT
+2 PLAC Kněžice
+0 TRLR

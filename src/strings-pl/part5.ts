@@ -740,6 +740,21 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         downloading: (done: number, total: number) => `Pobieranie zdjęć… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `Podłączono ${matched} z ${total} ${plPl(total, 'wskazanego pliku', 'wskazanych plików', 'wskazanych plików')}.`,
         mediaNoMatch: 'Żaden z wybranych plików nie odpowiada wskazanym nazwom.',
+        encodingLabel: 'Kodowanie tekstu',
+        encodingNames: {
+            'utf-8': 'UTF-8',
+            'windows-1250': 'Windows-1250 (Europa Środkowa)',
+            'windows-1252': 'Windows-1252 (Europa Zachodnia)',
+            'iso-8859-2': 'ISO-8859-2 (Latin-2)',
+            'ansel': 'ANSEL (starszy GEDCOM)',
+        },
+        encodingGuessed: (declared: string | null) => declared
+            ? `Rozpoznane na podstawie zawartości pliku (nagłówek podaje ${declared}).`
+            : 'Rozpoznane na podstawie zawartości pliku (nagłówek go nie podaje).',
+        encodingDeclared: 'Według nagłówka pliku.',
+        encodingChosen: 'Wybrane ręcznie.',
+        encodingSample: 'Przykładowe nazwiska:',
+        encodingHint: 'Zniekształcone znaki w nazwiskach (³ zamiast ł, ¿ zamiast ż) oznaczają, że pasuje inne kodowanie.',
     },
 
     // Notes the GEDCOM importer writes straight into the data (they are saved),

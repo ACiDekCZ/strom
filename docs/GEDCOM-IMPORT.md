@@ -24,6 +24,17 @@ field for it, but only if it arrives under a tag the importer knows.
 
 - **UTF-8, declared.** `1 CHAR UTF-8` in the header. Accented names survive
   everywhere, including in exported file names.
+- **Other encodings** are read too (`decodeGedcomBytes` in `src/ged-parser.ts`,
+  tests in `src/__tests__/gedcom-encoding.test.ts`): a byte order mark wins;
+  otherwise `CHAR` decides — `ANSEL`, `UNICODE`/`UTF-16`, `CP1250`/`WINDOWS-1250`,
+  `CP1252`/`WINDOWS-1252`/`ISO-8859-1`, `ISO-8859-2`. `ANSI` means the Windows
+  code page of the computer that wrote the file: valid UTF-8 stays UTF-8,
+  otherwise the words of the file decide between Windows-1250 (Central Europe:
+  č ř ě ł ż) and Windows-1252 (Western Europe). A file without `CHAR`, or with
+  `CHAR UTF-8` that is not valid UTF-8, is guessed the same way. When the
+  encoding was guessed or is a single-byte one and the file has non-ASCII
+  text, the import summary shows a sample of names and a menu to read the
+  file in another encoding.
 - **255 bytes per physical line**, counted in *bytes*, not characters. Czech or
   German text reaches that limit at roughly 130 characters. Split with `CONC`
   and `CONT` (below).

@@ -31,6 +31,7 @@ the table honest.
 | Exported HTML app / password-protected HTML app → "From HTML file" | `import-extra.spec.ts` | covered | real file picker; counts in the import dialog; wrong password → retry; local encryption stays off |
 | Password-protected "Export all" JSON restore | `import-extra.spec.ts` | covered | decrypt → "2 trees" confirm → every tree restored |
 | GEDCOM result "Save as JSON" | `import-extra.spec.ts` | covered | family-tree.json with persons/relations; no tree added |
+| GEDCOM text encoding (ANSI / CP1250 / no CHAR) | `gedcom-encoding.spec.ts` | covered | Windows-1250 detected, sample names, another encoding re-reads the file, stored names right; UTF-8 file has no encoding row |
 | Person merge (within a tree) | `merge.spec.ts` | covered | two persons → one, undo restores; relations unified |
 | PNG poster export | `export-poster.spec.ts` | covered | PNG magic number + non-trivial size |
 | SVG poster export | `export-poster.spec.ts` | covered | valid XML, contains a name |

@@ -1281,36 +1281,179 @@ export function decodeAnsel(bytes: Uint8Array): string {
     return out.normalize('NFC');
 }
 
-/**
- * Decode a raw GEDCOM file to text, honouring what the file says about itself:
- * a BOM wins outright, otherwise the HEAD > CHAR declaration decides (its line
- * is ASCII-compatible in every charset GEDCOM allows, so peeking at the header
- * bytes is safe). ANSEL gets the real decoder above — reading it as UTF-8
- * silently mangled every diacritic. Unknown or absent CHAR falls back to UTF-8.
- */
-export function decodeGedcomFile(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-        return new TextDecoder('utf-8').decode(bytes);
+/** Encodings a GEDCOM file can be read in (the import summary offers the single-byte ones). */
+export type GedcomEncoding =
+    | 'utf-8' | 'utf-16le' | 'utf-16be' | 'ansel' | 'windows-1250' | 'windows-1252' | 'iso-8859-2';
+
+/** The encodings the import summary lets a person switch between, in menu order. */
+export const GEDCOM_ENCODING_CHOICES: readonly GedcomEncoding[] =
+    ['utf-8', 'windows-1250', 'windows-1252', 'iso-8859-2', 'ansel'];
+
+/** A decoded GEDCOM file and how its encoding was settled. */
+export interface GedcomDecoding {
+    text: string;
+    encoding: GedcomEncoding;
+    /** The HEAD > CHAR value as written in the file, or null when it names none. */
+    declared: string | null;
+    /** bom = byte order mark; declared = CHAR named it; content = guessed from the bytes; chosen = forced by the caller. */
+    how: 'bom' | 'declared' | 'content' | 'chosen';
+    /** The file has bytes outside ASCII, i.e. the encoding matters for the text at all. */
+    nonAscii: boolean;
+}
+
+/** CHAR values (upper-cased, spaces and underscores dropped) that name one encoding outright. */
+const DECLARED_ENCODINGS: Record<string, GedcomEncoding> = {
+    'ANSEL': 'ansel',
+    'UTF-8': 'utf-8', 'UTF8': 'utf-8',
+    'CP1250': 'windows-1250', 'CP-1250': 'windows-1250', 'WINDOWS-1250': 'windows-1250',
+    'WINDOWS1250': 'windows-1250', 'WIN1250': 'windows-1250', 'WIN-1250': 'windows-1250', 'MS-EE': 'windows-1250',
+    'CP1252': 'windows-1252', 'CP-1252': 'windows-1252', 'WINDOWS-1252': 'windows-1252',
+    'WINDOWS1252': 'windows-1252', 'WIN1252': 'windows-1252', 'WIN-1252': 'windows-1252',
+    // Browsers decode latin1 as windows-1252 anyway (a superset for text).
+    'ISO-8859-1': 'windows-1252', 'ISO8859-1': 'windows-1252', 'LATIN1': 'windows-1252', 'LATIN-1': 'windows-1252',
+    'ISO-8859-2': 'iso-8859-2', 'ISO8859-2': 'iso-8859-2', 'LATIN2': 'iso-8859-2', 'LATIN-2': 'iso-8859-2',
+};
+
+function isValidUtf8(bytes: Uint8Array): boolean {
+    try {
+        new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        return true;
+    } catch {
+        return false;
     }
-    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
-    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+}
+
+// Byte classes for telling Windows-1250 (Central Europe) from Windows-1252
+// (Western Europe) when a file only says "ANSI". The two code pages agree on
+// á é í ó ú ý ä ö ü ß š ž and differ on the rest.
+/** Letters in 1250 (ť ź Ť Ź Ł Ą Ż ł ą ľ Ľ ż), symbols or nothing in 1252 (¹ ³ ¿ £ …): a strong 1250 sign. */
+const CP1250_ONLY_LETTERS = new Set([0x8D, 0x8F, 0x9D, 0x9F, 0xA3, 0xA5, 0xAF, 0xB3, 0xB9, 0xBC, 0xBE, 0xBF]);
+/** Czech and Slovak letters (č ě ř ů ň ď and capitals) that read as è ì ø ù ò ï in 1252. */
+const CP1250_CORE = new Set([0xE8, 0xEC, 0xF8, 0xF9, 0xF2, 0xEF, 0xC8, 0xCC, 0xD8, 0xD9, 0xD2, 0xCF]);
+/** Same byte in both code pages, frequent in Czech and Slovak words: š ž Š Ž á í ý ú Á Í Ý Ú. */
+const CENTRAL_COMPANIONS = new Set([0x8A, 0x8E, 0x9A, 0x9E, 0xE1, 0xED, 0xFD, 0xFA, 0xC1, 0xCD, 0xDD, 0xDA]);
+/** Western companions of è and friends: à ç ê é À Ç Ê É œ Œ. */
+const WESTERN_COMPANIONS = new Set([0xE0, 0xE7, 0xEA, 0xE9, 0xC0, 0xC7, 0xCA, 0xC9, 0x9C, 0x8C]);
+/** Italian/French final grave vowels: à è ì ò ù. */
+const WESTERN_FINAL = new Set([0xE0, 0xE8, 0xEC, 0xF2, 0xF9]);
+
+function isWordByte(b: number): boolean {
+    return (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
+        || (b >= 0xC0 && b !== 0xD7 && b !== 0xF7)
+        || b === 0x8A || b === 0x8C || b === 0x8E || b === 0x9A || b === 0x9C || b === 0x9E
+        || CP1250_ONLY_LETTERS.has(b);
+}
+
+/**
+ * Guess between Windows-1250 and Windows-1252 from the words of the file.
+ * A word votes 1250 when it holds a letter only 1250 has (ł ą ż ť …) or a
+ * Czech/Slovak letter next to š ž á í ý ú ("Kučerová", "Dvořák"); it votes
+ * 1252 when è-like letters sit next to Western companions ("Thérèse",
+ * "François") or end an Italian/French word ("Niccolò"). Words with neither
+ * ("Matěj") do not vote. No votes keeps the GEDCOM meaning of ANSI (1252).
+ */
+export function guessSingleByteEncoding(bytes: Uint8Array): 'windows-1250' | 'windows-1252' {
+    let votes1250 = 0;
+    let votes1252 = 0;
+    let i = 0;
+    while (i < bytes.length) {
+        if (!isWordByte(bytes[i])) { i++; continue; }
+        const start = i;
+        while (i < bytes.length && isWordByte(bytes[i])) i++;
+        let strong = false, core = false, central = false, western = false;
+        for (let j = start; j < i; j++) {
+            const b = bytes[j];
+            if (CP1250_ONLY_LETTERS.has(b)) {
+                // Spanish "¿Quién": ¿ opens a word and a capital follows; Polish
+                // "żona" has a small letter after ż.
+                const next = bytes[j + 1] ?? 0;
+                if (!(b === 0xBF && j === start && !(next >= 0x61 && next <= 0x7A))) strong = true;
+            }
+            if (CP1250_CORE.has(b)) core = true;
+            if (CENTRAL_COMPANIONS.has(b)) central = true;
+            if (WESTERN_COMPANIONS.has(b)) western = true;
+        }
+        const last = bytes[i - 1];
+        const finalGrave = i - start >= 3 && WESTERN_FINAL.has(last) && bytes[i - 2] < 0x80;
+        if (strong || (core && central)) votes1250++;
+        else if (core && (western || finalGrave)) votes1252++;
+    }
+    return votes1250 > votes1252 ? 'windows-1250' : 'windows-1252';
+}
+
+function decodeAs(bytes: Uint8Array, encoding: GedcomEncoding): string {
+    if (encoding === 'ansel') return decodeAnsel(bytes);
+    return new TextDecoder(encoding).decode(bytes);
+}
+
+/**
+ * Decode a raw GEDCOM file, honouring what the file says about itself: a BOM
+ * wins outright, otherwise the HEAD > CHAR declaration decides (its line is
+ * ASCII-compatible in every charset GEDCOM allows, so peeking at the header
+ * bytes is safe). ANSEL gets the real decoder above. "ANSI" means the Windows
+ * code page of the computer that wrote it: valid UTF-8 stays UTF-8, otherwise
+ * the bytes decide between Central (1250: č ř ě) and Western (1252) Europe.
+ * A file without CHAR, or with CHAR UTF-8 that is not valid UTF-8, is guessed
+ * the same way. `forced` overrides everything (the summary's encoding menu).
+ */
+export function decodeGedcomBytes(buffer: ArrayBuffer, forced?: GedcomEncoding): GedcomDecoding {
+    const bytes = new Uint8Array(buffer);
+    const nonAscii = bytes.some(b => b >= 0x80);
 
     // Peek HEAD for "1 CHAR <value>". NULs are stripped so a BOM-less UTF-16
     // header still matches; latin1 maps every byte so decoding cannot throw.
     const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096)).replace(/\0/g, '');
     const charMatch = /^\s*1\s+CHAR\s+(.+?)\s*$/m.exec(head);
-    const charset = (charMatch?.[1] ?? '').toUpperCase();
+    const declared = charMatch?.[1] ?? null;
+    const result = (encoding: GedcomEncoding, how: GedcomDecoding['how'], body: Uint8Array = bytes): GedcomDecoding =>
+        ({ text: decodeAs(body, encoding), encoding, declared, how, nonAscii });
 
-    if (charset === 'ANSEL') return decodeAnsel(bytes);
-    if (charset === 'UNICODE' || charset === 'UTF-16') {
+    if (forced) {
+        // A forced single-byte or UTF-8 reading must not keep a BOM as text.
+        const skip = forced === 'utf-8' && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF ? 3 : 0;
+        return result(forced, 'chosen', bytes.subarray(skip));
+    }
+    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return result('utf-8', 'bom');
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return result('utf-16le', 'bom');
+    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return result('utf-16be', 'bom');
+
+    const charset = (declared ?? '').toUpperCase().replace(/[\s_]+/g, '');
+    if (charset === 'UNICODE' || charset === 'UTF-16' || charset === 'UTF16') {
         // No BOM to tell the byte order: the first character of a GEDCOM is
         // ASCII ('0'), so a leading zero byte means big-endian.
-        return new TextDecoder(bytes[0] === 0 ? 'utf-16be' : 'utf-16le').decode(bytes);
+        return result(bytes[0] === 0 ? 'utf-16be' : 'utf-16le', 'declared');
     }
-    if (charset === 'ANSI') return new TextDecoder('windows-1252').decode(bytes);
-    // ASCII, UTF-8, unknown, or no header at all.
-    return new TextDecoder('utf-8').decode(bytes);
+    const named = DECLARED_ENCODINGS[charset];
+    if (named && named !== 'utf-8') return result(named, 'declared');
+    // UTF-8, ANSI, ASCII, unknown or no CHAR: valid UTF-8 is UTF-8 (a
+    // single-byte Central European text is practically never valid UTF-8).
+    if (!nonAscii) return result(named ?? 'utf-8', named ? 'declared' : 'content');
+    if (isValidUtf8(bytes)) return result('utf-8', named === 'utf-8' ? 'declared' : 'content');
+    return result(guessSingleByteEncoding(bytes), 'content');
+}
+
+/**
+ * A few full names of a converted file for the import summary's encoding row:
+ * names with non-ASCII letters first (they show whether the encoding fits),
+ * no repeats, at most `max`.
+ */
+export function gedcomSampleNames(data: StromData, max = 5): string[] {
+    const seen = new Set<string>();
+    const all: string[] = [];
+    for (const p of Object.values(data.persons)) {
+        if (p.isPlaceholder) continue;
+        const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        all.push(name);
+    }
+    const accented = all.filter(n => /[^\x00-\x7F]/.test(n));
+    return [...accented, ...all.filter(n => !/[^\x00-\x7F]/.test(n))].slice(0, max);
+}
+
+/** Decode a raw GEDCOM file to text (see decodeGedcomBytes). */
+export function decodeGedcomFile(buffer: ArrayBuffer): string {
+    return decodeGedcomBytes(buffer).text;
 }
 
 // ==================== MAIN PARSER ====================

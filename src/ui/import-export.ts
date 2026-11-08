@@ -32,7 +32,10 @@ import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, countImages, stripMedia } from '../attachments.js';
 import { getDemoTree, DEMO_FOCUS } from '../demo-tree.js';
 import { demoImageMaker } from '../demo-images.js';
-import { parseGedcom, convertToStrom, decodeGedcomFile, GedcomConversionResult } from '../ged-parser.js';
+import {
+    parseGedcom, convertToStrom, decodeGedcomBytes, GedcomConversionResult, GedcomEncoding, GEDCOM_ENCODING_CHOICES,
+    gedcomSampleNames,
+} from '../ged-parser.js';
 import {
     validateJsonImport,
     ValidationResult,
@@ -387,11 +390,13 @@ export const importExportMethods = uiModule({
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                // Raw bytes, not readAsText: the file's own HEAD > CHAR decides
-                // the encoding (ANSEL files were silently mangled as UTF-8).
-                const content = decodeGedcomFile(e.target?.result as ArrayBuffer);
-                const gedcom = parseGedcom(content);
-                this.gedcomResult = convertToStrom(gedcom);
+                // Raw bytes, not readAsText: the file's own HEAD > CHAR (or, for
+                // ANSI, its bytes) decides the encoding; the summary offers another.
+                const buffer = e.target?.result as ArrayBuffer;
+                const decoding = decodeGedcomBytes(buffer);
+                this.gedcomResult = convertToStrom(parseGedcom(decoding.text));
+                this.gedcomRawBuffer = buffer;
+                this.gedcomDecoding = decoding;
                 this.gedcomImportImages = null;
                 this.importFromTreeManager = fromManager;
                 this.importToCurrentTree = toCurrent;
@@ -494,6 +499,8 @@ export const importExportMethods = uiModule({
             }));
             detailEl.style.display = parts.length > 0 ? '' : 'none';
         }
+
+        this.renderGedcomEncoding();
 
         // External media (photos exported as a separate folder by platforms):
         // offer bulk attach BEFORE the data is inserted anywhere.
@@ -650,8 +657,62 @@ export const importExportMethods = uiModule({
         this.showGedcomResultDialog();
     },
 
+    /**
+     * The text-encoding row of the GEDCOM summary: shown when the file has
+     * non-ASCII text in a single-byte or guessed encoding (ANSI, no CHAR,
+     * ANSEL …), with a sample of names and a menu of other encodings.
+     */
+    renderGedcomEncoding(): void {
+        const row = document.getElementById('gedcom-encoding-row');
+        const d = this.gedcomDecoding;
+        if (!row) return;
+        const unicode = d?.encoding === 'utf-8' || d?.encoding === 'utf-16le' || d?.encoding === 'utf-16be';
+        const show = !!d && !!this.gedcomResult && d.nonAscii && (d.how === 'chosen' || !unicode);
+        row.style.display = show ? '' : 'none';
+        if (!show || !d || !this.gedcomResult) return;
+
+        const select = document.getElementById('gedcom-encoding-select') as HTMLSelectElement | null;
+        if (select) {
+            const choices = GEDCOM_ENCODING_CHOICES.includes(d.encoding)
+                ? GEDCOM_ENCODING_CHOICES : [d.encoding, ...GEDCOM_ENCODING_CHOICES];
+            select.replaceChildren(...choices.map(enc => {
+                const option = document.createElement('option');
+                option.value = enc;
+                option.textContent = strings.gedcom.encodingNames[enc] ?? enc.toUpperCase();
+                return option;
+            }));
+            select.value = d.encoding;
+        }
+        const how = document.getElementById('gedcom-encoding-how');
+        if (how) {
+            const said = d.how === 'chosen' ? strings.gedcom.encodingChosen
+                : d.how === 'content' ? strings.gedcom.encodingGuessed(d.declared)
+                    : strings.gedcom.encodingDeclared;
+            how.textContent = `${said} ${strings.gedcom.encodingHint}`;
+        }
+        const names = document.getElementById('gedcom-encoding-names');
+        if (names) names.textContent = gedcomSampleNames(this.gedcomResult.data).join(' · ');
+    },
+
+    /** Re-read the GEDCOM file of the summary in another encoding and show the summary again. */
+    setGedcomEncoding(encoding: string): void {
+        if (!this.gedcomRawBuffer || !(GEDCOM_ENCODING_CHOICES as readonly string[]).includes(encoding)) return;
+        try {
+            const decoding = decodeGedcomBytes(this.gedcomRawBuffer, encoding as GedcomEncoding);
+            const result = convertToStrom(parseGedcom(decoding.text));
+            this.gedcomDecoding = decoding;
+            this.gedcomResult = result;
+        } catch (error) {
+            this.showAlert(strings.gedcom.parseError, 'error');
+            console.error('GEDCOM parse error:', error);
+            return;
+        }
+        this.showGedcomResultDialog();
+    },
+
     closeGedcomResultDialog(): void {
         document.getElementById('gedcom-result-modal')?.classList.remove('active');
+        this.gedcomRawBuffer = null;
         if (this.importFromTreeManager) {
             this.returnToParentDialog();
             this.importFromTreeManager = false;
@@ -698,6 +759,7 @@ export const importExportMethods = uiModule({
 
     importGedcomAsNewTree(): void {
         if (!this.gedcomResult) return;
+        this.gedcomRawBuffer = null;
 
         // Check if importing directly to current tree (from empty state)
         if (this.importToCurrentTree) {

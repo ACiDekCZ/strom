@@ -26,7 +26,7 @@ import {
     Source
 } from '../types.js';
 import { strings } from '../strings.js';
-import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, GedcomConversionResult, GedcomDecoding } from '../ged-parser.js';
 import {
     validateJsonImport,
     ValidationResult,
@@ -186,6 +186,10 @@ export class UIClass {
     gedcomResult: GedcomConversionResult | null = null;
     /** This GEDCOM import brings images (null until the result dialog decides). */
     gedcomImportImages: boolean | null = null;
+    /** Raw bytes of the GEDCOM file in the result dialog (another encoding re-reads them). */
+    gedcomRawBuffer: ArrayBuffer | null = null;
+    /** How the GEDCOM file in the result dialog was decoded. */
+    gedcomDecoding: GedcomDecoding | null = null;
     /** State of the optional checkbox of the last showChoice() dialog. */
     choiceCheckboxChecked = false;
     /** The source catalog's filter ("Transcription not verified" from Research for this tree). */

@@ -4396,6 +4396,22 @@ const stringsEN = {
         downloading: (done: number, total: number) => `Downloading photos… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `Attached ${matched} of ${total} referenced files.`,
         mediaNoMatch: 'None of the selected files match the referenced names.',
+        // Import summary: the text encoding of a file that does not say it plainly (ANSI, no CHAR …).
+        encodingLabel: 'Text encoding',
+        encodingNames: {
+            'utf-8': 'UTF-8',
+            'windows-1250': 'Windows-1250 (Central Europe)',
+            'windows-1252': 'Windows-1252 (Western Europe)',
+            'iso-8859-2': 'ISO-8859-2 (Latin-2)',
+            'ansel': 'ANSEL (older GEDCOM)',
+        } as Record<string, string>,
+        encodingGuessed: (declared: string | null) => declared
+            ? `Detected from the content of the file (its header says ${declared}).`
+            : 'Detected from the content of the file (its header names none).',
+        encodingDeclared: 'As stated in the header of the file.',
+        encodingChosen: 'Chosen by hand.',
+        encodingSample: 'Names:',
+        encodingHint: 'Garbled letters in the names (è instead of č, ø instead of ř) mean that another encoding fits.',
     },
 
     // Notes the GEDCOM importer writes into the data itself (persisted). Built
@@ -12144,6 +12160,21 @@ const stringsCZ: StringsType = {
         downloading: (done: number, total: number) => `Stahuji fotky… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `Napojeno ${matched} z ${total} odkazovaných souborů.`,
         mediaNoMatch: 'Žádný z vybraných souborů neodpovídá odkazovaným názvům.',
+        encodingLabel: 'Kódování textu',
+        encodingNames: {
+            'utf-8': 'UTF-8',
+            'windows-1250': 'Windows-1250 (střední Evropa)',
+            'windows-1252': 'Windows-1252 (západní Evropa)',
+            'iso-8859-2': 'ISO-8859-2 (Latin-2)',
+            'ansel': 'ANSEL (starší GEDCOM)',
+        },
+        encodingGuessed: (declared: string | null) => declared
+            ? `Rozpoznáno podle obsahu souboru (hlavička uvádí ${declared}).`
+            : 'Rozpoznáno podle obsahu souboru (hlavička kódování neuvádí).',
+        encodingDeclared: 'Podle hlavičky souboru.',
+        encodingChosen: 'Zvoleno ručně.',
+        encodingSample: 'Ukázka jmen:',
+        encodingHint: 'Zkomolené znaky ve jménech (è místo č, ø místo ř) znamenají, že sedí jiné kódování.',
     },
 
     // Poznámky, které importér GEDCOM zapisuje přímo do dat (uloží se). Sestaveny
@@ -19833,6 +19864,21 @@ const stringsDE: StringsType = {
         downloading: (done: number, total: number) => `Fotos werden heruntergeladen… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `${matched} von ${total} referenzierten Dateien angehängt.`,
         mediaNoMatch: 'Keine der ausgewählten Dateien passt zu den referenzierten Namen.',
+        encodingLabel: 'Textkodierung',
+        encodingNames: {
+            'utf-8': 'UTF-8',
+            'windows-1250': 'Windows-1250 (Mitteleuropa)',
+            'windows-1252': 'Windows-1252 (Westeuropa)',
+            'iso-8859-2': 'ISO-8859-2 (Latin-2)',
+            'ansel': 'ANSEL (älteres GEDCOM)',
+        },
+        encodingGuessed: (declared: string | null) => declared
+            ? `Am Inhalt der Datei erkannt (der Dateikopf nennt ${declared}).`
+            : 'Am Inhalt der Datei erkannt (der Dateikopf nennt keine).',
+        encodingDeclared: 'Laut Dateikopf.',
+        encodingChosen: 'Manuell gewählt.',
+        encodingSample: 'Namensbeispiele:',
+        encodingHint: 'Verstümmelte Zeichen in den Namen (è statt č, ø statt ř) bedeuten, dass eine andere Kodierung passt.',
     },
 
     // Notes the GEDCOM importer writes into the data itself (persisted).
