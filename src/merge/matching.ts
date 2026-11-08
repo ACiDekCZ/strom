@@ -6,7 +6,8 @@
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
-import { detectPartnershipConflicts } from './executor.js';
+import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
+import { idEvidence } from './id-match.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -311,6 +312,49 @@ interface MatchCandidate {
     reasons: MatchReason[];
 }
 
+/** A pair's score; `cap` bounds it with any bonus added later (only offered, never auto-confirmed). */
+interface ScoreResult {
+    score: number;
+    reasons: MatchReason[];
+    cap?: number;
+    /** A shared strong id the names, sex and birth years agree with: the same person. */
+    idConfirmed?: boolean;
+}
+
+/** A strong id both files give the person (`_UID`, `_FSFTID`…) that the rest agrees with: the same person. */
+const ID_MATCH_SCORE = 100;
+/** A shared strong id the rest does not agree with: at least a candidate to look at, nothing more. */
+const ID_CANDIDATE_SCORE = 60;
+/** The most two birth (else baptism) years may differ for a shared strong id to confirm a match. */
+const ID_MAX_YEAR_GAP = 3;
+/** The same xref or RIN in files of one program: a contribution to a name match. */
+const WEAK_ID_BONUS = 25;
+
+/** The highest score of a match that is only offered (below the auto-confirm bar). */
+function offerOnlyCap(): number {
+    return AUTO_CONFIRM_SCORE - 1;
+}
+
+/** The year a person was born, else baptized; null when neither is known. */
+function birthOrBaptismYear(person: Person): number | null {
+    const born = yearOf(person.birthDate);
+    if (born !== null) return born;
+    const baptism = person.events?.find(e => e.type === 'baptism' && e.date);
+    return baptism ? yearOf(baptism.date) : null;
+}
+
+/** A shared strong id that is only a hint: offered with its reason, below the auto-confirm bar. */
+function idCandidate(score: number, reasons: MatchReason[]): ScoreResult {
+    const cap = offerOnlyCap();
+    const out: MatchReason[] = reasons.includes('id') ? [...reasons] : ['id', ...reasons];
+    return { score: Math.min(Math.max(score, ID_CANDIDATE_SCORE), cap), reasons: out, cap };
+}
+
+/** A base score plus a relationship bonus, within 100 and the base's cap. */
+function withBonus(base: ScoreResult, bonus: number): number {
+    return Math.min(base.score + bonus, base.cap ?? 100);
+}
+
 /**
  * Find matches between incoming persons and existing persons
  * Uses multiple strategies for smart matching
@@ -384,6 +428,32 @@ function findDirectMatches(
     usedIncoming: Set<PersonId>
 ): PersonMatch[] {
     const matches: PersonMatch[] = [];
+
+    // A strong id both files give a person decides first: a name match of
+    // another incoming person must not take the existing person it names.
+    for (const incoming of Object.values(incomingData.persons)) {
+        if (incoming.isPlaceholder || !incoming.originalIds?.length) continue;
+        if (usedIncoming.has(incoming.id)) continue;
+        for (const existing of Object.values(existingData.persons)) {
+            if (existing.isPlaceholder || usedExisting.has(existing.id)) continue;
+            if (!gendersCompatible(existing.gender, incoming.gender)) continue;
+            if (!idEvidence(existing, incoming, existingData, incomingData).same) continue;
+            if (!calculateMatchScore(existing, incoming, existingData, incomingData).idConfirmed) continue;
+            matches.push({
+                existingId: existing.id,
+                incomingId: incoming.id,
+                confidence: scoreToConfidence(ID_MATCH_SCORE),
+                reasons: ['id'],
+                score: ID_MATCH_SCORE,
+                existingPerson: existing,
+                incomingPerson: incoming,
+                conflicts: detectConflicts(existing, incoming)
+            });
+            usedExisting.add(existing.id);
+            usedIncoming.add(incoming.id);
+            break;
+        }
+    }
 
     // Process each incoming person
     for (const incoming of Object.values(incomingData.persons)) {
@@ -478,7 +548,7 @@ function propagateFromMatches(
 
                 // Add bonus for being partner of matched person
                 const partnerBonus = 20;
-                const totalScore = Math.min(baseResult.score + partnerBonus, 100);
+                const totalScore = withBonus(baseResult, partnerBonus);
 
                 // Accept with lower threshold due to relationship context
                 if (totalScore >= 30 || baseResult.score >= 25) {
@@ -525,7 +595,7 @@ function propagateFromMatches(
 
                 // Add bonus for being child of matched person
                 const childBonus = 15;
-                const totalScore = Math.min(baseResult.score + childBonus, 100);
+                const totalScore = withBonus(baseResult, childBonus);
 
                 if (totalScore >= 30 || baseResult.score >= 25) {
                     const confidence = scoreToConfidence(totalScore);
@@ -574,7 +644,7 @@ function propagateFromMatches(
 
                 // Add bonus for being parent of matched person
                 const parentBonus = 15;
-                const totalScore = Math.min(baseResult.score + parentBonus, 100);
+                const totalScore = withBonus(baseResult, parentBonus);
 
                 if (totalScore >= 30 || baseResult.score >= 25) {
                     const confidence = scoreToConfidence(totalScore);
@@ -794,13 +864,21 @@ function calculateMatchScore(
     incoming: Person,
     existingData: StromData,
     incomingData: StromData
-): { score: number; reasons: MatchReason[] } {
+): ScoreResult {
     let score = 0;
     const reasons: MatchReason[] = [];
 
+    // The ids the loaded files gave both records. A shared strong id is the
+    // same person only when the names are alike, the sex is not a man and a
+    // woman, the birth years (when both are known) are at most 3 apart and
+    // no global id (_FSFTID, AFN, EXID) differs; otherwise it is a candidate
+    // to look at. A global id that differs keeps a name match below the
+    // auto-confirm bar.
+    const ids = idEvidence(existing, incoming, existingData, incomingData);
+
     // Gender must match
     if (!gendersCompatible(existing.gender, incoming.gender)) {
-        return { score: 0, reasons: [] };
+        return ids.same ? idCandidate(0, []) : { score: 0, reasons: [] };
     }
 
     // Analyze first names (handles middle names, multi-part names)
@@ -857,7 +935,7 @@ function calculateMatchScore(
         score += 12;
     } else {
         // Names too different
-        return { score: 0, reasons: [] };
+        return ids.same ? idCandidate(0, []) : { score: 0, reasons: [] };
     }
 
     // Birth date matching
@@ -915,11 +993,29 @@ function calculateMatchScore(
         }
     }
 
+    // The same xref or RIN in files of one program: only on top of a name
+    // match (the names passed above), never on its own.
+    if (ids.weak) {
+        score += WEAK_ID_BONUS;
+        reasons.unshift('id');
+    }
+
     // Ensure we have at least one reason
     if (score >= 30 && reasons.length === 0) {
         reasons.push('name_similarity_relationships');
     }
 
+    if (ids.same) {
+        const y1 = birthOrBaptismYear(existing);
+        const y2 = birthOrBaptismYear(incoming);
+        const yearsAgree = y1 === null || y2 === null || Math.abs(y1 - y2) <= ID_MAX_YEAR_GAP;
+        if (yearsAgree && !ids.globalDiffers) return { score: ID_MATCH_SCORE, reasons: ['id'], idConfirmed: true };
+        return idCandidate(score, reasons);
+    }
+    if (ids.globalDiffers) {
+        const cap = offerOnlyCap();
+        return { score: Math.min(score, cap), reasons, cap };
+    }
     return { score: Math.min(score, 100), reasons };
 }
 

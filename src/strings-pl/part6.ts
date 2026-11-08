@@ -98,6 +98,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             parent_of_matched: 'Rodzic dopasowanej osoby',
             partner_similarity: 'Podobne imiona partnerów',
             unknown_name_relative: 'Nieznane imię – dopasowano przez krewnego',
+            id: 'Ten sam identyfikator w pliku',
             manual: 'Przypisanie ręczne'
         },
 
