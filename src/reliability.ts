@@ -13,6 +13,10 @@
  *   (StromData.imports + importedValues) while the value equals the file's,
  *   and the research's status a file of the research gave (`_STROM_STATUS`,
  *   shown before 066 too); the research's origins are not read then.
+ * In both, a fact a person confirmed (spec 065: by hand in the app while its
+ * value is unchanged, or the research's `_STROM_CONFIRMED`) is `human`, and
+ * the research's last check (`_STROM_CHECKED proven`, `_READERS`) gives the
+ * readers of a proven fact.
  * A tree with no import record shows no "from family tree" mark (nothing is guessed).
  */
 
@@ -24,6 +28,7 @@ import {
     FactHolder, factImportParts, factParts, factsOf, factValue, importRecordOf, isPartnership,
 } from './import-origin.js';
 import { PersonEvidence, personEvidence } from './evidence-level.js';
+import { factVerifyInfo, factVerifyReaders } from './verify.js';
 
 /** The steps, strongest first (the table of §2; the tree card's mini mark takes the weakest). */
 export const RELIABILITY_ORDER = ['human', 'proven', 'probable', 'possible', 'import', 'lead', 'none'] as const;
@@ -149,13 +154,33 @@ export function wasAccepted(origin: ResearchFactOrigin | null | undefined): bool
 }
 
 /**
+ * What the fact's own data say of it (spec 065): a confirmation by a person
+ * (in the app by hand while the value is unchanged, or in the research) and
+ * the readers the research's last check counted.
+ */
+function verifyEvidence(holder: FactHolder, fact: string): Pick<ReliabilityInput, 'readers' | 'confirmedByHuman'> {
+    const info = factVerifyInfo(holder, fact);
+    const readers = factVerifyReaders(holder, fact);
+    return {
+        ...(info.confirmed ? { confirmedByHuman: true } : {}),
+        ...(readers ? { readers } : {}),
+    };
+}
+
+/** The fields a caller's evidence says (undefined ones do not override). */
+function definedOnly<T extends object>(value: T | undefined): Partial<T> {
+    if (!value) return {};
+    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/**
  * The mark of one fact of a person or a couple, with what the tooltip and the "Originally" row need; null: no mark.
  * The research's tree with `origin`: from its origin and status. Otherwise: `import` while the value equals the file's,
  * and only with that import's record.
  */
 export function factReliability(data: Pick<StromData, 'imports'>, holder: FactHolder, fact: string,
     opts: ReliabilityOptions): FactReliability | null {
-    const evidence = opts.evidence?.(holder, fact) ?? {};
+    const evidence = { ...verifyEvidence(holder, fact), ...definedOnly(opts.evidence?.(holder, fact)) };
     if (opts.researchTree && opts.originFeature) {
         const origin = holder.researchOrigins?.[fact];
         const status = factStatusOf(holder, fact);
@@ -182,7 +207,7 @@ export function factReliability(data: Pick<StromData, 'imports'>, holder: FactHo
     const status = factStatusOf(holder, fact);
     const parts = factImportParts(holder, fact);
     const record = parts.fromImport.length > 0 ? importRecordOf(data, parts.importId) : undefined;
-    const step = reliabilityStep({ status, valueFromImport: !!record });
+    const step = reliabilityStep({ status, valueFromImport: !!record, ...evidence });
     if (!step) return null;
     return record
         ? { ...step, importRecord: record, fromParts: parts.fromImport, changedParts: parts.changed }
