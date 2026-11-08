@@ -666,7 +666,16 @@ the record ids, the export to the program the tree came from keeps:
 Merging the same file into the tree again fills what the earlier import did
 not keep: the e-mail lines of a fact and a couple without `MARR` in the file
 (only for the same family record of the same program). People without a name
-pair with each other by the id they have in the file.
+pair with each other by the id they have in the file, people known by the
+surname alone (`1 NAME /Novák/`) by that id and the surname, and the `?` a
+family of one named parent stands in for the other parent with the `?` of the
+same family record. A family of one spouse or a second family of one parent
+the tree does not have yet comes in with its `?` and its ids, and the child's
+second family link comes along. A source entry read by an older build (one
+`QUAY` for every page of a source record) takes each page's own `QUAY`, and a
+page cited twice with another `QUAY` or `DATA` / `DATE` keeps each citation
+on its own entry. So "Back to {program}" after such a merge gives the records
+a fresh import gives.
 
 The "Back to" file read into Strom again keeps the other program's tags of
 each record that carries `1 _STROM_IMPORT Ix`, for that import, so the next

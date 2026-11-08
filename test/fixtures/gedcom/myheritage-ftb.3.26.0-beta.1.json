@@ -1,0 +1,1213 @@
+{
+ "persons": {
+  "p_1794164240562_0006mibyt": {
+   "id": "p_1794164240562_0006mibyt",
+   "firstName": "Hromoslav",
+   "lastName": "Ozubec",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000oarwb2"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_0008xokc6",
+    "p_1794164240562_000cdamfx"
+   ],
+   "birthDate": "1880-03-03",
+   "birthPlace": "Ozubcov",
+   "deathDate": "1950-01-09",
+   "deathPlace": "Mechovka",
+   "notes": "Number of children: 3",
+   "events": [
+    {
+     "id": "ev_1794164240563_000zto81y",
+     "type": "residence",
+     "address": "Ozubcov 12",
+     "note": "E-mail: hromoslav@example.org"
+    }
+   ],
+   "birthSourceIds": [
+    "src_1794164240562_0002na25i"
+   ],
+   "deathSourceIds": [
+    "src_1794164240562_0004vjw1r"
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Hromoslav"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Ozubec"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1880-03-03"
+    },
+    "birthPlace": {
+     "from": "I1",
+     "value": "Ozubcov"
+    },
+    "deathDate": {
+     "from": "I1",
+     "value": "1950-01-09"
+    },
+    "deathPlace": {
+     "from": "I1",
+     "value": "Mechovka"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I1",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I1"
+      },
+      {
+       "tag": "_UID",
+       "value": "5F3A1B2C3D4E5F60718293A4B5C6D7E8"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_00077mw88": {
+   "id": "p_1794164240562_00077mw88",
+   "firstName": "Libuna",
+   "lastName": "Šťovíková",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000oarwb2"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_0008xokc6",
+    "p_1794164240562_000cdamfx"
+   ],
+   "birthDate": "1884",
+   "birthPlace": "Mechovka",
+   "isDeceased": true,
+   "sourceIds": [
+    "src_1794164240562_0003jy9yv"
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Libuna"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Šťovíková"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1884"
+    },
+    "birthPlace": {
+     "from": "I1",
+     "value": "Mechovka"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I2",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I2"
+      },
+      {
+       "tag": "_UID",
+       "value": "6A3A1B2C3D4E5F60718293A4B5C6D7E9"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_0008xokc6": {
+   "id": "p_1794164240562_0008xokc6",
+   "firstName": "Mlhoň",
+   "lastName": "Ozubec",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000q9dhnc"
+   ],
+   "parentIds": [
+    "p_1794164240562_0006mibyt",
+    "p_1794164240562_00077mw88"
+   ],
+   "childIds": [
+    "p_1794164240562_000f00x1d"
+   ],
+   "notes": "Birth: Born at the mill, says the family.",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Mlhoň"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Ozubec"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_0006mibyt": "I1",
+    "p_1794164240562_00077mw88": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I3",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I3"
+      },
+      {
+       "tag": "_UID",
+       "value": "7B3A1B2C3D4E5F60718293A4B5C6D7EA"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_0009qzqv1": {
+   "id": "p_1794164240562_0009qzqv1",
+   "firstName": "?",
+   "lastName": "",
+   "gender": "unknown",
+   "isPlaceholder": true,
+   "partnerships": [
+    "u_1794164240562_000q9dhnc"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000f00x1d"
+   ],
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I4",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I4"
+      },
+      {
+       "tag": "_UID",
+       "value": "9D3A1B2C3D4E5F60718293A4B5C6D7EC"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000atc158": {
+   "id": "p_1794164240562_000atc158",
+   "firstName": "Zbyhoň",
+   "lastName": "Pražmouk",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000pd54tu"
+   ],
+   "parentIds": [],
+   "childIds": [],
+   "birthDate": "1875",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Zbyhoň"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Pražmouk"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1875"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I5",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I5"
+      },
+      {
+       "tag": "_UID",
+       "value": "AE3A1B2C3D4E5F60718293A4B5C6D7ED"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000b8s6nm": {
+   "id": "p_1794164240562_000b8s6nm",
+   "firstName": "?",
+   "lastName": "",
+   "gender": "unknown",
+   "isPlaceholder": true,
+   "partnerships": [
+    "u_1794164240562_000pd54tu"
+   ],
+   "parentIds": [],
+   "childIds": [],
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I6",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I6"
+      },
+      {
+       "tag": "_UID",
+       "value": "BF3A1B2C3D4E5F60718293A4B5C6D7EE"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000cdamfx": {
+   "id": "p_1794164240562_000cdamfx",
+   "firstName": "Bořivoj",
+   "lastName": "Ozubec",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000rxru2t"
+   ],
+   "parentIds": [
+    "p_1794164240562_0006mibyt",
+    "p_1794164240562_00077mw88"
+   ],
+   "childIds": [
+    "p_1794164240562_000e26u4i"
+   ],
+   "birthDate": "1910",
+   "birthPlace": "Ozubcov",
+   "notes": "Also recorded as adopted child of Zbyhoň Pražmouk.",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Bořivoj"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Ozubec"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1910"
+    },
+    "birthPlace": {
+     "from": "I1",
+     "value": "Ozubcov"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_0006mibyt": "I1",
+    "p_1794164240562_00077mw88": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I7",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I7"
+      },
+      {
+       "tag": "_UID",
+       "value": "C03A1B2C3D4E5F60718293A4B5C6D7F1"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000d8w8x5": {
+   "id": "p_1794164240562_000d8w8x5",
+   "firstName": "Smrkoslava",
+   "lastName": "Mlýnková",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000rxru2t"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000e26u4i"
+   ],
+   "marriedSurname": "Ozubcová",
+   "birthDate": "1912",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Smrkoslava"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Mlýnková"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1912"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I8",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I8"
+      },
+      {
+       "tag": "_UID",
+       "value": "C43A1B2C3D4E5F60718293A4B5C6D7F4"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000e26u4i": {
+   "id": "p_1794164240562_000e26u4i",
+   "firstName": "Drahobyl",
+   "lastName": "Ozubec",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [],
+   "parentIds": [
+    "p_1794164240562_000cdamfx",
+    "p_1794164240562_000d8w8x5"
+   ],
+   "childIds": [],
+   "birthDate": "1938",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Drahobyl"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Ozubec"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1938"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_000cdamfx": "I1",
+    "p_1794164240562_000d8w8x5": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I9",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I9"
+      },
+      {
+       "tag": "_UID",
+       "value": "C53A1B2C3D4E5F60718293A4B5C6D7F5"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000f00x1d": {
+   "id": "p_1794164240562_000f00x1d",
+   "firstName": "Květuna",
+   "lastName": "Ozubcová",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [],
+   "parentIds": [
+    "p_1794164240562_0008xokc6",
+    "p_1794164240562_0009qzqv1"
+   ],
+   "childIds": [],
+   "marriedSurname": "Kroupalová",
+   "birthDate": "1940",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Květuna"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Ozubcová"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1940"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_0008xokc6": "I1",
+    "p_1794164240562_0009qzqv1": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I10",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I10"
+      },
+      {
+       "tag": "_UID",
+       "value": "C63A1B2C3D4E5F60718293A4B5C6D7F6"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000gqlve6": {
+   "id": "p_1794164240562_000gqlve6",
+   "firstName": "?",
+   "lastName": "",
+   "gender": "female",
+   "isPlaceholder": true,
+   "partnerships": [
+    "u_1794164240562_000upx7h6"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000jvl6no"
+   ],
+   "birthDate": "1915",
+   "importId": "I1",
+   "importedValues": {
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1915"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I11",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I11"
+      },
+      {
+       "tag": "_UID",
+       "value": "C73A1B2C3D4E5F60718293A4B5C6D7F8"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000hl9bvx": {
+   "id": "p_1794164240562_000hl9bvx",
+   "firstName": "Jaroboj",
+   "lastName": "Kroupal",
+   "gender": "unknown",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000upx7h6",
+    "u_1794164240562_000vm6a4j"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000jvl6no"
+   ],
+   "titleBefore": "Ing.",
+   "birthDate": "1913",
+   "events": [
+    {
+     "id": "ev_1794164240563_0010fs9w7",
+     "type": "custom",
+     "customLabel": "Birth (alternative record)",
+     "date": "1914",
+     "place": "Mechovka"
+    }
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Jaroboj"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupal"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1913"
+    },
+    "event:ev_1794164240563_0010fs9w7.date": {
+     "from": "I1",
+     "value": "1914"
+    },
+    "event:ev_1794164240563_0010fs9w7.place": {
+     "from": "I1",
+     "value": "Mechovka"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I12",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I12"
+      },
+      {
+       "tag": "_UID",
+       "value": "C83A1B2C3D4E5F60718293A4B5C6D7F9"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000iu1om4": {
+   "id": "p_1794164240562_000iu1om4",
+   "firstName": "Dobroslava",
+   "lastName": "Kroupalová",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000vm6a4j"
+   ],
+   "parentIds": [],
+   "childIds": [],
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Dobroslava"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupalová"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I13",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I13"
+      },
+      {
+       "tag": "_UID",
+       "value": "C93A1B2C3D4E5F60718293A4B5C6D7FA"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000jvl6no": {
+   "id": "p_1794164240562_000jvl6no",
+   "firstName": "Želibor",
+   "lastName": "Kroupal",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000ykkocl",
+    "u_1794164240564_0012obgib"
+   ],
+   "parentIds": [
+    "p_1794164240562_000hl9bvx",
+    "p_1794164240562_000gqlve6"
+   ],
+   "childIds": [
+    "p_1794164240562_000n778hz",
+    "p_1794164240562_000kuvzv8",
+    "p_1794164240562_000l8pi5s"
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Želibor"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupal"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_000hl9bvx": "I1",
+    "p_1794164240562_000gqlve6": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I14",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I14"
+      },
+      {
+       "tag": "_UID",
+       "value": "CA4A1B2C3D4E5F60718293A4B5C6D7FB"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000kuvzv8": {
+   "id": "p_1794164240562_000kuvzv8",
+   "firstName": "Radovan",
+   "lastName": "Kroupal",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [],
+   "parentIds": [
+    "p_1794164240562_000jvl6no",
+    "p_1794164240564_0011f55qh"
+   ],
+   "childIds": [],
+   "birthDate": "1950",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Radovan"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupal"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1950"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_000jvl6no": "I1",
+    "p_1794164240564_0011f55qh": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I15",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I15"
+      },
+      {
+       "tag": "_UID",
+       "value": "CE4A1B2C3D4E5F60718293A4B5C6D7FF"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000l8pi5s": {
+   "id": "p_1794164240562_000l8pi5s",
+   "firstName": "Lubomíra",
+   "lastName": "Kroupalová",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [],
+   "parentIds": [
+    "p_1794164240562_000jvl6no",
+    "p_1794164240564_0011f55qh"
+   ],
+   "childIds": [],
+   "birthDate": "1952",
+   "importId": "I1",
+   "importedValues": {
+    "firstName": {
+     "from": "I1",
+     "value": "Lubomíra"
+    },
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupalová"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    },
+    "birthDate": {
+     "from": "I1",
+     "value": "1952"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_000jvl6no": "I1",
+    "p_1794164240564_0011f55qh": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I16",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I16"
+      },
+      {
+       "tag": "_UID",
+       "value": "CF4A1B2C3D4E5F60718293A4B5C6D7F0"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000m8t4zl": {
+   "id": "p_1794164240562_000m8t4zl",
+   "firstName": "?",
+   "lastName": "Žblunková",
+   "gender": "female",
+   "isPlaceholder": false,
+   "partnerships": [
+    "u_1794164240562_000ykkocl"
+   ],
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000n778hz"
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "lastName": {
+     "from": "I1",
+     "value": "Žblunková"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I17",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I17"
+      },
+      {
+       "tag": "_UID",
+       "value": "D14A1B2C3D4E5F60718293A4B5C6D7F2"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240562_000n778hz": {
+   "id": "p_1794164240562_000n778hz",
+   "firstName": "?",
+   "lastName": "Kroupal",
+   "gender": "male",
+   "isPlaceholder": false,
+   "partnerships": [],
+   "parentIds": [
+    "p_1794164240562_000jvl6no",
+    "p_1794164240562_000m8t4zl"
+   ],
+   "childIds": [],
+   "isDeceased": true,
+   "importId": "I1",
+   "importedValues": {
+    "lastName": {
+     "from": "I1",
+     "value": "Kroupal"
+    },
+    "gender": {
+     "from": "I1",
+     "value": "male"
+    }
+   },
+   "importedParents": {
+    "p_1794164240562_000jvl6no": "I1",
+    "p_1794164240562_000m8t4zl": "I1"
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "I18",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:I18"
+      },
+      {
+       "tag": "_UID",
+       "value": "D24A1B2C3D4E5F60718293A4B5C6D7F3"
+      }
+     ]
+    }
+   ]
+  },
+  "p_1794164240564_0011f55qh": {
+   "id": "p_1794164240564_0011f55qh",
+   "firstName": "?",
+   "lastName": "",
+   "gender": "female",
+   "parentIds": [],
+   "childIds": [
+    "p_1794164240562_000kuvzv8",
+    "p_1794164240562_000l8pi5s"
+   ],
+   "partnerships": [
+    "u_1794164240564_0012obgib"
+   ],
+   "isPlaceholder": true,
+   "importId": "I1",
+   "importedValues": {
+    "gender": {
+     "from": "I1",
+     "value": "female"
+    }
+   }
+  }
+ },
+ "partnerships": {
+  "u_1794164240562_000oarwb2": {
+   "id": "u_1794164240562_000oarwb2",
+   "person1Id": "p_1794164240562_0006mibyt",
+   "person2Id": "p_1794164240562_00077mw88",
+   "childIds": [
+    "p_1794164240562_0008xokc6",
+    "p_1794164240562_000cdamfx"
+   ],
+   "status": "married",
+   "startPlace": "Ozubcov",
+   "startDate": "1905",
+   "sourceIds": [
+    "src_1794164240562_0005dcek7"
+   ],
+   "importId": "I1",
+   "importedValues": {
+    "startDate": {
+     "from": "I1",
+     "value": "1905"
+    },
+    "startPlace": {
+     "from": "I1",
+     "value": "Ozubcov"
+    }
+   },
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F1",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F1"
+      },
+      {
+       "tag": "_UID",
+       "value": "8C3A1B2C3D4E5F60718293A4B5C6D7EB"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000pd54tu": {
+   "id": "u_1794164240562_000pd54tu",
+   "person1Id": "p_1794164240562_000atc158",
+   "person2Id": "p_1794164240562_000b8s6nm",
+   "childIds": [],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F2",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F2"
+      },
+      {
+       "tag": "_UID",
+       "value": "CA3A1B2C3D4E5F60718293A4B5C6D7EF"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000q9dhnc": {
+   "id": "u_1794164240562_000q9dhnc",
+   "person1Id": "p_1794164240562_0008xokc6",
+   "person2Id": "p_1794164240562_0009qzqv1",
+   "childIds": [
+    "p_1794164240562_000f00x1d"
+   ],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F3",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F3"
+      },
+      {
+       "tag": "_UID",
+       "value": "DB3A1B2C3D4E5F60718293A4B5C6D7F0"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000rxru2t": {
+   "id": "u_1794164240562_000rxru2t",
+   "person1Id": "p_1794164240562_000cdamfx",
+   "person2Id": "p_1794164240562_000d8w8x5",
+   "childIds": [
+    "p_1794164240562_000e26u4i"
+   ],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F4",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F4"
+      },
+      {
+       "tag": "_UID",
+       "value": "DC3A1B2C3D4E5F60718293A4B5C6D7F7"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000upx7h6": {
+   "id": "u_1794164240562_000upx7h6",
+   "person1Id": "p_1794164240562_000hl9bvx",
+   "person2Id": "p_1794164240562_000gqlve6",
+   "childIds": [
+    "p_1794164240562_000jvl6no"
+   ],
+   "status": "divorced",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F7",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F7"
+      },
+      {
+       "tag": "_UID",
+       "value": "CB4A1B2C3D4E5F60718293A4B5C6D7FC"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000vm6a4j": {
+   "id": "u_1794164240562_000vm6a4j",
+   "person1Id": "p_1794164240562_000hl9bvx",
+   "person2Id": "p_1794164240562_000iu1om4",
+   "childIds": [],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F8",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F8"
+      },
+      {
+       "tag": "_UID",
+       "value": "CC4A1B2C3D4E5F60718293A4B5C6D7FD"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240562_000ykkocl": {
+   "id": "u_1794164240562_000ykkocl",
+   "person1Id": "p_1794164240562_000jvl6no",
+   "person2Id": "p_1794164240562_000m8t4zl",
+   "childIds": [
+    "p_1794164240562_000n778hz"
+   ],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F11",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F11"
+      },
+      {
+       "tag": "_UID",
+       "value": "D34A1B2C3D4E5F60718293A4B5C6D7F4"
+      }
+     ]
+    }
+   ]
+  },
+  "u_1794164240564_0012obgib": {
+   "id": "u_1794164240564_0012obgib",
+   "person1Id": "p_1794164240562_000jvl6no",
+   "person2Id": "p_1794164240564_0011f55qh",
+   "childIds": [
+    "p_1794164240562_000kuvzv8",
+    "p_1794164240562_000l8pi5s"
+   ],
+   "status": "married",
+   "importId": "I1",
+   "originalIds": [
+    {
+     "from": "I1",
+     "xref": "F10",
+     "ids": [
+      {
+       "tag": "RIN",
+       "value": "MH:F10"
+      },
+      {
+       "tag": "_UID",
+       "value": "D04A1B2C3D4E5F60718293A4B5C6D7F1"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "sources": {
+  "src_1794164240562_0002na25i": {
+   "id": "src_1794164240562_0002na25i",
+   "title": "Parish register Ozubcov",
+   "reference": "fol. 12",
+   "note": "Author: Ozubcov parish office\nPublication: Ozubcov 1880",
+   "quality": 3,
+   "recordDate": "1880-03-04",
+   "importId": "I1"
+  },
+  "src_1794164240562_0003jy9yv": {
+   "id": "src_1794164240562_0003jy9yv",
+   "title": "Mechovka chronicle",
+   "quality": 3,
+   "importId": "I1"
+  },
+  "src_1794164240562_0004vjw1r": {
+   "id": "src_1794164240562_0004vjw1r",
+   "title": "Parish register Ozubcov",
+   "reference": "fol. 88",
+   "note": "Author: Ozubcov parish office\nPublication: Ozubcov 1880",
+   "quality": 3,
+   "importId": "I1"
+  },
+  "src_1794164240562_0005dcek7": {
+   "id": "src_1794164240562_0005dcek7",
+   "title": "Parish register Ozubcov",
+   "reference": "fol. 40",
+   "note": "Author: Ozubcov parish office\nPublication: Ozubcov 1880",
+   "quality": 3,
+   "importId": "I1"
+  }
+ },
+ "imports": [
+  {
+   "id": "I1",
+   "program": "MyHeritage Family Tree Builder",
+   "at": "2026-11-08",
+   "version": "5.5.1",
+   "fileDate": "8 NOV 2026",
+   "file": "myheritage-ftb.ged",
+   "encoding": "utf-8"
+  }
+ ]
+}

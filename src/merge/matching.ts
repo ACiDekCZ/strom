@@ -7,7 +7,7 @@ import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
 import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
-import { idEvidence } from './id-match.js';
+import { idEvidence, sameFileRecord } from './id-match.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -401,6 +401,10 @@ export function findMatches(
         unknownSeeds = found;
     }
 
+    // Phase 2c: the "?" a file's family of one named parent got for the other
+    // parent pairs with the "?" of that very family record in the tree.
+    matches.push(...matchFamilyRecordStandIns(existingData, incomingData, matches, usedExisting, usedIncoming));
+
     // Phase 3: Find remaining matches with lower threshold
     const remainingMatches = findRemainingMatches(
         existingData, incomingData, usedExisting, usedIncoming
@@ -416,6 +420,53 @@ export function findMatches(
     });
 
     return matches;
+}
+
+/**
+ * A family record of a file names one parent; the import stands a "?" in for
+ * the other (no ids: the file has no record of it). Merging the same file
+ * again, that "?" is the "?" the tree has in the same family record (same
+ * program, same xref) of the person the named parent merged into.
+ */
+function matchFamilyRecordStandIns(
+    existingData: StromData,
+    incomingData: StromData,
+    matches: readonly PersonMatch[],
+    usedExisting: Set<PersonId>,
+    usedIncoming: Set<PersonId>
+): PersonMatch[] {
+    const target = new Map<PersonId, PersonId>();
+    for (const m of matches) if (m.score >= AUTO_CONFIRM_SCORE) target.set(m.incomingId, m.existingId);
+    const standIn = (p: Person | undefined): p is Person => !!p?.isPlaceholder && !p.originalIds?.length;
+    const found: PersonMatch[] = [];
+    for (const incomingUnion of Object.values(incomingData.partnerships)) {
+        if (!incomingUnion.originalIds?.length) continue;
+        for (const [named, other] of [[incomingUnion.person1Id, incomingUnion.person2Id], [incomingUnion.person2Id, incomingUnion.person1Id]]) {
+            const incoming = incomingData.persons[other];
+            const existingNamed = target.get(named);
+            if (!existingNamed || !standIn(incoming) || usedIncoming.has(incoming.id)) continue;
+            const existingUnion = (existingData.persons[existingNamed]?.partnerships ?? [])
+                .map(id => existingData.partnerships[id])
+                .find(u => !!u && sameFileRecord(u, incomingUnion, existingData, incomingData));
+            if (!existingUnion) continue;
+            const existingOther = existingUnion.person1Id === existingNamed ? existingUnion.person2Id : existingUnion.person1Id;
+            const existing = existingData.persons[existingOther];
+            if (!standIn(existing) || usedExisting.has(existing.id) || !gendersCompatible(existing.gender, incoming.gender)) continue;
+            found.push({
+                existingId: existing.id,
+                incomingId: incoming.id,
+                confidence: scoreToConfidence(ID_MATCH_SCORE),
+                reasons: ['id'],
+                score: ID_MATCH_SCORE,
+                existingPerson: existing,
+                incomingPerson: incoming,
+                conflicts: detectConflicts(existing, incoming)
+            });
+            usedExisting.add(existing.id);
+            usedIncoming.add(incoming.id);
+        }
+    }
+    return found;
 }
 
 /**
@@ -686,6 +737,16 @@ function hasUnknownGivenName(person: Person): boolean {
 }
 
 /**
+ * Two records the file knows by the surname alone (a MyHeritage spouse
+ * written `/Novák/`): their names agree as far as they go, so a strong id
+ * they share can confirm them (the same file merged again).
+ */
+function sameSurnameOnly(existing: Person, incoming: Person, surnameSimilarity: number): boolean {
+    return hasUnknownGivenName(existing) && hasUnknownGivenName(incoming)
+        && normalizeName(existing.lastName) !== '' && surnameSimilarity >= 0.95;
+}
+
+/**
  * The score of a match found through a relative of a person of unknown given
  * name: below the auto-confirm bar, so the wizard always asks for a look, and
  * below the 50 a name match with its context usually reaches, so it sorts
@@ -937,7 +998,7 @@ function calculateMatchScore(
     } else if (firstNameMatch.prefix && lastNameMatch.similar) {
         // Prefix match on first name + similar last name
         score += 12;
-    } else {
+    } else if (!(ids.same && sameSurnameOnly(existing, incoming, lastNameMatch.similarity))) {
         // Names too different
         return ids.same ? idCandidate(0, []) : { score: 0, reasons: [] };
     }

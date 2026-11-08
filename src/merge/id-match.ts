@@ -17,7 +17,7 @@
  *   only as a contribution to a name match, never on their own.
  */
 
-import { ImportRecord, Person, StromData } from '../types.js';
+import { ImportRecord, OriginalIds, Person, StromData } from '../types.js';
 
 /** Tags whose value names a person across files of one system. */
 const STRONG_TAGS: ReadonlySet<string> = new Set(['_UID', 'UID', '_FSFTID', 'AFN', 'EXID']);
@@ -126,4 +126,26 @@ export function idEvidence(existing: Person, incoming: Person, existingData: Str
         if (b.weak.has(key)) { weak = true; break; }
     }
     return { same, globalDiffers, weak };
+}
+
+/**
+ * The two records were one record (one xref) of files the same program wrote:
+ * a family of a file merged again into a tree loaded from it before.
+ */
+export function sameFileRecord(
+    existing: { originalIds?: OriginalIds[] }, incoming: { originalIds?: OriginalIds[] },
+    existingData: StromData, incomingData: StromData,
+): boolean {
+    const keys = (holder: { originalIds?: OriginalIds[] }, data: StromData): Set<string> => {
+        const imports = new Map((data.imports ?? []).map(r => [r.id, r] as const));
+        const out = new Set<string>();
+        for (const entry of holder.originalIds ?? []) {
+            const program = programKey(imports.get(entry.from));
+            if (program && entry.xref) out.add(`${program}\u0000${entry.xref}`);
+        }
+        return out;
+    };
+    const a = keys(existing, existingData);
+    if (a.size === 0) return false;
+    return [...keys(incoming, incomingData)].some(k => a.has(k));
 }
