@@ -295,3 +295,66 @@ describe('card densities (N16): each drawn at the layout\'s card size, in its ow
         expect(svg).toMatch(/<circle [^>]*r="17"/);
     });
 });
+
+describe('the card corner in the image (spec 066 P4 §7)', () => {
+    const data = makeData(person('a', { birthDate: '1900', deathDate: '1970', birthPlace: 'Lipany' }), person('b', { gender: 'female' }));
+    const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
+    const markBox = (svg: string) => {
+        const m = /<g class="card-status-mark" data-status="([a-z0-9-]+)"><rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(svg);
+        return m ? { cls: m[1], x: +m[2], y: +m[3], w: +m[4], h: +m[5] } : null;
+    };
+
+    it('no marks without cardMarks (the family book\'s tree page, a switch off)', () => {
+        const svg = buildTreeSvg(data, l);
+        expect(svg).not.toContain('card-status-mark');
+        expect(svg).not.toContain('card-story');
+    });
+
+    it('the status mark sits in the bottom-right corner, 15px in beside the fold, 5px without', () => {
+        const withFold = buildTreeSvg(data, l, { cardMarks: new Map([['a', { status: 'cs-p2', story: { kind: 'own', final: true } }]]) });
+        const m = markBox(withFold)!;
+        expect(m.cls).toBe('cs-p2');
+        // Card a: 188x64 at (0,0); the 20px pill ends 1 + 15px inside the right edge, 1 + 4px above the bottom.
+        expect(m.x + m.w + 0.5).toBeCloseTo(188.5 - 1 - 15, 1);
+        expect(m.y + m.h + 0.5).toBeCloseTo(64.5 - 1 - 4, 1);
+        expect(withFold).toContain('<g class="card-story">');
+        // Two full dots.
+        expect(withFold.match(/<circle [^>]*r="2" fill="#5c5546"/g)).toHaveLength(2);
+        const alone = markBox(buildTreeSvg(data, l, { cardMarks: new Map([['a', { status: 'cs-p2' }]]) }))!;
+        expect(alone.x + alone.w + 0.5).toBeCloseTo(188.5 - 1 - 5, 1);
+    });
+
+    it('each step draws its own shape: ✓, ●○, ○, ○○ dashed, an empty dotted frame', () => {
+        const svgOf = (cls: 'cs-human' | 'cs-p1' | 'cs-res' | 'cs-import' | 'cs-none') =>
+            buildTreeSvg(data, l, { cardMarks: new Map([['a', { status: cls }]]) });
+        expect(svgOf('cs-human')).toContain('>✓</text>');
+        expect(svgOf('cs-p1').match(/r="2" fill="none"/g)).toHaveLength(1);
+        expect(svgOf('cs-res').match(/r="2" fill="none"/g)).toHaveLength(1);
+        expect(svgOf('cs-import')).toContain('stroke-dasharray="3,2"');
+        expect(svgOf('cs-import').match(/r="2" fill="none"/g)).toHaveLength(2);
+        const none = svgOf('cs-none');
+        expect(none).toContain('stroke-dasharray="1,1.5"');
+        expect(none).not.toMatch(/r="2"/);
+    });
+
+    it('a couple\'s story or a draft: a hollow fold; a placeholder draws no mark', () => {
+        const svg = buildTreeSvg(makeData(person('a'), person('b', { isPlaceholder: true })), l, {
+            cardMarks: new Map([['a', { story: { kind: 'couple', final: true } }], ['b', { status: 'cs-none' }]]),
+        });
+        expect(svg).toContain('<g class="card-story hollow">');
+        expect(svg).not.toContain('card-status-mark');
+    });
+
+    it('the last row ends before the mark (the screen\'s 28px), the name of a compact card before its 36px', () => {
+        const meta = (svg: string) => /<text x="([\d.]+)" y="45.0"[^>]*textLength="(\d+)"|<text x="([\d.]+)" y="45.0"/.exec(svg);
+        const plain = meta(buildTreeSvg(data, l))!;
+        const marked = meta(buildTreeSvg(data, l, { cardMarks: new Map([['a', { status: 'cs-p2' }]]) }))!;
+        // The row's centre moves 14px left (its room 28px narrower).
+        expect(+(plain[1] ?? plain[3]) - +(marked[1] ?? marked[3])).toBeCloseTo(14, 1);
+        const compact = { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 };
+        const nameX = (svg: string) => +/<text x="([\d.]+)" y="26.5"/.exec(svg)![1];
+        const a = nameX(buildTreeSvg(data, l, { config: compact, cardDensity: 'compact' }));
+        const b = nameX(buildTreeSvg(data, l, { config: compact, cardDensity: 'compact', cardMarks: new Map([['a', { status: 'cs-p2' }]]) }));
+        expect(a - b).toBeCloseTo(13, 1);
+    });
+});

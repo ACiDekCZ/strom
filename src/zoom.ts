@@ -76,8 +76,10 @@ const CONTEXT_SCALE = 0.75;
 const JUMP_TOGETHER_SCALE = 0.6;
 /** Glide of a jump to a card elsewhere in the view (ms). */
 const JUMP_GLIDE_MS = 300;
-/** Below this scale the card badges become dots and the status icons hide. */
+/** Below this scale the card badges become dots and the status mark grows to stay readable (spec 066 P4 §7). */
 const ZOOM_FAR = 0.55;
+/** Below this scale the status mark hides too: the cards are specks (spec 066 P4 §7). */
+const ZOOM_TINY = 0.3;
 /** Below this scale the research edge's stub becomes a stretch of the card's top edge. */
 const ZOOM_EDGE_BAR = 0.6;
 /** From this scale on the stub has its word (a hair under 1: a reset lands on 1 exactly). */
@@ -1186,12 +1188,15 @@ class ZoomPanClass {
             canvas.style.transform = `translate(${Math.round(this.tx)}px, ${Math.round(this.ty)}px) scale(${this.scale})`;
             // Far out the card badges turn into dots that keep a readable size.
             canvas.classList.toggle('zoom-far', this.scale < ZOOM_FAR);
+            canvas.classList.toggle('zoom-tiny', this.scale < ZOOM_TINY);
             // The research edge: a stretch of the top edge far out, its words from 100 %.
             canvas.classList.toggle('zoom-edge-bar', this.scale < ZOOM_EDGE_BAR);
             canvas.classList.toggle('zoom-edge-labels', this.scale >= ZOOM_EDGE_LABELS);
             // The marriage-order pill: whole from 60 %, none below.
             canvas.classList.toggle('zoom-order-hidden', this.scale < ZOOM_UNION_ORDER_HIDDEN);
             canvas.style.setProperty('--zoom-inv', String(1 / Math.max(this.scale, 0.05)));
+            // The scale itself: far out the status mark grows by 0.85 / zoom (about 10px on screen).
+            canvas.style.setProperty('--tree-zoom', String(Math.max(this.scale, 0.05)));
             // Fonts scale naturally with CSS transform - no counter-scaling needed
         }
         for (const cb of this.changeListeners) cb();

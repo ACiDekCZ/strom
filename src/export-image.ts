@@ -12,10 +12,12 @@ import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
+import type { CardStatusClass } from './reliability.js';
+import type { StoryMark } from './card-signals.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_BIRTH_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
-    MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock,
+    MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock, CARD_STATUS_MARK_ROOM,
 } from './card-width.js';
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
@@ -46,6 +48,8 @@ const COLORS = {
     textLight: '#5c5546',
     textFaint: '#746c5c',
     accent: '#b0703c',      // the ∞ of the marriage-order pill (--accent)
+    markBg: '#f6f2ea',      // the status mark's fill (--surface-2)
+    storyFold: '#a39880',   // the story's folded corner (--story-fold = --text-ghost)
     printBorder: '#b8ad98',
     footer: '#8a8272',
     background: '#ffffff',
@@ -76,6 +80,63 @@ export function branchStripePath(x: number, y: number, h: number, r: number, w: 
     const dy = w < r ? r - Math.sqrt(r * r - (r - w) * (r - w)) : 0;
     return `M${f(x + w)} ${f(y + dy)}A${r} ${r} 0 0 0 ${f(x)} ${f(y + r)}`
         + `L${f(x)} ${f(y + h - r)}A${r} ${r} 0 0 0 ${f(x + w)} ${f(y + h - dy)}Z`;
+}
+
+/** The status mark's place (index.html .card-status-mark): 4px above the bottom, 15px in beside a fold, 5px without. */
+const STATUS_MARK_H = 12;
+const STATUS_MARK_BOTTOM = 4;
+
+/** The status mark's width: two dots (or ✓) inside a 3px padding and the 1px frame, at least 18px. */
+function statusMarkWidth(cls: CardStatusClass): number {
+    const content = cls === 'cs-p2' || cls === 'cs-p1' || cls === 'cs-import' ? 12 : cls === 'cs-res' ? 5 : cls === 'cs-human' ? 6 : 0;
+    return Math.max(18, content + 8);
+}
+
+/**
+ * The card's status mark (spec 066 P4 §1, §7) as the screen draws it: a 12px
+ * pill in the card's bottom-right corner, its frame and glyphs from the
+ * screen's light colours — ✓ in a firm frame, two dots full or half, one
+ * hollow dot, two hollow dots in a dashed frame (from the family tree), an
+ * empty dotted frame (no source). `right`/`bottom`: the card's outer edges.
+ */
+export function statusMarkSvg(cls: CardStatusClass, right: number, bottom: number, hasFold: boolean): string {
+    const w = statusMarkWidth(cls);
+    // Inside the card's 1px border, as the absolute mark of the screen.
+    const x = right - 1 - (hasFold ? 15 : 5) - w;
+    const y = bottom - 1 - STATUS_MARK_BOTTOM - STATUS_MARK_H;
+    const frame = cls === 'cs-human' || cls === 'cs-import' ? COLORS.textLight : cls === 'cs-none' ? COLORS.line : COLORS.cardBorder;
+    const dash = cls === 'cs-import' ? ' stroke-dasharray="3,2"' : cls === 'cs-none' ? ' stroke-dasharray="1,1.5"' : '';
+    const fill = cls === 'cs-none' ? 'none' : COLORS.markBg;
+    const ink = cls === 'cs-human' ? COLORS.text : cls === 'cs-none' ? COLORS.textFaint : COLORS.textLight;
+    const out = [`<g class="card-status-mark" data-status="${cls}">`,
+        `<rect x="${(x + 0.5).toFixed(1)}" y="${(y + 0.5).toFixed(1)}" width="${w - 1}" height="${STATUS_MARK_H - 1}" rx="5.5" fill="${fill}" stroke="${frame}" stroke-width="1"${dash}/>`];
+    const cx = x + w / 2;
+    const cy = y + STATUS_MARK_H / 2;
+    const dot = (dx: number, on: boolean): string =>
+        `<circle cx="${(cx + dx).toFixed(1)}" cy="${cy.toFixed(1)}" r="2" fill="${on ? ink : 'none'}" stroke="${ink}" stroke-width="1"/>`;
+    if (cls === 'cs-human') out.push(`<text x="${cx.toFixed(1)}" y="${(cy + 3).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="${ink}">✓</text>`);
+    else if (cls === 'cs-p2') out.push(dot(-3.5, true), dot(3.5, true));
+    else if (cls === 'cs-p1') out.push(dot(-3.5, true), dot(3.5, false));
+    else if (cls === 'cs-res') out.push(dot(0, false));
+    else if (cls === 'cs-import') out.push(dot(-3.5, false), dot(3.5, false));
+    out.push('</g>');
+    return out.join('');
+}
+
+/**
+ * The story's folded corner (spec 066 P4 §6, §7): the card's bottom-right
+ * 14px folded over, full for the person's own approved story, a band along
+ * the fold for a couple's story alone or a draft. `right`/`bottom`: the
+ * card's outer edges; the fold follows the card's 8px corner.
+ */
+export function storyFoldSvg(story: StoryMark, right: number, bottom: number): string {
+    const r = (n: number) => n.toFixed(1);
+    if (story.final && story.kind === 'own') {
+        return `<g class="card-story"><path d="M${r(right - 14)},${r(bottom)} L${r(right)},${r(bottom - 14)} L${r(right)},${r(bottom - 8)} A8,8 0 0 1 ${r(right - 8)},${r(bottom)} Z" fill="${COLORS.storyFold}"/>`
+            + `<line x1="${r(right - 14)}" y1="${r(bottom - 7)}" x2="${r(right - 7)}" y2="${r(bottom - 14)}" stroke="${COLORS.textFaint}" stroke-width="0.6"/></g>`;
+    }
+    // Hollow: the band between the fold line and a parallel line 4.5px towards the corner.
+    return `<g class="card-story hollow"><path d="M${r(right - 14)},${r(bottom)} L${r(right)},${r(bottom - 14)} L${r(right)},${r(bottom - 9.5)} L${r(right - 9.5)},${r(bottom)} Z" fill="${COLORS.storyFold}"/></g>`;
 }
 
 /** Spouse-line dash per partnership status (mirror of the renderer). */
@@ -265,6 +326,19 @@ export interface PosterOptions {
      * estimated when absent. `glyph` false: the ordinal alone.
      */
     measureUnionOrderPill?: (ordinal: string, year: string, glyph?: boolean) => PillMetrics;
+    /**
+     * The card marks the image carries (spec 066 P4 §7), per person as the
+     * screen shows them: the status mark of sources and reliability and the
+     * story's folded corner, each only when its switch in Settings → Show on
+     * card is on. Absent: none (the family book's tree page).
+     */
+    cardMarks?: Map<string, PosterCardMarks>;
+}
+
+/** What a card's bottom-right corner carries in the image. */
+export interface PosterCardMarks {
+    status?: CardStatusClass;
+    story?: StoryMark;
 }
 
 /** What the poster needs of a custom card line. */
@@ -292,6 +366,8 @@ interface CustomCardLook {
     measure: MeasureTexts;
     /** Widths measured by the screen: texts are drawn at them. */
     exact: boolean;
+    /** The card carries the status mark: its last line keeps clear of it, as on screen (CARD_STATUS_MARK_ROOM). */
+    statusRoom?: boolean;
 }
 
 /**
@@ -315,7 +391,7 @@ function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
     lines: PosterCardLine[], ring: string, clipId: string, years: string, look: CustomCardLook,
 ): string {
-    const { dateColumn, labelColumn, valueLines, style, measure, exact } = look;
+    const { dateColumn, labelColumn, valueLines, style, measure, exact, statusRoom } = look;
     const out: string[] = [];
     const left = pos.x + CUSTOM_CARD_PAD_X;
     const right = pos.x + cw - CUSTOM_CARD_PAD_X;
@@ -323,8 +399,15 @@ function customCardSvg(
     const birth = shownNameParts(person, '?').birthNote;
     const birthRow = birthNoteText(birth);
     const metrics = { cardWidth: cw, dateColumn, ...(style === 'labels' ? { labelColumn } : {}) };
-    const { rows, heads } = customCardRows([{ name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}),
-        ...(birthRow ? { birth: birthRow } : {}) }], metrics, measure, valueLines, style);
+    const entry = { name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}), ...(birthRow ? { birth: birthRow } : {}) };
+    let { rows, heads } = customCardRows([entry], metrics, measure, valueLines, style);
+    // The last line clear of the status mark, as the screen wraps it, unless that
+    // takes a row more than the card was laid out with (then it stays as it was).
+    if (statusRoom && lines.length > 0) {
+        const kept = customCardRows([{ ...entry, lastLineReserve: CARD_STATUS_MARK_ROOM }], metrics, measure, valueLines, style);
+        const count = (r: typeof rows) => lines.reduce((n, l) => n + Math.max(1, r.get(l)?.rows.length ?? 0), 0);
+        if (count(kept.rows) === count(rows)) ({ rows, heads } = kept);
+    }
     const head = heads[0];
     let textX = left;
     if (!person.isPlaceholder) {
@@ -614,6 +697,11 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         // to 50%, matching the on-screen `indirect` de-emphasis (draw parity).
         const dimmed = !!options.dimmedIds?.has(personId);
         if (dimmed) out.push('<g opacity="0.5">');
+        // The card's corner (spec 066 P4 §7): the status mark and the story's fold, as the screen shows them.
+        const marks = person && !isPlaceholder ? options.cardMarks?.get(personId) : undefined;
+        const markCls = marks?.status;
+        // Text that could reach the mark ends before it, as on screen (index.html: compact padding-right 36px, a last row 28px).
+        const markRoom = markCls ? 28 : 0;
 
         // "Letopis" card: neutral surface, hairline border (dashed for placeholders).
         // Custom cards are made to be printed: a firmer border on paper.
@@ -635,11 +723,14 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                     dateColumn: options.cardDateColumn ?? 0, labelColumn: options.cardLabelColumn ?? 0,
                     valueLines: options.cardValueLines ?? 1, style: options.cardStyle ?? 'marks',
                     measure: options.measureCardTexts ?? estimateCardTexts, exact: !!options.measureCardTexts,
+                    statusRoom: !!markCls,
                 }));
         } else if (person && !isPlaceholder && options.cardDensity === 'compact') {
             // Compact: the name only (no avatar, no meta), centred in the whole
             // box at 13px — the screen's 10px side padding inside the border.
-            out.push(fittedText(shownName(person, '?'), pos.x + cw / 2, pos.y + ch / 2 + 4.5, cw - 22,
+            // Beside the mark the name keeps 36px on the right (the screen's padding).
+            const nameShift = markCls ? 13 : 0;
+            out.push(fittedText(shownName(person, '?'), pos.x + cw / 2 - nameShift, pos.y + ch / 2 + 4.5, cw - 22 - 2 * nameShift,
                 [13, 12.5], true, COLORS.text));
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
@@ -682,7 +773,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             if (!birthText) {
                 out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
                 if (meta) {
-                    out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
+                    out.push(fittedText(meta, cx - markRoom / 2, pos.y + 45, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
                 }
             } else {
                 // With the birth surname's row: the screen's rows (fitCardNames) — the
@@ -698,15 +789,18 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 if (oneLine) {
                     out.push(nameText(fullName, pos.y + 24, oneLine));
                     out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 38.5).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
-                    if (meta) out.push(fittedText(meta, cx, pos.y + 52.5, contentW, [11, 10, 9], false, COLORS.textLight));
+                    if (meta) out.push(fittedText(meta, cx - markRoom / 2, pos.y + 52.5, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
                 } else {
                     out.push(nameText(parts.given, pos.y + 15, 12.5));
                     out.push(nameText(parts.surname, pos.y + 29.5, 12.5));
                     out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 43).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
-                    if (metaYears) out.push(fittedText(metaYears, cx, pos.y + 56.5, contentW, [10.5], false, COLORS.textLight));
+                    if (metaYears) out.push(fittedText(metaYears, cx - markRoom / 2, pos.y + 56.5, contentW - markRoom, [10.5], false, COLORS.textLight));
                 }
             }
         }
+
+        if (marks?.story) out.push(storyFoldSvg(marks.story, pos.x + cw + 0.5, pos.y + ch + 0.5));
+        if (markCls) out.push(statusMarkSvg(markCls, pos.x + cw + 0.5, pos.y + ch + 0.5, !!marks?.story));
 
         if (dimmed) out.push('</g>');
     }

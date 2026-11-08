@@ -263,7 +263,9 @@ function buildCurrentPoster(): PosterBuild | null {
     if (layout.positions.size === 0) return null;
     const { cardConfig, drawing } = treeCardDrawing(data, layout);
     // Marriage-order pills numbered as on screen, from the unfiltered data (T13).
-    const options: PosterOptions = { ...meta, ...drawing, orderData: DataManager.getData() };
+    // The status mark and the story's fold as the cards show them (spec 066 P4 §7), from the app's own data.
+    const options: PosterOptions = { ...meta, ...drawing, orderData: DataManager.getData(),
+        cardMarks: TreeRenderer.posterCardMarks(layout.positions.keys()) };
     const svg = buildTreeSvg(data, layout, options);
 
     // Occupied rectangles in poster-px space (cards + footer strip). Sheets

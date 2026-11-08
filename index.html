@@ -12545,9 +12545,18 @@
         @keyframes agDone { 0%, 93% { opacity: 1; } 100% { opacity: 0; } }
         /* Compact: the relations / branch pills make way for the dot. */
         body[data-card-density="compact"] .person-card.has-signal .edge-top-right { margin-right: 8px; }
-        /* Zoomed far out (< 55%): no status; the badge becomes a dot and the
-           arc a ring, both staying at least 8px on screen. */
-        #tree-canvas.zoom-far .card-status-mark, #tree-canvas.zoom-far .card-story { display: none; }
+        /* Zoomed far out (< 55%, spec 066 P4 §7): the story's fold goes, the
+           status mark stays in the corner grown to about 10px on screen
+           (0.85 / zoom, from its bottom-right corner); below 30% (zoom-tiny)
+           it goes too. The badge becomes a dot and the arc a ring, both
+           staying at least 8px on screen. */
+        #tree-canvas.zoom-far .card-story { display: none; }
+        @media screen {
+            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card > .card-status-mark {
+                right: 5px; transform: scale(calc(0.85 / var(--tree-zoom, 1))); transform-origin: bottom right;
+            }
+        }
+        #tree-canvas.zoom-tiny .person-card > .card-status-mark { display: none; }
         #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far .card-agent { display: none; }
         #tree-canvas.zoom-far .card-signal-dot, #tree-canvas.zoom-far .card-agent-dot {
             display: block;
@@ -12574,9 +12583,17 @@
         .tt-cross-glyph, .mps-glyph { flex: 0 0 auto; min-width: 18px; text-align: center; color: var(--text-light); font-size: 12px; }
         .card-tooltip .tt-action { color: var(--warning-text); }
         .card-tooltip .tt-line.tt-agent { color: var(--primary-dark); }
-        /* Printing the page: never (the poster / image export draws its own cards). */
-        body.view-mode-print :is(.card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
-        @media print { .card-status-mark, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; } }
+        /* Printing the page (spec 066 P4 §7): the status mark and the story's
+           fold, at their own size whatever the zoom; the badges and the agent
+           are this device's state and stay on screen. */
+        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
+        body.view-mode-print #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
+        body.view-mode-print #tree-canvas .person-card > .card-story { display: block !important; }
+        @media print {
+            .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; }
+            #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
+            #tree-canvas .person-card > .card-story { display: block !important; }
+        }
 
         /* Person menu: its first block explains the card's marks (spec 066 P4 §5),
            with the bubble's rows; the line under it parts it from the actions. */

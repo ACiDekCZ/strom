@@ -61,6 +61,28 @@ async function zoomOutFar(page: Page): Promise<void> {
     expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeLessThan(0.55);
 }
 
+/** Zoom to `scale` at once, around the card's centre (spec 066 P4 §7). */
+async function zoomTo(page: Page, scale: number, name = 'Jan'): Promise<void> {
+    await card(page, name).evaluate((el, s) => {
+        const c = el as HTMLElement;
+        const wx = parseFloat(c.style.left) + c.offsetWidth / 2;
+        const wy = parseFloat(c.style.top) + c.offsetHeight / 2;
+        window.Strom.ZoomPan.zoomAroundWorldPoint(wx, wy, s, 0, t => t);
+    }, scale);
+    expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 3);
+}
+
+/** The poster as an SVG download (Image export → SVG). */
+async function posterSvg(page: Page): Promise<string> {
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#poster-modal .menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const { readFileSync } = await import('fs');
+    return readFileSync(await download.path(), 'utf-8');
+}
+
 async function setup(page: Page, width = 1440): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript((uuid) => {
@@ -321,7 +343,9 @@ test.describe('card signals', () => {
             await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
             await expect(jan.locator('.card-signal'), `${density}: no badge far out`).toBeHidden();
             for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot'), `${density}: dot far out`).toBeVisible();
-            await expect(jan.locator(':scope > .card-status-mark'), `${density}: no status mark far out`).toBeHidden();
+            // The status mark stays far out, grown to stay readable (spec 066 P4 §7); the fold goes.
+            await expect(jan.locator(':scope > .card-status-mark'), `${density}: status mark far out`).toBeVisible();
+            await expect(jan.locator(':scope > .card-story'), `${density}: no fold far out`).toBeHidden();
         }
         await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
 
@@ -381,18 +405,79 @@ test.describe('card signals', () => {
         await zoomOutFar(page);
         await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
         await expect(card(page, 'Jan').locator('.card-signal')).toBeHidden();
-        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toBeHidden();
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toBeVisible();
         await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeHidden();
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeVisible();
     });
 
-    test('printing the page: no status mark, fold or badge', async ({ page }) => {
+    test('zoomed out: at 40 % the status mark stays in the corner, readable; under 30 % it goes (spec 066 P4 §7)', async ({ page }) => {
+        await setup(page);
+        const jan = card(page, 'Jan');
+        const mark = jan.locator(':scope > .card-status-mark');
+        await zoomTo(page, 0.4);
+        await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
+        await expect(page.locator('#tree-canvas')).not.toHaveClass(/zoom-tiny/);
+        await expect(mark).toBeVisible();
+        const far = await jan.evaluate((el) => {
+            const c = el.getBoundingClientRect();
+            const m = el.querySelector(':scope > .card-status-mark')!.getBoundingClientRect();
+            return { h: m.height, right: c.right - m.right, bottom: c.bottom - m.bottom, inside: m.left >= c.left && m.top >= c.top };
+        });
+        // 12px × 0.85 / 0.4 world px = about 10px on screen, its corner kept (5px + the 1px border, × 0.4).
+        expect(far.h).toBeGreaterThan(9);
+        expect(far.right).toBeGreaterThan(1);
+        expect(far.right).toBeLessThan(4);
+        expect(far.bottom).toBeGreaterThan(1);
+        expect(far.bottom).toBeLessThan(4);
+        expect(far.inside).toBe(true);
+        await expect(jan.locator(':scope > .card-story')).toBeHidden();
+        await zoomTo(page, 0.25);
+        await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-tiny/);
+        await expect(mark).toBeHidden();
+        await expect(jan.locator(':scope > .card-signal-dot')).toBeVisible();
+        // Back at 100 %: its own size, beside the fold.
+        await zoomTo(page, 1);
+        await expect(page.locator('#tree-canvas')).not.toHaveClass(/zoom-far|zoom-tiny/);
+        expect((await mark.boundingBox())!.height).toBeCloseTo(12, 0);
+        await expect(mark).toHaveCSS('right', '15px');
+    });
+
+    test('printing the page: the status mark and the fold, no badge, whatever the zoom (spec 066 P4 §7)', async ({ page }) => {
         await setup(page);
         await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
+        await zoomTo(page, 0.25);
         await page.emulateMedia({ media: 'print' });
-        for (const sel of [':scope > .card-status-mark', ':scope > .card-story', '.card-signal']) {
-            await expect(card(page, 'Jan').locator(sel)).toBeHidden();
+        for (const sel of [':scope > .card-status-mark', ':scope > .card-story']) {
+            await expect(card(page, 'Jan').locator(sel)).toBeVisible();
         }
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('transform', 'none');
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('right', '15px');
+        for (const sel of ['.card-signal', '.card-signal-dot']) await expect(card(page, 'Jan').locator(sel)).toBeHidden();
+        // The same with the print view's class on screen.
+        await page.emulateMedia({ media: 'screen' });
+        await page.evaluate(() => document.body.classList.add('view-mode-print'));
+        await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toBeVisible();
+        await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
+        await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeHidden();
+    });
+
+    test('image export: the status mark and the fold as the cards show them, only with their switch on (spec 066 P4 §7)', async ({ page }) => {
+        await setup(page);
+        const on = await posterSvg(page);
+        // Jan ●●, a draft (hollow fold); Josef an empty dotted frame and a full fold.
+        expect(on).toContain('<g class="card-status-mark" data-status="cs-p2">');
+        expect(on).toContain('<g class="card-status-mark" data-status="cs-none">');
+        expect(on).toContain('<g class="card-story hollow">');
+        expect(on).toContain('<g class="card-story">');
+        // The badges and the agent are this device's: never in the image.
+        expect(on).not.toMatch(/card-signal|≠<\/text>/);
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await page.locator('#card-signals-settings input[data-signal="status"]').uncheck();
+        await page.keyboard.press('Escape');
+        const off = await posterSvg(page);
+        expect(off).not.toContain('card-status-mark');
+        expect(off).toContain('card-story');
     });
 
     test('Settings: switching a signal off hides it on the card, the tooltip keeps it', async ({ page }) => {

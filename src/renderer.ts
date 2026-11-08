@@ -29,8 +29,8 @@ import {
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_LEFT, CARD_STATUS_MARK_ROOM, bottomRightPillsRoom,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
-import { treeKnowsOrigin } from './reliability.js';
-import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText } from './card-signals.js';
+import { treeKnowsOrigin, CardStatusClass } from './reliability.js';
+import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText, StoryMark } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
@@ -5419,6 +5419,26 @@ class TreeRendererClass {
     treeKnowsOriginNow(): boolean {
         const ctx = this.signalContext();
         return treeKnowsOrigin(ctx.data, ctx.reliability);
+    }
+
+    /**
+     * The marks the image export and the poster draw in the cards' corner
+     * (spec 066 P4 §7): the status mark and the story's fold, each only where
+     * the card shows it (Settings → Show on card). The badges, the agent, ⇄
+     * and the lock are this device's state and stay on screen.
+     */
+    posterCardMarks(ids: Iterable<PersonId>): Map<string, { status?: CardStatusClass; story?: StoryMark }> {
+        const ctx = this.signalContext();
+        const out = new Map<string, { status?: CardStatusClass; story?: StoryMark }>();
+        for (const id of ids) {
+            const person = DataManager.getPerson(id);
+            if (!person) continue;
+            const info = cardSignalInfo(person, ctx);
+            const status = info.showStatus && info.status ? info.status.cls : undefined;
+            const story = info.showStory && info.story ? { kind: info.story.kind, final: info.story.final } : undefined;
+            if (status || story) out.set(id, { ...(status ? { status } : {}), ...(story ? { story } : {}) });
+        }
+        return out;
     }
 
     /** One person's signals, as their card shows them (the person menu leads with them). */
