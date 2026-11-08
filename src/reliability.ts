@@ -261,10 +261,12 @@ export const CARD_STATUS_FACTS = ['name', 'birth', 'death'] as const;
 export type CardStatusFact = typeof CARD_STATUS_FACTS[number];
 
 /**
- * The tree card's one mark of sources and reliability (spec 066 P4 §1), by its class:
- * a person confirmed (✓), proven by two readers or fully cited (●●), proven by one
- * or partly cited (●○), the research has not proven it yet (○: probable, possible,
- * a lead), from the family tree, unverified (○○ dashed), no source (dotted frame).
+ * The tree card's one mark of sources and reliability (spec 066 P4 §1, K5.1), by its class.
+ * Per fact of the card: a person confirmed it (✓), proven (●●, however many readers),
+ * read from a source (●○: probable, possible or no step, with a citation at the fact),
+ * only a trace (○: a lead; probable, possible or no step without a citation), from the
+ * family tree, unverified (○○ dashed), no source (dotted frame). The card takes the weakest.
+ * A tree that does not know the origin keeps the citations' meaning: full ●●, partial ●○, none.
  */
 export type CardStatusClass = 'cs-human' | 'cs-p2' | 'cs-p1' | 'cs-res' | 'cs-import' | 'cs-none';
 
@@ -273,13 +275,13 @@ export const CARD_STATUS_CLASSES: readonly CardStatusClass[] = ['cs-human', 'cs-
 
 export interface CardStatus {
     cls: CardStatusClass;
-    /** Where it comes from: the weakest step of the card's facts, or the citations alone. */
+    /** Where it comes from: the card's facts (a tree that knows the origin), or the citations alone. */
     source: 'step' | 'evidence';
-    /** `step`: the weakest step (with its import record for the words). */
+    /** `step`: the step the facts of the mark share (with its import record for the words); absent when they do not share one. */
     step?: FactReliability;
     /** The person's citations, whenever the tree has sources (the count for the words, also beside a step). */
     evidence?: PersonEvidence;
-    /** `step`: the facts that share the weakest step, in the card's order. */
+    /** `step`: the facts that give the mark (the weakest), in the card's order. */
     facts: CardStatusFact[];
 }
 
@@ -297,22 +299,51 @@ export function treeKnowsOrigin(data: Pick<StromData, 'imports'>, opts: Reliabil
     return opts.originFeature || (data.imports?.length ?? 0) > 0;
 }
 
-/** A step's mark on the tree card. */
-export function cardStatusClassOfStep(step: ReliabilityStep): CardStatusClass {
-    switch (step.step) {
+const BIRTH_EVENT_TYPES = new Set(['birth', 'baptism']);
+const DEATH_EVENT_TYPES = new Set(['death', 'burial', 'cremation']);
+const hasIds = (ids: readonly string[] | undefined): boolean => (ids?.length ?? 0) > 0;
+
+/** The person has the fact at all: a name, or a date, a place or an event of the birth (baptism) or the death (burial). */
+function cardFactPresent(person: Person, fact: CardStatusFact): boolean {
+    if (factHasValue(person, fact)) return true;
+    const types = fact === 'birth' ? BIRTH_EVENT_TYPES : fact === 'death' ? DEATH_EVENT_TYPES : null;
+    return !!types && (person.events ?? []).some(e => types.has(e.type));
+}
+
+/**
+ * A source is cited at the fact itself: the name by the person's own citations (INDI / NAME.SOUR),
+ * the birth and the death by their fields or a birth / baptism (death / burial) event, any of them
+ * by the record the research changed it by.
+ */
+function cardFactCited(person: Person, fact: CardStatusFact, r: FactReliability | null): boolean {
+    if (hasIds(r?.sourceIds)) return true;
+    if (fact === 'name') return hasIds(person.sourceIds);
+    const types = fact === 'birth' ? BIRTH_EVENT_TYPES : DEATH_EVENT_TYPES;
+    if (hasIds(fact === 'birth' ? person.birthSourceIds : person.deathSourceIds)) return true;
+    return (person.events ?? []).some(e => types.has(e.type) && hasIds(e.sourceIds));
+}
+
+/**
+ * One fact's mark on the tree card (K5.1): a person ✓; proven ●● (the readers stay in the words);
+ * from the family tree ○○; a lead ○; probable, possible or no step read from a cited source ●○,
+ * without a citation ○; no source (and no citation) the dotted frame.
+ */
+export function cardStatusClassOfFact(step: ReliabilityStep | null, cited: boolean): CardStatusClass {
+    switch (step?.step) {
         case 'human': return 'cs-human';
-        case 'proven': return step.dots === 2 ? 'cs-p2' : 'cs-p1';
+        case 'proven': return 'cs-p2';
         case 'import': return 'cs-import';
-        case 'none': return 'cs-none';
-        default: return 'cs-res';
+        case 'lead': return 'cs-res';
+        default: return cited ? 'cs-p1' : step?.step === 'none' ? 'cs-none' : 'cs-res';
     }
 }
 
 /**
- * The tree card's one mark (spec 066 P4 §1, table 1b), or null (nothing drawn):
+ * The tree card's one mark (spec 066 P4 §1, K5.1), or null (nothing drawn):
  * 1. a placeholder, or the switch off → null;
- * 2. the tree knows the origin and one of name / birth / death has a step → the weakest
- *    step (a step from the family tree wins over citations that came with the file);
+ * 2. the tree knows the origin → the weakest of the marks of name, birth and death the person has
+ *    (cardStatusClassOfFact; a step from the family tree wins over citations that came with the file);
+ *    the person's citations as a whole are not asked then (null only when none of them is there);
  * 3. otherwise, with any source in the tree → the person's citations (full ●●, partial ●○, none);
  * 4. otherwise null (a tree with neither sources nor origin has nothing to say).
  */
@@ -320,17 +351,22 @@ export function cardStatus(data: StromData, person: Person, opts: CardStatusOpti
     if (person.isPlaceholder || opts.status === false) return null;
     const evidence = opts.treeHasSources ? personEvidence(person, data, opts.unions) ?? undefined : undefined;
     if (treeKnowsOrigin(data, opts)) {
-        const facts = CARD_STATUS_FACTS.map(f => ({ f, r: factReliability(data, person, f, opts) }));
-        const weakest = weakestStep(facts.map(x => x.r));
-        if (weakest) {
-            return {
-                cls: cardStatusClassOfStep(weakest),
-                source: 'step',
-                step: weakest,
-                ...(evidence ? { evidence } : {}),
-                facts: facts.filter(x => x.r && sameStep(x.r, weakest)).map(x => x.f),
-            };
-        }
+        const facts = CARD_STATUS_FACTS.filter(f => cardFactPresent(person, f)).map(f => {
+            const r = factReliability(data, person, f, opts);
+            return { f, r, cls: cardStatusClassOfFact(r, cardFactCited(person, f, r)) };
+        });
+        const cls = CARD_STATUS_CLASSES.reduce<CardStatusClass | null>((w, c) => (facts.some(x => x.cls === c) ? c : w), null);
+        if (!cls) return null;
+        const mine = facts.filter(x => x.cls === cls);
+        const first = mine[0]?.r;
+        const shared = first && mine.every(x => x.r?.step === first.step) ? weakestStep(mine.map(x => x.r)) : null;
+        return {
+            cls,
+            source: 'step',
+            ...(shared ? { step: shared } : {}),
+            ...(evidence ? { evidence } : {}),
+            facts: mine.map(x => x.f),
+        };
     }
     if (!evidence) return null;
     const cls: CardStatusClass = evidence.level === 'full' ? 'cs-p2' : evidence.level === 'partial' ? 'cs-p1' : 'cs-none';

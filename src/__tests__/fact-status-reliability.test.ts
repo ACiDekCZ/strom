@@ -8,8 +8,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     reliabilityHtml, reliabilityTitle, factStatusHtml, personMarksLayout, cardStatusMarkHtml, statusMarkHtml, reliabilityLabel,
+    cardStatusLegendLabel, cardStatusLabel, cardStatusAria, cardStatusWords,
 } from '../ui/fact-status.js';
-import { personOriginSummary, ReliabilityOptions } from '../reliability.js';
+import { CardStatus, personOriginSummary, ReliabilityOptions } from '../reliability.js';
 import type { ImportRecord, Person, StromData } from '../types.js';
 
 const PLAIN: ReliabilityOptions = { researchTree: false, originFeature: false };
@@ -183,5 +184,25 @@ describe('cardStatusMarkHtml: the tree card\'s one mark', () => {
     it('nothing to say: no mark', () => {
         expect(statusMarkHtml(null)).toBe('');
         expect(cardStatusMarkHtml({ imports: [], persons: {} } as unknown as StromData, person({ birthDate: '1851' }), { ...PLAIN, treeHasSources: false })).toBe('');
+    });
+});
+
+describe('the tree card mark in words: one meter (K5.1)', () => {
+    it('the legend says the meaning of a tree that knows the origin; a tree without it keeps the citations\' words', () => {
+        expect((['cs-human', 'cs-p2', 'cs-p1', 'cs-res'] as const).map(c => cardStatusLegendLabel(c)))
+            .toEqual(['confirmed by a person', 'everything verified', 'read from sources, not everything verified', 'only a trace']);
+        expect(cardStatusLegendLabel('cs-import')).toBe('from the family tree (unverified)');
+        expect((['cs-p2', 'cs-p1', 'cs-none'] as const).map(c => cardStatusLegendLabel(c, false))).toEqual(['proven', 'partly proven', 'no source']);
+    });
+
+    it('the aria-label names the meaning; the words keep the step and its readers', () => {
+        const proven1: CardStatus = { cls: 'cs-p2', source: 'step', step: { step: 'proven', dots: 1, fromParts: [], changedParts: [] }, facts: ['birth'] };
+        expect(cardStatusAria(proven1)).toBe('everything verified: birth');
+        expect(cardStatusWords(proven1, true).main).toBe('Proven by AI: one reader of the record · birth');
+        const mixed: CardStatus = { cls: 'cs-p1', source: 'step', facts: ['name', 'birth'] };
+        expect(cardStatusWords(mixed, true)).toEqual({ main: 'Read from sources, not everything verified · name and birth', sub: '' });
+        const full: CardStatus = { cls: 'cs-p2', source: 'evidence', facts: [],
+            evidence: { level: 'full', sources: 1, hasBirth: true, birthCited: true, hasDeath: false, deathCited: false } };
+        expect(cardStatusLabel(full)).toBe('documented by sources');
     });
 });

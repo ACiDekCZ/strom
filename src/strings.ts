@@ -953,6 +953,13 @@ const stringsEN = {
         citedInApp: 'cited in Strom',
         notProven: 'not yet proven by the research',
         provenPartial: 'partly proven',
+        /** The card mark's meaning in a tree that knows the origin (legend, aria-label, the words when the facts share no step; K5.1). */
+        cardMark: {
+            human: 'confirmed by a person',
+            all: 'everything verified',
+            read: 'read from sources, not everything verified',
+            trace: 'only a trace',
+        },
     },
 
     // "Originally from the family tree" under a fact the research changed, with Revert (spec 066 §3)
@@ -8911,6 +8918,12 @@ const stringsCZ: StringsType = {
         citedInApp: 'citováno ve Stromu',
         notProven: 'výzkum zatím nedoložil',
         provenPartial: 'doloženo zčásti',
+        cardMark: {
+            human: 'potvrdil člověk',
+            all: 'vše ověřené',
+            read: 'přečteno z pramenů, ne vše ověřené',
+            trace: 'jen stopa',
+        },
     },
 
     origin: {
@@ -16762,6 +16775,12 @@ const stringsDE: StringsType = {
         citedInApp: 'in Strom zitiert',
         notProven: 'von der Recherche noch nicht belegt',
         provenPartial: 'teilweise belegt',
+        cardMark: {
+            human: 'von einem Menschen bestätigt',
+            all: 'alles geprüft',
+            read: 'aus Quellen gelesen, nicht alles geprüft',
+            trace: 'nur eine Spur',
+        },
     },
 
     origin: {

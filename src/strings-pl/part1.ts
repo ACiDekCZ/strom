@@ -745,6 +745,12 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         citedInApp: 'cytowane w Strom',
         notProven: 'badanie jeszcze tego nie potwierdziło',
         provenPartial: 'częściowo udokumentowane',
+        cardMark: {
+            human: 'potwierdzone przez człowieka',
+            all: 'wszystko zweryfikowane',
+            read: 'odczytane ze źródeł, nie wszystko zweryfikowane',
+            trace: 'tylko ślad',
+        },
     },
 
     origin: {

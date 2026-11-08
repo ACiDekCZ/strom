@@ -197,6 +197,7 @@ export function statusMarkHtml(status: CardStatus | null | undefined, opts: Card
 }
 
 const lowerFirst = (t: string): string => (t ? t.charAt(0).toLocaleLowerCase() + t.slice(1) : t);
+const upperFirst = (t: string): string => (t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : t);
 
 /** The facts that share the mark's step, in words ("name, birth and death"). */
 function cardStatusFactsText(status: CardStatus): string {
@@ -219,6 +220,12 @@ export function cardStatusWords(status: CardStatus, originKnown: boolean): { mai
     const c = strings.card;
     const ev = status.evidence;
     const sources = ev && ev.sources > 0 ? c.ttSources(ev.sources) : '';
+    if (status.source === 'step' && !status.step) {
+        // The facts of the mark share no step (one read from a source, one with none): the mark's meaning.
+        const facts = cardStatusFactsText(status);
+        const title = upperFirst(cardStatusLegendLabel(status.cls));
+        return { main: facts ? `${title} · ${facts}` : title, sub: sources };
+    }
     if (status.source === 'step' && status.step) {
         const step = status.step;
         const title = step.step === 'human' ? r.titleHuman
@@ -245,16 +252,13 @@ export function cardStatusWords(status: CardStatus, originKnown: boolean): { mai
 }
 
 /**
- * The mark's step as a label in lower case (the card's aria-label, the tree
- * legend): "from the family tree (unverified)", "partly proven", "probable".
+ * The mark as a label in lower case (the card's aria-label): its meaning as the
+ * tree legend says it ("read from sources, not everything verified", "from the
+ * family tree (unverified)"), or the citations' level in a tree without origin.
  */
 export function cardStatusLabel(status: CardStatus): string {
-    const r = strings.reliability;
-    if (status.source === 'evidence' || !status.step) return strings.card.ariaEv[status.evidence?.level ?? 'none'];
-    const step = status.step;
-    if (step.step === 'proven') return step.dots === 2 ? lowerFirst(r.proven) : r.provenPartial;
-    if (step.step === 'import') return lowerFirst(r.titleImportShort);
-    return lowerFirst(reliabilityLabel(step.step));
+    if (status.source === 'evidence') return strings.card.ariaEv[status.evidence?.level ?? 'none'];
+    return cardStatusLegendLabel(status.cls);
 }
 
 /** The mark for a screen reader: "from the family tree (unverified): name, birth and death". */
@@ -263,14 +267,19 @@ export function cardStatusAria(status: CardStatus): string {
     return facts ? strings.card.ariaStatus(cardStatusLabel(status), facts) : cardStatusLabel(status);
 }
 
-/** One mark's class in the tree legend's words (the research's three steps say "not yet proven by the research"). */
-export function cardStatusLegendLabel(cls: CardStatusClass): string {
+/**
+ * One mark's class in the tree legend's words (K5.1). `originKnown` (the default): the one
+ * meter of a tree that knows the origin (✓ confirmed by a person, ●● everything verified,
+ * ●○ read from sources, ○ only a trace); otherwise the citations' level, as before.
+ */
+export function cardStatusLegendLabel(cls: CardStatusClass, originKnown = true): string {
     const r = strings.reliability;
+    const m = r.cardMark;
     switch (cls) {
-        case 'cs-human': return lowerFirst(r.human);
-        case 'cs-p2': return lowerFirst(r.proven);
-        case 'cs-p1': return r.provenPartial;
-        case 'cs-res': return r.notProven;
+        case 'cs-human': return originKnown ? m.human : lowerFirst(r.human);
+        case 'cs-p2': return originKnown ? m.all : lowerFirst(r.proven);
+        case 'cs-p1': return originKnown ? m.read : r.provenPartial;
+        case 'cs-res': return originKnown ? m.trace : r.notProven;
         case 'cs-import': return lowerFirst(r.titleImportShort);
         default: return lowerFirst(r.none);
     }

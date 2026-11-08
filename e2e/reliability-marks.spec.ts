@@ -166,7 +166,14 @@ test.describe('reliability marks', () => {
             // The research's bridge names `origin`: the tree is the research's.
             S.UI.researchShowsOriginNow = () => true;
             S.UI.activeResearchId = () => 'r-kvapilik';
+            S.SettingsManager.setBranchLegend(true);
+            S.TreeRenderer.render();
         });
+        // One meter (K5.1): proven by one reader is ●● on the card, the legend says what it means.
+        const mark = card(page, 'Bonifác').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveClass(/\bcs-p2\b/);
+        await expect(card(page, 'Bonifác')).toHaveAttribute('aria-label', /everything verified: birth/);
+        await expect(page.locator('#legend-marks .legend-mark-row')).toContainText(['everything verified']);
         await cardAction(page, 'Bonifác', 'edit');
         const modal = personModal(page);
         await expect(modal).toBeVisible();
