@@ -27,7 +27,7 @@ export interface PersonChange {
     refn?: string;
 }
 
-const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'nameVariants'];
+const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'marriedFirstName', 'primaryName', 'nameVariants'];
 const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress', 'birthAge'];
 const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause', 'deathAge', 'deathAddress', 'isDeceased'];
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];

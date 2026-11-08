@@ -156,6 +156,14 @@ send to a research carries it the same way:
 1 NAME Mařenka Dvořáková
 ```
 
+A married name with given names of its own (`1 NAME Jana Kateřina
+/Nováková/` with `2 TYPE married` beside `1 NAME Jana /Dvořáková/`) keeps
+them: the name shows them whenever it shows the married surname, and every
+export writes that `NAME` as it came, with its `TYPE married` and Strom's
+`_STROM_PRIMARY` mark. Editing the person's given name in the app drops
+them (the married name then takes the edited one). The titles of a married
+`NAME` (`NPFX`, `NSFX`) are not kept, nor `NICK` and `NOTE` under any `NAME`.
+
 Search finds the person under the married surname too (and under its other
 forms); the name shown is still the birth surname.
 

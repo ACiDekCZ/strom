@@ -343,6 +343,7 @@ type OwnedElsewhere =
     | 'originalIds'         // GEDCOM import only (K3.2): the person's ids in the loaded files
     | 'gedcomExtra'         // GEDCOM import only (G8): another program's own tags, for "Back to {prog}"
     | 'alsoChildOf'         // GEDCOM import only (066): a second family that also lists the person as a child
+    | 'marriedFirstName'    // GEDCOM import only (066): the married name's own given names; goes with the married surname
     | 'researchOrigins';    // written by Strom Research only (GEDCOM import), never edited
 
 /**
@@ -453,6 +454,19 @@ describe('updatePerson applies every field it owns', () => {
         expect(DataManager.getPerson(created.id)?.photoDate).toBe('24 JUL 2007');
         DataManager.updatePerson(created.id, { photo: 'data:image/png;base64,BBBB' });
         expect(DataManager.getPerson(created.id)?.photoDate).toBeUndefined();
+    });
+
+    it('the married name’s own given names stay through other edits, go with the married surname or an edited given name', () => {
+        const created = DataManager.createPerson({ firstName: 'Libuna', lastName: 'Šťovíková', gender: 'female', marriedSurname: 'Ozubcová' });
+        const p = DataManager.getData().persons[created.id];
+        p.marriedFirstName = 'Libuna Mlhoslava';
+        DataManager.updatePerson(created.id, { firstName: 'Libuna', marriedSurname: 'Ozubcová', notes: 'Kept bees.' });
+        expect(DataManager.getPerson(created.id)?.marriedFirstName).toBe('Libuna Mlhoslava');
+        DataManager.updatePerson(created.id, { firstName: 'Libunka' });
+        expect(DataManager.getPerson(created.id)?.marriedFirstName).toBeUndefined();
+        DataManager.getData().persons[created.id].marriedFirstName = 'Libuna Mlhoslava';
+        DataManager.updatePerson(created.id, { marriedSurname: '' });
+        expect(DataManager.getPerson(created.id)?.marriedFirstName).toBeUndefined();
     });
 });
 

@@ -19,6 +19,7 @@ import { createMergeState } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
 import { dropMediaLink } from '../import-origin.js';
 import { Partnership, Person, StromData, TreeId } from '../types.js';
+import { shownName } from '../person-name.js';
 
 const ORIGIN: GedcomImportOrigin = { at: '2026-11-08', file: 'family.ged', encoding: 'utf-8' };
 
@@ -794,5 +795,81 @@ describe('the research’s tree through the app and back (N-A, N-B, N-C)', () =>
         }
         // The age is no line of the person's note either (the second family's line is the app's own explanation).
         expect(byName(data, 'Mlhoň').notes ?? '').not.toMatch(/32/);
+    });
+});
+
+/**
+ * A name after marriage with given names of its own (066 N-E): "Zbyhoňka
+ * Mlhoslava /Pražmouková/" beside the birth name "Zbyhoňka /Mlhoslava/", the one
+ * the person goes by. The app keeps those given names, shows them with the
+ * married surname and writes the name back as it came, so the research sees
+ * no change of the name the person is shown by.
+ */
+describe('a married name with given names of its own (N-E)', () => {
+    const count = (ged: string, re: RegExp) => ged.split('\n').filter(l => re.test(l)).length;
+    const NAMES = ['1 NAME Zbyhoňka /Mlhoslava/', '1 NAME Zbyhoňka Mlhoslava /Pražmouková/', '2 TYPE married', '2 _STROM_PRIMARY Y'];
+    const research = RESEARCH_FAMILIES.replace('0 TRLR', [
+        '0 @I6@ INDI', '1 _STROM_IMPORT R1', '2 _XREF @I500006@', ...NAMES, '1 SEX F', '1 REFN P0006', '2 TYPE strom-research', '0 TRLR',
+    ].join('\n'));
+    const names = (ged: string): string[] => {
+        const lines = ged.split('\n');
+        const start = lines.findIndex(l => l === '1 NAME Zbyhoňka /Mlhoslava/');
+        expect(start).toBeGreaterThanOrEqual(0);
+        return lines.slice(start, start + 4);
+    };
+
+    it('comes from the research, shows and goes back as it came, in the file and to the research', () => {
+        const data = migrateData(load(research, null).data);
+        const m = byName(data, 'Zbyhoňka');
+        expect([m.lastName, m.marriedSurname, m.marriedFirstName, m.primaryName]).toEqual(['Mlhoslava', 'Pražmouková', 'Zbyhoňka Mlhoslava', 'married']);
+        expect(m.nameVariants).toBeUndefined();
+        expect(shownName(m, '', false, 'married')).toBe('Zbyhoňka Mlhoslava Pražmouková');
+        expect(shownName(m, '', false, 'birth')).toBe('Zbyhoňka Mlhoslava');
+        const sync = exportToGedcom(structuredClone(data), 'Ozubec', { research: { id: 'r-test' } }).content;
+        const file = exportToGedcom(structuredClone(data), 'Ozubec', { origins: true }).content;
+        for (const ged of [sync, file]) {
+            expect(names(ged)).toEqual(NAMES);
+            expect(count(ged, /^1 NAME Zbyhoňka/)).toBe(2);
+        }
+        // Read again and written again: the same.
+        const again = exportToGedcom(migrateData(load(file, null).data), 'Ozubec', { origins: true }).content;
+        expect(body(again)).toEqual(body(file));
+    });
+
+    const file = MYHERITAGE.replace('1 NAME Libuna /Šťovíková/\n2 GIVN Libuna\n2 SURN Šťovíková\n',
+        '1 NAME Libuna /Šťovíková/\n2 GIVN Libuna\n2 SURN Šťovíková\n1 NAME Libuna Bohumila /Ozubcová/\n2 TYPE married\n')
+        .replace('1 NAME Hromoslav /Ozubec/\n2 GIVN Hromoslav\n2 SURN Ozubec\n',
+            '1 NAME Hromoslav /Ozubec/\n2 GIVN Hromoslav\n2 SURN Ozubec\n1 NAME Hromoslav /Ozubec-Šťovík/\n2 TYPE married\n');
+
+    it('another program’s married name keeps its given names in "Back to {program}"; the same given names are no field of their own', () => {
+        expect(file).toContain('Libuna Bohumila');
+        const data = migrateData(load(file).data);
+        expect(byName(data, 'Libuna').marriedFirstName).toBe('Libuna Bohumila');
+        expect(byName(data, 'Hromoslav').marriedFirstName).toBeUndefined();
+        const ged = backTo(data);
+        expect(record(ged, '@I500002@')).toEqual(expect.arrayContaining(['1 NAME Libuna Bohumila /Ozubcová/', '2 TYPE married']));
+        expect(record(ged, '@I500001@')).toEqual(expect.arrayContaining(['1 NAME Hromoslav /Ozubec-Šťovík/', '2 TYPE married']));
+    });
+
+    it('a tree loaded before the given names were kept takes them when the same file is merged again', async () => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+        const existing = migrateData(load(file).data);
+        delete byName(existing, 'Libuna').marriedFirstName;
+        expect(record(backTo(existing), '@I500002@')).toContain('1 NAME Libuna /Ozubcová/');
+        const incoming = migrateData(load(file, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
+        const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
+        expect(byName(merged, 'Libuna').marriedFirstName).toBe('Libuna Bohumila');
+        expect(record(backTo(merged), '@I500002@')).toContain('1 NAME Libuna Bohumila /Ozubcová/');
+    });
+
+    it('goes with the married surname, and a stored one that says nothing more is dropped on load', () => {
+        const data = migrateData(load(research, null).data);
+        const m = byName(data, 'Zbyhoňka');
+        const loaded = migrateData({ ...data, persons: { ...data.persons,
+            [m.id]: { ...m, marriedSurname: undefined },
+        } } as StromData);
+        expect(loaded.persons[m.id].marriedFirstName).toBeUndefined();
+        const same = migrateData({ ...data, persons: { ...data.persons, [m.id]: { ...m, marriedFirstName: 'Zbyhoňka' } } } as StromData);
+        expect(same.persons[m.id].marriedFirstName).toBeUndefined();
     });
 });

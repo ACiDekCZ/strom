@@ -446,7 +446,7 @@ function relativeView(p: Person, withEvents: boolean): Person {
         id: p.id, firstName: p.firstName, lastName: p.lastName, gender: p.gender, isPlaceholder: p.isPlaceholder,
         partnerships: [...p.partnerships], parentIds: [...p.parentIds], childIds: [...p.childIds],
     };
-    for (const k of ['titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'birthDate', 'birthPlace',
+    for (const k of ['titleBefore', 'titleAfter', 'marriedSurname', 'marriedFirstName', 'primaryName', 'birthDate', 'birthPlace',
         'deathDate', 'deathPlace', 'isDeceased'] as const) {
         if (p[k] !== undefined) (keep as unknown as Record<string, unknown>)[k] = p[k];
     }
@@ -613,7 +613,7 @@ function ancestorView(p: Person, known: (id: PersonId) => boolean): Person {
         id: p.id, firstName: p.firstName, lastName: p.lastName, gender: p.gender, isPlaceholder: p.isPlaceholder,
         partnerships: [], parentIds, childIds: [],
     };
-    for (const k of ['titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'birthDate', 'deathDate', 'isDeceased'] as const) {
+    for (const k of ['titleBefore', 'titleAfter', 'marriedSurname', 'marriedFirstName', 'primaryName', 'birthDate', 'deathDate', 'isDeceased'] as const) {
         if (p[k] !== undefined) (keep as unknown as Record<string, unknown>)[k] = p[k];
     }
     const rel = parentIds.filter(pid => p.parentRelTypes?.[pid] && p.parentRelTypes[pid] !== 'biological');

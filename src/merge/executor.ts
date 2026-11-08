@@ -953,7 +953,15 @@ export function mergePersonData(
     if (!existing.titleAfter && incoming.titleAfter) existing.titleAfter = incoming.titleAfter;
     // The surname after marriage: the incoming one fills a gap; two different
     // ones are a conflict (detectConflicts) resolved below.
-    if (!existing.marriedSurname && incoming.marriedSurname) existing.marriedSurname = incoming.marriedSurname;
+    if (!existing.marriedSurname && incoming.marriedSurname) {
+        existing.marriedSurname = incoming.marriedSurname;
+        // With the married name's own given names, when it has them.
+        if (incoming.marriedFirstName) existing.marriedFirstName = incoming.marriedFirstName;
+    } else if (!existing.marriedFirstName && incoming.marriedFirstName && existing.marriedSurname === incoming.marriedSurname
+        && incoming.marriedFirstName !== existing.firstName) {
+        // The same married name read again from a file that gives its own given names (a tree loaded before they were kept).
+        existing.marriedFirstName = incoming.marriedFirstName;
+    }
 
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;
@@ -988,7 +996,11 @@ export function mergePersonData(
                 if (useIncoming) {
                     if (conflict.field === 'firstName') existing.firstName = incoming.firstName;
                     else if (conflict.field === 'lastName') existing.lastName = incoming.lastName;
-                    else existing.marriedSurname = incoming.marriedSurname;
+                    else {
+                        existing.marriedSurname = incoming.marriedSurname;
+                        if (incoming.marriedFirstName) existing.marriedFirstName = incoming.marriedFirstName;
+                        else delete existing.marriedFirstName;
+                    }
                 }
                 addLosingNameVariant(existing, winner, loser);
                 break;

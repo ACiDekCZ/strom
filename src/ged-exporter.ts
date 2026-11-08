@@ -1162,9 +1162,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushFactImport(person, 'name');
         pushFactOrigin(person, 'name');
         // The surname after marriage as the name she had after it, right
-        // after the primary one (the birth name), as the research writes it.
+        // after the primary one (the birth name), as the research writes it;
+        // with its own given names when they are not the person's.
         if (married) {
-            pushWrapped(lines, 1, 'NAME', formatGedcomName(person.firstName, married));
+            pushWrapped(lines, 1, 'NAME', formatGedcomName(person.marriedFirstName?.trim() || person.firstName, married));
             lines.push('2 TYPE married');
             if (person.primaryName === 'married') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
         }

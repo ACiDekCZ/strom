@@ -346,6 +346,7 @@ function stripDetails(person: Person): void {
     delete person.titleAfter;
     // The surname after marriage is the name a living woman goes by today.
     delete person.marriedSurname;
+    delete person.marriedFirstName;
     // …which of the two she goes by (it hints at a divorce; initials keep
     // the married surname's initial, not the choice)…
     delete person.primaryName;

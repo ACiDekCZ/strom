@@ -17,6 +17,10 @@
  *   married  none / married   married   none
  *   married  birth            birth     "(dříve married)"
  *
+ * A married name with given names of its own (Person.marriedFirstName,
+ * "Jana Kateřina" beside the birth name's "Jana") shows them whenever it
+ * shows the married surname.
+ *
  * Without a married surname primaryName means nothing; with the married
  * surname equal to the birth one there is no note. "roz." and "dříve" never
  * come together; cards never show "dříve" (only the detail asks for it).
@@ -35,7 +39,8 @@ import { Person, SurnameDisplay } from './types.js';
 import { SettingsManager } from './settings.js';
 import { strings } from './strings.js';
 
-type Named = Pick<Person, 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'primaryName'> & { isPlaceholder?: boolean };
+type Named = Pick<Person, 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'primaryName'>
+    & Partial<Pick<Person, 'marriedFirstName'>> & { isPlaceholder?: boolean };
 
 /** Whether titles are shown with names (the setting; default on). */
 export function titlesShown(): boolean {
@@ -85,8 +90,10 @@ export function shownNameParts(person: Named, emptyGiven = '', show = titlesShow
     const married = person.isPlaceholder ? '' : person.marriedSurname?.trim() ?? '';
     const useMarried = !!married && display !== 'birth' && person.primaryName !== 'birth';
     const surname = useMarried ? married : birth;
+    // The married name with given names of its own shows them with it.
+    const marriedGiven = useMarried ? person.marriedFirstName?.trim() : '';
     return {
-        given: [before, given].filter(Boolean).join(' '),
+        given: [before, marriedGiven || given].filter(Boolean).join(' '),
         surname: [surname, after].filter(Boolean).join(' '),
         birthNote: useMarried && display === 'both' && birth.trim() && birth.trim() !== married ? birth.trim() : '',
         formerNote: !!married && person.primaryName === 'birth' && display !== 'birth' && married !== birth.trim() ? married : '',

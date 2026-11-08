@@ -472,6 +472,14 @@ export interface Person {
      */
     marriedSurname?: string;
     /**
+     * The given names of the name after marriage when they are not the
+     * person's own (firstName): "Jana Kateřina /Nováková/" beside the birth
+     * name "Jana /…/" (GEDCOM NAME > TYPE married, as the file wrote it).
+     * Shown with the married surname and written back in that NAME. Only with
+     * a married surname — without it the field is dropped (load and save).
+     */
+    marriedFirstName?: string;
+    /**
      * Which surname the person goes by (the user's choice, never derived from
      * a divorce or the order of names): 'birth' = the birth surname
      * (lastName), the married one stays and shows as "formerly B" in the
@@ -1215,6 +1223,9 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * GEDCOM import skips `_STROM_PRIMARY` under a NAME silently and its export
  * does not write it (the research takes the missing mark as no change).
  * Person.dismissedMarriedSuggestion (3.13, app-local) the same way.
+ * Person.marriedFirstName (3.26) came without a bump too: an older app keeps
+ * it on a re-save and shows the married name with the person's own given
+ * name meanwhile; its GEDCOM export writes that name so.
  * Source.reading / readingEntry / readingSha (3.14) came without a bump too: an
  * older app loads sources whole (migrateData) and edits them in place
  * (updateSource), so it keeps the reading's marks on a re-save. Its merge keeps

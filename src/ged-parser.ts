@@ -1110,6 +1110,8 @@ interface GedcomIndividual {
     marnm: string[];
     /** The surname after marriage (Person.marriedSurname), set after the names are read. */
     marriedSurname?: string;
+    /** The given names of that married name when they are not the person's own (Person.marriedFirstName). */
+    marriedFirstName?: string;
     /**
      * The NAME with Strom's mark of the name the person goes by
      * (`2 _STROM_PRIMARY Y`, the first one counts): -1 the primary name, k the
@@ -1808,6 +1810,7 @@ function readMarriedSurname(
 ): void {
     if (indi.primaryNameType === 'married') return;
     let married = '';
+    let marriedGiven = '';
     // The mark of the name the person goes by: on the birth name (the
     // primary one), on the married name taken here, or elsewhere (nothing).
     let markedMarried = false;
@@ -1824,6 +1827,8 @@ function readMarriedSurname(
         const read = readGedcomName(indi.nameVariants[k], indi.variantNameParts[k], { ...opts, descriptions: false });
         if (!read.lastName) continue;
         married = read.lastName;
+        // Given names of its own ("Jana Kateřina /Nováková/" beside "Jana /…/") stay with it.
+        if (read.firstName && read.firstName !== '?' && read.firstName.trim() !== (indi.firstName ?? '').trim()) marriedGiven = read.firstName.trim();
         dropVariant(k);
         break;
     }
@@ -1835,9 +1840,10 @@ function readMarriedSurname(
     }
     if (!married) return;
     indi.marriedSurname = married;
+    if (marriedGiven) indi.marriedFirstName = marriedGiven;
     // "Marie Nováková" beside the field says nothing more.
     const key = (v: string): string => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
-    const repeat = key(`${indi.firstName} ${married}`);
+    const repeat = key(`${marriedGiven || indi.firstName} ${married}`);
     for (let k = indi.nameVariants.length - 1; k >= 0; k--) {
         if (key(indi.nameVariants[k]) !== repeat) continue;
         // A mark there is on the married name too (it is that name).
@@ -4195,6 +4201,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (indi.titleBefore) person.titleBefore = indi.titleBefore;
         if (indi.titleAfter) person.titleAfter = indi.titleAfter;
         if (indi.marriedSurname) person.marriedSurname = indi.marriedSurname;
+        if (indi.marriedSurname && indi.marriedFirstName) person.marriedFirstName = indi.marriedFirstName;
         if (indi.marriedSurname && indi.primaryName) person.primaryName = indi.primaryName;
 
         // Add extended info if present

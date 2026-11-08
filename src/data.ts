@@ -212,6 +212,13 @@ export function migrateData(data: unknown): StromData {
             && (typeof person.marriedSurname !== 'string' || !person.marriedSurname.trim())) {
             delete person.marriedSurname;
         }
+        // The married name's own given names: text, only with a married
+        // surname, and only when they are not the person's own.
+        if (person && typeof person === 'object' && 'marriedFirstName' in person
+            && (typeof person.marriedFirstName !== 'string' || !person.marriedFirstName.trim() || !person.marriedSurname
+                || person.marriedFirstName.trim() === (person.firstName ?? '').trim())) {
+            delete person.marriedFirstName;
+        }
         // Which surname the person goes by: 'birth' or 'married', and only
         // with a married surname (anything else means no choice).
         if (person && typeof person === 'object' && 'primaryName' in person
@@ -2150,6 +2157,7 @@ class DataManagerClass {
         if (updates.question !== undefined && (updates.question || undefined) !== person.question) diff(strings.labels.question, person.question, updates.question);
 
         const lastNameBefore = person.lastName ?? '';
+        const firstNameBefore = person.firstName;
         if (updates.firstName !== undefined) person.firstName = updates.firstName;
         if (updates.lastName !== undefined) person.lastName = updates.lastName;
         // A placeholder that got a real name — first OR last — is a person now
@@ -2173,6 +2181,9 @@ class DataManagerClass {
         }
         if (primaryAfter) person.primaryName = primaryAfter;
         else delete person.primaryName;
+        // The married name's own given names go with its surname, and give way
+        // to a given name edited here (the editor shows only that one).
+        if (!person.marriedSurname || (updates.firstName !== undefined && updates.firstName !== firstNameBefore)) delete person.marriedFirstName;
         // The married-surname suggestion hidden in the editor (app-local, no
         // audit line: it is not a fact about the person).
         if (updates.dismissedMarriedSuggestion !== undefined) {
@@ -3790,6 +3801,8 @@ class DataManagerClass {
         // or is the kept one's too and the kept one made no choice.
         keepPerson.primaryName = mergedPrimaryName(keepPerson, removePerson, keptMarried);
         if (!keepPerson.primaryName) delete keepPerson.primaryName;
+        // The married name's own given names come with the married surname they belong to.
+        if (!keptMarried && keepPerson.marriedSurname && removePerson.marriedFirstName) keepPerson.marriedFirstName = removePerson.marriedFirstName;
 
         // Clear placeholder status if we have a real name now
         if (keepPerson.firstName && keepPerson.firstName !== '?') {

@@ -1098,6 +1098,7 @@ function keepMarriedSurnameField(next: StromData, previous: StromData, features:
         // A research that keeps the kind and has no such spelling took it off.
         if (knows && kept.length === variants.length) continue;
         const changed: Person = { ...p, marriedSurname: was.marriedSurname };
+        if (was.marriedFirstName) changed.marriedFirstName = was.marriedFirstName;
         if (kept.length > 0) changed.nameVariants = kept;
         else delete changed.nameVariants;
         persons ??= { ...next.persons };

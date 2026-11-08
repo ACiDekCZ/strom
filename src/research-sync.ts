@@ -390,7 +390,7 @@ export function unverifiedOlderSources(data: StromData, link: ResearchLink | und
 }
 
 /** The user's values a conflict can be about: the name (the surname after marriage and the one the person goes by too), sex, birth and death. */
-const CONFLICT_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'marriedSurname', 'primaryName', 'gender', 'birthDate', 'birthPlace', 'deathDate', 'deathPlace'];
+const CONFLICT_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'marriedSurname', 'marriedFirstName', 'primaryName', 'gender', 'birthDate', 'birthPlace', 'deathDate', 'deathPlace'];
 
 /**
  * People whose value in the app the research's version would replace while a
