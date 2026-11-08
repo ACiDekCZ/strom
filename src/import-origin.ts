@@ -493,8 +493,11 @@ const isJoinedHead = (line: string): boolean => line === `1 ${JOINED_TAG}` || li
 export interface JoinedMarks {
     /** The lines the record gave the couple's note, as one run (`2 _STROM_TEXT`, `3 CONT`). */
     text?: string;
-    /** Its children, by their xref in the file, without the @ signs (`2 _STROM_CHIL I4`). */
-    children?: string[];
+    /**
+     * Its children, by their xref in the file, without the @ signs (`2 _STROM_CHIL I4`),
+     * and whether the first record names that child too (`3 _STROM_ALSO Y`).
+     */
+    children?: { xref: string; also: boolean }[];
     /**
      * Its citations: the source record's xref and the page (`2 _STROM_SOUR S1`
      * / `3 PAGE fol. 7`), and whether the first record cites that page too
@@ -520,7 +523,7 @@ export interface JoinedRecord {
     xref: string;
     lines: string[];
     text: string;
-    children: string[];
+    children: { xref: string; also: boolean }[];
     sources: { xref: string; page: string; also: boolean }[];
     events: string[];
     took: JoinedTook[];
@@ -542,7 +545,10 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
         block.push(first ? `2 _STROM_TEXT ${first}` : '2 _STROM_TEXT');
         for (const line of rest) block.push(line ? `3 CONT ${line}` : '3 CONT');
     }
-    for (const xref of marks.children ?? []) block.push(`2 _STROM_CHIL ${xref}`);
+    for (const child of marks.children ?? []) {
+        block.push(`2 _STROM_CHIL ${child.xref}`);
+        if (child.also) block.push('3 _STROM_ALSO Y');
+    }
     for (const src of marks.sources ?? []) {
         block.push(`2 _STROM_SOUR ${src.xref}`);
         if (src.page) block.push(`3 PAGE ${src.page}`);
@@ -566,7 +572,7 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 mark = line.split(' ')[1];
                 const value = line.slice(mark.length + 3);
                 if (mark === '_STROM_TEXT') out.text = value;
-                else if (mark === '_STROM_CHIL' && value) out.children.push(value);
+                else if (mark === '_STROM_CHIL' && value) out.children.push({ xref: value, also: false });
                 else if (mark === '_STROM_SOUR' && value) out.sources.push({ xref: value, page: '', also: false });
                 else if (mark === '_STROM_EVEN' && value) out.events.push(value);
                 else if (mark === '_STROM_TOOK' && value) {
@@ -578,6 +584,7 @@ export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
                 if (mark === '_STROM_TEXT' && /^3 CONT( |$)/.test(line)) out.text += '\n' + line.slice(7);
                 else if (src && line.startsWith('3 PAGE ')) src.page = line.slice(7);
                 else if (src && line === '3 _STROM_ALSO Y') src.also = true;
+                else if (mark === '_STROM_CHIL' && line === '3 _STROM_ALSO Y' && out.children.length) out.children[out.children.length - 1].also = true;
             } else {
                 mark = '';
                 out.lines.push(line.replace(/^\d+/, n => String(Number(n) - 1)));

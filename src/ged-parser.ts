@@ -5009,6 +5009,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const childGedId of childrenOf(gedFamId, fam)) linkChild(null, childGedId, gedFamId, fam, real);
     }
 
+    /** The couple of a family by its two partners ('' without both), as coupleKey below. */
+    const coupleOfFamily = (gedFamId: string): string => {
+        const fam = families.get(gedFamId);
+        const husb = fam?.husb ? personIdMap.get(fam.husb) : undefined;
+        const wife = fam?.wife ? personIdMap.get(fam.wife) : undefined;
+        return husb && wife ? [husb, wife].sort().join('|') : '';
+    };
     for (const [gedFamId, fam] of families) {
         if (noCoupleFamilies.has(gedFamId)) continue;
         const partnershipId = partnershipIdMap.get(gedFamId)!;
@@ -5042,9 +5049,16 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const marks = joinUnion(target, partnership);
             // Its children, citations and events, so "Back to {prog}" writes them in it.
             const bare = (x: string): string => /^@?([^@]*)@?$/.exec(x.trim())?.[1] ?? '';
-            marks.children = childrenOf(gedFamId, fam)
-                .map(c => bare(individuals.get(c)?.importIds?.find(b => b.xref)?.xref ?? c)).filter(Boolean);
+            // A child it names goes back to it, also one that hangs from another
+            // record of the couple; the first record keeps a child it names too.
             const firstFam = recordsOfUnion.get(sameCouple)?.[0];
+            marks.children = [];
+            for (const c of new Set(fam.children)) {
+                const hangs = childFamily.get(c);
+                if (!hangs || (hangs !== gedFamId && coupleOfFamily(hangs) !== coupleKey)) continue;
+                const xref = bare(individuals.get(c)?.importIds?.find(b => b.xref)?.xref ?? c);
+                if (xref) marks.children.push({ xref, also: !!firstFam?.[1].children.includes(c) });
+            }
             const firstRefs = new Set(firstFam ? mapRefs(firstFam[1].sourceRefs) : []);
             const cited = new Set<string>();
             marks.sources = [];
@@ -5231,6 +5245,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const gedFamId of familiesOfChild.get(childGedId) ?? []) {
             if (gedFamId === keptFamId) continue;
             const fam = families.get(gedFamId)!;
+            // Another record of the same couple (joined, see joinUnion): the child
+            // is the couple's already, and "Back to {prog}" names it in both records.
+            const here = famPartnership.get(gedFamId);
+            if (here && here === famPartnership.get(keptFamId) && (joinedKept.has(gedFamId) || joinedKept.has(keptFamId))) continue;
 
             const parentNames = [fam.husb, fam.wife]
                 .map(p => (p ? personIdMap.get(p) : undefined))

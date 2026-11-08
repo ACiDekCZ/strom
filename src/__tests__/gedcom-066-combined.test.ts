@@ -299,7 +299,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const couple = Object.values(tree.partnerships).filter(p => tree.persons[p.person1Id]?.firstName === 'Kořenoslav');
             expect(couple).toHaveLength(1);
             expect([couple[0].status, couple[0].startDate, couple[0].endDate]).toEqual(['married', '1911-04-01', undefined]);
-            expect(imported.stats.joinedFamilies).toBe(3);
+            expect(imported.stats.joinedFamilies).toBe(4);
             expect(holdsRun(record(first, '@F1401@'), ['1 MARR', '2 DATE 1 APR 1911', '2 PLAC Drnkalov'])).toBe(true);
             // The wedding's TYPE, read nowhere, goes back under it as written.
             const marriage = record(first, '@F1401@');
@@ -390,6 +390,21 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             for (const ged of [first, second]) {
                 expect(count(record(ged, '@F1901@'), /^1 MARR|^2 DATE/)).toBe(0);
                 expect(holdsRun(record(ged, '@F1902@'), ['1 MARR', '2 DATE 3 MAR 1922'])).toBe(true);
+            }
+        });
+
+        it('20 · a child named in both of a couple\'s family records: in both, with both FAMC, and no note about it', () => {
+            const couple = Object.values(tree.partnerships).filter(p => tree.persons[p.person1Id]?.firstName === 'Hnětislav');
+            expect(couple).toHaveLength(1);
+            expect(couple[0].childIds.map(c => tree.persons[c].firstName)).toEqual(['Klíčenka']);
+            const child = Object.values(tree.persons).find(p => p.firstName === 'Klíčenka')!;
+            expect(child.notes ?? '').toBe('');
+            expect(child.alsoChildOf).toBeUndefined();
+            for (const ged of [first, second]) {
+                expect(record(ged, '@F2001@')).toContain('1 CHIL @I2003@');
+                expect(record(ged, '@F2002@')).toContain('1 CHIL @I2003@');
+                expect(holdsRun(record(ged, '@I2003@'), ['1 FAMC @F2001@', '1 FAMC @F2002@'])).toBe(true);
+                expect(count(record(ged, '@I2003@'), /^1 (FAMC|NOTE) /)).toBe(2);
             }
         });
 

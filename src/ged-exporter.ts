@@ -940,11 +940,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             (holder?.originalIds ?? []).some(e => back.imports.has(e.from) && (e.xref ?? '').toUpperCase() === xref.toUpperCase());
         const takenEvents = new Set<CoupleEvent>();
         for (const j of list) {
-            for (const xref of j.record.children) {
-                const child = ps.childIds.find(c => !childElsewhere.has(`${id}\n${c}`) && xrefIs(data.persons[c], xref));
+            for (const { xref, also } of j.record.children) {
+                const child = ps.childIds.find(c => !j.children.includes(c) && xrefIs(data.persons[c], xref));
                 if (!child) continue;
                 j.children.push(child);
-                childElsewhere.add(`${id}\n${child}`);
+                // A child the first record names too stays there as well.
+                if (!also) childElsewhere.add(`${id}\n${child}`);
             }
             for (const cite of j.record.sources) {
                 const sid = (ps.sourceIds ?? []).find(s => !j.sources.includes(s) && xrefIs(data.sources?.[s], cite.xref)
