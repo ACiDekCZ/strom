@@ -10,6 +10,7 @@ import type { StromData, TreeId } from '../types.js';
 import { DataManager, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { encryptionUiMethods } from '../ui/encryption-ui.js';
+import { exportGedcomMethods } from '../ui/export-gedcom-ui.js';
 
 const A = 'tree-a' as TreeId;
 const B = 'tree-b' as TreeId;
@@ -51,6 +52,7 @@ function fakeDialog(privacy: string) {
 function dialogUi() {
     return {
         ...encryptionUiMethods,
+        ...exportGedcomMethods,
         exportContentSizes: null,
         exportSourceImagesOption: () => undefined,
         exportSourceImagesBytes: () => null,

@@ -238,8 +238,7 @@ export const importExportMethods = uiModule({
      */
     async exportTargetTreeGedcom(opts: { preset?: 'back' } = {}): Promise<void> {
         // `preset: 'back'` ("Back to {prog}: export with sources…" of the What next card,
-        // spec 066 §4) preselects the export's choices; until §4 lands it opens the dialog as is.
-        void opts;
+        // spec 066 §4) opens the dialog with "Back to {prog}" chosen.
         const treeId = this.getExportTargetTreeId();
         if (!treeId) {
             this.closeExportDialog();
@@ -259,13 +258,16 @@ export const importExportMethods = uiModule({
 
             const { isFaithfulExport } = await import('../research-link.js');
             const { resolveContentOptions } = await import('../privacy.js');
+            // "Back to {prog}" gives Full data and its own content (read through the dialog).
             const privacy = this.readExportPrivacyMode();
             const content = this.readExportContentOptions();
-            const filtered = applyLivingPrivacy(data, privacy);
+            const researchNote = this.exportGedcomResearchNote();
+            // Every privacy choice keeps the deceased's sources and citations (spec 066 §4).
+            const filtered = applyLivingPrivacy(data, privacy, undefined, { keepDeceasedSources: true });
             // A faithful export of a research tree names the research and its version.
             const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
                 ? { id: metadata.research.id, head: metadata.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(metadata.research).transcripts } : undefined;
-            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true });
+            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, researchNote });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
@@ -275,8 +277,8 @@ export const importExportMethods = uiModule({
             a.download = `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
-            if (this.readExportPrivacyMode() === 'full') TreeManager.noteFileCopy([treeId]);
-        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom', treeId });
+            if (privacy === 'full') TreeManager.noteFileCopy([treeId]);
+        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom', treeId, gedcomPurpose: opts.preset === 'back' ? 'back' : 'share' });
     },
 
     /**

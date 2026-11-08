@@ -6054,6 +6054,8 @@ const stringsEN = {
         // Any privacy mode but Full data leaves the source catalog, citations and attachments out (all persons).
         dropsSources: (full: string) => `With any choice other than “${full}”, sources, citations and attachments are not exported, not even for deceased people.`,
         dropsSourcesContent: 'Attachments and sources are left out by the chosen privacy of living people.',
+        // GEDCOM: the deceased keep their sources, only the living lose them (spec 066 §4).
+        dropsLivingOnly: 'Sources, images and attachments are left out for living people only; the deceased keep them.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -7615,7 +7617,6 @@ const stringsEN = {
             always: 'Header, family, story and timeline are always in the file.',
             privacy: 'Privacy of living people',
             privacyWho: (s: string) => `Applies to living people only: ${s}.`,
-            privacyDrops: 'Sources, images and attachments are left out for living people only; the deceased keep them.',
             size: (mb: string, n: number) => `About ${mb} MB · ${nEn(n, 'image', 'images')}`,
             sizeHint: 'One file; opens in a browser, also offline. Over 15 MB may not pass by e-mail.',
             sizeLarge: 'The file is large; turning off images makes it smaller.',
@@ -8074,6 +8075,26 @@ const stringsEN = {
         dataNote: 'The research takes facts from the family tree as leads: without proof from a source it does not overwrite them, and changed ones can be reverted.',
         backLink: (prog: string) => `Back to ${prog}: export with sources…`,
         help: 'A tree from another program',
+    },
+    /** GEDCOM export: what the file is for, and what leaves sources out (spec 066 §4, §5). */
+    exportGed: {
+        purpose: 'What the file is for',
+        back: (prog: string) => `Back to ${prog}`,
+        backGeneric: 'Back to another program',
+        backSub: 'The whole tree with sources and citations, for one\'s own genealogy program.',
+        share: 'To share with others',
+        shareSub: 'Protects living people; the content can be adjusted.',
+        sumFull: 'Full data of everyone, living people included',
+        sumSources: (s: number, c: number) => `Sources and citations (${nEn(s, 'source', 'sources')}, ${nEn(c, 'citation', 'citations')})`,
+        sumNoSources: 'Sources and citations (the tree has none yet)',
+        sumNoMedia: 'Without photos and attachments: other programs do not read them from the file',
+        markResearch: 'Mark the research\'s facts with a note',
+        markResearchSub: (ex: string) => `A fact the research added or corrected gets the note “${ex}”.`,
+        noteText: (src: string) => `Derived by the Strom research (per: ${src})`,
+        livingNote: (n: number) => `The file contains data of ${nEn(n, 'living person', 'living people')}. It belongs only in one's own program.`,
+        warnLoss: (s: number, c: number) => `The file will be without ${nEn(s, 'source', 'sources')} and ${nEn(c, 'citation', 'citations')}.`,
+        warnLiving: (n: number, c: number) => `For ${nEn(n, 'living person', 'living people')}, ${nEn(c, 'citation is', 'citations are')} left out. The deceased keep their sources.`,
+        keepSources: 'Keep sources',
     },
 };
 
@@ -13866,6 +13887,7 @@ const stringsCZ: StringsType = {
         contentSources: 'Zdroje a citace',
         dropsSources: (full: string) => `Při jiné volbě než „${full}“ se zdroje, citace a přílohy nevyexportují, ani u zemřelých osob.`,
         dropsSourcesContent: 'Přílohy a zdroje vynechá zvolené soukromí žijících osob.',
+        dropsLivingOnly: 'Prameny, výřezy a přílohy se vynechají jen u žijících osob; zemřelým zůstanou.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -15403,7 +15425,6 @@ const stringsCZ: StringsType = {
             always: 'Hlavička, rodina, vyprávění a časová osa jsou v souboru vždy.',
             privacy: 'Ochrana žijících osob',
             privacyWho: (s: string) => `Týká se jen žijících: ${s}.`,
-            privacyDrops: 'Prameny, výřezy a přílohy se vynechají jen u žijících osob; zemřelým zůstanou.',
             size: (mb: string, n: number) => `Asi ${mb} MB · ${nCs(n, 'obrázek', 'obrázky', 'obrázků')}`,
             sizeHint: 'Jeden soubor, otevře se v prohlížeči i bez internetu. Nad 15 MB nemusí projít e-mailem.',
             sizeLarge: 'Soubor je velký; vypnutím výřezů nebo obrázků se zmenší.',
@@ -15855,6 +15876,25 @@ const stringsCZ: StringsType = {
         dataNote: 'Údaje z rodokmenu bere výzkum jako vodítka: bez dokladu z pramene je nepřepíše a změněné jde vrátit.',
         backLink: (prog: string) => `Zpět do ${prog}: export s prameny…`,
         help: 'Strom z jiného programu',
+    },
+    exportGed: {
+        purpose: 'K čemu soubor je',
+        back: (prog: string) => `Zpět do ${prog}`,
+        backGeneric: 'Zpět do jiného programu',
+        backSub: 'Celý strom i s prameny a citacemi, pro vlastní rodopisný program.',
+        share: 'Ke sdílení s ostatními',
+        shareSub: 'Chrání žijící osoby, obsah jde upravit.',
+        sumFull: 'Plná data všech osob, i žijících',
+        sumSources: (s: number, c: number) => `Prameny a citace (${nCs(s, 'pramen', 'prameny', 'pramenů')}, ${nCs(c, 'citace', 'citace', 'citací')})`,
+        sumNoSources: 'Prameny a citace (strom zatím žádné nemá)',
+        sumNoMedia: 'Bez fotek a příloh: cizí programy je ze souboru nečtou',
+        markResearch: 'Označit údaje z výzkumu poznámkou',
+        markResearchSub: (ex: string) => `Údaj, který doplnil nebo opravil výzkum, dostane poznámku „${ex}“.`,
+        noteText: (src: string) => `Odvodil výzkum Strom (podle: ${src})`,
+        livingNote: (n: number) => `Soubor obsahuje údaje ${nCs(n, 'žijící osoby', 'žijících osob', 'žijících osob')}. Patří jen do vlastního programu.`,
+        warnLoss: (s: number, c: number) => `Soubor bude bez ${nCs(s, 'pramene', 'pramenů', 'pramenů')} a ${nCs(c, 'citace', 'citací', 'citací')}.`,
+        warnLiving: (n: number, c: number) => `U ${nCs(n, 'žijící osoby', 'žijících osob', 'žijících osob')} ${plural('cs', c, 'se vynechá', 'se vynechají', 'se vynechá')} ${nCs(c, 'citace', 'citace', 'citací')}. Zemřelým prameny zůstanou.`,
+        keepSources: 'Ponechat prameny',
     },
 };
 
@@ -21571,6 +21611,7 @@ const stringsDE: StringsType = {
         contentSources: 'Quellen & Zitate',
         dropsSources: (full: string) => `Bei jeder Wahl außer „${full}“ werden Quellen, Zitate und Anhänge nicht exportiert, auch nicht bei Verstorbenen.`,
         dropsSourcesContent: 'Anhänge und Quellen lässt die gewählte Privatsphäre lebender Personen weg.',
+        dropsLivingOnly: 'Quellen, Ausschnitte und Anhänge entfallen nur bei lebenden Personen; Verstorbene behalten sie.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -23104,7 +23145,6 @@ const stringsDE: StringsType = {
             always: 'Kopf, Familie, Erzählung und Lebenslauf sind immer in der Datei.',
             privacy: 'Schutz lebender Personen',
             privacyWho: (s: string) => `Betrifft nur lebende Personen: ${s}.`,
-            privacyDrops: 'Quellen, Ausschnitte und Anhänge entfallen nur bei lebenden Personen; Verstorbene behalten sie.',
             size: (mb: string, n: number) => `Etwa ${mb} MB · ${nDe(n, 'Bild', 'Bilder')}`,
             sizeHint: 'Eine Datei; öffnet sich im Browser, auch offline. Über 15 MB geht sie per E-Mail eventuell nicht durch.',
             sizeLarge: 'Die Datei ist groß; ohne Ausschnitte oder Bilder wird sie kleiner.',
@@ -23556,6 +23596,25 @@ const stringsDE: StringsType = {
         dataNote: 'Angaben aus dem Stammbaum nimmt die Forschung als Hinweise: ohne Beleg aus einer Quelle überschreibt sie sie nicht, und Geändertes lässt sich zurücksetzen.',
         backLink: (prog: string) => `Zurück zu ${prog}: Export mit Quellen…`,
         help: 'Stammbaum aus einem anderen Programm',
+    },
+    exportGed: {
+        purpose: 'Wofür die Datei ist',
+        back: (prog: string) => `Zurück zu ${prog}`,
+        backGeneric: 'Zurück in ein anderes Programm',
+        backSub: 'Der ganze Stammbaum mit Quellen und Zitaten, für das eigene Genealogieprogramm.',
+        share: 'Zum Teilen mit anderen',
+        shareSub: 'Schützt lebende Personen, der Inhalt lässt sich anpassen.',
+        sumFull: 'Vollständige Daten aller Personen, auch lebender',
+        sumSources: (s: number, c: number) => `Quellen und Zitate (${nDe(s, 'Quelle', 'Quellen')}, ${nDe(c, 'Zitat', 'Zitate')})`,
+        sumNoSources: 'Quellen und Zitate (der Stammbaum hat noch keine)',
+        sumNoMedia: 'Ohne Fotos und Anhänge: andere Programme lesen sie aus der Datei nicht',
+        markResearch: 'Angaben der Forschung mit einer Notiz kennzeichnen',
+        markResearchSub: (ex: string) => `Eine Angabe, die die Forschung ergänzt oder korrigiert hat, erhält die Notiz „${ex}“.`,
+        noteText: (src: string) => `Abgeleitet von der Strom-Forschung (nach: ${src})`,
+        livingNote: (n: number) => `Die Datei enthält Angaben zu ${nDe(n, 'lebenden Person', 'lebenden Personen')}. Sie gehört nur ins eigene Programm.`,
+        warnLoss: (s: number, c: number) => `Die Datei wird ohne ${nDe(s, 'Quelle', 'Quellen')} und ${nDe(c, 'Zitat', 'Zitate')} sein.`,
+        warnLiving: (n: number, c: number) => `Bei ${nDe(n, 'lebenden Person', 'lebenden Personen')} ${plural('de', c, 'entfällt', 'entfallen')} ${nDe(c, 'Zitat', 'Zitate')}. Verstorbene behalten ihre Quellen.`,
+        keepSources: 'Quellen behalten',
     },
 };
 

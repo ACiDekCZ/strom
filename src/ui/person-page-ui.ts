@@ -1074,7 +1074,7 @@ export const personPageMethods = uiModule({
                         </label>${checks}
                     </div>
                     <p class="ppx-note ppx-always">${esc(X.always)}</p>
-                    <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(X.privacyDrops)}</p>
+                    <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(strings.privacy.dropsLivingOnly)}</p>
                 </div>
                 ${mediaHtml}
                 <div class="ppx-size">

@@ -132,6 +132,19 @@ test('Review on the card opens the data check, and the card is closed for good',
     await expect.poll(async () => (await storedImports(page))[0]?.nextCardClosed).toBe(true);
 });
 
+test('"Back to {prog}" on the card opens the GEDCOM export with "Back to Family Tree Maker" chosen', async ({ page }, testInfo) => {
+    await openApp(page);
+    await importAsNewTree(page, writeOtherProgramGedcom(testInfo, { finding: true }));
+    const card = nextCard(page);
+    await card.getByRole('button', { name: 'Back to Family Tree Maker: export with sources…' }).click();
+    await expect(card).toHaveCount(0);
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    await expect(pwd.locator('#export-purpose-back')).toBeChecked();
+    await expect(pwd.locator('#export-purpose-back-title')).toHaveText('Back to Family Tree Maker');
+    await expect(pwd.locator('#export-privacy-section')).toBeHidden();
+});
+
 test('"Insert into tree": the card says where the people went, and a backup was taken before', async ({ page }, testInfo) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');

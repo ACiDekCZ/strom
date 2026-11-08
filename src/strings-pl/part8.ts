@@ -14,7 +14,7 @@ function romanPl(n: number): string {
     return tens + ones;
 }
 
-export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext'> = {
+export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext' | 'exportGed'> = {
     history: {
         settingLabel: 'Historia na osi czasu życia',
         settingHint: 'Wydarzenia epoki i miejsc, w których osoba żyła, z wiekiem osoby. Szuka ich badanie, każde ma źródło.',
@@ -689,7 +689,6 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             always: 'Nagłówek, rodzina, opowieść i oś czasu są w pliku zawsze.',
             privacy: 'Ochrona osób żyjących',
             privacyWho: (s: string) => `Dotyczy tylko osób żyjących: ${s}.`,
-            privacyDrops: 'Źródła, wycinki i załączniki są pomijane tylko u osób żyjących; u osób zmarłych pozostają.',
             size: (mb: string, n: number) => `Ok. ${mb} MB · ${nPl(n, 'obraz', 'obrazy', 'obrazów')}`,
             sizeHint: 'Jeden plik, otwiera się w przeglądarce także bez internetu. Powyżej 15 MB może nie przejść przez e-mail.',
             sizeLarge: 'Plik jest duży; wyłączenie wycinków lub obrazów go zmniejszy.',
@@ -1143,5 +1142,24 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         dataNote: 'Badania traktują dane z drzewa jako wskazówki: bez dowodu ze źródła ich nie nadpisują, a zmienione można przywrócić.',
         backLink: (prog: string) => `Z powrotem do ${prog}: eksport ze źródłami…`,
         help: 'Drzewo z innego programu',
+    },
+    exportGed: {
+        purpose: 'Do czego służy plik',
+        back: (prog: string) => `Z powrotem do ${prog}`,
+        backGeneric: 'Z powrotem do innego programu',
+        backSub: 'Całe drzewo ze źródłami i cytatami, do własnego programu genealogicznego.',
+        share: 'Do udostępnienia innym',
+        shareSub: 'Chroni osoby żyjące, zawartość można dostosować.',
+        sumFull: 'Pełne dane wszystkich osób, także żyjących',
+        sumSources: (s: number, c: number) => `Źródła i cytaty (${nPl(s, 'źródło', 'źródła', 'źródeł')}, ${nPl(c, 'cytat', 'cytaty', 'cytatów')})`,
+        sumNoSources: 'Źródła i cytaty (drzewo jeszcze ich nie ma)',
+        sumNoMedia: 'Bez zdjęć i załączników: inne programy nie odczytują ich z pliku',
+        markResearch: 'Oznacz dane z badań notatką',
+        markResearchSub: (ex: string) => `Dane uzupełnione lub poprawione przez badania dostaną notatkę „${ex}”.`,
+        noteText: (src: string) => `Wywiedzione przez badania Strom (według: ${src})`,
+        livingNote: (n: number) => `Plik zawiera dane ${nPl(n, 'żyjącej osoby', 'żyjących osób', 'żyjących osób')}. Należy tylko do własnego programu.`,
+        warnLoss: (s: number, c: number) => `Plik będzie bez ${nPl(s, 'źródła', 'źródeł', 'źródeł')} i ${nPl(c, 'cytatu', 'cytatów', 'cytatów')}.`,
+        warnLiving: (n: number, c: number) => `U ${nPl(n, 'żyjącej osoby', 'żyjących osób', 'żyjących osób')} ${plPl(c, 'zostanie pominięty', 'zostaną pominięte', 'zostanie pominiętych')} ${nPl(c, 'cytat', 'cytaty', 'cytatów')}. Zmarłym źródła pozostaną.`,
+        keepSources: 'Zachowaj źródła',
     },
 };
