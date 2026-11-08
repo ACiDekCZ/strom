@@ -34,6 +34,47 @@ export type FactHolder = Person | Partnership;
 const FACT_PARTS: readonly FactPart[] = ['DATE', 'PLAC', 'VAL', 'GIVN', 'SURN', 'SEX'];
 const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research'];
 
+/** The GEDCOM tag that carries the import of a record, a fact or a link (spec 066). */
+export const IMPORT_TAG = '_STROM_IMPORT';
+
+/**
+ * `I1` or `I1 DATE PLAC` as written after the tag: the import id and, when
+ * only some parts are still from it, which. Null for anything else (a list
+ * with no part this app knows says nothing it could trust).
+ */
+export function parseImportMark(value: string): { id: string; parts?: FactPart[] } | null {
+    const words = value.trim().split(/\s+/);
+    const id = words[0];
+    if (!id || !IMPORT_ID.test(id)) return null;
+    if (words.length === 1) return { id };
+    const parts = [...new Set(words.slice(1).map(factPartOf).filter((p): p is FactPart => !!p))];
+    return parts.length > 0 ? { id, parts } : null;
+}
+
+/**
+ * The values of the `_STROM_IMPORT` lines of one fact: nothing when no part
+ * is from an import; the bare id when one import covers every part the fact
+ * holds; otherwise one "id PART…" per import, naming the parts still from it.
+ */
+export function factImportTags(holder: FactHolder, fact: string): string[] {
+    const byImport = new Map<string, FactPart[]>();
+    let valued = 0;
+    for (const [part, key] of Object.entries(factParts(holder, fact))) {
+        if (!factValue(holder, key!)) continue;
+        valued++;
+        const hit = importedValueOf(holder, key!);
+        if (!hit) continue;
+        const list = byImport.get(hit.from) ?? [];
+        list.push(part as FactPart);
+        byImport.set(hit.from, list);
+    }
+    if (byImport.size === 1) {
+        const [[id, parts]] = [...byImport];
+        if (parts.length === valued) return [id];
+    }
+    return [...byImport].map(([id, parts]) => `${id} ${parts.join(' ')}`);
+}
+
 /** A valid fact part, or null. */
 export function factPartOf(value: string): FactPart | null {
     const v = value.trim().toUpperCase();
@@ -201,6 +242,12 @@ export function markTreeImported(data: StromData, importId: string): void {
     for (const src of Object.values(data.sources ?? {})) {
         if (src) src.importId = importId;
     }
+}
+
+/** Today as an ISO day in local time ("2026-11-08"): when a file was loaded. */
+export function localIsoDay(now: Date = new Date()): string {
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 /** The next free id of the app's own imports ("I1", "I2"…). */
@@ -379,6 +426,32 @@ export function cleanImportOrigin(data: StromData, rawImports: unknown): void {
  */
 export function pruneImportOrigin(data: StromData): void {
     cleanImportOrigin(data, data.imports);
+}
+
+/**
+ * For an export that left data out: a stored import value says what the file
+ * gave, so it must not outlive the value it stands for. `changed` also drops
+ * the values a person changed since (a living person's original name or date
+ * would come back through them), and the research's origins with their
+ * earlier values; without it only facts that are gone lose theirs.
+ */
+export function forgetHiddenImports(holder: FactHolder, changed: boolean): void {
+    if (holder.importedValues) {
+        for (const [key, stored] of Object.entries(holder.importedValues)) {
+            const now = factValue(holder, key);
+            if (!now || (changed && now !== stored.value)) delete holder.importedValues[key];
+        }
+        if (Object.keys(holder.importedValues).length === 0) delete holder.importedValues;
+    }
+    if (changed) delete holder.researchOrigins;
+    else if (holder.researchOrigins) {
+        const facts = new Set(factsOf(holder));
+        for (const fact of Object.keys(holder.researchOrigins)) {
+            const hasValue = Object.values(factParts(holder, fact)).some(key => !!factValue(holder, key!));
+            if (!facts.has(fact) || !hasValue) delete holder.researchOrigins[fact];
+        }
+        if (Object.keys(holder.researchOrigins).length === 0) delete holder.researchOrigins;
+    }
 }
 
 /** A parent link that is gone loses its import mark too. */

@@ -61,6 +61,7 @@ import {
     ResearchIsland,
     YearSpan,
     SourceImageHeld,
+    FactPart,
     uniqueIdSuffix,
     PrimaryName,
 } from './types';
@@ -91,6 +92,9 @@ import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
+import {
+    cleanImportOrigin, IMPORT_TAG, markFactImported, markTreeImported, parseImportMark as readImportMark, sanitizeImports,
+} from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -800,6 +804,17 @@ interface RawEvent {
     tagValue?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
+    /** 2 _STROM_IMPORT: which import the event's parts still come from (app files only). */
+    imports?: RawImportMark[];
+}
+
+/**
+ * `_STROM_IMPORT I1 [DATE PLAC…]` as an app-written file gives it: the import
+ * a record or a fact comes from, and — when only some parts still do — which.
+ */
+interface RawImportMark {
+    id: string;
+    parts?: FactPart[];
 }
 
 /** An event of the couple under FAM (MARB, CENS, EVEN…), as the file gave it. */
@@ -820,6 +835,8 @@ interface RawCoupleEvent {
     tagValue?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
+    /** 2 _STROM_IMPORT (app files only). */
+    imports?: RawImportMark[];
 }
 
 /**
@@ -870,6 +887,8 @@ interface RawParticipant {
 /** Raw GEDCOM source record (0 @Sx@ SOUR). */
 interface RawSource {
     id: string;
+    /** 1 _STROM_IMPORT: the import the record came from (app files only). */
+    importMark?: string;
     title: string;
     repository: string;
     reference: string;
@@ -929,6 +948,10 @@ interface RawSourceMedia {
 /** Raw GEDCOM individual record */
 interface GedcomIndividual {
     id: string;
+    /** 1 _STROM_IMPORT: the import the person came from (app files only). */
+    importMark?: string;
+    /** 2 _STROM_IMPORT under the primary NAME, SEX, BIRT and DEAT. */
+    factImports?: Partial<Record<'name' | 'sex' | 'birth' | 'death', RawImportMark[]>>;
     /** Every DATE of the birth, death and events as written, by flex value (see noteDateForm). */
     dateForms?: Record<string, string>;
     name: string;
@@ -1034,6 +1057,12 @@ interface GedcomIndividual {
 /** Raw GEDCOM family record */
 interface GedcomFamily {
     id: string;
+    /** 1 _STROM_IMPORT: the import the couple came from (app files only). */
+    importMark?: string;
+    /** 2 _STROM_IMPORT under MARR and DIV. */
+    factImports?: Partial<Record<'marriage' | 'divorce', RawImportMark[]>>;
+    /** CHIL > 2 _STROM_IMPORT: the import a child's link to these parents came from, by child. */
+    childImports?: Map<string, string>;
     /** Every DATE of the wedding, divorce and events as written, by flex value (see noteDateForm). */
     dateForms?: Record<string, string>;
     /** The couple's events besides the wedding and the divorce (ENGA, MARB, CENS, EVEN…). */
@@ -1128,6 +1157,46 @@ export interface ParsedGedcom {
     stromResearch?: boolean;
     /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
     researchAsOf?: string;
+    /** Header `1 SOUR STROM`: written by the Strom app. */
+    stromApp?: boolean;
+    /** What the header says of the program that wrote the file (HEAD > SOUR, DATE, FILE). */
+    head?: GedcomHead;
+    /** Header `1 _STROM_IMPORT Ix` records as written (app and research files only), for sanitizeImports. */
+    stromImports?: Record<string, string>[];
+}
+
+/** The file's own header: the program that wrote it and when. */
+export interface GedcomHead {
+    /** HEAD > SOUR > NAME, else the SOUR value. */
+    program?: string;
+    /** HEAD > SOUR > VERS. */
+    version?: string;
+    /** HEAD > DATE, as written. */
+    date?: string;
+    /** HEAD > FILE. */
+    file?: string;
+}
+
+/** What a loaded file is, for the origin of its facts (spec 066). */
+export interface GedcomImportOrigin {
+    /** The day it was loaded (ISO, local). */
+    at: string;
+    /** The file's name as picked. */
+    file?: string;
+    /** The encoding the import read it in. */
+    encoding?: string;
+    /** sha256 of the file's bytes (hex). */
+    sha?: string;
+}
+
+/** Options of convertToStrom. */
+export interface GedcomConvertOptions {
+    /**
+     * Record where the facts came from: a file another program wrote becomes
+     * one import record (I1) and marks everything in it; a Strom file keeps the
+     * records and marks it carries. Without it nothing is recorded.
+     */
+    importOrigin?: GedcomImportOrigin;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -1147,6 +1216,8 @@ export interface ExternalMediaRef {
 
 export interface GedcomConversionResult {
     data: StromData;
+    /** The import record made for this file (a file another program wrote, with importOrigin). */
+    importId?: string;
     /**
      * OBJE FILE references pointing OUTSIDE the file (platform exports ship
      * media as a separate folder/zip). The import summary offers to bulk-match
@@ -1633,6 +1704,11 @@ const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', '
 // Labels are read from strings at USE time (not module load) so the note lands
 // in the app's current language — see each call site.
 
+/** HEAD > 1 _STROM_IMPORT Ix: the lines under it, by the record's field. */
+const HEAD_IMPORT_FIELDS: Record<string, string> = {
+    SOUR: 'program', VERS: 'version', DATE: 'fileDate', _AT: 'at', FILE: 'file', _SHA: 'sha',
+};
+
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN', 'NOTE', 'SNOTE']);
 
 /** A `_STROM_IMG_OMITTED` value: the research's reason, or `other` for one this app does not know. */
@@ -2080,6 +2156,16 @@ export function parseGedcom(content: string): ParsedGedcom {
     let stromAppVersion: string | undefined;
     /** The header line being read is under HEAD > SOUR STROM. */
     let inStromSour = false;
+    /** HEAD > SOUR, DATE and FILE of the file, whoever wrote it (the origin of a loaded file). */
+    const head: GedcomHead = {};
+    let headSourName = '';
+    let headSourValue = '';
+    /** The header line being read is under HEAD > SOUR (any program). */
+    let inHeadSour = false;
+    /** HEAD > `1 _STROM_IMPORT Ix`: the import records an app or research file carries, as written. */
+    const headImports: Record<string, string>[] = [];
+    let openHeadImport: Record<string, string> | null = null;
+    let openHeadImportField: string | null = null;
     let researchAsOf = '';
     let lineageMarker = false;
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
@@ -2193,6 +2279,35 @@ export function parseGedcom(content: string): ParsedGedcom {
             if (done) openDetail = { level, text: value, done, sep: ' ' };
         }
 
+        // 2 _STROM_IMPORT under a fact of a person or a couple: which import the
+        // fact (or the listed parts of it) still comes from. Read here so no
+        // fact's own reading takes it for one of its lines; whether the file
+        // is trusted with it is the converter's call. Level 3 (under the
+        // research's _STROM_WAS) is never a mark of the fact.
+        if (level === 2 && tag === IMPORT_TAG && currentRecord && !currentResearch
+            && (currentType === 'INDI' || currentType === 'FAM')) {
+            const mark = readImportMark(value);
+            if (mark && currentType === 'INDI') {
+                const indi = currentRecord as GedcomIndividual;
+                const fact = currentEvent ? null
+                    : currentSubTag === 'NAME' ? (currentNameSlot === -1 ? 'name' : null)
+                    : currentSubTag === 'SEX' ? 'sex'
+                    : currentSubTag === 'BIRT' ? 'birth'
+                    : currentSubTag === 'DEAT' ? 'death' : null;
+                if (currentEvent) (currentEvent.imports ??= []).push(mark);
+                else if (fact) ((indi.factImports ??= {})[fact] ??= []).push(mark);
+            } else if (mark) {
+                const fam = currentRecord as GedcomFamily;
+                if (currentFamEvent) (currentFamEvent.imports ??= []).push(mark);
+                else if (currentSubTag === 'MARR' || currentSubTag === 'DIV') {
+                    ((fam.factImports ??= {})[currentSubTag === 'MARR' ? 'marriage' : 'divorce'] ??= []).push(mark);
+                } else if (currentSubTag === 'CHIL' && fam.lastChil && !fam.childImports?.has(fam.lastChil)) {
+                    (fam.childImports ??= new Map()).set(fam.lastChil, mark.id);
+                }
+            }
+            continue;
+        }
+
         if (level === 0) {
             // What KIND of record this is comes from the type word, never from
             // the shape of the id. An xref is an opaque label: nothing obliges a
@@ -2304,9 +2419,30 @@ export function parseGedcom(content: string): ParsedGedcom {
             inSurnameNote = false;
             if (recordType !== 'REPO') currentRepoId = null;
         } else if (inHeader) {
-            // Header sub-lines. The only one we read is the surname-groups NOTE
-            // (see the exporter's SURNAME_GROUPS_MARKER); everything else in the
-            // header is bookkeeping the data model does not carry.
+            // Header sub-lines: the surname-groups NOTE (see the exporter's
+            // SURNAME_GROUPS_MARKER), the writer's own marks, and who wrote the
+            // file and when (the origin of a loaded file, spec 066).
+            if (level === 1) {
+                inHeadSour = tag === 'SOUR';
+                if (tag === 'SOUR') headSourValue = value.trim();
+                else if (tag === 'DATE') head.date = value.trim();
+                else if (tag === 'FILE') head.file = value.trim();
+                openHeadImport = null;
+                openHeadImportField = null;
+                if (tag === IMPORT_TAG && headImports.length < 1000) {
+                    openHeadImport = { id: value.trim() };
+                    headImports.push(openHeadImport);
+                }
+            } else if (level === 2 && inHeadSour) {
+                if (tag === 'NAME') headSourName = value.trim();
+                else if (tag === 'VERS') head.version = value.trim();
+            }
+            if (level === 2 && openHeadImport) {
+                openHeadImportField = HEAD_IMPORT_FIELDS[tag] ?? null;
+                if (openHeadImportField) openHeadImport[openHeadImportField] = value.trim();
+            } else if (level === 3 && openHeadImport && openHeadImportField && (tag === 'CONC' || tag === 'CONT')) {
+                openHeadImport[openHeadImportField] += (tag === 'CONT' ? ' ' : '') + value;
+            }
             if (level === 1) {
                 inSurnameNote = tag !== 'NOTE' ? false
                     : value.trim() === SURNAME_GROUPS_MARKER ? 'groups'
@@ -2373,6 +2509,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_ORIG') { if (value.trim().toUpperCase() === 'Y') src.original = true; }
                 else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
                 else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
+                else if (tag === IMPORT_TAG) { const mark = readImportMark(value); if (mark) src.importMark = mark.id; }
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
                 else if (tag === '_STROM_IMG_OMITTED') src.imageHeld = imageHeldReason(value);
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
@@ -2473,6 +2610,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'SEX':
                             indi.sex = value;
                             break;
+                        case IMPORT_TAG: {
+                            // The import the person came from (read from app files only).
+                            const mark = readImportMark(value);
+                            if (mark) indi.importMark = mark.id;
+                            break;
+                        }
                         case '_STROM_LINE': {
                             // The person's lineage correction (data v14); an
                             // unknown value is ignored.
@@ -2651,6 +2794,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case '_STROM_NO_COUPLE':
                             fam.noCouple = value !== 'N';
                             break;
+                        case IMPORT_TAG: {
+                            const mark = readImportMark(value);
+                            if (mark) fam.importMark = mark.id;
+                            break;
+                        }
                         case 'NOTE':
                             fam.note = fam.note ? `${fam.note}\n${value}` : value;
                             break;
@@ -3263,6 +3411,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 note: src.note, media: [],
                 ...(src.abbr ? { abbr: src.abbr } : {}),
                 ...(src.quality !== undefined ? { quality: src.quality } : {}),
+                ...(src.importMark ? { importMark: src.importMark } : {}),
             });
         }
         c.list[c.index] = derived;
@@ -3290,6 +3439,14 @@ export function parseGedcom(content: string): ParsedGedcom {
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(lineageMarker ? { lineageMarker } : {}),
         ...(stromResearch ? { stromResearch, ...(researchAsOf ? { researchAsOf } : {}) } : {}),
+        ...(stromApp ? { stromApp } : {}),
+        head: {
+            ...((headSourName || headSourValue) ? { program: headSourName || headSourValue } : {}),
+            ...(head.version ? { version: head.version } : {}),
+            ...(head.date ? { date: head.date } : {}),
+            ...(head.file ? { file: head.file } : {}),
+        },
+        ...((stromApp || stromResearch) && headImports.length > 0 ? { stromImports: headImports } : {}),
     };
 }
 
@@ -3298,8 +3455,17 @@ export function parseGedcom(content: string): ParsedGedcom {
 /**
  * Convert parsed GEDCOM data to Strom data format
  */
-export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
+export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptions = {}): GedcomConversionResult {
     const { individuals, families, sources: gedSources, droppedTags } = gedcom;
+    /** A file the app or the research wrote keeps the import marks it carries (spec 066). */
+    const ownFile = !!(gedcom.stromApp || gedcom.stromResearch);
+    const readMarks = !!options.importOrigin && ownFile;
+    /** The marks of each event made from the file, until the end (app files only). */
+    const eventMarks = new WeakMap<LifeEvent | CoupleEvent, RawImportMark[]>();
+    /** The partnership each family became (the same couple's second family: the first one's). */
+    const famPartnership = new Map<string, Partnership>();
+    /** Parent links a family's CHIL marks as imported: child, its parents there, the import. */
+    const parentMarks: { childId: PersonId; parents: PersonId[]; importId: string }[] = [];
     /** Excerpts with a `_STROM_REGION` on their original, until the page attachments exist. */
     const excerptRegions = new Map<SourceExcerpt, { x: number; y: number; w: number; h: number }>();
 
@@ -3496,6 +3662,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 const parts = (ev.participants ?? [])
                     .map(toParticipant).filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
+                if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
                 return out;
             });
         }
@@ -3749,6 +3916,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 const parts = (ev.participants ?? []).map(toWitness)
                     .filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
+                if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
                 return out;
             });
         }
@@ -3819,6 +3987,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             if (!child.parentIds.includes(pid)) child.parentIds.push(pid);
             if (!persons[pid].childIds.includes(childId)) persons[pid].childIds.push(childId);
         }
+        const linkMark = readMarks ? fam.childImports?.get(childGedId) : undefined;
+        if (linkMark) parentMarks.push({ childId, parents, importId: linkMark });
 
         // Pedigree type (PEDI) applies to the child's link to THIS family →
         // set the real parents' relationship type accordingly. Read from the
@@ -3902,6 +4072,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             persons[person2Id]?.partnerships.push(partnershipId);
         }
 
+        famPartnership.set(gedFamId, target);
         for (const childGedId of childrenOf(gedFamId, fam)) {
             linkChild(target, childGedId, gedFamId, fam, { husb: person1Id, wife: person2Id });
         }
@@ -3984,6 +4155,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         };
         fillUnion(partnership, fam);
         partnerships[partnershipId] = partnership;
+        famPartnership.set(gedFamId, partnership);
 
         // Add partnership to both persons
         persons[person1Id].partnerships.push(partnershipId);
@@ -4076,9 +4248,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         ? { ...(lineFounders.length ? { founders: lineFounders } : {}), ...(lineNotCarriers.length ? { notCarriers: lineNotCarriers } : {}) }
         : null;
 
-    const result: GedcomConversionResult = {
-        externalMedia,
-        data: {
+    const data: StromData = {
             persons,
             partnerships,
             ...(Object.keys(sources).length > 0 ? { sources } : {}),
@@ -4098,7 +4268,72 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             // Like the surname markers: with the header mark the file's list
             // (even an empty one) is what it says; without it, nothing said.
             ...(lineageOverrides || gedcom.lineageMarker ? { lineageOverrides: lineageOverrides ?? {} } : {}),
-        },
+    };
+
+    // Where the facts came from (spec 066), only when the caller asks.
+    let importId: string | undefined;
+    const origin = options.importOrigin;
+    if (origin && !ownFile) {
+        // A file another program wrote: all of it is that file's, whatever
+        // marks of ours it may carry (they are never read from it).
+        const head = gedcom.head ?? {};
+        const record = sanitizeImports([{
+            id: 'I1',
+            program: head.program ?? '',
+            version: head.version,
+            fileDate: head.date,
+            at: origin.at,
+            file: origin.file || head.file,
+            encoding: origin.encoding,
+            sha: origin.sha,
+        }]);
+        if (record) {
+            data.imports = record;
+            importId = record[0].id;
+            markTreeImported(data, importId);
+        }
+    } else if (origin) {
+        applyFileImportMarks();
+        cleanImportOrigin(data, gedcom.stromImports);
+    }
+
+    /** A Strom file's own marks, as it carries them (cleaned against its records afterwards). */
+    function applyFileImportMarks(): void {
+        const markFact = (holder: Person | Partnership, fact: string, marks: RawImportMark[] | undefined): void => {
+            for (const mark of marks ?? []) markFactImported(holder, fact, mark.id, mark.parts);
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            const person = pid ? persons[pid] : undefined;
+            if (!person) continue;
+            if (indi.importMark) person.importId = indi.importMark;
+            for (const [fact, marks] of Object.entries(indi.factImports ?? {})) markFact(person, fact, marks);
+            for (const ev of person.events ?? []) markFact(person, `event:${ev.id}`, eventMarks.get(ev));
+        }
+        for (const [gedFamId, fam] of families) {
+            const ps = famPartnership.get(gedFamId);
+            if (!ps) continue;
+            if (fam.importMark && !ps.importId) ps.importId = fam.importMark;
+            for (const [fact, marks] of Object.entries(fam.factImports ?? {})) markFact(ps, fact, marks);
+        }
+        for (const ps of Object.values(partnerships)) {
+            for (const ev of ps.events ?? []) markFact(ps, `event:${ev.id}`, eventMarks.get(ev));
+        }
+        for (const { childId, parents, importId: from } of parentMarks) {
+            const child = persons[childId];
+            if (!child) continue;
+            for (const pid of parents) if (child.parentIds.includes(pid)) (child.importedParents ??= {})[pid] = from;
+        }
+        for (const [gedId, raw] of gedSources) {
+            const sid = sourceIdMap.get(gedId);
+            if (raw.importMark && sid && sources[sid]) sources[sid].importId = raw.importMark;
+        }
+    }
+
+    const result: GedcomConversionResult = {
+        externalMedia,
+        data,
+        ...(importId ? { importId } : {}),
         stats: {
             otherFamilyLinks,
             totalPersons: Object.keys(persons).length,

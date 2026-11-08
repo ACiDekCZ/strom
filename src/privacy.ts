@@ -12,6 +12,7 @@ import { rewriteStorySources, storySourceIds } from './story-sources.js';
 import { StromData, Person, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
+import { forgetHiddenImports } from './import-origin.js';
 import { stripPhotos } from './photo.js';
 import { stripAttachments, stripExcerpts } from './attachments.js';
 
@@ -211,6 +212,9 @@ export function applyContentOptions(data: StromData, content: boolean | ContentO
     } else if (!opts.attachments) out = stripAttachments(out);
     if (!opts.notes) out = stripNotes(out);
     if (!opts.sources) out = stripSources(out);
+    // A fact left out takes its stored import value with it.
+    for (const person of Object.values(out.persons)) forgetHiddenImports(person, false);
+    for (const ps of Object.values(out.partnerships)) forgetHiddenImports(ps, false);
     return out;
 }
 
@@ -427,6 +431,7 @@ export function applyLivingPrivacy(
     for (const partnership of Object.values(copy.partnerships)) {
         if (living.has(partnership.person1Id) || living.has(partnership.person2Id)) {
             stripPartnershipDetails(partnership, mode);
+            forgetHiddenImports(partnership, true);
         }
     }
 
@@ -459,6 +464,8 @@ export function applyLivingPrivacy(
                 break;
             }
         }
+        // The file's values of what was just hidden must not stay behind.
+        forgetHiddenImports(person, true);
     }
 
     // The living lost their citations above; a source only they cited goes too.

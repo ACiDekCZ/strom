@@ -537,7 +537,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 skipped: skippedCount,
                 partnerships: Object.keys(mergedData.partnerships).length
             },
-            backupKey
+            backupKey,
+            importMap,
         };
 
     } catch (error) {

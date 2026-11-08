@@ -152,6 +152,8 @@ export interface MergeResult {
     };
     backupKey?: string;        // localStorage key for backup
     errors?: string[];
+    /** Incoming import record id -> its id in the merged tree (spec 066). */
+    importMap?: Map<string, string>;
 }
 
 // ==================== UI STATE ====================

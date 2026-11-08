@@ -36,6 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
+import { FactHolder, factImportTags, IMPORT_TAG } from './import-origin.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -629,6 +630,37 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     lines.push(...researchHeaderLines(options.research));
     lines.push(STROM_SEX_U_LINE);
 
+    // The files the tree's facts came from (spec 066): one record per loaded
+    // file, named by its id under every record and fact still as it gave it.
+    const knownImports = new Set<string>();
+    for (const rec of data.imports ?? []) {
+        knownImports.add(rec.id);
+        lines.push(`1 ${IMPORT_TAG} ${rec.id}`);
+        if (rec.program) pushWrapped(lines, 2, 'SOUR', rec.program);
+        if (rec.version) pushWrapped(lines, 2, 'VERS', rec.version);
+        if (rec.fileDate) pushWrapped(lines, 2, 'DATE', rec.fileDate);
+        lines.push(`2 _AT ${rec.at}`);
+        if (rec.file) pushWrapped(lines, 2, 'FILE', rec.file);
+        if (rec.sha) lines.push(`2 _SHA ${rec.sha}`);
+    }
+    /** `n _STROM_IMPORT Ix` of a record from a known import. */
+    const pushRecordImport = (importId: string | undefined): void => {
+        if (importId && knownImports.has(importId)) lines.push(`1 ${IMPORT_TAG} ${importId}`);
+    };
+    /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
+    const pushFactImport = (holder: FactHolder, fact: string): void => {
+        for (const tag of factImportTags(holder, fact)) {
+            if (knownImports.has(tag.split(' ')[0])) lines.push(`2 ${IMPORT_TAG} ${tag}`);
+        }
+    };
+    /** The import of a child's link to the given parents (all of them from it), or none. */
+    const childLinkImport = (childId: PersonId, parentIds: readonly PersonId[]): string | undefined => {
+        const marks = data.persons[childId]?.importedParents;
+        if (!marks || parentIds.length === 0) return undefined;
+        const ids = parentIds.map(pid => marks[pid]);
+        return ids.every(id => !!id && knownImports.has(id)) ? ids[0] : undefined;
+    };
+
     // Surname-variant groups: no GEDCOM structure fits "these spellings mean one
     // family", so they ride in a header NOTE (standard, kept by every reader).
     // The marker line lets our own importer read them back; the group lines are
@@ -666,6 +698,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (!gedcomId) continue;
 
         lines.push(`0 ${gedcomId} INDI`);
+        pushRecordImport(person.importId);
 
         // Name. Placeholders are exported with an empty name so they re-import
         // as placeholders (lossless), instead of being dropped.
@@ -679,6 +712,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // one; none without a choice or a married surname.
         const married = person.marriedSurname?.trim();
         if (married && person.primaryName === 'birth') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
+        pushFactImport(person, 'name');
         // The surname after marriage as the name she had after it, right
         // after the primary one (the birth name), as the research writes it.
         if (married) {
@@ -694,6 +728,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Sex: M, F, or U for a sex the records do not give.
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : person.gender === 'female' ? 'F' : 'U'}`);
+        pushFactImport(person, 'sex');
         const lineTag = lineTagOf(personId);
         if (lineTag) lines.push(`1 ${STROM_LINE_TAG} ${lineTag}`);
 
@@ -710,6 +745,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
+            pushFactImport(person, 'birth');
         }
 
         // Death (a cited death without a date or place is a known death: DEAT Y)
@@ -726,6 +762,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             pushStatus(lines, person.deathStatus);
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
+            pushFactImport(person, 'death');
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
             // Without it the person came back as possibly living.
@@ -819,6 +856,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             for (const srcId of event.sourceIds ?? []) {
                 pushCitation(2, srcId);
             }
+            pushFactImport(person, `event:${event.id}`);
         }
 
         // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).
@@ -911,6 +949,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const person2 = data.persons[partnership.person2Id];
 
         lines.push(`0 ${gedcomId} FAM`);
+        pushRecordImport(partnership.importId);
 
         // Determine HUSB/WIFE by gender (male = HUSB, female = WIFE, a person
         // of unknown sex the role the other one leaves free). For a mixed
@@ -946,6 +985,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                     }
                 } else if (toHusb === 'step') lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
                 else if (toWife === 'step') lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
+                const linkImport = childLinkImport(childId, [husbId, wifeId].filter(pid => personIdMap.has(pid)));
+                if (linkImport) lines.push(`2 ${IMPORT_TAG} ${linkImport}`);
             }
         }
 
@@ -993,6 +1034,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
             for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
+            pushFactImport(partnership, 'marriage');
         }
 
         // Divorce event
@@ -1004,6 +1046,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
+            pushFactImport(partnership, 'divorce');
         }
 
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
@@ -1041,6 +1084,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (part.note) pushNote(lines, 3, part.note);
             }
             for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId);
+            pushFactImport(partnership, `event:${event.id}`);
         }
 
         // A status MARR/DIV cannot say (partners, separated).
@@ -1084,6 +1128,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const toWife = wifeId ? rels[wifeId] ?? 'biological' : undefined;
             if (toHusb && (toHusb !== (toWife ?? toHusb) || toHusb === 'step')) lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
             if (toWife && (toWife !== (toHusb ?? toWife) || toWife === 'step')) lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
+            const linkImport = childLinkImport(childId, family.parentIds);
+            if (linkImport) lines.push(`2 ${IMPORT_TAG} ${linkImport}`);
         }
         // Two parents who are not a couple: said so (else they would read back as one). One parent alone
         // reads back as the "?" family the app keeps — the same as such a family goes out.
@@ -1102,6 +1148,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const gedcomId = sourceIdMap.get(sourceId);
         if (!gedcomId) continue;
         lines.push(`0 ${gedcomId} SOUR`);
+        pushRecordImport(source.importId);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
         if (source.repository) {
             const repoRef = repoIdMap.get(source.repository);
