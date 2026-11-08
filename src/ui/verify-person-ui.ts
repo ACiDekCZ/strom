@@ -41,6 +41,7 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import { liveSession } from './research-ui.js';
 import { rodIndex } from './rod-view.js';
 import { uiModule } from './module.js';
+import { factWaitsForVerify, markVerifyPending } from './verify-ui.js';
 
 export const VERIFY_PERSON_DIALOG_ID = 'verify-person-modal';
 export const VERIFY_BULK_DIALOG_ID = 'verify-bulk-modal';
@@ -55,52 +56,21 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 // ==================== Started here ====================
 
 /** One fact a start here asked the research to verify. */
-export interface StartedFact {
+interface StartedFact {
     holderId: string;
     fact: string;
-    /** The research's id of the fact ("E0012"). */
-    eid: string;
-}
-
-/** Told of every start of a person's verification made here (the facts it asked for). */
-export type PersonVerifyStartedListener = (target: VerifyTarget, facts: readonly StartedFact[]) => void;
-const startedListeners: PersonVerifyStartedListener[] = [];
-
-/**
- * Listen to the starts of a person's verification (the preview's Start):
- * the fact level marks the facts as waiting (its pending pill). Returns its
- * removal.
- */
-export function onPersonVerifyStarted(listener: PersonVerifyStartedListener): () => void {
-    if (!startedListeners.includes(listener)) startedListeners.push(listener);
-    return () => {
-        const i = startedListeners.indexOf(listener);
-        if (i >= 0) startedListeners.splice(i, 1);
-    };
 }
 
 /**
- * Facts a start here sent, until the research's next version is loaded
- * (`holderId|fact` → the tree's `research.syncedAt` at the start): until then
- * they count as waiting, though the loaded file does not say so yet.
+ * The facts a start sent wait at once (their pills' clock, their tips'
+ * waiting row) until the tree holds the research's version (verify-ui.ts).
  */
-const startedHere = new Map<string, string>();
-
-function syncedAtNow(): string {
-    const treeId = DataManager.getCurrentTreeId();
-    return (treeId ? TreeManager.getTreeMetadata(treeId)?.research?.syncedAt : '') ?? '';
-}
-
-function startedHereNow(holderId: string, fact: string): boolean {
-    const at = startedHere.get(`${holderId}|${fact}`);
-    return at !== undefined && at === syncedAtNow();
-}
-
-function noteStarted(target: VerifyTarget, facts: readonly StartedFact[]): void {
-    const at = syncedAtNow();
-    for (const f of facts) startedHere.set(`${f.holderId}|${f.fact}`, at);
-    for (const listener of startedListeners) {
-        try { listener(target, facts); } catch (err) { console.warn('Verify start listener failed', err); }
+function noteStarted(facts: readonly StartedFact[], position?: number): void {
+    const byHolder = new Map<string, string[]>();
+    for (const f of facts) byHolder.set(f.holderId, [...(byHolder.get(f.holderId) ?? []), f.fact]);
+    for (const [holderId, list] of byHolder) {
+        const target = DataManager.getPartnership(holderId as PartnershipId) ? { partnershipId: holderId } : { personId: holderId };
+        markVerifyPending(target, list, position);
     }
 }
 
@@ -241,7 +211,7 @@ export const verifyPersonMethods = uiModule({
     },
 
     /** The research the open tree is linked to, as the offers need it (null: none, or its bridge is not answering). */
-    verifyResearchNow(): { rid: string; research: VerifyResearch; status: LiveStatus } | null {
+    verifyBridgeNow(): { rid: string; research: VerifyResearch; status: LiveStatus } | null {
         const rid = activeResearchId();
         if (!rid || !this.researchBridgeUp(rid)) return null;
         const status = this.researchStatusOf(rid);
@@ -254,7 +224,7 @@ export const verifyPersonMethods = uiModule({
         const data = DataManager.getData();
         const person = data.persons[personId];
         if (!person) return null;
-        const now = this.verifyResearchNow();
+        const now = this.verifyBridgeNow();
         const research = now?.research ?? null;
         const opts = this.reliabilityOptionsNow();
         const editable = !DataManager.isViewMode();
@@ -266,11 +236,12 @@ export const verifyPersonMethods = uiModule({
             for (const fact of list) {
                 const kind = verifyFactKind(holder, fact);
                 const info = factVerifyInfo(holder, fact);
-                if (!kind && !info.pending) continue;
+                const waits = factWaitsForVerify(holder, fact);
+                if (!kind && !waits) continue;
                 const step = factReliability(data, holder, fact, opts)?.step ?? null;
                 const offer = factOffer(holder, fact, {
                     step, research, researchTree: opts.researchTree, cited: factCitations(data, holder, fact).length > 0, info,
-                    localPending: startedHereNow(holder.id, fact), editable,
+                    localPending: waits, editable,
                 });
                 facts.push({ holder, fact, offer, kind, step });
             }
@@ -314,7 +285,7 @@ export const verifyPersonMethods = uiModule({
 
     /** "Verify facts (N)": what the research would verify of the person, asked first (dry run). */
     showVerifyPersonDialog(personId: PersonId): void {
-        const now = this.verifyResearchNow();
+        const now = this.verifyBridgeNow();
         const person = DataManager.getPerson(personId);
         const ref = person ? personResearchRef(person) : null;
         if (!now || !person || !ref) {
@@ -452,25 +423,31 @@ export const verifyPersonMethods = uiModule({
         if (!st || st.busy) return;
         const person = DataManager.getPerson(st.personId);
         const ref = person ? personResearchRef(person) : null;
-        const base = bridgeBase(st.rid);
-        const features = this.researchStatusOf(st.rid)?.features ?? null;
         const checked = st.rows.filter(r => r.on);
-        if (!ref || !base || checked.length === 0) return;
+        if (!ref || checked.length === 0) return;
         st.busy = true;
         this.renderVerifyPerson();
         const all = checked.length === st.rows.length;
         const targets: VerifyTarget[] = all ? [{ person: ref }] : checked.map(r => ({ fact: r.eid }));
         const started: StartedFact[] = [];
         let failure = '';
-        for (const target of targets) {
-            const r = await postVerify(base, target, { features });
-            if (!r.ok) { failure = refusalText(r.code, r.reason); break; }
-            const asked = new Set(r.facts.map(f => f.fact));
-            const rows = 'person' in target ? checked.filter(x => asked.size === 0 || asked.has(x.eid)) : checked.filter(x => 'fact' in target && x.eid === target.fact);
-            const facts = rows.filter(x => x.holderId && x.fact).map(x => ({ holderId: x.holderId, fact: x.fact, eid: x.eid }));
-            started.push(...facts);
-            noteStarted(target, facts);
-        }
+        let position: number | undefined;
+        // One write under the window lock; the research's new version follows quietly.
+        const answer = await this.postResearchBridgeWrite<{ ok: boolean; head?: string }>(async (base, features) => {
+            let last: { ok: boolean; head?: string } = { ok: false };
+            for (const target of targets) {
+                const r = await postVerify(base, target, { features });
+                if (!r.ok) { failure = refusalText(r.code, r.reason); break; }
+                const asked = new Set(r.facts.map(f => f.fact));
+                const rows = 'person' in target ? checked.filter(x => asked.size === 0 || asked.has(x.eid)) : checked.filter(x => 'fact' in target && x.eid === target.fact);
+                started.push(...rows.filter(x => x.holderId && x.fact).map(x => ({ holderId: x.holderId, fact: x.fact })));
+                if (r.position !== undefined) position = r.position;
+                last = r;
+            }
+            return last;
+        });
+        if (!answer && !failure && started.length === 0) failure = strings.verify.failed;
+        noteStarted(started, targets.length === 1 ? position : undefined);
         if (preview !== st) return;
         if (failure && started.length === 0) {
             st.busy = false;
@@ -494,7 +471,7 @@ export const verifyPersonMethods = uiModule({
 
     /** The tree's verification now: waiting facts, Stop and the bulk dialog (null: the research does not verify). */
     treeVerifyNow(): { waiting: number; stop: boolean; bulk: boolean } | null {
-        const now = this.verifyResearchNow();
+        const now = this.verifyBridgeNow();
         if (!now || !researchVerifies(now.research, VERIFY_FEATURE) || DataManager.isViewMode()) return null;
         const v = now.status.verify;
         return {
@@ -560,17 +537,14 @@ export const verifyPersonMethods = uiModule({
 
     /** Stop: the research drops what it has not begun to verify. */
     async verifyStop(btn: HTMLButtonElement | null): Promise<void> {
-        const now = this.verifyResearchNow();
-        const base = now ? bridgeBase(now.rid) : null;
-        if (!now || !base) return;
+        if (!this.verifyBridgeNow()) return;
         if (btn) btn.disabled = true;
-        const r = await postVerifyStop(base, { features: now.status.features });
+        const r = await this.postResearchBridgeWrite((base, features) => postVerifyStop(base, { features }));
         if (btn) btn.disabled = false;
-        if (!r.ok) {
-            this.showToast(refusalText(r.code, r.reason), 5000, { alert: true });
+        if (!r || !r.ok) {
+            this.showToast(r ? refusalText(r.code, r.reason) : strings.verify.failed, 5000, { alert: true });
             return;
         }
-        startedHere.clear();
         this.showToast(strings.verify.stopped, 4000);
         this.afterVerifyStarted();
     },
@@ -658,7 +632,7 @@ export const verifyPersonMethods = uiModule({
 
     /** The bulk verification is offered now (the research's `verify.bulk`, its bridge answering, the tree editable). */
     verifyBulkAvailable(): boolean {
-        const now = this.verifyResearchNow();
+        const now = this.verifyBridgeNow();
         return !!now && researchVerifies(now.research, VERIFY_BULK_FEATURE) && !DataManager.isViewMode();
     },
 
@@ -688,7 +662,7 @@ export const verifyPersonMethods = uiModule({
 
     /** "Verify facts in the tree…": the scope, the order and a first try, with the research's estimate. */
     showVerifyBulkDialog(): void {
-        const now = this.verifyResearchNow();
+        const now = this.verifyBridgeNow();
         if (!now || !researchVerifies(now.research, VERIFY_BULK_FEATURE)) {
             this.showToast(strings.verify.failed, 5000);
             return;
@@ -847,18 +821,17 @@ export const verifyPersonMethods = uiModule({
 
     async verifyBulkStart(): Promise<void> {
         const st = bulk;
-        const base = st ? bridgeBase(st.rid) : null;
-        if (!st || !base || st.busy || !st.estimate) return;
+        if (!st || st.busy || !st.estimate) return;
         st.busy = true;
         this.renderVerifyBulkEstimate();
         const s = st.scopes[st.scope];
-        const r = await postVerifyBulk(base, {
+        const r = await this.postResearchBridgeWrite((base, features) => postVerifyBulk(base, {
             scope: s.scope, ...(s.of ? { of: s.of } : {}), order: st.order, ...(st.tryFirst ? { try: VERIFY_TRY_PEOPLE } : {}),
-        }, { features: this.researchStatusOf(st.rid)?.features ?? null });
+        }, { features }));
         if (bulk !== st) return;
         st.busy = false;
-        if (!r.ok) {
-            st.error = refusalText(r.code, r.reason);
+        if (!r || !r.ok) {
+            st.error = r ? refusalText(r.code, r.reason) : strings.verify.failed;
             this.renderVerifyBulkEstimate();
             return;
         }
