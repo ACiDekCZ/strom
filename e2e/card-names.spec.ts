@@ -168,3 +168,44 @@ test('B-2: a birth given as a range of years shows the range on the card, not it
     });
     await expect(card(page, 'Anna').locator('.birth-date')).toHaveAttribute('data-years', '1872–1875 – 1940');
 });
+
+test('Q2: two ranges of years beside the status mark go short instead of losing the death year to the ellipsis', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    // A source in the tree gives every card the status mark, which narrows the meta row (an imported file does the same).
+    await page.evaluate(async () => {
+        const base = { isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'] };
+        await window.Strom.DataManager.importAsNewTree({
+            persons: {
+                a: { ...base, id: 'a', firstName: 'Otakar', lastName: 'Zvonkovec', gender: 'male',
+                    birthDate: '1650..1655', deathDate: '1720..1725', birthPlace: 'Dolní Bukovina', childIds: ['b'] },
+                b: { ...base, id: 'b', firstName: 'Bertold', lastName: 'Zvonkovec', gender: 'male',
+                    birthDate: '1698..1702', deathDate: '1760', birthPlace: 'Hořice', parentIds: ['a'] },
+            },
+            partnerships: {}, sources: { s1: { id: 's1', title: 'Matrika' } },
+        } as never, 'Rozsahy');
+    });
+    const a = card(page, 'Otakar');
+    await expect(a.locator(':scope > .card-status-mark')).toBeVisible();
+    const meta = a.locator('.birth-date');
+    await expect(meta).toHaveAttribute('data-years', '1650–1655 – 1720–1725');
+    // The place shortens with "…" after them or, with no room for that, leaves the row (the tooltip keeps it).
+    await expect(meta.locator('.meta-text')).toHaveText(/^1650–55 – 1720–25( · |$)/);
+    await expect(meta).toHaveAttribute('data-full', '1650–1655 – 1720–1725 · Dolní Bukovina');
+    // The years show whole: inside the row, and the ellipsis cuts none of them
+    // (Chromium reports the visible part of a cut text as a second, narrower rect).
+    const yearsWhole = await meta.evaluate((m) => {
+        const text = m.querySelector('.meta-text')!.firstChild as Text;
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, '1650–55 – 1720–25'.length);
+        const widths = [...range.getClientRects()].map(r => r.width);
+        return Math.max(...widths) <= m.getBoundingClientRect().width + 0.5
+            && Math.min(...widths) >= Math.max(...widths) - 0.5;
+    });
+    expect(yearsWhole).toBe(true);
+    // Years that fit keep their whole form (a range across centuries is never shortened).
+    const b = card(page, 'Bertold').locator('.birth-date');
+    await expect(b.locator('.meta-text')).toHaveText(/^1698–1702 – 1760/);
+    await expect(b).not.toHaveAttribute('data-years-short', /./);
+});

@@ -11,6 +11,7 @@ import {
     isValidDateInput,
     formatDateForInput,
     displayYear,
+    shortYearRanges,
     yearOf,
     dateSortKey,
     formatFlexDate,
@@ -141,6 +142,14 @@ describe('displayYear / yearOf / dateSortKey', () => {
         expect(displayYear('1872-03..1875-11-02')).toBe('1872–1875');
         // A range inside one year is that year.
         expect(displayYear('1872-03..1872-05')).toBe('1872');
+    });
+
+    it('a card row too narrow for two ranges writes them short within a century, never across one', () => {
+        expect(shortYearRanges('1650–1655 – 1720–1725')).toBe('1650–55 – 1720–25');
+        expect(shortYearRanges('~1900 – 1960–1965')).toBe('~1900 – 1960–65');
+        expect(shortYearRanges('1698–1702 – 1760')).toBe('1698–1702 – 1760');
+        expect(shortYearRanges('1890–1880 †')).toBe('1890–1880 †');
+        expect(shortYearRanges('1872 – 1940')).toBe('1872 – 1940');
     });
 
     it('yearOf strips qualifier and returns number', () => {

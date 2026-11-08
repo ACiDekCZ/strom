@@ -52,7 +52,7 @@ import {
 } from './layout/index.js';
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
-import { yearOf, displayYear, formatFlexDate } from './dates.js';
+import { yearOf, displayYear, formatFlexDate, shortYearRanges } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
 import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
@@ -240,6 +240,9 @@ export interface LiveRenderHooks {
     /** The trail on the cards: the newest first, each with its colour. */
     cardTrail?: () => ReadonlyArray<{ personId: PersonId; kind: 'added' | 'changed'; color: string }>;
 }
+
+/** Measures the meta row's "…" (fitCardMetaYears); made on first use. */
+let metaMeasure: CanvasRenderingContext2D | null | undefined;
 
 /** A card's content for telling whether a live load changed it (its place and running animations' phase left out). */
 function cardSignature(card: HTMLElement): string {
@@ -4522,6 +4525,8 @@ class TreeRendererClass {
             const metaPlace = person.birthPlace?.trim() ?? '';
             // Normal cards pack "years · place" onto one ellipsized meta row.
             const metaText = [metaYears, metaPlace].filter(Boolean).join(' · ');
+            // The years with their ranges short, for a row too narrow for them whole (fitCardMetaYears).
+            const metaYearsShort = shortYearRanges(metaYears);
 
             // Person status: the story's fold in the card's bottom-right corner, in
             // every density (decoration; the tooltip and aria-label say it).
@@ -4579,7 +4584,7 @@ class TreeRendererClass {
                 ${avatarHtml}
                 <div class="card-body">
                     ${nameHtml}${birthHtml}
-                    ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
+                    ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"${metaYearsShort !== metaYears ? ` data-years-short="${this.escapeHtml(metaYearsShort)}"` : ''}><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
                 </div>
             `;
             // The lock, the status mark, the fold and the corner dot: on every card type, the custom one too (N34).
@@ -5075,6 +5080,7 @@ class TreeRendererClass {
         // The custom card has one name row above its lines: no two-line step either.
         const density = SettingsManager.getCardDensity();
         if (density === 'compact' || isFieldCardDensity(density)) {
+            this.fitCardMetaYears(items);
             this.fitCardBirths(canvas, only);
             return;
         }
@@ -5101,7 +5107,70 @@ class TreeRendererClass {
         }
         // Step 3 (ellipsis on an overflowing line) is handled by the
         // .name-line { text-overflow: ellipsis } CSS.
+        this.fitCardMetaYears(items);
         this.fitCardBirths(canvas, only);
+    }
+
+    /**
+     * The years of a meta row that do not show whole (a range at birth and
+     * at death, beside the status mark: "1650–1655 – 1720–1725 · Hořice")
+     * take their short form ("1650–55 – 1720–25 · Hořice") instead of losing
+     * the death year to the ellipsis; when even those and the "…" after them
+     * do not fit, the place leaves the row (as on a card whose name takes two
+     * rows; the tooltip keeps it). Whole means the row fits, or the years and
+     * the "…" do. Reads, then the writes, once per step. The full text stays
+     * in data-full (restored by the next fitting, read by the live-load row
+     * marks).
+     */
+    private fitCardMetaYears(items: ReadonlyArray<{ meta: HTMLElement | null; metaText: HTMLElement | null }>): void {
+        type Row = { meta: HTMLElement; metaText: HTMLElement; text: Text; years: string; short: string };
+        const ellipsis = new Map<string, number>();
+        /** Whether the first `chars` of the row show whole (the row fits, or they and the "…" do). */
+        const showsWhole = ({ meta, text }: Row, chars: number): boolean => {
+            const box = meta.getBoundingClientRect().width;
+            // In the canvas' (possibly zoomed) space, as the rects of the text.
+            const width = (end: number): number => {
+                const range = document.createRange();
+                range.setStart(text, 0);
+                range.setEnd(text, end);
+                // One line: the widest rect (an ellipsized row may report its text twice).
+                let w = 0;
+                for (const r of range.getClientRects()) w = Math.max(w, r.width);
+                return w;
+            };
+            if (width(text.data.length) <= box + 0.01) return true;
+            const cs = getComputedStyle(meta);
+            const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+            let ell = ellipsis.get(font);
+            if (ell === undefined) {
+                metaMeasure ??= document.createElement('canvas').getContext('2d');
+                if (metaMeasure) metaMeasure.font = font;
+                ell = metaMeasure?.measureText('…').width ?? 0;
+                ellipsis.set(font, ell);
+            }
+            return width(chars) + ell * (box / meta.offsetWidth) <= box + 0.01;
+        };
+        const rows: Row[] = [];
+        for (const { meta, metaText } of items) {
+            const years = meta?.dataset.years;
+            const short = meta?.dataset.yearsShort;
+            const text = metaText?.firstChild;
+            if (!meta || !metaText || !years || !short || !(text instanceof Text) || !text.data.startsWith(years)
+                || meta.offsetWidth === 0) continue;
+            rows.push({ meta, metaText, text, years, short });
+        }
+        const shorten = rows.filter(row => !showsWhole(row, row.years.length));
+        for (const { meta, metaText, years, short } of shorten) {
+            const now = metaText.textContent ?? '';
+            if (meta.dataset.full === undefined) meta.dataset.full = now;
+            metaText.textContent = short + now.slice(years.length);
+        }
+        const yearsOnly = shorten.filter(row => {
+            const text = row.metaText.firstChild;
+            if (!(text instanceof Text) || text.data === row.short) return false;
+            return !showsWhole({ ...row, text }, row.short.length);
+        });
+        for (const { metaText, short } of yearsOnly) metaText.textContent = short;
     }
 
     /**

@@ -265,6 +265,17 @@ export function displayYear(value?: string): string {
     return `${d.qualifier}${d.year}`;
 }
 
+/**
+ * The year ranges of a card's years written short where the century is
+ * shared ('1650–1655 – 1720–1725' → '1650–55 – 1720–25'), for a card row too
+ * narrow for them whole. A range across centuries ('1698–1702') or running
+ * backwards stays as it is.
+ */
+export function shortYearRanges(text: string): string {
+    return text.replace(/\b(\d\d)(\d\d)–(\d\d)(\d\d)\b/g, (whole, c1: string, y1: string, c2: string, y2: string) =>
+        c1 === c2 && y2 > y1 ? `${c1}${y1}–${y2}` : whole);
+}
+
 /** Numeric year (qualifier stripped), or null. */
 export function yearOf(value?: string): number | null {
     const d = parseFlexDate(value);
