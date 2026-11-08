@@ -248,7 +248,9 @@ describe('create / update / ask', () => {
 
     it('a link synced by an older version is compared in its own format', () => {
         const data = importData(researchGed());
-        const legacyText = JSON.stringify([data.persons, data.partnerships, data.sources ?? null, data.places ?? null, data.surnameVariants ?? null]);
+        // An older version kept no family id of the research (Partnership.researchId).
+        const olderCouples = JSON.parse(JSON.stringify(data.partnerships, (k, v) => (k === 'researchId' ? undefined : v)));
+        const legacyText = JSON.stringify([data.persons, olderCouples, data.sources ?? null, data.places ?? null, data.surnameVariants ?? null]);
         const fnv = (t: string, seed: number) => { let h = seed >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
         const legacy = `${legacyText.length.toString(36)}-${fnv(legacyText, 0x811c9dc5).toString(36)}-${fnv(legacyText, 0x01000193).toString(36)}`;
         expect(decideResearchOpen({ fingerprint: legacy }, fingerprintLike(data, legacy))).toBe('update');

@@ -1094,7 +1094,8 @@ export function forgetHiddenImports(holder: FactHolder, changed: boolean): void 
     if (holder.confirmed) {
         for (const [fact, c] of Object.entries(holder.confirmed)) {
             const now = factValueSignature(holder, fact);
-            if (!now || (c.value !== undefined && c.value !== now)) delete holder.confirmed[fact];
+            // A take-back of the research's confirmation goes with the research's state.
+            if (!now || (c.value !== undefined && c.value !== now) || (c.withdrawn && changed)) delete holder.confirmed[fact];
         }
         if (Object.keys(holder.confirmed).length === 0) delete holder.confirmed;
     }

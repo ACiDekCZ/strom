@@ -9,7 +9,11 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, Person, Partnership } from '../types.js';
-import { factVerifyInfo, factValueSignature } from '../verify.js';
+import {
+    factVerifyInfo, factValueSignature, factResearchEid, factPendingPosition, personResearchRef, familyResearchRef,
+    confirmationEdits, handedConfirmations,
+} from '../verify.js';
+import { migrateData } from '../data.js';
 import { contentFingerprint } from '../research-link.js';
 
 const RESEARCH_FILE = `0 HEAD
@@ -192,10 +196,174 @@ describe("the app's own GEDCOM export", () => {
         expect(ged).not.toMatch(/1 DEAT[^]*?2 _STROM_CONFIRMED 2026-11-07/);
     });
 
-    it('nothing without the option (what goes to the research, another export)', () => {
+    it('none in a file "Back to {prog}" or without the option', () => {
         const d = confirmedTree();
+        d.imports = [{ id: 'R1', file: 'ozubec.ged', program: 'FTM', at: '2026-11-01' } as never];
+        expect(exportToGedcom(d, 'Ozubec', { origins: true, confirmations: true, backTo: 'R1' }).content).not.toContain('_STROM_CONFIRMED');
+        expect(exportToGedcom(d, 'Ozubec', { confirmations: false }).content).not.toContain('_STROM_CONFIRMED');
+    });
+});
+
+describe('confirmations handed over to the research (read against _STROM_HEAD)', () => {
+    const LINK = { id: 'r1', head: 'a'.repeat(40) };
+    /** What the research's file gave: SEX, BIRT, BURI and MARR confirmed there. */
+    const CONFIRMED_FILE = RESEARCH_FILE
+        .replace('1 BURI\n2 DATE 12 JAN 1910', '1 BURI\n2 DATE 12 JAN 1910\n2 _STROM_CONFIRMED 2026-10-03')
+        .replace('2 _STROM_VERIFY permission', '2 _STROM_CONFIRMED 2026-10-04');
+
+    /** The `_STROM_CONFIRMED` days of a GEDCOM, by "<given name or FAM>/<fact tag>". */
+    function confirmedIn(ged: string): Record<string, string> {
+        const out: Record<string, string> = {};
+        let rec = '';
+        let fact = '';
+        for (const line of ged.split('\n')) {
+            const m = /^(\d) (\S+)(?: (.*))?$/.exec(line);
+            if (!m) continue;
+            const [, level, tag, value = ''] = m;
+            if (level === '0') rec = / FAM$/.test(line) ? 'FAM' : '';
+            else if (level === '1') {
+                fact = tag;
+                if (tag === 'NAME' && !rec) rec = value.split(' ')[0];
+            } else if (level === '2' && tag === '_STROM_CONFIRMED') out[`${rec}/${fact}`] = value;
+        }
+        return out;
+    }
+
+    /** What goes to the research (the sync's export: the research's header, no other option). */
+    const send = (d: StromData): string => exportToGedcom(d, 'Ozubec', { research: LINK }).content;
+
+    it("a round trip gives back the research's confirmations as they were: no change", () => {
+        const d = load(CONFIRMED_FILE);
+        const given = { 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BIRT': '2026-11-08', 'Hromoslav/BURI': '2026-10-03', 'FAM/MARR': '2026-10-04' };
+        expect(confirmedIn(CONFIRMED_FILE)).toEqual(given);
+        expect(confirmedIn(send(d))).toEqual(given);
+        for (const h of [...Object.values(d.persons), ...Object.values(d.partnerships)]) expect(confirmationEdits(h)).toEqual({});
+        // The research's own state is not a change of the tree.
+        expect(contentFingerprint(d)).toBe(contentFingerprint(JSON.parse(JSON.stringify(d, (k, v) => (k === 'researchVerify' || k === 'researchId' ? undefined : v)))));
+        // What goes to the research, read again as its file, has the same confirmations.
+        const again = load(send(d).replace(/^1 SOUR STROM\n2 VERS .*$/m, '1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research'));
+        expect(Object.values(handedConfirmations(person(again, 'Hromoslav'))).sort())
+            .toEqual(Object.values(handedConfirmations(person(d, 'Hromoslav'))).sort());
+        expect(confirmedIn(send(again))).toEqual(given);
+    });
+
+    it('a fact confirmed here adds its tag (a change); taking it back removes it again', () => {
+        const d = load(CONFIRMED_FILE);
+        const fp = contentFingerprint(d);
+        const h = person(d, 'Hromoslav');
+        h.confirmed = { death: { at: '2026-11-08', value: factValueSignature(h, 'death') } };
+        expect(confirmedIn(send(d))['Hromoslav/DEAT']).toBe('2026-11-08');
+        expect(contentFingerprint(d)).not.toBe(fp);
+        delete h.confirmed;
+        expect(confirmedIn(send(d))['Hromoslav/DEAT']).toBeUndefined();
+        expect(contentFingerprint(d)).toBe(fp);
+    });
+
+    it("the research's confirmation taken back here leaves its tag out (a change)", () => {
+        const d = load(CONFIRMED_FILE);
+        const fp = contentFingerprint(d);
+        const h = person(d, 'Hromoslav');
+        h.confirmed = { birth: { at: '2026-11-08', withdrawn: true } };
+        couple(d).confirmed = { marriage: { at: '2026-10-04', withdrawn: true } };
+        const sent = confirmedIn(send(d));
+        expect(sent).toEqual({ 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BURI': '2026-10-03' });
+        expect(confirmationEdits(h)).toEqual({ birth: '' });
+        expect(contentFingerprint(d)).not.toBe(fp);
+    });
+
+    it('a tree confirmed in the app alone hands each confirmation over (adoption: no head)', () => {
+        const d = load(RESEARCH_FILE.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR STROM\n2 VERS 3.26.0'));
+        const h = person(d, 'Hromoslav');
+        expect(h.confirmed).toEqual({
+            sex: { at: '2026-10-02', value: factValueSignature(h, 'sex') },
+            birth: { at: '2026-11-08', value: factValueSignature(h, 'birth') },
+        });
+        // The adoption's export (no research header, no other option).
+        expect(confirmedIn(exportToGedcom(d, 'Ozubec', {}).content)).toEqual({ 'Hromoslav/SEX': '2026-10-02', 'Hromoslav/BIRT': '2026-11-08' });
+    });
+});
+
+describe('the ids /verify names for a person and a family', () => {
+    const WITH_REFN = RESEARCH_FILE
+        .replace('1 NAME Hromoslav /Ozubec/', '1 NAME Hromoslav /Ozubec/\n1 REFN P0012\n2 TYPE strom-research')
+        .replace(/@F1@/g, '@F0003@');
+
+    it("a research tree keeps the person's REFN and the family's record", () => {
+        const d = load(WITH_REFN);
+        expect(personResearchRef(person(d, 'Hromoslav'))).toBe('P0012');
+        expect(personResearchRef(person(d, 'Libuna'))).toBeNull();
+        expect(couple(d).researchId).toBe('F0003');
+        expect(familyResearchRef(couple(d))).toBe('F0003');
+    });
+
+    it('a file of the app or of another program gives a couple none', () => {
+        const own = load(WITH_REFN.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR STROM\n2 VERS 3.26.0'));
+        expect(couple(own).researchId).toBeUndefined();
+        const foreign = load(WITH_REFN.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR FTM\n2 VERS 24'));
+        expect(familyResearchRef(couple(foreign))).toBeNull();
+    });
+
+    it('is neither sent back nor a change, and a stored one stays only when valid', () => {
+        const d = load(WITH_REFN);
+        const without = JSON.parse(JSON.stringify(d, (k, v) => (k === 'researchId' ? undefined : v))) as StromData;
+        expect(contentFingerprint(d)).toBe(contentFingerprint(without));
         const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
-        expect(ged).not.toContain('_STROM_CONFIRMED');
-        expect(exportToGedcom(d, 'Ozubec', {}).content).not.toContain('_STROM_CONFIRMED');
+        expect(ged).not.toContain('F0003');
+        const stored = JSON.parse(JSON.stringify(d)) as StromData;
+        expect(familyResearchRef(couple(migrateData(stored)))).toBe('F0003');
+        couple(stored).researchId = 'P0012';
+        expect(couple(migrateData(stored)).researchId).toBeUndefined();
+    });
+});
+
+describe("the fact's id in the research and its place in the queue", () => {
+    const WITH_IDS = RESEARCH_FILE
+        .replace('1 BIRT\n2 DATE 3 MAR 1850', '1 BIRT\n2 DATE 3 MAR 1850\n2 _STROM_EID E0012')
+        .replace('1 DEAT\n2 DATE 1910\n2 _STROM_VERIFY asked', '1 DEAT\n2 DATE 1910\n2 _STROM_VERIFY asked\n3 _POS 3\n2 _STROM_EID E0013')
+        .replace('2 _STROM_VERIFY permission', '2 _STROM_VERIFY permission\n3 _POS 1\n2 _STROM_EID E0020')
+        .replace('1 CHR\n', '1 CHR\n2 _STROM_EID E0014\n');
+
+    it('keeps the id per fact and the place of a fact its agent is to take', () => {
+        const d = load(WITH_IDS);
+        const h = person(d, 'Hromoslav');
+        expect(factResearchEid(h, 'birth')).toBe('E0012');
+        expect(factResearchEid(h, 'death')).toBe('E0013');
+        expect(factResearchEid(h, eventFact(h, 'baptism'))).toBe('E0014');
+        expect(factResearchEid(couple(d), 'marriage')).toBe('E0020');
+        expect(factResearchEid(h, 'sex')).toBeNull();
+        expect(factPendingPosition(h, 'death')).toBe(3);
+        expect(h.researchVerify?.death).toEqual({ pending: 'asked', position: 3, eid: 'E0013' });
+        // Waiting for a person: no place in the agent's queue.
+        expect(factPendingPosition(couple(d), 'marriage')).toBeNull();
+        expect(couple(d).researchVerify?.marriage).toEqual({ pending: 'permission', eid: 'E0020' });
+        // The birth keeps both its confirmation and its id.
+        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08', eid: 'E0012' });
+    });
+
+    it('counts neither tag as unsupported and changes no fact', () => {
+        const result = convertToStrom(parseGedcom(WITH_IDS));
+        expect(result.stats.droppedTagSummary).not.toMatch(/_STROM_EID|_POS/);
+        const h = person(result.data, 'Hromoslav');
+        expect(h.deathDate).toBe('1910');
+        expect(h.events!.find(e => e.type === 'baptism')!.date).toBe('1850-03-05');
+    });
+
+    it('drops an id or a place that is not valid', () => {
+        const d = load(WITH_IDS.replace('_STROM_EID E0012', '_STROM_EID P0012').replace('3 _POS 3', '3 _POS first'));
+        const h = person(d, 'Hromoslav');
+        expect(factResearchEid(h, 'birth')).toBeNull();
+        expect(factPendingPosition(h, 'death')).toBeNull();
+        expect(h.researchVerify?.death).toEqual({ pending: 'asked', eid: 'E0013' });
+    });
+
+    it('is neither sent back nor a change', () => {
+        const d = load(WITH_IDS);
+        // The same tree without the ids and places (ids of records are fresh on every load).
+        const plain = JSON.parse(JSON.stringify(d, (k, v) => (k === 'eid' || k === 'position' ? undefined : v))) as StromData;
+        expect(contentFingerprint(d)).toBe(contentFingerprint(plain));
+        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
+        expect(ged).not.toMatch(/_STROM_EID|_POS/);
+        const own = exportToGedcom(d, 'Ozubec', { origins: true, confirmations: true }).content;
+        expect(own).not.toMatch(/_STROM_EID|_POS/);
     });
 });

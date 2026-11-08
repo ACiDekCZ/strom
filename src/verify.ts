@@ -13,7 +13,7 @@
  */
 
 import type {
-    StromData, FactConfirmation, FactVerifyPending, FactVerifyChecked, ResearchFactVerify,
+    StromData, FactConfirmation, FactVerifyPending, FactVerifyChecked, ResearchFactVerify, Person, Partnership,
 } from './types.js';
 import { FactHolder, factValueSignature, factsOf, isPartnership } from './import-origin.js';
 
@@ -23,16 +23,22 @@ export { factValueSignature };
 export const CONFIRMED_TAG = '_STROM_CONFIRMED';
 export const VERIFY_TAG = '_STROM_VERIFY';
 export const CHECKED_TAG = '_STROM_CHECKED';
+/** The fact's id in the research (`2 _STROM_EID E0012`), research files only. */
+export const EID_TAG = '_STROM_EID';
 
 /** The bridge features of 065 (in /status.features). */
 export const VERIFY_FEATURE = 'verify';
 export const VERIFY_BULK_FEATURE = 'verify.bulk';
 export const FACTS_CONFIRM_FEATURE = 'facts.confirm';
+/** POST /verify/stop: drop the re-verification tasks not yet begun. */
+export const VERIFY_STOP_FEATURE = 'verify.stop';
 
 export const VERIFY_PENDING: readonly FactVerifyPending[] = ['wait', 'asked', 'images', 'permission'];
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const READERS_MAX = 99;
+/** The highest place in the research's queue kept (`3 _POS n`). */
+const POSITION_MAX = 1_000_000;
 const WHY_MAX = 1000;
 const DATE_MAX = 40;
 
@@ -43,7 +49,7 @@ const DATE_MAX = 40;
  */
 export function factConfirmation(holder: FactHolder, fact: string): FactConfirmation | null {
     const c = holder.confirmed?.[fact];
-    if (!c) return null;
+    if (!c || c.withdrawn) return null;
     const now = factValueSignature(holder, fact);
     if (now === '') return null;
     if (c.value !== undefined && c.value !== now) return null;
@@ -62,9 +68,17 @@ export interface FactVerifyInfo {
     checked?: FactVerifyChecked;
 }
 
+/** The research's confirmation of a fact is taken back here (FactConfirmation.withdrawn of its day). */
+export function researchConfirmationWithdrawn(holder: FactHolder, fact: string): boolean {
+    const c = holder.confirmed?.[fact];
+    const research = holder.researchVerify?.[fact]?.confirmed;
+    return !!c?.withdrawn && !!research && c.at === research;
+}
+
 /**
  * The confirmation and verification of one fact. A confirmation in the app
- * (still valid) wins over the research's.
+ * (still valid) wins over the research's; one of the research's taken back
+ * here is none.
  */
 export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo {
     const out: FactVerifyInfo = {};
@@ -73,7 +87,7 @@ export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo
     if (local) {
         out.confirmed = local.at;
         out.confirmedBy = 'app';
-    } else if (research?.confirmed) {
+    } else if (research?.confirmed && !researchConfirmationWithdrawn(holder, fact)) {
         out.confirmed = research.confirmed;
         out.confirmedBy = 'research';
     }
@@ -82,10 +96,97 @@ export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo
     return out;
 }
 
+/**
+ * The confirmations a holder hands over (`2 _STROM_CONFIRMED <day>` under the
+ * fact, in what goes to the research and in the app's own file): each
+ * confirmed fact with the day factVerifyInfo gives — a valid confirmation of
+ * the app, else the research's not taken back here.
+ */
+export function handedConfirmations(holder: FactHolder): Record<string, string> {
+    const out: Record<string, string> = {};
+    const facts = new Set([...Object.keys(holder.confirmed ?? {}), ...Object.keys(holder.researchVerify ?? {})]);
+    for (const fact of [...facts].sort()) {
+        const day = factVerifyInfo(holder, fact).confirmed;
+        if (day) out[fact] = day;
+    }
+    return out;
+}
+
+/**
+ * How the confirmations handed over differ from the research's own (the
+ * research's file the tree was loaded from): per fact the day handed over, ''
+ * for one of the research's taken back. What the research reads as the
+ * user's edit against `_STROM_HEAD`; empty when nothing was confirmed or
+ * taken back here (also when a confirmation of the app has ended with a
+ * changed value).
+ */
+export function confirmationEdits(holder: FactHolder): Record<string, string> {
+    const out: Record<string, string> = {};
+    const handed = handedConfirmations(holder);
+    const facts = new Set([...Object.keys(handed), ...Object.keys(holder.researchVerify ?? {})]);
+    for (const fact of [...facts].sort()) {
+        const now = handed[fact] ?? '';
+        if (now !== (holder.researchVerify?.[fact]?.confirmed ?? '')) out[fact] = now;
+    }
+    return out;
+}
+
 /** Readers of the record that agreed in the research's last check (`proven` only). */
 export function factVerifyReaders(holder: FactHolder, fact: string): number | undefined {
     const checked = holder.researchVerify?.[fact]?.checked;
     return checked?.result === 'proven' && checked.readers ? checked.readers : undefined;
+}
+
+/** A person's id in the research (its REFN, e.g. "P0012"), or null. */
+export function researchPersonRef(refn: unknown): string | null {
+    return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
+}
+
+/** A family's id in the research (its record, e.g. "F0054"), or null. */
+export function researchFamilyRef(id: unknown): string | null {
+    return typeof id === 'string' && /^F\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/**
+ * The person's id in the research for /verify {person} (its REFN "P0012",
+ * written by the research as `1 REFN` with `2 TYPE strom-research`), or
+ * null: a person made here, or a tree not from the research.
+ */
+export function personResearchRef(person: Pick<Person, 'refn'>): string | null {
+    return researchPersonRef(person.refn);
+}
+
+/**
+ * The couple's id in the research for /verify {family} (its record "F0003",
+ * kept from the research's file in Partnership.researchId), or null: a
+ * couple made here, or a tree not from the research.
+ */
+export function familyResearchRef(partnership: Pick<Partnership, 'researchId'>): string | null {
+    return researchFamilyRef(partnership.researchId);
+}
+
+/** A fact's id in the research ("E0012"), or null. */
+export function researchFactRef(id: unknown): string | null {
+    return typeof id === 'string' && /^E\d{1,9}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/**
+ * The fact's id in the research (`2 _STROM_EID`), for /verify {fact} and
+ * /facts/confirm; null when the research's file gave none (a fact made or
+ * copied here, a file of a research before 065, another file).
+ */
+export function factResearchEid(holder: FactHolder, fact: string): string | null {
+    return researchFactRef(holder.researchVerify?.[fact]?.eid);
+}
+
+/**
+ * The fact's place in the research's queue of re-verification (`3 _POS n`
+ * under `_STROM_VERIFY wait|asked`: 1 = the next session takes it), as of
+ * the research's last file; null when it waits for a person or is not said.
+ */
+export function factPendingPosition(holder: FactHolder, fact: string): number | null {
+    const v = holder.researchVerify?.[fact];
+    return v?.position && (v.pending === 'wait' || v.pending === 'asked') ? v.position : null;
 }
 
 /** The facts of a holder that wait for re-verification in the research. */
@@ -128,6 +229,14 @@ export function parseCheckedResult(value: string): FactVerifyChecked['result'] |
     return v === 'proven' || v === 'kept' ? v : null;
 }
 
+/** `3 _POS n` (a positive whole number), or null. */
+export function parsePendingPosition(value: string): number | null {
+    const v = value.trim();
+    if (!/^\d{1,7}$/.test(v)) return null;
+    const n = Number(v);
+    return n >= 1 && n <= POSITION_MAX ? n : null;
+}
+
 /** `3 _READERS n` (a positive whole number), or null. */
 export function parseReaders(value: string): number | null {
     const v = value.trim();
@@ -143,6 +252,8 @@ function cleanConfirmation(value: unknown): FactConfirmation | null {
     const v = value as Record<string, unknown>;
     if (typeof v.at !== 'string' || !ISO_DAY.test(v.at)) return null;
     const out: FactConfirmation = { at: v.at };
+    // A take-back of the research's confirmation has no value of its own.
+    if (v.withdrawn === true) return { at: v.at, withdrawn: true };
     if (typeof v.value === 'string' && v.value !== '') out.value = v.value;
     return out;
 }
@@ -155,6 +266,9 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
     if (typeof v.confirmed === 'string' && ISO_DAY.test(v.confirmed)) out.confirmed = v.confirmed;
     if (typeof v.pending === 'string' && (VERIFY_PENDING as readonly string[]).includes(v.pending)) {
         out.pending = v.pending as FactVerifyPending;
+        // A place in the queue only while the research's agent is to take it (not waiting for a person).
+        if ((out.pending === 'wait' || out.pending === 'asked') && typeof v.position === 'number' && Number.isInteger(v.position)
+            && v.position >= 1 && v.position <= POSITION_MAX) out.position = v.position;
     }
     if (v.checked && typeof v.checked === 'object') {
         const c = v.checked as Record<string, unknown>;
@@ -168,7 +282,9 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
             out.checked = checked;
         }
     }
-    return out.confirmed || out.pending || out.checked ? out : null;
+    const eid = researchFactRef(v.eid);
+    if (eid) out.eid = eid;
+    return out.confirmed || out.pending || out.checked || out.eid ? out : null;
 }
 
 function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', clean: (v: unknown) => T | null): void {
@@ -198,5 +314,12 @@ export function cleanFactVerify(data: Pick<StromData, 'persons' | 'partnerships'
         if (!holder || typeof holder !== 'object') continue;
         cleanMap(holder, 'confirmed', cleanConfirmation);
         cleanMap(holder, 'researchVerify', sanitizeResearchVerify);
+    }
+    // The couple's id in the research (Partnership.researchId).
+    for (const ps of Object.values(data.partnerships ?? {})) {
+        if (!ps || typeof ps !== 'object' || ps.researchId === undefined) continue;
+        const id = researchFamilyRef(ps.researchId);
+        if (id) ps.researchId = id;
+        else delete ps.researchId;
     }
 }

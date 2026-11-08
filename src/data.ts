@@ -65,7 +65,7 @@ import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin, factsOf, localIsoDay, FactHolder } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
-import { cleanFactVerify, factConfirmation, factValueSignature } from './verify.js';
+import { cleanFactVerify, factConfirmation, factValueSignature, researchConfirmationWithdrawn } from './verify.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
@@ -2346,14 +2346,25 @@ class DataManagerClass {
         return true;
     }
 
-    /** "Take back" a hand confirmation of a fact (also one no longer valid); false when there is none. */
+    /**
+     * "Take back" the confirmation of a fact: a hand confirmation of the app
+     * (also one no longer valid) goes; else the research's confirmation is
+     * taken back here (FactConfirmation.withdrawn), so the fact goes to the
+     * research without it. False when there is nothing to take back.
+     */
     unconfirmFact(target: FactTarget, fact: string): boolean {
         const t = this.confirmTarget(target);
-        if (!t || t.locked || !t.holder.confirmed?.[fact]) return false;
+        if (!t || t.locked) return false;
+        const own = t.holder.confirmed?.[fact];
+        const ownLive = !!own && !own.withdrawn;
+        const research = t.holder.researchVerify?.[fact]?.confirmed;
+        const takeBackResearch = !ownLive && !!research && !researchConfirmationWithdrawn(t.holder, fact);
+        if (!ownLive && !takeBackResearch) return false;
 
         this.beginMutation();
-        delete t.holder.confirmed[fact];
-        if (Object.keys(t.holder.confirmed).length === 0) delete t.holder.confirmed;
+        if (takeBackResearch) (t.holder.confirmed ??= {})[fact] = { at: research!, withdrawn: true };
+        else delete t.holder.confirmed![fact];
+        if (t.holder.confirmed && Object.keys(t.holder.confirmed).length === 0) delete t.holder.confirmed;
         this.commitMutation(strings.undo.unconfirmFact(t.name));
         AuditLogManager.log(this.currentTreeId, 'fact.unconfirm', strings.auditLog.unconfirmedFact(t.name));
         return true;

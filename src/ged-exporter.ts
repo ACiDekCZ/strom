@@ -78,8 +78,12 @@ export interface GedcomExportOptions {
     /**
      * Write the day a fact was confirmed by a person (`2 _STROM_CONFIRMED
      * YYYY-MM-DD` under the fact, spec 065): the app's own confirmation while
-     * the value is unchanged, else the research's. Only a file the user
-     * exports, so a file read back keeps it: never in what goes to the research.
+     * the value is unchanged, else the research's unless taken back here
+     * (handedConfirmations). Every confirmed fact carries it: the research
+     * reads what goes to it (sync, adoption) against `_STROM_HEAD` — one added
+     * is a confirmation, one left out a take-back — and a Strom file read
+     * back keeps it. Default: written; false: none. "Back to {prog}"
+     * (`backTo`) never writes it (the other program does not read it).
      */
     confirmations?: boolean;
     /**
@@ -1270,13 +1274,18 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (knownImports.has(tag.split(' ')[0])) lines.push(`2 ${IMPORT_TAG} ${tag}`);
         }
     };
-    /** The research's origin of a fact under it (`2 _STROM_ORIGIN`, `2 _STROM_WAS`), file exports only. */
+    /** `2 _STROM_CONFIRMED` under the facts (see GedcomExportOptions.confirmations). */
+    const writeConfirmations = options.confirmations !== false && !options.backTo;
+    /**
+     * The research's origin of a fact under it (`2 _STROM_ORIGIN`, `2 _STROM_WAS`),
+     * file exports only; and its confirmation (`2 _STROM_CONFIRMED`).
+     */
     const pushFactOrigin = (holder: FactHolder, fact: string): void => {
         if (options.researchNote && NOTE_FACT(fact)) {
             const src = researchNoteSource(data, holder, fact);
             if (src) pushNote(lines, 2, options.researchNote(src));
         }
-        const confirmed = options.confirmations ? factVerifyInfo(holder, fact).confirmed : undefined;
+        const confirmed = writeConfirmations ? factVerifyInfo(holder, fact).confirmed : undefined;
         if (confirmed) lines.push(`2 ${CONFIRMED_TAG} ${confirmed}`);
         const o = options.origins ? holder.researchOrigins?.[fact] : undefined;
         if (!o) return;

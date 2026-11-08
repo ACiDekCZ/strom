@@ -17,6 +17,7 @@ import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads
 import { readAgainSaid, waitingProposalsSaid, type ReadSourceProposal, type ReadSourceState } from './research-read-task.js';
 import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js';
 import { verifyStatusSaid, type LiveVerifyStatus } from './research-verify.js';
+import { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef, confirmationEdits } from './verify.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -156,15 +157,9 @@ export function researchSourceRef(refn: unknown): string | null {
     return typeof refn === 'string' && /^S\d{1,9}$/.test(refn.trim()) ? refn.trim() : null;
 }
 
-/** A person's id in the research (its REFN, e.g. "P0012"), or null. */
-export function researchPersonRef(refn: unknown): string | null {
-    return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
-}
-
-/** A family's id in the research (its record, e.g. "F0054"), or null. */
-export function researchFamilyRef(id: unknown): string | null {
-    return typeof id === 'string' && /^F\d{1,7}$/.test(id.trim()) ? id.trim() : null;
-}
+// The ids of a person and a family in the research live with the
+// re-verification that names them (src/verify.ts).
+export { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef };
 
 /**
  * The partners of each family of the research's GEDCOM, by the family's id
@@ -748,11 +743,13 @@ function fnv1a(text: string, seed: number): number {
 
 /**
  * People without what the app keeps for itself and never sends in the file
- * (a hidden married surname suggestion; a fact confirmed by hand and the
- * research's verification of facts, spec 065, which go by the bridge):
- * hiding a suggestion or confirming a fact leaves the tree in step with the
- * research. People without such a field are the same objects, so a tree
- * that has none keeps its fingerprint.
+ * (a hidden married surname suggestion; the research's verification of facts,
+ * spec 065, which comes with its version): hiding a suggestion leaves the
+ * tree in step with the research. A fact confirmed, or a confirmation of the
+ * research taken back, here does go (`_STROM_CONFIRMED`, which the research
+ * reads against `_STROM_HEAD`): only what differs from the research's own
+ * (confirmationEdits) counts, so a tree with no such edit keeps the
+ * fingerprint it had. People without such a field are the same objects.
  */
 function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
     let out: StromData['persons'] | null = null;
@@ -760,19 +757,21 @@ function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
         if (p?.dismissedMarriedSuggestion === undefined && p?.confirmed === undefined && p?.researchVerify === undefined) continue;
         out ??= { ...persons };
         const { dismissedMarriedSuggestion: _local, confirmed: _confirmed, researchVerify: _verify, ...rest } = p;
-        out[id as PersonId] = rest as Person;
+        const edits = confirmationEdits(p);
+        out[id as PersonId] = (Object.keys(edits).length ? { ...rest, confirmed: edits } : rest) as Person;
     }
     return out ?? persons;
 }
 
-/** Couples without their facts confirmed by hand and the research's verification (see withoutAppLocal). */
+/** Couples without the research's verification and their id there, with their confirmation edits (see withoutAppLocal). */
 function couplesWithoutAppLocal(partnerships: StromData['partnerships']): StromData['partnerships'] {
     let out: StromData['partnerships'] | null = null;
     for (const [id, ps] of Object.entries(partnerships)) {
-        if (ps?.confirmed === undefined && ps?.researchVerify === undefined) continue;
+        if (ps?.confirmed === undefined && ps?.researchVerify === undefined && ps?.researchId === undefined) continue;
         out ??= { ...partnerships };
-        const { confirmed: _confirmed, researchVerify: _verify, ...rest } = ps;
-        out[id as PartnershipId] = rest as Partnership;
+        const { confirmed: _confirmed, researchVerify: _verify, researchId: _id, ...rest } = ps;
+        const edits = confirmationEdits(ps);
+        out[id as PartnershipId] = (Object.keys(edits).length ? { ...rest, confirmed: edits } : rest) as Partnership;
     }
     return out ?? partnerships;
 }

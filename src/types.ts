@@ -768,6 +768,13 @@ export interface FactConfirmation {
      * Absent: valid whatever the value (an older record).
      */
     value?: string;
+    /**
+     * Not a confirmation: the research's confirmation of the day `at` is
+     * taken back here (research trees). The fact then goes to the research
+     * without its `_STROM_CONFIRMED`, which the research reads as taking it
+     * back; a version of the research loaded afterwards replaces it.
+     */
+    withdrawn?: true;
 }
 
 /** Why a fact waits for re-verification in the research (`2 _STROM_VERIFY`). */
@@ -790,7 +797,17 @@ export interface ResearchFactVerify {
     /** `2 _STROM_CONFIRMED <date>`: confirmed by a person in the research. */
     confirmed?: string;
     pending?: FactVerifyPending;
+    /**
+     * `3 _POS n` under `_STROM_VERIFY wait|asked`: the fact's task is the
+     * n-th the research's next session would take (1 = next), as of the file.
+     */
+    position?: number;
     checked?: FactVerifyChecked;
+    /**
+     * `2 _STROM_EID E0012`: the fact's id in the research (what /verify and
+     * /facts/confirm name). Never sent back; a fact copied or made here has none.
+     */
+    eid?: string;
 }
 
 /** What the research knows about one person (see Person.research). */
@@ -1160,6 +1177,13 @@ export interface Partnership {
     confirmed?: Record<string, FactConfirmation>;
     /** The research's re-verification of each fact, see Person.researchVerify. */
     researchVerify?: Record<string, ResearchFactVerify>;
+    /**
+     * The family's id in the research ("F0003", its record `0 @F0003@ FAM`),
+     * read from the research's own file: what /verify {family} names. Never
+     * sent back (what goes to the research numbers its families afresh) and
+     * no change of the tree; a couple made here has none.
+     */
+    researchId?: string;
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
