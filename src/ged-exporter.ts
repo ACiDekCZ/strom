@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -719,6 +719,18 @@ export function countFamilies(data: StromData): number {
  */
 export const STROM_SEX_U_LINE = '1 _STROM_SEX_U Y';
 
+/** Another record of a couple "Back to {prog}" writes beside the couple's own (JOINED_TAG), with what the couple has of it. */
+interface JoinedBack {
+    xref: string;
+    /** Its xref in the program's file ('' unknown), without the @ signs. */
+    own: string;
+    from: string;
+    record: JoinedRecord;
+    children: PersonId[];
+    sources: string[];
+    events: CoupleEvent[];
+}
+
 /** What "Back to {prog}" writes of the records' ids (see backToXrefs). */
 interface BackXrefs {
     /** The program the file goes back to ('' without one). */
@@ -894,7 +906,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // "Back to {prog}": the couple's other records of that program's file
     // (JOINED_TAG), written beside the couple's own; each keeps its xref
     // while no other record has it (once, when two imports kept the same).
-    const joined = new Map<PartnershipId, { xref: string; own: string; from: string; record: JoinedRecord }[]>();
+    const joined = new Map<PartnershipId, JoinedBack[]>();
     if (back.imports.size > 0) {
         const seen = new Set<string>();
         for (const [id, ps] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
@@ -908,8 +920,45 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                     if (free) taken.add(record.xref.toUpperCase());
                     const list = joined.get(id) ?? [];
                     joined.set(id, list);
-                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record });
+                    list.push({ xref: free ? `@${record.xref}@` : '', own: record.xref, from: entry.from, record, children: [], sources: [], events: [] });
                 }
+            }
+        }
+    }
+    // What the couple has of each such record goes back with it, not with the
+    // first one: its children (by their xref in the file), the sources of its
+    // citations (by the record's xref and the page; also in the first record
+    // when that cited the page too) and its events (by what they say).
+    /** `${partnershipId}\n${childId}` of a child only another record of the couple has. */
+    const childElsewhere = new Set<string>();
+    /** Sources and events of a couple that go only with its other records. */
+    const sourcesElsewhere = new Map<PartnershipId, Set<string>>();
+    const eventsElsewhere = new Set<CoupleEvent>();
+    for (const [id, list] of joined) {
+        const ps = data.partnerships[id];
+        const xrefIs = (holder: { originalIds?: OriginalIds[] } | undefined, xref: string): boolean =>
+            (holder?.originalIds ?? []).some(e => back.imports.has(e.from) && (e.xref ?? '').toUpperCase() === xref.toUpperCase());
+        const takenEvents = new Set<CoupleEvent>();
+        for (const j of list) {
+            for (const xref of j.record.children) {
+                const child = ps.childIds.find(c => !childElsewhere.has(`${id}\n${c}`) && xrefIs(data.persons[c], xref));
+                if (!child) continue;
+                j.children.push(child);
+                childElsewhere.add(`${id}\n${child}`);
+            }
+            for (const cite of j.record.sources) {
+                const sid = (ps.sourceIds ?? []).find(s => !j.sources.includes(s) && xrefIs(data.sources?.[s], cite.xref)
+                    && (data.sources?.[s]?.reference ?? '').trim() === cite.page);
+                if (!sid) continue;
+                j.sources.push(sid);
+                if (!cite.also) (sourcesElsewhere.get(id) ?? sourcesElsewhere.set(id, new Set()).get(id)!).add(sid);
+            }
+            for (const key of j.record.events) {
+                const ev = (ps.events ?? []).find(e => !takenEvents.has(e) && joinedEventKey(e) === key);
+                if (!ev) continue;
+                takenEvents.add(ev);
+                eventsElsewhere.add(ev);
+                j.events.push(ev);
             }
         }
     }
@@ -1529,7 +1578,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (partnership.childIds.includes(personId)) {
                 const famId = partnershipIdMap.get(partnershipId);
                 if (famId) {
-                    lines.push(`1 FAMC ${famId}`);
+                    // The couple's record, or the other record of the couple the child is of (see joined).
+                    const famIds = [
+                        ...(childElsewhere.has(`${partnershipId}\n${personId}`) ? [] : [famId]),
+                        ...(joined.get(partnershipId) ?? []).filter(j => j.children.includes(personId)).map(j => j.xref),
+                    ];
                     // PEDI reflects the child's relationship to this family. GEDCOM
                     // has adopted/foster but no 'step' — step links export without
                     // PEDI (known-unsupported, see header).
@@ -1537,7 +1590,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                     const famRels = [partnership.person1Id, partnership.person2Id].map(pid => rels[pid]);
                     const pedi = famRels.includes('adoptive') ? 'adopted'
                         : famRels.includes('foster') ? 'foster' : null;
-                    if (pedi) lines.push(`2 PEDI ${pedi}`);
+                    for (const xref of famIds) {
+                        lines.push(`1 FAMC ${xref}`);
+                        if (pedi) lines.push(`2 PEDI ${pedi}`);
+                    }
                 }
             }
         }
@@ -1576,8 +1632,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
         }
 
-        // Children
-        for (const childId of partnership.childIds) {
+        // Children (those only another record of the couple has go with it, see joined)
+        const pushChild = (childId: PersonId): void => {
             const childGedcomId = personIdMap.get(childId);
             if (childGedcomId) {
                 lines.push(`1 CHIL ${childGedcomId}`);
@@ -1598,6 +1654,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 const linkImport = childLinkImport(childId, [husbId, wifeId].filter(pid => personIdMap.has(pid)));
                 if (linkImport) lines.push(`2 ${IMPORT_TAG} ${linkImport}`);
             }
+        };
+        for (const childId of partnership.childIds) {
+            if (!childElsewhere.has(`${partnershipId}\n${childId}`)) pushChild(childId);
         }
         // Children that hang from another family but were also recorded in this one (alsoChildLinks).
         for (const childId of alsoChildren.get(partnershipId) ?? []) lines.push(`1 CHIL ${personIdMap.get(childId)}`);
@@ -1614,8 +1673,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn && !noMarriageSaid) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
-        // What the couple's other records gave its note goes back with them (see joined).
+        // What the couple's other records gave its note goes back with them (see joined), and their citations.
         const joinedHere = joined.get(partnershipId) ?? [];
+        const ownSources = (partnership.sourceIds ?? []).filter(id => !sourcesElsewhere.get(partnershipId)?.has(id));
         const joinedNote = joinedNoteBack(partnership.note, joinedHere.map(j => j.record));
         const famNoted = notedOf(partnership, joinedNote.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
@@ -1659,7 +1719,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
-            for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
+            for (const srcId of ownSources) pushCitation(2, srcId);
             pushNoted(marriageNoted.rest, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
@@ -1691,7 +1751,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
         // 1 EVEN + 2 TYPE …) — never as lines of the note, so another program
         // and the research read them as facts.
-        for (const event of sortCoupleEvents(partnership.events ?? [])) {
+        const pushEvent = (event: CoupleEvent): void => {
             lines.push(`1 ${COUPLE_EVENT_TAG[event.type]}`);
             if (event.type === 'custom') {
                 pushLongValue(lines, 2, 'TYPE', event.customLabel || strings.gedcomNotes.genericEvent);
@@ -1725,6 +1785,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId);
             pushFactImport(partnership, `event:${event.id}`);
             pushFactOrigin(partnership, `event:${event.id}`);
+        };
+        for (const event of sortCoupleEvents(partnership.events ?? [])) {
+            if (!eventsElsewhere.has(event)) pushEvent(event);
         }
 
         // A status MARR/DIV cannot say (partners, separated).
@@ -1740,14 +1803,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushNoted(famNoted.structures.filter(st => !notedMarriage.includes(st) && !notedDivorce.includes(st)), false);
 
         // Family citations of a couple without a marriage (partners).
-        for (const srcId of hasMarriage ? [] : partnership.sourceIds ?? []) {
+        for (const srcId of hasMarriage ? [] : ownSources) {
             pushCitation(1, srcId);
         }
 
         pushGedcomExtra(partnership);
 
         // The couple's other records of the program's file, as it wrote them (see joined).
-        for (const { xref, own, from, record } of joinedHere) {
+        for (const { xref, own, from, record, children, sources, events } of joinedHere) {
             lines.push(`0 ${xref} FAM`);
             if (knownImports.has(from)) {
                 lines.push(`1 ${IMPORT_TAG} ${from}`);
@@ -1755,8 +1818,18 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (personIdMap.has(husbId)) lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
             if (personIdMap.has(wifeId)) lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
+            for (const childId of children) pushChild(childId);
             // Its notes while the couple's note still has what they gave it (else they stay there).
-            lines.push(...(record.text && !joinedNote.found.has(record) ? withoutJoinedNotes(record.lines) : record.lines));
+            const kept = record.text && !joinedNote.found.has(record) ? withoutJoinedNotes(record.lines) : record.lines;
+            // Its citations under its wedding, as the couple's are (else on the record).
+            const marriageAt = kept.findIndex(l => l === '1 MARR' || l.startsWith('1 MARR '));
+            const marriageEnd = marriageAt < 0 ? -1 : kept.findIndex((l, i) => i > marriageAt && l.startsWith('1 '));
+            const cut = marriageAt < 0 ? kept.length : marriageEnd < 0 ? kept.length : marriageEnd;
+            lines.push(...kept.slice(0, cut));
+            if (marriageAt >= 0) for (const srcId of sources) pushCitation(2, srcId);
+            lines.push(...kept.slice(cut));
+            for (const event of sortCoupleEvents(events)) pushEvent(event);
+            if (marriageAt < 0) for (const srcId of sources) pushCitation(1, srcId);
         }
     }
 

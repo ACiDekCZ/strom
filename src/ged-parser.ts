@@ -97,7 +97,7 @@ import { researchClaimValue } from './research-claim';
 import {
     addGedcomExtra, addOriginalIds, CITE_TAG, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
-    JOINED_TAG, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
+    JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -5022,6 +5022,23 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (sameCouple) {
             target = partnerships[sameCouple];
             const marks = joinUnion(target, partnership);
+            // Its children, citations and events, so "Back to {prog}" writes them in it.
+            const bare = (x: string): string => /^@?([^@]*)@?$/.exec(x.trim())?.[1] ?? '';
+            marks.children = childrenOf(gedFamId, fam)
+                .map(c => bare(individuals.get(c)?.importIds?.find(b => b.xref)?.xref ?? c)).filter(Boolean);
+            const firstFam = recordsOfUnion.get(sameCouple)?.[0];
+            const firstRefs = new Set(firstFam ? mapRefs(firstFam[1].sourceRefs) : []);
+            const cited = new Set<string>();
+            marks.sources = [];
+            for (const ref of fam.sourceRefs) {
+                const sid = sourceIdMap.get(ref);
+                const raw = gedSources.get(ref);
+                if (!sid || !raw || cited.has(sid)) continue;
+                cited.add(sid);
+                const xref = bare(raw.importXref ?? raw.derivedFrom ?? ref);
+                if (xref && !xref.startsWith('__')) marks.sources.push({ xref, page: (raw.reference ?? '').trim(), also: firstRefs.has(sid) });
+            }
+            marks.events = (partnership.events ?? []).map(joinedEventKey);
             recordsOfUnion.get(sameCouple)?.push([gedFamId, fam]);
             joinedFamilies++;
             if (keepJoinedRecord(gedFamId, fam, marks)) joinedKept.add(gedFamId);

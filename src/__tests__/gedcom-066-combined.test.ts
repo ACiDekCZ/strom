@@ -319,6 +319,27 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             }
         });
 
+        it('14 · the second record\'s child, citation and event go back to it, not to the first record', () => {
+            for (const ged of [first, second]) {
+                const remarried = record(ged, '@F1402@');
+                const firstFam = record(ged, '@F1401@');
+                expect(remarried).toContain('1 CHIL @I1403@');
+                expect(firstFam).not.toContain('1 CHIL @I1403@');
+                expect(count(record(ged, '@I1403@'), /^1 FAMC /)).toBe(1);
+                expect(record(ged, '@I1403@')).toContain('1 FAMC @F1402@');
+                const at = remarried.indexOf('1 MARR');
+                expect(holdsRun(remarried.slice(at, remarried.findIndex((l, i) => i > at && l.startsWith('1 '))),
+                    ['2 SOUR @S1@', '3 PAGE fol. 14'])).toBe(true);
+                expect(count(firstFam, /^\d SOUR @/)).toBe(0);
+                expect(holdsRun(remarried, ['1 EVEN', '2 TYPE Blessing', '2 DATE 1915'])).toBe(true);
+                expect(count(firstFam, /^1 EVEN/)).toBe(0);
+            }
+            // In the tree they stay with the couple.
+            const couple = Object.values(tree.partnerships).find(p => tree.persons[p.person1Id]?.firstName === 'Kořenoslav')!;
+            expect(couple.childIds.map(c => tree.persons[c].firstName)).toEqual(['Drobuna']);
+            expect(couple.events?.map(e => e.customLabel)).toEqual(['Blessing']);
+        });
+
         it('14 · the couple\'s note edited in the tree: written once, in the first record', () => {
             const edited = structuredClone(tree);
             const couple = Object.values(edited.partnerships).find(p => edited.persons[p.person1Id]?.firstName === 'Kořenoslav')!;

@@ -493,6 +493,16 @@ const isJoinedHead = (line: string): boolean => line === `1 ${JOINED_TAG}` || li
 export interface JoinedMarks {
     /** The lines the record gave the couple's note, as one run (`2 _STROM_TEXT`, `3 CONT`). */
     text?: string;
+    /** Its children, by their xref in the file, without the @ signs (`2 _STROM_CHIL I4`). */
+    children?: string[];
+    /**
+     * Its citations: the source record's xref and the page (`2 _STROM_SOUR S1`
+     * / `3 PAGE fol. 7`), and whether the first record cites that page too
+     * (`3 _STROM_ALSO Y`).
+     */
+    sources?: { xref: string; page: string; also: boolean }[];
+    /** Its events, by what they say (joinedEventKey; `2 _STROM_EVEN`). */
+    events?: string[];
 }
 
 /** A record of the couple kept so: its xref ('' unknown), its lines from level 1, and its marks. */
@@ -500,6 +510,14 @@ export interface JoinedRecord {
     xref: string;
     lines: string[];
     text: string;
+    children: string[];
+    sources: { xref: string; page: string; also: boolean }[];
+    events: string[];
+}
+
+/** What a couple's event says, to tell it among the couple's events (a JoinedRecord's events). */
+export function joinedEventKey(ev: { type: string; customLabel?: string; date?: string; place?: string }): string {
+    return [ev.type, ev.customLabel ?? '', ev.date ?? '', ev.place ?? ''].join('|').replace(/[\r\n]+/g, ' ');
 }
 
 const JOINED_MARK = /^2 _STROM_[A-Z]+( |$)/;
@@ -513,21 +531,34 @@ export function joinedBlock(xref: string, structure: readonly string[], marks: J
         block.push(first ? `2 _STROM_TEXT ${first}` : '2 _STROM_TEXT');
         for (const line of rest) block.push(line ? `3 CONT ${line}` : '3 CONT');
     }
+    for (const xref of marks.children ?? []) block.push(`2 _STROM_CHIL ${xref}`);
+    for (const src of marks.sources ?? []) {
+        block.push(`2 _STROM_SOUR ${src.xref}`);
+        if (src.page) block.push(`3 PAGE ${src.page}`);
+        if (src.also) block.push('3 _STROM_ALSO Y');
+    }
+    for (const key of marks.events ?? []) block.push(`2 _STROM_EVEN ${key}`);
     return validExtraBlock(block) ? block : null;
 }
 
 /** The couple's other records of one import's kept lines. */
 export function joinedRecords(lines: readonly string[]): JoinedRecord[] {
     return extraBlocks(lines).filter(b => isJoinedHead(b[0])).map(b => {
-        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '' };
+        const out: JoinedRecord = { xref: b[0].slice(JOINED_TAG.length + 3).trim(), lines: [], text: '', children: [], sources: [], events: [] };
         let mark = '';
         for (const line of b.slice(1)) {
             if (JOINED_MARK.test(line)) {
                 mark = line.split(' ')[1];
                 const value = line.slice(mark.length + 3);
                 if (mark === '_STROM_TEXT') out.text = value;
+                else if (mark === '_STROM_CHIL' && value) out.children.push(value);
+                else if (mark === '_STROM_SOUR' && value) out.sources.push({ xref: value, page: '', also: false });
+                else if (mark === '_STROM_EVEN' && value) out.events.push(value);
             } else if (mark && !line.startsWith('2 ')) {
+                const src = mark === '_STROM_SOUR' ? out.sources[out.sources.length - 1] : undefined;
                 if (mark === '_STROM_TEXT' && /^3 CONT( |$)/.test(line)) out.text += '\n' + line.slice(7);
+                else if (src && line.startsWith('3 PAGE ')) src.page = line.slice(7);
+                else if (src && line === '3 _STROM_ALSO Y') src.also = true;
             } else {
                 mark = '';
                 out.lines.push(line.replace(/^\d+/, n => String(Number(n) - 1)));
