@@ -38,6 +38,7 @@ import {
 } from '../ged-parser.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
+import { importProgramName } from '../import-next.js';
 
 /**
  * What an import brought, for the steps after it (spec 066). `gedcom`: from a
@@ -514,6 +515,12 @@ export const importExportMethods = uiModule({
             if (parts.length === 0 && this.gedcomResult.stats.unsupportedTags === 0) {
                 // Say it out loud — silence reads as "who knows what got lost".
                 parts.push(strings.gedcom.allImported);
+            }
+            // Another program's own tags, kept for the way back (spec 066 G8).
+            const kept = this.gedcomResult.stats.keptTags;
+            const keptFrom = this.gedcomResult.data.imports?.find(r => r.id === this.gedcomResult?.importId);
+            if (kept > 0 && keptFrom) {
+                parts.push(strings.gedcom.keptTags(importProgramName(keptFrom), kept, this.gedcomResult.stats.keptTagSummary));
             }
             // One line each: the people of unknown sex were imported, and next to
             // "Skipped records" on the same line they read as skipped people.

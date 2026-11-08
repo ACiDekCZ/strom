@@ -12,7 +12,7 @@ import { exportToGedcom, isSafeXref } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
 import { applyLivingPrivacy } from '../privacy.js';
 import {
-    carryMergedImports, cleanImportOrigin, keepImports, ORIGIN_IDS_FEATURE, remapHolderImports,
+    addOriginalIds, carryMergedImports, cleanImportOrigin, cleanOriginalIds, keepImports, ORIGIN_IDS_FEATURE, remapHolderImports,
 } from '../import-origin.js';
 import { OriginalIds, Partnership, Person, PersonId, StromData } from '../types.js';
 
@@ -187,6 +187,30 @@ describe('reading another program’s file', () => {
         }]);
         expect(byName(data, 'Corvin').originalIds).toEqual([{ from: 'I1', xref: 'I3' }]);
         expect(stats.droppedTagSummary).not.toMatch(/_FSFTID|AFN/);
+    });
+
+    it('a value is trimmed and in NFC; a line with U+FFFD or a control character is not taken and is counted', () => {
+        const decomposed = 'Ozube\u0301c-7';
+        const ged = MYHERITAGE
+            .replace('1 RIN MH:I500001', `1 RIN   ${decomposed}  `)
+            .replace('1 _UID 6A3A1B2C3D4E5F60718293A4B5C6D7E9', '1 _UID 6A3A\uFFFD1B2C')
+            .replace('1 RIN MH:I500003', '1 RIN MH:\u0001I3');
+        const { data, stats } = load(ged);
+        expect(byName(data, 'Hromoslav').originalIds![0].ids).toContainEqual({ tag: 'RIN', value: 'Ozubéc-7'.normalize('NFC') });
+        expect(byName(data, 'Libuna').originalIds![0].ids).toEqual([{ tag: 'RIN', value: 'MH:I500002' }]);
+        expect(byName(data, 'Mlhoň').originalIds![0].ids).toEqual([{ tag: '_UID', value: '7B3A1B2C3D4E5F60718293A4B5C6D7EA' }]);
+        expect(stats.droppedTagSummary).toMatch(/(^|, )_UID ×1/);
+        expect(stats.droppedTagSummary).toMatch(/(^|, )RIN ×1/);
+    });
+
+    it('at most 20 id lines of a record are kept; the rest are counted', () => {
+        const many = Array.from({ length: 25 }, (_, i) => `1 RIN R${i + 1}`).join('\n');
+        const { data, stats } = load(MYHERITAGE.replace('1 RIN MH:I500001', many));
+        const ids = byName(data, 'Hromoslav').originalIds![0].ids!;
+        expect(ids).toHaveLength(20);
+        expect(ids[0]).toEqual({ tag: 'RIN', value: 'R1' });
+        // R21 … R25 and the _UID after them.
+        expect(stats.droppedTagSummary).toBe('RIN ×5, _UID ×1');
     });
 
     it('GEDCOM 7: UID and EXID with its TYPE, on a person and a family', () => {
@@ -462,6 +486,17 @@ describe('keeping the ids', () => {
         w.originalIds = [{ from: 'I9', xref: 'I2' }];
         cleanImportOrigin(data, data.imports);
         expect(w.originalIds).toBeUndefined();
+    });
+
+    it('an entry keeps at most 20 lines and a record at most 50 entries', () => {
+        const known = new Set(Array.from({ length: 60 }, (_, i) => `I${i + 1}`));
+        const ids = Array.from({ length: 30 }, (_, i) => ({ tag: 'RIN', value: `R${i}` }));
+        expect(cleanOriginalIds({ from: 'I1', ids }, known)!.ids).toHaveLength(20);
+        const p = { id: 'p' } as unknown as Person;
+        for (const from of known) addOriginalIds(p, { from, xref: 'X1', ids: ids.slice(0, 1) });
+        expect(p.originalIds).toHaveLength(50);
+        addOriginalIds(p, { from: 'I1', ids });
+        expect(p.originalIds![0].ids).toHaveLength(20);
     });
 
     it('merging holders joins the ids of both without duplicates; a remap renames and joins them', () => {

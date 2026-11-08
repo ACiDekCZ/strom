@@ -567,6 +567,14 @@ export interface Person {
      */
     originalIds?: OriginalIds[];
     /**
+     * Another program's own level-1 tags on the person (`1 _XXX` and the lines
+     * under it) that the app does not read (spec 066 G8): kept as the file
+     * wrote them, one entry per import, and written back only by "Back to
+     * {prog}" for that program. Never sent to the research, never in Strom's
+     * own file.
+     */
+    gedcomExtra?: GedcomExtra[];
+    /**
      * The research's origin of each fact (GEDCOM `_STROM_ORIGIN`, `_STROM_WAS`,
      * `_STROM_SEX_ORIGIN`), by fact (`name`, `sex`, `birth`, `death`,
      * `event:<id>`). Research trees only; read from the research's file,
@@ -615,6 +623,14 @@ export interface OriginalIds {
     xref?: string;
     /** Its id lines, in file order. */
     ids?: OriginalIdLine[];
+}
+
+/** Another program's level-1 tags of a record kept as written (Person/Partnership.gedcomExtra). */
+export interface GedcomExtra {
+    /** The import (ImportRecord.id). */
+    from: string;
+    /** The lines as the file wrote them, from the level-1 `_XXX` line down (no line is re-wrapped). */
+    lines: string[];
 }
 
 /** A fact's value as it came from a loaded file (Person/Partnership.importedValues). */
@@ -1013,6 +1029,8 @@ export interface Partnership {
     importedValues?: Record<string, ImportedValue>;
     /** The family record's ids in the loaded GEDCOM files (xref, `_UID`…), see Person.originalIds. */
     originalIds?: OriginalIds[];
+    /** The family record's own tags of another program, see Person.gedcomExtra. */
+    gedcomExtra?: GedcomExtra[];
     /** The research's origin of each fact (`marriage`, `divorce`, `event:<id>`), research trees only. */
     researchOrigins?: Record<string, ResearchFactOrigin>;
     // Primary partnership flag - when person has multiple partnerships,
@@ -1162,7 +1180,9 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   (Person/Partnership.importedValues, importId, Person.importedParents,
  *   Source.importId), plus the research's origin of facts (researchOrigins,
  *   ResearchConflict.kind), and the records' ids in the loaded files
- *   (Person/Partnership.originalIds: xref, _UID, RIN, EXID…). Additive;
+ *   (Person/Partnership.originalIds: xref, _UID, RIN, EXID…) and another
+ *   program's own level-1 tags kept for "Back to {prog}"
+ *   (Person/Partnership.gedcomExtra). Additive;
  *   existing trees get no origin and no ids (nothing is guessed). An older
  *   app (v14) would drop imports on a re-save.
  */

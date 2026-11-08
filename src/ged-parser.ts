@@ -95,8 +95,9 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addOriginalIds, cleanImportOrigin, cleanOriginalIds, factPartOf, IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
-    ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports,
+    addGedcomExtra, addOriginalIds, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
+    ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
 } from './import-origin';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -823,7 +824,9 @@ function originalMimeOf(name: string): string {
 }
 
 interface RawMedia {
-    /** _PRIM / _PERSONALPHOTO Y — preferred as the person's portrait. */
+    /** `1 OBJE @O1@`: the media record the link points at (its FILE, TITL… come from there). */
+    ref?: string;
+    /** _PRIM / _PRIMARY / _PERSONALPHOTO Y — preferred as the person's portrait. */
     primary?: boolean;
     title: string;
     form: string;
@@ -958,6 +961,12 @@ interface RawParticipant {
     note?: string;
 }
 
+/** A level-1 `_XXX` of another program with the lines under it, as the file wrote them (spec 066 G8). */
+interface RawExtra {
+    tag: string;
+    lines: string[];
+}
+
 /** `1 _STROM_IMPORT Ix` of a person or a family with its `2 _XREF` and id lines (spec 066 K3.2). */
 interface RawOriginalIds {
     from: string;
@@ -1010,6 +1019,8 @@ interface RawSource {
 
 /** Raw OBJE under a source record. */
 interface RawSourceMedia {
+    /** `1 OBJE @O1@`: the media record the link points at. */
+    ref?: string;
     title: string;
     file: string;
     /** _URL: the page in the archive's image viewer. */
@@ -1035,6 +1046,8 @@ interface GedcomIndividual {
     fileIds?: OriginalIdLine[];
     /** The ids under each `1 _STROM_IMPORT Ix` (Strom's own files). */
     importIds?: RawOriginalIds[];
+    /** Another program's own level-1 tags kept as written (spec 066 G8). */
+    extras?: RawExtra[];
     /** 2 _STROM_IMPORT under the primary NAME, SEX, BIRT and DEAT. */
     factImports?: Partial<Record<RawPersonFact, RawImportMark[]>>;
     /** The research's origin of the primary NAME, the sex (1 _STROM_SEX_ORIGIN), BIRT and DEAT (Strom's own files only). */
@@ -1150,6 +1163,8 @@ interface GedcomFamily {
     fileIds?: OriginalIdLine[];
     /** The ids under each `1 _STROM_IMPORT Ix` (Strom's own files). */
     importIds?: RawOriginalIds[];
+    /** Another program's own level-1 tags kept as written (spec 066 G8). */
+    extras?: RawExtra[];
     /** 2 _STROM_IMPORT under MARR and DIV. */
     factImports?: Partial<Record<RawCoupleFact, RawImportMark[]>>;
     /** The research's origin of MARR and DIV (Strom's own files only). */
@@ -1256,6 +1271,8 @@ export interface ParsedGedcom {
     head?: GedcomHead;
     /** Header `1 _STROM_IMPORT Ix` records as written (app and research files only), for sanitizeImports. */
     stromImports?: Record<string, string>[];
+    /** `0 @O1@ OBJE` media records, by xref: what `1 OBJE @O1@` links point at. */
+    mediaRecords?: Map<string, RawMedia>;
 }
 
 /** The file's own header: the program that wrote it and when. */
@@ -1334,8 +1351,16 @@ export interface GedcomConversionResult {
          * on the child.
          */
         otherFamilyLinks: number;
-        /** Embedded media skipped because of their type (only images and PDFs come in). */
+        /**
+         * Media not carried over: embedded ones of another type (only images and
+         * PDFs come in), a link to a media record the file does not have, a
+         * record with no file, a record no person or source takes.
+         */
         skippedMedia: number;
+        /** Another program's own level-1 tags kept for "Back to {prog}" (spec 066 G8). */
+        keptTags: number;
+        /** Their tags, most frequent first ("_FOO, _BAR"). Empty when none. */
+        keptTagSummary: string;
         totalGedFamilies: number;
     };
 }
@@ -1630,6 +1655,8 @@ interface GedLine {
     level: number;
     tag: string;
     value: string;
+    /** Index of its (first) physical line in the file: kept tags are taken from the file as written. */
+    src: number;
 }
 
 /**
@@ -1655,7 +1682,8 @@ function preprocessGedcomLines(lines: string[]): {
     inlineSources: Map<string, string>;
 } {
     const parsed: GedLine[] = [];
-    for (const line of lines) {
+    for (let src = 0; src < lines.length; src++) {
+        const line = lines[src];
         const match = line.match(/^(\d+)\s+(@[^@\s]+@|\w+)\s*(.*)?$/);
         if (!match) continue;
         let tag = match[2];
@@ -1667,7 +1695,7 @@ function preprocessGedcomLines(lines: string[]): {
         const value = (conc ? conc[1].trimEnd() : (match[3] || '').trim()).replace(/@@/g, '@');
         // GEDCOM 7 shared-note pointer: the same thing as a NOTE pointer.
         if (tag === 'SNOTE' && GED_POINTER.test(value)) tag = 'NOTE';
-        parsed.push({ level: parseInt(match[1]), tag, value });
+        parsed.push({ level: parseInt(match[1]), tag, value, src });
     }
 
     const noteRecords = new Map<string, string>();
@@ -1689,7 +1717,7 @@ function preprocessGedcomLines(lines: string[]): {
                     text += (next.tag === 'CONT' ? '\n' : '') + next.value;
                 }
                 noteRecords.set(rec.tag, text);
-                records.push({ level: 0, tag: rec.tag, value: m[1] });
+                records.push({ level: 0, tag: rec.tag, value: m[1], src: rec.src });
                 continue;
             }
         }
@@ -1709,7 +1737,7 @@ function preprocessGedcomLines(lines: string[]): {
                 }
                 value = id;
             }
-            records.push({ level: rec.level, tag: rec.tag, value });
+            records.push({ level: rec.level, tag: rec.tag, value, src: rec.src });
             continue;
         }
         records.push(rec);
@@ -1802,7 +1830,7 @@ const HEAD_IMPORT_FIELDS: Record<string, string> = {
     SOUR: 'program', VERS: 'version', DATE: 'fileDate', _AT: 'at', FILE: 'file', _SHA: 'sha',
 };
 
-const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN', 'NOTE', 'SNOTE']);
+const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN', 'NOTE', 'SNOTE', 'OBJE']);
 
 /** A `_STROM_IMG_OMITTED` value: the research's reason, or `other` for one this app does not know. */
 export function imageHeldReason(value: string): SourceImageHeld {
@@ -1824,6 +1852,37 @@ export function imageHeldReason(value: string): SourceImageHeld {
  */
 const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID',
     'UID', 'CREA', 'EXID']);
+
+/**
+ * MyHeritage's bookkeeping under a photo: its size and its record numbers (of
+ * the photo, of the photo a face was cut from). Not counted either.
+ */
+const IGNORED_MEDIA_BOOKKEEPING_TAGS = new Set(['_FILESIZE', '_PHOTO_RIN', '_PARENTRIN']);
+
+/**
+ * The `_` tags this reader takes somewhere (spec 066 G8), Strom's own
+ * `_STROM_…` aside. A deeper `_XXX` (level 2 or more) of another program's
+ * file that is none of them, and not under a line already kept or counted,
+ * is counted as not carried over (it used to vanish without a word). A test
+ * keeps the list complete: every `'_XXX'` the reader names is in it.
+ */
+export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
+    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DRAFT', '_DUP',
+    '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FREL', '_FSFTID', '_GEN', '_HELD', '_HYPO', '_INTREE', '_ISLAND',
+    '_JOIN', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI', '_MILT', '_MREL', '_NEXT', '_NORECORDS', '_PAR', '_PART',
+    '_PARTIAL', '_PERS', '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PROJECT_GUID', '_QUESTION', '_RECORDS', '_REF',
+    '_RELATIONSHIP_STATUS', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SESSIONS', '_SOUR', '_STAT', '_STORY', '_TASK', '_TEST',
+    '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_WITN', '_XREF',
+]);
+
+/** Another program's `_XXX` the reader takes nowhere (and no bookkeeping, no id). */
+export function isUnreadUnderscoreTag(tag: string): boolean {
+    return tag.startsWith('_') && !tag.startsWith('_STROM_') && !GEDCOM_READ_UNDERSCORE_TAGS.has(tag)
+        && !IGNORED_BOOKKEEPING_TAGS.has(tag) && !IGNORED_MEDIA_BOOKKEEPING_TAGS.has(tag) && !ORIGINAL_ID_TAGS.has(tag);
+}
+
+/** A data URL inside a line: never kept outside the photos and attachments it makes. */
+const DATA_URL_IN_LINE = /data:[^,;\s]*;base64,/i;
 
 /** Attach a DATE to the MARR/DIV it sits under — the most recent one seen. */
 function lastUnionEvent(fam: GedcomFamily, type: 'marriage' | 'divorce', date: string): void {
@@ -2068,7 +2127,31 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (ref && q >= 0 && q <= 3 && !citationQuality.has(ref)) citationQuality.set(ref, q);
     };
     const droppedTags = new Map<string, number>();
-    const drop = (tag: string) => droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
+    const count = (tag: string): void => { droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1); };
+    /** The level of the line being read. */
+    let lineLevel = 0;
+    /**
+     * The level of a line already counted (or kept): nothing under it is
+     * counted again (spec 066 G8). Cleared by the next line at its level or above.
+     */
+    let quietBelow: number | null = null;
+    /** A tag of the line being read was not carried over: counted, and its lines with it. */
+    const drop = (tag: string): void => {
+        count(tag);
+        if (quietBelow === null || lineLevel < quietBelow) quietBelow = lineLevel;
+    };
+    /** `0 @O1@ OBJE` media records, by xref. */
+    const mediaRecords = new Map<string, RawMedia>();
+    /** The media record being read, its level-1 tag, and whether that FILE is the record's first (later ones are left). */
+    let currentObje: RawMedia | null = null;
+    let objeSubTag: string | null = null;
+    let objeFirstFile = false;
+    /**
+     * Another program's level-1 `_XXX` of a person or a family being kept
+     * (spec 066 G8): from its line in the file down; a pointer under it (an
+     * xref the reader renumbers) means the block cannot be kept as written.
+     */
+    let extraBlock: { target: { extras?: RawExtra[] }; tag: string; start: number; pointer: boolean } | null = null;
     /** Citation DATA > DATE -> the source's record date (first wins, like PAGE). */
     const citationDates = new Map<string, string>();
     let citeLevel: number | null = null;
@@ -2277,7 +2360,9 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** A level-1 id line of a person or a family (another program's file keeps them). */
     const readFileId = (target: { fileIds?: OriginalIdLine[] }, tag: string, value: string): void => {
         const line: OriginalIdLine = { tag, value: value.trim() };
-        if (line.value) (target.fileIds ??= []).push(line);
+        // More id lines than a record keeps (ID_LINES_MAX): left out, counted.
+        if (line.value && (target.fileIds?.length ?? 0) >= ID_LINES_MAX) count(tag);
+        else if (line.value) (target.fileIds ??= []).push(line);
         idBlock = { level: 1, last: line };
     };
     /** `1 _STROM_IMPORT Ix` of a person or a family: its import, and the ids that follow under it. */
@@ -2287,6 +2372,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         // The first `_STROM_IMPORT` says where the record came from; a further
         // one and every `_STROM_XID` only bring ids, never an origin.
         if (!idsOnly) target.importMark ??= mark.id;
+        // More blocks than a record keeps (ID_ENTRIES_MAX): their lines are passed over.
+        if ((target.importIds?.length ?? 0) >= ID_ENTRIES_MAX) { idBlock = { level: 1 }; return; }
         const entry: RawOriginalIds = { from: mark.id, ids: [] };
         (target.importIds ??= []).push(entry);
         idBlock = { level: 1, entry };
@@ -2312,12 +2399,74 @@ export function parseGedcom(content: string): ParsedGedcom {
         return null;
     };
 
+    /** A line of a media record: FILE (5.5.1 and 7 with FORM and TITL under it, 5.5 beside it), TITL, the portrait marks, Strom's own. */
+    const readMediaRecordLine = (m: RawMedia, level: number, tag: string, value: string): void => {
+        if (level === 1) {
+            objeSubTag = tag;
+            if (tag === 'FILE') {
+                objeFirstFile = !m.file;
+                if (objeFirstFile) m.file = value;
+            } else if (tag === 'FORM') { if (!m.form) m.form = value; }
+            else if (tag === 'TITL') { if (!m.title) m.title = value; }
+            else if (tag === 'NOTE') m.note = m.note ? `${m.note}\n${value}` : value;
+            else if (tag === '_STROM_KIND') m.stromKind = value;
+            else if (tag === '_SOUR' || tag === 'SOUR') m.sourceXref = value;
+            else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
+            else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
+            else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
+            else if (isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
+        } else if (level === 2 && objeSubTag === 'FILE' && objeFirstFile) {
+            // Data-URL payloads are CONC-wrapped (255-char physical lines).
+            if (tag === 'CONC') m.file += value;
+            else if (tag === 'FORM') { if (!m.form) m.form = value; }
+            else if (tag === 'TITL') { if (!m.title) m.title = value; }
+        } else if (level === 2 && objeSubTag === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) {
+            m.note = (m.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
+        }
+    };
+    /**
+     * The kept block ends before line `end` of the file: its lines as written
+     * go to the record, or, when they cannot be kept as they are (a pointer,
+     * a data URL, a line that is not one), the tag is counted.
+     */
+    const closeExtra = (end: number): void => {
+        const block = extraBlock;
+        extraBlock = null;
+        if (!block) return;
+        const raw = lines.slice(block.start, end).filter(l => l.trim() !== '');
+        if (!block.pointer && validExtraBlock(raw) && !raw.some(l => DATA_URL_IN_LINE.test(l))) {
+            (block.target.extras ??= []).push({ tag: block.tag, lines: raw });
+        } else {
+            count(block.tag);
+        }
+    };
+
     const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
     for (const rec of gedLines) {
         const level = rec.level;
         const tag = rec.tag;
         let value = rec.value;
+        lineLevel = level;
+
+        // Another program's own level-1 tag being kept (spec 066 G8): the
+        // lines under it are taken from the file as written, nothing reads them.
+        if (extraBlock) {
+            if (level > 1) {
+                if (GED_POINTER.test(tag) || (GED_POINTER.test(value.trim()) && !value.startsWith('@__inline'))) extraBlock.pointer = true;
+                continue;
+            }
+            closeExtra(rec.src);
+        }
+        if (quietBelow !== null && level <= quietBelow) quietBelow = null;
+        // A deeper `_XXX` of another program that the reader takes nowhere
+        // (under an event, a citation, a name…): counted, with its lines.
+        if (level >= 2 && quietBelow === null && !inHeader && !stromApp && !stromResearch && isUnreadUnderscoreTag(tag)) drop(tag);
+        // The lines of a media record (0 @O1@ OBJE).
+        if (currentObje && level > 0) {
+            readMediaRecordLine(currentObje, level, tag, value);
+            continue;
+        }
 
         // The lines under a record's id (spec 066 K3.2): `2 _XREF`, `2 _UID`…
         // under `1 _STROM_IMPORT Ix`, `2 TYPE` under `1 EXID`, `3 TYPE` under
@@ -2329,7 +2478,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             if (level === block.level + 1 && block.entry) {
                 block.last = undefined;
                 if (tag === '_XREF') { if (!block.entry.xref && v) block.entry.xref = v; }
-                else if (ORIGINAL_ID_TAGS.has(tag) && v) {
+                else if (ORIGINAL_ID_TAGS.has(tag) && v && block.entry.ids.length < ID_LINES_MAX) {
                     block.last = { tag, value: v };
                     block.entry.ids.push(block.last);
                 }
@@ -2517,6 +2666,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             // must never reach the unsupported-tag summary.
             const recordType = hasXref ? value.split(/\s+/)[0] : tag;
             const recordId = hasXref ? tag : `@__anon${anonRecordSeq++}__@`;
+            currentObje = null;
+            objeSubTag = null;
 
             if (recordType === 'INDI') {
                 currentRecord = {
@@ -2564,6 +2715,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentRecord = null;
                 currentType = 'SOUR';
                 sources.set(recordId, currentSource);
+            } else if (recordType === 'OBJE' && hasXref) {
+                // A media record (spec 066 G8): `1 OBJE @O1@` links of people
+                // and sources take its file like an OBJE written in place.
+                currentObje = { title: '', form: '', file: '', stromKind: '' };
+                mediaRecords.set(recordId, currentObje);
+                currentRecord = null;
+                currentType = null;
+                currentSource = null;
             } else if (recordType === 'REPO') {
                 currentRepoId = recordId;
                 repositories.set(recordId, '');
@@ -2705,7 +2864,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
                 else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
                 else if (tag === IMPORT_TAG) { const mark = readImportMark(value); if (mark) src.importMark = mark.id; }
-                else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
+                else if (tag === 'OBJE') src.media.push({ title: '', file: '', ...(GED_POINTER.test(value.trim()) ? { ref: value.trim() } : {}) });
                 else if (tag === '_STROM_IMG_OMITTED') src.imageHeld = imageHeldReason(value);
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
@@ -2922,7 +3081,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             }
                             break;
                         case 'OBJE': {
+                            // Written in place, or a link to a media record (`1 OBJE @O1@`).
                             const media: RawMedia = { title: '', form: '', file: '', stromKind: '' };
+                            if (GED_POINTER.test(value.trim())) media.ref = value.trim();
                             indi.media.push(media);
                             currentMedia = media;
                             break;
@@ -2960,7 +3121,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 indi.noteFacts.push({ tag, value, date: '', place: '' });
                             } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT'
                                 && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
-                                drop(tag);
+                                // Another program's own tag: kept as written for
+                                // "Back to {prog}" (spec 066 G8); anything else counted.
+                                if (tag.startsWith('_') && !stromApp && !stromResearch) {
+                                    extraBlock = { target: indi, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
+                                } else {
+                                    drop(tag);
+                                }
                             }
                             break;
                         }
@@ -3049,6 +3216,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             }
                             if (NOTED_FAM_TAGS.has(tag)) {
                                 fam.noteFacts.push({ tag, value, date: '', place: '' });
+                            } else if (tag === 'OBJE' && GED_POINTER.test(value.trim())) {
+                                // A family's link to a media record: the record is
+                                // counted once if nothing else takes it (convertToStrom).
+                            } else if (tag.startsWith('_') && !KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)
+                                && !stromApp && !stromResearch) {
+                                extraBlock = { target: fam, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()) };
                             } else if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
                             }
@@ -3309,7 +3482,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === '_SOUR' || tag === 'SOUR') currentMedia.sourceXref = value;
                         else if (tag === '_STROM_SHA') currentMedia.sha = normalizeSha256(value) ?? undefined;
                         else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) currentMedia.orient = Number(value.trim());
-                        else if ((tag === '_PRIM' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
+                        else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
                     } else if (NOTED_INDI_TAGS.has(currentSubTag ?? '') && indi.noteFacts.length > 0) {
                         attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
@@ -3523,6 +3696,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
+    // A kept block on the last lines of the file.
+    closeExtra(lines.length);
     // A detail line on the very last line of the file has no successor to close it.
     flushDetail();
 
@@ -3659,6 +3834,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             ...(head.file ? { file: head.file } : {}),
         },
         ...((stromApp || stromResearch) && headImports.length > 0 ? { stromImports: headImports } : {}),
+        ...(mediaRecords.size > 0 ? { mediaRecords } : {}),
     };
 }
 
@@ -3695,6 +3871,37 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     let unknownSexPersons = 0;
     let otherFamilyLinks = 0;
     let skippedMedia = 0;
+    /** A media link or record not carried over: counted with the OBJEs. */
+    const skipMedia = (): void => {
+        skippedMedia++;
+        droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
+    };
+    /** Media records a person's or a source's link took; the others are counted once at the end. */
+    const usedMedia = new Set<string>();
+    /**
+     * A person's link to a media record (`1 OBJE @O1@`) read as if the OBJE
+     * were written in place: the record's file and marks, the link's own
+     * title and portrait mark first. Null when the file has no such record.
+     */
+    const linkedMedia = (m: RawMedia): RawMedia | null => {
+        if (!m.ref) return m;
+        const rec = gedcom.mediaRecords?.get(m.ref);
+        if (!rec) return null;
+        usedMedia.add(m.ref);
+        return {
+            ...rec, title: m.title || rec.title, stromKind: m.stromKind || rec.stromKind,
+            note: m.note ?? rec.note, sourceXref: m.sourceXref ?? rec.sourceXref, sha: m.sha ?? rec.sha, orient: m.orient ?? rec.orient,
+            ...(m.primary || rec.primary ? { primary: true } : {}),
+        };
+    };
+    /** A source's link to a media record, the same way. */
+    const linkedSourceMedia = (m: RawSourceMedia): RawSourceMedia | null => {
+        if (!m.ref) return m;
+        const rec = gedcom.mediaRecords?.get(m.ref);
+        if (!rec) return null;
+        usedMedia.add(m.ref);
+        return { ...m, file: rec.file, title: m.title || rec.title, sha: m.sha ?? rec.sha, orient: m.orient ?? rec.orient };
+    };
 
     // Build the source catalog and a GEDCOM-id -> new-id map for citations.
     const sourceIdMap = new Map<string, string>();
@@ -3730,7 +3937,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // Images on a source record are crops of its entry. Only embedded
         // raster images come in; a path or URL (another program's media
         // folder) or any other payload is skipped and counted.
-        for (const media of raw.media) {
+        for (const link of raw.media) {
+            const media = linkedSourceMedia(link);
+            if (!media) { skipMedia(); continue; }
             const exc = media.file.startsWith('data:')
                 ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha, orient: media.orient })
                 : null;
@@ -3738,8 +3947,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const region = exc?.originalSha ? parseRegion(media.region) : null;
             if (exc && region) excerptRegions.set(exc, region);
             if (!exc) {
-                skippedMedia++;
-                droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
+                skipMedia();
                 continue;
             }
             (src.excerpts ??= []).push(exc);
@@ -3968,7 +4176,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // OBJE media: a data-URL FILE is either the portrait (Strom marker)
         // or an attachment. External file paths cannot be embedded — counted
         // as dropped so the import summary mentions them.
-        for (const media of indi.media) {
+        for (const link of indi.media) {
+            const media = linkedMedia(link);
+            if (!media) { skipMedia(); continue; }
             if (media.file.startsWith('data:')) {
                 // Only the formats the app itself stores come in: a portrait
                 // is a raster image, a document an image or a PDF. Anything
@@ -3976,8 +4186,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 // skipped — and counted, so the summary says so.
                 const wantsPhoto = media.stromKind === 'photo';
                 if (!(wantsPhoto ? SAFE_PHOTO_DATA_URL : SAFE_ATTACHMENT_DATA_URL).test(media.file)) {
-                    skippedMedia++;
-                    droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
+                    skipMedia();
                     continue;
                 }
                 if (wantsPhoto) {
@@ -4033,11 +4242,16 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 } else {
                     externalMedia.push(ref);
                 }
+            } else if (link.ref) {
+                // A media record with no file to take (a BLOB of GEDCOM 5.5, nothing at all).
+                skipMedia();
             }
         }
 
         persons[personId] = person;
     }
+    // Media records no person or source took (a family's photo, one nobody links): counted once each.
+    for (const ref of gedcom.mediaRecords?.keys() ?? []) if (!usedMedia.has(ref)) skipMedia();
 
     /** Is this link the one the child was born into? No PEDI means birth. */
     const isBirthLink = (pedi: string): boolean => !pedi || pedi === 'birth';
@@ -4494,6 +4708,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
     // Where the facts came from (spec 066), only when the caller asks.
     let importId: string | undefined;
+    /** Another program's own tags kept for "Back to {prog}", by tag (spec 066 G8). */
+    const keptTags = new Map<string, number>();
+    let extrasKept = false;
     const origin = options.importOrigin;
     if (origin && !ownFile) {
         // A file another program wrote: all of it is that file's, whatever
@@ -4514,6 +4731,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             importId = record[0].id;
             markTreeImported(data, importId);
             applyForeignIds(importId);
+            applyFileExtras(importId);
         }
     } else if (origin) {
         applyFileImportMarks();
@@ -4527,6 +4745,34 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (origins || ids) cleanImportOrigin(data, gedcom.stromImports);
     }
 
+    // Another program's own tags with no import to keep them for (the file is
+    // not loaded as an import): not carried over, so counted.
+    if (!extrasKept) {
+        for (const raw of [...individuals.values(), ...families.values()]) {
+            for (const e of raw.extras ?? []) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
+        }
+    }
+
+    /**
+     * Another program's level-1 `_XXX` tags of each person and family, kept as
+     * written for "Back to {prog}" (spec 066 G8).
+     */
+    function applyFileExtras(from: string): void {
+        extrasKept = true;
+        const put = (holder: Person | Partnership | undefined, extras: RawExtra[] | undefined): void => {
+            for (const e of extras ?? []) {
+                if (!holder) { droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1); continue; }
+                addGedcomExtra(holder, { from, lines: e.lines });
+                keptTags.set(e.tag, (keptTags.get(e.tag) ?? 0) + 1);
+            }
+        };
+        for (const [gedId, indi] of individuals) {
+            const pid = personIdMap.get(gedId);
+            put(pid ? persons[pid] : undefined, indi.extras);
+        }
+        for (const [gedFamId, fam] of families) put(famPartnership.get(gedFamId), fam.extras);
+    }
+
     /**
      * Another program's file: each person and family keeps its xref and its id
      * lines there (spec 066 K3.2), as written. A couple read from two families
@@ -4537,6 +4783,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         const put = (holder: Person | Partnership, gedId: string, lines: OriginalIdLine[] | undefined): void => {
             const entry = cleanOriginalIds({ from, xref: gedId.startsWith('@__anon') ? undefined : gedId, ids: lines ?? [] }, known);
             if (entry) addOriginalIds(holder, entry);
+            // A line that is not taken (a control character, U+FFFD, too long) is counted.
+            const kept = holder.originalIds?.find(e => e.from === from)?.ids ?? [];
+            for (const raw of lines ?? []) {
+                const line = cleanOriginalIdLine(raw);
+                const taken = line && kept.some(l => l.tag === line.tag && l.value === line.value && (l.type ?? '') === (line.type ?? ''));
+                if (!taken) droppedTags.set(raw.tag, (droppedTags.get(raw.tag) ?? 0) + 1);
+            }
         };
         for (const [gedId, indi] of individuals) {
             const pid = personIdMap.get(gedId);
@@ -4656,6 +4909,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 .join(', '),
             unknownSexPersons,
             skippedMedia,
+            keptTags: [...keptTags.values()].reduce((a, b) => a + b, 0),
+            keptTagSummary: [...keptTags.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag).join(', '),
             totalGedFamilies: families.size
         }
     };

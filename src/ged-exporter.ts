@@ -640,6 +640,8 @@ interface BackXrefs {
     familyEntries: Map<PartnershipId, OriginalIds>;
     /** Every original xref of that program (upper case), used or given up: no other record gets one. */
     reserved: Set<string>;
+    /** The imports from that program (its own tags kept from them go back, spec 066 G8). */
+    imports: Set<string>;
 }
 
 /**
@@ -655,11 +657,13 @@ interface BackXrefs {
 function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     const out: BackXrefs = {
         program: '', persons: new Map(), families: new Map(), personEntries: new Map(), familyEntries: new Map(), reserved: new Set(),
+        imports: new Set(),
     };
     const rec = backTo ? data.imports?.find(r => r.id === backTo) : undefined;
     if (!rec) return out;
     out.program = importProgramName(rec);
     const same = (data.imports ?? []).filter(r => importProgramName(r) === out.program).map(r => r.id);
+    out.imports = new Set(same);
     // 0 for the import itself, then the later files before the earlier ones.
     const rank = (from: string): number => (from === rec.id ? 0 : same.length - same.indexOf(from));
     const pick = (holder: FactHolder): OriginalIds | undefined => {
@@ -867,6 +871,30 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (backEntry.xref && `@${backEntry.xref}@` !== xref) {
             pushWrapped(lines, 1, 'REFN', backEntry.xref);
             pushWrapped(lines, 2, 'TYPE', `${back.program} xref`);
+        }
+    };
+    /**
+     * "Back to {prog}" (spec 066 G8): the program's own level-1 tags the
+     * record had in its files, at the end of the record exactly as they were
+     * written (the same block from two of its files once). Never in another
+     * export: not in Strom's own file, not to the research.
+     */
+    const pushGedcomExtra = (holder: FactHolder): void => {
+        if (back.imports.size === 0 || !holder.gedcomExtra) return;
+        const written = new Set<string>();
+        for (const entry of holder.gedcomExtra) {
+            if (!back.imports.has(entry.from)) continue;
+            let block: string[] = [];
+            const flush = (): void => {
+                const key = block.join('\n');
+                if (block.length > 0 && !written.has(key)) { written.add(key); lines.push(...block); }
+                block = [];
+            };
+            for (const line of entry.lines) {
+                if (line.startsWith('1 ')) flush();
+                block.push(line);
+            }
+            flush();
         }
     };
     /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
@@ -1178,6 +1206,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 }
             }
         }
+
+        pushGedcomExtra(person);
     }
 
     // ==================== FAMILIES ====================
@@ -1347,6 +1377,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         for (const srcId of hasMarriage ? [] : partnership.sourceIds ?? []) {
             pushCitation(1, srcId);
         }
+
+        pushGedcomExtra(partnership);
     }
 
     // Parents who are not a couple, with their children (see looseFamilies).

@@ -152,7 +152,8 @@ describe('GEDCOM: a register entry as a source', () => {
             pageUrl: 'https://archive.example/page/57',
         });
         expect(src.excerpts![0].region).toBeUndefined();
-        expect(r.stats.unsupportedTags).toBe(0);
+        // Another program's `_REGION` is not read (only Strom's own `_STROM_REGION`): counted.
+        expect(r.stats.droppedTagSummary).toBe('_REGION ×1');
     });
 
     it('reads the record date from a citation at person and family level too', () => {

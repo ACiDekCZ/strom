@@ -732,6 +732,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         events: 'Zdarzenia',
         notes: 'Notatki',
         allImported: 'Zaimportowano wszystko z pliku.',
+        keptTags: (prog: string, n: number, tags: string) =>
+            `Zachowano do eksportu „Z powrotem do ${prog}”: ${nPl(n, 'znacznik', 'znaczniki', 'znaczników')} (${tags})`,
         viewCutTooSmall: 'Najpierw wymagane jest wyświetlenie większej liczby osób (widok Rodzina lub Potomkowie), potem można utworzyć drzewo z widoku.',
         viewCutName: (name: string) => `${name} – wycinek`,
         externalMedia: (n: number) => `Plik odwołuje się do ${nPl(n, 'zewnętrznego pliku multimediów', 'zewnętrznych plików multimediów', 'zewnętrznych plików multimediów')} (platformy eksportują zdjęcia osobno jako folder/zip – najpierw wymagane jest jego rozpakowanie).`,

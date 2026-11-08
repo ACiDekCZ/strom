@@ -4451,6 +4451,8 @@ const stringsEN = {
         events: 'Events',
         notes: 'Notes',
         allImported: 'Everything in the file was imported.',
+        keptTags: (prog: string, n: number, tags: string) =>
+            `Kept for the export “Back to ${prog}”: ${n} ${n === 1 ? 'tag' : 'tags'} (${tags})`,
         viewCutTooSmall: 'Show more people (family or descendants view) before making a tree from the view.',
         viewCutName: (name: string) => `${name} — selection`,
         externalMedia: (n: number) => `The file references ${n} external media file${n === 1 ? '' : 's'} (platforms export photos as a separate folder/zip — unpack it first).`,
@@ -12312,6 +12314,8 @@ const stringsCZ: StringsType = {
         events: 'Události',
         notes: 'Poznámky',
         allImported: 'Vše ze souboru bylo naimportováno.',
+        keptTags: (prog: string, n: number, tags: string) =>
+            `Uchováno pro export „Zpět do ${prog}“: ${nCs(n, 'značka', 'značky', 'značek')} (${tags})`,
         viewCutTooSmall: 'Nejdřív je potřeba zobrazit více osob (pohled Rodina nebo Potomci), pak z pohledu vytvořit strom.',
         viewCutName: (name: string) => `${name} — výřez`,
         externalMedia: (n: number) => `Soubor odkazuje na ${nCs(n, 'externí soubor médií', 'externí soubory médií', 'externích souborů médií')} (platformy exportují fotky zvlášť jako složku/zip — nejdřív je potřeba jej rozbalit).`,
@@ -20110,6 +20114,8 @@ const stringsDE: StringsType = {
         events: 'Ereignisse',
         notes: 'Notizen',
         allImported: 'Alles in der Datei wurde importiert.',
+        keptTags: (prog: string, n: number, tags: string) =>
+            `Für den Export „Zurück zu ${prog}“ aufbewahrt: ${n} GEDCOM-${n === 1 ? 'Tag' : 'Tags'} (${tags})`,
         viewCutTooSmall: 'Vor dem Erstellen eines Stammbaums aus der Ansicht mehr Personen anzeigen (Familien- oder Nachkommenansicht).',
         viewCutName: (name: string) => `${name} — Auswahl`,
         externalMedia: (n: number) => `Die Datei verweist auf ${n} ${n === 1 ? 'externe Mediendatei' : 'externe Mediendateien'} (Plattformen exportieren Fotos als eigenen Ordner/ZIP — diesen zuerst entpacken).`,

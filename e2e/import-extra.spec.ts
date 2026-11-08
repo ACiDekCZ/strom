@@ -343,6 +343,41 @@ test('GEDCOM result: a GEDCOM 7 file\'s ids and stamps are not unsupported, and 
     await expect(lines.first()).toHaveText(/^„Nieobsługiwane” to części pliku, których Strom nie zna i nie przeniósł/);
 });
 
+test('GEDCOM result: another program\'s own tags are kept for the way back, deeper ones are skipped, a media record is offered to connect', async ({ page }, testInfo) => {
+    await openApp(page);
+    const ged = [
+        '0 HEAD', '1 SOUR MYHERITAGE', '2 NAME MyHeritage Family Tree Builder', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Hromoslav /Ozubec/', '1 SEX M', '1 _MHNOTE Žluťoučký kůň 🦉 鳥居', '2 _MHSUB Kořenov',
+        '1 BIRT', '2 DATE 1880', '2 _MHPLACEID 4711', '1 OBJE @O1@', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME Libuna /Mechová/', '1 SEX F', '1 FAMS @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 _MHSTATUS spolu',
+        '0 @O1@ OBJE', '1 FILE photos/hromoslav.jpg', '2 FORM jpg',
+        '0 TRLR', '',
+    ].join('\n');
+    const p = testInfo.outputPath('myheritage-tags.ged');
+    writeFileSync(p, ged);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('1');
+    const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
+    await expect(lines).toHaveText([
+        /^“Unsupported” counts the parts of the file/,
+        'Skipped records: _MHPLACEID ×1',
+        /^Kept for the export “Back to MyHeritage Family Tree Builder”: 2 tags \((_MHNOTE, _MHSTATUS|_MHSTATUS, _MHNOTE)\)$/,
+    ]);
+    await expect(result.locator('#gedcom-media-row')).toBeVisible();
+    await expect(result.locator('#gedcom-media-text')).toHaveText(/references 1 external media file\b/);
+
+    // Czech: the count agrees with its word.
+    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+    await page.locator('#gedcom-input').setInputFiles([]);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    await expect(result).toBeVisible();
+    await expect(lines.nth(2)).toHaveText(/^Uchováno pro export „Zpět do MyHeritage Family Tree Builder“: 2 značky \(/);
+});
+
 test('GEDCOM result: a file with nothing unsupported has no sentence about it', async ({ page }, testInfo) => {
     await openApp(page);
     const p = testInfo.outputPath('clean.ged');

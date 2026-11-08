@@ -24,7 +24,7 @@
 
 import { eventValueIsOnTag } from './events.js';
 import {
-    CoupleEvent, FactOriginKind, FactPart, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
+    CoupleEvent, FactOriginKind, FactPart, GedcomExtra, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
     Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, StromData,
 } from './types.js';
 
@@ -269,18 +269,29 @@ export const ORIGIN_IDS_FEATURE = 'origin.ids';
 const ID_VALUE_MAX = 200;
 const XREF_MAX = 80;
 
+/**
+ * Most id lines kept of one import on one record, and most imports' ids on
+ * one record (the research keeps the same bounds); more are left out.
+ */
+export const ID_LINES_MAX = 20;
+export const ID_ENTRIES_MAX = 50;
+
 /** An xref as stored: without the @ signs, nothing that would break the line. */
 function cleanXref(value: unknown): string | undefined {
     if (typeof value !== 'string') return undefined;
-    const x = value.trim().replace(/^@/, '').replace(/@$/, '');
-    return x && x.length <= XREF_MAX && !/[@\s\p{Cc}]/u.test(x) ? x : undefined;
+    const x = value.trim().normalize('NFC').replace(/^@/, '').replace(/@$/, '');
+    return x && x.length <= XREF_MAX && !/[@\s\p{Cc}\uFFFD]/u.test(x) ? x : undefined;
 }
 
-/** An id value or type as stored: one line, trimmed, not too long. */
+/**
+ * An id value or type as stored: one line, trimmed, in NFC, not too long.
+ * A control character or U+FFFD (a character the file's encoding lost)
+ * means the value is not the one the other system has: not taken.
+ */
 function cleanIdText(value: unknown): string | undefined {
     if (typeof value !== 'string') return undefined;
-    const v = value.trim();
-    return v && v.length <= ID_VALUE_MAX && !/\p{Cc}/u.test(v) ? v : undefined;
+    const v = value.trim().normalize('NFC');
+    return v && v.length <= ID_VALUE_MAX && !/[\p{Cc}\uFFFD]/u.test(v) ? v : undefined;
 }
 
 /** One id line, valid fields only; null when it is not one. */
@@ -310,7 +321,7 @@ export function cleanOriginalIds(value: unknown, known: ReadonlySet<string>): Or
     if (Array.isArray(r.ids)) {
         for (const raw of r.ids) {
             const line = cleanOriginalIdLine(raw);
-            if (line && !ids.some(l => sameIdLine(l, line))) ids.push(line);
+            if (line && !ids.some(l => sameIdLine(l, line)) && ids.length < ID_LINES_MAX) ids.push(line);
         }
     }
     if (!xref && ids.length === 0) return null;
@@ -325,19 +336,89 @@ export function addOriginalIds(holder: FactHolder, entry: OriginalIds): void {
     const list = holder.originalIds ??= [];
     const have = list.find(e => e.from === entry.from);
     if (!have) {
+        if (list.length >= ID_ENTRIES_MAX) return;
         list.push({ from: entry.from, ...(entry.xref ? { xref: entry.xref } : {}),
-            ...(entry.ids?.length ? { ids: entry.ids.map(l => ({ ...l })) } : {}) });
+            ...(entry.ids?.length ? { ids: entry.ids.slice(0, ID_LINES_MAX).map(l => ({ ...l })) } : {}) });
         return;
     }
     if (!have.xref && entry.xref) have.xref = entry.xref;
     for (const line of entry.ids ?? []) {
+        if ((have.ids?.length ?? 0) >= ID_LINES_MAX) break;
         if (!have.ids?.some(l => sameIdLine(l, line))) (have.ids ??= []).push({ ...line });
     }
 }
 
-/** The ids of `from` added to `into` (import ids renamed by `map`), e.g. after a merge. */
+/**
+ * The ids of `from` added to `into` (import ids renamed by `map`), e.g. after
+ * a merge; its kept tags of other programs (gedcomExtra) go along.
+ */
 export function mergeOriginalIds(into: FactHolder, from: FactHolder, map: Map<string, string> = new Map()): void {
     for (const entry of from.originalIds ?? []) addOriginalIds(into, { ...entry, from: map.get(entry.from) ?? entry.from });
+    for (const entry of from.gedcomExtra ?? []) addGedcomExtra(into, { ...entry, from: map.get(entry.from) ?? entry.from });
+}
+
+// ==================== OTHER PROGRAMS' OWN TAGS ====================
+
+/** Most lines kept of one import's tags on one record, and the longest line (a whole block is kept or none of it). */
+const EXTRA_MAX_LINES = 2000;
+const EXTRA_MAX_LINE = 10000;
+
+/** A kept line: `1 _XXX …` opens a block, the lines under it are level 2 or deeper; one line, no line break. */
+const EXTRA_HEAD = /^1 _[A-Za-z0-9_]+(?: |$)/;
+const EXTRA_BODY = /^(?:[2-9]|[1-9]\d+) \S/;
+
+/**
+ * One kept block as written: a `1 _XXX` line and the lines under it (level 2
+ * or deeper), each one line, not too long; not too many of them.
+ */
+export function validExtraBlock(block: readonly string[]): boolean {
+    return block.length > 0 && block.length <= EXTRA_MAX_LINES && EXTRA_HEAD.test(block[0])
+        && block.slice(1).every(l => EXTRA_BODY.test(l))
+        && block.every(l => l.length <= EXTRA_MAX_LINE && !/[\r\n\0]/.test(l));
+}
+
+/** The blocks of kept lines, each from its `1 _XXX` line. */
+function extraBlocks(lines: readonly string[]): string[][] {
+    const blocks: string[][] = [];
+    for (const line of lines) {
+        if (line.startsWith('1 ')) blocks.push([line]);
+        else blocks[blocks.length - 1]?.push(line);
+    }
+    return blocks;
+}
+
+/**
+ * One import's kept tags of a record, cleaned: null when the import is not
+ * known or no valid block is left. A block with a line that is not one
+ * (a line break inside, no level, too long) goes as a whole.
+ */
+export function cleanGedcomExtra(value: unknown, known: ReadonlySet<string>): GedcomExtra | null {
+    if (!value || typeof value !== 'object') return null;
+    const r = value as Record<string, unknown>;
+    if (typeof r.from !== 'string' || !known.has(r.from) || !Array.isArray(r.lines)) return null;
+    if (!r.lines.every((l): l is string => typeof l === 'string')) return null;
+    const lines: string[] = [];
+    for (const block of extraBlocks(r.lines as string[])) {
+        if (validExtraBlock(block) && lines.length + block.length <= EXTRA_MAX_LINES) lines.push(...block);
+    }
+    return lines.length > 0 ? { from: r.from, lines } : null;
+}
+
+/**
+ * Add one import's kept tags to a holder: joined with the entry of the same
+ * import (a block it already has is not added again), else a new entry.
+ */
+export function addGedcomExtra(holder: FactHolder, entry: GedcomExtra): void {
+    const list = holder.gedcomExtra ??= [];
+    const have = list.find(e => e.from === entry.from);
+    if (!have) { list.push({ from: entry.from, lines: [...entry.lines] }); return; }
+    const known = new Set(extraBlocks(have.lines).map(b => b.join('\n')));
+    for (const block of extraBlocks(entry.lines)) {
+        const key = block.join('\n');
+        if (known.has(key)) continue;
+        known.add(key);
+        have.lines.push(...block);
+    }
 }
 
 /** Today as an ISO day in local time ("2026-11-08"): when a file was loaded. */
@@ -494,6 +575,15 @@ function cleanHolder(holder: FactHolder, known: Set<string>, sources: StromData[
             if (clean) addOriginalIds(holder, clean);
         }
     }
+    if ('gedcomExtra' in h) {
+        const raw = h.gedcomExtra;
+        const list = Array.isArray(raw) ? raw : [];
+        delete holder.gedcomExtra;
+        for (const v of list) {
+            const clean = cleanGedcomExtra(v, known);
+            if (clean) addGedcomExtra(holder, clean);
+        }
+    }
 }
 
 /**
@@ -551,7 +641,11 @@ export function pruneImportOrigin(data: StromData): void {
  * FamilySearch one names the hidden person in the other system.
  */
 export function forgetHiddenImports(holder: FactHolder, changed: boolean): void {
-    if (changed) delete holder.originalIds;
+    if (changed) {
+        delete holder.originalIds;
+        // Another program's own lines may say anything about the person.
+        delete holder.gedcomExtra;
+    }
     if (holder.importedValues) {
         for (const [key, stored] of Object.entries(holder.importedValues)) {
             const now = factValue(holder, key);
@@ -626,6 +720,11 @@ export function remapHolderImports(holder: FactHolder, map: Map<string, string>)
         const list = holder.originalIds;
         delete holder.originalIds;
         for (const entry of list) addOriginalIds(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
+    }
+    if (holder.gedcomExtra) {
+        const list = holder.gedcomExtra;
+        delete holder.gedcomExtra;
+        for (const entry of list) addGedcomExtra(holder, { ...entry, from: map.get(entry.from) ?? entry.from });
     }
 }
 
@@ -711,6 +810,8 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
                 if (!into.originalIds?.some(e => e.from === entry.from)) addOriginalIds(into, entry);
             }
         }
+        // Another program's own tags never go to the research: the tree keeps its own.
+        for (const entry of from.gedcomExtra ?? []) addGedcomExtra(into, entry);
     };
     for (const [prevId, nextId] of prevToNext) {
         const before = previous.persons[prevId as PersonId];
