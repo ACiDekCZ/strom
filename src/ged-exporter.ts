@@ -36,7 +36,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
-import { citeLines, ExtraHolder, FactHolder, factImportTags, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
+import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { CONFIRMED_TAG, factVerifyInfo } from './verify.js';
 import { importProgramName } from './import-next.js';
 
@@ -1994,7 +1994,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // A record of another program's file has its pages on the citations (5.5.1 knows no PAGE on a record).
         if (source.reference && !members) pushLongValue(lines, 1, 'PAGE', source.reference);
         if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);
-        if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
+        // "Back to {prog}": its TEXT with the HTML it had, while the transcript is still its text.
+        const textAsWritten = members ? members.find(m => m.transcript)?.gedcomText : undefined;
+        if (source.transcript && textAsWritten && gedcomHtmlText(textAsWritten).trim() === source.transcript) {
+            pushLongValue(lines, 1, 'TEXT', textAsWritten);
+        } else if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
         // The user read the transcript from the record (Strom Research: the first reading).
         if (source.transcriptVerified && source.transcript) lines.push('1 _STROM_VERIFIED Y');
         // Who read the entry, as the research said it (and the confirmation of its wording): back as it came.

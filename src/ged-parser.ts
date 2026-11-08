@@ -96,7 +96,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { researchClaimValue } from './research-claim';
 import {
-    addGedcomExtra, addOriginalIds, CITE_TAG, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
+    addGedcomExtra, addOriginalIds, CITE_TAG, gedcomHtmlText, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
     factValueSignature,
@@ -3332,8 +3332,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             const addLine = (line: string, sep: string): void => {
                 src.note = src.note ? `${src.note}${sep}${line}` : line;
             };
-            const plain = (text: string): string =>
-                currentSubTag === 'TEXT' || currentSubTag === 'PUBL' ? text.replace(/<[^>]*>/g, '') : text;
+            // (The TEXT is read as written, its HTML turned to text once it is whole: a tag may span lines.)
+            const plain = (text: string): string => currentSubTag === 'PUBL' ? gedcomHtmlText(text) : text;
             if (level === 1) {
                 currentSubTag = tag;
                 readingAuthor = false;
@@ -4544,7 +4544,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (raw.url) src.url = raw.url;
         if (raw.note) src.note = raw.note;
         if (raw.quality !== undefined) src.quality = raw.quality;
-        if (raw.transcript?.trim()) src.transcript = raw.transcript.trim();
+        const transcript = raw.transcript ? gedcomHtmlText(raw.transcript).trim() : '';
+        if (transcript) src.transcript = transcript;
+        // HTML in another program's TEXT (a link of MyHeritage): as written, for "Back to {prog}".
+        if (transcript && !gedcom.stromResearch && raw.transcript!.trim() !== transcript) src.gedcomText = raw.transcript!.trim();
         if (raw.refn) src.refn = raw.refn;
         if (raw.verified && src.transcript) src.transcriptVerified = true;
         if (raw.readBy) {

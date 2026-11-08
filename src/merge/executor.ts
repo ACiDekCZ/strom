@@ -249,6 +249,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     if (into) addOriginalIds(into, { ...entry, from: importMap.get(entry.from) ?? entry.from });
                 }
                 if (into && !into.gedcomAuthor && incomingSrc.gedcomAuthor) into.gedcomAuthor = incomingSrc.gedcomAuthor;
+                if (into && !into.gedcomText && incomingSrc.gedcomText && incomingSrc.transcript) {
+                    // A tree loaded before a link's address was kept has the link's text alone: unedited, it takes the address.
+                    const before = incomingSrc.gedcomText.replace(/<[^>]*>/g, '').trim();
+                    if (into.transcript === before) into.transcript = incomingSrc.transcript;
+                    if (into.transcript === incomingSrc.transcript) into.gedcomText = incomingSrc.gedcomText;
+                }
                 continue;
             }
             const src = mergedData.sources?.[id];

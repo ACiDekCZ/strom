@@ -491,6 +491,25 @@ export function citeLines(lines: readonly string[]): string[] {
  */
 export const NOTED_TAG = '_STROM_NOTED';
 
+/**
+ * Text another program wrote with HTML in it (MyHeritage's source TEXT,
+ * `<a href='https://…' target='_blank'>www.…</a>`), as plain text: a link
+ * keeps its address (alone when its text is that address, else after the
+ * text in brackets), every other tag goes.
+ */
+export function gedcomHtmlText(text: string): string {
+    const linked = text.replace(/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a\s*>/gi,
+        (_m, dq: string | undefined, sq: string | undefined, bare: string | undefined, inner: string) => {
+            const url = (dq ?? sq ?? bare ?? '').trim();
+            const label = inner.replace(/<[^>]*>/g, '').trim();
+            if (!url) return label;
+            const bareUrl = (u: string): string => u.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+            if (!label || bareUrl(label) === bareUrl(url)) return url;
+            return `${label} (${url})`;
+        });
+    return linked.replace(/<[^>]*>/g, '');
+}
+
 /** A structure that became lines of a note: those lines, and the structure as written from level 1. */
 export interface NotedStructure {
     texts: string[];
@@ -1031,6 +1050,7 @@ export function cleanImportOrigin(data: StromData, rawImports: unknown): void {
         cleanHolderExtra(src, known);
         cleanSourceXrefs(src, known);
         if ('gedcomAuthor' in src && (typeof src.gedcomAuthor !== 'string' || !src.gedcomAuthor)) delete src.gedcomAuthor;
+        if ('gedcomText' in src && (typeof src.gedcomText !== 'string' || !src.gedcomText)) delete src.gedcomText;
     }
 }
 

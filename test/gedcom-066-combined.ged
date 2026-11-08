@@ -815,6 +815,18 @@
 2 DATE 1920
 1 RIN MH:I2201
 1 _UID 22A1B2C3D4E5F60718293A4B5C6D7E01
+0 @I2301@ INDI
+1 _UPD 8 NOV 2026 10:00:00 GMT -0500
+1 NAME Bláboslava /Žbluňková/
+2 GIVN Bláboslava
+2 SURN Žbluňková
+1 SEX F
+1 BIRT
+2 DATE 1852
+2 SOUR @S5@
+3 PAGE p. 14
+1 RIN MH:I2301
+1 _UID 23A1B2C3D4E5F60718293A4B5C6D7E01
 0 @S1@ SOUR
 1 _UPD 8 NOV 2026 10:00:00 GMT -0500
 1 TITL Parish register Hrbolcov
@@ -833,4 +845,9 @@
 1 _UPD 8 NOV 2026 10:00:00 GMT -0500
 1 TITL Drnkalov estate inventory
 1 RIN MH:S3
+0 @S5@ SOUR
+1 _UPD 8 NOV 2026 10:00:00 GMT -0500
+1 TITL Kňouralov parish register online
+1 TEXT Births 1850-1860, <a href='https://www.example.org/register/7' target='_blank'>scan 7</a>, also at <a href='https://archive.example.org' target='_blank'>archive.example.org</a>
+1 RIN MH:S5
 0 TRLR

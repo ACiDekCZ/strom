@@ -411,6 +411,13 @@ export interface Source {
      * in the note (like LifeEvent.gedcomEmails).
      */
     gedcomAuthor?: string;
+    /**
+     * The record's TEXT as the file wrote it when it had HTML in it (a link
+     * of MyHeritage); the transcript is its plain text, the link's address
+     * kept. "Back to {prog}" writes it as written while the transcript is
+     * still that text.
+     */
+    gedcomText?: string;
 }
 
 /** Why the research left a source's image out of its file (see Source.imageHeld). */

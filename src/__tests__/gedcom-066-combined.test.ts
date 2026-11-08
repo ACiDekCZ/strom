@@ -472,6 +472,17 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(holdsRun(rec, ['1 RESI', '2 ADDR Mlýnská 6, Kňouralov'])).toBe(true);
             expect(count(rec, /ADR1/)).toBe(0);
         });
+
+        it('23 · a source\'s TEXT with web links (MyHeritage): the links\' addresses kept, the TEXT back as written', () => {
+            const source = Object.values(tree.sources!).find(s => s.title === 'Kňouralov parish register online')!;
+            expect(source.transcript).toBe('Births 1850-1860, scan 7 (https://www.example.org/register/7), also at https://archive.example.org');
+            for (const ged of [first, second]) {
+                expect(record(ged, '@S5@')).toContain("1 TEXT Births 1850-1860, <a href='https://www.example.org/register/7' target='_blank'>scan 7</a>, also at <a href='https://archive.example.org' target='_blank'>archive.example.org</a>");
+            }
+            const edited = structuredClone(tree);
+            Object.values(edited.sources!).find(s => s.title === 'Kňouralov parish register online')!.transcript = 'Births 1850-1860';
+            expect(record(backTo(edited), '@S5@')).toContain('1 TEXT Births 1850-1860');
+        });
     });
 });
 
@@ -488,6 +499,32 @@ describe('The combined 066 file merged into the tree it was imported into', () =
         const size = (d: StromData) => [Object.keys(d.persons).length, Object.keys(d.partnerships).length, Object.keys(d.sources ?? {}).length];
         expect(size(merged)).toEqual(size(tree));
         expect(records(backTo(merged))).toEqual(records(fresh));
+    });
+
+    it('22, 23 · a tree imported before these were kept takes them from the file merged again', async () => {
+        const fresh = backTo(load(FILE, '2026-11-08'));
+        // What an earlier import of the file made of cases 22 and 23.
+        const tree = load(FILE, '2026-11-08');
+        const person = Object.values(tree.persons).find(p => p.firstName === 'Bublislav')!;
+        for (const event of person.events!) {
+            if (event.gedcomValue && event.type !== 'custom') delete event.note;
+            delete event.gedcomValue;
+            if (event.gedcomAddress) { delete event.address; delete event.gedcomAddress; }
+        }
+        const source = Object.values(tree.sources!).find(s => s.title === 'Kňouralov parish register online')!;
+        source.transcript = 'Births 1850-1860, scan 7, also at archive.example.org';
+        delete source.gedcomText;
+
+        const merged = (await executeMerge(createMergeState(tree, load(FILE, '2026-11-09')))).mergedData!;
+        const events = Object.values(merged.persons).find(p => p.firstName === 'Bublislav')!.events!;
+        expect(events.find(e => e.type === 'education')!.note).toBe('Kňouralov grammar school');
+        expect(events.find(e => e.type === 'burial')!.note).toBe('Kňouralov churchyard, grave 12');
+        expect(events.find(e => e.type === 'residence')!.address).toBe('Mlýnská 5, Kňouralov');
+        expect(events).toHaveLength(person.events!.length);
+        expect(Object.values(merged.sources!).find(s => s.title === 'Kňouralov parish register online')!.transcript)
+            .toBe('Births 1850-1860, scan 7 (https://www.example.org/register/7), also at https://archive.example.org');
+        const ofCase = (ged: string) => records(ged).filter(r => /^0 @(I2201|S5)@ /.test(r));
+        expect(ofCase(backTo(merged))).toEqual(ofCase(fresh));
     });
 });
 
