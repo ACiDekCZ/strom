@@ -1026,6 +1026,8 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         // The kind's rule: × in the header, Cancel right before the one primary.
         await expect(dialog.locator('.close-btn')).toHaveCount(1);
         expect(await dialog.locator('.buttons [data-dismiss]').evaluate(el => el.nextElementSibling?.classList.contains('primary'))).toBe(true);
+        // The research's answer drew the content again: the focus stayed in the dialog.
+        await expect(dialog.locator('[data-dismiss]')).toBeFocused();
 
         await dialog.locator('.vfy-check').nth(1).uncheck();
         await expect(est).toHaveText('Estimate: 1 low, 0 higher');
@@ -1139,5 +1141,8 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         expect(look.row).toBeGreaterThanOrEqual(52);
         expect(Math.min(...look.btns)).toBeGreaterThanOrEqual(48);
         expect(look.scroll).toBeLessThanOrEqual(0);
+        // Opened without a menu, drawn again with the answer: Esc still closes it.
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#verify-person-modal')).toHaveCount(0);
     });
 });

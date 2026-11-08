@@ -189,6 +189,31 @@ function refusalText(code: string, reason: string): string {
     return reason || strings.verify.failed;
 }
 
+/**
+ * Before a dialog's content is drawn again: the control that has the focus,
+ * so the new content gives it back (else the dialog's Cancel/Close), and Esc
+ * keeps closing the dialog. Focus outside the dialog stays where it is.
+ */
+function keepFocus(modal: HTMLElement): () => void {
+    const el = document.activeElement;
+    const inside = el instanceof HTMLElement && modal.contains(el);
+    if (!inside && el && el !== document.body) return () => { /* the focus is elsewhere */ };
+    let key = '';
+    if (inside) {
+        for (const a of ['data-row', 'data-dismiss', 'data-vfy', 'data-act']) {
+            const v = el.getAttribute(a);
+            if (v !== null) { key = v ? `[${a}="${CSS.escape(v)}"]` : `[${a}]`; break; }
+        }
+        const input = el as HTMLInputElement;
+        if (!key && input.name) key = `[name="${CSS.escape(input.name)}"][value="${CSS.escape(input.value)}"]`;
+    }
+    return () => {
+        const target = key ? modal.querySelector<HTMLElement>(key) : null;
+        target?.focus({ preventScroll: true });
+        if (!modal.contains(document.activeElement)) modal.querySelector<HTMLElement>('[data-dismiss]')?.focus({ preventScroll: true });
+    };
+}
+
 /** Close a dialog of this module and give the focus back. */
 function removeDialog(id: string, opener: HTMLElement | null, ui: { dialogStack: string[] }): void {
     document.getElementById(id)?.remove();
@@ -375,6 +400,7 @@ export const verifyPersonMethods = uiModule({
         }
         const n = checked.length;
         const startOff = st.loading || !!st.error || n === 0 || st.busy;
+        const restoreFocus = keepFocus(modal);
         modal.innerHTML = `
             <div class="modal-header vfy-header">
                 <div class="vfy-heading"><h2 id="vfy-person-title">${esc(v.personTitle)}</h2>
@@ -388,6 +414,7 @@ export const verifyPersonMethods = uiModule({
             </div>`;
         // The sub says the count of the facts offered, not 0 while asking.
         if (st.loading || st.error) modal.querySelector('.vfy-sub')!.textContent = name;
+        restoreFocus();
     },
 
     verifyPersonClick(e: Event): void {
@@ -615,6 +642,7 @@ export const verifyPersonMethods = uiModule({
         if (!modal) return;
         const treeId = DataManager.getCurrentTreeId();
         const name = treeId ? TreeManager.getTreeMetadata(treeId)?.name ?? '' : '';
+        const restoreFocus = keepFocus(modal);
         modal.innerHTML = `
             <div class="modal-header vfy-header">
                 <div class="vfy-heading"><h2 id="vfy-tree-title">${esc(strings.research.knows)}</h2>${name ? `<div class="vfy-sub">${esc(name)}</div>` : ''}</div>
@@ -626,6 +654,7 @@ export const verifyPersonMethods = uiModule({
         const body = modal.querySelector<HTMLElement>('.vfy-body')!;
         if (block) body.appendChild(block);
         else body.innerHTML = `<p class="vfy-loading">${esc(strings.verify.nothing)}</p>`;
+        restoreFocus();
     },
 
     // ==================== The bulk dialog (10l) ====================
@@ -756,6 +785,7 @@ export const verifyPersonMethods = uiModule({
                 <input type="radio" name="vfy-order" value="${o}"${o === st.order ? ' checked' : ''}>
                 <span class="vfy-opt-main"><span class="vfy-opt-title">${esc(orderLabel(o))}</span></span>
             </label>`).join('');
+        const restoreFocus = keepFocus(modal);
         modal.innerHTML = `
             <div class="modal-header vfy-header">
                 <div class="vfy-heading"><h2 id="vfy-bulk-title">${esc(v.bulkTitle)}</h2><div class="vfy-sub">${esc(v.bulkSub)}</div></div>
@@ -776,6 +806,7 @@ export const verifyPersonMethods = uiModule({
                 <button type="button" class="primary" data-vfy="start" disabled></button>
             </div>`;
         this.renderVerifyBulkEstimate();
+        restoreFocus();
     },
 
     /** The estimate and the start button of the bulk dialog. */
