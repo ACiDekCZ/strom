@@ -511,6 +511,18 @@ test.describe('card signals', () => {
         expect(off).toContain('card-story');
     });
 
+    test('image export with living people protected: no mark or fold on a living person\'s card (spec 066 P4 §7)', async ({ page }) => {
+        await plainTree(page, {
+            a: { firstName: 'Hostivít', lastName: 'Kvapilík', gender: 'male', birthDate: '1850', deathDate: '1921', birthSourceIds: ['s1'], story: { text: 'Mlýn.', status: 'final' } },
+            b: { firstName: 'Zdeslava', lastName: 'Kvapilíková', birthDate: '1990', birthSourceIds: ['s1'], story: { text: 'Dnes.', status: 'final' } },
+        }, { s1: { id: 's1', title: 'Matrika' } });
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await page.locator('#poster-privacy-mode').selectOption('initials');
+        const svg = await posterSvg(page);
+        expect(svg.match(/<g class="card-status-mark"/g) ?? []).toHaveLength(1);
+        expect(svg.match(/<g class="card-story/g) ?? []).toHaveLength(1);
+    });
+
     test('Settings: switching a signal off hides it on the card, the tooltip keeps it', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());

@@ -263,9 +263,13 @@ function buildCurrentPoster(): PosterBuild | null {
     if (layout.positions.size === 0) return null;
     const { cardConfig, drawing } = treeCardDrawing(data, layout);
     // Marriage-order pills numbered as on screen, from the unfiltered data (T13).
-    // The status mark and the story's fold as the cards show them (spec 066 P4 §7), from the app's own data.
+    // The status mark and the story's fold as the cards show them (spec 066 P4 §7), from the app's own data;
+    // under a living-privacy mode only for the people it leaves as they are (the presumed deceased).
+    const privacy = posterPrivacyMode();
+    const deceased = privacy === 'full' ? null : presumedDeceasedSet(DataManager.getData());
+    const markIds = [...layout.positions.keys()].filter(id => !deceased || deceased.has(id));
     const options: PosterOptions = { ...meta, ...drawing, orderData: DataManager.getData(),
-        cardMarks: TreeRenderer.posterCardMarks(layout.positions.keys()) };
+        cardMarks: TreeRenderer.posterCardMarks(markIds) };
     const svg = buildTreeSvg(data, layout, options);
 
     // Occupied rectangles in poster-px space (cards + footer strip). Sheets
