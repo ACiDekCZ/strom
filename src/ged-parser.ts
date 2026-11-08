@@ -719,7 +719,13 @@ const NOTED_FAM_TAGS = new Set(['NCHI']);
  * whole — "1815/1816", "10 JAN", another calendar): kept as written for
  * "Back to {prog}" when they do (see NOTED_TAG).
  */
-const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB', 'WIFE', 'DATE']);
+const NOTED_DETAIL_TAGS = new Set(['NOTE', 'RELI', 'CAUS', 'AGE', 'ADDR', 'HUSB', 'WIFE', 'DATE', 'TYPE']);
+/**
+ * Of those, the lines Strom reads nowhere, not even into the note (a
+ * wedding's `2 TYPE civil`): kept as written all the same, with no line of
+ * the note to stand for them.
+ */
+const NOTED_SILENT_TAGS = new Set(['TYPE']);
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -2684,8 +2690,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         /** The note's lines of the structure's lines read so far, and those lines as written. */
         texts: string[];
         body: string[];
-        /** A level-2 line under the fact being read, and the note's length before it. */
-        sub: { start: number; before: number } | null;
+        /** A level-2 line under the fact being read (its tag), and the note's length before it. */
+        sub: { start: number; before: number; tag: string } | null;
     } | null = null;
     /** The file's level-1 line being read (the head of a fact's lines). */
     let notedHead = -1;
@@ -2710,6 +2716,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (open?.sub && level <= 2) {
             const text = open.note().slice(open.sub.before).replace(/^\n/, '');
             if (text) { open.texts.push(text); open.body.push(...structureAt(open.sub.start)); }
+            else if (NOTED_SILENT_TAGS.has(open.sub.tag)) open.body.push(...structureAt(open.sub.start));
             open.sub = null;
         }
         if (open && level <= 1) {
@@ -2718,7 +2725,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             const structure = open.whole ? structureAt(open.head) : [lines[open.head].trimStart(), ...open.body];
             // A pointer in it would name a record by an xref the export renumbers
             // (a calendar's escape, `@#DJULIAN@`, is none).
-            const block = structure.some(l => /^\d+ @|\s@[^@#\s][^@\s]*@/.test(l)) ? null : notedBlock(texts, structure);
+            const block = structure.some(l => /^\d+ @|\s@[^@#\s][^@\s]*@/.test(l)) || (open.whole && texts.length === 0)
+                ? null : notedBlock(texts, structure);
             if (block) (open.target.extras ??= []).push({ tag: NOTED_TAG, lines: block, quiet: true });
         }
         if (level === 1) notedHead = src;
@@ -2752,7 +2760,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
             if (!target || !note) return;
             noted ??= { target, note, head: notedHead, texts: [], body: [], sub: null };
-            noted.sub = { start: src, before: noted.note().length };
+            noted.sub = { start: src, before: noted.note().length, tag };
         }
     };
 

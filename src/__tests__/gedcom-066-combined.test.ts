@@ -153,7 +153,7 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             ['FAMC', people, /^1 FAMC /], ['FAMS', people, /^1 FAMS /], ['PEDI', people, /^2 PEDI /],
             ['NAME', people, /^1 NAME/], ['TYPE married', people, /^2 TYPE married$/],
             ['RIN', ['INDI', 'FAM', 'SOUR'], /^1 RIN /], ['_UID', people, /^1 _UID /], ['_UPD', ['INDI', 'FAM', 'SOUR'], /^1 _UPD /],
-            ['BIRT', people, /^1 BIRT$/], ['DEAT', people, /^1 DEAT( Y)?$/], ['MARR', people, /^1 MARR$/],
+            ['TYPE', people, /^2 TYPE /], ['BIRT', people, /^1 BIRT$/], ['DEAT', people, /^1 DEAT( Y)?$/], ['MARR', people, /^1 MARR$/],
             ['RESI', people, /^1 RESI$/], ['EMAIL', people, /^2 EMAIL /], ['NCHI', people, /^1 NCHI /],
             ['AGE', people, /^2 AGE /], ['NOTE', people, /^\d NOTE /], ['CONT', people, /^\d CONT /],
             ['OBJE', people, /^1 OBJE$/], ['_DATE', people, /^2 _DATE /], ['_PHOTO_RIN', people, /^2 _PHOTO_RIN /],
@@ -299,6 +299,10 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect([couple[0].status, couple[0].startDate, couple[0].endDate]).toEqual(['married', '1911-04-01', undefined]);
             expect(imported.stats.joinedFamilies).toBe(1);
             expect(holdsRun(record(first, '@F1401@'), ['1 MARR', '2 DATE 1 APR 1911', '2 PLAC Drnkalov'])).toBe(true);
+            // The wedding's TYPE, read nowhere, goes back under it as written.
+            const marriage = record(first, '@F1401@');
+            const at = marriage.indexOf('1 MARR');
+            expect(marriage.slice(at + 1, marriage.findIndex((l, i) => i > at && l.startsWith('1 ')))).toContain('2 TYPE civil');
             expect(holdsRun(record(first, '@F1401@'), ['1 DIV', '2 DATE 2 MAY 1912'])).toBe(true);
             const remarried = record(first, '@F1402@');
             expect(remarried).toEqual(expect.arrayContaining(['1 HUSB @I1401@', '1 WIFE @I1402@', '1 RIN MH:F1402',

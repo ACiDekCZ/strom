@@ -417,7 +417,9 @@ export function citeLines(lines: readonly string[]): string[] {
  * one level deeper (`2 NCHI 3`; of a fact Strom has, its head and only the
  * lines that went to the note: `2 BIRT` / `3 NOTE …`). "Back to {prog}" writes
  * the structure again in place of those note lines while the note still has
- * them; every other export writes the note.
+ * them; every other export writes the note. A line under a fact that Strom
+ * reads nowhere, not even into the note (a wedding's `2 TYPE civil`), is kept
+ * the same way without a `_TEXT`: it goes back whatever the note says.
  */
 export const NOTED_TAG = '_STROM_NOTED';
 
@@ -429,7 +431,9 @@ export interface NotedStructure {
 
 /** The kept block of a structure that became `texts` in the note (null: not one to keep). */
 export function notedBlock(texts: readonly string[], structure: readonly string[]): string[] | null {
-    if (texts.length === 0 || structure.length === 0 || !/^1 \S/.test(structure[0])) return null;
+    if (structure.length === 0 || !/^1 \S/.test(structure[0])) return null;
+    // No line of the note: only the lines under a fact that went nowhere (see NOTED_TAG).
+    if (texts.length === 0 && structure.length < 2) return null;
     const block = [`1 ${NOTED_TAG}`];
     for (const text of texts) {
         const [first, ...rest] = text.split('\n');
@@ -452,7 +456,7 @@ export function notedStructures(lines: readonly string[]): NotedStructure[] {
             else if (structure.length === 0 && /^3 CONT( |$)/.test(line) && texts.length) texts[texts.length - 1] += '\n' + line.slice(7);
             else structure.push(line.replace(/^\d+/, n => String(Number(n) - 1)));
         }
-        if (texts.length && structure.length && structure[0].startsWith('1 ')) out.push({ texts, lines: structure });
+        if ((texts.length || structure.length > 1) && structure.length && structure[0].startsWith('1 ')) out.push({ texts, lines: structure });
     }
     return out;
 }
@@ -499,10 +503,13 @@ export function joinedRecords(lines: readonly string[]): { xref: string; lines: 
  * note, as emailsBack and authorBack do).
  */
 export function notedBack(note: string | undefined, structures: readonly NotedStructure[]): { note: string | undefined; structures: NotedStructure[] } {
-    if (!note || structures.length === 0) return { note, structures: [] };
+    // A structure that became no line of the note (silent) goes back whatever the note says.
+    const silent = structures.filter(s => s.texts.length === 0);
+    if (!note || structures.length === silent.length) return { note, structures: silent };
     let noteLines = note.split('\n');
     const back: NotedStructure[] = [];
     for (const s of structures) {
+        if (s.texts.length === 0) { back.push(s); continue; }
         let left = noteLines;
         const found = s.texts.every(text => {
             const want = text.split('\n');
@@ -515,7 +522,7 @@ export function notedBack(note: string | undefined, structures: readonly NotedSt
         noteLines = left;
         back.push(s);
     }
-    if (back.length === 0) return { note, structures: [] };
+    if (back.length === silent.length) return { note, structures: back };
     const rest = noteLines.join('\n').trim();
     return { note: rest || undefined, structures: back };
 }
