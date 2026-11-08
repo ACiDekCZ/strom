@@ -88,13 +88,17 @@ async function readAndFinish(page: Page, b: FakeBridge, d: Locator, source: Reco
     await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
     await expect(d.locator('#read-title')).toHaveText('Reading again');
     // The comparison with the transcript is named as such, even with one reader.
+    // The dialog polls on its own: a poll asked while that one runs is skipped and the
+    // dialog would stay on the old state until its next tick (up to 5 s), so poll again.
+    const pollUntil = (target: Locator, text: string) => expect(async () => {
+        await poll(page);
+        await expect(target).toHaveText(text, { timeout: 1000 });
+    }).toPass();
     b.read!.reads[0].state = 'checking';
-    await poll(page);
-    await expect(d.locator('.read-run-title')).toHaveText('Comparing with the source’s transcript');
+    await pollUntil(d.locator('.read-run-title'), 'Comparing with the source’s transcript');
     b.read!.reads[0].state = 'done';
     b.read!.results.set(READ_ID, result(source));
-    await poll(page);
-    await expect(d.locator('#read-title')).toHaveText('Source read again');
+    await pollUntil(d.locator('#read-title'), 'Source read again');
 }
 
 test.describe('Read a source again from its original', () => {
