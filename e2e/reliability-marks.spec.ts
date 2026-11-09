@@ -493,6 +493,41 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(vAct(page, 'verify')).toHaveCount(0);
     });
 
+    test('a fact the research queued by itself, 3rd: "Verify first" with the AI badge, the same preview, then 1st (1109)', async ({ page }) => {
+        const asks = await openVerifyTree(page, { extra: ['2 _STROM_VERIFY wait', '3 _POS 3'], position: 1 });
+        const pill = factPill(page, 'Birth');
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip.locator('.st-v-state')).toHaveText("Waiting to be verified · 3rd in the research's queue");
+        await expect(vAct(page, 'verify')).toHaveCount(0);
+        await expect(vAct(page, 'prioritize')).toContainText('Verify first');
+        await expect(vAct(page, 'prioritize').locator('.research-ai-badge')).toHaveCount(1);
+        await vAct(page, 'prioritize').click();
+        await expect(tip.locator('.st-preview .st-preview-label')).toHaveText(['What', 'How', 'Estimate']);
+        expect(asks.verify).toEqual([{ fact: 'E0001', dry: true }]);
+        await vAct(page, 'back').click();
+        await expect(vAct(page, 'prioritize')).toBeFocused();
+        await vAct(page, 'prioritize').click();
+        await vAct(page, 'start').click();
+        await expect.poll(() => asks.verify.filter(a => !a.dry)).toEqual([{ fact: 'E0001' }]);
+        await expect(tip.locator('.st-v-state')).toHaveText("Waiting to be verified · 1st in the research's queue");
+        await expect(vAct(page, 'prioritize')).toHaveCount(0);
+        await expect(pill).toHaveClass(/\bis-pending\b/);
+    });
+
+    for (const [extra, why] of [
+        [['2 _STROM_VERIFY wait', '3 _POS 1'], 'next already'],
+        [['2 _STROM_VERIFY asked', '3 _POS 3'], 'asked for by a person'],
+        [['2 _STROM_VERIFY images'], 'waiting for images'],
+    ] as const) {
+        test(`no "Verify first" for a waiting fact ${why} (1109)`, async ({ page }) => {
+            await openVerifyTree(page, { extra: [...extra] });
+            await factPill(page, 'Birth').click();
+            await expect(page.locator('#status-tip .st-v-state')).toBeVisible();
+            await expect(vAct(page, 'prioritize')).toHaveCount(0);
+        });
+    }
+
     test('proven: no Verify, the scan only', async ({ page }) => {
         await openVerifyTree(page);
         await factPill(page, 'Death').click();

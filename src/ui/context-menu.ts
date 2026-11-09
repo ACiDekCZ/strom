@@ -578,6 +578,9 @@ export const contextMenuMethods = uiModule({
             case 'signal-verify':
                 this.showVerifyPersonDialog(personId);
                 break;
+            case 'signal-verify-first':
+                this.showVerifyPersonDialog(personId, { prioritize: true });
+                break;
             case 'signal-verify-pending':
                 this.clearDialogStack();
                 this.showPersonResearchDialog(personId);

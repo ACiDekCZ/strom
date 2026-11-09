@@ -105,6 +105,11 @@ function localConfirmationEnded(s: LocalState, fact: string): boolean {
     return !!s.confirmed && s.confirmedValue !== undefined && s.confirmedValue !== factValueSignature(s.holder, fact);
 }
 
+/** A wait for re-verification started here (asked for already), until the tree holds the research's version. */
+export function factVerifyStartedHere(holder: FactHolder, fact: string): boolean {
+    return !!localOf(holder, fact)?.pending;
+}
+
 /**
  * Whether a fact waits for re-verification: started here, or as the research's
  * file says — unless it was confirmed or taken back through the bridge since
@@ -356,7 +361,7 @@ export const verifyUiMethods = uiModule({
         const v = this.verifyFactView(ctx);
         if (!v || !tip) return;
         const st = stateFor(tip, v.key);
-        if (st?.preview && v.offer.verify) {
+        if (st?.preview && (v.offer.verify || v.offer.prioritize)) {
             tip.classList.add('st-previewing');
             this.drawVerifyPreview(v, st, slots);
             return;
@@ -411,6 +416,12 @@ export const verifyUiMethods = uiModule({
         }
         if (offer.verify) {
             const b = button('verify', researchBridgeActionLabel(s.btn, 'verify'), { disabled: !!st?.busy });
+            b.addEventListener('click', () => this.verifyOpenPreview(v));
+            slots.actions.appendChild(b);
+        }
+        // Queued by the research itself, not next: the same preview, then /verify moves its task to the head.
+        if (offer.prioritize) {
+            const b = button('prioritize', researchBridgeActionLabel(s.prioritize, 'verify'), { disabled: !!st?.busy });
             b.addEventListener('click', () => this.verifyOpenPreview(v));
             slots.actions.appendChild(b);
         }
@@ -506,7 +517,7 @@ export const verifyUiMethods = uiModule({
     /** "Back": the tip as it was. */
     verifyClosePreview(v: FactView): void {
         if (tipState?.key === v.key) tipState = null;
-        this.verifyTipRedrawn('verify');
+        this.verifyTipRedrawn(v.offer.verify ? 'verify' : 'prioritize');
     },
 
     /** "Start verifying": the research takes the fact first in its queue; the pill waits. */

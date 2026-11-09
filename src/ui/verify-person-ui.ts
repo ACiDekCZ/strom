@@ -41,7 +41,7 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import { liveSession } from './research-ui.js';
 import { rodIndex } from './rod-view.js';
 import { uiModule } from './module.js';
-import { factWaitsForVerify, markVerifyPending, verifyKindName } from './verify-ui.js';
+import { factVerifyStartedHere, factWaitsForVerify, markVerifyPending, verifyKindName } from './verify-ui.js';
 import { verifyRefusalText } from '../verify-refusal.js';
 
 export const VERIFY_PERSON_DIALOG_ID = 'verify-person-modal';
@@ -136,6 +136,8 @@ interface PersonPreviewState {
     rows: PreviewRow[];
     busy: boolean;
     opener: HTMLElement | null;
+    /** "Verify first": the facts waiting further down the research's queue, moved to its head. */
+    prioritize?: boolean;
 }
 
 let preview: PersonPreviewState | null = null;
@@ -270,7 +272,7 @@ export const verifyPersonMethods = uiModule({
                 const step = factReliability(data, holder, fact, opts)?.step ?? null;
                 const offer = factOffer(holder, fact, {
                     step, research, researchTree: opts.researchTree, cited: factCitations(data, holder, fact).length > 0, info,
-                    localPending: waits, editable,
+                    localPending: factVerifyStartedHere(holder, fact), editable,
                 });
                 facts.push({ holder, fact, offer, kind, step });
             }
@@ -299,15 +301,33 @@ export const verifyPersonMethods = uiModule({
             row.className = 'st-verify-pending';
             row.textContent = strings.verify.personPending(st.pending);
             actions.appendChild(row);
+            if (this.personVerifyMenu(personId)?.prioritize) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'st-v-btn st-verify-first';
+                btn.innerHTML = researchBridgeActionLabel(strings.verify.prioritize, 'verify');
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    closeStatusTip();
+                    this.showVerifyPersonDialog(personId, { prioritize: true });
+                });
+                actions.appendChild(btn);
+            }
         }
     },
 
-    /** The person menu's item: "Verify facts · N" (AI badge), "Verifying · N", or nothing. */
-    personVerifyMenu(personId: PersonId): { kind: 'verify' | 'pending'; n: number } | null {
+    /**
+     * The person menu's item: "Verify facts · N" (AI badge), "Verifying · N", or nothing.
+     * `prioritize`: with "Verifying", some fact the research queued by itself is not next
+     * ("Verify first" for the whole person: the person's preview, then /verify {person}).
+     */
+    personVerifyMenu(personId: PersonId): { kind: 'verify' | 'pending'; n: number; prioritize?: boolean } | null {
         const st = this.personVerifyState(personId);
         if (!st) return null;
-        if (st.verify > 0 && personResearchRef(DataManager.getData().persons[personId] ?? {})) return { kind: 'verify', n: st.verify };
-        return st.pending > 0 ? { kind: 'pending', n: st.pending } : null;
+        const ref = personResearchRef(DataManager.getData().persons[personId] ?? {});
+        if (st.verify > 0 && ref) return { kind: 'verify', n: st.verify };
+        if (st.pending <= 0) return null;
+        return { kind: 'pending', n: st.pending, ...(ref && st.facts.some(f => f.offer.prioritize) ? { prioritize: true } : {}) };
     },
 
     /**
@@ -343,8 +363,12 @@ export const verifyPersonMethods = uiModule({
 
     // ==================== The person's preview (10j) ====================
 
-    /** "Verify facts (N)": what the research would verify of the person, asked first (dry run). */
-    showVerifyPersonDialog(personId: PersonId): void {
+    /**
+     * "Verify facts (N)": what the research would verify of the person, asked first (dry run).
+     * `prioritize` ("Verify first"): the same, titled so — /verify {person} moves the tasks
+     * that hold the person's waiting facts to the head of the queue.
+     */
+    showVerifyPersonDialog(personId: PersonId, opts: { prioritize?: boolean } = {}): void {
         const now = this.verifyBridgeNow();
         const person = DataManager.getPerson(personId);
         const ref = person ? personResearchRef(person) : null;
@@ -354,7 +378,10 @@ export const verifyPersonMethods = uiModule({
         }
         this.hideContextMenu();
         const active = document.activeElement;
-        preview = { personId, rid: now.rid, loading: true, error: null, rows: [], busy: false, opener: active instanceof HTMLElement ? active : null };
+        preview = {
+            personId, rid: now.rid, loading: true, error: null, rows: [], busy: false, opener: active instanceof HTMLElement ? active : null,
+            ...(opts.prioritize ? { prioritize: true } : {}),
+        };
         document.getElementById(VERIFY_PERSON_DIALOG_ID)?.remove();
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active vfy-overlay';
@@ -438,7 +465,7 @@ export const verifyPersonMethods = uiModule({
         const restoreFocus = keepFocus(modal);
         modal.innerHTML = `
             <div class="modal-header vfy-header">
-                <div class="vfy-heading"><h2 id="vfy-person-title">${esc(v.personTitle)}</h2>
+                <div class="vfy-heading"><h2 id="vfy-person-title">${esc(st.prioritize ? v.prioritize : v.personTitle)}</h2>
                 <div class="vfy-sub">${esc(v.personSub(name, st.loading || st.error ? 0 : st.rows.length))}</div></div>
                 <button type="button" class="close-btn" data-vfy="close" aria-label="${esc(strings.buttons.close)}">&times;</button>
             </div>

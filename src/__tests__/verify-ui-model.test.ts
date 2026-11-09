@@ -125,6 +125,11 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
     it('row 7: waiting — from the research\'s file or started here: no Verify, the scan, the waiting row', () => {
         expect(factOffer(p, 'birth', input({ info: { pending: 'asked' } }))).toMatchObject({ verify: false, scan: true, row: 'pending' });
         expect(factOffer(p, 'birth', input({ localPending: true }))).toMatchObject({ verify: false, scan: true, row: 'pending' });
+        // Its place in the file (3 _POS 4, queued by the research): "Verify first"; started here or without its id: none (1109).
+        const queued = person({ ...EIDS, birth: { eid: 'E0001', pending: 'wait', position: 4 } });
+        expect(factOffer(queued, 'birth', input({ info: { pending: 'wait' } })).prioritize).toBe(true);
+        expect(factOffer(queued, 'birth', input({ info: { pending: 'wait' }, localPending: true })).prioritize).toBeUndefined();
+        expect(factOffer(person({ birth: { pending: 'wait', position: 4 } }), 'birth', input({ info: { pending: 'wait' } })).prioritize).toBeUndefined();
     });
 
     it('row 8: a research without 065 — no Verify; the scan only with facts.confirm', () => {

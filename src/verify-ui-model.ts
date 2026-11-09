@@ -10,7 +10,7 @@ import type { LifeEvent } from './types.js';
 import type { FactHolder } from './import-origin.js';
 import { isPartnership } from './import-origin.js';
 import type { ReliabilityStepName } from './reliability.js';
-import { factResearchEid } from './verify.js';
+import { factPendingPosition, factResearchEid } from './verify.js';
 import type { VerifyFact } from './research-verify.js';
 import { VerifyOffer, VerifyResearch, verifyOffer } from './verify-offer.js';
 import type { FactVerifyInfo } from './verify.js';
@@ -75,14 +75,17 @@ export function factOffer(holder: FactHolder, fact: string, input: FactOfferInpu
     const eid = factResearchEid(holder, fact);
     const kind = verifyFactKind(holder, fact);
     const pending = input.info.pending ?? (input.localPending ? 'wait' : undefined);
+    // Its place as the file says; a wait started here was asked for already (no "Verify first").
+    const position = input.localPending ? null : factPendingPosition(holder, fact);
     const base = verifyOffer({
-        step: input.step, research: input.research, cited: input.cited, source: input.source, pending,
+        step: input.step, research: input.research, cited: input.cited, source: input.source, pending, position,
         confirmedBy: input.info.confirmedBy, why: input.info.checked?.why,
     });
     const out: FactOffer = { ...base, eid, scanViaBridge: false, undoViaBridge: false };
-    if (!eid || !kind) { out.verify = false; delete out.cost; }
+    if (!eid || !kind) { out.verify = false; delete out.cost; delete out.prioritize; }
     if (input.researchTree && (fact === 'name' || fact === 'sex')) {
         out.verify = false;
+        delete out.prioritize;
         out.scan = false;
         delete out.cost;
     }

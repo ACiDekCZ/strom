@@ -808,6 +808,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         personPending: (n: number) => `${nPl(n, 'dana czeka', 'dane czekają', 'danych czeka')} na weryfikację`,
         menu: (n: number) => `Zweryfikuj dane · ${n}`,
         menuPending: (n: number) => `Weryfikacja · ${n}`,
+        prioritize: 'Zweryfikuj w pierwszej kolejności',
         personTitle: 'Zweryfikuj dane osoby',
         personSub: (name: string, n: number) => `${name} · ${nPl(n, 'niezweryfikowana dana', 'niezweryfikowane dane', 'niezweryfikowanych danych')}`,
         estimate: (l: number, h: number) => `Szacunek: ${l} tanio, ${h} drożej`,

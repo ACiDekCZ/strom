@@ -145,6 +145,9 @@ export const cardSignalsUiMethods = uiModule({
             items.push(verify.kind === 'verify'
                 ? item('signal-verify', 'verify', verifyGlyph, '', researchBridgeActionLabel(strings.verify.menu(verify.n), 'verify'))
                 : item('signal-verify-pending', 'verify-pending', verifyGlyph, strings.verify.menuPending(verify.n)));
+            if (verify.prioritize) {
+                items.push(item('signal-verify-first', 'verify-first', verifyGlyph, '', researchBridgeActionLabel(strings.verify.prioritize, 'verify')));
+            }
         }
         if (s.showAgent) items.push(item('signal-agent', 'agent', '<span class="agent-mark" aria-hidden="true"></span>', c.menuAgent));
         const trees = groupCrossTreeMatches(TreeRenderer.crossTreeMatchesFor(personId));

@@ -83,6 +83,22 @@ describe('table 10z', () => {
         }
     });
 
+    it('row 7: one the research queued by itself further than next — "Verify first" (1109)', () => {
+        expect(verifyOffer({ step: 'probable', research: FULL, cited: true, pending: 'wait', position: 3 }))
+            .toEqual({ verify: false, scan: true, undo: false, prioritize: true, row: 'pending' });
+        // Next already, the place not said, asked for by a person, or waiting for images or a decision: none.
+        for (const position of [1, null, undefined]) {
+            expect(verifyOffer({ step: 'probable', research: FULL, cited: true, pending: 'wait', position }).prioritize).toBeUndefined();
+        }
+        for (const pending of ['asked', 'images', 'permission'] as const) {
+            expect(verifyOffer({ step: 'probable', research: FULL, cited: true, pending, position: 3 }).prioritize).toBeUndefined();
+        }
+        // A research that does not verify (no feature, an archive) does not move it either.
+        expect(verifyOffer({ step: 'probable', research: CONFIRM_ONLY, cited: true, pending: 'wait', position: 3 }).prioritize).toBeUndefined();
+        expect(verifyOffer({ step: 'probable', research: { ...FULL, treeState: 'archive' }, cited: true, pending: 'wait', position: 3 }).prioritize)
+            .toBeUndefined();
+    });
+
     it('row 8: a research without 065 — no Verify; the scan only with facts.confirm', () => {
         for (const step of ['proven', 'probable', 'possible', 'lead', 'import'] as const) {
             expect(verifyOffer({ step, research: OLD, cited: true }))

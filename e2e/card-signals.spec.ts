@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card, cardAction } from './helpers.js';
-import { FakeBridge, fakeBridge, openResearch, poll, touchScreenNow } from './research-bridge.js';
+import { FakeBridge, fakeBridge, openResearch, poll, researchGed as bridgeGed, touchScreenNow } from './research-bridge.js';
 import { FakeVerify, VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
 /**
@@ -1146,6 +1146,58 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await card(page, 'Jan').locator('.name').click();
         await expect(menu.locator('[data-action="signal-verify"]')).toHaveCount(0);
         await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 4');
+    });
+
+    test('"Verifying · N" with a fact the research queued by itself further down: "Verify first" with the AI badge — the person\'s preview, then /verify {person} (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // Jan's birth queued by the research, 3rd; his death asked for by a person, next.
+        const ged = bridgeGed(undefined, [
+            '1 BIRT', '2 DATE 1860', '2 PLAC Čapkov', '2 _STROM_STATUS probable', '2 SOUR @S0001@', '2 _STROM_EID E0012', '2 _STROM_VERIFY wait', '3 _POS 3',
+            '1 DEAT', '2 DATE 1910', '2 PLAC Čapkov', '2 _STROM_STATUS possible', '2 _STROM_EID E0013', '2 _STROM_VERIFY asked', '3 _POS 1',
+        ]);
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: ged, statusExtra: { researches: [LINE] } });
+        const verify = await fakeVerify(page, bridge, { position: 1 });
+        await openResearch(page, { ged });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+
+        await card(page, 'Jan').locator('.name').click();
+        const menu = page.locator('.context-menu');
+        await expect(menu.locator('[data-action="signal-verify"]')).toHaveCount(0);
+        await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 2');
+        const first = menu.locator('[data-action="signal-verify-first"]');
+        await expect(first.locator('.menu-act-text')).toContainText('Verify first');
+        await expect(first.locator('.research-ai-badge')).toHaveCount(1);
+        await first.click();
+        const dialog = page.locator('#verify-person-modal');
+        await expect(dialog.locator('#vfy-person-title')).toHaveText('Verify first');
+        await expect(dialog.locator('.vfy-check')).toHaveCount(2);
+        await expect(dialog.locator('.vfy-est-head')).toBeVisible();
+        expect(verify.posts).toEqual([{ route: 'verify', body: { person: 'P0003', dry: true } }]);
+        await dialog.locator('[data-vfy="start"]').click();
+        await expect(dialog).toHaveCount(0);
+        expect(verify.posts.filter(p => !p.body.dry)).toEqual([{ route: 'verify', body: { person: 'P0003' } }]);
+
+        // Asked for now: no "Verify first" again.
+        await card(page, 'Jan').locator('.name').click();
+        await expect(menu.locator('[data-action="signal-verify-pending"]')).toHaveCount(1);
+        await expect(first).toHaveCount(0);
+    });
+
+    test('"Verifying · N" with every waiting fact next or asked for: no "Verify first" (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const ged = bridgeGed(undefined, [
+            '1 BIRT', '2 DATE 1860', '2 _STROM_STATUS probable', '2 SOUR @S0001@', '2 _STROM_EID E0012', '2 _STROM_VERIFY wait', '3 _POS 1',
+            '1 DEAT', '2 DATE 1910', '2 _STROM_STATUS possible', '2 _STROM_EID E0013', '2 _STROM_VERIFY asked', '3 _POS 2',
+        ]);
+        await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: ged, statusExtra: { researches: [LINE] } });
+        await openResearch(page, { ged });
+        await poll(page);
+        await card(page, 'Jan').locator('.name').click();
+        const menu = page.locator('.context-menu');
+        await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 2');
+        await expect(menu.locator('[data-action="signal-verify-first"]')).toHaveCount(0);
     });
 
     test('the tree\'s Verifying: Stop, then the bulk dialog with the line, nearest ancestors first and a try on 5 people; the estimate follows the choice', async ({ page }) => {

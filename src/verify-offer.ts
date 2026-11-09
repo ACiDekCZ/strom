@@ -32,6 +32,12 @@ export interface VerifyOfferInput {
     source?: boolean;
     /** It waits for re-verification in the research. */
     pending?: FactVerifyPending;
+    /**
+     * Its task's place in the research's queue as the research's file says
+     * (`3 _POS n`; 1 = the next session takes it). Absent: not said, or the
+     * wait was started here (asked for already).
+     */
+    position?: number | null;
     /** Where it was confirmed (factVerifyInfo.confirmedBy). */
     confirmedBy?: 'app' | 'research';
     /** The research's reason a kept fact stays (factVerifyInfo.checked.why). */
@@ -62,6 +68,11 @@ export interface VerifyOffer {
     scan: boolean;
     /** "Take back" a confirmation. */
     undo: boolean;
+    /**
+     * "Verify first": a fact the research queued by itself (`wait`), not next
+     * and not at work, moved to the head of the queue by the same /verify.
+     */
+    prioritize?: boolean;
     row: VerifyOfferRow | null;
 }
 
@@ -86,7 +97,8 @@ export function researchConfirms(research: VerifyResearch | null): boolean {
  *    costlier) and the scan; the reason a kept fact stays, or whether the
  *    family tree cited it;
  * 6. no source: "Verify" (costlier), no scan;
- * 7. waiting: no "Verify", the scan, the waiting row;
+ * 7. waiting: no "Verify", the scan, the waiting row; one the research
+ *    queued by itself (`wait`) further than next in line: "Verify first";
  * 8. a research without `verify`: no "Verify"; the scan only with `facts.confirm`;
  * 9. no research: the scan when the fact cites a source, and the row that a
  *    research would verify it.
@@ -107,7 +119,12 @@ export function verifyOffer(input: VerifyOfferInput): VerifyOffer {
         return { ...none, scan: sourced, row: 'noResearch' };
     }
     const scan = step !== 'none' && sourced && researchConfirms(research);
-    if (input.pending) return { ...none, scan, row: 'pending' };
+    if (input.pending) {
+        const offer: VerifyOffer = { ...none, scan, row: 'pending' };
+        // Asked for by a person (`asked`) it is first already; images or a decision it waits for are not the queue.
+        if (input.pending === 'wait' && (input.position ?? 0) > 1 && step !== null && researchVerifies(research)) offer.prioritize = true;
+        return offer;
+    }
     const canVerify = step !== null && step !== 'proven' && researchVerifies(research);
     const offer: VerifyOffer = { ...none, scan };
     if (canVerify) {
