@@ -59,8 +59,11 @@ svůj strom. Poprvé vznikne v aplikaci nový strom, příště se aktualizuje t
 - **Ovládání:** terminál: `strom app`, `strom app --live`. Aplikace: **Výzkum → Další → Výzkum u tohoto
   stromu…**
 - **Platí od:** aplikace 3.0.0, výzkum 1.0.0
+- **Od výzkumu 1.30.0:** na macOS předá výzkum adresu aplikaci nainstalované z prohlížeče na Chromiu (Chrome, Edge…)
+  prohlížeči, který už běží, stejně jako by ji předalo jeho druhé spuštění. Žádný další program se nespustí a v Docku
+  nepřibude ikona prohlížeče. Když prohlížeč neběží nebo do 5 s neodpoví, výzkum ho spustí jako dřív.
 
-<!-- zdroj: research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
+<!-- zdroj: research:a4a2f6c0 src/core/chromium.ts openWebApp (darwin: handToRunning SingletonSocket, jinak launch), handToRunning (ACK, timeout 5000), singletonMessage · dirigent:prace/1109-vyzkum-dock-chrome/karta.md Výsledek (živě Chrome, Edge, Canary) · research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
 
 <a id="S1.2.1"></a>
 ### S1.2.1 Odkazy, které aplikace přijme

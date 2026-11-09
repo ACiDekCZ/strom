@@ -101,22 +101,30 @@ den Linien.
     Eintrag nicht gefunden, bleibt die Angabe aus dem Stammbaum, und der Hinweis sagt warum.“
 - **Nach dem Start** (**Prüfung starten**) hat die Angabe eine Marke mit einer Uhr „Wartet auf Prüfung · in der
   Warteschlange der Recherche, {position}. an der Reihe“, und **Prüfen** wird bei ihr nicht erneut angeboten.
+- **Vorrangig prüfen:** eine Angabe, die die Forschung von selbst zur Prüfung eingereiht hat ([S7.6](#S7.6)) und die
+  nicht als nächste an der Reihe ist, hat im Popup **Vorrangig prüfen**. Es folgt dieselbe Vorschau mit der Schätzung
+  wie bei **Prüfen**; nach **Prüfung starten** stellt die Forschung die Aufgabe mit dieser Angabe an den Anfang der
+  Warteschlange, und das Popup zeigt die Position, die die Forschung antwortet („1. an der Reihe“).
 - **Prüft der Code:**
   - eine von einem Menschen erbetene Prüfung steht in der Warteschlange der Forschung an erster Stelle
     ([R2](R2-lines-and-queue.md));
   - **Prüfen** wird nur bei einem an die Forschung gebundenen Stammbaum angeboten, wenn die Brücke läuft und die
     Forschung das Prüfen beherrscht ([S7.9](#S7.9));
-  - Name, Geschlecht, Scheidung und die übrigen Ereignisse werden nicht geprüft.
+  - Name, Geschlecht, Scheidung und die übrigen Ereignisse werden nicht geprüft;
+  - **Vorrangig prüfen** wird nicht angeboten bei einer Angabe, deren Prüfung ein Mensch schon erbeten hat (sie steht
+    in der Warteschlange vorn), bei einer Angabe, die auf Scans oder auf die Erlaubnis eines Archivs wartet, bei der
+    nächsten an der Reihe und wenn die Forschung die Position der Angabe nicht nennt. Eine Aufgabe, an der der Agent
+    gerade arbeitet, stellt die Forschung nicht um.
 - **Grenzen:** ein Stammbaum ohne Forschung hat im Popup statt der Aktion die Zeile „Mit der Ahnenforschung prüft ein
   KI-Agent die Angabe selbst in den Matriken.“ Antwortet die Forschung nicht: „Prüfung konnte nicht starten; die
   Recherche antwortet nicht.“; gibt es nichts zu prüfen: „Die Recherche hat hier gerade nichts zu prüfen.“ Lehnt die
   Forschung die Prüfung ab, sagt das Popup warum, zum Beispiel dass die Forschung ein Archiv ist, dass sie die Angabe
   nicht mehr hat oder dass sie gerade beschäftigt ist.
-- **Bedienung:** App: Personenkarte → Marke der Angabe → **Prüfen** → **Prüfung starten**. Terminal:
-  `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
+- **Bedienung:** App: Personenkarte → Marke der Angabe → **Prüfen** (oder **Vorrangig prüfen**) → **Prüfung
+  starten**. Terminal: `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7cf409bd src/verify-offer.ts verifyOffer (prioritize: pending wait, position > 1, step, researchVerifies) · src/verify-ui-model.ts factOffer (čekání spuštěné tady: position null) · src/ui/verify-ui.ts (tlačítko prioritize → verifyOpenPreview; verifyStart: pozice z odpovědi) · strings.ts verify.prioritize, verify.pending · research:a4a2f6c0 src/core/verify.ts verifyAsk (držený úkol → queueAt next; doing nebo už next beze změny), verifyWait (wait / asked / images / permission, position) · app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Angaben prüfen bei einer Person
@@ -135,6 +143,12 @@ im Menü der Person.
   jeder **günstig** oder **teurer**, „Schätzung: {n} günstig, {n} teurer“ („Günstig = einen bekannten Eintrag lesen.
   Teurer = der Eintrag wird erst gesucht.“) und die Schaltfläche **Prüfen (N)** nach den angekreuzten. Nach dem Start
   „N Angaben sind zur Prüfung eingereiht.“, und der Eintrag im Menü zeigt **Wird geprüft · N**.
+- **Vorrangig prüfen für die ganze Person:** hat die Person nichts zur Prüfung anzubieten und wartet eine ihrer Angaben
+  weiter hinten in der Warteschlange, so wie die Forschung sie von selbst eingereiht hat, steht im Menü der Person unter
+  **Wird geprüft · N** der Eintrag **Vorrangig prüfen** und im Popup der Marke auf dem Kärtchen unter „N Angaben warten
+  auf Prüfung“ die Schaltfläche **Vorrangig prüfen**. Sie öffnet die Vorschau der Person mit diesem Titel; nach dem
+  Start stellt die Forschung die Aufgaben mit den wartenden Angaben der Person an den Anfang der Warteschlange
+  ([S7.3](#S7.3)). Die Personenkarte hat weiter nur die Zeile „N Angaben warten auf Prüfung“.
 - **Prüft der Code:** N ist genau das, was die Forschung nimmt: Angaben der Person und ihrer Familien, die die
   Forschung kennt (auch Wohnorte und Angaben, die schon ein anderer Leser belegt hat), außer den von einem Menschen
   bestätigten, den auf Prüfung wartenden, Name und Geschlecht. Die Zahl im Menü, im Fenster und in der Meldung nach dem
@@ -142,11 +156,11 @@ im Menü der Person.
 - **Grenzen:** Schaltfläche und Eintrag erscheinen nur mit laufender Brücke der Forschung ([S7.9](#S7.9)) und nur,
   wenn mindestens eine Angabe der Person **Prüfen** anbietet.
 - **Bedienung:** App: Personenkarte → **Angaben prüfen (N)** über **Ereignisse**; Popup der Marke auf dem Kärtchen →
-  **Angaben prüfen (N)**; Menü der Person → **Angaben prüfen · N**; dann im Fenster **Prüfen (N)**. Terminal:
-  `strom verify facts P…`.
+  **Angaben prüfen (N)** oder **Vorrangig prüfen**; Menü der Person → **Angaben prüfen · N**, oder **Vorrangig
+  prüfen** unter **Wird geprüft · N**; dann im Fenster **Prüfen (N)**. Terminal: `strom verify facts P…`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
+<!-- zdroj: app:7cf409bd src/ui/verify-person-ui.ts personVerifyMenu (pending + prioritize), verifyCardTipActions (st-verify-first), renderPersonVerifyRow (jen pending řádek), showVerifyPersonDialog prioritize (titulek verify.prioritize) · src/ui/card-signals-ui.ts signal-verify-first · src/ui/context-menu.ts · research:a4a2f6c0 src/core/verify.ts verifyAsk (osoba: držené úkoly na začátek) · app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
 
 <a id="S7.5"></a>
 ## S7.5 Angaben im Baum prüfen
@@ -302,7 +316,7 @@ statt der Aktion den Stand „✓ Am {datum} anhand des Scans bestätigt“ und 
 | | An die Forschung gebundener Stammbaum, Brücke läuft | An die Forschung gebundener Stammbaum, Brücke läuft nicht | Stammbaum ohne Forschung |
 |---|---|---|---|
 | Marken an Angaben und auf dem Kärtchen | ja | ja, gleich wie mit der Brücke (nach dem letzten Stand aus der Datei) | ja, aus dem Import und aus den Zitationen |
-| **Prüfen**, **Angaben prüfen · N**, **Angaben im Baum prüfen…** | ja | nein | nein (Zeile zur Ahnenforschung) |
+| **Prüfen**, **Vorrangig prüfen**, **Angaben prüfen · N**, **Angaben im Baum prüfen…** | ja | nein | nein (Zeile zur Ahnenforschung) |
 | **Anhand des Scans bestätigen**, **Zurücknehmen** | ja, schreibt die Forschung | nein | ja, hält die App |
 | **Anhalten** der Prüfung | ja | nein; `strom verify stop` im Terminal | – |
 | Prüfung in der Warteschlange der Forschung | läuft | läuft (die Forschung wartet nicht auf die App) | – |

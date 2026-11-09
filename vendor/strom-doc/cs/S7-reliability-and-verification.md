@@ -91,19 +91,25 @@ Výzkum pak údaj ověří podle originálu záznamu: na pozadí, mimo práci na
     z rodokmenu a bublina řekne proč.“
 - **Po spuštění** (**Spustit ověření**) má údaj značku s hodinami „Čeká na ověření · ve frontě výzkumu, {pořadí}. na
   řadě“ a **Ověřit** se u něj znovu nenabídne.
+- **Ověřit přednostně:** údaj, který výzkum zařadil k ověření sám ([S7.6](#S7.6)) a který není první na řadě, má
+  v bublině **Ověřit přednostně**. Následuje stejný náhled s odhadem jako u **Ověřit**; po **Spustit ověření** dá
+  výzkum úkol s tímto údajem na začátek fronty a bublina ukáže pořadí, které výzkum odpoví („1. na řadě“).
 - **Hlídá kód:**
   - ověření vyžádané člověkem jde ve frontě výzkumu první ([R2](R2-lines-and-queue.md));
   - **Ověřit** se nabízí jen u stromu napojeného na výzkum, když most běží a výzkum ověřování umí ([S7.9](#S7.9));
-  - jméno, pohlaví, rozvod a ostatní události se neověřují.
+  - jméno, pohlaví, rozvod a ostatní události se neověřují;
+  - **Ověřit přednostně** se nenabízí u údaje, o jehož ověření už požádal člověk (je první ve frontě), u údaje, který
+    čeká na snímky nebo na svolení archivu, u prvního na řadě a když výzkum pořadí údaje neuvádí. Úkol, na kterém
+    agent právě pracuje, výzkum nepřeřadí.
 - **Hranice:** strom bez výzkumu má v bublině místo akce řádek „S výzkumem předků AI agent údaj ověří v matrikách
   sám.“ Když výzkum neodpoví: „Ověření se nepodařilo spustit, výzkum neodpovídá.“; když není co ověřit: „Výzkum tu
   teď nemá co ověřit.“ Když výzkum ověření odmítne, řekne bublina proč, například že výzkum je archiv, že údaj už
   nemá, nebo že je teď zaneprázdněný.
-- **Ovládání:** aplikace: karta osoby → značka údaje → **Ověřit** → **Spustit ověření**. Terminál:
-  `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
+- **Ovládání:** aplikace: karta osoby → značka údaje → **Ověřit** (nebo **Ověřit přednostně**) → **Spustit
+  ověření**. Terminál: `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7cf409bd src/verify-offer.ts verifyOffer (prioritize: pending wait, position > 1, step, researchVerifies) · src/verify-ui-model.ts factOffer (čekání spuštěné tady: position null) · src/ui/verify-ui.ts (tlačítko prioritize → verifyOpenPreview; verifyStart: pozice z odpovědi) · strings.ts verify.prioritize, verify.pending · research:a4a2f6c0 src/core/verify.ts verifyAsk (držený úkol → queueAt next; doing nebo už next beze změny), verifyWait (wait / asked / images / permission, position) · app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Ověřit údaje u osoby
@@ -120,17 +126,22 @@ a v bublině značky na kartičce, nebo položkou **Ověřit údaje · N** v nab
   **dražší**, „Odhad: {n} levné, {n} dražší“ („Levné = přečíst známý záznam. Dražší = záznam se teprve hledá.“)
   a tlačítko **Ověřit (N)** podle zaškrtnutých. Po spuštění „N údajů je zařazeno k ověření.“ a položka v nabídce
   ukazuje **Ověřuje se · N**.
+- **Ověřit přednostně pro celou osobu:** když osoba nemá co nabídnout k ověření a některý její údaj čeká dál ve
+  frontě tak, jak ho výzkum zařadil sám, je v nabídce osoby pod **Ověřuje se · N** položka **Ověřit přednostně**
+  a v bublině značky na kartičce pod „N údajů čeká na ověření“ tlačítko **Ověřit přednostně**. Otevře náhled osoby
+  s tímto titulkem; po spuštění dá výzkum úkoly s čekajícími údaji osoby na začátek fronty ([S7.3](#S7.3)). Karta
+  osoby má dál jen řádek „N údajů čeká na ověření“.
 - **Hlídá kód:** N je přesně to, co výzkum vezme: údaje osoby a jejích rodin, které výzkum zná (i bydliště a údaje
   už doložené jiným čtenářem), kromě potvrzených člověkem, čekajících na ověření, jména a pohlaví. Počet v nabídce,
   v okně a ve zprávě po spuštění je stejný.
 - **Hranice:** tlačítko i položka se ukážou jen s běžícím mostem výzkumu ([S7.9](#S7.9)) a jen tehdy, když aspoň
   jeden údaj osoby nabízí **Ověřit**.
 - **Ovládání:** aplikace: karta osoby → **Ověřit údaje (N)** nad **Událostmi**; bublina značky na kartičce →
-  **Ověřit údaje (N)**; nabídka osoby → **Ověřit údaje · N**; pak v okně **Ověřit (N)**. Terminál:
-  `strom verify facts P…`.
+  **Ověřit údaje (N)** nebo **Ověřit přednostně**; nabídka osoby → **Ověřit údaje · N**, nebo **Ověřit přednostně**
+  pod **Ověřuje se · N**; pak v okně **Ověřit (N)**. Terminál: `strom verify facts P…`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
+<!-- zdroj: app:7cf409bd src/ui/verify-person-ui.ts personVerifyMenu (pending + prioritize), verifyCardTipActions (st-verify-first), renderPersonVerifyRow (jen pending řádek), showVerifyPersonDialog prioritize (titulek verify.prioritize) · src/ui/card-signals-ui.ts signal-verify-first · src/ui/context-menu.ts · research:a4a2f6c0 src/core/verify.ts verifyAsk (osoba: držené úkoly na začátek) · app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
 
 <a id="S7.5"></a>
 ## S7.5 Ověřit údaje ve stromu
@@ -269,7 +280,7 @@ a **Vzít zpět**.
 | | Strom napojený na výzkum, most běží | Strom napojený na výzkum, most neběží | Strom bez výzkumu |
 |---|---|---|---|
 | Značky u údajů a na kartičce | ano | ano, stejné jako s mostem (podle posledního stavu ze souboru) | ano, z importu a z citací |
-| **Ověřit**, **Ověřit údaje · N**, **Ověřit údaje ve stromu…** | ano | ne | ne (řádek o výzkumu předků) |
+| **Ověřit**, **Ověřit přednostně**, **Ověřit údaje · N**, **Ověřit údaje ve stromu…** | ano | ne | ne (řádek o výzkumu předků) |
 | **Potvrdit podle skenu**, **Vzít zpět** | ano, zapíše výzkum | ne | ano, drží aplikace |
 | **Zastavit** ověřování | ano | ne; `strom verify stop` v terminálu | – |
 | Ověřování ve frontě výzkumu | běží | běží (výzkum na aplikaci nečeká) | – |

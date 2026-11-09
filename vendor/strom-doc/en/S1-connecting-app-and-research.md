@@ -62,8 +62,12 @@ updated.
 - **Controls:** terminal: `strom app`, `strom app --live`. App: **Research → Other actions → Research for this
   tree…**
 - **Since:** app 3.0.0, research 1.0.0
+- **Since research 1.30.0:** on macOS the research hands the address for the app installed from a Chromium browser
+  (Chrome, Edge…) to the browser already running, as its own second start would hand it over. No other program starts
+  and no browser icon is added to the Dock. When the browser is not running or does not answer within 5 s, the
+  research starts it as before.
 
-<!-- zdroj: research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
+<!-- zdroj: research:a4a2f6c0 src/core/chromium.ts openWebApp (darwin: handToRunning SingletonSocket, jinak launch), handToRunning (ACK, timeout 5000), singletonMessage · dirigent:prace/1109-vyzkum-dock-chrome/karta.md Výsledek (živě Chrome, Edge, Canary) · research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
 
 <a id="S1.2.1"></a>
 ### S1.2.1 Links the app accepts

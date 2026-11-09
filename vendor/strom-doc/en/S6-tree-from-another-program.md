@@ -204,6 +204,10 @@ share with others**. By that it protects living people and returns program IDs.
   - the GEDCOM export keeps the sources and citations of deceased people in every option; the JSON, HTML and CSV
     exports do not change ([A7.2](A7-book-pages-and-export.md#A7.2));
   - the file has no photos and attachments: other programs do not read them from the file;
+  - at **Back to {program}** the summary's row **Sources and citations (N sources, M citations)** counts the source
+    records the file writes. The sources the import made from one source record for each page cited
+    ([A2.6](A2-loading-a-family-tree.md#A2.6)) go back as that one record: two registers cited at 81 facts give
+    “2 sources, 81 citations”. The tree keeps a source for each page cited;
   - **Mark the research's facts with a note** (on by default, only when the tree has facts from the research): a fact
     the research added or corrected gets the note “Derived by the Strom research (per: …)”;
   - otherwise program IDs are written under Strom's own tags (`_STROM_IMPORT`), so that they come back on the next
@@ -212,7 +216,7 @@ share with others**. By that it protects living people and returns program IDs.
   {program}: export with sources…** (opens the export with the choice back).
 - **Since:** app 3.26.0
 
-<!-- zdroj: app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
+<!-- zdroj: app:7cf409bd src/ged-exporter.ts backSourceRecordCount (sourceGroups: jeden záznam za skupinu) · src/ui/export-gedcom-ui.ts backSources → exportGed.sumSources · e2e/export-gedcom-back.spec.ts · app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
 
 <a id="S6.7"></a>
 ## S6.7 A family tree loaded again and merging

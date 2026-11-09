@@ -62,8 +62,12 @@ samo.
 - **Obsługa:** terminal: `strom app`, `strom app --live`. Aplikacja: **Badanie → Więcej → Badanie dla tego
   drzewa…**
 - **Obowiązuje od:** aplikacja 3.0.0, badanie 1.0.0
+- **Od badania 1.30.0:** na macOS badanie przekazuje adres dla aplikacji zainstalowanej z przeglądarki opartej na
+  Chromium (Chrome, Edge…) przeglądarce, która już działa, tak jak przekazałoby go jej własne drugie uruchomienie. Nie
+  uruchamia się żaden inny program, a w Docku nie przybywa ikona przeglądarki. Gdy przeglądarka nie działa lub nie
+  odpowie w ciągu 5 s, badanie uruchomi ją jak dotąd.
 
-<!-- zdroj: research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
+<!-- zdroj: research:a4a2f6c0 src/core/chromium.ts openWebApp (darwin: handToRunning SingletonSocket, jinak launch), handToRunning (ACK, timeout 5000), singletonMessage · dirigent:prace/1109-vyzkum-dock-chrome/karta.md Výsledek (živě Chrome, Edge, Canary) · research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
 
 <a id="S1.2.1"></a>
 ### S1.2.1 Linki, które aplikacja przyjmuje

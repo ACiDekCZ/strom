@@ -64,8 +64,12 @@ wird derselbe aktualisiert.
 - **Bedienung:** Terminal: `strom app`, `strom app --live`. App: **Forschung → Weitere Aktionen → Forschung für
   diesen Stammbaum…**
 - **Gilt seit:** App 3.0.0, Forschung 1.0.0
+- **Seit Forschung 1.30.0:** unter macOS übergibt die Forschung die Adresse für die aus einem Chromium-Browser
+  installierte App (Chrome, Edge…) dem schon laufenden Browser, so wie sie sein eigener zweiter Start übergeben würde.
+  Kein weiteres Programm startet, und im Dock kommt kein Browser-Symbol hinzu. Läuft der Browser nicht oder antwortet
+  er nicht innerhalb von 5 s, startet die Forschung ihn wie bisher.
 
-<!-- zdroj: research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
+<!-- zdroj: research:a4a2f6c0 src/core/chromium.ts openWebApp (darwin: handToRunning SingletonSocket, jinak launch), handToRunning (ACK, timeout 5000), singletonMessage · dirigent:prace/1109-vyzkum-dock-chrome/karta.md Výsledek (živě Chrome, Edge, Canary) · research:src/commands/start.ts (v1.25.2) app, liveAppUrl / importAppUrl, Safari · app:src/research-link.ts:584 parseLoopbackUrl, :747 decideResearchOpen · src/ui/research-ui.ts:1088 initExternalOpen, :1350 importResearchFromUrl · src/local-network.ts · strings.ts research.notLocal, research.editedMessage, research.safariBlocked -->
 
 <a id="S1.2.1"></a>
 ### S1.2.1 Links, die die App annimmt

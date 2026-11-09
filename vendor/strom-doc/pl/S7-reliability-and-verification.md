@@ -98,20 +98,27 @@ znacznika oferuje **Zweryfikuj**. Badanie weryfikuje wtedy daną według orygina
     dana pozostanie z drzewa, a podpowiedź powie dlaczego.”
 - **Po uruchomieniu** (**Rozpocznij weryfikację**) dana ma znacznik z zegarem „Czeka na weryfikację · {pozycja}.
   w kolejce badania” i **Zweryfikuj** nie jest przy niej ponownie oferowane.
+- **Zweryfikuj w pierwszej kolejności:** dana, którą badanie samo dodało do kolejki weryfikacji ([S7.6](#S7.6)) i która
+  nie jest następna w kolejce, ma w podpowiedzi **Zweryfikuj w pierwszej kolejności**. Następuje ten sam podgląd
+  z szacunkiem co przy **Zweryfikuj**; po **Rozpocznij weryfikację** badanie przesunie zadanie z tą daną na początek
+  kolejki, a podpowiedź pokaże pozycję, którą badanie odpowie („1. w kolejce badania”).
 - **Pilnuje kod:**
   - weryfikacja, o którą poprosił człowiek, idzie w kolejce badania pierwsza ([R2](R2-lines-and-queue.md));
   - **Zweryfikuj** jest oferowane tylko przy drzewie powiązanym z badaniem, gdy most działa, a badanie potrafi
     weryfikować ([S7.9](#S7.9));
-  - imienia, płci, rozwodu i pozostałych zdarzeń się nie weryfikuje.
+  - imienia, płci, rozwodu i pozostałych zdarzeń się nie weryfikuje;
+  - **Zweryfikuj w pierwszej kolejności** nie jest oferowane przy danej, o której weryfikację człowiek już poprosił
+    (jest w kolejce pierwsza), przy danej czekającej na skany lub na zgodę archiwum, przy następnej w kolejce i gdy
+    badanie nie podaje pozycji danej. Zadania, nad którym agent właśnie pracuje, badanie nie przesuwa.
 - **Granice:** drzewo bez badania ma w podpowiedzi zamiast akcji wiersz „Z badaniem przodków agent AI sam zweryfikuje
   daną w księgach.” Gdy badanie nie odpowiada: „Nie udało się rozpocząć weryfikacji; badanie nie odpowiada.”; gdy nie
   ma czego weryfikować: „Badanie nie ma tu teraz nic do zweryfikowania.” Gdy badanie odrzuci weryfikację, podpowiedź
   mówi dlaczego, na przykład że badanie jest archiwum, że już nie ma tej danej albo że jest teraz zajęte.
-- **Obsługa:** aplikacja: karta osoby → znacznik danej → **Zweryfikuj** → **Rozpocznij weryfikację**. Terminal:
-  `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
+- **Obsługa:** aplikacja: karta osoby → znacznik danej → **Zweryfikuj** (albo **Zweryfikuj w pierwszej
+  kolejności**) → **Rozpocznij weryfikację**. Terminal: `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7cf409bd src/verify-offer.ts verifyOffer (prioritize: pending wait, position > 1, step, researchVerifies) · src/verify-ui-model.ts factOffer (čekání spuštěné tady: position null) · src/ui/verify-ui.ts (tlačítko prioritize → verifyOpenPreview; verifyStart: pozice z odpovědi) · strings.ts verify.prioritize, verify.pending · research:a4a2f6c0 src/core/verify.ts verifyAsk (držený úkol → queueAt next; doing nebo už next beze změny), verifyWait (wait / asked / images / permission, position) · app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Zweryfikuj dane przy osobie
@@ -129,17 +136,24 @@ w karcie osoby i w podpowiedzi znacznika na karcie w drzewie albo pozycją **Zwe
   **tanio** albo **drożej**, „Szacunek: {n} tanio, {n} drożej” („Tanio = odczytać znany zapis. Drożej = zapis trzeba
   znaleźć.”) i przycisk **Zweryfikuj (N)** według zaznaczonych. Po uruchomieniu „N danych czeka w kolejce do
   weryfikacji.”, a pozycja w menu pokazuje **Weryfikacja · N**.
+- **Zweryfikuj w pierwszej kolejności dla całej osoby:** gdy osoba nie ma nic do zaoferowania do weryfikacji, a któraś
+  z jej danych czeka dalej w kolejce tak, jak ją badanie samo dodało, menu osoby ma pod **Weryfikacja · N** pozycję
+  **Zweryfikuj w pierwszej kolejności**, a podpowiedź znacznika na karcie w drzewie pod „N danych czeka na
+  weryfikację” przycisk **Zweryfikuj w pierwszej kolejności**. Otwiera podgląd osoby z tym tytułem; po uruchomieniu
+  badanie przesunie zadania z czekającymi danymi osoby na początek kolejki ([S7.3](#S7.3)). Karta osoby ma nadal tylko
+  wiersz „N danych czeka na weryfikację”.
 - **Pilnuje kod:** N to dokładnie to, co weźmie badanie: dane osoby i jej rodzin, które badanie zna (także miejsce
   zamieszkania i dane już udokumentowane przez innego czytelnika), poza potwierdzonymi przez człowieka, czekającymi na
   weryfikację, imieniem i płcią. Liczba w menu, w oknie i w komunikacie po uruchomieniu jest taka sama.
 - **Granice:** przycisk i pozycja pokazują się tylko przy działającym moście badania ([S7.9](#S7.9)) i tylko wtedy,
   gdy co najmniej jedna dana osoby oferuje **Zweryfikuj**.
 - **Obsługa:** aplikacja: karta osoby → **Zweryfikuj dane (N)** nad **Zdarzeniami**; podpowiedź znacznika na karcie
-  w drzewie → **Zweryfikuj dane (N)**; menu osoby → **Zweryfikuj dane · N**; potem w oknie **Zweryfikuj (N)**.
-  Terminal: `strom verify facts P…`.
+  w drzewie → **Zweryfikuj dane (N)** albo **Zweryfikuj w pierwszej kolejności**; menu osoby → **Zweryfikuj dane ·
+  N** albo **Zweryfikuj w pierwszej kolejności** pod **Weryfikacja · N**; potem w oknie **Zweryfikuj (N)**. Terminal:
+  `strom verify facts P…`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
+<!-- zdroj: app:7cf409bd src/ui/verify-person-ui.ts personVerifyMenu (pending + prioritize), verifyCardTipActions (st-verify-first), renderPersonVerifyRow (jen pending řádek), showVerifyPersonDialog prioritize (titulek verify.prioritize) · src/ui/card-signals-ui.ts signal-verify-first · src/ui/context-menu.ts · research:a4a2f6c0 src/core/verify.ts verifyAsk (osoba: držené úkoly na začátek) · app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
 
 <a id="S7.5"></a>
 ## S7.5 Zweryfikuj dane w drzewie
@@ -288,7 +302,7 @@ Najsilniejszy znacznik daje człowiek: patrzy na skan aktu, porównuje go z dan�
 | | Drzewo powiązane z badaniem, most działa | Drzewo powiązane z badaniem, most nie działa | Drzewo bez badania |
 |---|---|---|---|
 | Znaczniki przy danych i na karcie | tak | tak, takie same jak z mostem (według ostatniego stanu z pliku) | tak, z importu i z cytatów |
-| **Zweryfikuj**, **Zweryfikuj dane · N**, **Zweryfikuj dane w drzewie…** | tak | nie | nie (wiersz o badaniu przodków) |
+| **Zweryfikuj**, **Zweryfikuj w pierwszej kolejności**, **Zweryfikuj dane · N**, **Zweryfikuj dane w drzewie…** | tak | nie | nie (wiersz o badaniu przodków) |
 | **Potwierdź według skanu**, **Cofnij** | tak, zapisuje badanie | nie | tak, przechowuje aplikacja |
 | **Zatrzymaj** weryfikację | tak | nie; `strom verify stop` w terminalu | – |
 | Weryfikacja w kolejce badania | działa | działa (badanie nie czeka na aplikację) | – |

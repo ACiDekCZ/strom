@@ -187,6 +187,10 @@ Export GEDCOM se nejdřív ptá, **K čemu soubor je**: **Zpět do {program}** (
   - export GEDCOM drží prameny a citace zemřelých v každé volbě; export JSON, HTML a CSV se nemění
     ([A7.2](A7-book-pages-and-export.md#A7.2));
   - fotky a přílohy soubor nemá: cizí programy je ze souboru nečtou;
+  - u **Zpět do {program}** počítá řádek souhrnu **Prameny a citace (N pramenů, M citací)** záznamy pramenů, které
+    soubor zapíše. Prameny, které import udělal z jednoho záznamu pramene pro každou citovanou stranu
+    ([A2.6](A2-loading-a-family-tree.md#A2.6)), jdou zpět jako ten jeden záznam: dvě matriky citované u 81 údajů dají
+    „2 prameny, 81 citací“. Ve stromu zůstává pramen pro každou citovanou stranu;
   - **Označit údaje z výzkumu poznámkou** (výchozí zapnuto, jen když strom má údaje z výzkumu): údaj, který doplnil
     nebo opravil výzkum, dostane poznámku „Odvodil výzkum Strom (podle: …)“;
   - jinak se ID programu zapíší pod vlastní značky Stromu (`_STROM_IMPORT`), ať se při dalším načtení do Stromu
@@ -195,7 +199,7 @@ Export GEDCOM se nejdřív ptá, **K čemu soubor je**: **Zpět do {program}** (
   s prameny…** (otevře export s volbou zpět).
 - **Platí od:** aplikace 3.26.0
 
-<!-- zdroj: app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
+<!-- zdroj: app:7cf409bd src/ged-exporter.ts backSourceRecordCount (sourceGroups: jeden záznam za skupinu) · src/ui/export-gedcom-ui.ts backSources → exportGed.sumSources · e2e/export-gedcom-back.spec.ts · app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
 
 <a id="S6.7"></a>
 ## S6.7 Rodokmen načtený znovu a sloučení

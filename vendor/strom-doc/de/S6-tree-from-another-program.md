@@ -217,6 +217,10 @@ Programm**) oder **Zum Teilen mit anderen**. Danach schützt er lebende Personen
   - der GEDCOM-Export behält Quellen und Zitate Verstorbener bei jeder Auswahl; der Export JSON, HTML und CSV ändert
     sich nicht ([A7.2](A7-book-pages-and-export.md#A7.2));
   - Fotos und Anhänge hat die Datei nicht: andere Programme lesen sie aus der Datei nicht;
+  - bei **Zurück zu {program}** zählt die Zeile der Zusammenfassung **Quellen und Zitate (N Quellen, M Zitate)** die
+    Quelleneinträge, die die Datei schreibt. Die Quellen, die der Import aus einem Quelleneintrag für jede zitierte
+    Seite gemacht hat ([A2.6](A2-loading-a-family-tree.md#A2.6)), gehen als dieser eine Eintrag zurück: zwei Matriken,
+    bei 81 Angaben zitiert, ergeben „2 Quellen, 81 Zitate“. Im Stammbaum bleibt eine Quelle für jede zitierte Seite;
   - **Angaben der Forschung mit einer Notiz kennzeichnen** (standardmäßig ein, nur wenn der Stammbaum Angaben aus der
     Forschung hat): eine Angabe, die die Forschung ergänzt oder korrigiert hat, erhält die Notiz „Abgeleitet von der
     Strom-Forschung (nach: …)“;
@@ -226,7 +230,7 @@ Programm**) oder **Zum Teilen mit anderen**. Danach schützt er lebende Personen
   **Zurück zu {program}: Export mit Quellen…** (öffnet den Export mit der Wahl zurück).
 - **Gilt seit:** App 3.26.0
 
-<!-- zdroj: app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
+<!-- zdroj: app:7cf409bd src/ged-exporter.ts backSourceRecordCount (sourceGroups: jeden záznam za skupinu) · src/ui/export-gedcom-ui.ts backSources → exportGed.sumSources · e2e/export-gedcom-back.spec.ts · app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
 
 <a id="S6.7"></a>
 ## S6.7 Ein erneut geladener Stammbaum und Zusammenführen

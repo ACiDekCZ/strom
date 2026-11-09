@@ -98,21 +98,28 @@ on the lines.
     found, the fact stays from the family tree and the tip says why.”
 - **After starting** (**Start verifying**) the fact has a mark with a clock “Waiting to be verified · {n}th in the
   research's queue” and **Verify** is not offered at it again.
+- **Verify first:** a fact the research queued for verification by itself ([S7.6](#S7.6)) and that is not next in
+  line has **Verify first** in its tip. The same preview with the estimate as at **Verify** follows; after **Start
+  verifying** the research moves the task with this fact to the head of its queue and the tip shows the place the
+  research answers (“1st in the research's queue”).
 - **Enforced by the code:**
   - a verification asked for by a person goes first in the research's queue ([R2](R2-lines-and-queue.md));
   - **Verify** is offered only for a tree linked to the research, when the bridge runs and the research can verify
     ([S7.9](#S7.9));
-  - name, sex, divorce and other events are not verified.
+  - name, sex, divorce and other events are not verified;
+  - **Verify first** is not offered at a fact whose verification a person asked for already (it is first in the
+    queue), at a fact waiting for scans or for an archive's permission, at the one next in line, and when the research
+    does not give the fact's place. A task the agent is working on right now the research does not move.
 - **Limits:** a tree without research has, instead of the action, the line “With the ancestor research an AI agent
   verifies the fact in the registers itself.” in the tip. When the research does not respond: “Verifying could not
   start; the research does not respond.”; when there is nothing to verify: “The research has nothing to verify here
   now.” When the research refuses the verification, the tip says why, for example that the research is an archive,
   that it no longer has the fact, or that it is busy right now.
-- **Controls:** app: the person card → the fact's mark → **Verify** → **Start verifying**. Terminal:
-  `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
+- **Controls:** app: the person card → the fact's mark → **Verify** (or **Verify first**) → **Start verifying**.
+  Terminal: `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7cf409bd src/verify-offer.ts verifyOffer (prioritize: pending wait, position > 1, step, researchVerifies) · src/verify-ui-model.ts factOffer (čekání spuštěné tady: position null) · src/ui/verify-ui.ts (tlačítko prioritize → verifyOpenPreview; verifyStart: pozice z odpovědi) · strings.ts verify.prioritize, verify.pending · research:a4a2f6c0 src/core/verify.ts verifyAsk (držený úkol → queueAt next; doing nebo už next beze změny), verifyWait (wait / asked / images / permission, position) · app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Verify facts at a person
@@ -130,6 +137,12 @@ person card and in the tip at the mark on the card, or with the item **Verify fa
   **higher**, “Estimate: {n} low, {n} higher” (“Low = read a known record. Higher = the record is still to be
   found.”) and the button **Verify (N)** by the ticked ones. After starting “N facts queued for verification.” and the
   menu item shows **Verifying · N**.
+- **Verify first for the whole person:** when the person has nothing to offer for verification and some of their
+  facts waits further down the queue as the research queued it by itself, the person's menu has the item **Verify
+  first** under **Verifying · N**, and the tip at the mark on the card has the button **Verify first** under “N facts
+  waiting to be verified”. It opens the person's preview with this title; after starting, the research moves the tasks
+  with the person's waiting facts to the head of its queue ([S7.3](#S7.3)). The person card keeps only the line “N facts
+  waiting to be verified”.
 - **Enforced by the code:** N is exactly what the research takes: the facts of the person and their families that the
   research knows (residences too, and facts already proven by another reader), except those confirmed by a person,
   those waiting to be verified, the name and the sex. The count in the menu, in the window and in the message after
@@ -137,11 +150,11 @@ person card and in the tip at the mark on the card, or with the item **Verify fa
 - **Limits:** the button and the item show only with the research's bridge running ([S7.9](#S7.9)) and only when at
   least one fact of the person offers **Verify**.
 - **Controls:** app: the person card → **Verify facts (N)** above **Events**; the tip at the mark on the card →
-  **Verify facts (N)**; the person's menu → **Verify facts · N**; then in the window **Verify (N)**. Terminal:
-  `strom verify facts P…`.
+  **Verify facts (N)** or **Verify first**; the person's menu → **Verify facts · N**, or **Verify first** under
+  **Verifying · N**; then in the window **Verify (N)**. Terminal: `strom verify facts P…`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
+<!-- zdroj: app:7cf409bd src/ui/verify-person-ui.ts personVerifyMenu (pending + prioritize), verifyCardTipActions (st-verify-first), renderPersonVerifyRow (jen pending řádek), showVerifyPersonDialog prioritize (titulek verify.prioritize) · src/ui/card-signals-ui.ts signal-verify-first · src/ui/context-menu.ts · research:a4a2f6c0 src/core/verify.ts verifyAsk (osoba: držené úkoly na začátek) · app:7b0471f8 src/verify-ui-model.ts personVerifyAskCount · strings.ts verify.menu, menuPending, personTitle, estimate, startN, bulkStarted · app:7eb903a3 src/ui/verify-person-ui.ts renderPersonVerifyRow, personVerifyMenu (karta osoby nad #events-section; jinak personPending), verifyCardTipActions · strings.ts verify.personBtn, personPending, events.title · dirigent:prace/1109-app-jeden-rodic/karta.md Výsledek (6f58068a: menu = náhled = toast; i bydliště, i doložené) -->
 
 <a id="S7.5"></a>
 ## S7.5 Verify facts in the tree
@@ -291,7 +304,7 @@ tip shows the state “✓ Confirmed against the scan on {date}” and **Undo**.
 | | Tree linked to the research, the bridge runs | Tree linked to the research, the bridge does not run | Tree without research |
 |---|---|---|---|
 | Marks at facts and on the card | yes | yes, the same as with the bridge (by the last state from the file) | yes, from the import and the citations |
-| **Verify**, **Verify facts · N**, **Verify facts in the tree…** | yes | no | no (a line about the ancestor research) |
+| **Verify**, **Verify first**, **Verify facts · N**, **Verify facts in the tree…** | yes | no | no (a line about the ancestor research) |
 | **Confirm against the scan**, **Undo** | yes, the research writes it | no | yes, the app keeps it |
 | **Stop** verifying | yes | no; `strom verify stop` in the terminal | – |
 | Verifying in the research's queue | runs | runs (the research does not wait for the app) | – |

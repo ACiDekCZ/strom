@@ -200,6 +200,10 @@ programu**) albo **Do udostępnienia innym**. Według tego chroni osoby żyjące
   - eksport GEDCOM zachowuje źródła i cytaty zmarłych w każdej opcji; eksport JSON, HTML i CSV się nie zmienia
     ([A7.2](A7-book-pages-and-export.md#A7.2));
   - zdjęć i załączników plik nie ma: inne programy nie odczytują ich z pliku;
+  - przy **Z powrotem do {program}** wiersz podsumowania **Źródła i cytaty (N źródeł, M cytatów)** liczy rekordy
+    źródeł, które plik zapisze. Źródła, które import utworzył z jednego rekordu źródła dla każdej cytowanej strony
+    ([A2.6](A2-loading-a-family-tree.md#A2.6)), wracają jako ten jeden rekord: dwie księgi metrykalne cytowane przy
+    81 danych dają „2 źródła, 81 cytatów”. W drzewie zostaje źródło dla każdej cytowanej strony;
   - **Oznacz dane z badań notatką** (domyślnie włączone, tylko gdy drzewo ma dane z badania): dana, którą uzupełniło
     lub poprawiło badanie, dostaje notatkę „Wywiedzione przez badania Strom (według: …)”;
   - w przeciwnym razie identyfikatory programu zapisują się pod własnymi znacznikami Stromu (`_STROM_IMPORT`), aby
@@ -208,7 +212,7 @@ programu**) albo **Do udostępnienia innym**. Według tego chroni osoby żyjące
   {program}: eksport ze źródłami…** (otwiera eksport z opcją z powrotem).
 - **Obowiązuje od:** aplikacja 3.26.0
 
-<!-- zdroj: app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
+<!-- zdroj: app:7cf409bd src/ged-exporter.ts backSourceRecordCount (sourceGroups: jeden záznam za skupinu) · src/ui/export-gedcom-ui.ts backSources → exportGed.sumSources · e2e/export-gedcom-back.spec.ts · app:1c9b2392 src/ged-exporter.ts backToXrefs (původní xref, ID řádky úrovně 1, REFN + TYPE {prog} xref, _XXX téhož programu, jinak _STROM_IMPORT / _STROM_XID) · src/ui/import-export.ts:267 keepDeceasedSources: true (jen GEDCOM) · strings.ts exportGed.* -->
 
 <a id="S6.7"></a>
 ## S6.7 Drzewo wczytane ponownie i scalanie
