@@ -104,7 +104,11 @@ export function sameStep(a: ReliabilityStep | null | undefined, b: ReliabilitySt
 export interface ReliabilityOptions {
     /** The tree is the research's (loaded from its bridge). */
     researchTree: boolean;
-    /** Its bridge names `origin` in /status.features (researchShowsOrigin). */
+    /**
+     * The research tree's data carry the research's origin: its bridge names `origin` in /status.features
+     * (researchShowsOrigin), or the tree stored from such a research has it (treeCarriesResearchOrigin) —
+     * the marks are the same with the bridge, without it and before it answers.
+     */
     originFeature: boolean;
     /** What 065 knows of a fact (readers, confirmed, no source), when it does. */
     evidence?: (holder: FactHolder, fact: string) => Pick<ReliabilityInput, 'readers' | 'confirmedByHuman' | 'noSource'> | undefined;
@@ -147,6 +151,17 @@ export function factHasValue(holder: FactHolder, fact: string): boolean {
 }
 
 /**
+ * The research's `user` origin that says only that the value came from the user's own family tree (Milan's
+ * decision A, 1109): the research writes `_STROM_ORIGIN user` both for the values of the Strom app's tree it
+ * took in and for a person's change, and only the latter keeps the family tree's earlier value (`_STROM_WAS`).
+ * Such a value is marked as the family tree's (its status, else ○○), never ✓; ✓ stays for a confirmation and
+ * for a change with an earlier value kept (an accepted proposal, the person's edit of an imported value).
+ */
+export function userTreeOrigin(origin: ResearchFactOrigin | null | undefined): boolean {
+    return origin?.kind === 'user' && !origin.was;
+}
+
+/**
  * The earlier value was replaced by a proposal the person accepted: an earlier value kept with the person's origin
  * (a correction by a record keeps it with the research's origin; a revert leaves none).
  */
@@ -185,8 +200,10 @@ export function factReliability(data: Pick<StromData, 'imports'>, holder: FactHo
     if (opts.researchTree && opts.originFeature) {
         const origin = holder.researchOrigins?.[fact];
         const status = factStatusOf(holder, fact);
-        const step = reliabilityStep({ status, origin: origin?.kind, ...evidence });
+        const fromOwnTree = userTreeOrigin(origin);
+        const step = reliabilityStep({ status, origin: fromOwnTree ? 'import' : origin?.kind, ...evidence });
         if (!step) return null;
+        if (fromOwnTree) return { ...step, fromParts: [], changedParts: [], ...(origin?.sourceIds?.length ? { sourceIds: [...origin.sourceIds] } : {}) };
         const has = partsWithValue(holder, fact);
         const fromParts = origin?.kind === 'import' ? (origin.parts?.length ? has.filter(p => origin.parts!.includes(p)) : has) : [];
         const changedParts = origin?.kind === 'import' && origin.parts?.length ? has.filter(p => !origin.parts!.includes(p)) : [];
@@ -319,6 +336,26 @@ export interface CardStatusOptions extends ReliabilityOptions {
     status?: boolean;
     /** Each person's unions, when many cards are evaluated (evidence-level.ts unionsByPerson). */
     unions?: Map<string, Partnership[]>;
+}
+
+/**
+ * The tree's data carry the research's origin of its facts: a research that shows the origin writes
+ * `_STROM_ORIGIN` under every fact and name, so any holder with `researchOrigins` says the tree came from one.
+ */
+export function treeCarriesResearchOrigin(data: Pick<StromData, 'persons' | 'partnerships'>): boolean {
+    for (const p of Object.values(data.persons ?? {})) if (p?.researchOrigins) return true;
+    for (const u of Object.values(data.partnerships ?? {})) if (u?.researchOrigins) return true;
+    return false;
+}
+
+/**
+ * The options of the active tree (without evidence): `live` — its research's bridge answers now and names
+ * `origin`; `researchTree` — the tree is a research's. A research tree whose data carry the origin gets the
+ * same options whether its bridge answers, has not answered yet, or does not run.
+ */
+export function reliabilityOptionsOf(data: Pick<StromData, 'persons' | 'partnerships'>, live: boolean, researchTree: boolean): ReliabilityOptions {
+    const research = live || researchTree;
+    return { researchTree: research, originFeature: live || (research && treeCarriesResearchOrigin(data)) };
 }
 
 /** The tree knows where its facts came from: the research's bridge names `origin`, or a file of another program was imported. */

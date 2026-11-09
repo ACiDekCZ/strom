@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     RELIABILITY_ORDER, reliabilityStep, weakestStep, sameStep, factReliability, personOriginSummary, cardReliability,
-    cardStatus, CardStatusOptions, partnershipReliability, wasAccepted, ReliabilityInput, ReliabilityStep, ReliabilityOptions,
+    cardStatus, CardStatusOptions, partnershipReliability, reliabilityOptionsOf, treeCarriesResearchOrigin, wasAccepted, ReliabilityInput, ReliabilityStep, ReliabilityOptions,
 } from '../reliability.js';
 import { factCitations } from '../import-origin.js';
 import type { ImportRecord, Partnership, Person, PersonId, StromData } from '../types.js';
@@ -137,6 +137,22 @@ describe('factReliability in the research\'s tree with origin', () => {
         expect(wasAccepted(undefined)).toBe(false);
     });
 
+    it('a value of the user\'s own family tree (origin user, no earlier value): the family tree\'s, never ✓ (1109, A)', () => {
+        const fromTree = person({ birthDate: '1851', researchOrigins: { name: { kind: 'user' }, birth: { kind: 'user' } } });
+        expect(factReliability(data, fromTree, 'birth', RESEARCH)).toEqual({ step: 'import', fromParts: [], changedParts: [] });
+        expect(factReliability(data, fromTree, 'name', RESEARCH)).toMatchObject({ step: 'import' });
+        // Its status says more: that step; a confirmation stays ✓.
+        const proven = person({ birthDate: '1851', birthStatus: 'proven', researchOrigins: { birth: { kind: 'user' } } });
+        expect(factReliability(data, proven, 'birth', RESEARCH)).toMatchObject({ step: 'proven', dots: 1 });
+        const lead = person({ birthDate: '1851', birthStatus: 'lead', researchOrigins: { birth: { kind: 'user' } } });
+        expect(factReliability(data, lead, 'birth', RESEARCH)).toMatchObject({ step: 'import' });
+        expect(factReliability(data, fromTree, 'birth', { ...RESEARCH, evidence: () => ({ confirmedByHuman: true }) }))
+            .toMatchObject({ step: 'human' });
+        const p = person({ birthDate: '1851', researchOrigins: { name: { kind: 'user' }, birth: { kind: 'user' } } });
+        const t = { persons: { p1: p }, partnerships: {}, imports: [], sources: {} } as unknown as StromData;
+        expect(cardStatus(t, p, { ...RESEARCH, treeHasSources: false })?.cls).toBe('cs-import');
+    });
+
     it('the research\'s own value: its status alone; nothing without one', () => {
         const p = person({ birthDate: '1851', birthStatus: 'probable', deathDate: '1910',
             importedValues: { deathDate: { from: 'I1', value: '1910' } } });
@@ -249,12 +265,15 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
     const cls = (data: StromData, p: Person, o: CardStatusOptions) => cardStatus(data, p, o)?.cls ?? null;
 
     it('a person\'s confirmation on every fact: ✓', () => {
-        const p = person({ birthDate: '1851', researchOrigins: { name: { kind: 'user' }, birth: { kind: 'user' } } });
-        expect(cls(tree([I1], p), p, opts(RESEARCH))).toBe('cs-human');
+        const p = person({ birthDate: '1851', researchOrigins: { name: { kind: 'research' }, birth: { kind: 'research' } } });
+        expect(cls(tree([I1], p), p, opts({ ...RESEARCH, evidence: () => ({ confirmedByHuman: true }) }))).toBe('cs-human');
+        // The person's change of an imported value (the earlier value kept): ✓ too.
+        const changed = person({ birthDate: '1851', researchOrigins: { name: { kind: 'user', was: { value: 'x' } }, birth: { kind: 'user', was: { value: 'x' } } } });
+        expect(cls(tree([I1], changed), changed, opts(RESEARCH))).toBe('cs-human');
     });
 
     it('a person\'s confirmation everywhere stays ✓ beside citations', () => {
-        const p = person({ birthDate: '1851', birthSourceIds: ['s1'], researchOrigins: { name: { kind: 'user' }, birth: { kind: 'user' } } });
+        const p = person({ birthDate: '1851', birthSourceIds: ['s1'], researchOrigins: { name: { kind: 'user', was: { value: 'x' } }, birth: { kind: 'user', was: { value: 'x' } } } });
         expect(cls(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true }))).toBe('cs-human');
     });
 
@@ -277,12 +296,12 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
         const s = cardStatus(tree([I1], p), p, opts({ ...RESEARCH, treeHasSources: true }));
         expect(s).toMatchObject({ cls: 'cs-p1', source: 'step', step: { step: 'probable' }, facts: ['birth'] });
         // Only a possible birth read from a copy with primary information (QUAY 2): its step stays for the words.
-        const birthOnly = person({ birthDate: '1851', birthStatus: 'possible', birthSourceIds: ['s2'], researchOrigins: { name: { kind: 'user' } } });
+        const birthOnly = person({ birthDate: '1851', birthStatus: 'possible', birthSourceIds: ['s2'], researchOrigins: { name: { kind: 'research' } } });
         expect(cardStatus(tree([I1], birthOnly), birthOnly, opts(RESEARCH)))
             .toMatchObject({ cls: 'cs-p1', step: { step: 'possible' }, facts: ['birth'] });
         // The record the research changed the fact by is a citation too.
         const bySrc = person({ birthDate: '1851', birthStatus: 'probable',
-            researchOrigins: { name: { kind: 'user' }, birth: { kind: 'research', sourceIds: ['s1'] } } });
+            researchOrigins: { name: { kind: 'research' }, birth: { kind: 'research', sourceIds: ['s1'] } } });
         expect(cls(tree([I1], bySrc), bySrc, opts(RESEARCH))).toBe('cs-p1');
     });
 
@@ -452,5 +471,47 @@ describe('factCitations', () => {
 
     it('a cited id the tree no longer has is skipped', () => {
         expect(titles(factCitations(data, person({ sourceIds: ['gone', 's2'] }), 'name'))).toEqual(['Pohřební kniha Lhotka']);
+    });
+});
+
+describe('the mark of a research tree does not wait for its bridge (1109)', () => {
+    // A research tree stored from a research that shows the origin (every fact and name carries
+    // `_STROM_ORIGIN`), its birth a lead with an original cited: the bridge answering, not answered
+    // yet after the page loads, or not running at all gives the same mark.
+    const SOURCES = { s1: { id: 's1', title: 'Křty Lhota 1851', quality: 3 } };
+    const lead = person({
+        birthDate: '1851', birthStatus: 'lead', birthSourceIds: ['s1'], sourceIds: ['s1'],
+        researchOrigins: { name: { kind: 'research' }, birth: { kind: 'research' } },
+    });
+    const data = {
+        persons: { p1: lead }, partnerships: {}, imports: [], sources: SOURCES,
+    } as unknown as StromData;
+    const statusOf = (o: ReliabilityOptions) => cardStatus(data, lead, { ...o, treeHasSources: true });
+
+    it('the tree\'s data say the research showed the origin', () => {
+        expect(treeCarriesResearchOrigin(data)).toBe(true);
+        expect(treeCarriesResearchOrigin({ persons: { p1: person() }, partnerships: {} } as unknown as StromData)).toBe(false);
+        const ps = { id: 'u1', researchOrigins: { marriage: { kind: 'research' } } } as unknown as Partnership;
+        expect(treeCarriesResearchOrigin({ persons: {}, partnerships: { u1: ps } } as unknown as StromData)).toBe(true);
+    });
+
+    it('the same card mark with the bridge and without it', () => {
+        const live = statusOf(reliabilityOptionsOf(data, true, true));
+        expect(live).toMatchObject({ cls: 'cs-res', source: 'step', facts: ['birth'] });
+        expect(statusOf(reliabilityOptionsOf(data, false, true))).toEqual(live);
+        // Before: the bridge not answered fell to the citations (●●), the very mark that flipped.
+        expect(statusOf(RESEARCH_OLD)?.cls).toBe('cs-p2');
+    });
+
+    it('the same person card summary with the bridge and without it', () => {
+        expect(personOriginSummary(data, lead, reliabilityOptionsOf(data, false, true)))
+            .toEqual(personOriginSummary(data, lead, reliabilityOptionsOf(data, true, true)));
+    });
+
+    it('a research tree without the origin in its data, or the app\'s own tree, keeps the old options', () => {
+        const old = { persons: { p1: person({ birthStatus: 'lead' }) }, partnerships: {} } as unknown as StromData;
+        expect(reliabilityOptionsOf(old, false, true)).toEqual(RESEARCH_OLD);
+        expect(reliabilityOptionsOf(data, false, false)).toEqual(PLAIN);
+        expect(reliabilityOptionsOf(old, true, false)).toEqual(RESEARCH);
     });
 });

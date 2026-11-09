@@ -164,7 +164,9 @@ test.describe('reliability marks', () => {
             const p = S.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Bonifác')!;
             p.birthDate = '1850-02-03';
             p.birthStatus = 'proven';
-            p.researchOrigins = { name: { kind: 'user' }, sex: { kind: 'user' }, birth: { kind: 'research' } };
+            // The person's own changes of the family tree's values (the earlier value kept): theirs, ✓.
+            const was = { value: 'Bonifácius' };
+            p.researchOrigins = { name: { kind: 'user', was }, sex: { kind: 'user', was: { value: 'F' } }, birth: { kind: 'research' } };
             // The research's bridge names `origin`: the tree is the research's.
             S.UI.researchShowsOriginNow = () => true;
             S.UI.activeResearchId = () => 'r-kvapilik';
@@ -185,6 +187,34 @@ test.describe('reliability marks', () => {
         await expect(birth).toHaveClass(/fact-status-proven/);
         await expect(birth).toHaveText('Proven');
         await expect(birth.locator('.fs-dots i.on')).toHaveCount(1);
+    });
+
+    test('a research tree with origin stored: the card\'s mark is the same before its bridge answers and with it (1109)', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Bonifác', 'Kvapilík');
+        const markOf = async (live: boolean) => {
+            await page.evaluate((bridgeLive) => {
+                const S = window.Strom;
+                const data = S.DataManager.getData() as unknown as { sources?: Record<string, unknown> };
+                data.sources = { s1: { id: 's1', title: 'Křty Bramborov 1850', quality: 3 } };
+                const p = S.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Bonifác')!;
+                p.birthDate = '1850-02-03';
+                p.birthStatus = 'lead';
+                p.birthSourceIds = ['s1'];
+                p.sourceIds = ['s1'];
+                p.researchOrigins = { name: { kind: 'research' }, birth: { kind: 'research' } };
+                // The tree is the research's; its bridge answers with `origin`, or not yet / not at all.
+                S.UI.researchShowsOriginNow = () => bridgeLive;
+                S.UI.activeResearchId = () => 'r-kvapilik';
+                S.TreeRenderer.render();
+            }, live);
+            const mark = card(page, 'Bonifác').locator(':scope > .card-status-mark');
+            await expect(mark).toBeVisible();
+            return mark.getAttribute('class');
+        };
+        const before = await markOf(false);
+        expect(before).toMatch(/\bcs-res\b/);
+        expect(await markOf(true)).toBe(before);
     });
 });
 

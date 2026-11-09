@@ -14,6 +14,7 @@ import { Partnership, Person, PersonId } from '../types.js';
 import { importRecordOf } from '../import-origin.js';
 import {
     FactReliability, PersonOriginSummary, ReliabilityOptions, factReliability, personOriginSummary, reliabilityStep,
+    reliabilityOptionsOf,
 } from '../reliability.js';
 import {
     factReliabilityHtml, installReliabilityTips, originRowPillHtml, personMarksLayout, reliabilityHtml, reliabilityTitle,
@@ -64,11 +65,16 @@ export const personReliabilityMethods = uiModule({
         this.installVerifyUi();
     },
 
-    /** Where the steps come from now: the active research tree and whether its bridge names `origin`. */
+    /**
+     * Where the steps come from now: the active research tree and whether its data carry the research's
+     * origin — its bridge names `origin`, or the tree stored from such a research has it. The marks never
+     * wait for the bridge (the same before it answers and without it); what needs it (Revert, verify)
+     * asks the bridge itself.
+     */
     reliabilityOptionsNow(): ReliabilityOptions {
-        const originFeature = this.researchShowsOriginNow();
+        const opts = reliabilityOptionsOf(DataManager.getData(), this.researchShowsOriginNow(), !!this.activeResearchId());
         // A confirmation the research's bridge took shows at once (spec 065, src/ui/verify-ui.ts).
-        return { researchTree: originFeature || !!this.activeResearchId(), originFeature, evidence: verifyLocalEvidence };
+        return { ...opts, evidence: verifyLocalEvidence };
     },
 
     /** The person card's marks (null: the setting is off). */
