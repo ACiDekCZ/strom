@@ -23,6 +23,7 @@
 
 import { StorageManager } from './storage.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
+import { bytesToBase64, base64ToBytes } from './base64.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
 export const POOL_MIN_LENGTH = 1024;
@@ -73,33 +74,9 @@ export function withPoolLock<T>(job: () => Promise<T>): Promise<T> {
     return run;
 }
 
-// ---- base64 <-> bytes ----
+// ---- base64 <-> bytes (src/base64.ts) ----
 
-/** Native base64 of typed arrays (Chrome 140+, Firefox 133+, Safari 18.2+). */
-type NativeBase64 = { toBase64?: () => string };
-type NativeFromBase64 = { fromBase64?: (b64: string) => Uint8Array };
-
-export function bytesToBase64(bytes: Uint8Array): string {
-    const native = (bytes as unknown as NativeBase64).toBase64;
-    if (typeof native === 'function') return native.call(bytes);
-    // Fallback: build the binary string in large slices. The spread of a
-    // 32 KB chunk per call was ~40x slower than native on 80 MB of images.
-    const parts: string[] = [];
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]));
-    }
-    return btoa(parts.join(''));
-}
-
-export function base64ToBytes(b64: string): Uint8Array {
-    const native = (Uint8Array as unknown as NativeFromBase64).fromBase64;
-    if (typeof native === 'function') return native(b64);
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-}
+export { bytesToBase64, base64ToBytes };
 
 function hex(buf: ArrayBuffer, bytes: number): string {
     return Array.from(new Uint8Array(buf, 0, bytes), b => b.toString(16).padStart(2, '0')).join('');

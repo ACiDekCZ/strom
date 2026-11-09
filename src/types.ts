@@ -2222,7 +2222,12 @@ export interface ResearchTreeEtag {
     fingerprint: string;
     /** The file's images were taken (the import setting then): reused only while the setting is the same. */
     images: boolean;
+    /** The file's variant: `ref` its images by their hash (`ged.imagesByHash`); absent: with them in it. */
+    variant?: 'ref';
 }
+
+/** A research's file with its images by their hash (`ref`) or in it (`data`). */
+export type TreeImagesVariant = 'ref' | 'data';
 
 /** How changes go to the research (see ResearchLink.sendMode). */
 export type ResearchSendMode = 'auto' | 'manual' | 'off';

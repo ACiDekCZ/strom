@@ -30,7 +30,7 @@ import { sessionTone } from '../live-follow-targets.js';
 import { hasFollowPrefs, resetFollowPrefs, restoreFollowPrefs } from '../live-follow-prefs.js';
 import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
-import { StromData, TreeId, PersonId, SourceExcerpt } from '../types.js';
+import { StromData, TreeId, PersonId, SourceExcerpt, TreeImagesVariant } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate, instantLocalDay } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
@@ -87,7 +87,8 @@ import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
-import { bridgeGivesEtag, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
+import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
+import { findImageRefs, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveImageRefs, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 
 /** What a research open needs to know from the file (or the bridge). */
@@ -900,28 +901,110 @@ export interface FetchedTree extends TreeReplyHeads {
     etag: string | null;
     /** 304: the bridge would send the very file `etag` asked with (`text` is then empty). */
     notModified?: true;
+    /** Which file came: its images by their hash (`ref`) or in it (`data`); its tag is of that variant. */
+    variant: TreeImagesVariant;
+    /** The images the file names by their hash, resolved: the parser takes them (convertToStrom `images`). */
+    images?: ReadonlyMap<string, string>;
 }
+
+/** The excerpt images of the tree stored for a research (the open one as it is in memory). */
+async function researchTreeImages(researchId: string): Promise<string[]> {
+    const meta = TreeManager.findTreeByResearchId(researchId);
+    if (!meta || TreeManager.isTreeUnreadable(meta.id)) return [];
+    const data = await readTree(meta.id);
+    const out: string[] = [];
+    for (const src of Object.values(data?.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) if (exc.dataUrl) out.push(exc.dataUrl);
+    }
+    return out;
+}
+
+/** What resolving the images by hash takes from the app: the network, hashing, the stored tree. */
+const imageDeps: ImageResolveDeps = {
+    fetch: (url, init) => fetch(url, init),
+    sha256Hex,
+    sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+    address: url => withAppVersion(url),
+    treeImages: researchTreeImages,
+};
 
 /**
  * The research's tree from `url` (its bridge's `tree.ged`). `stale`: the last
  * tree the bridge built, at once (a bridge with `ged.stale`); without it the
  * bridge answers once the tree of its head now is built. `etag`: the tag of
  * the file the tree holds (a bridge with `ged.etag`), sent as `If-None-Match`;
- * a 304 then comes back as `notModified` with no text.
+ * a 304 then comes back as `notModified` with no text. `byHash`: the bridge
+ * has `ged.imagesByHash` — the file comes with its images by their hash and
+ * only the images not held here are downloaded (`etag` must then be a tag of
+ * that variant); `images: false` leaves them out (not resolved). Anything
+ * that keeps an image from being had loads the file with its images in it.
  */
-export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null } = {}): Promise<FetchedTree> {
+export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null; byHash?: boolean; images?: boolean } = {}): Promise<FetchedTree> {
+    if (opts.byHash) {
+        const got = await fetchRefTree(url, opts);
+        if (got) return got;
+        // The images could not all be had: this load takes the file with them in it.
+        return fetchResearchTree(url, { stale: opts.stale });
+    }
     const res = await fetchWithTimeout(opts.stale ? staleTreeUrl(url) : url, TREE_GED_TIMEOUT_MS,
         opts.etag ? { 'If-None-Match': opts.etag } : undefined);
     const get = (name: string): string | null => res.headers?.get(name) ?? null;
-    if (opts.etag && res.status === 304) return { text: '', notModified: true, etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
+    if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'data', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = decodeGedcomFile(await res.arrayBuffer());
     noteFamilyPartners(url, researchFamilyPartners(text));
-    return { text, etag: treeReplyEtag(get), ...treeReplyHeads(get) };
+    // Its images are in it: those held for the last file would only be a second copy.
+    forgetHeldImages();
+    return { text, variant: 'data', etag: treeReplyEtag(get), ...treeReplyHeads(get) };
+}
+
+/**
+ * The file with its images by their hash (`images=ref`) and those images;
+ * null when they could not all be had (the caller then takes the file with
+ * them in it). A bridge that cannot be reached throws, as for the whole file.
+ */
+async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string | null; images?: boolean }): Promise<FetchedTree | null> {
+    const res = await fetchWithTimeout(refTreeUrl(opts.stale ? staleTreeUrl(url) : url), TREE_GED_TIMEOUT_MS,
+        opts.etag ? { 'If-None-Match': opts.etag } : undefined);
+    const get = (name: string): string | null => res.headers?.get(name) ?? null;
+    if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'ref', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
+    if (!res.ok) {
+        console.warn('The tree with its images by hash was refused, loading the whole file', res.status);
+        return null;
+    }
+    const text = decodeGedcomFile(await res.arrayBuffer());
+    const said = treeReplyImages(get);
+    const base = { text, etag: treeReplyEtag(get), ...treeReplyHeads(get) };
+    noteFamilyPartners(url, researchFamilyPartners(text));
+    // The bridge sent the file with its images in it after all: it is complete as it is.
+    if (said === 'data') {
+        forgetHeldImages();
+        return { ...base, variant: 'data' };
+    }
+    if (opts.images === false) return { ...base, variant: 'ref' };
+    const refs = findImageRefs(text);
+    try {
+        const got = await resolveImageRefs({ researchId: readResearchHeader(text).treeId, refs, imagesUrl: imagesUrlOf(url) }, imageDeps);
+        return { ...base, variant: 'ref', images: got.images };
+    } catch (err) {
+        console.warn('The images by hash could not all be had, loading the whole file', err);
+        forgetHeldImages();
+        return null;
+    }
 }
 
 export async function fetchGedcomText(url: string): Promise<string> {
     return (await fetchResearchTree(url)).text;
+}
+
+/**
+ * The research's tree for reading, its images as the file with them in it
+ * would carry: by their hash when the bridge's `features` (its last status)
+ * say it gives them so, else the whole file.
+ */
+export async function readResearchTreeFile(url: string, features: readonly string[] | null | undefined): Promise<{ text: string; images?: ReadonlyMap<string, string> }> {
+    const got = await fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(features) });
+    return { text: got.text, ...(got.images ? { images: got.images } : {}) };
 }
 
 /** The partners of the research's families by the tree's address (its last read), for rows of `working[]` about a couple. */
@@ -2560,24 +2643,26 @@ export const researchUiMethods = uiModule({
      * The tree of that research this browser holds, when it is exactly a file
      * its bridge sent with an ETag (`ged.etag`): readable, the tie's base the
      * load gave, the tree unchanged since, its images taken as the setting
-     * says now. Null otherwise (the file is then asked without a tag).
+     * says now, the tag of the file's `variant` about to be asked (the one
+     * with its images by hash and the one with them in it have their own
+     * tags). Null otherwise (the file is then asked without a tag).
      */
-    async researchHeldFile(researchId: string): Promise<HeldResearchFile | null> {
+    async researchHeldFile(researchId: string, variant: TreeImagesVariant = 'data'): Promise<HeldResearchFile | null> {
         const meta = TreeManager.findTreeByResearchId(researchId);
         const link = meta?.research;
         if (!meta || !link?.treeEtag || TreeManager.isTreeUnreadable(meta.id)) return null;
         const data = await readTree(meta.id);
         if (!data) return null;
-        const etag = storedTreeEtag(link, fingerprintLike(data, link.fingerprint), SettingsManager.isImportImages());
+        const etag = storedTreeEtag(link, fingerprintLike(data, link.fingerprint), SettingsManager.isImportImages(), variant);
         if (!etag) return null;
         return { treeId: meta.id, etag, data, head: link.head ?? '', mode: link.mode ?? null };
     },
 
-    /** Keep the tag of the file just loaded into `treeId` with its tie (only that research's, not a copy's). */
-    researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean): void {
+    /** Keep the tag of the file just loaded into `treeId` with its tie (only that research's, not a copy's), with the file's variant. */
+    researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean, variant: TreeImagesVariant = 'data'): void {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || link.copy || link.id !== researchId.toLowerCase() || !link.fingerprint) return;
-        TreeManager.patchResearchLink(treeId, { treeEtag: { tag, head: link.head ?? '', fingerprint: link.fingerprint, images } });
+        TreeManager.patchResearchLink(treeId, { treeEtag: { tag, head: link.head ?? '', fingerprint: link.fingerprint, images, ...(variant === 'ref' ? { variant } : {}) } });
     },
 
     /**
@@ -2710,6 +2795,9 @@ export const researchUiMethods = uiModule({
             // when the bridge answered 304 to its tag (the very file it would send: nothing downloaded or parsed).
             let etag: string | null = null;
             let held: HeldResearchFile | null = null;
+            // A bridge with `ged.imagesByHash`: the file with its images by their hash, and those images.
+            let images: ReadonlyMap<string, string> | undefined;
+            let variant: TreeImagesVariant = 'data';
             try {
                 status = opts.resume || auto
                     ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
@@ -2725,18 +2813,22 @@ export const researchUiMethods = uiModule({
                 }
                 const stale = bridgeGivesStale(status.features);
                 const tagged = bridgeGivesEtag(status.features);
-                const ask = tagged ? await this.researchHeldFile(status.treeId) : null;
-                let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag });
+                const byHash = bridgeGivesImagesByHash(status.features);
+                const asked: TreeImagesVariant = byHash ? 'ref' : 'data';
+                const ask = tagged ? await this.researchHeldFile(status.treeId, asked) : null;
+                let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag, byHash });
                 if (got.notModified) {
                     // Still exactly that tree (nothing changed it meanwhile): kept. Else the file itself.
-                    const now = await this.researchHeldFile(status.treeId);
+                    const now = await this.researchHeldFile(status.treeId, asked);
                     if (now && now.etag === ask?.etag && now.treeId === ask.treeId) {
                         held = now;
                     } else {
-                        got = await fetchResearchTree(bridge.ged, { stale });
+                        got = await fetchResearchTree(bridge.ged, { stale, byHash });
                     }
                 }
                 text = got.text;
+                images = got.images;
+                variant = got.variant;
                 if (stale) reply = got;
                 if (tagged) etag = got.etag;
             } catch (err) {
@@ -2771,7 +2863,7 @@ export const researchUiMethods = uiModule({
             }
             let data: StromData;
             try {
-                data = held ? held.data : convertToStrom(parseGedcom(text)).data;
+                data = held ? held.data : convertToStrom(parseGedcom(text), { images }).data;
             } catch {
                 if (auto) passive();
                 else await this.showAlert(strings.gedcom.parseError, 'error');
@@ -2802,7 +2894,7 @@ export const researchUiMethods = uiModule({
                 );
             // The file's tag kept with the tree it was loaded into (only a file sent with one: one built without
             // all its images has none and is never kept as a finished state).
-            if (treeId && etag && !held) this.researchKeepTreeEtag(treeId, status.treeId, etag, taken.images);
+            if (treeId && etag && !held) this.researchKeepTreeEtag(treeId, status.treeId, etag, taken.images, variant);
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();
                 passive();
@@ -3202,9 +3294,16 @@ export const researchUiMethods = uiModule({
         let fileHead: string | null = null;
         let etag: string | null = null;
         const ownHead = bridgeGivesStale(s.features);
+        // Following live asks nothing: the setting decides about images (not taken: not even downloaded).
+        const takeImages = SettingsManager.isImportImages();
+        let images: ReadonlyMap<string, string> | undefined;
+        let variant: TreeImagesVariant = 'data';
         try {
-            const got = await fetchResearchTree(s.bridge.ged);
+            const got = await fetchResearchTree(s.bridge.ged, { byHash: bridgeGivesImagesByHash(s.features), images: takeImages });
             text = got.text;
+            images = got.images;
+            variant = got.variant;
+            if (!takeImages) forgetHeldImages();
             if (bridgeGivesEtag(s.features)) etag = got.etag;
             if (ownHead) fileHead = got.head ?? readResearchHeader(text).head;
         } catch {
@@ -3219,12 +3318,11 @@ export const researchUiMethods = uiModule({
         }
         let data: StromData;
         try {
-            data = convertToStrom(parseGedcom(text)).data;
+            data = convertToStrom(parseGedcom(text), { images }).data;
         } catch {
             return null;
         }
-        // Following live asks nothing: the setting decides about images.
-        if (!SettingsManager.isImportImages()) data = stripMedia(data);
+        if (!takeImages) data = stripMedia(data);
         if (!TreeManager.getTreeMetadata(s.treeId)) {
             // The user deleted the followed tree: stop, never recreate it.
             this.endLiveFollow(s, 'ended');
@@ -3265,7 +3363,7 @@ export const researchUiMethods = uiModule({
         if (!titlesIn) TreeManager.patchResearchLink(s.treeId, { titlesIn: undefined });
         this.researchKeepCopy(s.treeId, base);
         // The file's tag (one sent with it): a reload while the research stays here keeps this tree (a 304).
-        if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, SettingsManager.isImportImages());
+        if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, takeImages, variant);
         return loaded;
     },
 
@@ -3628,7 +3726,8 @@ export const researchUiMethods = uiModule({
         if (!s.working.some(w => w.family && !w.person)) return;
         const url = s.bridge.ged;
         familiesReading.add(url);
-        void fetchGedcomText(url).then(() => {
+        // Only its families are read: the file with its images by hash is enough, its images are not asked.
+        void fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(s.features), images: false }).then(() => {
             if (live === s) this.renderLivePanel();
         }, () => { /* the next status tries again */ }).finally(() => familiesReading.delete(url));
     },

@@ -30,7 +30,7 @@ import {
     isDecidedRow, otherLoadChanges,
 } from '../research-conflict-card.js';
 import { conflictScope, conflictValueHtml, conflictValueSaid as said, researchConflictTitle, researchValueText } from './person-research-ui.js';
-import { fetchGedcomText, researchDateLabel } from './research-ui.js';
+import { readResearchTreeFile, researchDateLabel } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
@@ -631,10 +631,10 @@ export const conflictDecideMethods = uiModule({
         const researchId = ctx.link.id;
         const job = (async (): Promise<ResearchVersion | null> => {
             try {
-                const text = await fetchGedcomText(bridge.ged);
+                const { text, images } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(researchId)?.features);
                 const header = readResearchHeader(text);
                 if (!header.isStromResearch || header.treeId !== researchId) return null;
-                return { key: header.head ? `${researchId}|${header.head}` : key, data: convertToStrom(parseGedcom(text)).data, header };
+                return { key: header.head ? `${researchId}|${header.head}` : key, data: convertToStrom(parseGedcom(text), { images }).data, header };
             } catch {
                 return null;
             }

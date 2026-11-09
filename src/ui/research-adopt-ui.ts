@@ -30,7 +30,7 @@ import {
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
-import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
+import { onComputer, fetchWithTimeout, fetchStatus, readResearchTreeFile, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { canPromptInstall, promptInstall } from '../pwa.js';
@@ -388,8 +388,9 @@ export const researchAdoptMethods = uiModule({
         for (const wait of ADOPT_LOAD_WAITS) {
             if (wait) await new Promise(resolve => setTimeout(resolve, wait));
             let text: string;
+            let images: ReadonlyMap<string, string> | undefined;
             try {
-                text = await fetchGedcomText(gedUrl);
+                ({ text, images } = await readResearchTreeFile(gedUrl, this.researchStatusOf(researchId)?.features));
             } catch (err) {
                 console.warn('Loading the research version after the hand-over failed', err);
                 continue;
@@ -401,7 +402,7 @@ export const researchAdoptMethods = uiModule({
                 continue;
             }
             try {
-                const done = await this.applyResearch(convertToStrom(parseGedcom(text)).data, header, { quiet: true, ...(head ? { head } : {}) });
+                const done = await this.applyResearch(convertToStrom(parseGedcom(text), { images }).data, header, { quiet: true, ...(head ? { head } : {}) });
                 if (done !== treeId) console.warn('The research version after the hand-over was not loaded into the tree', { done, treeId });
                 return done === treeId;
             } catch (err) {

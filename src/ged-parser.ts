@@ -88,6 +88,7 @@ function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
     return groups;
 }
 import { excerptFromDataUrl } from './excerpts';
+import { imageRefSha, resolveImageFile } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
@@ -1439,6 +1440,13 @@ export interface GedcomConvertOptions {
      * records and marks it carries. Without it nothing is recorded.
      */
     importOrigin?: GedcomImportOrigin;
+    /**
+     * The images a research's file names by their hash (`FILE strom-image:<sha>`,
+     * spec 071), as the data URLs the file with its images in it would carry.
+     * A reference not in it (or without it) leaves its image out, as such a
+     * file was always read; the reference itself never comes into the tree.
+     */
+    images?: ReadonlyMap<string, string>;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -4685,8 +4693,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // raster images come in; a path or URL (another program's media
         // folder) or any other payload is skipped and counted.
         for (const link of raw.media) {
-            const media = linkedSourceMedia(link);
-            if (!media) { skipMedia(); continue; }
+            const linked = linkedSourceMedia(link);
+            if (!linked) { skipMedia(); continue; }
+            // An image named by its hash: the image itself (or left out).
+            const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
             const exc = media.file.startsWith('data:')
                 ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha, orient: media.orient })
                 : null;
@@ -4939,8 +4949,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // or an attachment. External file paths cannot be embedded — counted
         // as dropped so the import summary mentions them.
         for (const link of indi.media) {
-            const media = linkedMedia(link);
-            if (!media) { skipMedia(); continue; }
+            const linked = linkedMedia(link);
+            if (!linked) { skipMedia(); continue; }
+            // An image named by its hash: the image itself, else left out (never a file path).
+            const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+            if (!media.file && linked.file) { skipMedia(); continue; }
             if (media.file.startsWith('data:')) {
                 // Only the formats the app itself stores come in: a portrait
                 // is a raster image, a document an image or a PDF. Anything

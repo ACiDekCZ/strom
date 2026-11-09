@@ -67,7 +67,7 @@ import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
-    fetchWithTimeout, readStatusPart, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
+    fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
@@ -2145,8 +2145,9 @@ export const researchSyncMethods = uiModule({
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
         if (!bridge) return { ok: false, why: 'unreachable' };
         let text: string;
+        let images: ReadonlyMap<string, string> | undefined;
         try {
-            text = await fetchGedcomText(bridge.ged);
+            ({ text, images } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(link.id)?.features));
         } catch (err) {
             console.warn('Loading the research version for its numbers failed', err);
             return { ok: false, why: 'unreachable' };
@@ -2156,7 +2157,7 @@ export const researchSyncMethods = uiModule({
             console.warn('The research version is not this tree', { stromResearch: header.isStromResearch, tree: header.treeId, expected: link.id });
             return { ok: false, why: 'other-tree' };
         }
-        const research = convertToStrom(parseGedcom(text)).data;
+        const research = convertToStrom(parseGedcom(text), { images }).data;
         if (this.researchSyncFingerprints(treeId, link).matchesBase) {
             const done = await this.applyResearch(research, header, { quiet: true });
             return done === treeId && !TreeManager.getTreeMetadata(treeId)?.research?.awaitingIds
@@ -3154,8 +3155,9 @@ export const researchSyncMethods = uiModule({
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
         if (!bridge) return false;
         let text: string;
+        let images: ReadonlyMap<string, string> | undefined;
         try {
-            text = await fetchGedcomText(bridge.ged);
+            ({ text, images } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(link.id)?.features));
         } catch {
             return false;
         }
@@ -3163,7 +3165,7 @@ export const researchSyncMethods = uiModule({
         if (!header.isStromResearch || header.treeId !== link.id) return false;
         let data: StromData;
         try {
-            data = convertToStrom(parseGedcom(text)).data;
+            data = convertToStrom(parseGedcom(text), { images }).data;
         } catch {
             return false;
         }

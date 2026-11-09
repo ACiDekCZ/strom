@@ -18,7 +18,7 @@
  */
 
 import { isResearchHead, parseLoopbackUrl, researchFamilyRef, researchPersonRef } from './research-link.js';
-import type { ResearchLink, StromData } from './types.js';
+import type { ResearchLink, StromData, TreeImagesVariant } from './types.js';
 
 /** The bridge answers `tree.ged?stale=1` with the last file it built (Strom Research 1.30.0). */
 export const GED_STALE_FEATURE = 'ged.stale';
@@ -133,18 +133,50 @@ export function treeReplyEtag(get: (name: string) => string | null): string | nu
  * when the tree is not exactly the file the tag names: a copy, no tag, a
  * base moved since the load (another load, a send's new head, an undo), the
  * tree changed since (`fingerprint`: the stored tree's now, in the link's
- * format), or images taken otherwise than the setting says now.
+ * format), images taken otherwise than the setting says now, or a tag of the
+ * other variant of the file than the one asked (`variant`: the file with its
+ * images by reference, or with them in it — each has its own tags).
  */
 export function storedTreeEtag(
     link: Pick<ResearchLink, 'fingerprint' | 'head' | 'copy' | 'treeEtag'> | null | undefined,
     fingerprint: string | null,
     images: boolean,
+    variant: TreeImagesVariant = 'data',
 ): string | null {
     const kept = link?.treeEtag;
     if (!link || link.copy || !kept || !readTreeEtag(kept.tag)) return null;
     if (!link.fingerprint || kept.fingerprint !== link.fingerprint || kept.head !== (link.head ?? '')) return null;
     if (fingerprint !== link.fingerprint || kept.images !== images) return null;
+    if ((kept.variant ?? 'data') !== variant) return null;
     return kept.tag;
+}
+
+// ==================== IMAGES BY THEIR HASH (`ged.imagesByHash`, spec 071) ====================
+//
+// A bridge with `ged.imagesByHash` (Strom Research 1.30.0) gives
+// `tree.ged?images=ref`: the same file with each excerpt image named by the
+// SHA-256 of its bytes (`2 FILE strom-image:<sha>`), the images by
+// `POST <token>/images` (src/research-image-refs.ts). `X-Strom-Images` says
+// which file came (`ref` / `data`); each variant has its own ETag.
+
+/** The bridge gives its tree with the images by their hash (Strom Research 1.30.0). */
+export const GED_IMAGES_BY_HASH_FEATURE = 'ged.imagesByHash';
+
+/** Whether the bridge gives the tree with its images by their hash (`ged.imagesByHash` in its features). */
+export function bridgeGivesImagesByHash(features: readonly string[] | null | undefined): boolean {
+    return !!features?.includes(GED_IMAGES_BY_HASH_FEATURE);
+}
+
+/** Which file came (`X-Strom-Images`): `ref` its images by hash, `data` in it; null when not said or not readable. */
+export function treeReplyImages(get: (name: string) => string | null): TreeImagesVariant | null {
+    let said: string | null;
+    try {
+        said = get('X-Strom-Images');
+    } catch {
+        return null;
+    }
+    const v = (said ?? '').trim().toLowerCase();
+    return v === 'ref' || v === 'data' ? v : null;
 }
 
 /**
