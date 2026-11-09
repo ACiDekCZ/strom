@@ -380,18 +380,24 @@ function verifyGed(extra: string[] = []): string {
 
 interface VerifyAsks {
     verify: { fact: string; dry?: boolean }[];
-    confirm: { fact: string; confirm: boolean }[];
+    confirm: { fact: string; txt?: string; confirm: boolean }[];
 }
 
+/** A refusal of the research's bridge: HTTP status and its code. */
+interface Refusal { status: number; code: string }
+
 /** `/verify` and `/facts/confirm` of the research's bridge (the reply's place in the queue: `position`). */
-async function verifyRoutes(page: Page, opts: { position?: number } = {}): Promise<VerifyAsks> {
+async function verifyRoutes(page: Page, opts: { position?: number; verifyRefusal?: Refusal; confirmRefusal?: Refusal } = {}): Promise<VerifyAsks> {
     const asks: VerifyAsks = { verify: [], confirm: [] };
     const cors = { 'access-control-allow-origin': '*' };
     const json = (body: unknown) => ({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    // The research's refusal: its English sentence, which the app never shows.
+    const refusal = (r: Refusal) => ({ ...json({ ok: false, code: r.code, error: `refused: ${r.code}` }), status: r.status });
     await page.route(url => url.href.startsWith(`${BRIDGE}/`) && url.pathname.endsWith('/verify'), (route) => {
         if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
         const body = JSON.parse(route.request().postData() ?? '{}') as { fact: string; dry?: boolean };
         asks.verify.push(body);
+        if (opts.verifyRefusal) return route.fulfill(refusal(opts.verifyRefusal));
         return route.fulfill(json({
             ok: true, ...(body.dry ? {} : { task: 'T0101', ...(opts.position ? { position: opts.position } : {}) }),
             facts: [{ fact: body.fact, kind: 'BIRT', how: 'read', record: { source: 'S0001', title: 'Oddací matrika Čapkov', page: 'fol. 41' } }],
@@ -400,18 +406,21 @@ async function verifyRoutes(page: Page, opts: { position?: number } = {}): Promi
     });
     await page.route(url => url.href.startsWith(`${BRIDGE}/`) && url.pathname.endsWith('/facts/confirm'), (route) => {
         if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
-        const body = JSON.parse(route.request().postData() ?? '{}') as { fact: string; confirm: boolean };
+        const body = JSON.parse(route.request().postData() ?? '{}') as { fact: string; txt?: string; confirm: boolean };
         asks.confirm.push(body);
+        if (opts.confirmRefusal) return route.fulfill(refusal(opts.confirmRefusal));
         return route.fulfill(json({ ok: true, fact: body.fact, owner: 'P0003', ...(body.confirm ? { confirmed: '2026-11-09' } : {}), head: HEAD, parent: HEAD }));
     });
     return asks;
 }
 
 /** The research's tree with its bridge saying `features`; Jan's person editor open. */
-async function openVerifyTree(page: Page, opts: { features?: string[]; extra?: string[]; position?: number; ged?: string } = {}): Promise<VerifyAsks> {
+async function openVerifyTree(page: Page, opts: {
+    features?: string[]; extra?: string[]; position?: number; ged?: string; verifyRefusal?: Refusal; confirmRefusal?: Refusal;
+} = {}): Promise<VerifyAsks> {
     const ged = opts.ged ?? verifyGed(opts.extra);
     await fakeBridge(page, { features: opts.features ?? ['verify', 'facts.confirm'], treeGed: ged });
-    const asks = await verifyRoutes(page, { position: opts.position });
+    const asks = await verifyRoutes(page, { position: opts.position, verifyRefusal: opts.verifyRefusal, confirmRefusal: opts.confirmRefusal });
     await openResearch(page, { ged });
     await poll(page);
     await cardAction(page, 'Jan', 'edit');
@@ -564,6 +573,79 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await cardAction(page, 'Jan', 'edit');
         await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-probable/);
     });
+
+    // Research 1.30+: the mark of what the birth says (`3 _TXT` under its id), as the bridge 13f50ae0 writes it.
+    const MARK = '440dc563414cfcee';
+    const markedGed = () => researchGed(HEAD, [
+        '1 BIRT', '2 DATE 3 FEB 1862', '2 PLAC Čapkov', '2 _STROM_STATUS probable', '2 _STROM_EID E0001', `3 _TXT ${MARK}`, '2 SOUR @S0001@',
+        '1 DEAT', '2 DATE 1919', '2 _STROM_STATUS proven', '2 _STROM_EID E0002', '2 SOUR @S0001@',
+    ]);
+    const VALUE_FEATURES = ['verify', 'facts.confirm', 'facts.confirm.value'];
+    const CHANGED = 'The fact has changed meanwhile; nothing was confirmed.';
+
+    test('facts.confirm.value: the scan confirms the value shown, by the research\'s mark; an older bridge gets none (1109)', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: VALUE_FEATURES, ged: markedGed() });
+        await factPill(page, 'Birth').click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'E0001', txt: MARK, confirm: true }]);
+        await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-human/);
+        await vAct(page, 'undo').click();
+        await expect.poll(() => asks.confirm.length).toBe(2);
+        expect(asks.confirm[1]).toEqual({ fact: 'E0001', txt: MARK, confirm: false });
+    });
+
+    test('an older bridge: the same tree confirms without the mark (1109)', async ({ page }) => {
+        const asks = await openVerifyTree(page, { ged: markedGed() });
+        await factPill(page, 'Birth').click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'E0001', confirm: true }]);
+    });
+
+    test('409 confirm.changed: nothing confirmed, "The fact has changed meanwhile", the research\'s version offered (1109)', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: VALUE_FEATURES, ged: markedGed(), confirmRefusal: { status: 409, code: 'confirm.changed' } });
+        const pill = factPill(page, 'Birth');
+        await pill.click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'E0001', txt: MARK, confirm: true }]);
+        await expect(page.locator('.toast', { hasText: CHANGED })).toBeVisible();
+        await expect(page.getByText('refused: confirm.changed')).toHaveCount(0);
+        // The tip gives way to the usual "Load the research version?" (the tree has changes here).
+        await expect(page.locator('#status-tip')).toBeHidden();
+        const load = page.getByRole('dialog').filter({ hasText: 'Load the research version?' });
+        await expect(load).toBeVisible();
+        await load.getByRole('button', { name: 'Cancel' }).click();
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        await expect(pill).not.toHaveClass(/fact-status-human/);
+    });
+
+    test('a value changed here is not sent: the reason in the tip, no request, nothing loaded (1109)', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: VALUE_FEATURES, ged: markedGed() });
+        await page.evaluate(() => {
+            const jan = Object.values(window.Strom.DataManager.getData().persons).find(p => p.firstName === 'Jan')!;
+            jan.birthDate = '1863-02-03';
+        });
+        await factPill(page, 'Birth').click();
+        await vAct(page, 'scan').click();
+        await expect(page.locator('#status-tip')).toContainText(CHANGED);
+        await expect(page.getByText('Load the research version?')).toHaveCount(0);
+        expect(asks.confirm).toEqual([]);
+    });
+
+    for (const [code, status, said] of [
+        ['verify.archive', 409, 'The research is an archive; its facts are not verified or confirmed.'],
+        ['verify.retracted', 409, 'The research has withdrawn this fact.'],
+        ['verify.unknown', 404, 'The research no longer has this fact.'],
+    ] as const) {
+        test(`Verify refused (${code}): the tip names the reason, not a failure (1109)`, async ({ page }) => {
+            await openVerifyTree(page, { verifyRefusal: { status, code } });
+            await factPill(page, 'Birth').click();
+            await vAct(page, 'verify').click();
+            const tip = page.locator('#status-tip');
+            await expect(tip).toContainText(said);
+            await expect(tip).not.toContainText(`refused: ${code}`);
+            await expect(vAct(page, 'start')).toBeDisabled();
+        });
+    }
 
     test('a fact without a source: Verify, but no "Confirm against the scan" (nothing to confirm against)', async ({ page }) => {
         await openVerifyTree(page, {

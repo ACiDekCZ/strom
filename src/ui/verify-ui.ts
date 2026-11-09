@@ -576,14 +576,21 @@ export const verifyUiMethods = uiModule({
         if (tipState?.key === v.key) tipState = null;
         if (!result?.ok) {
             const why = result ? confirmRefusalText(result.code) : strings.verify.confirmFailed;
+            // The research's fact says something else now (409): nothing confirmed, the tree takes the
+            // research's version (the usual load, which asks when the tree has changes); the tip gives way
+            // to it, the reason in a toast. A value changed here (not sent) only says why.
+            if (result?.code === 'confirm.changed' && result.status !== 0) {
+                if (tip && document.querySelector('#status-tip') === tip) closeStatusTip();
+                this.showToast(why, 8000, { alert: true, kind: 'verify-confirm' });
+                void this.researchLoadNewer();
+                return;
+            }
             if (tip && document.querySelector('#status-tip') === tip) {
                 tipState = { tip, key: v.key, error: why };
                 this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
             } else {
                 this.showToast(why, 5000, { alert: true, kind: 'verify-confirm' });
             }
-            // The fact says something else now: nothing confirmed, the tree takes the research's version.
-            if (result?.code === 'confirm.changed') void this.researchLoadNewer();
             return;
         }
         const holder = holderOf(v.target);

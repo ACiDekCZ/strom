@@ -793,7 +793,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         busy: 'Badanie jest teraz zajęte. Za chwilę weryfikacja znów będzie możliwa.',
         locked: 'Nie można teraz rozpocząć weryfikacji: badanie jest zajęte przez inną sesję.',
         confirmFailed: 'Bez zmian; badanie nie odpowiada.',
-        confirmChanged: 'Dana w międzyczasie się zmieniła. Nic nie potwierdzono; wczytuje się aktualna wersja drzewa.',
+        confirmChanged: 'Dana w międzyczasie się zmieniła; nic nie potwierdzono. Potwierdzić można tylko aktualną wartość z badania.',
         confirmLocked: 'Bez zmian; badanie jest zajęte przez inną sesję.',
         confirmBusy: 'Bez zmian; badanie jest teraz zajęte. Za chwilę znów będzie możliwe.',
         whyArchive: 'Badanie jest archiwum; jego dane nie są weryfikowane ani potwierdzane.',
