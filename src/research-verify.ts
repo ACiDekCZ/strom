@@ -19,11 +19,11 @@ import {
     TREE_STATE_FEATURE, TREE_KIND_FEATURE,
 } from './research-link.js';
 import {
-    VERIFY_FEATURE, VERIFY_BULK_FEATURE, VERIFY_STOP_FEATURE, FACTS_CONFIRM_FEATURE,
+    VERIFY_FEATURE, VERIFY_BULK_FEATURE, VERIFY_STOP_FEATURE, FACTS_CONFIRM_FEATURE, FACTS_CONFIRM_VALUE_FEATURE, FACT_MARK,
     researchFactRef, researchPersonRef, researchFamilyRef,
 } from './verify.js';
 
-export { VERIFY_FEATURE, VERIFY_BULK_FEATURE, VERIFY_STOP_FEATURE, FACTS_CONFIRM_FEATURE, researchFactRef };
+export { VERIFY_FEATURE, VERIFY_BULK_FEATURE, VERIFY_STOP_FEATURE, FACTS_CONFIRM_FEATURE, FACTS_CONFIRM_VALUE_FEATURE, researchFactRef };
 
 /** How long the research has to answer (it may plan the work and commit). */
 export const VERIFY_TIMEOUT_MS = 30_000;
@@ -116,10 +116,16 @@ export function verifyStopRequestBody(scope?: VerifyStopScope): { scope?: Verify
     return scope === 'all' || scope === 'bulk' ? { scope } : null;
 }
 
-/** The body of POST /facts/confirm, or null when the fact is not one the research names. */
-export function factConfirmRequestBody(fact: string, confirm: boolean): { fact: string; confirm: boolean } | null {
+/**
+ * The body of POST /facts/confirm, or null when the fact is not one the
+ * research names (or `txt`, given, is not the research's mark of a value).
+ * `txt`: the mark of the value shown (`3 _TXT`, research 1.30.0+).
+ */
+export function factConfirmRequestBody(fact: string, confirm: boolean, txt?: string): { fact: string; txt?: string; confirm: boolean } | null {
     const ref = researchFactRef(fact);
-    return ref && typeof confirm === 'boolean' ? { fact: ref, confirm } : null;
+    if (!ref || typeof confirm !== 'boolean') return null;
+    if (txt === undefined) return { fact: ref, confirm };
+    return FACT_MARK.test(txt) ? { fact: ref, txt: txt.toLowerCase(), confirm } : null;
 }
 
 // ==================== Answers ====================
@@ -219,9 +225,13 @@ export type VerifyErrorCode =
     | 'verify.invalid' | 'verify.unknown' | 'verify.archive' | 'verify.nothing' | 'verify.retracted'
     | 'busy' | 'locked' | 'network' | 'invalid' | 'unsupported' | 'unknown';
 
-/** Why /facts/confirm did nothing (as VerifyErrorCode; `factconfirm.merged`: the fact went into another one). */
+/**
+ * Why /facts/confirm did nothing (as VerifyErrorCode; `factconfirm.merged`: the fact went into another one;
+ * `confirm.changed`: the fact says something else than the value shown, 409 with `txt`, or the value shown
+ * is not the one the research's mark stands for — not sent).
+ */
 export type FactConfirmErrorCode =
-    | 'factconfirm.invalid' | 'factconfirm.unknown' | 'factconfirm.retracted' | 'factconfirm.merged'
+    | 'factconfirm.invalid' | 'factconfirm.unknown' | 'factconfirm.retracted' | 'factconfirm.merged' | 'confirm.changed'
     | 'busy' | 'locked' | 'network' | 'invalid' | 'unsupported' | 'unknown';
 
 export interface BridgeRefused<C extends string> {
@@ -250,7 +260,7 @@ const STOP_CODES: Record<number, readonly VerifyErrorCode[]> = {
 const CONFIRM_CODES: Record<number, readonly FactConfirmErrorCode[]> = {
     400: ['factconfirm.invalid'],
     404: ['factconfirm.unknown'],
-    409: ['factconfirm.retracted', 'factconfirm.merged'],
+    409: ['factconfirm.retracted', 'factconfirm.merged', 'confirm.changed'],
 };
 
 function countOf(v: unknown): number | null {
@@ -467,10 +477,17 @@ export function postVerifyStop(base: string, opts: PostOptions & { scope?: Verif
     return bridgePost(base, 'verify/stop', payload, verifyStopReply, notSent<VerifyErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
 }
 
-/** POST /facts/confirm: confirm a fact from the scan (`confirm: false`: take the confirmation back). */
-export function postFactConfirm(base: string, fact: string, confirm: boolean, opts: PostOptions): Promise<FactConfirmResult> {
+/**
+ * POST /facts/confirm: confirm a fact from the scan (`confirm: false`: take the confirmation back). `txt`: the
+ * research's mark of the value shown, sent only to a bridge that says `facts.confirm.value` (an older one refuses
+ * it); there it is `changed` (not sent) when the value shown is not the mark's.
+ */
+export function postFactConfirm(base: string, fact: string, confirm: boolean,
+    opts: PostOptions & { txt?: string | 'changed' | null }): Promise<FactConfirmResult> {
     if (!bridgeVerifies(opts.features, FACTS_CONFIRM_FEATURE)) return Promise.resolve(notSent('unsupported'));
-    const payload = factConfirmRequestBody(fact, confirm);
+    const withValue = bridgeVerifies(opts.features, FACTS_CONFIRM_VALUE_FEATURE) && !!opts.txt;
+    if (withValue && opts.txt === 'changed') return Promise.resolve(notSent('confirm.changed'));
+    const payload = factConfirmRequestBody(fact, confirm, withValue ? opts.txt ?? undefined : undefined);
     if (!payload) return Promise.resolve(notSent('invalid'));
     return bridgePost(base, 'facts/confirm', payload, (status, json) => factConfirmReply(payload.fact, status, json),
         notSent<FactConfirmErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);

@@ -32,6 +32,10 @@ export const EID_TAG = '_STROM_EID';
 export const VERIFY_FEATURE = 'verify';
 export const VERIFY_BULK_FEATURE = 'verify.bulk';
 export const FACTS_CONFIRM_FEATURE = 'facts.confirm';
+/** POST /facts/confirm takes `txt` (the research's mark of the value shown, `3 _TXT`) and refuses a changed fact (409 confirm.changed). */
+export const FACTS_CONFIRM_VALUE_FEATURE = 'facts.confirm.value';
+/** The research's mark of what a fact says (`3 _TXT`): 16 hex digits. */
+export const FACT_MARK = /^[0-9a-fA-F]{16}$/;
 /** POST /verify/stop: drop the re-verification tasks not yet begun. */
 export const VERIFY_STOP_FEATURE = 'verify.stop';
 
@@ -200,6 +204,20 @@ export function factResearchEid(holder: FactHolder, fact: string): string | null
 }
 
 /**
+ * The research's mark of the value a confirmation names (`3 _TXT`, sent as
+ * `txt` with /facts/confirm): the mark while the fact shows the value the
+ * research's file gave it with; `changed` when it shows another value (edited
+ * here since); null when the file gave no mark (an older research).
+ */
+export function factConfirmMark(holder: FactHolder, fact: string): string | 'changed' | null {
+    const v = holder.researchVerify?.[fact];
+    const txt = typeof v?.txt === 'string' && FACT_MARK.test(v.txt) ? v.txt.toLowerCase() : null;
+    if (!txt) return null;
+    if (v?.txtValue !== undefined && v.txtValue !== factValueSignature(holder, fact)) return 'changed';
+    return txt;
+}
+
+/**
  * The fact's place in the research's queue of re-verification (`3 _POS n`
  * under `_STROM_VERIFY wait|asked`: 1 = the next session takes it), as of
  * the research's last file; null when it waits for a person or is not said.
@@ -307,6 +325,10 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
     }
     const eid = researchFactRef(v.eid);
     if (eid) out.eid = eid;
+    if (eid && typeof v.txt === 'string' && FACT_MARK.test(v.txt)) {
+        out.txt = v.txt.toLowerCase();
+        if (typeof v.txtValue === 'string') out.txtValue = v.txtValue;
+    }
     return out.confirmed || out.pending || out.checked || out.eid ? out : null;
 }
 

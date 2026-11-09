@@ -101,7 +101,7 @@ import {
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
     factValueSignature,
 } from './import-origin';
-import { parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, researchFamilyRef, sanitizeResearchVerify } from './verify';
+import { FACT_MARK, parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, researchFamilyRef, sanitizeResearchVerify } from './verify';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -335,7 +335,9 @@ function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | 
     const confirmed = raw.confirmed !== undefined ? researchIsoDate(raw.confirmed) : '';
     const position = raw.position !== undefined ? parsePendingPosition(raw.position) : null;
     const eid = raw.eid !== undefined ? researchFactRef(raw.eid) : null;
+    const txt = eid && raw.txt !== undefined && FACT_MARK.test(raw.txt) ? raw.txt.toLowerCase() : null;
     return sanitizeResearchVerify({
+        ...(txt ? { txt } : {}),
         ...(confirmed ? { confirmed } : {}),
         ...(raw.pending !== undefined ? { pending: parseVerifyPending(raw.pending) ?? undefined } : {}),
         ...(position ? { position } : {}),
@@ -959,6 +961,8 @@ interface RawFactVerify {
     pending?: string;
     position?: string;
     eid?: string;
+    /** `3 _TXT` under `_STROM_EID`: the research's mark of what the fact says. */
+    txt?: string;
     checked?: { result: string; date?: string; why?: string; readers?: string };
 }
 
@@ -2725,6 +2729,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let openChecked: { level: number; checked: NonNullable<RawFactVerify['checked']>; field?: string } | null = null;
     /** The research's `_STROM_VERIFY` being read (its `3 _POS` follows). */
     let openPending: { level: number; verify: RawFactVerify | null } | null = null;
+    /** `2 _STROM_EID` whose `3 _TXT` may follow. */
+    let openEid: { level: number; verify: RawFactVerify | null } | null = null;
     /**
      * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
      * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
@@ -3137,6 +3143,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
             continue;
         }
+        if (openEid && level <= openEid.level) openEid = null;
+        if (openEid) {
+            if (level === openEid.level + 1 && tag === '_TXT' && openEid.verify) openEid.verify.txt = value.trim();
+            continue;
+        }
         if (openPending && level <= openPending.level) openPending = null;
         if (openPending) {
             if (level === openPending.level + 1 && tag === '_POS' && openPending.verify) openPending.verify.position = value.trim();
@@ -3149,7 +3160,10 @@ export function parseGedcom(content: string): ParsedGedcom {
             const o = factOriginTarget();
             const v = o ? (o.verify ??= {}) : null;
             if (tag === '_STROM_CONFIRMED') { if (v) v.confirmed = value.trim(); }
-            else if (tag === '_STROM_EID') { if (v) v.eid = value.trim(); }
+            else if (tag === '_STROM_EID') {
+                if (v) v.eid = value.trim();
+                openEid = { level, verify: v };
+            }
             else if (tag === '_STROM_VERIFY') {
                 if (v) v.pending = value.trim();
                 openPending = { level, verify: v };
@@ -5805,6 +5819,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 // The value it was confirmed with: a change here ends the confirmation.
                 const value = v.confirmed ? factValueSignature(holder, fact) : '';
                 if (value) v.value = value;
+                // The value the research's mark stands for: confirming another one is not sent with it.
+                if (v.txt) v.txtValue = factValueSignature(holder, fact);
                 (holder.researchVerify ??= {})[fact] = v;
                 return;
             }

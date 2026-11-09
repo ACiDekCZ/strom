@@ -842,6 +842,14 @@ export interface ResearchFactVerify {
      * /facts/confirm name). Never sent back; a fact copied or made here has none.
      */
     eid?: string;
+    /**
+     * `3 _TXT 3f9a0c51d2e4b788` under `_STROM_EID`: the research's mark of what
+     * the fact says in its file (research 1.30.0+), sent back with
+     * /facts/confirm so the research confirms only the value shown here.
+     */
+    txt?: string;
+    /** The fact's value (factValueSignature) when the file gave `txt`: the mark holds only for it. */
+    txtValue?: string;
 }
 
 /** What the research knows about one person (see Person.research). */

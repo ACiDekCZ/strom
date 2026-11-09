@@ -42,6 +42,7 @@ import { liveSession } from './research-ui.js';
 import { rodIndex } from './rod-view.js';
 import { uiModule } from './module.js';
 import { factWaitsForVerify, markVerifyPending, verifyKindName } from './verify-ui.js';
+import { verifyRefusalText } from '../verify-refusal.js';
 
 export const VERIFY_PERSON_DIALOG_ID = 'verify-person-modal';
 export const VERIFY_BULK_DIALOG_ID = 'verify-bulk-modal';
@@ -190,19 +191,6 @@ function usdText(usd: number | undefined): string {
     } catch {
         return `$${usd.toFixed(2)}`;
     }
-}
-
-/**
- * A refusal said in the app's words: nothing to verify, the research busy or
- * held by another session, else that it could not start. Never the bridge's
- * own sentence (`reason`, English and for the details only).
- */
-export function verifyRefusalText(code: string): string {
-    const v = strings.verify;
-    if (code === 'verify.nothing') return v.nothing;
-    if (code === 'busy') return v.busy;
-    if (code === 'locked') return v.locked;
-    return v.failed;
 }
 
 /**

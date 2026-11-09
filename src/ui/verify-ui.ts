@@ -20,7 +20,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import type { LifeEvent, PartnershipId, PersonId } from '../types.js';
 import { FactHolder, factCitations, isPartnership, localIsoDay } from '../import-origin.js';
-import { factConfirmation, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
+import { factConfirmation, factConfirmMark, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
+import { confirmRefusalText, verifyRefusalText } from '../verify-refusal.js';
 import { postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
 import type { VerifyResearch } from '../verify-offer.js';
 import type { ReliabilityInput, ReliabilityStepName } from '../reliability.js';
@@ -190,7 +191,8 @@ export function keepPinnedStatusTip(fn: () => void): void {
 interface TipState {
     tip: Element;
     key: string;
-    preview?: { loading: boolean; result?: VerifyResult; starting?: boolean; failed?: boolean };
+    /** `failed`: why the research did nothing (its refusal in the app's words; the dry run's or the start's). */
+    preview?: { loading: boolean; result?: VerifyResult; starting?: boolean; failed?: string };
     /** A request on its way (its action's buttons wait). */
     busy?: 'scan' | 'undo';
     /** A sentence under the buttons (the bridge did not take it). */
@@ -449,7 +451,7 @@ export const verifyUiMethods = uiModule({
             <span class="st-preview-value">${esc(value)}${sub ? `<span class="st-preview-sub">${esc(sub)}</span>` : ''}</span></div>`;
         let note = '';
         let canStart = false;
-        let failed = !!p.failed;
+        let failed = p.failed ?? '';
         if (p.loading) {
             rows.push(`<div class="st-v-line">${esc(s.loading)}</div>`);
         } else if (p.result?.ok) {
@@ -471,7 +473,7 @@ export const verifyUiMethods = uiModule({
             }
         } else if (p.result && !p.result.ok) {
             if (p.result.code === 'verify.nothing') rows.push(`<div class="st-v-line">${esc(s.nothing)}</div>`);
-            else failed = true;
+            else failed = verifyRefusalText(p.result.code);
         }
         slots.actions.appendChild(block('st-preview', `<div class="st-preview-head">${esc(s.previewHead(factNameText(v.holder, v.fact)))}</div>`
             + rows.join('') + (note ? `<div class="st-preview-note">${esc(note)}</div>` : '')));
@@ -480,7 +482,7 @@ export const verifyUiMethods = uiModule({
         const start = button('start', researchBridgeActionLabel(s.start, 'verify'), { primary: true, disabled: !canStart || !!p.starting });
         start.addEventListener('click', () => { void this.verifyStart(v); });
         slots.actions.append(back, start);
-        if (failed) slots.actions.appendChild(block('st-v-note is-error', esc(s.failed)));
+        if (failed) slots.actions.appendChild(block('st-v-note is-error', esc(failed)));
     },
 
     /** "Verify": the preview from a dry run of the research, in the same tip. */
@@ -496,7 +498,7 @@ export const verifyUiMethods = uiModule({
                 if (tipState?.preview !== preview) return;
                 preview.loading = false;
                 if (result) preview.result = result;
-                else preview.failed = true;
+                else preview.failed = strings.verify.failed;
                 this.verifyTipRedrawn(result?.ok ? 'start' : 'back');
             });
     },
@@ -513,13 +515,13 @@ export const verifyUiMethods = uiModule({
         const preview = tipState?.key === v.key ? tipState.preview : undefined;
         if (!eid || !preview || preview.starting) return;
         preview.starting = true;
-        preview.failed = false;
+        delete preview.failed;
         this.verifyTipRedrawn('start');
         const result = await this.postResearchBridgeWrite((base, features) => postVerify(base, { fact: eid }, { features }));
         if (tipState?.preview !== preview) return;
         preview.starting = false;
         if (!result?.ok) {
-            preview.failed = true;
+            preview.failed = result ? verifyRefusalText(result.code) : strings.verify.failed;
             this.verifyTipRedrawn('start');
             return;
         }
@@ -566,16 +568,22 @@ export const verifyUiMethods = uiModule({
             tipState = { tip, key: v.key, busy: confirm ? 'scan' : 'undo' };
             this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
         }
+        // The research's mark of the value shown (`3 _TXT`): it confirms only that value (facts.confirm.value).
+        const holderNow = holderOf(v.target);
+        const txt = holderNow ? factConfirmMark(holderNow, v.fact) : null;
         const result: FactConfirmResult | null = await this.postResearchBridgeWrite(
-            (base, features) => postFactConfirm(base, eid, confirm, { features }));
+            (base, features) => postFactConfirm(base, eid, confirm, { features, txt }));
         if (tipState?.key === v.key) tipState = null;
         if (!result?.ok) {
+            const why = result ? confirmRefusalText(result.code) : strings.verify.confirmFailed;
             if (tip && document.querySelector('#status-tip') === tip) {
-                tipState = { tip, key: v.key, error: strings.verify.confirmFailed };
+                tipState = { tip, key: v.key, error: why };
                 this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
             } else {
-                this.showToast(strings.verify.confirmFailed, 5000, { alert: true, kind: 'verify-confirm' });
+                this.showToast(why, 5000, { alert: true, kind: 'verify-confirm' });
             }
+            // The fact says something else now: nothing confirmed, the tree takes the research's version.
+            if (result?.code === 'confirm.changed') void this.researchLoadNewer();
             return;
         }
         const holder = holderOf(v.target);
