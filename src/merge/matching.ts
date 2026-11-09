@@ -414,6 +414,44 @@ function getParents(person: Person, data: StromData): Person[] {
     return parents;
 }
 
+/**
+ * The siblings of a person through a parent of no name (a "?"): nothing
+ * pairs that parent by its name, so the siblings are what relate the person
+ * to the matched ones. Siblings through a named parent are reached through
+ * that parent.
+ */
+function getSiblingsThroughStandIns(person: Person, data: StromData): Person[] {
+    const siblings = new Set<Person>();
+    for (const parentId of person.parentIds) {
+        const parent = data.persons[parentId];
+        if (!parent?.isPlaceholder) continue;
+        for (const childId of parent.childIds) {
+            const child = data.persons[childId];
+            if (child && child.id !== person.id) siblings.add(child);
+        }
+    }
+    return [...siblings];
+}
+
+/**
+ * The in-laws of a person through a spouse of no name (a "?"): the partners
+ * of the person's "?" children and the parents of the person's "?" partners.
+ * Nothing pairs that "?" by its name, so they are what relate the person to
+ * the matched ones.
+ */
+function getInLawsThroughStandIns(person: Person, data: StromData): Person[] {
+    const inLaws = new Set<Person>();
+    for (const child of getChildren(person, data)) {
+        if (!child.isPlaceholder) continue;
+        for (const partner of getPartners(child, data)) if (partner.id !== person.id) inLaws.add(partner);
+    }
+    for (const partner of getPartners(person, data)) {
+        if (!partner.isPlaceholder) continue;
+        for (const parent of getParents(partner, data)) if (parent.id !== person.id) inLaws.add(parent);
+    }
+    return [...inLaws];
+}
+
 // ==================== MATCHING ALGORITHM ====================
 
 /**
@@ -505,6 +543,20 @@ function findMatchesInPass(
         if (propagatedMatches.length === 0) break;
         matches.push(...propagatedMatches);
         seeds = propagatedMatches;
+    }
+
+    // Phase 2a: a person the name scores leave out (no surname, no dates — a
+    // tree loaded before files' ids were kept has nothing else to pair by)
+    // is the one of the same name related the same way to a matched person.
+    const sameNameBlocked = new Set<PersonId>();
+    let sameNameSeeds = matches;
+    for (let round = 0; round < maxRounds; round++) {
+        const found = matchSameNamedRelatives(
+            existingData, incomingData, sameNameSeeds, usedExisting, usedIncoming, sameNameBlocked, matches
+        );
+        if (found.length === 0) break;
+        matches.push(...found);
+        sameNameSeeds = found;
     }
 
     // Phase 2b: persons whose given name is unknown ('?' or empty) have no
@@ -857,6 +909,107 @@ function propagateFromMatches(
     return propagated;
 }
 
+/**
+ * The score of a match found through a relative of a person of the same name
+ * whom the name scores left out: for review (below the auto-confirm bar),
+ * above a match of unknown given name.
+ */
+const SAME_NAME_RELATIVE_SCORE = 50;
+
+/**
+ * Phase 2a: a person the name scores leave out — a given name alone ("Henry",
+ * no surname) and no dates, so a tree loaded before files' ids were kept
+ * (3.25.0) has nothing to pair the same file's record with — is the person in
+ * the tree of the same given name and surname (both empty too) who stands in
+ * the same relation (partner, child, parent, a sibling through a parent of
+ * no name, or an in-law through a spouse or child of no name) to the matched
+ * counterpart of a matched relative, when that relative has exactly one such
+ * person on each side. Their sex may not differ, their birth and death dates may not
+ * conflict, and every matched relative of the incoming person must be the
+ * same relative of the tree's person. Anything ambiguous on any path (two
+ * sons of one name, two seeds proposing different persons, one tree person
+ * proposed for two) leaves the person unmatched; `blocked` remembers that
+ * across rounds. Always 'medium', for review; a match found here seeds this
+ * phase again.
+ */
+function matchSameNamedRelatives(
+    existingData: StromData,
+    incomingData: StromData,
+    seeds: PersonMatch[],
+    usedExisting: Set<PersonId>,
+    usedIncoming: Set<PersonId>,
+    blocked: Set<PersonId>,
+    matched: readonly PersonMatch[] = seeds
+): PersonMatch[] {
+    const matchedTo = new Map<PersonId, PersonId>(matched.map(m => [m.incomingId, m.existingId] as const));
+    const nameKey = (p: Person): string | null => {
+        const first = normalizeName(p.firstName);
+        return first ? `${first}|${normalizeName(p.lastName)}` : null;
+    };
+    const candidate = (p: Person, used: Set<PersonId>): boolean => !p.isPlaceholder && !used.has(p.id) && nameKey(p) !== null;
+    const compatible = (existing: Person, incoming: Person): boolean =>
+        gendersCompatible(existing.gender, incoming.gender)
+        && compareEventDates(existing.birthDate, incoming.birthDate) !== 'conflict'
+        && compareEventDates(existing.deathDate, incoming.deathDate) !== 'conflict';
+    /** Every matched relative of the incoming person is the tree person's relative of the same kind. */
+    const consistent = (existing: Person, incoming: Person): boolean => UNKNOWN_NAME_RELATIONS.every(({ relatives }) => {
+        const theirs = new Set(relatives(existing, existingData).map(p => p.id));
+        return relatives(incoming, incomingData).every(r => {
+            const to = matchedTo.get(r.id);
+            return to === undefined || theirs.has(to);
+        });
+    });
+
+    const proposals = new Map<PersonId, { existing: Person; incoming: Person; reason: MatchReason }>();
+    for (const seed of seeds) {
+        for (const relation of UNKNOWN_NAME_RELATIONS) {
+            const incomingRelatives = relation.relatives(seed.incomingPerson, incomingData).filter(p => candidate(p, usedIncoming));
+            if (incomingRelatives.length === 0) continue;
+            const existingRelatives = relation.relatives(seed.existingPerson, existingData).filter(p => candidate(p, usedExisting));
+            for (const incoming of incomingRelatives) {
+                if (blocked.has(incoming.id)) continue;
+                const key = nameKey(incoming);
+                const twins = incomingRelatives.filter(p => nameKey(p) === key);
+                const named = existingRelatives.filter(p => nameKey(p) === key);
+                const existing = named.length === 1 && twins.length === 1 ? named[0] : undefined;
+                const earlier = proposals.get(incoming.id);
+                if (!existing || !compatible(existing, incoming) || !consistent(existing, incoming)
+                    || (earlier && earlier.existing.id !== existing.id)) {
+                    // No one of that name here: other seeds may still find the person.
+                    if (named.length === 0 && twins.length === 1 && !earlier) continue;
+                    blocked.add(incoming.id);
+                    proposals.delete(incoming.id);
+                    continue;
+                }
+                if (!earlier) proposals.set(incoming.id, { existing, incoming, reason: relation.reason });
+            }
+        }
+    }
+
+    const proposedFor = new Map<PersonId, number>();
+    for (const { existing } of proposals.values()) proposedFor.set(existing.id, (proposedFor.get(existing.id) ?? 0) + 1);
+    const found: PersonMatch[] = [];
+    for (const { existing, incoming, reason } of proposals.values()) {
+        if (proposedFor.get(existing.id)! > 1) {
+            blocked.add(incoming.id);
+            continue;
+        }
+        found.push({
+            existingId: existing.id,
+            incomingId: incoming.id,
+            confidence: 'medium',
+            reasons: ['name_similarity_relationships', reason],
+            score: SAME_NAME_RELATIVE_SCORE,
+            existingPerson: existing,
+            incomingPerson: incoming,
+            conflicts: detectConflicts(existing, incoming)
+        });
+        usedExisting.add(existing.id);
+        usedIncoming.add(incoming.id);
+    }
+    return found;
+}
+
 /** A person whose given name is unknown: '?', empty or punctuation only. */
 function hasUnknownGivenName(person: Person): boolean {
     return normalizeName(person.firstName) === '';
@@ -888,13 +1041,16 @@ const UNKNOWN_NAME_RELATIONS: Array<{
     { relatives: getPartners, reason: 'partner_of_matched' },
     { relatives: getChildren, reason: 'child_of_matched' },
     { relatives: getParents, reason: 'parent_of_matched' },
+    { relatives: getSiblingsThroughStandIns, reason: 'sibling_of_matched' },
+    { relatives: getInLawsThroughStandIns, reason: 'in_law_of_matched' },
 ];
 
 /**
  * Phase 2b: a person of unknown given name ("1 NAME /Nováková/" — MyHeritage
  * writes a wife known only by her surname this way) is the person in the tree
- * who stands in the same relation (partner, child or parent) to the matched
- * counterpart of a matched relative, when there is exactly one such person in
+ * who stands in the same relation (partner, child, parent, a sibling through
+ * a parent of no name, or an in-law through a spouse or child of no name) to
+ * the matched counterpart of a matched relative, when there is exactly one such person in
  * the tree of the same sex and surname (birth or after marriage) with an
  * unknown given name, no conflicting dates, and exactly one such person on the
  * incoming side too. Anything ambiguous on any path, or a tree person already

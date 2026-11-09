@@ -1,0 +1,289 @@
+{
+  "persons": {
+    "p_1794192490206_0001h7vu5": {
+      "id": "p_1794192490206_0001h7vu5",
+      "firstName": "Vrbislav",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794192490206_000hpzeqa"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_0003fv9pw",
+        "p_1794192490206_000454hnt",
+        "p_1794192490206_00051o6rg",
+        "p_1794192490206_0009nlytw"
+      ],
+      "birthDate": "1801"
+    },
+    "p_1794192490206_0002ps2hr": {
+      "id": "p_1794192490206_0002ps2hr",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "female",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000hpzeqa"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_0003fv9pw",
+        "p_1794192490206_000454hnt",
+        "p_1794192490206_00051o6rg",
+        "p_1794192490206_0009nlytw"
+      ]
+    },
+    "p_1794192490206_0003fv9pw": {
+      "id": "p_1794192490206_0003fv9pw",
+      "firstName": "Kvasoslav",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794192490206_0001h7vu5",
+        "p_1794192490206_0002ps2hr"
+      ],
+      "childIds": []
+    },
+    "p_1794192490206_000454hnt": {
+      "id": "p_1794192490206_000454hnt",
+      "firstName": "Radmil",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794192490206_0001h7vu5",
+        "p_1794192490206_0002ps2hr"
+      ],
+      "childIds": []
+    },
+    "p_1794192490206_00051o6rg": {
+      "id": "p_1794192490206_00051o6rg",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000i0l74d",
+        "u_1794192490206_000jxvpcq"
+      ],
+      "parentIds": [
+        "p_1794192490206_0001h7vu5",
+        "p_1794192490206_0002ps2hr"
+      ],
+      "childIds": []
+    },
+    "p_1794192490206_0006cs08w": {
+      "id": "p_1794192490206_0006cs08w",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000i0l74d"
+      ],
+      "parentIds": [],
+      "childIds": []
+    },
+    "p_1794192490206_0007ohqc0": {
+      "id": "p_1794192490206_0007ohqc0",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000jxvpcq"
+      ],
+      "parentIds": [],
+      "childIds": []
+    },
+    "p_1794192490206_000893c9q": {
+      "id": "p_1794192490206_000893c9q",
+      "firstName": "Lubomír",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794192490206_000kzqvjv"
+      ],
+      "parentIds": [],
+      "childIds": []
+    },
+    "p_1794192490206_0009nlytw": {
+      "id": "p_1794192490206_0009nlytw",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "female",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000kzqvjv"
+      ],
+      "parentIds": [
+        "p_1794192490206_0001h7vu5",
+        "p_1794192490206_0002ps2hr"
+      ],
+      "childIds": []
+    },
+    "p_1794192490206_000aft69d": {
+      "id": "p_1794192490206_000aft69d",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000lnvnan"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_000c67giq",
+        "p_1794192490206_000dqawzv"
+      ]
+    },
+    "p_1794192490206_000b6may8": {
+      "id": "p_1794192490206_000b6may8",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794192490206_000lnvnan"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_000c67giq",
+        "p_1794192490206_000dqawzv"
+      ]
+    },
+    "p_1794192490206_000c67giq": {
+      "id": "p_1794192490206_000c67giq",
+      "firstName": "Bohuchval",
+      "lastName": "Klobouček",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794192490206_000aft69d",
+        "p_1794192490206_000b6may8"
+      ],
+      "childIds": [],
+      "birthDate": "1830"
+    },
+    "p_1794192490206_000dqawzv": {
+      "id": "p_1794192490206_000dqawzv",
+      "firstName": "?",
+      "lastName": "Klobouček",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794192490206_000aft69d",
+        "p_1794192490206_000b6may8"
+      ],
+      "childIds": []
+    },
+    "p_1794192490206_000ea5043": {
+      "id": "p_1794192490206_000ea5043",
+      "firstName": "Zbyhoň",
+      "lastName": "Pazderník",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794192490206_000mr7bix"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_000gcx5ke"
+      ],
+      "birthDate": "1802"
+    },
+    "p_1794192490206_000f0i1do": {
+      "id": "p_1794192490206_000f0i1do",
+      "firstName": "Bělislava",
+      "lastName": "Pazderníková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794192490206_000mr7bix"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794192490206_000gcx5ke"
+      ],
+      "birthDate": "1806"
+    },
+    "p_1794192490206_000gcx5ke": {
+      "id": "p_1794192490206_000gcx5ke",
+      "firstName": "Radmil",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794192490206_000ea5043",
+        "p_1794192490206_000f0i1do"
+      ],
+      "childIds": []
+    }
+  },
+  "partnerships": {
+    "u_1794192490206_000hpzeqa": {
+      "id": "u_1794192490206_000hpzeqa",
+      "person1Id": "p_1794192490206_0001h7vu5",
+      "person2Id": "p_1794192490206_0002ps2hr",
+      "childIds": [
+        "p_1794192490206_0003fv9pw",
+        "p_1794192490206_000454hnt",
+        "p_1794192490206_00051o6rg",
+        "p_1794192490206_0009nlytw"
+      ],
+      "status": "married",
+      "startDate": "1825"
+    },
+    "u_1794192490206_000i0l74d": {
+      "id": "u_1794192490206_000i0l74d",
+      "person1Id": "p_1794192490206_00051o6rg",
+      "person2Id": "p_1794192490206_0006cs08w",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_1794192490206_000jxvpcq": {
+      "id": "u_1794192490206_000jxvpcq",
+      "person1Id": "p_1794192490206_00051o6rg",
+      "person2Id": "p_1794192490206_0007ohqc0",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_1794192490206_000kzqvjv": {
+      "id": "u_1794192490206_000kzqvjv",
+      "person1Id": "p_1794192490206_000893c9q",
+      "person2Id": "p_1794192490206_0009nlytw",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_1794192490206_000lnvnan": {
+      "id": "u_1794192490206_000lnvnan",
+      "person1Id": "p_1794192490206_000aft69d",
+      "person2Id": "p_1794192490206_000b6may8",
+      "childIds": [
+        "p_1794192490206_000c67giq",
+        "p_1794192490206_000dqawzv"
+      ],
+      "status": "married"
+    },
+    "u_1794192490206_000mr7bix": {
+      "id": "u_1794192490206_000mr7bix",
+      "person1Id": "p_1794192490206_000ea5043",
+      "person2Id": "p_1794192490206_000f0i1do",
+      "childIds": [
+        "p_1794192490206_000gcx5ke"
+      ],
+      "status": "married",
+      "startDate": "1826"
+    }
+  },
+  "version": 14
+}

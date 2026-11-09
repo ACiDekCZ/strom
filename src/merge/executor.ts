@@ -278,8 +278,93 @@ function standInsOfKnownFamilies(state: MergeState, personMapping: Map<PersonId,
             }
         }
     }
+
+    // Further, in a tree loaded before the families' ids were kept (its
+    // families of no ids), until nothing changes — each pairing can tell
+    // another family who its people are:
+    //  - a family both of whose parents merge (a "?" of them paired too): its
+    //    "?" children are the tree's "?" children of that couple, in order,
+    //    when it has as many free ones (see sameChildren);
+    //  - a family of one parent that merges (a "?" too) and a "?": the "?" of
+    //    that parent's only family of a free "?" with the same children;
+    //  - a family of two "?" (a file's record that names neither parent, or
+    //    two nameless records): the tree's only family of two free "?" that
+    //    has the same children, at least one of them merging.
+    const pairPartners = (existingUnion: Partnership, incomingUnion: Partnership): [PersonId, PersonId][] | null => {
+        const fits = (e: PersonId, i: PersonId): boolean => inTree(i) === e
+            || (!inTree(i) && !!incomingData.persons[i]?.isPlaceholder && freeStandIn(e)
+                && gendersCompatible(existingData.persons[e].gender, incomingData.persons[i].gender));
+        const { person1Id: e1, person2Id: e2 } = existingUnion;
+        const { person1Id: i1, person2Id: i2 } = incomingUnion;
+        if (fits(e1, i1) && fits(e2, i2)) return [[i1, e1], [i2, e2]];
+        if (fits(e1, i2) && fits(e2, i1)) return [[i2, e1], [i1, e2]];
+        return null;
+    };
+    const loadedBefore = (u: Partnership | undefined): u is Partnership => !!u && !u.originalIds?.length;
+    /**
+     * Families nothing tells apart: each pairs the same partners but one "?"
+     * of nothing (only this family, no parents, children, name or facts) in
+     * a family of no children and nothing said of it. Whichever is taken, the
+     * tree is the same.
+     */
+    const interchangeable = (choices: [PersonId, PersonId][][]): boolean => {
+        const signature = (pairs: [PersonId, PersonId][]): string | null => {
+            const blank = pairs.filter(([i, e]) => inTree(i) !== e).map(([, e]) => existingData.persons[e]);
+            if (blank.length !== 1) return null;
+            const p = blank[0];
+            const union = existingData.partnerships[p.partnerships[0]];
+            const blankPerson = p.partnerships.length === 1 && !p.parentIds.length && !p.childIds.length
+                && !(p.firstName ?? '').replace(/[?\s]/g, '') && !(p.lastName ?? '').trim()
+                && Object.entries(p).every(([k, v]) => v === undefined || BLANK_STAND_IN_FIELDS.has(k));
+            const blankUnion = !!union && !union.childIds.length
+                && Object.entries(union).every(([k, v]) => v === undefined || BLANK_UNION_FIELDS.has(k));
+            return blankPerson && blankUnion ? `${p.gender}\u0000${union.status}` : null;
+        };
+        const first = signature(choices[0]);
+        return first !== null && choices.every(c => signature(c) === first);
+    };
+    for (let changed = true; changed;) {
+        changed = false;
+        for (const incomingUnion of Object.values(incomingData.partnerships)) {
+            const p1 = inTree(incomingUnion.person1Id);
+            const p2 = inTree(incomingUnion.person2Id);
+            const unions = new Set<Partnership>();
+            if (p1 || p2) {
+                for (const unionId of existingData.persons[(p1 ?? p2)!].partnerships ?? []) {
+                    const u = existingData.partnerships[unionId];
+                    if (loadedBefore(u)) unions.add(u);
+                }
+            } else {
+                if (!incomingData.persons[incomingUnion.person1Id]?.isPlaceholder || !incomingData.persons[incomingUnion.person2Id]?.isPlaceholder) continue;
+                for (const childId of incomingUnion.childIds.map(inTree).filter((id): id is PersonId => !!id)) {
+                    for (const parentId of existingData.persons[childId].parentIds) {
+                        for (const unionId of existingData.persons[parentId]?.partnerships ?? []) {
+                            const u = existingData.partnerships[unionId];
+                            if (loadedBefore(u) && u.childIds.includes(childId)) unions.add(u);
+                        }
+                    }
+                }
+            }
+            const fitting = [...unions]
+                .map(u => ({ partners: pairPartners(u, incomingUnion), children: sameChildren(u, incomingUnion) }))
+                .filter((c): c is { partners: [PersonId, PersonId][]; children: [PersonId, PersonId][] } => !!c.partners && !!c.children);
+            if (fitting.length === 0 || (fitting.length > 1 && !interchangeable(fitting.map(c => c.partners)))) continue;
+            const pairs = [...fitting[0].partners, ...fitting[0].children].filter(([i]) => !inTree(i));
+            if (pairs.length === 0) continue;
+            for (const [incomingId, existingId] of pairs) {
+                out.set(incomingId, existingId);
+                claimed.add(existingId);
+            }
+            changed = true;
+        }
+    }
     return out;
 }
+
+/** What a "?" of nothing has: its sex and its one family. */
+const BLANK_STAND_IN_FIELDS = new Set(['id', 'firstName', 'lastName', 'gender', 'isPlaceholder', 'partnerships', 'parentIds', 'childIds']);
+/** What a family that says nothing has: its two people and its status. */
+const BLANK_UNION_FIELDS = new Set(['id', 'person1Id', 'person2Id', 'childIds', 'status']);
 
 // ==================== MERGE EXECUTION ====================
 

@@ -32,6 +32,8 @@ export type MatchReason =
     | 'partner_of_matched'            // Partner of already matched person
     | 'child_of_matched'              // Child of already matched person
     | 'parent_of_matched'             // Parent of already matched person
+    | 'sibling_of_matched'            // Sibling of already matched person (through parents of no name)
+    | 'in_law_of_matched'             // Parent-in-law or child-in-law of a matched person (through a spouse of no name)
     | 'partner_similarity'            // Partners have similar names
     | 'unknown_name_relative'         // Unknown given name, paired through a matched relative
     | 'id'                            // The same id in the loaded files (_UID, _FSFTID…; xref/RIN of one program)

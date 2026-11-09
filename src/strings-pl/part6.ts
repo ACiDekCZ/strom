@@ -96,6 +96,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             partner_of_matched: 'Partner dopasowanej osoby',
             child_of_matched: 'Dziecko dopasowanej osoby',
             parent_of_matched: 'Rodzic dopasowanej osoby',
+            sibling_of_matched: 'Rodzeństwo dopasowanej osoby',
+            in_law_of_matched: 'Teść, teściowa, zięć lub synowa dopasowanej osoby',
             partner_similarity: 'Podobne imiona partnerów',
             unknown_name_relative: 'Nieznane imię – dopasowano przez krewnego',
             id: 'Ten sam identyfikator w pliku',
