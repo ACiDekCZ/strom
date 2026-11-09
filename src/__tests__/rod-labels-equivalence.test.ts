@@ -117,7 +117,9 @@ describe('rodLabels: the same labels as the rule lineage by lineage', () => {
         for (const item of rodPickerSmallItems(index, 'en')) {
             expect(item.label).toBe(reference.get(item.id as RodId) || index.rods.get(item.id as RodId)!.surname);
         }
-    });
+        // A tree of thousands of people: about 1.5 s on an idle machine, several
+        // times that under a full parallel run, so the default 5 s is too tight.
+    }, 60_000);
 
     it('the qualifiers of every kind are reached by the synthetic trees', () => {
         const kinds = new Set<string>();
