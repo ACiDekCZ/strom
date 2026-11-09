@@ -64,6 +64,7 @@ import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin, factsOf, localIsoDay, FactHolder } from './import-origin.js';
+import { mergeNoteText } from './merge/notes.js';
 import { restoreViewLinks } from './view-links.js';
 import { cleanFactVerify, factConfirmation, factValueSignature, researchConfirmation, researchConfirmationWithdrawn } from './verify.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
@@ -3867,6 +3868,12 @@ class DataManagerClass {
         if (resolvedFields.birthPlace !== undefined) keepPerson.birthPlace = resolvedFields.birthPlace || undefined;
         if (resolvedFields.deathDate !== undefined) keepPerson.deathDate = resolvedFields.deathDate || undefined;
         if (resolvedFields.deathPlace !== undefined) keepPerson.deathPlace = resolvedFields.deathPlace || undefined;
+        // The note: the value chosen in the dialog, else both texts, each part once.
+        const notes = resolvedFields.notes !== undefined
+            ? resolvedFields.notes || undefined
+            : mergeNoteText(keepPerson.notes, removePerson.notes);
+        if (notes) keepPerson.notes = notes;
+        else delete keepPerson.notes;
         // What the register adds to the birth and death: the kept person's own
         // wins, the removed one's fills a gap.
         // The titles of the name and the surname after marriage likewise.
@@ -3990,9 +3997,9 @@ class DataManagerClass {
                             const key = pid === removeId ? keepId : pid;
                             if (!existingPartnership.ages?.[key]) existingPartnership.ages = { ...(existingPartnership.ages ?? {}), [key]: age };
                         }
-                        if (!existingPartnership.note && removePartnership.note) {
-                            existingPartnership.note = removePartnership.note;
-                        }
+                        // The couple's note: both texts, each part once.
+                        const note = mergeNoteText(existingPartnership.note, removePartnership.note);
+                        if (note !== existingPartnership.note) existingPartnership.note = note;
                         // The couple's events (banns, a census…) come along.
                         if (removePartnership.events?.length) {
                             existingPartnership.events = [...(existingPartnership.events ?? []), ...removePartnership.events];

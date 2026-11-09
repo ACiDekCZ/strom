@@ -4,12 +4,16 @@
  * merging the same file again does not grow a note.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mergeNoteText } from '../merge/notes.js';
 import { executeMerge, mergePersonData, mergePartnershipData } from '../merge/executor.js';
 import { StorageManager } from '../storage.js';
 import { MergeState, PersonMatch } from '../merge/types.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source } from '../types.js';
+import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { AuditLogManager } from '../audit-log.js';
+import { UndoManager } from '../undo.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, TreeId } from '../types.js';
 
 function person(id: string, first: string, last: string, o: Partial<Person> = {}): Person {
     return {
@@ -179,5 +183,70 @@ describe('a deduplicated source joins its note', () => {
         expect(first.sources!.s1.note).toBe('Pages 12-14\n---\nEntry no. 37');
         const second = await mergeOnce(first, 'Entry no. 37');
         expect(second.sources!.s1.note).toBe('Pages 12-14\n---\nEntry no. 37');
+    });
+});
+
+describe('merging two persons by hand', () => {
+    const TREE = 'notes-merge-tree' as TreeId;
+    const dm = DataManager as unknown as {
+        data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null;
+    };
+    /** Kept Hromoslav and his duplicate, each married to Bělinka in a family of its own. */
+    const load = (keepNote?: string, otherNote?: string, keepUnion?: string, otherUnion?: string): void => {
+        dm.data = {
+            persons: {
+                k: person('k', 'Hromoslav', 'Ozubec', { notes: keepNote, partnerships: ['u1' as PartnershipId],
+                    originalIds: [{ from: 'I1', xref: 'I7', ids: [{ tag: '_UID', value: 'AAAA' }] }] }),
+                r: person('r', 'Hromoslav', 'Ozubec', { notes: otherNote, partnerships: ['u2' as PartnershipId],
+                    originalIds: [{ from: 'I2', xref: 'P3' }] }),
+                w: person('w', 'Bělinka', 'Ozubcová', { gender: 'female', partnerships: ['u1', 'u2'] as PartnershipId[] }),
+            } as unknown as StromData['persons'],
+            partnerships: {
+                u1: union('u1', 'k', 'w', { note: keepUnion }),
+                u2: union('u2', 'r', 'w', { note: otherUnion }),
+            } as unknown as StromData['partnerships'],
+            imports: [{ id: 'I1', program: 'MyHeritage', at: '2026-11-01' }, { id: 'I2', program: 'Gramps', at: '2026-11-02' }],
+        };
+        dm.currentTreeId = TREE;
+        dm.viewMode = false;
+        dm.pendingBefore = null;
+        UndoManager.setActiveTree(null);
+        UndoManager.setActiveTree(TREE);
+    };
+    const merge = (fields: Record<string, string | undefined> = {}): void => {
+        expect(DataManager.mergePersons('k' as PersonId, 'r' as PersonId, fields,
+            new Map([['u2' as PartnershipId, 'merge' as const]]))).toBe(true);
+    };
+
+    beforeEach(() => {
+        vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
+        vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("keeps both persons' notes and both families' notes, each part once", () => {
+        load('Miller in Kňouralov.', 'Born in the mill.\n---\nMiller in Kňouralov.', 'Married in Kňouralov.', 'Two witnesses.');
+        merge();
+        expect(dm.data.persons['k' as PersonId].notes).toBe('Miller in Kňouralov.\n---\nBorn in the mill.');
+        expect(Object.keys(dm.data.partnerships)).toEqual(['u1']);
+        expect(dm.data.partnerships['u1' as PartnershipId].note).toBe('Married in Kňouralov.\n---\nTwo witnesses.');
+    });
+
+    it('the same note on both is kept once; a note on one side only is taken', () => {
+        load('Miller.', ' Miller. ', undefined, 'Two witnesses.');
+        merge();
+        expect(dm.data.persons['k' as PersonId].notes).toBe('Miller.');
+        expect(dm.data.partnerships['u1' as PartnershipId].note).toBe('Two witnesses.');
+    });
+
+    it("the note chosen in the dialog is the note, and the kept person carries the ids of both", () => {
+        load('Miller.', 'Born in the mill.');
+        merge({ notes: 'Born in the mill.' });
+        const kept = dm.data.persons['k' as PersonId];
+        expect(kept.notes).toBe('Born in the mill.');
+        expect(kept.originalIds).toEqual([
+            { from: 'I1', xref: 'I7', ids: [{ tag: '_UID', value: 'AAAA' }] },
+            { from: 'I2', xref: 'P3' },
+        ]);
     });
 });
