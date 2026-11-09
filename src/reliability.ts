@@ -13,8 +13,9 @@
  *   (StromData.imports + importedValues) while the value equals the file's,
  *   and the research's status a file of the research gave (`_STROM_STATUS`,
  *   shown before 066 too); the research's origins are not read then.
- * In both, a fact a person confirmed (spec 065: by hand in the app while its
- * value is unchanged, or the research's `_STROM_CONFIRMED`) is `human`, and
+ * In both, a fact a person confirmed (spec 065: by hand in the app, or the
+ * research's `_STROM_CONFIRMED`, each while the fact's value is the one it was
+ * confirmed with — a change here ends it) is `human`, and
  * the research's last check (`_STROM_CHECKED proven`, `_READERS`) gives the
  * readers of a proven fact.
  * A tree with no import record shows no "from family tree" mark (nothing is guessed).
@@ -155,8 +156,8 @@ export function wasAccepted(origin: ResearchFactOrigin | null | undefined): bool
 
 /**
  * What the fact's own data say of it (spec 065): a confirmation by a person
- * (in the app by hand while the value is unchanged, or in the research) and
- * the readers the research's last check counted.
+ * (in the app by hand or in the research, either while the value is
+ * unchanged) and the readers the research's last check counted.
  */
 function verifyEvidence(holder: FactHolder, fact: string): Pick<ReliabilityInput, 'readers' | 'confirmedByHuman'> {
     const info = factVerifyInfo(holder, fact);

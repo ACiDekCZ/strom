@@ -817,6 +817,14 @@ export interface FactVerifyChecked {
 export interface ResearchFactVerify {
     /** `2 _STROM_CONFIRMED <date>`: confirmed by a person in the research. */
     confirmed?: string;
+    /**
+     * The fact's value the research's file gave with its confirmation (see
+     * factValueSignature): the confirmation holds while the fact keeps it, a
+     * change here ends it (as the app's own, FactConfirmation.value). Only
+     * with `confirmed`. Absent in a tree stored before it was kept: filled
+     * once when the tree is read (fillResearchConfirmedValues).
+     */
+    value?: string;
     pending?: FactVerifyPending;
     /**
      * `3 _POS n` under `_STROM_VERIFY wait|asked`: the fact's task is the
@@ -1387,7 +1395,10 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   facts: confirmed, waiting, last checked). Additive; existing trees get
  *   neither. An older app (v15) keeps persons whole but would show a
  *   confirmed fact as unconfirmed and drop the mark from its GEDCOM export,
- *   so the bump makes it warn first.
+ *   so the bump makes it warn first. The value the research's confirmation
+ *   holds for (ResearchFactVerify.value) came within v16 without a bump: an
+ *   entry without it is filled when the tree is read, from the research's
+ *   kept copy of the tree, else from the current value.
  */
 export const STROM_DATA_VERSION = 16;
 

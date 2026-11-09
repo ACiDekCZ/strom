@@ -35,7 +35,8 @@ import { deleteQualityBridgeRecord } from './quality-bridge.js';
 import { deleteSurnamesBridgeRecord } from './surname-suggest-bridge.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
-import { unknownSexInResearchCopies } from './research-copy.js';
+import { unknownSexInResearchCopies, loadResearchCopy } from './research-copy.js';
+import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
 import { asciiSlug } from './filenames.js';
@@ -610,6 +611,7 @@ class TreeManagerClass {
                 changed = true;
             }
             if (tree?.research && 'sexU' in tree.research && !this.isTreeNewer(id)) result.data = await this.dropLegacySexU(id, tree, result.data);
+            if (!this.isTreeNewer(id) && hasUnvaluedResearchConfirmations(result.data)) await this.valueResearchConfirmations(id, result.data);
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
                 tree.personCount = count;
@@ -651,6 +653,22 @@ class TreeManagerClass {
         // Before the tree is shown: its changes per person are read against the copy.
         await unknownSexInResearchCopies(id, sexU);
         return next ?? data;
+    }
+
+    /**
+     * The research's confirmations of a tree stored before each kept the
+     * value it holds for (ResearchFactVerify.value): the value the fact has
+     * in the kept copy of the research's version of the tree, else (no copy)
+     * its current value — so a fact changed here since is no longer
+     * confirmed, as with a tree loaded now. Once: the tree is saved so —
+     * unless a newer state of it was handed to the queue while the copy was
+     * read (that one is written; this read's values are filled again next
+     * time).
+     */
+    private async valueResearchConfirmations(id: TreeId, data: StromData): Promise<void> {
+        const writes = this.queuedWrites.get(id) ?? 0;
+        const base = await loadResearchCopy(id);
+        if (fillResearchConfirmedValues(data, base) && (this.queuedWrites.get(id) ?? 0) === writes) this.saveTreeData(id, data);
     }
 
     /**
@@ -849,6 +867,9 @@ class TreeManagerClass {
     /** The newest state handed to the queue per tree until its write lands (see rescueUnsettledSaves). */
     private unsettledSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
 
+    /** How many states were handed to the queue per tree (a read can tell a write made meanwhile). */
+    private queuedWrites = new Map<TreeId, number>();
+
     /** Rescue keys of closed windows this one stored at start, per tree, until that write lands. */
     private restoredRescues = new Map<TreeId, string>();
 
@@ -1006,6 +1027,7 @@ class TreeManagerClass {
 
     /** Put a state on the tree's write queue (see saveTreeData). */
     private queueWrite(id: TreeId, entry: { data: StromData; base: ResearchBase | null }): void {
+        this.queuedWrites.set(id, (this.queuedWrites.get(id) ?? 0) + 1);
         // Not stored until its write lands: a page left before that keeps it in a rescue copy (rescueUnsettledSaves).
         this.unsettledSaves.set(id, entry);
         // A write for this tree still waiting in the queue takes this newer

@@ -5789,7 +5789,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
     /**
      * The re-verification of facts a Strom file carries (spec 065): from the
-     * research's file its whole state (Person/Partnership.researchVerify);
+     * research's file its whole state (Person/Partnership.researchVerify), a
+     * confirmation with the value the fact has in the file;
      * from the app's own export only a confirmation, which becomes the
      * tree's own, valid for the value the fact has in the file. A family the
      * file writes twice keeps the first record's.
@@ -5800,7 +5801,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (gedcom.stromResearch) {
                 if (holder.researchVerify?.[fact]) return;
                 const v = toResearchVerify(raw.verify);
-                if (v) (holder.researchVerify ??= {})[fact] = v;
+                if (!v) return;
+                // The value it was confirmed with: a change here ends the confirmation.
+                const value = v.confirmed ? factValueSignature(holder, fact) : '';
+                if (value) v.value = value;
+                (holder.researchVerify ??= {})[fact] = v;
                 return;
             }
             if (holder.confirmed?.[fact]) return;

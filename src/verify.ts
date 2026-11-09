@@ -7,7 +7,9 @@
  *   Person/Partnership.confirmed, valid while the fact keeps the value it was
  *   confirmed with;
  * - the research's own state of the fact (GEDCOM `_STROM_CONFIRMED`,
- *   `_STROM_VERIFY`, `_STROM_CHECKED` under it): Person/Partnership.researchVerify.
+ *   `_STROM_VERIFY`, `_STROM_CHECKED` under it): Person/Partnership.researchVerify;
+ *   its confirmation too is valid while the fact keeps the value the
+ *   research's file gave it with (a change here ends it).
  *
  * Pure: no DOM, no storage.
  */
@@ -56,6 +58,21 @@ export function factConfirmation(holder: FactHolder, fact: string): FactConfirma
     return c;
 }
 
+/**
+ * The day of the research's confirmation of a fact while it is valid: the
+ * fact still has the value the research's file gave with it (an entry with
+ * no stored value: while the fact has any value). null otherwise — none, or
+ * the value changed here since.
+ */
+export function researchConfirmation(holder: FactHolder, fact: string): string | null {
+    const v = holder.researchVerify?.[fact];
+    if (!v?.confirmed) return null;
+    const now = factValueSignature(holder, fact);
+    if (now === '') return null;
+    if (v.value !== undefined && v.value !== now) return null;
+    return v.confirmed;
+}
+
 /** What is known of a fact's confirmation and verification. */
 export interface FactVerifyInfo {
     /** The day it was confirmed by a person (`YYYY-MM-DD`). */
@@ -78,17 +95,18 @@ export function researchConfirmationWithdrawn(holder: FactHolder, fact: string):
 /**
  * The confirmation and verification of one fact. A confirmation in the app
  * (still valid) wins over the research's; one of the research's taken back
- * here is none.
+ * here, or whose value changed here since, is none.
  */
 export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo {
     const out: FactVerifyInfo = {};
     const local = factConfirmation(holder, fact);
     const research = holder.researchVerify?.[fact];
+    const researchDay = researchConfirmation(holder, fact);
     if (local) {
         out.confirmed = local.at;
         out.confirmedBy = 'app';
-    } else if (research?.confirmed && !researchConfirmationWithdrawn(holder, fact)) {
-        out.confirmed = research.confirmed;
+    } else if (researchDay && !researchConfirmationWithdrawn(holder, fact)) {
+        out.confirmed = researchDay;
         out.confirmedBy = 'research';
     }
     if (research?.pending) out.pending = research.pending;
@@ -100,7 +118,8 @@ export function factVerifyInfo(holder: FactHolder, fact: string): FactVerifyInfo
  * The confirmations a holder hands over (`2 _STROM_CONFIRMED <day>` under the
  * fact, in what goes to the research and in the app's own file): each
  * confirmed fact with the day factVerifyInfo gives — a valid confirmation of
- * the app, else the research's not taken back here.
+ * the app, else the research's while its value is unchanged and not taken
+ * back here.
  */
 export function handedConfirmations(holder: FactHolder): Record<string, string> {
     const out: Record<string, string> = {};
@@ -115,9 +134,10 @@ export function handedConfirmations(holder: FactHolder): Record<string, string> 
 /**
  * How the confirmations handed over differ from the research's own (the
  * research's file the tree was loaded from): per fact the day handed over, ''
- * for one of the research's taken back. What the research reads as the
- * user's edit against `_STROM_HEAD`; empty when nothing was confirmed or
- * taken back here (also when a confirmation of the app has ended with a
+ * for one of the research's taken back or ended by a value changed here (it
+ * goes without its `_STROM_CONFIRMED`). What the research reads as the
+ * user's edit against `_STROM_HEAD`; empty when nothing was confirmed, taken
+ * back or changed here (also when a confirmation of the app has ended with a
  * changed value).
  */
 export function confirmationEdits(holder: FactHolder): Record<string, string> {
@@ -263,7 +283,10 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
     if (!value || typeof value !== 'object') return null;
     const v = value as Record<string, unknown>;
     const out: ResearchFactVerify = {};
-    if (typeof v.confirmed === 'string' && ISO_DAY.test(v.confirmed)) out.confirmed = v.confirmed;
+    if (typeof v.confirmed === 'string' && ISO_DAY.test(v.confirmed)) {
+        out.confirmed = v.confirmed;
+        if (typeof v.value === 'string' && v.value !== '') out.value = v.value;
+    }
     if (typeof v.pending === 'string' && (VERIFY_PENDING as readonly string[]).includes(v.pending)) {
         out.pending = v.pending as FactVerifyPending;
         // A place in the queue only while the research's agent is to take it (not waiting for a person).
@@ -304,17 +327,55 @@ function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', 
     else delete h[field];
 }
 
+type VerifyTree = Pick<StromData, 'persons' | 'partnerships'>;
+
+/** Whether some confirmation of the research in the tree has no value of its own (stored before it was kept). */
+export function hasUnvaluedResearchConfirmations(data: VerifyTree): boolean {
+    const holders: FactHolder[] = [...Object.values(data.persons ?? {}), ...Object.values(data.partnerships ?? {})];
+    return holders.some(h => !!h && typeof h === 'object' && h.researchVerify && typeof h.researchVerify === 'object'
+        && Object.values(h.researchVerify).some(v => !!v && typeof v === 'object' && !!v.confirmed && v.value === undefined));
+}
+
+/**
+ * The value each confirmation of the research without one holds for (a tree
+ * stored before ResearchFactVerify.value was kept): the fact's value in
+ * `base`, the tree as the research last gave it (research-copy.ts), else —
+ * no copy, or the copy lacks the fact — its current value (taken as
+ * unchanged since). A fact with no value in either keeps none. Returns
+ * whether anything was filled.
+ */
+export function fillResearchConfirmedValues(data: VerifyTree, base?: VerifyTree | null): boolean {
+    let filled = false;
+    const fill = (holder: FactHolder | undefined, baseHolder: FactHolder | undefined): void => {
+        if (!holder || typeof holder !== 'object' || !holder.researchVerify || typeof holder.researchVerify !== 'object') return;
+        for (const [fact, v] of Object.entries(holder.researchVerify)) {
+            if (!v || typeof v !== 'object' || !v.confirmed || v.value !== undefined) continue;
+            const was = baseHolder && typeof baseHolder === 'object' ? factValueSignature(baseHolder, fact) : '';
+            const value = was || factValueSignature(holder, fact);
+            if (!value) continue;
+            v.value = value;
+            filled = true;
+        }
+    };
+    for (const [id, p] of Object.entries(data.persons ?? {})) fill(p, base?.persons?.[id as keyof typeof base.persons]);
+    for (const [id, ps] of Object.entries(data.partnerships ?? {})) fill(ps, base?.partnerships?.[id as keyof typeof base.partnerships]);
+    return filled;
+}
+
 /**
  * The confirmations and the research's verification states of a loaded tree,
- * cleaned (migrateData): valid entries of existing facts only. Nothing is added.
+ * cleaned (migrateData): valid entries of existing facts only. A confirmation
+ * of the research stored without its value gets the current one (a tree read
+ * from storage got the research's kept copy's first, TreeManager.readTreeData).
  */
-export function cleanFactVerify(data: Pick<StromData, 'persons' | 'partnerships'>): void {
+export function cleanFactVerify(data: VerifyTree): void {
     const holders: FactHolder[] = [...Object.values(data.persons ?? {}), ...Object.values(data.partnerships ?? {})];
     for (const holder of holders) {
         if (!holder || typeof holder !== 'object') continue;
         cleanMap(holder, 'confirmed', cleanConfirmation);
         cleanMap(holder, 'researchVerify', sanitizeResearchVerify);
     }
+    fillResearchConfirmedValues(data);
     // The couple's id in the research (Partnership.researchId).
     for (const ps of Object.values(data.partnerships ?? {})) {
         if (!ps || typeof ps !== 'object' || ps.researchId === undefined) continue;

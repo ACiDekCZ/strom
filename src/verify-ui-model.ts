@@ -63,8 +63,11 @@ export interface FactOffer extends VerifyOffer {
  * then what the tree can do of it — "Verify" only for a fact the research
  * verifies and named by its id; in a tree of the research no name or sex
  * (it neither verifies nor confirms them); the scan through the bridge when
- * the fact has its id, else the app's own confirmation (sent on the next
- * sync), only where the tree can be changed.
+ * the fact has its id, else the app's own confirmation, only where the tree
+ * can be changed. In a tree of the research the scan comes only while its
+ * bridge takes confirmations (`researchConfirms`, verifyOffer): without the
+ * bridge none is offered; with it, a fact without its id is confirmed as the
+ * app's own.
  */
 export function factOffer(holder: FactHolder, fact: string, input: FactOfferInput): FactOffer {
     const eid = factResearchEid(holder, fact);

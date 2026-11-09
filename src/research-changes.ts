@@ -8,7 +8,8 @@
 import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { collectPlaces } from './places.js';
-import { handedConfirmations } from './verify.js';
+import { factValueSignature, handedConfirmations } from './verify.js';
+import type { FactHolder } from './import-origin.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -50,6 +51,18 @@ export function stable(value: unknown): string {
 }
 
 const differs = (a: unknown, b: unknown): boolean => stable(a) !== stable(b);
+
+/**
+ * A fact confirmed or a confirmation taken back between the two (what goes
+ * to the research as `_STROM_CONFIRMED`): a confirmation ended by a change
+ * of the fact's value is that change, told as it.
+ */
+function confirmationsDiffer(before: FactHolder, after: FactHolder): boolean {
+    const a = handedConfirmations(before);
+    const b = handedConfirmations(after);
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+        .some(fact => a[fact] !== b[fact] && !(b[fact] === undefined && factValueSignature(before, fact) !== factValueSignature(after, fact)));
+}
 const fullName = (p: Person): string => `${p.firstName} ${p.lastName}`.trim() || '?';
 /** The name with its titles ("Ing. Josef Novák st."): a title the load takes away is a value it overwrites (B18-1). */
 const titledName = (p: Person): string => [p.titleBefore, p.firstName, p.lastName, p.titleAfter].map(v => v?.trim() ?? '').filter(Boolean).join(' ');
@@ -140,7 +153,7 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
     };
     if (differs(rest(before), rest(after))) kinds.add('other');
     // A fact confirmed, or a confirmation taken back, goes to the research (`_STROM_CONFIRMED`).
-    if (differs(handedConfirmations(before), handedConfirmations(after))) kinds.add('other');
+    if (confirmationsDiffer(before, after)) kinds.add('other');
     if (differs(ownAtts(before).map(a => ({ ...a, dataUrl: undefined })), ownAtts(after).map(a => ({ ...a, dataUrl: undefined })))
         && !kinds.has('attachment') && !kinds.has('attachmentRemoved')) kinds.add('other');
     return kinds;
@@ -204,7 +217,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             if (differs(a.events ?? [], b.events ?? [])) kinds.add('event');
             if (differs(a.sourceIds ?? [], b.sourceIds ?? []) || differs(a.divorceSourceIds ?? [], b.divorceSourceIds ?? [])) kinds.add('citation');
             if (differs(a.story, b.story)) kinds.add('other');
-            if (differs(handedConfirmations(a), handedConfirmations(b))) kinds.add('other');
+            if (confirmationsDiffer(a, b)) kinds.add('other');
         }
         if (!kinds.size) continue;
         const u = (b ?? a)!;

@@ -20,7 +20,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import type { LifeEvent, PartnershipId, PersonId } from '../types.js';
 import { FactHolder, factCitations, isPartnership, localIsoDay } from '../import-origin.js';
-import { factConfirmation, factPendingPosition, factSourceIds, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
+import { factConfirmation, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
 import { postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
 import type { VerifyResearch } from '../verify-offer.js';
 import type { ReliabilityInput, ReliabilityStepName } from '../reliability.js';
@@ -62,6 +62,8 @@ interface LocalState {
     pending?: { position: number | null };
     /** Confirmed through the research (its day), or taken back there (null). */
     confirmed?: string | null;
+    /** The fact's value it was confirmed with (factValueSignature): a change here ends that confirmation. */
+    confirmedValue?: string;
 }
 
 const local = new Map<string, LocalState>();
@@ -96,6 +98,11 @@ function setLocal(holder: FactHolder, fact: string, patch: Partial<Omit<LocalSta
     local.set(key, { ...base, ...patch, holder });
 }
 
+/** A confirmation the bridge took whose fact has changed here since: it no longer counts. */
+function localConfirmationEnded(s: LocalState, fact: string): boolean {
+    return !!s.confirmed && s.confirmedValue !== undefined && s.confirmedValue !== factValueSignature(s.holder, fact);
+}
+
 /**
  * Whether a fact waits for re-verification: started here, or as the research's
  * file says — unless it was confirmed or taken back through the bridge since
@@ -114,7 +121,7 @@ export function factWaitsForVerify(holder: FactHolder, fact: string): boolean {
  */
 export function verifyLocalEvidence(holder: FactHolder, fact: string): Pick<ReliabilityInput, 'confirmedByHuman'> | undefined {
     const s = localOf(holder, fact);
-    if (!s || s.confirmed === undefined) return undefined;
+    if (!s || s.confirmed === undefined || localConfirmationEnded(s, fact)) return undefined;
     if (s.confirmed) return { confirmedByHuman: true };
     return factConfirmation(holder, fact) ? undefined : { confirmedByHuman: false };
 }
@@ -126,6 +133,7 @@ function infoWithLocal(holder: FactHolder, fact: string): FactVerifyInfo {
     if (!s || s.confirmed === undefined) return info;
     // Confirmed or taken back through the bridge: the file's wait is over (factWaitsForVerify).
     const { pending: _p, ...settled } = info;
+    if (localConfirmationEnded(s, fact)) return settled;
     if (s.confirmed) return { ...settled, confirmed: s.confirmed, confirmedBy: 'research' };
     if (settled.confirmedBy !== 'research') return settled;
     const { confirmed: _c, confirmedBy: _b, ...rest } = settled;
@@ -543,7 +551,12 @@ export const verifyUiMethods = uiModule({
         }
         const holder = holderOf(v.target);
         // A confirmation closes the fact's waiting (the research drops it from its task).
-        if (holder) setLocal(holder, v.fact, { confirmed: confirm ? result.confirmed ?? localIsoDay() : null, ...(confirm ? { pending: undefined } : {}) });
+        if (holder) {
+            setLocal(holder, v.fact, {
+                confirmed: confirm ? result.confirmed ?? localIsoDay() : null,
+                ...(confirm ? { pending: undefined, confirmedValue: factValueSignature(holder, v.fact) } : {}),
+            });
+        }
         this.verifyRedraw(confirm ? 'undo' : 'scan');
         done();
     },

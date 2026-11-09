@@ -1,5 +1,5 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, card } from './helpers.js';
 import { BRIDGE, HEAD, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
 
@@ -497,6 +497,41 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect.poll(() => asks.confirm.length).toBe(3);
         expect(asks.confirm[2]).toEqual({ fact: 'E0001', confirm: true });
         await expect(pill).toHaveClass(/fact-status-human/);
+    });
+
+    test('the research\'s confirmation ends when the value changes here: no ✓, the scan again, none in the file for the research', async ({ page }) => {
+        const asks = await openVerifyTree(page, { extra: ['2 _STROM_CONFIRMED 2026-10-01'] });
+        const modal = personModal(page);
+        await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-human/);
+        await modal.locator('#input-birthdate').fill('3.2.1863');
+        await modal.getByRole('button', { name: 'Save' }).click();
+        await expect(modal).toBeHidden();
+        await waitForPersist(page, '1863-02-03');
+
+        await cardAction(page, 'Jan', 'edit');
+        const pill = factPill(page, 'Birth');
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        await expect(pill).not.toHaveClass(/fact-status-human/);
+        await pill.click();
+        await expect(vAct(page, 'scan')).toBeVisible();
+        await expect(vAct(page, 'undo')).toHaveCount(0);
+        // The edit is a change, never a confirmation sent to the research.
+        expect(asks.confirm).toEqual([]);
+
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.evaluate(() => window.Strom.UI.downloadResearchGedcom(window.Strom.DataManager.getCurrentTreeId()!)),
+        ]);
+        const ged = readFileSync((await download.path())!, 'utf8');
+        const birth = ged.split(/\r?\n(?=1 )/).find(b => b.startsWith('1 BIRT') && b.includes('E0001'))!;
+        expect(birth).toMatch(/^2 DATE 3 FEB 1863$/m);
+        expect(birth).not.toMatch(/_STROM_CONFIRMED/);
+
+        // The same after a reload.
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await cardAction(page, 'Jan', 'edit');
+        await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-probable/);
     });
 
     test('a research without verify: no action of the AI', async ({ page }) => {

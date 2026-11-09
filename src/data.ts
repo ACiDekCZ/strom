@@ -65,7 +65,7 @@ import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { carryMergedImports, cleanImportOrigin, dropImportedParent, mergeOriginalIds, pruneImportOrigin, factsOf, localIsoDay, FactHolder } from './import-origin.js';
 import { restoreViewLinks } from './view-links.js';
-import { cleanFactVerify, factConfirmation, factValueSignature, researchConfirmationWithdrawn } from './verify.js';
+import { cleanFactVerify, factConfirmation, factValueSignature, researchConfirmation, researchConfirmationWithdrawn } from './verify.js';
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
@@ -2348,16 +2348,17 @@ class DataManagerClass {
 
     /**
      * "Take back" the confirmation of a fact: a hand confirmation of the app
-     * (also one no longer valid) goes; else the research's confirmation is
-     * taken back here (FactConfirmation.withdrawn), so the fact goes to the
-     * research without it. False when there is nothing to take back.
+     * (also one no longer valid) goes; else the research's confirmation, while
+     * valid (its value unchanged here), is taken back here
+     * (FactConfirmation.withdrawn), so the fact goes to the research without
+     * it. False when there is nothing to take back.
      */
     unconfirmFact(target: FactTarget, fact: string): boolean {
         const t = this.confirmTarget(target);
         if (!t || t.locked) return false;
         const own = t.holder.confirmed?.[fact];
         const ownLive = !!own && !own.withdrawn;
-        const research = t.holder.researchVerify?.[fact]?.confirmed;
+        const research = researchConfirmation(t.holder, fact);
         const takeBackResearch = !ownLive && !!research && !researchConfirmationWithdrawn(t.holder, fact);
         if (!ownLive && !takeBackResearch) return false;
 

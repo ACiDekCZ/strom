@@ -78,8 +78,9 @@ export interface GedcomExportOptions {
     /**
      * Write the day a fact was confirmed by a person (`2 _STROM_CONFIRMED
      * YYYY-MM-DD` under the fact, spec 065): the app's own confirmation while
-     * the value is unchanged, else the research's unless taken back here
-     * (handedConfirmations). Every confirmed fact carries it: the research
+     * the value is unchanged, else the research's while the value is the one
+     * its file gave and it is not taken back here (handedConfirmations).
+     * Every confirmed fact carries it: the research
      * reads what goes to it (sync, adoption) against `_STROM_HEAD` — one added
      * is a confirmation, one left out a take-back — and a Strom file read
      * back keeps it. Default: written; false: none. "Back to {prog}"

@@ -82,8 +82,10 @@ describe("the research's file", () => {
     const h = person(data, 'Hromoslav');
 
     it('gives each fact its state', () => {
-        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08' });
-        expect(h.researchVerify?.sex).toEqual({ confirmed: '2026-10-02' });
+        // Each confirmation with the value it holds for (a change here ends it).
+        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08', value: factValueSignature(h, 'birth') });
+        expect(factValueSignature(h, 'birth')).toBe('1850-03-03\u001fKvasilov');
+        expect(h.researchVerify?.sex).toEqual({ confirmed: '2026-10-02', value: 'male' });
         expect(h.researchVerify?.death).toEqual({ pending: 'asked' });
         expect(h.researchVerify?.[eventFact(h, 'baptism')]).toEqual({
             checked: {
@@ -191,7 +193,7 @@ ${fam}0 TRLR
 `));
         const c = couple(d);
         expect([c.startDate, c.startPlace]).toEqual(['1911-04-01', 'Drnkalov']);
-        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-01', eid: 'E0066' });
+        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-01', value: factValueSignature(c, 'marriage'), eid: 'E0066' });
         expect(factResearchEid(c, 'marriage')).toBe('E0066');
         expect(c.researchOrigins?.marriage?.kind).toBe('import');
     });
@@ -271,7 +273,7 @@ ${fam}0 TRLR
 `));
         const c = couple(d);
         expect([c.status, c.startDate, c.startPlace]).toEqual(['married', '1920-05-12', 'Drnkalov']);
-        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-02', eid: 'E0081' });
+        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-02', value: factValueSignature(c, 'marriage'), eid: 'E0081' });
         expect(sentFamily(d)).toEqual(['1 MARR', '2 DATE 12 MAY 1920', '2 PLAC Drnkalov', '2 _STROM_CONFIRMED 2026-11-02', '2 _STROM_EID E0081']);
     });
 
@@ -495,7 +497,7 @@ describe("the fact's id in the research and its place in the queue", () => {
         expect(factPendingPosition(couple(d), 'marriage')).toBeNull();
         expect(couple(d).researchVerify?.marriage).toEqual({ pending: 'permission', eid: 'E0020' });
         // The birth keeps both its confirmation and its id.
-        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08', eid: 'E0012' });
+        expect(h.researchVerify?.birth).toEqual({ confirmed: '2026-11-08', value: factValueSignature(h, 'birth'), eid: 'E0012' });
     });
 
     it('counts neither tag as unsupported and changes no fact', () => {
