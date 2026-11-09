@@ -1384,7 +1384,7 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   (Person/Partnership.originalIds: xref, _UID, RIN, EXID…) and another
  *   program's own level-1 tags kept for "Back to {prog}"
  *   (Person/Partnership/Source.gedcomExtra; the source's came after
- *   3.26.0-beta.1 without a bump: a v15 app keeps sources whole) and a
+ *   3.26.0-beta.2 without a bump: a v15 app keeps sources whole) and a
  *   picture's date (Attachment.date, Person.photoDate, kept whole the same
  *   way). Additive;
  *   existing trees get no origin and no ids (nothing is guessed). An older
@@ -1853,7 +1853,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.26.0-beta.1';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.26.0-beta.2';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
