@@ -31,7 +31,7 @@ import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
 import { placeKey } from './places.js';
-import { noName, PRIMARY_NAME_TAG } from './gedcom-names.js';
+import { GedcomNameParts, noName, PRIMARY_NAME_TAG, readGedcomName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
@@ -337,6 +337,25 @@ function pushPlace(lines: string[], level: number, place: string, places?: Recor
         lines.push(`${level + 2} LATI ${formatGedcomLat(geo.lat)}`);
         lines.push(`${level + 2} LONG ${formatGedcomLon(geo.lon)}`);
     }
+}
+
+/**
+ * Whether a NAME the import kept as written because its given name is a
+ * description ("Son //", see describedNameLines in the parser) still says
+ * the person's name: read again, it gives the person's given name ("?"),
+ * surname and titles, and the description the note had of it.
+ */
+function describedNameHolds(st: NotedStructure, person: Person): boolean {
+    const line = st.lines[0].replace(/^1 NAME ?/, '');
+    const parts: GedcomNameParts = {};
+    for (const l of st.lines.slice(1)) {
+        const m = /^2 (NPFX|GIVN|SPFX|SURN|NSFX) (.*)$/.exec(l);
+        if (m) parts[m[1].toLowerCase() as keyof GedcomNameParts] = m[2];
+    }
+    const read = readGedcomName(line, parts);
+    return st.texts.length === 1 && read.description === st.texts[0]
+        && read.firstName === (person.firstName || '?') && read.lastName === (person.lastName ?? '')
+        && (read.titleBefore ?? '') === (person.titleBefore ?? '') && (read.titleAfter ?? '') === (person.titleAfter ?? '');
 }
 
 /**
@@ -1254,12 +1273,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
      * record's note (NOTED_TAG), each while the note still has its lines, and
      * the note without them. Every other export writes the note as it is.
      */
-    const notedOf = (holder: ExtraHolder, note: string | undefined): { note: string | undefined; structures: NotedStructure[] } => {
+    const notedOf = (holder: ExtraHolder, note: string | undefined, keep: (st: NotedStructure) => boolean = () => true): { note: string | undefined; structures: NotedStructure[] } => {
         if (back.imports.size === 0 || !holder.gedcomExtra) return { note, structures: [] };
         const seen = new Set<string>();
         // (The page sources of one record each keep the record's structures: once.)
         const structures = holder.gedcomExtra.filter(e => back.imports.has(e.from)).flatMap(e => notedStructures(e.lines))
-            .filter(st => !seen.has(st.lines.join('\n')) && !!seen.add(st.lines.join('\n')));
+            .filter(st => !seen.has(st.lines.join('\n')) && !!seen.add(st.lines.join('\n')) && keep(st));
         return notedBack(note, structures);
     };
     /** Those structures of one fact (`1 BIRT` …), and the rest. */
@@ -1372,14 +1391,24 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         lines.push(`0 ${gedcomId} INDI`);
         pushHolderOrigin(person, gedcomId, back.personEntries.get(personId));
         const links = alsoChildOf.get(personId);
-        const noted = notedOf(person, person.notes && links ? notesWithoutLinks(person.notes, links) : person.notes);
+        // A NAME the file wrote with a description for a given name ("Son //")
+        // goes back as written while the name still reads so (describedNameHolds).
+        const noted = notedOf(person, person.notes && links ? notesWithoutLinks(person.notes, links) : person.notes,
+            st => !st.lines[0].startsWith('1 NAME') || describedNameHolds(st, person));
         const notedBirth = notedFact(noted.structures, 'BIRT');
         const notedDeath = notedFact(noted.structures, 'DEAT');
+        const notedName = notedFact(noted.structures, 'NAME');
 
         // Name. Placeholders are exported with an empty name so they re-import
         // as placeholders (lossless), instead of being dropped.
         const nameParts = back.imports.size > 0 && isBackRecord(person);
-        if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
+        if (notedName.length) {
+            pushNoted(notedName.slice(0, 1), false);
+            // The import it came from, so the file read again reads it as that program's line.
+            const from = person.gedcomExtra?.find(e => back.imports.has(e.from)
+                && notedStructures(e.lines).some(st => st.lines.join('\n') === notedName[0].lines.join('\n')))?.from;
+            if (from && knownImports.has(from)) lines.push(`2 ${IMPORT_TAG} ${from}`);
+        } else if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
             lines.push('1 NAME //');
         } else {
             pushName(lines, person, options.titles, nameParts);
@@ -1495,7 +1524,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         if (noted.note) pushNote(lines, 1, noted.note);
-        pushNoted(noted.structures.filter(st => !notedBirth.includes(st) && !notedDeath.includes(st)), false);
+        pushNoted(noted.structures.filter(st => !notedBirth.includes(st) && !notedDeath.includes(st) && !notedName.includes(st)), false);
 
         // Life events. OCCU carries its detail as the tag value; the rest use
         // level-2 DATE/PLAC/NOTE. 'custom'/'military' have no dedicated tag and

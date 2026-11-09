@@ -2059,6 +2059,32 @@ function lastUnionEvent(fam: GedcomFamily, type: 'marriage' | 'divorce', date: s
 }
 
 /**
+ * The primary NAME of a person whose given name the file wrote as a
+ * description ("Son", "Mrtvě narozený"), as written: its line and its
+ * parts (NPFX, GIVN, SPFX, SURN, NSFX).
+ */
+function describedNameLines(indi: GedcomIndividual): string[] {
+    const parts = indi.primaryNameParts;
+    const out = [indi.name ? `1 NAME ${indi.name}` : '1 NAME'];
+    for (const [tag, value] of [['NPFX', parts.npfx], ['GIVN', parts.givn], ['SPFX', parts.spfx], ['SURN', parts.surn], ['NSFX', parts.nsfx]] as const) {
+        if (value) out.push(`2 ${tag} ${value}`);
+    }
+    return out;
+}
+
+/**
+ * A family's MARR/DIV events with the divorces written before its first
+ * wedding moved right after it: a divorce cannot end a marriage that has not
+ * begun, so it is that wedding's (some programs, PAF among them, write DIV
+ * first). A family with no wedding keeps its events as they are.
+ */
+function divorcesAfterFirstMarriage<T extends { type: 'marriage' | 'divorce' }>(events: T[]): T[] {
+    const first = events.findIndex(e => e.type === 'marriage');
+    if (first <= 0) return events;
+    return [events[first], ...events.slice(0, first), ...events.slice(first + 1)];
+}
+
+/**
  * Where a couple ended up, reading their MARR/DIV events in order.
  *
  * A couple can divorce and marry each other again; GEDCOM 7 records that as
@@ -4285,6 +4311,11 @@ export function parseGedcom(content: string): ParsedGedcom {
     // A detail line on the very last line of the file has no successor to close it.
     flushDetail();
 
+    // A divorce written ahead of the family's first wedding (PAF: `1 DIV Y`,
+    // then `1 MARR`) ends that wedding, not one before it: read in file order,
+    // the wedding came last and the couple was married again.
+    for (const fam of families.values()) fam.unionEvents = divorcesAfterFirstMarriage(fam.unionEvents);
+
     // The lines of a couple's records when the couple has more than one, or
     // when one record marries the two again after a divorce: kept as written
     // for "Back to {prog}" (see JOINED_TAG, laterUnionStructures).
@@ -4335,8 +4366,16 @@ export function parseGedcom(content: string): ParsedGedcom {
     // version it names (HEAD > SOUR STROM > VERS "1.0" or missing), and in the research's
     // file; from that app version on (it writes "? //") it is the surname Unknown (N13).
     const unknownIsNoSurname = stromResearch || (stromApp && appUnknownIsNoSurname(stromAppVersion));
+    // In the app's own "Back to {prog}" file a NAME marked as another
+    // program's import (`2 _STROM_IMPORT Ix`, HEAD > _STROM_IMPORT Ix > SOUR
+    // not Strom) is that program's line as written ("Son //"): read by its
+    // rules, so the file read again gives what its import gave.
+    const programOf = new Map(headImports.map(h => [h.id, h.program ?? '']));
+    const otherProgramName = (indi: GedcomIndividual): boolean => stromApp && !stromResearch
+        && (indi.factImports?.name ?? []).some(m => { const p = programOf.get(m.id); return !!p && !/^STROM(_RESEARCH)?$/i.test(p); });
     for (const indi of individuals.values()) {
-        const read = readGedcomName(indi.name, indi.primaryNameParts, { fromStrom, unknownIsNoSurname });
+        const read = readGedcomName(indi.name, indi.primaryNameParts,
+            { fromStrom, unknownIsNoSurname, ...(otherProgramName(indi) ? { descriptions: true } : {}) });
         indi.firstName = read.firstName;
         indi.lastName = read.lastName;
         if (read.description) indi.nameDescription = read.description;
@@ -4344,7 +4383,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         // without a name as "? //" ("? /Unknown/" before 3.10): in its own
         // file only the first is a stand-in.
         const line = indi.name.trim();
-        if (stromApp && read.firstName === '?' && !read.lastName && line && !/^\/\s*\/$/.test(line)) indi.knownNameless = true;
+        if (stromApp && read.firstName === '?' && !read.lastName && line && !/^\/\s*\/$/.test(line) && !read.description) indi.knownNameless = true;
         if (read.titleBefore) indi.titleBefore = read.titleBefore;
         if (read.titleAfter) indi.titleAfter = read.titleAfter;
         readMarriedSurname(indi, { fromStrom, unknownIsNoSurname });
@@ -4722,7 +4761,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // What the file wrote in place of a name ("Mrtvě narozený"), kept as
         // written — after the rest, and only once.
         const description = indi.nameDescription;
-        if (description && !allNotes.some(n => n.split('\n').some(l => l.trim() === description))) allNotes.push(description);
+        if (description && !allNotes.some(n => n.split('\n').some(l => l.trim() === description))) {
+            allNotes.push(description);
+            // "Back to {prog}" writes the NAME as the file had it ("Son //"),
+            // not "//" and the description as a note (see NOTED_TAG).
+            const block = gedcom.stromResearch ? null : notedBlock([description], describedNameLines(indi));
+            if (block) (indi.extras ??= []).push({ tag: NOTED_TAG, lines: block, quiet: true });
+        }
         if (allNotes.length > 0) person.notes = allNotes.join('\n');
         if (indi.refn) person.refn = indi.refn;
         if (indi.question) person.question = indi.question;

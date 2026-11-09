@@ -24,7 +24,7 @@ import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import { StorageManager } from '../storage.js';
 import { createMergeState } from '../merge/matching.js';
-import { executeMerge } from '../merge/executor.js';
+import { detectPartnershipConflicts, executeMerge, updatePartnershipConflictResolution } from '../merge/executor.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { factCitations } from '../import-origin.js';
 import { StromData, STROM_DATA_VERSION, Partnership } from '../types.js';
@@ -516,8 +516,56 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             expect(divorcedCouple(json).divorceSourceIds).toEqual(divorcedCouple(tree).divorceSourceIds);
             expect(undated(backTo(json))).toBe(undated(first));
         });
+
+        it('26 · a divorce written before the wedding (PAF: DIV Y, then MARR): divorced, and the divorce goes back', () => {
+            const couple = paforderCouple(tree);
+            expect([couple.status, couple.startDate, couple.endDate ?? '']).toEqual(['divorced', '1925', '']);
+            expect(couple.note ?? '').toBe('');
+            for (const ged of [first, second]) {
+                const rec = record(ged, '@F2601@');
+                expect(holdsRun(rec, ['1 MARR', '2 DATE 1925', '2 PLAC Hrbolcov'])).toBe(true);
+                expect(count(rec, /^1 DIV Y$/)).toBe(1);
+                expect(count(rec, /^1 MARR/)).toBe(1);
+            }
+        });
+
+        it('27 · a description for a given name (Son //, Unknown //, Daughter /…/ with GIVN): "?" in the tree, the NAME back as written, no NOTE made up', () => {
+            const father = Object.values(tree.persons).find(p => p.firstName === 'Kvákoslav')!;
+            const [son, daughter] = father.childIds.map(id => tree.persons[id]);
+            const mother = tree.persons[tree.partnerships[father.partnerships[0]].person2Id];
+            expect([son, daughter, mother].map(p => [p.firstName, p.lastName, p.notes])).toEqual([
+                ['?', '', 'Son'], ['?', 'Huňáčková', 'Baptised at home.\nDaughter'], ['?', '', 'Unknown']]);
+            for (const ged of [first, second]) {
+                expect(record(ged, '@I2703@').filter(l => /^\d (NAME|GIVN|SURN|NOTE)\b/.test(l))).toEqual(['1 NAME Son  //']);
+                expect(record(ged, '@I2702@').filter(l => /^\d (NAME|GIVN|SURN|NOTE)\b/.test(l))).toEqual(['1 NAME Unknown  //']);
+                expect(record(ged, '@I2704@').filter(l => /^\d (NAME|GIVN|SURN|NOTE)\b/.test(l)))
+                    .toEqual(['1 NAME Daughter /Huňáčková/', '2 GIVN Daughter', '2 SURN Huňáčková', '1 NOTE Baptised at home.']);
+            }
+            // Read again from "Back to", the same people.
+            const sonAgain = Object.values(again.persons).find(p => p.notes === 'Son')!;
+            expect([sonAgain.firstName, sonAgain.lastName, sonAgain.isPlaceholder]).toEqual(['?', '', true]);
+        });
+
+        it('27 · the name or its note changed in the tree: the tree\'s goes back', () => {
+            const named = structuredClone(tree);
+            Object.values(named.persons).find(p => p.notes === 'Son')!.firstName = 'Bručislav';
+            const rec = record(backTo(named), '@I2703@');
+            expect(rec).toContain('1 NAME Bručislav //');
+            expect(rec).toContain('1 NOTE Son');
+            const noted = structuredClone(tree);
+            delete Object.values(noted.persons).find(p => p.notes === 'Son')!.notes;
+            expect(record(backTo(noted), '@I2703@').filter(l => /^\d (NAME|NOTE)\b/.test(l))).toEqual(['1 NAME //']);
+            const surname = structuredClone(tree);
+            Object.values(surname.persons).find(p => p.lastName === 'Huňáčková')!.lastName = 'Huňáčková-Kvákalová';
+            expect(record(backTo(surname), '@I2704@').filter(l => /^\d (NAME|NOTE|CONT)\b/.test(l)))
+                .toEqual(['1 NAME ? /Huňáčková-Kvákalová/', '1 NOTE Baptised at home.', '2 CONT Daughter']);
+        });
     });
 });
+
+/** The couple of case 26 (DIV Y written before MARR). */
+const paforderCouple = (data: StromData): Partnership =>
+    Object.values(data.partnerships).find(p => data.persons[p.person1Id]?.firstName === 'Bručimír')!;
 
 /** The couple of case 25 (divorced, the divorce cited). */
 const divorcedCouple = (data: StromData): Partnership =>
@@ -593,6 +641,39 @@ describe('The combined 066 file merged into the tree it was imported into', () =
         const again = (await executeMerge(createMergeState(merged, load(FILE, '2026-11-10')))).mergedData!;
         expect(divorcedCouple(again).divorceSourceIds).toEqual(divorcedCouple(merged).divorceSourceIds);
         expect(Object.keys(again.sources!)).toHaveLength(Object.keys(fresh.sources!).length);
+    });
+});
+
+describe('Cases 26 and 27 in a tree an earlier beta imported, the file merged again', () => {
+    beforeEach(() => { vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never); });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('26 · the couple the earlier import made married: the merge offers the file\'s divorce; taken, it goes back', async () => {
+        const fresh = load(FILE, '2026-11-08');
+        const tree = load(FILE, '2026-11-08');
+        paforderCouple(tree).status = 'married';
+        expect(record(backTo(tree), '@F2601@')).not.toContain('1 DIV Y');
+        const state = createMergeState(tree, load(FILE, '2026-11-09'));
+        const conflicts = detectPartnershipConflicts(state);
+        expect(conflicts.map(c => [c.field, c.existingValue, c.incomingValue])).toEqual([['status', 'married', 'divorced']]);
+        updatePartnershipConflictResolution(state, conflicts[0].incomingPartnershipId, 'status', 'use_incoming');
+        const merged = (await executeMerge(state)).mergedData!;
+        expect(paforderCouple(merged).status).toBe('divorced');
+        const ofCase = (ged: string) => records(ged).filter(r => /^0 @F2601@ /.test(r));
+        expect(ofCase(backTo(merged))).toEqual(ofCase(backTo(fresh)));
+    });
+
+    it('27 · the names kept without their NAME as written go back as written', async () => {
+        const fresh = load(FILE, '2026-11-08');
+        const tree = load(FILE, '2026-11-08');
+        for (const p of Object.values(tree.persons)) {
+            p.gedcomExtra = p.gedcomExtra?.filter(e => !e.lines.some(l => l.startsWith('2 NAME ')));
+        }
+        expect(record(backTo(tree), '@I2703@')).toContain('1 NOTE Son');
+        const merged = (await executeMerge(createMergeState(tree, load(FILE, '2026-11-09')))).mergedData!;
+        const ofCase = (ged: string) => records(ged).filter(r => /^0 @I270[234]@ /.test(r));
+        expect(ofCase(backTo(merged))).toEqual(ofCase(backTo(fresh)));
+        expect(Object.values(merged.persons).find(p => p.notes === 'Son')).toBeDefined();
     });
 });
 
