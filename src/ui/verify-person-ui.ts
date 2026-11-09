@@ -306,6 +306,37 @@ export const verifyPersonMethods = uiModule({
         return st.pending > 0 ? { kind: 'pending', n: st.pending } : null;
     },
 
+    /**
+     * The person card's row above its events: "Verify facts (N)" (AI badge) as
+     * in the card mark's tip and the person menu, else "N facts waiting to be
+     * verified", else none. Null: the card of no saved person.
+     */
+    renderPersonVerifyRow(personId: PersonId | null): void {
+        const events = document.getElementById('events-section');
+        if (!events) return;
+        let row = document.getElementById('pm-verify-row');
+        const state = personId ? this.personVerifyMenu(personId) : null;
+        if (!personId || !state) { row?.remove(); return; }
+        if (!row) {
+            row = document.createElement('div');
+            row.id = 'pm-verify-row';
+            row.className = 'form-group pm-verify-row';
+        }
+        if (row.nextElementSibling !== events) events.before(row);
+        row.dataset.person = personId;
+        row.dataset.kind = state.kind;
+        if (state.kind === 'verify') {
+            row.innerHTML = `<button type="button" class="secondary pm-verify-btn">${researchBridgeActionLabel(strings.verify.personBtn(state.n), 'verify')}</button>`;
+            row.querySelector('button')!.addEventListener('click', () => this.showVerifyPersonDialog(personId));
+        } else {
+            row.innerHTML = '';
+            const text = document.createElement('div');
+            text.className = 'pm-verify-pending';
+            text.textContent = strings.verify.personPending(state.n);
+            row.appendChild(text);
+        }
+    },
+
     // ==================== The person's preview (10j) ====================
 
     /** "Verify facts (N)": what the research would verify of the person, asked first (dry run). */
@@ -583,6 +614,10 @@ export const verifyPersonMethods = uiModule({
 
     /** The open places that show the verification, drawn again (a start, a stop, a new status). */
     refreshVerifySections(): void {
+        const card = document.getElementById('person-modal');
+        if (card?.classList.contains('active') && document.getElementById('events-section')) {
+            this.renderPersonVerifyRow(DataManager.getPerson(this.currentId as PersonId) ? this.currentId as PersonId : null);
+        }
         const person = document.querySelector<HTMLElement>('#person-research-modal[data-person]');
         const section = person?.querySelector<HTMLElement>('[data-verify-section="person"]');
         if (person && section) {

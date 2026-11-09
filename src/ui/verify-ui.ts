@@ -4,7 +4,7 @@
  * beside the step — the research's reason a fact stays as it is, "Verify"
  * (the research's AI agent through its bridge, the AI badge alone) with its
  * preview in the same tip, the row of a fact waiting to be verified,
- * "Checked against the scan" and its "Undo", and without the research one
+ * "Confirm against the scan" and its "Undo", and without the research one
  * sentence with the way to it. Table 10z decides (src/verify-ui-model.ts).
  *
  * What the bridge took is shown at once (optimistic) and never written into
@@ -347,7 +347,8 @@ export const verifyUiMethods = uiModule({
                 sentence.className = 'st-sentence';
                 slots.reason.before(sentence);
             }
-            sentence.textContent = text;
+            // The state the action led to: ✓ belongs to it, never to the action.
+            sentence.innerHTML = `<span class="st-v-check" aria-hidden="true">✓</span> ${esc(text)}`;
         }
         const checked = info.checked;
         if (offer.row === 'reason' && checked?.why && v.step) {
@@ -383,8 +384,7 @@ export const verifyUiMethods = uiModule({
             slots.actions.appendChild(b);
         }
         if (offer.scan) {
-            const b = button('scan', `<span class="st-v-check" aria-hidden="true">✓</span>${researchBridgeActionLabel(s.scan, 'fact-confirm')}`,
-                { disabled: !!st?.busy });
+            const b = button('scan', researchBridgeActionLabel(s.scan, 'fact-confirm'), { disabled: !!st?.busy });
             b.addEventListener('click', () => { void this.verifyConfirm(v, true); });
             slots.actions.appendChild(b);
         }
@@ -501,7 +501,7 @@ export const verifyUiMethods = uiModule({
     },
 
     /**
-     * "Checked against the scan" (`confirm`) or its "Undo": through the
+     * "Confirm against the scan" (`confirm`) or its "Undo": through the
      * research when the fact is its (by its id), else the app's own
      * confirmation. Undone: a toast with "Redo".
      */

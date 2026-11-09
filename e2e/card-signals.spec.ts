@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, cardAction } from './helpers.js';
 import { FakeBridge, fakeBridge, openResearch, poll, touchScreenNow } from './research-bridge.js';
 import { FakeVerify, VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
@@ -1057,6 +1057,37 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await knows.locator('[data-verify-act="bulk"]').click();
         await expect(page.locator('#person-research-modal')).toHaveCount(0);
         await expect(page.locator('#verify-bulk-modal')).toBeVisible();
+    });
+
+    test('the person card: "Verify facts (N)" with the AI badge above the events, as in the menu; after a start how many wait (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const { verify } = await verifySetup(page);
+        await cardAction(page, 'Jan', 'edit');
+        const modal = page.locator('#person-modal');
+        const row = modal.locator('#pm-verify-row');
+        await expect(row).toBeVisible();
+        // Right above the events, inside their section.
+        expect(await row.evaluate(el => el.nextElementSibling?.id)).toBe('events-section');
+        const btn = row.locator('.pm-verify-btn');
+        await expect(btn).toContainText('Verify facts (2)');
+        await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(btn.locator('svg')).toHaveCount(0);
+        await btn.click();
+        const dialog = page.locator('#verify-person-modal');
+        await expect(dialog).toBeVisible();
+        expect(verify.posts[0]).toEqual({ route: 'verify', body: { person: 'P0003', dry: true } });
+        await expect(dialog.locator('.vfy-check')).toHaveCount(2);
+        await dialog.locator('[data-vfy="start"]').click();
+        await expect(dialog).toHaveCount(0);
+        // The person card stays open: the row now says how many wait, no button.
+        await expect(modal).toHaveClass(/active/);
+        await expect(row).toHaveText('2 facts waiting to be verified');
+        await expect(row.locator('button')).toHaveCount(0);
+        // The pills say they are controls: a pointer and a ring under the mouse.
+        const pill = modal.locator('button.fact-status').first();
+        await expect(pill).toHaveCSS('cursor', 'pointer');
+        await pill.hover();
+        await expect(pill).not.toHaveCSS('box-shadow', 'none');
     });
 
     test('a person with residences: the menu counts what /verify takes (the residences too), as the preview does; the toast says what the research queued', async ({ page }) => {

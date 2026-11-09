@@ -193,8 +193,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         removedAttachment: (name: string) => `Usunięto załącznik osoby ${name}`,
         updatedAttachment: (name: string) => `Zmieniono załącznik osoby ${name}`,
         setParentRelType: (parent: string, child: string) => `Ustawiono typ relacji ${parent} → ${child}`,
-        confirmedFact: (name: string) => `Dana osoby ${name} sprawdzona na podstawie skanu`,
-        unconfirmedFact: (name: string) => `Cofnięto sprawdzenie na podstawie skanu: ${name}`,
+        confirmedFact: (name: string) => `Dana osoby ${name} potwierdzona według skanu`,
+        unconfirmedFact: (name: string) => `Cofnięto potwierdzenie według skanu: ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Cofnij: ${desc}`,
         redoAction: (desc: string) => `Ponów: ${desc}`
@@ -249,8 +249,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         removeAttachment: (name: string) => `usunięcie załącznika osoby ${name}`,
         editAttachment: (name: string) => `edycja załącznika osoby ${name}`,
         setParentRelType: (child: string) => `typ relacji osoby ${child}`,
-        confirmFact: (name: string) => `sprawdzenie danej osoby ${name} na podstawie skanu`,
-        unconfirmFact: (name: string) => `cofnięcie sprawdzenia osoby ${name}`,
+        confirmFact: (name: string) => `potwierdzenie danej osoby ${name} według skanu`,
+        unconfirmFact: (name: string) => `cofnięcie potwierdzenia osoby ${name}`,
         applyChanges: (sender: string) => `przyjęcie zmian (${sender})`,
         undone: (desc: string) => `Cofnięto: ${desc}`,
         redone: (desc: string) => `Ponowiono: ${desc}`,

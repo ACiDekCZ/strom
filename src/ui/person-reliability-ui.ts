@@ -111,6 +111,8 @@ export const personReliabilityMethods = uiModule({
         }
         // "Originally from the family tree" under the name and the sex (not marks: whatever the setting says).
         this.renderPersonFactOrigins(personId);
+        // "Verify facts (N)" above the events, as the card mark's tip offers it (whatever the marks setting says).
+        this.renderPersonVerifyRow(person ? personId : null);
         if (!person || !view?.atFacts) return;
         const put = (label: Element | null | undefined, html: string): void => {
             if (!label || !html) return;

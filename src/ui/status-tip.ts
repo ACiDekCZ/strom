@@ -397,6 +397,16 @@ function canHover(): boolean {
     return typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches;
 }
 
+/**
+ * The tip's content in its own scrolling box: the arrow and the mouse's
+ * bridge to the mark stand outside the bubble, and in the scrolling bubble
+ * itself they made it scroll (a bridge under a tip above its mark: 9 px, two
+ * scrollbars) while its content fitted.
+ */
+function setTipContent(el: HTMLElement, html: string): void {
+    el.innerHTML = `<div class="st-scroll">${html}</div>`;
+}
+
 /** The tip's element, made once. */
 function tipElement(): HTMLElement {
     if (tip && tip.isConnected) return tip;
@@ -475,7 +485,7 @@ export function openStatusTip(trigger: HTMLElement, opts: { pinned?: boolean } =
         const m = modelOf(ctx, touch);
         if (!m) return null;
         el.className = 'status-tip';
-        el.innerHTML = tipHtml(m);
+        setTipContent(el, tipHtml(m));
         lastCtx = ctx;
         lastTouch = touch;
         runExtensions(el, ctx);
@@ -500,7 +510,7 @@ export function refreshStatusTip(): void {
     const ctx = contextOf(current);
     const m = ctx ? modelOf(ctx, lastTouch) : null;
     if (!ctx || !m) { closeStatusTip(); return; }
-    tip.innerHTML = tipHtml(m);
+    setTipContent(tip, tipHtml(m));
     lastCtx = ctx;
     runExtensions(tip, ctx);
     place();
@@ -520,9 +530,9 @@ export function openMarkTip(trigger: HTMLElement, content: MarkTipContent): bool
     return show(trigger, (el) => {
         el.className = 'status-tip mark-tip-panel';
         el.dataset.kind = 'mark';
-        el.innerHTML = `<div class="st-head badge-tooltip-header"><span class="st-step">${esc(content.head)}</span></div>`
+        setTipContent(el, `<div class="st-head badge-tooltip-header"><span class="st-step">${esc(content.head)}</span></div>`
             + `<div class="st-body">${content.bodyHtml}</div>`
-            + (content.button ? `<button type="button" class="st-mark-action st-link">${esc(content.button.label)}</button>` : '');
+            + (content.button ? `<button type="button" class="st-mark-action st-link">${esc(content.button.label)}</button>` : ''));
         const btn = el.querySelector<HTMLButtonElement>('.st-mark-action');
         if (btn && content.button) {
             const run = content.button.run;

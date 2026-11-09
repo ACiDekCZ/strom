@@ -405,7 +405,8 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(tip).toBeVisible();
         await expect(vAct(page, 'verify')).toContainText('Verify');
         await expect(vAct(page, 'verify').locator('.research-ai-badge')).toHaveCount(1);
-        await expect(vAct(page, 'scan')).toContainText('Checked against the scan');
+        await expect(vAct(page, 'scan')).toContainText('Confirm against the scan');
+        await expect(vAct(page, 'scan')).not.toContainText('✓');
         await expect(vAct(page, 'scan').locator('.research-ai-badge')).toHaveCount(0);
 
         await vAct(page, 'verify').click();
@@ -482,7 +483,7 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(pill).toHaveClass(/fact-status-human/);
         await expect(pill).toContainText('✓');
         await expect(tip).toBeVisible();
-        await expect(tip.locator('.st-sentence')).toContainText('Confirmed by a person against the scan on');
+        await expect(tip.locator('.st-sentence')).toContainText('✓ Confirmed against the scan on');
         await expect(vAct(page, 'scan')).toHaveCount(0);
         await expect(vAct(page, 'verify')).toHaveCount(0);
 
@@ -551,7 +552,8 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await factPill(page, 'Birth').click();
         const tip = page.locator('#status-tip');
         await expect(tip).toBeVisible();
-        await expect(vAct(page, 'scan')).toContainText('Checked against the scan');
+        await expect(vAct(page, 'scan')).toContainText('Confirm against the scan');
+        await expect(vAct(page, 'scan')).not.toContainText('✓');
         await expect(vAct(page, 'verify')).toHaveCount(0);
         await expect(tip.locator('.st-v-aside')).toContainText('With the ancestor research an AI agent verifies the fact in the registers itself.');
         await expect(tip.locator('.research-ai-badge')).toHaveCount(0);

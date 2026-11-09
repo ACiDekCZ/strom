@@ -765,10 +765,10 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     verify: {
         btn: 'Zweryfikuj',
-        scan: 'Sprawdzone ze skanem',
+        scan: 'Potwierdź według skanu',
         undo: 'Cofnij',
         undone: 'Potwierdzenie cofnięte',
-        confirmedAt: (d: string) => `Potwierdzone przez człowieka ze skanem ${d}.`,
+        confirmedAt: (d: string) => `Potwierdzone według skanu ${d}`,
         reasonHead: (l: string, d: string) => (d ? `Pozostaje ${l} · badanie sprawdziło ${d}` : `Pozostaje ${l}`),
         previewHead: (f: string) => `Zweryfikuj ${f}`,
         what: 'Co',

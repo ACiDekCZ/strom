@@ -21800,7 +21800,12 @@
         }
         .fact-status .fs-dots i.on { background: currentColor; }
         button.fact-status:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        @media (hover: hover) { button.fact-status:hover, .modal button.fact-status:hover { color: var(--text); } }
+        /* A pill opens its tip (the step, the sources, Verify): a ring under the mouse says it is a control. */
+        @media (hover: hover) { button.fact-status:hover, .modal button.fact-status:hover { color: var(--text); box-shadow: 0 0 0 1px var(--primary); } }
+        /* The person card's "Verify facts (N)" above its events, or how many of its facts wait (verify-person-ui.ts). */
+        #person-modal .pm-verify-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #person-modal .pm-verify-row .pm-verify-btn { width: auto; max-width: 100%; }
+        #person-modal .pm-verify-pending { color: var(--text-light); font-size: 13px; }
         /* Touch: a 44 px target around the pill (the pill stays small). */
         @media (pointer: coarse) { button.fact-status::after { content: ''; position: absolute; inset: -13px -6px; } }
         .partnership-grid .pg-label .fact-status { display: flex; width: max-content; margin: 3px 0 0; }
@@ -21821,13 +21826,19 @@
            edge at the mark's, its arrow at --st-arrow-x; above the mark without room below. */
         .status-tip {
             position: fixed; z-index: 10050; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px);
-            max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto;
-            padding: 10px 12px; background: var(--surface); color: var(--text-light);
+            max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); display: flex; flex-direction: column;
+            padding: 0; background: var(--surface); color: var(--text-light);
             border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg);
             font-family: var(--font-sans); font-size: 12.5px; font-weight: normal; line-height: 1.45;
             text-align: left; white-space: normal; overflow-wrap: anywhere;
         }
         .status-tip[hidden] { display: none; }
+        /* The content scrolls in a box of its own, only when taller than the window; never sideways
+           (long source titles wrap). The arrow and the bridge stay outside it (status-tip.ts). */
+        .status-tip > .st-scroll {
+            flex: 0 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+            padding: 10px 12px; border-radius: inherit;
+        }
         .status-tip::before {
             content: ''; position: absolute; top: -5px; left: var(--st-arrow-x, 50%); width: 8px; height: 8px; margin-left: -4px;
             background: var(--surface); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg);
@@ -21891,7 +21902,7 @@
         /* Verify facts: fact tip (spec 065 §10.1, src/ui/verify-ui.ts). The pill of a fact
            waiting to be verified (a 10 px clock after its text); in the tip of a fact: the
            research's reason it stays, "Verify" and its preview in place of the sources,
-           the waiting row, "Checked against the scan" / "Undo", the sentence without the
+           the waiting row, "Confirm against the scan" / "Undo", the sentence without the
            research. Buttons 30 px side by side; by touch 44 px across, one under another. */
         .fact-status .fs-clock { display: inline-flex; flex: none; margin-left: -1px; }
         .fact-status .fs-clock svg { display: block; width: 10px; height: 10px; }
