@@ -1947,6 +1947,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushCitation(1, srcId);
         }
 
+        // One parent alone the file wrote as not a couple (Partnership.noCouple):
+        // the mark back while the other parent is still the "?" left out and
+        // nothing here says they were a couple, so the family reads back whole.
+        const standInLeftOut = !personIdMap.has(partnership.person1Id) || !personIdMap.has(partnership.person2Id);
+        if (partnership.noCouple && standInLeftOut && !hasMarriage && !hasDivorce && !stat && !(partnership.events?.length)) {
+            lines.push('1 _STROM_NO_COUPLE Y');
+        }
+
         pushGedcomExtra(partnership);
 
         // The couple's other records of the program's file, as it wrote them (see joined).

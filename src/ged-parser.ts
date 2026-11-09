@@ -5273,12 +5273,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             ...(husb && persons[husb] ? { husb } : {}),
             ...(wife && persons[wife] && wife !== husb ? { wife } : {}),
         };
-        if (!real.husb && !real.wife) continue;
-        // One parent and a child recorded here who hangs from another family
-        // (an adoptive father beside the birth parents): the family itself is
-        // kept, the "?" family the app makes of one parent anyway, so the
-        // child's second FAMC has a family to point at (spec 066 K3.1).
-        if (!(real.husb && real.wife) && recordedElsewhere(gedFamId, fam)) continue;
+        // One parent alone: the "?" family the app keeps of one parent, read
+        // below as one family of all its children, its import marks and its
+        // ids on it (Partnership.noCouple writes the mark back). Taken as
+        // loose links it became a "?" family per child and lost them; a child
+        // recorded here who hangs from another family (an adoptive father
+        // beside the birth parents) keeps a family to point at (spec 066 K3.1/K3.2).
+        if (!real.husb || !real.wife) continue;
         noCoupleFamilies.add(gedFamId);
         for (const childGedId of childrenOf(gedFamId, fam)) linkChild(null, childGedId, gedFamId, fam, real);
     }
@@ -5495,6 +5496,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             status: 'married'
         };
         fillUnion(partnership, fam);
+        if (fam.noCouple && parentId) partnership.noCouple = true;
         partnerships[partnershipId] = partnership;
         famPartnership.set(gedFamId, partnership);
 

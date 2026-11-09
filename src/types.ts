@@ -1193,6 +1193,13 @@ export interface Partnership {
      * K3.1); a wedding detail (date, place, witnesses…) writes one as before.
      */
     marriageUnrecorded?: boolean;
+    /**
+     * The file wrote the family of one parent alone as not a couple
+     * (`1 _STROM_NO_COUPLE Y`, as Strom Research does): while the other
+     * parent is still the "?" and the family says nothing a couple would,
+     * an export writes the mark back, so the family goes out as it came.
+     */
+    noCouple?: boolean;
     /** Each fact's value as it came from a loaded file (`startDate`, `startPlace`, `endDate`, `endPlace`, `event:<id>.date|place|value`). */
     importedValues?: Record<string, ImportedValue>;
     /** The family record's ids in the loaded GEDCOM files (xref, `_UID`…), see Person.originalIds. */

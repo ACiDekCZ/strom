@@ -116,6 +116,8 @@ export function fillPlaceholder(data: StromData, placeholderId: PersonId, parent
         } else if (all) {
             if (u.person1Id === placeholderId) u.person1Id = parentId;
             else u.person2Id = parentId;
+            // (No more one parent alone, see Partnership.noCouple.)
+            delete u.noCouple;
             if (!parent.partnerships.includes(uid)) parent.partnerships.push(uid);
             stand.partnerships = stand.partnerships.filter(x => x !== uid);
         } else {

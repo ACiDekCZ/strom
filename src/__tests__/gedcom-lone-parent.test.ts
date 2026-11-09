@@ -187,18 +187,23 @@ describe('GEDCOM: a child with one known parent', () => {
         expect(body(exportGed(importGed(out)))).toBe(body(out));
     });
 
-    it('Strom\'s older single-parent family (_STROM_NO_COUPLE, one parent) reads as "?" families, one per child', () => {
+    it('a single-parent family marked _STROM_NO_COUPLE (one parent, as the research writes it) reads as one "?" family of its children, and goes out with the mark', () => {
         const ged = '0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n'
             + '0 @I1@ INDI\n1 NAME Ole /Berg/\n1 SEX M\n1 FAMS @F1@\n'
             + '0 @I2@ INDI\n1 NAME Ida /Berg/\n1 SEX F\n1 FAMC @F1@\n'
             + '0 @I3@ INDI\n1 NAME Kari /Berg/\n1 SEX F\n1 FAMC @F1@\n'
             + '0 @F1@ FAM\n1 HUSB @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y\n0 TRLR\n';
         const data = importGed(ged);
-        // The mark said "no couple", not that the two share the other parent.
-        expect(Object.keys(data.partnerships)).toHaveLength(2);
-        expect(standIns(data)).toHaveLength(2);
+        // The file holds the two in one family: one "?" for the other parent (a family per child lost it).
+        expect(Object.keys(data.partnerships)).toHaveLength(1);
+        expect(standIns(data)).toHaveLength(1);
         expect(parentNames(data, 'Ida')).toEqual(['?', 'Ole']);
         expect(parentNames(data, 'Kari')).toEqual(['?', 'Ole']);
+        const out = exportGed(data);
+        noNameless(out);
+        expect(famCount(out)).toBe(1);
+        expect(out).toMatch(/0 @F1@ FAM\n1 HUSB @I\d+@\n1 CHIL @I\d+@\n1 CHIL @I\d+@\n1 _STROM_NO_COUPLE Y\n0 /);
+        expect(body(exportGed(importGed(out)))).toBe(body(out));
     });
 
     it('a "?" with something of its own (a note) is kept as a person', () => {
