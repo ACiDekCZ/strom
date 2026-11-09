@@ -206,7 +206,7 @@ export const appModeMethods = uiModule({
     showViewModeImportDialog(): void {
         const envelope = DataManager.getEmbeddedEnvelope();
         if (envelope) {
-            const nameEl = document.getElementById('import-tree-name');
+            const nameEl = document.getElementById('import-view-mode-tree-name');
             if (nameEl) {
                 nameEl.textContent = `"${envelope.treeName}"`;
             }
