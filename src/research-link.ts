@@ -1362,6 +1362,34 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         map.set(newId, oldId);
         taken.add(oldId);
     }
+    // A source without a number on both sides — the source of its own a
+    // citation of another page, QUAY or date gets at every reading (the file
+    // has no id for it), or an entry made in the app the research has not
+    // numbered — is the same entry when all it says is the same. Only where
+    // that is unique on both sides: two such entries are never joined.
+    const unnumberedKey = (src: Source): string => {
+        const text = [src.title, src.repository, src.reference, src.url, src.note, src.recordDate, src.transcript]
+            .map(v => (v ?? '').trim());
+        return [...text, src.quality ?? '', JSON.stringify(src.gedcomExtra ?? [])].join('\u0000');
+    };
+    const uniqueUnnumbered = (data: StromData, keep: (id: string) => boolean): Map<string, string> => {
+        const seen = new Map<string, string | null>();
+        for (const [id, src] of Object.entries(data.sources ?? {})) {
+            if (!src || src.refn || !keep(id)) continue;
+            const key = unnumberedKey(src);
+            seen.set(key, seen.has(key) ? null : id);
+        }
+        const out = new Map<string, string>();
+        for (const [k, id] of seen) if (id) out.set(k, id);
+        return out;
+    };
+    const prevPlain = uniqueUnnumbered(previous, id => !taken.has(id) && !nextIds.has(id));
+    for (const [key, newId] of uniqueUnnumbered(next, id => !map.has(id) && !previous.sources?.[id])) {
+        const oldId = prevPlain.get(key);
+        if (!oldId || taken.has(oldId)) continue;
+        map.set(newId, oldId);
+        taken.add(oldId);
+    }
 
     const prevPairs = uniquePairs(previous, false);
     for (const [key, newId] of uniquePairs(next, true)) {
@@ -1369,6 +1397,59 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         if (!oldId || oldId === newId || nextIds.has(oldId)) continue;
         map.set(newId, oldId);
     }
+
+    // An event read from a GEDCOM gets a new id at every reading (the file
+    // has none of its own), and so do its participants and a couple's own
+    // (the wedding's witnesses): one that says exactly the same as one of
+    // the same person or couple before keeps that one's id (identical ones in
+    // their order). A changed one keeps its new id; its facts (`event:<id>`
+    // keys) follow the id (remapId).
+    type Item = { id?: string; participants?: readonly Item[] };
+    type Holder = { events?: readonly Item[]; participants?: readonly Item[] };
+    const holders = (data: StromData): [string, Holder | undefined][] =>
+        [...Object.entries(data.persons ?? {}), ...Object.entries(data.partnerships ?? {})];
+    /** Ids inside `next` an old id must not take over. */
+    const innerIds = new Set<string>();
+    const collect = (items: readonly Item[] | undefined): void => {
+        for (const x of items ?? []) {
+            if (x?.id) innerIds.add(x.id);
+            collect(x?.participants);
+        }
+    };
+    for (const [, h] of holders(next)) { collect(h?.events); collect(h?.participants); }
+    /** What an item says: all but its id and its participants' ids. */
+    const said = (x: Item, remap: boolean): string => {
+        const { id: _id, participants, ...rest } = x;
+        const out = { ...rest, ...(participants ? { participants: participants.map(({ id: _p, ...y }) => y) } : {}) };
+        return JSON.stringify(remap ? remapIds(out, map) : out);
+    };
+    const inner = new Map<string, string>();
+    const pair = (old: readonly Item[] | undefined, theirs: readonly Item[] | undefined): void => {
+        if (!old?.length || !theirs?.length) return;
+        const byKey = new Map<string, Item[]>();
+        for (const x of old) {
+            if (!x?.id || innerIds.has(x.id)) continue;
+            const k = said(x, false);
+            byKey.set(k, [...(byKey.get(k) ?? []), x]);
+        }
+        for (const x of theirs) {
+            const was = x?.id ? byKey.get(said(x, true))?.shift() : undefined;
+            if (!was?.id || !x.id) continue;
+            if (was.id !== x.id) inner.set(x.id, was.id);
+            // Its participants, in the same order (the same key says so).
+            (x.participants ?? []).forEach((y, i) => {
+                const w = was.participants?.[i]?.id;
+                if (y.id && w && w !== y.id && !innerIds.has(w)) inner.set(y.id, w);
+            });
+        }
+    };
+    const prevHolders = new Map(holders(previous));
+    for (const [id, h] of holders(next)) {
+        const was = prevHolders.get(map.get(id) ?? id);
+        pair(was?.events, h?.events);
+        pair(was?.participants, h?.participants);
+    }
+    for (const [k, v] of inner) map.set(k, v);
 
     return remapIds(next, map) as StromData;
 }
@@ -1560,15 +1641,26 @@ export function carryOverUnknownPartners(next: StromData, previous: StromData): 
  * never text. Long strings (images, transcripts) are never ids.
  */
 function remapIds(value: unknown, map: Map<string, string>): unknown {
-    if (typeof value === 'string') return value.length <= 256 ? map.get(value) ?? value : value;
+    if (typeof value === 'string') return value.length <= 256 ? remapId(value, map) : value;
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(v => (v === undefined ? null : remapIds(v, map)));
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
         if (v === undefined || typeof v === 'function') continue;
-        out[map.get(k) ?? k] = remapIds(v, map);
+        out[remapId(k, map)] = remapIds(v, map);
     }
     return out;
+}
+
+/** An id, or a fact of an event named by its id (`event:<id>`, `event:<id>.date`), mapped. */
+function remapId(s: string, map: Map<string, string>): string {
+    const direct = map.get(s);
+    if (direct !== undefined) return direct;
+    if (!s.startsWith('event:')) return s;
+    const dot = s.indexOf('.', 6);
+    const id = dot < 0 ? s.slice(6) : s.slice(6, dot);
+    const to = map.get(id);
+    return to === undefined ? s : `event:${to}${dot < 0 ? '' : s.slice(dot)}`;
 }
 
 // ==================== LIVE BRIDGE MESSAGES ====================

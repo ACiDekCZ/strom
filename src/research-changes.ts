@@ -10,6 +10,7 @@ import { isPurePlaceholder } from './single-parent.js';
 import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
+import { getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -756,9 +757,59 @@ const EVENT_TAG: Record<string, string> = {
     education: 'EDUC', religion: 'RELI', confirmation: 'CONF', firstCommunion: 'FCOM', cremation: 'CREM', title: 'TITL',
 };
 
-/** The titles of sources (or their ids when unnamed), sorted. */
+/** A source as a citation row names it: its title (or its id when unnamed), and its page when the title does not say it. */
+function sourceLabel(id: string, sources: Record<string, Source>): string {
+    const src = sources[id];
+    const title = src?.title?.trim() || id;
+    const page = src?.reference?.trim() ?? '';
+    return page && !title.includes(page) ? `${title} · ${page}` : title;
+}
+
+/** The labels of sources, sorted. */
 function sourceTitles(ids: readonly string[], sources: Record<string, Source>): string {
-    return ids.map(id => sources[id]?.title?.trim() || id).sort((a, b) => a.localeCompare(b)).join(', ');
+    return ids.map(id => sourceLabel(id, sources)).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+
+/**
+ * What a citation cites: the entry and its page (title, archive, page). A
+ * page cited with its own QUAY or date is a source of its own, read anew
+ * (another id) at every reading of the file, and a tree stored before that
+ * cites the record itself: still the same entry and page, not a change.
+ */
+function citedKey(id: string, sources: Record<string, Source>): string {
+    const src = sources[id];
+    return src ? [src.title, src.repository, src.reference].map(v => (v ?? '').trim()).join('\u0000') : `\u0001${id}`;
+}
+
+/** Of citations `a` (sources `as`), those `b` (sources `bs`) does not cite: neither the same id nor the same entry and page. */
+function citedOnlyIn(a: readonly string[], as: Record<string, Source>, b: readonly string[], bs: Record<string, Source>): string[] {
+    const ids = new Set(b);
+    const keys = new Set(b.map(id => citedKey(id, bs)));
+    return a.filter(id => !ids.has(id) && !keys.has(citedKey(id, as)));
+}
+
+/**
+ * A person's note without the line an import before 3.26.0-beta.3 made of an
+ * age at the birth of the research's file ("Birth: Age: 32 years", in the
+ * language of that import): that age is Person.birthAge now, read from the
+ * same file. Only a line whose age says the same numbers as `birthAge`
+ * goes; any other text stays.
+ */
+export function withoutMadeUpBirthAge(notes: string, birthAge: string): string {
+    const digits = (v: string): string => (v.match(/\d+/g) ?? []).join(' ');
+    const want = digits(birthAge);
+    if (!notes || !birthAge.trim()) return notes;
+    const madeUp = (line: string): boolean => SUPPORTED_LANGUAGES.some(({ code }) => {
+        const g = getStringsForLang(code).gedcomNotes;
+        const [head, tail] = g.birthNote(g.age('\u0000')).split('\u0000');
+        const t = line.trim();
+        if (!t.startsWith(head) || !t.endsWith(tail)) return false;
+        const age = t.slice(head.length, t.length - tail.length).trim();
+        return want ? digits(age) === want : age === birthAge.trim();
+    });
+    const lines = notes.split('\n');
+    const kept = lines.filter(l => !madeUp(l));
+    return kept.length === lines.length ? notes : kept.join('\n').trim();
 }
 
 /** What a fact of a new person adds: its filled fields and events. */
@@ -856,7 +907,8 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         field(h, 'deathDate', str(h.deathDate), str(t.deathDate), { date: true, ...death });
         field(h, 'deathPlace', str(h.deathPlace), str(t.deathPlace), death);
         field(h, 'deathCause', str(h.deathCause), str(t.deathCause), death);
-        field(h, 'notes', str(h.notes), str(t.notes));
+        // (A note line an earlier import made of the age at the birth the research has as such is no change.)
+        if (h.birthAge || withoutMadeUpBirthAge(str(h.notes), str(t.birthAge)) !== str(t.notes)) field(h, 'notes', str(h.notes), str(t.notes));
         // Events paired (by id, else by what they say): their date, place, value; one here only goes.
         const paired = pairEvents(h.events ?? [], t.events ?? []);
         for (const e of h.events ?? []) {
@@ -871,7 +923,7 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
             field(h, 'eventPlace', str(e.place), str(o.place), ev);
             field(h, 'eventValue', str(e.note), str(o.note), ev);
             // Its citations: a source cited here and not there goes.
-            const gone = (e.sourceIds ?? []).filter(id => !(o.sourceIds ?? []).includes(id));
+            const gone = citedOnlyIn(e.sourceIds ?? [], hs, o.sourceIds ?? [], ts);
             if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of: e.type, here: sourceTitles(gone, hs), there: sourceTitles(o.sourceIds ?? [], ts) });
         }
         const pairedThere = new Set(paired.values());
@@ -880,9 +932,9 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         for (const [key, of] of [['sourceIds', 'person'], ['birthSourceIds', 'birth'], ['deathSourceIds', 'death']] as const) {
             const a = h[key] ?? [];
             const b = t[key] ?? [];
-            const gone = a.filter(id => !b.includes(id));
+            const gone = citedOnlyIn(a, hs, b, ts);
             if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of, here: sourceTitles(gone, hs), there: sourceTitles(b, ts) });
-            addedFacts += b.filter(id => !a.includes(id)).length;
+            addedFacts += citedOnlyIn(b, ts, a, hs).length;
         }
     }
     // Couples: the wedding's date and place.

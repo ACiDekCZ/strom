@@ -98,4 +98,21 @@ describe('values the research version would overwrite', () => {
         ]);
         expect(d.addedFacts).toBe(1);
     });
+
+    it('a note line an earlier import made of the age at the birth is no change where the research has that age (1109)', () => {
+        // Stored before: BIRT > AGE became a line of the note, in the language of the import.
+        const here = tree([person('a', 'Ida', { notes: 'Narození: Věk: 32 let\nKmotr z Voss' })]);
+        const there = tree([person('a', 'Ida', { notes: 'Kmotr z Voss', birthAge: '32 years' })]);
+        expect(diffValues(here, there).rows).toEqual([]);
+        // Another age, or text the research does not have, is still a change.
+        const other = tree([person('a', 'Ida', { notes: 'Kmotr z Voss', birthAge: '33 years' })]);
+        expect(diffValues(here, other).rows.map(r => r.field)).toEqual(['notes']);
+        const more = tree([person('a', 'Ida', { notes: 'Birth: Age: 32 years\nKmotr z Voss\nVlastní řádek' })]);
+        expect(diffValues(more, there).rows).toEqual([
+            { personId: 'a', name: 'Ida Berg', field: 'notes', here: 'Birth: Age: 32 years\nKmotr z Voss\nVlastní řádek', there: 'Kmotr z Voss' },
+        ]);
+        // Without the age there, the line is the user's note.
+        const noAge = tree([person('a', 'Ida', { notes: 'Kmotr z Voss' })]);
+        expect(diffValues(here, noAge).rows.map(r => r.field)).toEqual(['notes']);
+    });
 });
