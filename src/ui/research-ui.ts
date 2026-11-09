@@ -3240,7 +3240,8 @@ export const researchUiMethods = uiModule({
             host = liveSection(body, { ...fold, title, summary: replies, headCls: 'live-panel-heading-waiting', help: 'waiting' });
         } else {
             const row = body.appendChild(el('div', 'live-section__headrow live-section__headrow--help live-section__headrow--m'));
-            const h = row.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
+            const h = row.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting'));
+            h.appendChild(el('span', 'live-section__title', title));
             if (replies) h.appendChild(el('span', 'live-section__sum', replies));
             row.appendChild(helpMark('waiting'));
             host = body;

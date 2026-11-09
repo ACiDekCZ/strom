@@ -214,6 +214,83 @@ test.describe('the help mark on a computer', () => {
     });
 });
 
+/** Following a research whose list of tasks can grow (waiting.groups): 14 letters to do. */
+async function followWaiting(page: Page, size: { width: number; height: number }): Promise<{ waiting: Record<string, unknown>[] }> {
+    await page.setViewportSize(size);
+    const at = new Date().toISOString();
+    const bridge = { waiting: Array.from({ length: 14 }, (_, i) => ({ id: `T${1000 + i}`, what: `Dopis ${i + 1}`, kind: 'letter', section: 'letter', at })) as Record<string, unknown>[] };
+    const status = () => ({
+        tree: { id: UUID, name: 'Velbrandovi' }, head: 'h1', persons: 3, features: ['waiting.groups'],
+        working: [{ who: 'agent-matriky', since: at, task: 'Sčítání 1921', person: 'P0003' }],
+        waiting: bridge.waiting, links: LINKS, queue: [], queueMore: 0,
+    });
+    await page.route(`${BRIDGE}/**`, async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
+        if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: liveGed() });
+        if (path.endsWith('/events')) {
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
+        }
+        return route.fulfill({ status: 404, headers: cors, body: '' });
+    });
+    await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+    return bridge;
+}
+
+const setSectionPrefs = (page: Page, prefs: Record<string, string>) => page.evaluate((p) => {
+    localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 1, s: p }));
+    document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+}, prefs);
+
+/** The title with its count is one whole line, and "?" sits on that line inside the row. */
+async function titleOnOneLine(row: Locator, what: string): Promise<void> {
+    const title = row.locator('.live-section__title');
+    await expect(title).toBeVisible();
+    const m = await row.evaluate((r) => {
+        const t = r.querySelector<HTMLElement>('.live-section__title')!;
+        const lh = parseFloat(getComputedStyle(t).lineHeight) || parseFloat(getComputedStyle(t).fontSize) * 1.25;
+        const tb = t.getBoundingClientRect();
+        const mb = r.querySelector<HTMLElement>('.help-mark')!.getBoundingClientRect();
+        return { lines: tb.height / lh, cut: t.scrollWidth > t.clientWidth + 1, onLine: mb.top < tb.bottom && mb.bottom > tb.top,
+            inside: r.scrollWidth <= r.clientWidth + 1 };
+    });
+    expect(m.lines, `${what}: lines`).toBeLessThan(1.5);
+    expect(m.cut, `${what}: cut short`).toBe(false);
+    expect(m.onLine, `${what}: "?" on the title's line`).toBe(true);
+    expect(m.inside, `${what}: inside the row`).toBe(true);
+}
+
+test.describe('the heading of Awaiting action with its "?"', () => {
+    test('German: the title and its count stay on one line beside "?" with "N new" in the small panel (1440, 1024) and with "hidden" in the overview (390)', async ({ page }) => {
+        const bridge = await followWaiting(page, { width: 1440, height: 900 });
+        const live = page.locator('#live-panel');
+        await expect(rowOf(live, /Awaiting action · 14/)).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await setSectionPrefs(page, { waiting: 'collapsed' });
+        const at = new Date().toISOString();
+        bridge.waiting = [...bridge.waiting,
+            { id: 'T0901', what: 'Smí agent číst archiv?', kind: 'permission', host: 'katalog.archiv-chlumy.cz', at },
+            { id: 'T0902', what: 'Smí agent číst druhý archiv?', kind: 'permission', host: 'katalog.archiv-bredov.cz', at }];
+        const row = rowOf(live, 'Wartet auf Bearbeitung · 16');
+        await expect(row.locator('.live-panel-new')).toHaveText('2 neu', { timeout: 15000 });
+        await titleOnOneLine(row, 'panel 1440');
+        await page.setViewportSize({ width: 1024, height: 768 });
+        await expect(row.locator('.live-panel-new')).toBeVisible();
+        await titleOnOneLine(row, 'panel 1024');
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(live).toHaveClass(/phone-strip/);
+        await setSectionPrefs(page, { waiting: 'hidden' });
+        await page.evaluate(() => window.Strom.UI.openResearchOverview({ showWaiting: true }));
+        const ov = page.locator('#research-overview');
+        await expect(ov).toHaveClass(/research-overview--sheet/);
+        const ovRow = rowOf(ov, 'Wartet auf Bearbeitung · 16');
+        await expect(ovRow.locator('.live-section__tag')).toBeVisible();
+        await titleOnOneLine(ovRow, 'overview 390');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+    });
+});
+
 test.describe('the help mark on a touch screen', () => {
     test.use({ hasTouch: true, isMobile: true });
 

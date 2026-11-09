@@ -17563,6 +17563,15 @@
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .live-section__sum--new { color: var(--primary); font-weight: 600; }
+        /* "Awaiting action · N": the title and its count are one line beside "?" in every
+           language; a chip ("N new", "hidden") or the summary that has no room beside them goes
+           to a second line under the title (the chevron hangs in the padding, so that line
+           starts under the title). Cut short only when the title alone is wider than the row. */
+        .live-section__head.live-panel-heading-waiting,
+        h4.live-panel-heading-waiting { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 2px; }
+        .live-section__head.live-panel-heading-waiting { padding-left: 16px; }
+        .live-section__head.live-panel-heading-waiting > .live-section__chevron { margin-left: -16px; }
+        .live-panel-heading-waiting > .live-section__title { flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
         .live-section__body[hidden] { display: none; }
         .live-change-text { font-size: 14px; }
         /* A name or a source title inside a history line reads as a link in
@@ -17704,7 +17713,8 @@
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .research-overview__sub .live-panel-waitchip { min-height: 32px; font-size: 12.5px; }
         }
-        /* Tablet: the 260px panel; a long German title wraps beside its chip. */
+        /* Tablet: the 260px panel; a long German title wraps beside its chip (Awaiting action's
+           stays one line and its chip goes under it). */
         @media (min-width: 641px) and (max-width: 1024px) {
             .live-section__head .live-panel-chip { white-space: nowrap; }
         }
