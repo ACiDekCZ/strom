@@ -153,7 +153,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         ariaStatus: (label: string, facts: string) => `${label}: ${facts}`,
         ariaCross: (n: number) => `także w ${n} ${plPl(n, 'innym drzewie', 'innych drzewach', 'innych drzewach')}`,
         legend: {
-            marksTitle: 'Znaki kart',
+            marksTitle: 'Znaczniki kart',
             storyOwn: 'opowieść osoby',
             storyOther: 'opowieść małżeństwa lub szkic',
             action: 'czeka na decyzję (!, ≠, ?)',
