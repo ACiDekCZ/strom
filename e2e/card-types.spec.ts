@@ -410,6 +410,100 @@ for (const width of [1440, 390]) {
 }
 
 /**
+ * Far zoom (30–55 %, spec 066 P4 §7): the status mark grows to stay readable
+ * (0.85 / zoom), so the card's text keeps clear of the grown mark too — on
+ * every card in view, in every type, from the band's top to its bottom.
+ */
+async function farZoomClear(page: Page, around: string): Promise<void> {
+    for (const type of ['compact', 'normal', 'detailed', 'register', 'custom']) {
+        await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), type);
+        await expect(page.locator('body')).toHaveAttribute('data-card-density', type);
+        for (const scale of [0.54, 0.5, 0.4, 0.31]) {
+            await card(page, around).evaluate((el, s) => {
+                const c = el as HTMLElement;
+                const wx = parseFloat(c.style.left) + c.offsetWidth / 2;
+                const wy = parseFloat(c.style.top) + c.offsetHeight / 2;
+                window.Strom.ZoomPan.zoomAroundWorldPoint(wx, wy, s, 0, (t: number) => t);
+            }, scale);
+            await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
+            await expect(page.locator('#tree-canvas')).not.toHaveClass(/zoom-tiny/);
+            // Names are fitted a frame after the render: wait for that.
+            const clash = () => page.evaluate(() => {
+                const out: string[] = [];
+                const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+                for (const el of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')) {
+                    const markEl = el.querySelector<HTMLElement>(':scope > .card-status-mark');
+                    if (!markEl || markEl.offsetWidth === 0) continue;
+                    const mark = markEl.getBoundingClientRect();
+                    const body = el.querySelector('.card-body');
+                    if (!body) continue;
+                    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+                    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                        if (!n.textContent?.trim()) continue;
+                        const range = document.createRange();
+                        range.selectNodeContents(n);
+                        // A text cut with "…" is seen only inside the boxes that clip it.
+                        let clip = new DOMRect(-1e6, -1e6, 2e6, 2e6);
+                        for (let e = n.parentElement; e && e !== el; e = e.parentElement) {
+                            if (getComputedStyle(e).overflowX === 'visible') continue;
+                            const b = e.getBoundingClientRect();
+                            const l = Math.max(clip.left, b.left), t = Math.max(clip.top, b.top);
+                            clip = new DOMRect(l, t, Math.min(clip.right, b.right) - l, Math.min(clip.bottom, b.bottom) - t);
+                        }
+                        for (const raw of range.getClientRects()) {
+                            const l = Math.max(raw.left, clip.left), t = Math.max(raw.top, clip.top);
+                            const r = new DOMRect(l, t, Math.min(raw.right, clip.right) - l, Math.min(raw.bottom, clip.bottom) - t);
+                            if (r.width > 0 && r.height > 0 && hit(r, mark)) out.push(`${el.dataset.id}: "${n.textContent.trim()}"`);
+                        }
+                    }
+                }
+                return out;
+            });
+            await expect.poll(clash, { message: `${type} at ${scale}: text under the status mark` }).toEqual([]);
+            // The mark stays readable: at least 10px on screen.
+            expect((await card(page, around).locator(':scope > .card-status-mark').boundingBox())!.height).toBeGreaterThanOrEqual(10);
+        }
+    }
+}
+
+test('far zoom: the grown status mark over no text of any card in any type, the cards with ⇄ (spec 066 P4 §7)', async ({ page }) => {
+    await fullestCard(page, 1440);
+    // Long bottom rows: the places run to the card's edge in the types with details.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const place = 'Horní Lhota u Bystřice nad Pernštejnem';
+        for (const p of Object.values(dm.getData().persons)) {
+            if (p.firstName === 'Václav Bonifác') dm.updatePerson(p.id, { deathPlace: place });
+            if (p.firstName === 'Josef') dm.updatePerson(p.id, { birthPlace: place, deathDate: '1901', deathPlace: place });
+        }
+        window.Strom.TreeRenderer.render();
+    });
+    await farZoomClear(page, 'Václav');
+});
+
+test('far zoom: the grown status mark over no text of any card in any type, one tree without ⇄ (spec 066 P4 §7)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await page.evaluate(async () => {
+        const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+        const place = 'Horní Lhota u Bystřice nad Pernštejnem';
+        const persons = {
+            g1: P('g1', { firstName: 'Václav Bonifác', lastName: 'Kvapilík-Vlčinský', birthDate: '1800', birthPlace: place,
+                deathDate: '1870', deathPlace: place, partnerships: ['u1'], childIds: ['p1'], birthSourceIds: ['s1'] }),
+            g2: P('g2', { firstName: 'Anna Rozálie', lastName: 'Kvapilíková-Vlčinská', gender: 'female', birthDate: '1805', birthPlace: place,
+                deathDate: '1871', deathPlace: place, partnerships: ['u1'], childIds: ['p1'] }),
+            p1: P('p1', { firstName: 'Jan Nepomuk', lastName: 'Kvapilík-Vlčinský', birthDate: '1830', birthPlace: place, deathDate: '1890', deathPlace: place, parentIds: ['g1', 'g2'] }),
+        };
+        const partnerships = { u1: { id: 'u1', person1Id: 'g1', person2Id: 'g2', childIds: ['p1'], status: 'married', isPrimary: true } };
+        await window.Strom.DataManager.importAsNewTree({ persons, partnerships, sources: { s1: { id: 's1', title: 'Matrika' } } } as never, 'Vlčinští');
+        window.Strom.TreeRenderer.setFocus('p1' as never);
+    });
+    await expect(card(page, 'Václav')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await farZoomClear(page, 'Václav');
+});
+
+/**
  * Touch (spec 065 round 2, §9): the areas a finger hits on the fullest card,
  * the tree at 100 %, probed point by point with elementFromPoint — C the badge
  * 32 × 32, D the status mark 44 × 32 in the bottom-right corner (the story's
