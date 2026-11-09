@@ -87,7 +87,7 @@ import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
-import { bridgeGivesStale, staleTreeUrl, treeFileState, treeReplyHeads, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
+import { bridgeGivesEtag, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 
 /** What a research open needs to know from the file (or the bridge). */
@@ -854,7 +854,7 @@ function enqueueOpen<T>(job: () => Promise<T>): Promise<T | undefined> {
  * a bridge that sends its headers and then nothing more must not leave the
  * caller waiting for ever (a stuck read stopped all asking in that page).
  */
-export async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+export async function fetchWithTimeout(url: string, ms: number, headers?: Record<string, string>): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
@@ -864,6 +864,8 @@ export async function fetchWithTimeout(url: string, ms: number): Promise<Respons
             mode: 'cors',
             credentials: 'omit',
             cache: 'no-store',
+            // Only when asked for (a header outside the simple ones makes the browser ask the bridge first).
+            ...(headers ? { headers } : {}),
             signal: ctl?.signal,
         });
     } catch (err) {
@@ -879,22 +881,43 @@ export async function readStatusPart(url: string): Promise<unknown> {
     return res.json();
 }
 
+/** A tree this browser holds that is exactly a file of its research's bridge (its ETag kept). */
+interface HeldResearchFile {
+    treeId: TreeId;
+    /** The tag to ask with (`If-None-Match`). */
+    etag: string;
+    /** The tree as stored. */
+    data: StromData;
+    /** The head that file was written from ('' when not known). */
+    head: string;
+    mode: 'archive' | null;
+}
+
 /** The research's tree as fetched, with what the answer's headers say of it. */
 export interface FetchedTree extends TreeReplyHeads {
     text: string;
+    /** The file's `ETag` (a bridge with `ged.etag`; null without one, or when not readable here). */
+    etag: string | null;
+    /** 304: the bridge would send the very file `etag` asked with (`text` is then empty). */
+    notModified?: true;
 }
 
 /**
  * The research's tree from `url` (its bridge's `tree.ged`). `stale`: the last
  * tree the bridge built, at once (a bridge with `ged.stale`); without it the
- * bridge answers once the tree of its head now is built.
+ * bridge answers once the tree of its head now is built. `etag`: the tag of
+ * the file the tree holds (a bridge with `ged.etag`), sent as `If-None-Match`;
+ * a 304 then comes back as `notModified` with no text.
  */
-export async function fetchResearchTree(url: string, opts: { stale?: boolean } = {}): Promise<FetchedTree> {
-    const res = await fetchWithTimeout(opts.stale ? staleTreeUrl(url) : url, TREE_GED_TIMEOUT_MS);
+export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null } = {}): Promise<FetchedTree> {
+    const res = await fetchWithTimeout(opts.stale ? staleTreeUrl(url) : url, TREE_GED_TIMEOUT_MS,
+        opts.etag ? { 'If-None-Match': opts.etag } : undefined);
+    const get = (name: string): string | null => res.headers?.get(name) ?? null;
+    if (opts.etag && res.status === 304) return { text: '', notModified: true, etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = decodeGedcomFile(await res.arrayBuffer());
-    noteFamilyPartners(url, text);
-    return { text, ...treeReplyHeads(name => res.headers?.get(name) ?? null) };
+    noteFamilyPartners(url, researchFamilyPartners(text));
+    return { text, etag: treeReplyEtag(get), ...treeReplyHeads(get) };
 }
 
 export async function fetchGedcomText(url: string): Promise<string> {
@@ -904,11 +927,11 @@ export async function fetchGedcomText(url: string): Promise<string> {
 /** The partners of the research's families by the tree's address (its last read), for rows of `working[]` about a couple. */
 const familyPartners = new Map<string, Map<string, string[]>>();
 
-function noteFamilyPartners(url: string, text: string): void {
+function noteFamilyPartners(url: string, partners: Map<string, string[]>): void {
     familyPartners.delete(url);
     // The trees of a few researches at most (an old one goes first).
     while (familyPartners.size >= 4) familyPartners.delete(familyPartners.keys().next().value!);
-    familyPartners.set(url, researchFamilyPartners(text));
+    familyPartners.set(url, partners);
     // The live session's rows about a couple get their person now that the families are known.
     if (live && live.bridge.ged === url) live.working = workingWithFamilyPersons(live.working, familyPartners.get(url)!);
 }
@@ -1793,7 +1816,9 @@ export const researchUiMethods = uiModule({
      */
     async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean; noDialog?: boolean;
         /** "Load the new version" from the running research: the very same tree under a new head is only taken (no question). */
-        takeSame?: boolean }): Promise<TreeId | null> {
+        takeSame?: boolean;
+        /** Told back: whether the file's images were taken (the setting, or the choice in a question). */
+        taken?: { images: boolean } }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date, source.asOf);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1960,6 +1985,7 @@ export const researchUiMethods = uiModule({
         }
         // Images stay out when the user said so (the setting, or the checkbox).
         if (!includeImages) data = stripMedia(data);
+        if (opts.taken) opts.taken.images = includeImages;
 
         const previousTreeId = DataManager.getCurrentTreeId();
         let treeId: TreeId;
@@ -2531,6 +2557,76 @@ export const researchUiMethods = uiModule({
     // ==================== D. LIVE BRIDGE ====================
 
     /**
+     * The tree of that research this browser holds, when it is exactly a file
+     * its bridge sent with an ETag (`ged.etag`): readable, the tie's base the
+     * load gave, the tree unchanged since, its images taken as the setting
+     * says now. Null otherwise (the file is then asked without a tag).
+     */
+    async researchHeldFile(researchId: string): Promise<HeldResearchFile | null> {
+        const meta = TreeManager.findTreeByResearchId(researchId);
+        const link = meta?.research;
+        if (!meta || !link?.treeEtag || TreeManager.isTreeUnreadable(meta.id)) return null;
+        const data = await readTree(meta.id);
+        if (!data) return null;
+        const etag = storedTreeEtag(link, fingerprintLike(data, link.fingerprint), SettingsManager.isImportImages());
+        if (!etag) return null;
+        return { treeId: meta.id, etag, data, head: link.head ?? '', mode: link.mode ?? null };
+    },
+
+    /** Keep the tag of the file just loaded into `treeId` with its tie (only that research's, not a copy's). */
+    researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean): void {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || link.copy || link.id !== researchId.toLowerCase() || !link.fingerprint) return;
+        TreeManager.patchResearchLink(treeId, { treeEtag: { tag, head: link.head ?? '', fingerprint: link.fingerprint, images } });
+    },
+
+    /**
+     * The bridge would send the very file the tree holds (a 304 to its tag):
+     * what loading that file over the unchanged tree does, without the load —
+     * the tree opened, its tie set as a load sets it (on the file's `head`),
+     * nothing replaced (so no backup). Returns the tree, or null when it could
+     * not be opened.
+     */
+    async researchKeepHeldFile(held: HeldResearchFile, researchId: string, opts: { head: string; quiet?: boolean; noDialog?: boolean }): Promise<TreeId | null> {
+        const treeId = held.treeId;
+        const meta = TreeManager.getTreeMetadata(treeId);
+        const link = meta?.research;
+        if (!meta || !link) return null;
+        const previousTreeId = DataManager.getCurrentTreeId();
+        if (meta.isHidden) TreeManager.setTreeVisibility(treeId, false);
+        if (previousTreeId !== treeId) {
+            if (!await DataManager.switchTree(treeId)) return null;
+            TreeRenderer.restoreFromSession();
+        }
+        const head = opts.head || link.head || '';
+        const archive = link.mode === 'archive';
+        TreeManager.setResearchLink(treeId, {
+            id: researchId,
+            fingerprint: link.fingerprint,
+            syncedAt: new Date().toISOString(),
+            ...(head ? { head } : {}),
+            ...(archive ? { mode: 'archive' as const } : {}),
+            ...(link.treeEtag ? { treeEtag: { ...link.treeEtag, head } } : {}),
+        }, { agentless: this.researchAgentlessFor(researchId, archive ? { mode: 'archive' } : undefined) });
+        patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
+        this.researchKeepCopy(treeId, held.data);
+        const switched = previousTreeId !== treeId;
+        this.updateTreeSwitcher();
+        this.updateTreeManagerList();
+        await TreeRenderer.renderAsync();
+        if (switched) {
+            ZoomPan.centerOnFocusWithContext();
+            window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+        }
+        this.refreshSearch();
+        this.updateUrlTreeParam(treeId);
+        // Nothing loaded: the tree is the research's version as it is.
+        if (!opts.quiet && !opts.noDialog) this.showToast(strings.sync.stateInSync, 4000);
+        this.refreshResearchSyncUi();
+        return treeId;
+    },
+
+    /**
      * A ?live= from a research whose version is the one this tree builds on,
      * the tree changed since: nothing to receive — its bridge is known again
      * (the status just asked noted it) and what waits goes as usual. True when
@@ -2610,6 +2706,10 @@ export const researchUiMethods = uiModule({
             let text: string;
             // A bridge with `ged.stale` gives its last built tree at once; the tree's state is then that file's head.
             let reply: TreeReplyHeads | null = null;
+            // A bridge with `ged.etag`: the file's tag (kept once it is loaded), and the tree this browser holds
+            // when the bridge answered 304 to its tag (the very file it would send: nothing downloaded or parsed).
+            let etag: string | null = null;
+            let held: HeldResearchFile | null = null;
             try {
                 status = opts.resume || auto
                     ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
@@ -2623,13 +2723,22 @@ export const researchUiMethods = uiModule({
                     await this.showAlert(strings.research.liveNoTree, 'error');
                     return;
                 }
-                if (bridgeGivesStale(status.features)) {
-                    const got = await fetchResearchTree(bridge.ged, { stale: true });
-                    text = got.text;
-                    reply = got;
-                } else {
-                    text = await fetchGedcomText(bridge.ged);
+                const stale = bridgeGivesStale(status.features);
+                const tagged = bridgeGivesEtag(status.features);
+                const ask = tagged ? await this.researchHeldFile(status.treeId) : null;
+                let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag });
+                if (got.notModified) {
+                    // Still exactly that tree (nothing changed it meanwhile): kept. Else the file itself.
+                    const now = await this.researchHeldFile(status.treeId);
+                    if (now && now.etag === ask?.etag && now.treeId === ask.treeId) {
+                        held = now;
+                    } else {
+                        got = await fetchResearchTree(bridge.ged, { stale });
+                    }
                 }
+                text = got.text;
+                if (stale) reply = got;
+                if (tagged) etag = got.etag;
             } catch (err) {
                 console.warn('Connecting to the research bridge failed', err);
                 if (auto) {
@@ -2651,7 +2760,10 @@ export const researchUiMethods = uiModule({
                 if (await this.showResearchConnectFailed(err, { param: 'live', value: raw })) void this.startLiveFollow(raw);
                 return;
             }
-            const header = readResearchHeader(text);
+            // The tree held: what its file said is in its tie (the research, the head, the mode).
+            const header = held
+                ? { ...readResearchHeader(''), treeId: status.treeId, head: held.head || null, mode: held.mode }
+                : readResearchHeader(text);
             if (header.treeId && header.treeId !== status.treeId) {
                 if (auto) passive();
                 else await this.showAlert(strings.research.liveOtherTree, 'error');
@@ -2659,12 +2771,14 @@ export const researchUiMethods = uiModule({
             }
             let data: StromData;
             try {
-                data = convertToStrom(parseGedcom(text)).data;
+                data = held ? held.data : convertToStrom(parseGedcom(text)).data;
             } catch {
                 if (auto) passive();
                 else await this.showAlert(strings.gedcom.parseError, 'error');
                 return;
             }
+            // Its couples by the research's families (a row of `working[]` about a couple), as the file would say.
+            if (held) noteFamilyPartners(bridge.ged, treeFamilyPartners(held.data));
             const name = status.name || header.name || strings.research.defaultName;
             const file = reply ? treeFileState(reply, header.head, status.head) : { head: status.head, preparing: false, headNow: '' };
             // The research has nothing new beyond what this tree builds on, and the tree has changes it lacks
@@ -2678,11 +2792,17 @@ export const researchUiMethods = uiModule({
                 void this.adoptFromResearch(bridge.base);
                 return;
             }
-            const treeId = await this.applyResearch(
-                data,
-                { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode },
-                { head: file.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}) }
-            );
+            const taken = { images: SettingsManager.isImportImages() };
+            const treeId = held
+                ? await this.researchKeepHeldFile(held, status.treeId, { head: file.head, quiet: opts.resume, noDialog: !!auto })
+                : await this.applyResearch(
+                    data,
+                    { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode },
+                    { head: file.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}), taken }
+                );
+            // The file's tag kept with the tree it was loaded into (only a file sent with one: one built without
+            // all its images has none and is never kept as a finished state).
+            if (treeId && etag && !held) this.researchKeepTreeEtag(treeId, status.treeId, etag, taken.images);
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();
                 passive();
@@ -3080,10 +3200,12 @@ export const researchUiMethods = uiModule({
     async refreshLiveTree(s: LiveSession, head: string): Promise<StromData | null> {
         let text: string;
         let fileHead: string | null = null;
+        let etag: string | null = null;
         const ownHead = bridgeGivesStale(s.features);
         try {
             const got = await fetchResearchTree(s.bridge.ged);
             text = got.text;
+            if (bridgeGivesEtag(s.features)) etag = got.etag;
             if (ownHead) fileHead = got.head ?? readResearchHeader(text).head;
         } catch {
             // The probe after the stream error decides whether the bridge is gone.
@@ -3142,6 +3264,8 @@ export const researchUiMethods = uiModule({
         }, { agentless: this.researchAgentlessFor(s.researchId, header.mode === 'archive' ? { mode: 'archive' } : undefined) });
         if (!titlesIn) TreeManager.patchResearchLink(s.treeId, { titlesIn: undefined });
         this.researchKeepCopy(s.treeId, base);
+        // The file's tag (one sent with it): a reload while the research stays here keeps this tree (a 304).
+        if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, SettingsManager.isImportImages());
         return loaded;
     },
 

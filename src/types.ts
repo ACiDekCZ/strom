@@ -2190,6 +2190,25 @@ export interface ResearchLink {
      * Survives updates from the research.
      */
     titlesIn?: string;
+    /**
+     * The bridge's ETag of the file this tree was last loaded from (a bridge
+     * with `ged.etag`), with the base that load gave the tree: asked again
+     * with `If-None-Match` while the tree is still that load unchanged. Any
+     * other load replaces the link and drops it (setResearchLink).
+     */
+    treeEtag?: ResearchTreeEtag;
+}
+
+/** The ETag of the research's file a tree holds (ResearchLink.treeEtag). */
+export interface ResearchTreeEtag {
+    /** The `ETag` the bridge sent with the file, verbatim. */
+    tag: string;
+    /** The link's head the load gave (ResearchLink.head; '' without one). */
+    head: string;
+    /** The link's fingerprint the load gave (ResearchLink.fingerprint). */
+    fingerprint: string;
+    /** The file's images were taken (the import setting then): reused only while the setting is the same. */
+    images: boolean;
 }
 
 /** How changes go to the research (see ResearchLink.sendMode). */
