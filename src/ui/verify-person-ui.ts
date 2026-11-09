@@ -41,7 +41,7 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import { liveSession } from './research-ui.js';
 import { rodIndex } from './rod-view.js';
 import { uiModule } from './module.js';
-import { factWaitsForVerify, markVerifyPending } from './verify-ui.js';
+import { factWaitsForVerify, markVerifyPending, verifyKindName } from './verify-ui.js';
 
 export const VERIFY_PERSON_DIALOG_ID = 'verify-person-modal';
 export const VERIFY_BULK_DIALOG_ID = 'verify-bulk-modal';
@@ -110,7 +110,7 @@ function factValueText(holder: FactHolder, fact: string): string {
 
 /** The fact's name and value ("Birth · 3 Feb 1850, Horní Bříza"). */
 function factTitle(kind: string, holder: FactHolder, fact: string): string {
-    const name = strings.verify.kinds[kind] ?? kind;
+    const name = verifyKindName(kind);
     const value = factValueText(holder, fact);
     return value ? `${name} · ${value}` : name;
 }
@@ -394,7 +394,7 @@ export const verifyPersonMethods = uiModule({
             for (const f of state?.facts ?? []) if (f.offer.eid) byEid.set(f.offer.eid, f);
             st.rows = r.facts.map(f => {
                 const local = byEid.get(f.fact);
-                const title = local ? factTitle(f.kind, local.holder, local.fact) : (strings.verify.kinds[f.kind] ?? f.kind);
+                const title = local ? factTitle(f.kind, local.holder, local.fact) : verifyKindName(f.kind);
                 const record = verifyRecordText(f.record);
                 const how = f.how === 'read' ? strings.verify.howRead(record) : strings.verify.howSearch(record);
                 const step = local?.step ? reliabilityLabel(local.step) : '';

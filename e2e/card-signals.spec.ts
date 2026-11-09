@@ -1192,6 +1192,29 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         expect(verify.posts.at(-1)).toEqual({ route: 'verify/bulk', body: { scope: 'tree', order: 'ancestors' } });
     });
 
+    test('the preview names every fact the research sends by its name, never by its tag (OCCU → Occupation) (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const ged = verifyGed(undefined, ['1 OCCU kovář', '2 _STROM_STATUS lead', '2 _STROM_EID E0014']);
+        const facts = [
+            { fact: 'E0012', kind: 'BIRT', how: 'read', record: { source: 'S0001', title: 'Křestní matrika Čapkov', page: 'fol. 12' } },
+            { fact: 'E0014', kind: 'OCCU', how: 'search' },
+            // Facts the tree does not show: named by their tags all the same.
+            { fact: 'E0016', kind: 'CENS', how: 'search' },
+            { fact: 'E0017', kind: 'EDUC', how: 'search' },
+            { fact: 'E0018', kind: 'EVEN', how: 'search' },
+        ];
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: ged, statusExtra: { researches: [LINE] } });
+        await fakeVerify(page, bridge, { facts });
+        await openResearch(page, { ged });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.UI.showVerifyPersonDialog(id as never), jan);
+        const titles = page.locator('#verify-person-modal .vfy-row-title');
+        await expect(titles).toHaveCount(5);
+        await expect(titles).toHaveText([/^Birth/, 'Occupation', 'Census', 'Education', 'Other fact']);
+        for (const tag of ['BIRT', 'OCCU', 'CENS', 'EDUC', 'EVEN']) await expect(page.locator('#verify-person-modal')).not.toContainText(tag);
+    });
+
     test('the toast after a run of re-verification comes once per run', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         const { bridge } = await verifySetup(page, { verify: { waiting: 3, ...COUNTS, fix: FIX } });

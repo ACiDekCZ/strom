@@ -831,6 +831,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         details: 'Szczegóły',
         marriage: 'ślub',
         kinds: { BIRT: 'Urodzenie', CHR: 'Chrzest', BAPM: 'Chrzest', MARR: 'Ślub', DEAT: 'Zgon', BURI: 'Pogrzeb' } as Record<string, string>,
+        kindOther: 'Inna dana',
     },
 
     origin: {

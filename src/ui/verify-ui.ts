@@ -31,6 +31,7 @@ import {
 } from './status-tip.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
+import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -203,6 +204,28 @@ function stateFor(tip: Element | null, key: string): TipState | null {
 }
 
 // ==================== Words ====================
+
+/** A couple's fact tag → the couple's event it stands for (as the couple's events are named). */
+const COUPLE_KIND_TYPES: Readonly<Record<string, string>> = {
+    ENGA: 'engagement', MARB: 'banns', MARL: 'marriageLicence', MARC: 'marriageContract', MARS: 'marriageSettlement',
+    CENS: 'census', DIVF: 'divorceFiled', ANUL: 'annulment',
+};
+
+/**
+ * A fact the research names by its GEDCOM tag ("OCCU", "BIRT", "NAME"), in
+ * words as the app names it elsewhere ("Occupation", "Birth", "Name"); a tag
+ * the app has no name for reads "Other fact", never the bare tag.
+ */
+export function verifyKindName(kind: string): string {
+    const tag = kind.trim().toUpperCase();
+    const own = strings.verify.kinds[tag];
+    if (own) return own;
+    if (tag === 'DIV') return strings.fields.divorceRow;
+    const couple = COUPLE_KIND_TYPES[tag];
+    if (couple) return (strings.partnerEvents.types as Record<string, string>)[couple] ?? strings.verify.kindOther;
+    const label = researchFactLabel(tag);
+    return label && label !== tag ? label : strings.verify.kindOther;
+}
 
 /** A fact's name in the preview's header ("birth", "baptism"; German nouns keep their capital). */
 function factNameText(holder: FactHolder, fact: string): string {

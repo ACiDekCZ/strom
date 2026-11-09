@@ -1041,6 +1041,8 @@ const stringsEN = {
         details: 'Details',
         marriage: 'marriage',
         kinds: { BIRT: 'Birth', CHR: 'Christening', BAPM: 'Baptism', MARR: 'Marriage', DEAT: 'Death', BURI: 'Burial' } as Record<string, string>,
+        /** A fact the bridge names by a tag the app has no name for. */
+        kindOther: 'Other fact',
     },
 
     // "Originally from the family tree" under a fact the research changed, with Revert (spec 066 §3)
@@ -9116,6 +9118,7 @@ const stringsCZ: StringsType = {
         details: 'Podrobnosti',
         marriage: 'sňatek',
         kinds: { BIRT: 'Narození', CHR: 'Křest', BAPM: 'Křest', MARR: 'Sňatek', DEAT: 'Úmrtí', BURI: 'Pohřeb' } as Record<string, string>,
+        kindOther: 'Jiný údaj',
     },
 
     origin: {
@@ -17083,6 +17086,7 @@ const stringsDE: StringsType = {
         details: 'Details',
         marriage: 'Heirat',
         kinds: { BIRT: 'Geburt', CHR: 'Taufe', BAPM: 'Taufe', MARR: 'Heirat', DEAT: 'Tod', BURI: 'Bestattung' } as Record<string, string>,
+        kindOther: 'Andere Angabe',
     },
 
     origin: {
