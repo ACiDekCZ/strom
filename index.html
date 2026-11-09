@@ -1823,8 +1823,10 @@
         /* Row 1: full name, Strom Serif 15px/600. Staged fitting (JS measures
            once per render, see fitCardNames): step 0 = 15px; step 1 shrinks to
            14 then 13px (floor); step 2 breaks the name over two 12.5px lines and
-           shortens the meta to years only; step 3 (last resort) ellipsizes the
-           surname line. The full name always stays in the title/tooltip. */
+           shortens the meta to years only; step 3 puts a line still too wide on
+           rows of its own (T40, never "…": the card is laid out taller for them,
+           src/card-width.ts normalCardHeights). The Compact card ellipsizes
+           instead. The full name always stays in the title/tooltip. */
         .person-card .name {
             max-width: 100%;
             min-width: 0;
@@ -1844,8 +1846,8 @@
         /* Step 1: single-line font shrink. Floor is 13px — never smaller. */
         .person-card .name.name-fit-1 .name-text { font-size: 14px; }
         .person-card .name.name-fit-13 .name-text { font-size: 13px; }
-        /* Step 2: two lines (given name / surname), 12.5px. Each line clips and,
-           when it alone overflows, ellipsizes (step 3). */
+        /* Step 2: two lines (given name / surname), 12.5px. Step 3: a line too
+           wide holds its rows (.name-row, each measured to fit the column). */
         .person-card .name.name-fit-2lines .name-text {
             white-space: normal;
             font-size: 12.5px;
@@ -1855,8 +1857,13 @@
             display: block;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
+            text-overflow: clip;
             max-width: 100%;
+        }
+        .person-card .name.name-fit-2lines .name-row {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
         }
         /* Row 2: life-year range + place, 11px, tabular figures. --text-light
            (not --text-faint) so the small meta clears 4.5:1 in both themes. */
@@ -1870,7 +1877,8 @@
             text-overflow: ellipsis;
         }
         /* Meta shrinks to 10.5px (years only) when the name goes two-line, so
-           both rows still fit the unchanged 64px card. */
+           both rows still fit the unchanged 64px card (a name of more rows
+           makes the card taller, 14.375px a row). */
         .person-card .birth-date.meta-short { font-size: 10.5px; }
         /* The birth surname under a married surname ("roz. Dvořáková", Settings →
            Surname display "both"): a quiet 11/13px row between the name and the
@@ -12613,8 +12621,10 @@
             #tree-canvas.zoom-far { --far-mark-room: calc(17px / var(--tree-zoom, 1)); }
             body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body:not(.card-body--custom) > :not(.name),
             body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body:not(.card-body--custom) > .name:not(.name-fit-2lines),
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .name-fit-2lines .name-surname {
+            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .name-fit-2lines .name-surname:not(:has(.name-row)),
+            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .name-fit-2lines .name-surname > .name-row:last-of-type {
                 margin-right: max(28px, var(--far-mark-room));
+                text-overflow: ellipsis;
             }
             body:not(.view-mode-print)[data-card-density="compact"] #tree-canvas.zoom-far .person-card.has-status {
                 padding-right: max(36px, calc(8px + var(--far-mark-room)));
@@ -24526,6 +24536,11 @@
                 background: white !important;
                 border: 2px solid #999 !important;
             }
+            /* The 2px border takes 1px of padding a side, as on the focused
+               card: the text column keeps the width its name rows were
+               measured for (src/card-width.ts), nothing is clipped. */
+            body[data-card-density="normal"] .person-card { padding-left: 8px; padding-right: 8px; }
+            body[data-card-fields] .person-card { padding-left: 11px; padding-right: 11px; }
             .person-card.male {
                 border-color: #5b9bd5 !important;
                 color: #333 !important;

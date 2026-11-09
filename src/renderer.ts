@@ -27,6 +27,7 @@ import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateRe
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_LEFT, CARD_STATUS_MARK_ROOM, bottomRightPillsRoom,
+    cardNameMaxRows, normalCardHeights, normalCardNameRows, rowSeparators, NormalCardName, CARD_LOCK_NAME_ROOM,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { treeKnowsOrigin, CardStatusClass } from './reliability.js';
@@ -341,6 +342,12 @@ class TreeRendererClass {
      * person's own card height too (the layout's personHeights).
      */
     private customMetrics: CustomCardViewMetrics | null = null;
+    /**
+     * The Normal cards of the drawn view whose name takes more than two rows
+     * and their height (src/card-width.ts normalCardHeights, T40; null: none,
+     * every card 64px). The next render starts from them (usually the same).
+     */
+    private normalHeights: Map<PersonId, number> | null = null;
     /** The custom card's lines per drawn person, computed once per render. */
     private customLines = new Map<PersonId, CardLine[]>();
     /** The custom card lines' rows (src/card-width.ts customCardRows): what wraps, what is cut. */
@@ -735,6 +742,7 @@ class TreeRendererClass {
             ...this.config, ...size, spouseLineY, personHeights: undefined,
             ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth, cardHeight: this.customMetrics.cardHeight } : {}),
             ...(ownHeights && this.customMetrics?.personHeights ? { personHeights: this.customMetrics.personHeights } : {}),
+            ...(density === 'normal' && this.normalHeights ? { personHeights: this.normalHeights } : {}),
         };
         document.body.dataset.cardDensity = density;
         // The cards of details share one look (index.html body[data-card-fields]).
@@ -775,6 +783,24 @@ class TreeRendererClass {
             });
         } else {
             this.customMetrics = null;
+            // A Normal card whose name takes more than two rows is taller (T40):
+            // measured for the people laid out, laid out again when that changes
+            // a card's height.
+            if (density === 'normal') {
+                const heights = this.normalNameHeights(result.positions);
+                const measured: LayoutConfig = { ...this.config, personHeights: heights ?? undefined };
+                if (!sameCardSizes(this.config, measured, result.positions.keys())) {
+                    this.config = measured;
+                    result = this.computeTreeLayout(descendantsOnly, viewLinks);
+                } else this.config = measured;
+                this.normalHeights = heights;
+                // Measured before the card fonts were in: measure again once they are.
+                cardFontsPending()?.then(() => {
+                    if (seq !== this.renderSeq || SettingsManager.getCardDensity() !== 'normal') return;
+                    const again: LayoutConfig = { ...this.config, personHeights: this.normalNameHeights(this.positions) ?? undefined };
+                    if (!sameCardSizes(this.config, again, this.positions.keys())) this.render();
+                });
+            } else this.normalHeights = null;
             this.edgeRoomIds.clear();
             this.edgeRightIds.clear();
             this.edgeLeftIds.clear();
@@ -1344,6 +1370,8 @@ class TreeRendererClass {
     private customCardsOf(positions: Map<PersonId, Position>): CustomCardsMeasure {
         const data = DataManager.getData();
         const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
+        // The Detailed card shows the whole name on as many rows as it needs (T40), Register and Custom two at most.
+        const nameRows = cardNameMaxRows(SettingsManager.getCardDensity());
         // The years under the name say "1841 †" for one presumed dead, as the detailed card.
         const presumed = fields.years ? this.computePresumedDeceased() : null;
         const lines = new Map<PersonId, CardLine[]>();
@@ -1385,6 +1413,8 @@ class TreeRendererClass {
             entries.push({
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(birth ? { birth } : {}),
+                // A whole name on rows ends before the lock of a locked card (index.html, 5px).
+                ...(nameRows === 0 && DataManager.isPersonLocked(id) ? { nameReserve: CARD_LOCK_NAME_ROOM } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
                 ...(reserve || statusRoom ? { lastLineReserve: (reserve ? bottomRightPillsRoom(crossPill, siblingPill)
                     + (partnersPill ? CARD_EDGE_PILL_LEFT : 0) : 0) + (statusRoom ? CARD_STATUS_MARK_ROOM : 0) } : {}),
@@ -1394,7 +1424,7 @@ class TreeRendererClass {
         // The date column at most as wide as the language's ordinary dates; a longer date goes its own way.
         const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines, fields.style,
             cardDateReferences(fields.fullDate));
-        const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
+        const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style, nameRows);
         const measured = {
             lines, rows, wrapped: fields.lines !== 1, style: fields.style,
             heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds, edgeLeftIds, statusRoomIds,
@@ -1415,6 +1445,21 @@ class TreeRendererClass {
             return { ...measured, metrics: { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) } };
         }
         return { ...measured, metrics: { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth) } };
+    }
+
+    /**
+     * The Normal cards among `positions` whose name takes more than two rows,
+     * with their height (src/card-width.ts normalCardHeights); null: none.
+     */
+    private normalNameHeights(positions: ReadonlyMap<PersonId, Position>): Map<PersonId, number> | null {
+        const names = new Map<PersonId, NormalCardName>();
+        for (const id of positions.keys()) {
+            const person = DataManager.getPerson(id);
+            if (!person) continue;
+            const { given, surname } = shownNameParts(person, '?');
+            names.set(id, { given, surname, avatar: !person.isPlaceholder });
+        }
+        return normalCardHeights(names, measureCardTexts);
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -4288,6 +4333,7 @@ class TreeRendererClass {
         // The ⇄ pills of all the cards in one matching pass (findCrossTreeMatches below reads the cache).
         this.prepareCrossTreePills(this.positions.keys(), allTrees);
 
+        const normalCard = SettingsManager.getCardDensity() === 'normal';
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -4348,7 +4394,10 @@ class TreeRendererClass {
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
             // The height "by content": the card's own height (top-aligned in its band).
-            if (this.config.personHeights) card.style.setProperty('--card-custom-h', `${this.cardHeightOf(id)}px`);
+            // A Normal card whose name takes more than two rows: its own height (T40).
+            if (this.config.personHeights && normalCard) {
+                if (this.config.personHeights.has(id)) card.style.height = `${this.cardHeightOf(id)}px`;
+            } else if (this.config.personHeights) card.style.setProperty('--card-custom-h', `${this.cardHeightOf(id)}px`);
             card.dataset.id = id;
             if (ghostOf) {
                 card.dataset.viewGhost = '';
@@ -5062,8 +5111,10 @@ class TreeRendererClass {
      *
      * Steps (see the .name-fit-* CSS): 0 = 15px; 1 = 14px then 13px (floor);
      * 2 = two lines (given name / surname, 12.5px) plus the meta shortened to
-     * years only; 3 = ellipsis on whichever line still overflows. The full name
-     * always stays in the name-text title attribute.
+     * years only; 3 = a line still too wide goes on rows of its own, never
+     * shortened (T40: src/card-width.ts normalCardNameRows, the rows the card's
+     * height was laid out for, normalCardHeights). The Compact card ends in
+     * "…" instead. The full name always stays in the name-text title attribute.
      */
     private fitCardNames(canvas: HTMLElement, attempt = 0, only?: readonly HTMLElement[]): void {
         if (canvas.clientWidth === 0 && attempt < 5) {
@@ -5093,7 +5144,7 @@ class TreeRendererClass {
             const full = `${given} ${surname}`.trim();
 
             // Start from a clean single-line state (idempotent across retries).
-            nameEl.classList.remove('name-fit-1', 'name-fit-13', 'name-fit-2lines');
+            nameEl.classList.remove('name-fit-1', 'name-fit-13', 'name-fit-2lines', 'name-fit-wrap');
             if (textEl.dataset.split === '1') {
                 textEl.textContent = full;
                 delete textEl.dataset.split;
@@ -5150,27 +5201,42 @@ class TreeRendererClass {
         }
 
         // Step 2: two lines (break between given name and surname) + years-only meta.
-        for (const { nameEl, textEl, given, surname, meta, metaText } of left) {
+        // Step 3: a line wider than the column on rows of its own (the rows the
+        // card's height was laid out for; between them the space the name had).
+        const rowsOf = normalCardNameRows(left.map(it => ({ given: it.given, surname: it.surname,
+            avatar: !!it.nameEl.closest('.person-card')?.querySelector('.card-avatar') })), measureCardTexts);
+        const lineOf = (cls: string, text: string, rows: readonly string[]): HTMLElement => {
+            const line = document.createElement('span');
+            line.className = `name-line ${cls}`;
+            if (rows.length <= 1) {
+                line.textContent = text;
+                return line;
+            }
+            const gaps = rowSeparators(text, rows);
+            rows.forEach((r, i) => {
+                if (i > 0 && gaps[i - 1]) line.appendChild(document.createTextNode(gaps[i - 1]));
+                const row = document.createElement('span');
+                row.className = 'name-row';
+                row.textContent = r;
+                line.appendChild(row);
+            });
+            return line;
+        };
+        left.forEach(({ nameEl, textEl, given, surname, meta, metaText }, i) => {
             nameEl.classList.remove('name-fit-13');
             nameEl.classList.add('name-fit-2lines');
-            const givenSpan = document.createElement('span');
-            givenSpan.className = 'name-line name-given';
-            givenSpan.textContent = given;
-            const surnameSpan = document.createElement('span');
-            surnameSpan.className = 'name-line name-surname';
-            surnameSpan.textContent = surname;
+            const rows = rowsOf[i];
+            if (rows.given.length > 1 || rows.surname.length > 1) nameEl.classList.add('name-fit-wrap');
             textEl.textContent = '';
-            textEl.appendChild(givenSpan);
-            textEl.appendChild(surnameSpan);
+            textEl.appendChild(lineOf('name-given', given, rows.given));
+            textEl.appendChild(lineOf('name-surname', surname, rows.surname));
             textEl.dataset.split = '1';
             if (meta && metaText && meta.dataset.years !== undefined) {
                 meta.dataset.full = metaText.textContent ?? '';
                 metaText.textContent = meta.dataset.years;
                 meta.classList.add('meta-short');
             }
-        }
-        // Step 3 (ellipsis on an overflowing line) is handled by the
-        // .name-line { text-overflow: ellipsis } CSS.
+        });
         this.fitCardMetaYears(items);
         this.fitCardBirths(canvas, only);
     }

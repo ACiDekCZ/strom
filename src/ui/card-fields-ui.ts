@@ -23,7 +23,7 @@ import {
     cardLineHtml, cardYears, cardDateReferences, isFieldCardDensity, CARD_DENSITIES, CardPresetKey, cardTypeForKey,
     customCardSize, matchCardPreset, presetAsCustom,
 } from '../card-fields.js';
-import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
+import { CardHead, cardNameMaxRows, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
 
 const esc = (text: string): string => text.replace(/[&<>"']/g, c =>
@@ -106,7 +106,7 @@ function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | un
     const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style,
         cardDateReferences(fields.fullDate));
     const metrics = { ...own, cardWidth: viewWidth ?? own.cardWidth };
-    const { rows, heights, heads } = customCardRows([entry], metrics, measureCardTexts, fields.lines, fields.style);
+    const { rows, heights, heads } = customCardRows([entry], metrics, measureCardTexts, fields.lines, fields.style, cardNameMaxRows(density));
     const wrapped = fields.lines !== 1;
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
         cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style, !!rows.get(l)?.longDate)).join('')}</div>`;
