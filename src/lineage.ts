@@ -938,16 +938,35 @@ export function rodOfPersonForCrumbs(index: LineageIndex, personId: PersonId): C
 export function rodLabel(rod: Rod, all: readonly Rod[], data?: StromData): string {
     const key = surnameKey(rod.surname);
     const peers = all.filter(r => r.id !== rod.id && surnameKey(r.surname) === key && (rod.small || !r.small));
+    return labelAmong(rod, peers, data, rodPlaceKey, r => founderFirstName(r, data));
+}
+
+/** The key of the place a lineage lived most ('' with no place). */
+function rodPlaceKey(r: Rod): string {
+    return r.places[0] ? placeKey(r.places[0].name) : '';
+}
+
+/** The founder's first name as the labels compare it. */
+function founderFirstName(r: Rod, data?: StromData): string {
+    return (data?.persons[r.founderId]?.firstName ?? '').trim();
+}
+
+/** rodLabel's rule over the peers already found (`placeOf`, `firstOf`: the peers' keys, possibly remembered). */
+function labelAmong(
+    rod: Rod,
+    peers: readonly Rod[],
+    data: StromData | undefined,
+    placeOf: (r: Rod) => string,
+    firstOf: (r: Rod) => string,
+): string {
     if (!peers.length || !rod.surname) return rod.surname;
     const place = rod.places[0]?.name;
     const pk = place ? placeKey(place) : '';
-    const placeOf = (r: Rod): string => r.places[0] ? placeKey(r.places[0].name) : '';
     if (pk && !peers.some(r => placeOf(r) === pk)) return `${rod.surname} (${place})`;
     const year = rod.founderYear;
     if (year != null && !peers.some(r => r.founderYear === year)) return `${rod.surname} (${year})`;
     const first = (data ?? null)?.persons[rod.founderId]?.firstName?.trim() ?? '';
     if (first) {
-        const firstOf = (r: Rod): string => (data?.persons[r.founderId]?.firstName ?? '').trim();
         if (!peers.some(r => firstOf(r) === first) || year == null) return `${rod.surname} (${first})`;
         return `${rod.surname} (${first}, ${year})`;
     }
@@ -955,10 +974,36 @@ export function rodLabel(rod: Rod, all: readonly Rod[], data?: StromData): strin
     return pk ? `${rod.surname} (${place})` : rod.surname;
 }
 
-/** Every lineage's label, by id (see rodLabel). */
+/**
+ * Every lineage's label, by id (see rodLabel). The same rule with each
+ * surname's lineages found once and each lineage's keys computed once: a tree
+ * of a thousand lineages no longer compares every one with every other.
+ */
 export function rodLabels(index: LineageIndex): Map<RodId, string> {
     const all = rods(index);
-    return new Map(all.map(r => [r.id, rodLabel(r, all, index.data)]));
+    const data = index.data;
+    // The lineages of each surname key, in the order of `all` (as rodLabel's filter keeps them).
+    const keys = all.map(r => surnameKey(r.surname));
+    const byKey = new Map<string, Rod[]>();
+    all.forEach((r, i) => {
+        const group = byKey.get(keys[i]);
+        if (group) group.push(r);
+        else byKey.set(keys[i], [r]);
+    });
+    const remembered = (f: (r: Rod) => string): ((r: Rod) => string) => {
+        const seen = new Map<Rod, string>();
+        return (r) => {
+            let v = seen.get(r);
+            if (v === undefined) { v = f(r); seen.set(r, v); }
+            return v;
+        };
+    };
+    const placeOf = remembered(rodPlaceKey);
+    const firstOf = remembered(r => founderFirstName(r, data));
+    return new Map(all.map((rod, i) => {
+        const peers = byKey.get(keys[i])!.filter(r => r.id !== rod.id && (rod.small || !r.small));
+        return [rod.id, labelAmong(rod, peers, data, placeOf, firstOf)];
+    }));
 }
 
 /** A place a lineage lived in, over time (the book's "Where the line lived", §5.3). */
