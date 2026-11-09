@@ -428,3 +428,48 @@ describe('family the research gives as "other", and persons found through relati
         expect(carryPropose(s, READ, baptism(), data).persons.p1).toMatchObject({ choice: 'link', target: '' });
     });
 });
+
+describe('a match that rests on a name read uncertainly (1109)', () => {
+    /** The tree with a godfather Franciszek Krawczyk the research knows as P0007. */
+    function withGodfather(): StromData {
+        const data = tree();
+        const k = person('k', 'Franciszek', 'Krawczyk', 'male', { refn: 'P0007' });
+        return { ...data, persons: { ...data.persons, k } } as StromData;
+    }
+    const godfather = (extra: Partial<ReadPerson>): ReadEntry => ({
+        ...baptism(),
+        persons: baptism().persons.map(p => p.ref === 'p4'
+            ? rp('p4', 'godparent', 'Franciszek', 'Krawczyk', { match: [{ person: 'P0007', why: 'name', score: 0.8 }], ...extra })
+            : p),
+    });
+
+    it('a godfather the research matches by a surname read uncertainly: No, the match kept for Link', () => {
+        const s = initialPropose('D20261019153012-a1b2', godfather({ uncertain: ['surname'] }), withGodfather());
+        expect(s.persons.p4).toMatchObject({ choice: 'skip', target: '' });
+        expect(s.persons.p4.candidate).toMatchObject({ id: 'k', byResearch: true });
+    });
+
+    it('the same match by a surname read surely links as before', () => {
+        const s = initialPropose('D20261019153012-a1b2', godfather({}), withGodfather());
+        expect(s.persons.p4).toMatchObject({ choice: 'link', target: 'k' });
+    });
+
+    it('a parent matched by an uncertain surname alone: No; matched by the partner as well: Link as before', () => {
+        const entry: ReadEntry = {
+            ...baptism(),
+            persons: baptism().persons.map(p => p.ref === 'p2' ? { ...p, uncertain: ['surname'] }
+                : p.ref === 'p3' ? { ...p, uncertain: ['surname'] } : p),
+        };
+        const s = initialPropose('D20261019153012-a1b2', entry, tree());
+        // Václav: the research's match by the name only.
+        expect(s.persons.p2).toMatchObject({ choice: 'skip', target: '' });
+        expect(s.persons.p2.candidate?.id).toBe('v');
+        // Anna: by the name and by her husband (the spouse relation).
+        expect(s.persons.p3).toMatchObject({ choice: 'link', target: 'a' });
+    });
+
+    it('an uncertain field that is not a name (the occupation) leaves the match as it was', () => {
+        const s = initialPropose('D20261019153012-a1b2', godfather({ uncertain: ['occupation'] }), withGodfather());
+        expect(s.persons.p4).toMatchObject({ choice: 'link', target: 'k' });
+    });
+});
