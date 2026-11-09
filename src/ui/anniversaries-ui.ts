@@ -16,6 +16,7 @@ import { TreeManager } from '../tree-manager.js';
 import { getTreesDataForMatching } from '../cross-tree.js';
 import {
     upcomingAnniversaries, onThisDay, Anniversary, OnThisDayEvent,
+    anniversaryDotLit, anniversaryListFingerprint, localDayKey, AnniversariesSeen,
 } from '../anniversaries.js';
 import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
@@ -25,6 +26,25 @@ import { shownNameOrEmpty } from '../person-name.js';
 export const ANNIVERSARY_SOON_DAYS = 7;
 /** Days ahead the anniversaries panel lists. */
 export const ANNIVERSARY_LIST_DAYS = 30;
+
+/** Where the device keeps what the anniversaries list held when last opened, per tree (T51). */
+function seenKey(treeId: string): string {
+    return `strom-ann-seen-${treeId}`;
+}
+
+function readSeen(treeId: string | null): AnniversariesSeen | null {
+    if (!treeId) return null;
+    try {
+        const raw = localStorage.getItem(seenKey(treeId));
+        if (!raw) return null;
+        const v = JSON.parse(raw) as Partial<AnniversariesSeen>;
+        return typeof v.day === 'string' && typeof v.list === 'string' ? { day: v.day, list: v.list } : null;
+    } catch { return null; }
+}
+
+function soonAnniversaries(today: Date): Anniversary[] {
+    return upcomingAnniversaries(DataManager.getData(), today, ANNIVERSARY_SOON_DAYS, SettingsManager.isDeathAnniversariesEnabled());
+}
 
 function personName(p?: Person): string {
     return p ? shownNameOrEmpty(p) : '';
@@ -78,6 +98,9 @@ export const anniversariesUiMethods = uiModule({
         });
 
         modal.classList.add('active');
+        // Opened: the menu's dot goes out until the list changes or another day comes (T51).
+        this.markAnniversariesSeen();
+        this.refreshActionMenuBadges();
     },
 
     closeAnniversariesDialog(): void {
@@ -187,7 +210,29 @@ export const anniversariesUiMethods = uiModule({
     /** Count of anniversaries within ANNIVERSARY_SOON_DAYS, for the menu badge (0 = none). */
     anniversaryBadgeCount(): number {
         if (DataManager.isViewMode()) return 0;
-        return upcomingAnniversaries(DataManager.getData(), new Date(), ANNIVERSARY_SOON_DAYS, SettingsManager.isDeathAnniversariesEnabled()).length;
+        return soonAnniversaries(new Date()).length;
+    },
+
+    /**
+     * Whether the menu's anniversaries dot is lit (T51): anniversaries in the
+     * next days that have not been looked at today in the same shape. The
+     * count on the Anniversaries row does not depend on it.
+     */
+    anniversaryDotLit(): boolean {
+        if (DataManager.isViewMode()) return false;
+        const today = new Date();
+        return anniversaryDotLit(soonAnniversaries(today), today, readSeen(DataManager.getCurrentTreeId()));
+    },
+
+    /** Remember on this device what the list held when opened today (T51). */
+    markAnniversariesSeen(): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (DataManager.isViewMode() || !treeId) return;
+        const today = new Date();
+        const seen: AnniversariesSeen = { day: localDayKey(today), list: anniversaryListFingerprint(soonAnniversaries(today)) };
+        try {
+            localStorage.setItem(seenKey(treeId), JSON.stringify(seen));
+        } catch { /* no storage: the dot stays as before */ }
     },
 
     /** What the menu badge's number means ("3 anniversaries in the next 7 days"): its tooltip and spoken name. */

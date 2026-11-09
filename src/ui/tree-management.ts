@@ -305,10 +305,12 @@ export const treeManagementMethods = uiModule({
      */
     refreshActionMenuBadges(): void {
         const count = this.anniversaryBadgeCount();
+        // The dot goes out once the anniversaries were opened, until their list changes or a new day (T51).
+        const annDot = count > 0 && this.anniversaryDotLit();
         // The Research button and menu (its own signal); the ⋯ dot is the anniversaries' only.
         const researchSignal = this.refreshResearchMenu();
         const dot = document.getElementById('actions-menu-dot');
-        if (dot) dot.style.display = count > 0 ? 'block' : 'none';
+        if (dot) dot.style.display = annDot ? 'block' : 'none';
         // The "More" tab carries both: there the research group sits in its sheet (a narrow window with a mouse).
         // Changes waiting for a research that is not running: their number on the tab, in place of the dot (audit 017 a-D6).
         const resting = this.researchRestingWaitingCount();
@@ -320,7 +322,7 @@ export const treeManagementMethods = uiModule({
             else moreCount.removeAttribute('title');
         }
         const moreDot = document.getElementById('bottom-bar-more-dot');
-        if (moreDot) moreDot.style.display = resting === 0 && (count > 0 || researchSignal !== '') ? 'block' : 'none';
+        if (moreDot) moreDot.style.display = resting === 0 && (annDot || researchSignal !== '') ? 'block' : 'none';
         this.renderActionsExportReminder();
         // Count badge on the Anniversaries row; its tooltip and the row's
         // spoken name say what the number counts (the next days, T33).

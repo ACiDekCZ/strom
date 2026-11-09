@@ -185,3 +185,70 @@ test('the tree overview writes an anniversary day first in English ("15 May")', 
     const month = now.toLocaleDateString('en-GB', { month: 'long' });
     await expect(date).toHaveText(`${now.getDate()} ${month}`);
 });
+
+/**
+ * T51: the menu's dot goes out once the anniversaries were opened, stays out
+ * after a reload, and is lit again when their list changes or on another day.
+ * The number on the Anniversaries row stays. Fixed clock, mid-afternoon.
+ */
+test('the anniversaries dot goes out once opened; back on a changed list or the next day (T51)', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 5, 15, 14, 30));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: '1980-06-17' });
+    await waitForPersist(page, 'Soon');
+    const dot = page.locator('#actions-menu-dot');
+    await expect(dot).toBeVisible();
+
+    const openFromMenu = async () => {
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-ann-row').click();
+        await expect(page.locator('#anniversaries-modal')).toBeVisible();
+        await page.locator('#anniversaries-modal .close-btn').click();
+        await expect(page.locator('#anniversaries-modal')).toBeHidden();
+    };
+    await openFromMenu();
+    await expect(dot).toBeHidden();
+    // The count on the Anniversaries row stays.
+    await page.locator('.actions-menu-btn').click();
+    await expect(page.locator('#actions-ann-badge')).toHaveText('1');
+    await page.keyboard.press('Escape');
+
+    await page.reload();
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await expect(page.locator('#actions-ann-badge')).toHaveText('1');
+    await expect(dot).toBeHidden();
+
+    // Another anniversary in the next days: a different list, the dot again.
+    await page.evaluate(() => {
+        window.Strom.DataManager.createPerson({ firstName: 'Also', lastName: 'Novak', gender: 'male', birthDate: '1975-06-19' });
+        window.Strom.UI.refreshActionMenuBadges();
+    });
+    await expect(dot).toBeVisible();
+    await openFromMenu();
+    await expect(dot).toBeHidden();
+
+    // The next day: the same anniversaries, the dot again.
+    await page.clock.setFixedTime(new Date(2026, 5, 16, 9, 15));
+    await page.reload();
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await expect(page.locator('#actions-ann-badge')).toHaveText('2');
+    await expect(dot).toBeVisible();
+});
+
+test('phone: opening the anniversaries from the More sheet puts out the More tab\'s dot (T51)', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 5, 15, 14, 30));
+    await page.setViewportSize({ width: 390, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: '1980-06-17' });
+    await waitForPersist(page, 'Soon');
+    const moreDot = page.locator('#bottom-bar-more-dot');
+    await expect(moreDot).toBeVisible();
+    await page.locator('#bb-view-more').click();
+    const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Anniversaries' });
+    await expect(row.locator('.tree-switcher-badge')).toHaveText('1');
+    await row.click();
+    await expect(page.locator('#anniversaries-modal')).toBeVisible();
+    await page.locator('#anniversaries-modal .close-btn').click();
+    await expect(moreDot).toBeHidden();
+});

@@ -168,3 +168,44 @@ export function onThisDay(data: StromData, today: Date): OnThisDayEvent[] {
 
     return out.sort((a, b) => b.years - a.years);
 }
+
+/** The local calendar day of `d` as "YYYY-MM-DD" (the anniversaries' own clock, not UTC). */
+export function localDayKey(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * A short fingerprint of an anniversary list: who, what and on which day (T51).
+ * Order-independent; a person added, a date changed or a type switched gives
+ * another fingerprint, the same list on another day keeps it.
+ */
+export function anniversaryListFingerprint(items: readonly Anniversary[]): string {
+    const text = items
+        .map(i => `${i.type}|${i.personIds.join(',')}|${localDayKey(i.date)}`)
+        .sort()
+        .join(';');
+    // FNV-1a, 32 bits: enough to tell two lists of one tree apart.
+    let h = 0x811c9dc5;
+    for (let k = 0; k < text.length; k++) {
+        h ^= text.charCodeAt(k);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return `${items.length}-${h.toString(36)}`;
+}
+
+/** What was on the anniversaries list when it was last opened, and on which day. */
+export interface AnniversariesSeen {
+    day: string;
+    list: string;
+}
+
+/**
+ * The menu's anniversaries dot (T51): lit while anniversaries are coming up,
+ * until the list is opened; lit again on another day or when the list differs
+ * from the one opened.
+ */
+export function anniversaryDotLit(items: readonly Anniversary[], today: Date, seen: AnniversariesSeen | null): boolean {
+    if (items.length === 0) return false;
+    if (!seen) return true;
+    return seen.day !== localDayKey(today) || seen.list !== anniversaryListFingerprint(items);
+}

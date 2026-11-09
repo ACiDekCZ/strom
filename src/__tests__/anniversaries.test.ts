@@ -3,7 +3,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { upcomingAnniversaries, onThisDay } from '../anniversaries.js';
+import {
+    upcomingAnniversaries, onThisDay, anniversaryDotLit, anniversaryListFingerprint, localDayKey,
+} from '../anniversaries.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender } from '../types.js';
 
 interface POpts {
@@ -130,5 +132,57 @@ describe('death anniversaries (opt-in)', () => {
         // With the setting on, the milestone is NOT duplicated as a plain death.
         const on = upcomingAnniversaries(data, today, 30, true);
         expect(on.filter(a => a.personIds[0] === 'p1' && a.daysUntil === ms[0].daysUntil)).toHaveLength(1);
+    });
+});
+
+describe('the menu dot after the anniversaries were opened (T51)', () => {
+    // Mid-afternoon local time: a day key must not slip across midnight UTC.
+    const NOW = new Date(2026, 5, 15, 14, 30);
+    const anna = person('a', 'Anna', 'female', { birthDate: '1990-06-17' });
+    const jan = person('j', 'Jan', 'male', { birthDate: '1985-06-19' });
+    const seenNow = (d: StromData, now = NOW) =>
+        ({ day: localDayKey(now), list: anniversaryListFingerprint(upcomingAnniversaries(d, now, 7)) });
+
+    it('is lit while anniversaries are coming up and the list was never opened', () => {
+        expect(anniversaryDotLit(upcomingAnniversaries(data([anna]), NOW, 7), NOW, null)).toBe(true);
+    });
+
+    it('stays out without anniversaries, opened or not', () => {
+        expect(anniversaryDotLit([], NOW, null)).toBe(false);
+    });
+
+    it('goes out once opened, the same day and the same list (later that day too)', () => {
+        const d = data([anna, jan]);
+        const seen = seenNow(d);
+        const evening = new Date(2026, 5, 15, 23, 10);
+        expect(anniversaryDotLit(upcomingAnniversaries(d, NOW, 7), NOW, seen)).toBe(false);
+        expect(anniversaryDotLit(upcomingAnniversaries(d, evening, 7), evening, seen)).toBe(false);
+    });
+
+    it('is lit again the next day, though the list is the same', () => {
+        const d = data([anna]);
+        const seen = seenNow(d);
+        const tomorrow = new Date(2026, 5, 16, 9, 15);
+        const items = upcomingAnniversaries(d, tomorrow, 7);
+        expect(anniversaryListFingerprint(items)).toBe(seen.list);
+        expect(anniversaryDotLit(items, tomorrow, seen)).toBe(true);
+    });
+
+    it('is lit again when the list changes: a new anniversary, a date moved, one gone', () => {
+        const seen = seenNow(data([anna]));
+        expect(anniversaryDotLit(upcomingAnniversaries(data([anna, jan]), NOW, 7), NOW, seen)).toBe(true);
+        const moved = person('a', 'Anna', 'female', { birthDate: '1990-06-18' });
+        expect(anniversaryDotLit(upcomingAnniversaries(data([moved]), NOW, 7), NOW, seen)).toBe(true);
+        const seenBoth = seenNow(data([anna, jan]));
+        expect(anniversaryDotLit(upcomingAnniversaries(data([anna]), NOW, 7), NOW, seenBoth)).toBe(true);
+    });
+
+    it('the fingerprint does not depend on the order of the list', () => {
+        const items = upcomingAnniversaries(data([anna, jan]), NOW, 7);
+        expect(anniversaryListFingerprint([...items].reverse())).toBe(anniversaryListFingerprint(items));
+    });
+
+    it('the day key is the local calendar day', () => {
+        expect(localDayKey(new Date(2026, 0, 5, 0, 30))).toBe('2026-01-05');
     });
 });
