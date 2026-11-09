@@ -1319,6 +1319,11 @@ interface GedcomFamily {
      * otherwise.
      */
     unionEvents: { type: 'marriage' | 'divorce'; date: string }[];
+    /**
+     * The research's file: the wedding is its first MARR alone, dated or not,
+     * never another one's date (a further one is the research's own record of it).
+     */
+    firstMarriageOnly?: boolean;
     note: string;
     /** Standard facts with no field of their own — folded into the note. */
     noteFacts: RawNoteFact[];
@@ -2073,7 +2078,7 @@ function resolveUnionStatus(fam: GedcomFamily): {
     const divorcedAtAll = divorces.length > 0 || fam.divorced || !!fam.divorceDate;
     // The union began at the FIRST marriage; a remarriage is a later chapter of
     // the same couple, not a new start date.
-    const startDate = marriages.find(e => e.date)?.date ?? fam.marriageDate;
+    const startDate = fam.firstMarriageOnly ? fam.marriageDate : marriages.find(e => e.date)?.date ?? fam.marriageDate;
 
     if (!divorcedAtAll) return { status: 'married', startDate, endDate: '', remarriage: null };
 
@@ -2458,6 +2463,15 @@ export function parseGedcom(content: string): ParsedGedcom {
      * hang level-3 lines (PAGE, RELA, CONT) on.
      */
     let currentFactSubTag: string | null = null;
+    /**
+     * The `1 MARR` / `1 DIV` being read is not the family's first of its kind.
+     * Its re-verification, id and origin never become the fact's: the fact is
+     * the first record's. In the research's file (which keeps one per record
+     * it joined) the fact is the first record's alone: a later one gives it
+     * no date, place, status or detail either (the research reads a further
+     * one missing from what the app sends as the shape of the union).
+     */
+    let laterUnionRecord = false;
     let currentSource: RawSource | null = null;
     /** The source record's first AUTH is being read (its CONT/CONC lines join Source.author). */
     let readingAuthor = false;
@@ -2610,6 +2624,10 @@ export function parseGedcom(content: string): ParsedGedcom {
     };
     /** Where a finished detail goes: its field (an age in the UI language), else the fact's note, labelled. */
     const detailTarget = (tag: string, partner?: 'HUSB' | 'WIFE'): ((text: string) => void) | null => {
+        // The research's later record of a wedding or a divorce: its age or
+        // address is neither the fact's nor a line of the note (sent back, the
+        // note would grow by it on every round).
+        if (stromResearch && laterUnionRecord && currentType === 'FAM' && !currentFamEvent) return () => {};
         const sink = factDetailSink();
         const field = factDetailField(tag, partner);
         if (!sink && !field) return null;
@@ -2722,7 +2740,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             if (currentFamEvent) return currentFamEvent.origin ??= fresh();
             const fam = currentRecord as GedcomFamily;
             const fact: RawCoupleFact | null = currentSubTag === 'MARR' ? 'marriage' : currentSubTag === 'DIV' ? 'divorce' : null;
-            return fact ? ((fam.factOrigins ??= {})[fact] ??= fresh()) : null;
+            // A family's further MARR / DIV: the fact is the first one's (laterUnionRecord).
+            return fact && !laterUnionRecord ? ((fam.factOrigins ??= {})[fact] ??= fresh()) : null;
         }
         return null;
     };
@@ -3237,6 +3256,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     childRels: new Map(),
                     noteFacts: [],
                     recordLine: rec.src,
+                    ...(stromResearch ? { firstMarriageOnly: true } : {}),
                 };
                 currentType = 'FAM';
                 currentSource = null;
@@ -3450,6 +3470,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentFamEvent = null;
                 currentFamEventSubTag = null;
                 currentFactSubTag = null;
+                laterUnionRecord = false;
                 currentStory = null;
                 currentStorySubTag = null;
                 currentResearch = null;
@@ -3714,6 +3735,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'DIV':
                             // A bare DIV (no date sub-record) still means divorced.
                             fam.divorced = true;
+                            laterUnionRecord = fam.unionEvents.some(e => e.type === 'divorce');
                             fam.unionEvents.push({ type: 'divorce', date: '' });
                             break;
                         case 'SOUR':
@@ -3721,6 +3743,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (value) cite(fam.sourceRefs, value);
                             break;
                         case 'MARR':
+                            laterUnionRecord = fam.unionEvents.some(e => e.type === 'marriage');
                             fam.unionEvents.push({ type: 'marriage', date: '' });
                             break;
                         case '_STORY':
@@ -4086,15 +4109,21 @@ export function parseGedcom(content: string): ParsedGedcom {
                         noteQuay(currentCitationId, value);
                     } else if (currentSubTag === 'MARR') {
                         currentFactSubTag = tag;
+                        // The research's later record of the wedding: the date
+                        // still orders the union's course, nothing of it is the fact's.
+                        const own = !(stromResearch && laterUnionRecord);
                         if (tag === 'DATE') {
-                            fam.marriageDate = parseGedcomDate(value);
-                            noteDateForm(fam, value, fam.marriageDate);
-                            lastUnionEvent(fam, 'marriage', fam.marriageDate);
+                            const date = parseGedcomDate(value);
+                            if (own) {
+                                fam.marriageDate = date;
+                                noteDateForm(fam, value, date);
+                            }
+                            lastUnionEvent(fam, 'marriage', date);
                         }
                         // First wins: the union's startDate comes from the FIRST
                         // marriage, so its place must not drift to a later one.
-                        if (tag === 'PLAC' && !fam.marriagePlace) fam.marriagePlace = value;
-                        if (tag === '_STROM_STATUS' && !fam.marriageStatus) fam.marriageStatus = parseFactStatus(value);
+                        if (tag === 'PLAC' && own && !fam.marriagePlace) fam.marriagePlace = value;
+                        if (tag === '_STROM_STATUS' && own && !fam.marriageStatus) fam.marriageStatus = parseFactStatus(value);
                         // The marriage record's own citation, note and witnesses
                         // sit here, not on the FAM — reading only DATE/PLAC lost
                         // every one of them.
@@ -4118,12 +4147,17 @@ export function parseGedcom(content: string): ParsedGedcom {
                             const sink = factDetailSink();
                             if (sink) openDetail = { level, text: value, done: sink, sep: '\n' };
                         }
-                        if (tag === 'PLAC' && value && !fam.divorcePlace) fam.divorcePlace = value;
-                        if (tag === '_STROM_STATUS' && !fam.divorceStatus) fam.divorceStatus = parseFactStatus(value);
+                        // The research's later record of a divorce: as for the wedding.
+                        const own = !(stromResearch && laterUnionRecord);
+                        if (tag === 'PLAC' && value && own && !fam.divorcePlace) fam.divorcePlace = value;
+                        if (tag === '_STROM_STATUS' && own && !fam.divorceStatus) fam.divorceStatus = parseFactStatus(value);
                         if (tag === 'DATE') {
-                            fam.divorceDate = parseGedcomDate(value);
-                            noteDateForm(fam, value, fam.divorceDate);
-                            lastUnionEvent(fam, 'divorce', fam.divorceDate);
+                            const date = parseGedcomDate(value);
+                            if (own) {
+                                fam.divorceDate = date;
+                                noteDateForm(fam, value, date);
+                            }
+                            lastUnionEvent(fam, 'divorce', date);
                         }
                     } else if (currentFamEvent) {
                         const ev = currentFamEvent;

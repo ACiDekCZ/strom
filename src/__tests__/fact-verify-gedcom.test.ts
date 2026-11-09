@@ -152,6 +152,124 @@ describe("the research's file", () => {
     });
 });
 
+describe("a fact the research's file writes twice (records it joined)", () => {
+    const head = RESEARCH_FILE.slice(0, RESEARCH_FILE.indexOf('0 @I1@ INDI'));
+    const file = (fam: string, indi = ''): string => `${head}0 @I1@ INDI
+1 NAME Hromoslav /Ozubec/
+1 SEX M
+${indi}1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Libuna /Šťovíková/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+${fam}0 TRLR
+`;
+    /** The family's lines of the file going to the research, without the partners. */
+    const sentFamily = (d: StromData): string[] => {
+        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
+        const block = ged.split(/\r?\n(?=0 )/).find(b => /^0 @F\d+@ FAM/.test(b))!;
+        return block.split(/\r?\n/).slice(1).filter(l => !/^1 (HUSB|WIFE) /.test(l));
+    };
+
+    it("two weddings: the re-verification, id and origin are the first's, whose date and place the couple has", () => {
+        const d = load(file(`1 MARR
+2 _STROM_EID E0066
+2 DATE 1 APR 1911
+2 PLAC Drnkalov
+2 _STROM_CONFIRMED 2026-11-01
+2 _STROM_ORIGIN import R1
+1 MARR
+2 _STROM_EID E0068
+2 DATE 4 JUL 1914
+2 PLAC Hrbolcov
+2 _STROM_VERIFY asked
+3 _POS 2
+2 _STROM_ORIGIN user
+`));
+        const c = couple(d);
+        expect([c.startDate, c.startPlace]).toEqual(['1911-04-01', 'Drnkalov']);
+        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-01', eid: 'E0066' });
+        expect(factResearchEid(c, 'marriage')).toBe('E0066');
+        expect(c.researchOrigins?.marriage?.kind).toBe('import');
+    });
+
+    it('the first wedding without a date: the couple has none of the second (date, place, age), and it goes back as it was', () => {
+        const d = load(file(`1 MARR
+2 _STROM_EID E0073
+2 PLAC Hrbolcov
+2 _STROM_STATUS lead
+1 MARR
+2 _STROM_EID E0074
+2 DATE 12 MAY 1920
+2 PLAC Drnkalov
+2 HUSB
+3 AGE 30y
+2 _STROM_STATUS proven
+2 _STROM_CHECKED kept
+3 DATE 1 NOV 2026
+`));
+        const c = couple(d);
+        expect(c.status).toBe('married');
+        expect([c.startDate, c.startPlace, c.startStatus]).toEqual([undefined, 'Hrbolcov', 'lead']);
+        expect(c.ages).toBeUndefined();
+        expect(c.note).toBeUndefined();
+        expect(c.researchVerify?.marriage).toEqual({ eid: 'E0073' });
+        // The first goes back as the research has it; the second is the
+        // research's own (a further wedding missing from the file is the shape
+        // of the app's union there), never mixed into the first.
+        expect(sentFamily(d)).toEqual(['1 MARR', '2 PLAC Hrbolcov', '2 _STROM_STATUS lead']);
+    });
+
+    it('two divorces: the divorce is the first one, with its id', () => {
+        const d = load(file(`1 MARR
+2 DATE 1900
+1 DIV
+2 _STROM_EID E0010
+2 DATE 1905
+2 PLAC Drnkalov
+1 DIV
+2 _STROM_EID E0011
+2 DATE 1906
+2 PLAC Hrbolcov
+2 _STROM_VERIFY asked
+`));
+        const c = couple(d);
+        expect([c.status, c.endDate, c.endPlace]).toEqual(['divorced', '1905', 'Drnkalov']);
+        expect(c.researchVerify?.divorce).toEqual({ eid: 'E0010' });
+        expect(sentFamily(d)).toEqual(['1 MARR', '2 DATE 1900', '1 DIV', '2 DATE 1905', '2 PLAC Drnkalov']);
+    });
+
+    it('a person with two births: the birth is the first, the other an event with its own id', () => {
+        const d = load(file('', `1 BIRT
+2 _STROM_EID E0001
+2 DATE 1850
+2 PLAC Kvasilov
+1 BIRT
+2 _STROM_EID E0002
+2 DATE 1851
+2 PLAC Úlehle
+2 _STROM_VERIFY asked
+`));
+        const h = person(d, 'Hromoslav');
+        expect([h.birthDate, h.birthPlace]).toEqual(['1850', 'Kvasilov']);
+        expect(h.researchVerify?.birth).toEqual({ eid: 'E0001' });
+        const alt = h.events!.find(e => e.date === '1851')!;
+        expect(h.researchVerify?.[`event:${alt.id}`]).toEqual({ pending: 'asked', eid: 'E0002' });
+    });
+
+    it("another program's file keeps reading a second wedding's date where the first has none", () => {
+        const other = file(`1 MARR
+2 PLAC Hrbolcov
+1 MARR
+2 DATE 12 MAY 1920
+`).replace('1 SOUR STROM_RESEARCH', '1 SOUR OTHERPROG').replace('2 NAME Strom Research', '2 NAME Other');
+        expect(couple(load(other)).startDate).toBe('1920-05-12');
+    });
+});
+
 describe("another program's file", () => {
     it('reads none of it', () => {
         const foreign = RESEARCH_FILE.replace('1 SOUR STROM_RESEARCH\n2 VERS 1.30.0\n2 NAME Strom Research', '1 SOUR FTM\n2 VERS 24');
