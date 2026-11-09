@@ -38,6 +38,7 @@ import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
+    markWaitingFocus, waitingWhyEl,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
@@ -869,6 +870,10 @@ export const researchOverviewMethods = uiModule({
             this.renderResearchOverview();
         };
         li.appendChild(row);
+        // One person's items the card's ! led to: lit, with why they cannot be answered here.
+        markWaitingFocus(li, w);
+        const why = waitingWhyEl(w);
+        if (why) li.appendChild(why);
         // Files dropped on an item that takes images: its detail opens with them (spec 048 §3).
         if (mode !== 'sheet' && waitingActions(w, { writes: this.liveWaitingWrites(s), links: false, phone: false })?.some(v => v.key === 'images')) {
             li.classList.add('takes-images');

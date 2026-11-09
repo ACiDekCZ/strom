@@ -611,6 +611,32 @@ let liveTaskMenuCleanup: (() => void) | null = null;
 let live: LiveSession | null = null;
 /** The "Waiting for you" panel while no research is followed (the research's id). */
 let idlePanel: string | null = null;
+/**
+ * One person's waiting items the card's ! (or the person menu) led to: shown
+ * first in the panel and the overview and lit, until the panel closes or
+ * "Waiting for you" opens for everyone. `why`: none of them can be answered
+ * here — their row says why.
+ */
+let waitingFocus: { treeId: TreeId; ids: ReadonlySet<string>; why: boolean } | null = null;
+
+/** The ids of the waiting items lit for one person (empty: none, or another tree's). */
+function waitingFocusIds(): ReadonlySet<string> {
+    return waitingFocus && waitingFocus.treeId === DataManager.getCurrentTreeId() ? waitingFocus.ids : new Set();
+}
+
+/** Light a waiting item's row when it is one of the person's the card led to. */
+export function markWaitingFocus(li: HTMLElement, w: LiveWaiting): void {
+    li.dataset.waitingId = w.id;
+    if (waitingFocusIds().has(w.id)) li.classList.add('is-person-focus');
+}
+
+/** The line under a lit row that cannot be answered here (null: none). */
+export function waitingWhyEl(w: LiveWaiting): HTMLElement | null {
+    if (!waitingFocus?.why || !waitingFocusIds().has(w.id)) return null;
+    const p = el('p', 'live-waiting-why', strings.live.waitingNoAnswerHere);
+    p.setAttribute('role', 'note');
+    return p;
+}
 
 /**
  * The panel's line once following began (spec 011): which tree is followed
@@ -2453,6 +2479,37 @@ export const researchUiMethods = uiModule({
 
     /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */
     showResearchWaiting(): void {
+        waitingFocus = null;
+        this.openResearchWaiting();
+    },
+
+    /**
+     * One person's waiting items (the card's !, the person menu): the panel
+     * open with them first and lit, in view; the overview when the panel
+     * cannot show them (a phone, the section folded or hidden, the overview
+     * open). `why`: none can be answered here, their rows say why.
+     */
+    showPersonWaiting(items: readonly LiveWaiting[], why = false): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || items.length === 0) {
+            this.showResearchWaiting();
+            return;
+        }
+        waitingFocus = { treeId, ids: new Set(items.map(w => w.id)), why };
+        const s = live && !live.ended && live.treeId === treeId ? live : null;
+        const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
+        if (s && (phone || s.overview || panelSectionHidden('waiting') || panelSectionCollapsed(s, 'waiting'))) {
+            this.openWaitingItems(s, items);
+            this.openResearchOverview({ showWaiting: true });
+            const row = document.querySelector<HTMLElement>('#research-overview .research-overview__waiting-item.is-person-focus');
+            row?.scrollIntoView({ block: 'nearest' });
+            return;
+        }
+        this.openResearchWaiting();
+    },
+
+    /** The panel open at "Waiting for you": at the lit person's first row, else at the heading. */
+    openResearchWaiting(): void {
         const treeId = DataManager.getCurrentTreeId();
         if (live && !live.ended && live.treeId === treeId) {
             live.collapsed = false;
@@ -2470,7 +2527,9 @@ export const researchUiMethods = uiModule({
         const panel = document.getElementById('live-panel');
         const body = panel?.querySelector<HTMLElement>('.live-panel-body');
         const heading = panel?.querySelector<HTMLElement>('.live-panel-heading-waiting');
-        if (body && heading) body.scrollTop = Math.max(0, heading.offsetTop - body.offsetTop - 4);
+        const lit = panel?.querySelector<HTMLElement>('.live-waiting-row.is-person-focus');
+        const at = lit ?? heading;
+        if (body && at) body.scrollTop = Math.max(0, at.offsetTop - body.offsetTop - 4);
     },
 
     /** A card's agent badge: the followed research's panel, unfolded. */
@@ -2484,6 +2543,7 @@ export const researchUiMethods = uiModule({
     closeResearchIdlePanel(): void {
         if (!idlePanel) return;
         idlePanel = null;
+        waitingFocus = null;
         this.renderLivePanel();
     },
 
@@ -3414,7 +3474,10 @@ export const researchUiMethods = uiModule({
     toggleLivePanel(): void {
         if (!live) return;
         live.collapsed = !live.collapsed;
-        if (live.collapsed) live.seenChanges = live.changes.length;
+        if (live.collapsed) {
+            live.seenChanges = live.changes.length;
+            waitingFocus = null;
+        }
         this.renderLivePanel();
     },
 
@@ -3470,15 +3533,18 @@ export const researchUiMethods = uiModule({
         }
         const list = el('ul', 'live-panel-list live-waiting');
         host.appendChild(list);
-        const { shown, more } = panelWaiting(items);
+        const { shown, more } = panelWaiting(items, undefined, waitingFocusIds());
         for (const w of shown) {
             const li = el('li', 'live-waiting-row');
+            markWaitingFocus(li, w);
             const text = el('div', 'live-waiting-text');
             if (w.kind === 'story') {
                 // A story's new version: compared here, not answered there.
                 const compare = this.appendStoryWaiting(text, w, (id) => this.showLivePerson(id));
                 const at = timeEl(w.at, 'ago');
                 if (at) text.appendChild(at);
+                const whyStory = waitingWhyEl(w);
+                if (whyStory) text.appendChild(whyStory);
                 li.append(text, compare);
                 list.appendChild(li);
                 continue;
@@ -3492,6 +3558,8 @@ export const researchUiMethods = uiModule({
             if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
+            const why = waitingWhyEl(w);
+            if (why) text.appendChild(why);
             li.appendChild(text);
             const s = answerable ? liveSession() : null;
             if (s && !s.ended && this.appendPanelWaitingTask(li, what, s, w)) {

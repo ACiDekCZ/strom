@@ -15543,6 +15543,14 @@
         /* "Waiting for you": the task, since when, and "Answer ↗" into the research. */
         .live-panel-list li.live-waiting-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
         .live-waiting-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        /* One person's items the card's ! led to: first and lit (both themes by the variables). */
+        .live-panel-list li.live-waiting-row.is-person-focus {
+            padding: 6px 6px 6px 9px; border-radius: 6px;
+            background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary);
+        }
+        .research-overview__waiting-item.is-person-focus > .research-overview__waiting-row { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+        .live-waiting-why { margin: 4px 0 0; font-size: 12px; color: var(--text-light); }
+        .research-overview__waiting-item > .live-waiting-why { padding: 0 4px 6px; }
         .live-waiting-what { font-size: 14px; color: var(--text); }
         .live-waiting-text > .live-waiting-who { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); }
         .live-waiting-answer {

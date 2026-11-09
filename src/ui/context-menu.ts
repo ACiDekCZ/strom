@@ -564,7 +564,9 @@ export const contextMenuMethods = uiModule({
                 this.openCardSignal(personId, action.slice('signal-'.length));
                 break;
             case 'signal-waiting-list':
-                this.showResearchWaiting();
+                // Touch: the person's items in Waiting for you, lit (each answered from its row).
+                this.hideContextMenu();
+                this.showPersonWaiting(this.personWaitingItems(personId));
                 break;
             case 'signal-story-compare':
                 if (!this.openWaitingStoryCompare(personId)) this.showResearchWaiting();

@@ -115,10 +115,27 @@ export function waitingGroupOpenByDefault(items: readonly LiveWaiting[], filter:
     return items.length === 1 || filter !== 'all' || items.some(w => fresh.has(w.id));
 }
 
-/** The first `n` items to do, in order, and how many more there are (the small panel). */
-export function panelWaiting<T extends LiveWaiting>(items: readonly T[], n = PANEL_WAITING): { shown: T[]; more: number } {
+/**
+ * The first `n` items to do, in order, and how many more there are (the small
+ * panel). Items in `focus` (one person's, from the card's !) come first and
+ * are all shown, however many; the rest fill the panel up to `n` rows.
+ */
+export function panelWaiting<T extends LiveWaiting>(items: readonly T[], n = PANEL_WAITING,
+    focus: ReadonlySet<string> = new Set()): { shown: T[]; more: number } {
     const todo = orderWaiting(todoWaiting(items));
-    return { shown: todo.slice(0, n), more: Math.max(0, todo.length - n) };
+    const first = todo.filter(w => focus.has(w.id));
+    const shown = [...first, ...todo.filter(w => !focus.has(w.id))].slice(0, Math.max(n, first.length));
+    return { shown, more: todo.length - shown.length };
+}
+
+/**
+ * What waits on one person (their `refn`), in order: the items to do naming
+ * them, and a story's new version of a couple they are part of — the same
+ * items their card's ! counts.
+ */
+export function personWaiting<T extends LiveWaiting>(items: readonly T[], refn: string | undefined): T[] {
+    if (!refn) return [];
+    return orderWaiting(todoWaiting(items)).filter(w => w.person === refn || (w.kind === 'story' && w.partner === refn));
 }
 
 /** The order the actions stand in: Chat right next to Answer, never tucked away. */

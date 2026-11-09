@@ -195,6 +195,27 @@ export const waitingTaskMethods = uiModule({
         return true;
     },
 
+    /**
+     * What "Answer" does at one waiting item, as its row's button in the
+     * panel does: a task with images, a website or a check by its main action
+     * (while following), a question about a place in the Places window, else
+     * the task in the research by its link. Null: nothing answers it here.
+     */
+    waitingAnswerAction(w: LiveWaiting): (() => void) | null {
+        const s = liveSession();
+        if (s && !s.ended) {
+            const phone = isPhone();
+            const views = waitingActions(w, { writes: this.liveWaitingWrites(s), links: !phone && this.researchLinkAvailable('task'), phone });
+            if (views) {
+                const action = views[0] ? this.panelWaitingAction(s, w, views[0]) : null;
+                return action ? () => action.click() : null;
+            }
+        }
+        if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) return () => this.showWaitingPlaces(w.place ?? w.id);
+        if (this.canAnswerResearchWaiting(w)) return () => this.answerResearchTask(w);
+        return null;
+    },
+
     panelWaitingAction(s: LiveSession, w: LiveWaiting, v: WaitActionView): HTMLElement | null {
         const T = strings.live.waitingTask;
         const cls = 'live-waiting-answer waiting-panel-action';

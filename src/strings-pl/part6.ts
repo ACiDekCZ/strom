@@ -667,6 +667,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         waitingTo: (t: string) => `adresat: ${t}`,
         waitingInbox: (have: number, want: number) => `zapisano ${have}/${want}`,
         waitingMore: (n: number) => `Kolejne ${n} w przeglądzie ⤢`,
+        waitingNoAnswerHere: 'Tutaj nie można odpowiedzieć: odpowiada się w badaniu, na komputerze, na którym jest zainstalowane.',
         // How the sections of research following show (Customize panel, the chips that keep "Awaiting action" in sight).
         editPanel: 'Dostosuj panel',
         editPanelMenu: 'Dostosuj panel…',

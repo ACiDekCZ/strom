@@ -19,6 +19,8 @@ import { uiModule } from './module.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { openMarkTip } from './status-tip.js';
 import { DataManager } from '../data.js';
+import { LiveWaiting } from '../research-link.js';
+import { personWaiting } from '../research-waiting.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
 
 const STATE_KEYS: (keyof CardSignals)[] = ['status', 'story'];
@@ -43,8 +45,7 @@ export const cardSignalsUiMethods = uiModule({
     /** A click on a card's badge (desktop): open what it signals. */
     openCardSignal(personId: PersonId, signal: string): void {
         this.hideContextMenu();
-        if (signal === 'waiting' && this.openWaitingStoryCompare(personId)) return;
-        if (signal === 'waiting') this.showResearchWaiting();
+        if (signal === 'waiting') this.answerPersonWaiting(personId);
         else if (signal === 'conflict') {
             // At the first open conflict's card.
             const first = researchConflictRef(this.personOpenConflicts(personId)[0]?.id);
@@ -70,11 +71,33 @@ export const cardSignalsUiMethods = uiModule({
         return true;
     },
 
-    /** How many items of Waiting for you name the person (at least 1 while the card says one waits). */
+    /** What waits on the person in Waiting for you, in order (the items their card's ! counts). */
+    personWaitingItems(personId: PersonId): LiveWaiting[] {
+        return personWaiting(this.researchWaiting()?.items ?? [], DataManager.getPerson(personId)?.refn);
+    },
+
+    /** How many items of Waiting for you wait on the person (at least 1 while the card says one waits). */
     waitingCountOf(personId: PersonId): number {
-        const refn = DataManager.getPerson(personId)?.refn;
-        const n = refn ? (this.researchWaiting()?.items.filter(w => w.person === refn || w.partner === refn).length ?? 0) : 0;
-        return Math.max(1, n);
+        return Math.max(1, this.personWaitingItems(personId).length);
+    },
+
+    /**
+     * The card's ! and the menu's "Answer · N waiting" do what they say: a
+     * story's new version opens its comparison; one item opens its answer as
+     * its row's button does; more items (or one nothing answers here) open the
+     * panel at the person's items, lit — then with the line why not. Never
+     * nothing: with no item known the panel says how things are.
+     */
+    answerPersonWaiting(personId: PersonId): void {
+        this.hideContextMenu();
+        if (this.openWaitingStoryCompare(personId)) return;
+        const items = this.personWaitingItems(personId);
+        const runs = items.map(w => this.waitingAnswerAction(w));
+        if (items.length === 1 && runs[0]) {
+            runs[0]();
+            return;
+        }
+        this.showPersonWaiting(items, items.length > 0 && runs.every(r => !r));
     },
 
     /**

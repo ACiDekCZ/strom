@@ -13,7 +13,7 @@ import {
 } from '../research-link.js';
 import { noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import {
-    effectiveWaitingFilter, filterWaiting, groupWaiting, orderWaiting, panelWaiting, textWithLinks, todoWaiting, waitingActionDo,
+    effectiveWaitingFilter, filterWaiting, groupWaiting, orderWaiting, panelWaiting, personWaiting, textWithLinks, todoWaiting, waitingActionDo,
     waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask, waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions,
     waitingTodoCount,
 } from '../research-waiting.js';
@@ -258,6 +258,33 @@ describe('to do, sent, chips and groups', () => {
         expect(shown.map(w => w.id)).toEqual(['T0009', 'T0008', 'T0007', 'T0006', 'T0005']);
         expect(more).toBe(3);
         expect(panelWaiting(many.slice(0, 3))).toMatchObject({ more: 0 });
+    });
+
+    it('one person\'s items (the card\'s !) come first and are all shown, the rest fill up to five (1109)', () => {
+        const many = items(Array.from({ length: 9 }, (_, i) => ({
+            id: `T${String(i + 1).padStart(4, '0')}`, what: `Úkol ${i + 1}`, kind: 'letter', order: i,
+        })));
+        const two = panelWaiting(many, undefined, new Set(['T0008', 'T0003']));
+        expect(two.shown.map(w => w.id)).toEqual(['T0003', 'T0008', 'T0001', 'T0002', 'T0004']);
+        expect(two.more).toBe(4);
+        // More of them than the panel's rows: all shown, none of the rest.
+        const seven = new Set(many.slice(1, 8).map(w => w.id));
+        const all = panelWaiting(many, undefined, seven);
+        expect(all.shown.map(w => w.id)).toEqual(['T0002', 'T0003', 'T0004', 'T0005', 'T0006', 'T0007', 'T0008']);
+        expect(all.more).toBe(2);
+    });
+
+    it('what waits on one person: the items to do naming them and a story of their couple, in order; nothing without a refn (1109)', () => {
+        const list = items([
+            { id: 'T0002', what: 'b', person: 'P0013', order: 2 },
+            { id: 'T0001', what: 'a', person: 'P0013', order: 1 },
+            { id: 'T0003', what: 'sent', person: 'P0013', phase: 'sent' },
+            { id: 'T0004', what: 'other', person: 'P0012' },
+            { id: 'S1', what: 'nová verze', kind: 'story', person: 'P0012', partner: 'P0013', order: 3 },
+            { id: 'T0005', what: 'not a story', person: 'P0012', partner: 'P0013' },
+        ]);
+        expect(personWaiting(list, 'P0013').map(w => w.id)).toEqual(['T0001', 'T0002', 'S1']);
+        expect(personWaiting(list, undefined)).toEqual([]);
     });
 });
 

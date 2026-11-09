@@ -5400,6 +5400,7 @@ const stringsEN = {
         waitingTo: (t: string) => `to: ${t}`,
         waitingInbox: (have: number, want: number) => `saved ${have}/${want}`,
         waitingMore: (n: number) => `${n} more in the overview ⤢`,
+        waitingNoAnswerHere: 'Not answerable here: the answer is given in the research, on the computer where it is installed.',
         // How the sections of research following show (Customize panel, the chips that keep "Awaiting action" in sight).
         editPanel: 'Customize panel',
         editPanelMenu: 'Customize panel…',
@@ -13428,6 +13429,7 @@ const stringsCZ: StringsType = {
         waitingTo: (t: string) => `adresát: ${t}`,
         waitingInbox: (have: number, want: number) => `uloženo ${have}/${want}`,
         waitingMore: (n: number) => `Další ${n} v přehledu ⤢`,
+        waitingNoAnswerHere: 'Tady odpovědět nejde: odpovídá se ve výzkumu, na počítači, kde je nainstalovaný.',
         // How the sections of research following show (Customize panel, the chips that keep "Awaiting action" in sight).
         editPanel: 'Upravit panel',
         editPanelMenu: 'Upravit panel…',
@@ -21354,6 +21356,7 @@ const stringsDE: StringsType = {
         waitingTo: (t: string) => `an: ${t}`,
         waitingInbox: (have: number, want: number) => `gespeichert ${have}/${want}`,
         waitingMore: (n: number) => `${n} weitere in der Übersicht ⤢`,
+        waitingNoAnswerHere: 'Hier ist keine Antwort möglich: Geantwortet wird in der Forschung, auf dem Computer, auf dem sie installiert ist.',
         // How the sections of research following show (Customize panel, the chips that keep "Awaiting action" in sight).
         editPanel: 'Panel anpassen',
         editPanelMenu: 'Panel anpassen…',
