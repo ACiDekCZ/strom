@@ -282,7 +282,7 @@ export const verifyPersonMethods = uiModule({
         if (st.verify > 0 && personResearchRef(DataManager.getData().persons[personId] ?? {})) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'st-act st-verify-person';
+            btn.className = 'st-v-btn st-verify-person';
             btn.innerHTML = researchBridgeActionLabel(strings.verify.personBtn(st.verify), 'verify');
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();

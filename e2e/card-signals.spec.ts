@@ -1092,6 +1092,24 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await expect(pill).not.toHaveCSS('box-shadow', 'none');
     });
 
+    test('the card mark\'s tip: "Verify facts (N)" is a button of the tip, drawn as the fact tip\'s Verify (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await verifySetup(page);
+        await card(page, 'Jan').locator(':scope > .card-status-mark[data-mark="status"]').click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        const btn = tip.locator('.st-acts > .st-verify-person');
+        await expect(btn).toContainText('Verify facts (2)');
+        await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
+        // A framed button as the tip's other actions, not bare text.
+        await expect(btn).toHaveClass(/\bst-v-btn\b/);
+        await expect(btn).toHaveCSS('border-top-style', 'solid');
+        await expect(btn).toHaveCSS('border-top-left-radius', '8px');
+        expect((await btn.boundingBox())!.height).toBeGreaterThanOrEqual(30);
+        await btn.click();
+        await expect(page.locator('#verify-person-modal')).toBeVisible();
+    });
+
     test('a person with residences: the menu counts what /verify takes (the residences too), as the preview does; the toast says what the research queued', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         // Two residences the research holds (their ids): no "Verify" of their own, but a person's /verify takes them.
