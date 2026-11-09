@@ -80,8 +80,8 @@ describe('the marriage order without a wedding date (T50, T13)', () => {
         const b = builder();
         b.person('George', 'male', '1970');
         b.person('Margaret', 'female'); b.person('Dana', 'female'); b.person('Gabrielle', 'female');
-        b.person('Nicole', 'female', '2010-01-14'); b.person('Jerome', 'male', '2011-05-13');
-        b.person('Sarah', 'female', '1999-03-18'); b.person('Matthew', 'male', '2008-04-02');
+        b.person('Nicole', 'female', '2010-09-03'); b.person('Jerome', 'male', '2011-02-21');
+        b.person('Sarah', 'female', '1999-11-07'); b.person('Matthew', 'male', '2008-07-25');
         b.union('u_margaret', 'George', 'Margaret', {}, ['Jerome', 'Nicole']);
         b.union('u_dana', 'George', 'Dana', {}, ['Sarah']);
         b.union('u_gabrielle', 'George', 'Gabrielle', {}, ['Matthew']);
