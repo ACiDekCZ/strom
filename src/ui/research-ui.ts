@@ -87,6 +87,7 @@ import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
+import { bridgeGivesStale, staleTreeUrl, treeFileState, treeReplyHeads, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 
 /** What a research open needs to know from the file (or the bridge). */
@@ -143,7 +144,13 @@ export interface LiveSession {
     researchId: string;
     treeId: TreeId;
     name: string;
+    /** The research's commit the followed tree holds (the loaded file's head with `ged.stale`). */
     head: string;
+    /**
+     * The tree shown is an older one the bridge gave at once (`tree.ged?stale=1`):
+     * a newer version is being built, loaded when it comes (false: none).
+     */
+    preparing?: boolean;
     /** When the research last changed (ISO; '' = unknown). */
     headAt: string;
     working: LiveWorker[];
@@ -872,12 +879,26 @@ export async function readStatusPart(url: string): Promise<unknown> {
     return res.json();
 }
 
-export async function fetchGedcomText(url: string): Promise<string> {
-    const res = await fetchWithTimeout(url, 30000);
+/** The research's tree as fetched, with what the answer's headers say of it. */
+export interface FetchedTree extends TreeReplyHeads {
+    text: string;
+}
+
+/**
+ * The research's tree from `url` (its bridge's `tree.ged`). `stale`: the last
+ * tree the bridge built, at once (a bridge with `ged.stale`); without it the
+ * bridge answers once the tree of its head now is built.
+ */
+export async function fetchResearchTree(url: string, opts: { stale?: boolean } = {}): Promise<FetchedTree> {
+    const res = await fetchWithTimeout(opts.stale ? staleTreeUrl(url) : url, TREE_GED_TIMEOUT_MS);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = decodeGedcomFile(await res.arrayBuffer());
     noteFamilyPartners(url, text);
-    return text;
+    return { text, ...treeReplyHeads(name => res.headers?.get(name) ?? null) };
+}
+
+export async function fetchGedcomText(url: string): Promise<string> {
+    return (await fetchResearchTree(url)).text;
 }
 
 /** The partners of the research's families by the tree's address (its last read), for rows of `working[]` about a couple. */
@@ -1138,6 +1159,16 @@ export function pausedText(w: LiveWorker): string {
     const L = strings.live;
     return [L.statePaused, w.paused.reason, Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
         .filter(Boolean).join(' · ');
+}
+
+/** "Preparing a newer version…" with a small spinner (the tree shown is an older one the bridge gave at once). */
+function livePreparing(tag: 'p' | 'span', cls: string): HTMLElement {
+    const note = el(tag, cls);
+    note.setAttribute('role', 'status');
+    const spin = note.appendChild(el('span', 'live-panel-spinner'));
+    spin.setAttribute('aria-hidden', 'true');
+    note.appendChild(el('span', 'live-panel-preparing-text', strings.research.newerPreparing));
+    return note;
 }
 
 /** Keep the panel's (and the overview's) times fresh while shown. */
@@ -2577,6 +2608,8 @@ export const researchUiMethods = uiModule({
 
             let status: LiveStatus | null;
             let text: string;
+            // A bridge with `ged.stale` gives its last built tree at once; the tree's state is then that file's head.
+            let reply: TreeReplyHeads | null = null;
             try {
                 status = opts.resume || auto
                     ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
@@ -2590,7 +2623,13 @@ export const researchUiMethods = uiModule({
                     await this.showAlert(strings.research.liveNoTree, 'error');
                     return;
                 }
-                text = await fetchGedcomText(bridge.ged);
+                if (bridgeGivesStale(status.features)) {
+                    const got = await fetchResearchTree(bridge.ged, { stale: true });
+                    text = got.text;
+                    reply = got;
+                } else {
+                    text = await fetchGedcomText(bridge.ged);
+                }
             } catch (err) {
                 console.warn('Connecting to the research bridge failed', err);
                 if (auto) {
@@ -2627,6 +2666,7 @@ export const researchUiMethods = uiModule({
                 return;
             }
             const name = status.name || header.name || strings.research.defaultName;
+            const file = reply ? treeFileState(reply, header.head, status.head) : { head: status.head, preparing: false, headNow: '' };
             // The research has nothing new beyond what this tree builds on, and the tree has changes it lacks
             // (opened again from it, e.g. its bridge on a new port): connected again, the changes go to it —
             // never asked whether to replace them (B3 of the rc.22 round). `follow`: "Follow live" asked for it.
@@ -2641,7 +2681,7 @@ export const researchUiMethods = uiModule({
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode },
-                { head: status.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}) }
+                { head: file.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}) }
             );
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();
@@ -2664,7 +2704,8 @@ export const researchUiMethods = uiModule({
                 researchId: status.treeId,
                 treeId,
                 name,
-                head: status.head,
+                head: file.head,
+                ...(file.preparing ? { preparing: true } : {}),
                 headAt: status.headAt,
                 working: withFamilyPersons(status.working, bridge),
                 waiting: status.waiting,
@@ -2718,6 +2759,10 @@ export const researchUiMethods = uiModule({
             this.connectLiveEvents(live);
             void this.fetchLiveLog(live);
             this.refreshDirectionPeople(live, live.head);
+            // An older tree shown at once: the newer one is waited for now (the bridge answers once it is built),
+            // never only on an event that may have gone before the stream opened.
+            const s = live;
+            if (file.preparing && file.headNow) this.enqueueLive(s, () => this.onLiveChange(s, { head: file.headNow, what: [], at: '' }));
         });
     },
 
@@ -3027,11 +3072,19 @@ export const researchUiMethods = uiModule({
         this.renderLivePanel();
     },
 
-    /** Fetch the research's current GEDCOM and put it into the followed tree only. */
+    /**
+     * Fetch the research's current GEDCOM and put it into the followed tree only.
+     * `head`: the change's; a bridge with `ged.stale` says the file's own head,
+     * which is the state the tree then holds.
+     */
     async refreshLiveTree(s: LiveSession, head: string): Promise<StromData | null> {
         let text: string;
+        let fileHead: string | null = null;
+        const ownHead = bridgeGivesStale(s.features);
         try {
-            text = await fetchGedcomText(s.bridge.ged);
+            const got = await fetchResearchTree(s.bridge.ged);
+            text = got.text;
+            if (ownHead) fileHead = got.head ?? readResearchHeader(text).head;
         } catch {
             // The probe after the stream error decides whether the bridge is gone.
             return null;
@@ -3073,7 +3126,9 @@ export const researchUiMethods = uiModule({
         } else {
             TreeManager.updateTreeFromImport(s.treeId, stable);
         }
-        if (head) s.head = head;
+        if (fileHead || head) s.head = fileHead || head;
+        // The tree of the research's head now (asked without `stale`): nothing newer is being built for it.
+        s.preparing = false;
         // Titles kept that the research never got: its version without them is the base, they go with the next send.
         const loaded = active ? DataManager.getData() : stable;
         const { base, titlesIn } = researchTitlesBase(loaded, data, knowsTitles, link?.titlesIn);
@@ -3583,6 +3638,8 @@ export const researchUiMethods = uiModule({
             }
             const fresh = s.changes.length - s.seenChanges;
             if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
+            // An older tree shown at once: the newer one comes by itself.
+            if (s.preparing && !s.ended) summary.appendChild(livePreparing('span', 'live-panel-chip live-panel-preparing'));
             if (!s.ended && !phone) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
             // Phone: the follow switch at the strip's right end.
             const phoneFollow = phone ? this.liveFollowButton('phone') : null;
@@ -3601,6 +3658,7 @@ export const researchUiMethods = uiModule({
             stateLine.classList.add('is-lost');
             stateLine.setAttribute('role', 'status');
         }
+        if (s.preparing && !s.ended) body.appendChild(livePreparing('p', 'live-panel-preparing'));
         // "Research on" (spec 064): once following ended, the tree's bridge can be switched on again here
         // (while following, the panel's room is the agent's; the idle panel and the tree manager have the switch).
         if (!phone && s.ended) body.appendChild(this.researchLiveSlot(s.treeId, 'panel'));

@@ -2858,6 +2858,8 @@ const stringsEN = {
         ended: 'Following ended',
         endedText: 'Strom Research is no longer sending updates. The tree shows the last state and can be edited again.',
         reconnecting: 'The connection to Strom Research dropped. Trying again… The tree stays as it was meanwhile.',
+        /** Following: the tree shown is an older one, a newer version is being built (it loads by itself). */
+        newerPreparing: 'Preparing a newer version…',
         reconnectingShort: 'trying again…',
         stop: 'Stop following',
         stopped: 'Stopped following the research.',
@@ -10904,6 +10906,8 @@ const stringsCZ: StringsType = {
         ended: 'Sledování skončilo',
         endedText: 'Strom Research už neposílá změny. Rodokmen ukazuje poslední stav a jde ho znovu upravovat.',
         reconnecting: 'Spojení se Strom Research se přerušilo. Zkouším znovu… Rodokmen mezitím zůstává, jak byl.',
+        /** Following: the tree shown is an older one, a newer version is being built (it loads by itself). */
+        newerPreparing: 'Připravuje se novější verze…',
         reconnectingShort: 'zkouším znovu…',
         stop: 'Ukončit sledování',
         stopped: 'Sledování výzkumu ukončeno.',
@@ -18867,6 +18871,8 @@ const stringsDE: StringsType = {
         ended: 'Verfolgung beendet',
         endedText: 'Strom Research sendet keine Änderungen mehr. Der Stammbaum zeigt den letzten Stand und kann wieder bearbeitet werden.',
         reconnecting: 'Die Verbindung zu Strom Research ist unterbrochen. Neuer Versuch… Der Stammbaum bleibt so lange, wie er war.',
+        /** Following: the tree shown is an older one, a newer version is being built (it loads by itself). */
+        newerPreparing: 'Neuere Version wird vorbereitet…',
         reconnectingShort: 'neuer Versuch…',
         stop: 'Verfolgung beenden',
         stopped: 'Die Forschung wird nicht mehr verfolgt.',

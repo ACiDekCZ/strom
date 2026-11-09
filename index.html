@@ -15481,6 +15481,21 @@
         }
         .live-panel.collapsed .live-panel-body { display: none; }
         .live-panel-state { margin: 0 0 8px; color: var(--text-light); }
+        /* An older tree shown at once (tree.ged?stale=1): a newer version comes by itself. */
+        .live-panel-preparing { display: flex; align-items: center; gap: 6px; margin: -4px 0 8px; font-size: 12px; color: var(--text-light); }
+        .live-panel-chip.live-panel-preparing { display: inline-flex; gap: 5px; margin: 0; font-size: 11px; min-width: 0; max-width: 100%; }
+        .live-panel-chip .live-panel-preparing-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .live-panel-spinner {
+            flex: none; width: 10px; height: 10px; box-sizing: border-box;
+            border: 2px solid color-mix(in srgb, var(--text-light) 30%, transparent);
+            border-top-color: var(--text-light); border-radius: 50%;
+            animation: toast-spin 0.9s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) { .live-panel-spinner { animation-duration: 2.4s; } }
+        /* Phone held sideways: the strip is one row; the note gives way to the head. */
+        @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+            .live-panel.phone-strip .live-panel-chip.live-panel-preparing { max-width: 160px; }
+        }
         /* Opening a research from outside: keep the canvas blank until that
            tree is loaded (no flash of the last-opened tree). */
         html.external-opening #tree-container { visibility: hidden; }

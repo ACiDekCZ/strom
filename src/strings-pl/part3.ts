@@ -820,6 +820,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         ended: 'Śledzenie zakończone',
         endedText: 'Strom Research nie wysyła już zmian. Drzewo pokazuje ostatni stan i można je znów edytować.',
         reconnecting: 'Połączenie ze Strom Research zostało przerwane. Ponawianie próby… Drzewo pozostaje w międzyczasie bez zmian.',
+        /** Following: the tree shown is an older one, a newer version is being built (it loads by itself). */
+        newerPreparing: 'Przygotowywanie nowszej wersji…',
         reconnectingShort: 'ponawianie próby…',
         stop: 'Zakończ śledzenie',
         stopped: 'Zakończono śledzenie badania.',
