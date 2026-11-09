@@ -334,6 +334,12 @@ describe('S10: date phrases', () => {
         expect(ev.date).toBe('~1900');
         expect(ev.note).toBe(strings.gedcomNotes.datePhrase('INT 1900 (per census)'));
     });
+    it('a month and year in figures is the date, with no note (T42)', () => {
+        const d = conv(GED('0 @I1@ INDI\n1 NAME Jan /Novák/\n1 SEX M\n1 BAPM\n2 DATE Cca 07/1987')).data;
+        const ev = byFirst(d, 'Jan').events![0];
+        expect(ev.date).toBe('~1987-07');
+        expect(ev.note).toBeUndefined();
+    });
 });
 
 describe('S11 / S14: family structure', () => {

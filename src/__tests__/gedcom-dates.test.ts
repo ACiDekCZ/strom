@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseGedcomDate, gedcomDatePhrase } from '../ged-parser.js';
+import { normalizeDateInput } from '../dates.js';
 
 describe('parseGedcomDate (flex dates)', () => {
     it('preserves precision instead of fabricating month/day', () => {
@@ -99,5 +100,57 @@ describe('dates written with local words', () => {
         expect(gedcomDatePhrase('Nejspíš 1919')).toBe('Nejspíš 1919');
         // An unknown month between a day and a year: the year is certain.
         expect(parseGedcomDate('3 XYZ 1900')).toBe('1900');
+    });
+});
+
+describe('a month and year in figures (T42)', () => {
+    it('reads MM/YYYY, M/YYYY, MM.YYYY and M.YYYY as the month of that year', () => {
+        // "Cca 07/1987" was left to the note "Date in the record: …" with no date.
+        for (const [value, date] of [
+            ['07/1987', '1987-07'], ['7/1987', '1987-07'], ['07.1987', '1987-07'], ['7.1987', '1987-07'],
+            ['12/1987', '1987-12'], ['1/987', '987-01'],
+        ]) {
+            expect(parseGedcomDate(value), value).toBe(date);
+            expect(gedcomDatePhrase(value), value).toBeNull();
+        }
+    });
+
+    it('keeps the qualifier, in GEDCOM keywords and in local words', () => {
+        for (const [value, date] of [
+            ['Cca 07/1987', '~1987-07'], ['ABT 07/1987', '~1987-07'], ['EST 7/1987', '~1987-07'],
+            ['ca. 07/1987', '~1987-07'], ['circa 7/1987', '~1987-07'], ['kolem 07.1987', '~1987-07'],
+            ['um 07/1987', '~1987-07'], ['ok. 07/1987', '~1987-07'], ['około 7/1987', '~1987-07'],
+            ['před 07/1987', '<1987-07'], ['BEF 7/1987', '<1987-07'], ['vor 07/1987', '<1987-07'], ['przed 7.1987', '<1987-07'],
+            ['po 7.1987', '>1987-07'], ['AFT 07.1987', '>1987-07'], ['nach 07/1987', '>1987-07'],
+            ['BET 5/1880 AND 7/1880', '1880-05..1880-07'],
+        ]) {
+            expect(parseGedcomDate(value), value).toBe(date);
+            expect(gedcomDatePhrase(value), value).toBeNull();
+        }
+    });
+
+    it('a number that is no month stays unknown, kept as written', () => {
+        for (const value of ['13/1987', '00/1987', 'Cca 13/1987']) {
+            expect(parseGedcomDate(value), value).toBe('');
+            expect(gedcomDatePhrase(value), value).toBe(value);
+        }
+    });
+
+    it('a dual year and a day-first date read as before', () => {
+        expect(parseGedcomDate('1699/00')).toBe('1699');
+        expect(parseGedcomDate('ABT 1699/00')).toBe('~1699');
+        expect(parseGedcomDate('1987/07')).toBe('1987');
+        expect(parseGedcomDate('kolem 12. 3. 1919')).toBe('~1919-03-12');
+        expect(parseGedcomDate('5/3/1919')).toBe('');
+        expect(gedcomDatePhrase('5/3/1919')).toBe('5/3/1919');
+    });
+
+    it('a date typed in the app reads the same in every language', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            for (const value of ['07/1987', '7.1987', 'Cca 07/1987', 'kolem 7/1987', 'před 07/1987', 'po 7.1987',
+                'um 07/1987', 'ok. 07/1987', 'przed 7/1987', 'ABT 07/1987', '13/1987']) {
+                expect(normalizeDateInput(value, lang) ?? '', `${lang} ${value}`).toBe(parseGedcomDate(value));
+            }
+        }
     });
 });
