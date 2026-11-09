@@ -7,7 +7,7 @@ import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname, withSurnameRules } from '../surnames.js';
 import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
-import { idEvidence, sameFileRecord, strongIdIndex } from './id-match.js';
+import { idEvidence, sameFileRecord, strongIdIndex, StrongIdIndex } from './id-match.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -37,6 +37,14 @@ interface MatchPass {
     signatures: WeakMap<object, string>;
     /** firstNameMayQuickMatch by the two normalized first names. */
     firstNameBound: Map<string, Map<string, boolean>>;
+    /** A tree's persons (in order) and their strong ids, by tree. */
+    strongIds: Map<StromData, TreeStrongIds>;
+}
+
+/** A tree's persons in their order and the index of their strong ids. */
+interface TreeStrongIds {
+    persons: Person[];
+    index: StrongIdIndex;
 }
 
 let matchPass: MatchPass | null = null;
@@ -61,13 +69,39 @@ function memo2<V>(table: Map<string, Map<string, V>>, a: string, b: string, comp
  */
 export function inMatchPass<T>(trees: StromData[], fn: () => T): T {
     if (matchPass) return fn();
-    matchPass = { normalized: new Map(), similarity: new Map(), firstNames: new Map(), lastNames: new Map(), sameSurname: new Map(), bestLastNames: new Map(), signatures: new WeakMap(), firstNameBound: new Map() };
+    matchPass = { normalized: new Map(), similarity: new Map(), firstNames: new Map(), lastNames: new Map(), sameSurname: new Map(), bestLastNames: new Map(), signatures: new WeakMap(), firstNameBound: new Map(), strongIds: new Map() };
     try {
         const run = trees.reduceRight<() => T>((inner, data) => () => withSurnameRules(data, inner), fn);
         return run();
     } finally {
         matchPass = null;
     }
+}
+
+/** A tree's persons and their strong-id index, remembered for the pass. */
+function strongIdsOf(data: StromData): TreeStrongIds {
+    const have = matchPass?.strongIds.get(data);
+    if (have) return have;
+    const persons = Object.values(data.persons);
+    const made: TreeStrongIds = { persons, index: strongIdIndex(persons, data) };
+    matchPass?.strongIds.set(data, made);
+    return made;
+}
+
+/**
+ * The tree has more than one person (of a name, or more than one "?") with
+ * a strong id the incoming person has: the id does not say which one it is,
+ * so it pairs none of them by itself — a match is only offered (spec 066
+ * K3.2, as the research's rule (a)).
+ */
+function idNamesSeveral(incoming: Person, existingData: StromData, incomingData: StromData): boolean {
+    if (existingData === incomingData || !incoming.originalIds?.length) return false;
+    const tree = strongIdsOf(existingData);
+    let found = 0;
+    for (const at of tree.index.sharing(incoming, incomingData)) {
+        if (!!tree.persons[at].isPlaceholder === !!incoming.isPlaceholder && ++found > 1) return true;
+    }
+    return false;
 }
 
 /** sameSurname, remembered for the pass. */
@@ -659,12 +693,15 @@ function findDirectMatches(
     // file merged again, its couples then are the same couples (P-c, spec 066).
     // Only the tree's persons sharing a strong id with the record can pass the
     // id check below: the index finds them, in the tree's order.
-    const existingPersons = Object.values(existingData.persons);
+    // An id more persons of the tree have pairs none of them here (only offered below).
+    // Persons of the file sharing an id: the first in the file's order the
+    // id confirms takes the person, the others cannot take it again.
+    const { persons: existingPersons, index: idIndex } = strongIdsOf(existingData);
     const incomingPersons = Object.values(incomingData.persons);
-    const idIndex = strongIdIndex(existingPersons, existingData);
     for (const incoming of incomingPersons) {
         if (!incoming.originalIds?.length) continue;
         if (usedIncoming.has(incoming.id)) continue;
+        if (idNamesSeveral(incoming, existingData, incomingData)) continue;
         for (const at of idIndex.sharing(incoming, incomingData)) {
             const existing = existingPersons[at];
             if (!!existing.isPlaceholder !== !!incoming.isPlaceholder || usedExisting.has(existing.id)) continue;
@@ -1386,7 +1423,9 @@ function calculateMatchScore(
         const y1 = birthOrBaptismYear(existing);
         const y2 = birthOrBaptismYear(incoming);
         const yearsAgree = y1 === null || y2 === null || Math.abs(y1 - y2) <= ID_MAX_YEAR_GAP;
-        if (yearsAgree && !ids.globalDiffers) return { score: ID_MATCH_SCORE, reasons: ['id'], idConfirmed: true };
+        if (yearsAgree && !ids.globalDiffers && !idNamesSeveral(incoming, existingData, incomingData)) {
+            return { score: ID_MATCH_SCORE, reasons: ['id'], idConfirmed: true };
+        }
         return idCandidate(score, reasons);
     }
     if (ids.globalDiffers) {

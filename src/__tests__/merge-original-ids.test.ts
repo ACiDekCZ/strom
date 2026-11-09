@@ -251,6 +251,44 @@ describe('strong ids', () => {
         const differ = matchOf(createMergeState(existing, other), byName(other, 'Libuna'))!;
         expect(differ.score).toBeLessThan(AUTO_CONFIRM_SCORE);
     });
+
+    it('a _UID two persons of the tree have pairs neither of them by itself: one is only offered', () => {
+        const existing = load(ged('MyHeritage Family Tree Builder', [
+            { xref: 'I1', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+            { xref: 'I2', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+        ]), 'a.ged');
+        const incoming = load(ged('MyHeritage Family Tree Builder', [
+            { xref: 'I5', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+        ]), 'b.ged');
+        const state = createMergeState(existing, incoming);
+        const match = matchOf(state, byName(incoming, 'Hromoslav'))!;
+        expect(Object.keys(existing.persons)).toContain(match.existingId);
+        expect(match.reasons).toContain('id');
+        expect(match.score).toBeLessThan(AUTO_CONFIRM_SCORE);
+        expect(isEffectivelyConfirmed(state, match)).toBe(false);
+    });
+
+    it('persons of the file with one _UID: the first in the file the id confirms takes the person, the other does not', () => {
+        const existing = load(ged('MyHeritage Family Tree Builder', [
+            { xref: 'I1', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+        ]), 'a.ged');
+        const twice = load(ged('MyHeritage Family Tree Builder', [
+            { xref: 'I5', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+            { xref: 'I6', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1881', lines: [`1 _UID ${UID}`] },
+        ]), 'b.ged');
+        const state = createMergeState(existing, twice);
+        const [first, second] = Object.values(twice.persons);
+        expect(matchOf(state, first)).toMatchObject({ existingId: byName(existing, 'Hromoslav').id, score: 100 });
+        expect(matchOf(state, second)).toBeUndefined();
+        // The first one of another name only offered: the next one the id confirms takes the person.
+        const renamed = load(ged('MyHeritage Family Tree Builder', [
+            { xref: 'I5', name: 'Jaromil /Vrbecký/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+            { xref: 'I6', name: 'Hromoslav /Ozubec/', sex: 'M', birth: '1880', lines: [`1 _UID ${UID}`] },
+        ]), 'c.ged');
+        const again = createMergeState(existing, renamed);
+        expect(matchOf(again, byName(renamed, 'Hromoslav'))).toMatchObject({ existingId: byName(existing, 'Hromoslav').id, score: 100 });
+        expect(matchOf(again, byName(renamed, 'Jaromil'))).toBeUndefined();
+    });
 });
 
 describe('weak ids (xref, RIN)', () => {
