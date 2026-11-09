@@ -1059,6 +1059,44 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await expect(page.locator('#verify-bulk-modal')).toBeVisible();
     });
 
+    test('a person with residences: the menu counts what /verify takes (the residences too), as the preview does; the toast says what the research queued', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // Two residences the research holds (their ids): no "Verify" of their own, but a person's /verify takes them.
+        const resi = ['1 RESI', '2 DATE 1880', '2 PLAC Čapkov', '2 _STROM_STATUS lead', '2 _STROM_EID E0014',
+            '1 RESI', '2 DATE 1890', '2 PLAC Lhota', '2 _STROM_STATUS lead', '2 _STROM_EID E0015'];
+        const ged = verifyGed(undefined, resi);
+        const facts = [
+            { fact: 'E0012', kind: 'BIRT', how: 'read', record: { source: 'S0001', title: 'Křestní matrika Čapkov', page: 'fol. 12' } },
+            { fact: 'E0013', kind: 'DEAT', how: 'search' },
+            { fact: 'E0014', kind: 'RESI', how: 'search' },
+            { fact: 'E0015', kind: 'RESI', how: 'search' },
+        ];
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: ged, statusExtra: { researches: [LINE] } });
+        // The start queues one more than the preview listed (a fact the research holds that the tree does not show).
+        const verify = await fakeVerify(page, bridge, { facts, startFacts: [...facts, { fact: 'E0016', kind: 'CENS', how: 'search' }] });
+        await openResearch(page, { ged });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+
+        await card(page, 'Jan').locator('.name').click();
+        const menu = page.locator('.context-menu');
+        await expect(menu.locator('[data-action="signal-verify"] .menu-act-text')).toContainText('Verify facts · 4');
+        await menu.locator('[data-action="signal-verify"]').click();
+        const dialog = page.locator('#verify-person-modal');
+        await expect(dialog.locator('.vfy-check')).toHaveCount(4);
+        await expect(dialog.locator('[data-vfy="start"]')).toContainText('Verify (4)');
+        await dialog.locator('[data-vfy="start"]').click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: '5 facts queued for verification.' })).toBeVisible();
+        expect(verify.posts.filter(p => !p.body.dry)).toEqual([{ route: 'verify', body: { person: 'P0003' } }]);
+
+        // Each of the four the tree holds waits now (the residences too).
+        await card(page, 'Jan').locator('.name').click();
+        await expect(menu.locator('[data-action="signal-verify"]')).toHaveCount(0);
+        await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 4');
+    });
+
     test('the tree\'s Verifying: Stop, then the bulk dialog with the line, nearest ancestors first and a try on 5 people; the estimate follows the choice', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         const { verify } = await verifySetup(page, { verify: { waiting: 2, ...COUNTS } });

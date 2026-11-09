@@ -15,6 +15,10 @@ export interface FakeVerify {
     counts: { line: number; lineage: number; tree: number };
     /** The place in the queue a person's start gets. */
     position: number;
+    /** The facts a person's /verify takes (default VERIFY_FACTS). */
+    facts?: typeof VERIFY_FACTS;
+    /** The facts a start (not dry) answers it queued, when they differ from `facts`. */
+    startFacts?: typeof VERIFY_FACTS;
 }
 
 /** Jan's facts the research verifies: the birth by reading a record, the death by searching one. */
@@ -24,10 +28,11 @@ export const VERIFY_FACTS = [
 ];
 
 /** The research's tree with Jan's birth and death named by their ids (what /verify takes). */
-export function verifyGed(head?: string): string {
+export function verifyGed(head?: string, extra: string[] = []): string {
     return researchGed(head, [
         '1 BIRT', '2 DATE 1860', '2 PLAC Čapkov', '2 _STROM_STATUS probable', '2 SOUR @S0001@', '2 _STROM_EID E0012',
         '1 DEAT', '2 DATE 1910', '2 PLAC Čapkov', '2 _STROM_STATUS possible', '2 _STROM_EID E0013',
+        ...extra,
     ]);
 }
 
@@ -50,7 +55,8 @@ export async function fakeVerify(page: Page, bridge: FakeBridge, init: Partial<F
         const json = (status: number, b: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(b) });
         const dry = body.dry === true;
         if (path === 'verify') {
-            const facts = typeof body.fact === 'string' ? VERIFY_FACTS.filter(f => f.fact === body.fact) : VERIFY_FACTS;
+            const all = (!dry && v.startFacts) || v.facts || VERIFY_FACTS;
+            const facts = typeof body.fact === 'string' ? all.filter(f => f.fact === body.fact) : all;
             await json(200, {
                 ok: true, task: dry ? null : 'T0042', facts, ...(dry ? {} : { position: v.position }),
                 estimate: { sessions: 1, usd: 0.4 }, head: bridge.head,

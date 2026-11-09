@@ -9,7 +9,7 @@ import type { Partnership, Person, ResearchFactVerify } from '../types.js';
 import type { FactVerifyInfo } from '../verify.js';
 import type { VerifyResearch } from '../verify-offer.js';
 import {
-    FactOfferInput, bulkScopeOptions, factOffer, personVerifyCounts, queuedToastDue, verifyCostSplit, verifyFactKind,
+    FactOfferInput, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue, verifyCostSplit, verifyFactKind,
     verifyRecordText,
 } from '../verify-ui-model.js';
 
@@ -147,6 +147,25 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
             factOffer(p, 'event:e3', input()),
         ];
         expect(personVerifyCounts(offers)).toEqual({ verify: 2, pending: 1 });
+    });
+
+    it('"Verify facts · N": every fact /verify {person} takes (an occupation too, a proven one too), not one confirmed or waiting, not the name or sex', () => {
+        const fact = (f: string, o: Partial<FactOfferInput> = {}) => ({ fact: f, offer: factOffer(p, f, input(o)), step: o.step ?? 'probable' });
+        const facts = [
+            fact('birth'),
+            fact('death', { step: 'proven' }),
+            fact('event:e1', { step: 'human', info: { confirmedBy: 'research' } as FactVerifyInfo }),
+            fact('event:e2', { localPending: true }),
+            fact('event:e3', { step: null }),
+            fact('name'),
+            fact('sex'),
+        ];
+        expect(personVerifyAskCount(facts)).toBe(3);
+        // Nothing offers "Verify": no item, whatever the research would take.
+        expect(personVerifyAskCount(facts.filter(f => f.fact !== 'birth'))).toBe(0);
+        // A fact without the research's id is none of its facts.
+        const noIds = person();
+        expect(personVerifyAskCount([{ fact: 'birth', offer: factOffer(noIds, 'birth', input()), step: 'probable' }])).toBe(0);
     });
 });
 

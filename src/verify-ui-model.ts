@@ -141,6 +141,27 @@ export function queuedToastDue(fix: { at: string } | undefined, waiting: number,
     return !!fix && !!fix.at && waiting > 0 && fix.at !== shownFor;
 }
 
+/** One of a person's facts as "Verify facts · N" counts it. */
+export interface PersonAskFact {
+    fact: string;
+    offer: Pick<FactOffer, 'verify' | 'row' | 'eid'>;
+    step: ReliabilityStepName | null;
+}
+
+/**
+ * "Verify facts · N" (the person menu, the card mark's tip): the facts the
+ * research's /verify {person} takes — each of the person's and their
+ * couples' facts it holds (its id there: a residence or an occupation as
+ * well as a birth), not confirmed by a person, not waiting already; the
+ * name and the sex are no facts of its. 0 while none of them offers
+ * "Verify" (nothing worth asking for): the item is not shown.
+ */
+export function personVerifyAskCount(facts: readonly PersonAskFact[]): number {
+    if (!facts.some(f => f.offer.verify)) return 0;
+    return facts.filter(f => !!f.offer.eid && f.fact !== 'name' && f.fact !== 'sex'
+        && f.step !== 'human' && f.offer.row !== 'pending').length;
+}
+
 /** A person's count for "Verify facts (N)" and "Verifying · N" from the offers of their facts. */
 export function personVerifyCounts(offers: readonly Pick<FactOffer, 'verify' | 'row'>[]): { verify: number; pending: number } {
     return {

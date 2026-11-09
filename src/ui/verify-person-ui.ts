@@ -23,13 +23,13 @@ import type { LiveStatus } from '../research-link.js';
 import { FactHolder, factCitations, factsOf, isPartnership } from '../import-origin.js';
 import { factReliability, ReliabilityStepName } from '../reliability.js';
 import {
-    VERIFY_BULK_FEATURE, VERIFY_FEATURE, VERIFY_STOP_FEATURE, factVerifyInfo, personResearchRef,
+    VERIFY_BULK_FEATURE, VERIFY_FEATURE, VERIFY_STOP_FEATURE, factResearchEid, factVerifyInfo, personResearchRef,
 } from '../verify.js';
 import {
     VerifyBulkDone, VerifyBulkOrder, VerifyFact, VerifyTarget, postVerify, postVerifyBulk, postVerifyStop,
 } from '../research-verify.js';
 import {
-    BulkScopeOption, FactOffer, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyCounts, queuedToastDue,
+    BulkScopeOption, FactOffer, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
     verifyCostSplit, verifyFactKind, verifyRecordText,
 } from '../verify-ui-model.js';
 import { VerifyResearch, researchVerifies } from '../verify-offer.js';
@@ -89,7 +89,7 @@ interface PersonFact {
 export interface PersonVerifyState {
     research: VerifyResearch | null;
     facts: PersonFact[];
-    /** Facts "Verify facts (N)" would take (only with the research's `verify`). */
+    /** Facts "Verify facts (N)" would take, as the research's /verify {person} does (only with its `verify`; see personVerifyAskCount). */
     verify: number;
     /** Facts waiting for re-verification. */
     pending: number;
@@ -257,12 +257,12 @@ export const verifyPersonMethods = uiModule({
             .map(id => data.partnerships[id as PartnershipId]).filter((p): p is Partnership => !!p)];
         const facts: PersonFact[] = [];
         for (const holder of holders) {
-            const list = isPartnership(holder) ? ['marriage'] : factsOf(holder);
-            for (const fact of list) {
+            for (const fact of factsOf(holder)) {
                 const kind = verifyFactKind(holder, fact);
                 const info = factVerifyInfo(holder, fact);
                 const waits = factWaitsForVerify(holder, fact);
-                if (!kind && !waits) continue;
+                // A fact the research holds (its id) is one /verify {person} takes too, whatever its kind.
+                if (!kind && !waits && !factResearchEid(holder, fact)) continue;
                 const step = factReliability(data, holder, fact, opts)?.step ?? null;
                 const offer = factOffer(holder, fact, {
                     step, research, researchTree: opts.researchTree, cited: factCitations(data, holder, fact).length > 0, info,
@@ -272,7 +272,7 @@ export const verifyPersonMethods = uiModule({
             }
         }
         const counts = personVerifyCounts(facts.map(f => f.offer));
-        return { research, facts, verify: researchVerifies(research) ? counts.verify : 0, pending: counts.pending };
+        return { research, facts, verify: researchVerifies(research) ? personVerifyAskCount(facts) : 0, pending: counts.pending };
     },
 
     /** "Verify facts (N)" in a card mark's tip, else "N facts waiting to be verified". */
@@ -457,6 +457,8 @@ export const verifyPersonMethods = uiModule({
         const all = checked.length === st.rows.length;
         const targets: VerifyTarget[] = all ? [{ person: ref }] : checked.map(r => ({ fact: r.eid }));
         const started: StartedFact[] = [];
+        /** The facts the research queued, by its answers (each target's checked rows when one names none). */
+        const queued = new Set<string>();
         let failure = '';
         let position: number | undefined;
         // One write under the window lock; the research's new version follows quietly.
@@ -468,22 +470,24 @@ export const verifyPersonMethods = uiModule({
                 const asked = new Set(r.facts.map(f => f.fact));
                 const rows = 'person' in target ? checked.filter(x => asked.size === 0 || asked.has(x.eid)) : checked.filter(x => 'fact' in target && x.eid === target.fact);
                 started.push(...rows.filter(x => x.holderId && x.fact).map(x => ({ holderId: x.holderId, fact: x.fact })));
+                for (const id of asked.size ? asked : rows.map(x => x.eid)) queued.add(id);
                 if (r.position !== undefined) position = r.position;
                 last = r;
             }
             return last;
         });
-        if (!answer && !failure && started.length === 0) failure = strings.verify.failed;
+        if (!answer && !failure && started.length === 0 && queued.size === 0) failure = strings.verify.failed;
         noteStarted(started, targets.length === 1 ? position : undefined);
         if (preview !== st) return;
-        if (failure && started.length === 0) {
+        if (failure && started.length === 0 && queued.size === 0) {
             st.busy = false;
             st.error = failure;
             this.renderVerifyPerson();
             return;
         }
         this.closeVerifyPersonDialog();
-        this.showToast(failure || strings.verify.bulkStarted(started.length || checked.length), 5000, failure ? { alert: true } : {});
+        // What the research says it queued: a residence it verifies too, though the tree holds no such fact to mark.
+        this.showToast(failure || strings.verify.bulkStarted(queued.size || started.length || checked.length), 5000, failure ? { alert: true } : {});
         this.afterVerifyStarted();
     },
 
