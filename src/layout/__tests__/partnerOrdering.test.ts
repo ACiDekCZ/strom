@@ -130,9 +130,16 @@ describe('Chronological partner order (T13)', () => {
         expect(row(data, 'c1')).toBe('P1 S P3 P2');
     });
 
-    it('an undated marriage stands after the dated ones', () => {
+    it('an undated marriage with nothing to bound it stands after the dated ones', () => {
         const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
+        delete (data.persons['c3' as PersonId] as { birthDate?: string }).birthDate;
         expect(row(data, 'c1')).toBe('P3 P2 S P1');
+    });
+
+    it('an undated marriage is bounded by its first child (T13)', () => {
+        // Child of the undated union born 1863: that marriage came before 1908.
+        const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
+        expect(row(data, 'c1')).toBe('P2 P3 S P1');
     });
 });
 
