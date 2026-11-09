@@ -17,6 +17,9 @@ import { AUTO_CONFIRM_SCORE, executeMerge, isEffectivelyConfirmed } from '../mer
 import { MergeState, PersonMatch } from '../merge/types.js';
 import { Person, StromData } from '../types.js';
 import { StorageManager } from '../storage.js';
+import { exportToGedcom } from '../ged-exporter.js';
+import { migrateData } from '../data.js';
+import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
 
 interface Indi {
     xref: string;
@@ -353,5 +356,63 @@ describe('the merged person', () => {
             { from: 'I1', xref: 'I500001', ids: [{ tag: '_UID', value: UID }, { tag: 'RIN', value: 'MH:I500001' }] },
             { from: 'I2', xref: 'I500007', ids: [{ tag: '_UID', value: UID }, { tag: 'RIN', value: 'MH:I500007' }] },
         ]);
+    });
+});
+
+describe('the merged family', () => {
+    beforeEach(() => { vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never); });
+
+    /** A couple divorced in one family record and married again in another, each record with its ids. */
+    const FILE = [
+        '0 HEAD', '1 SOUR MYHERITAGE', '2 NAME MyHeritage Family Tree Builder', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Hromoslav /Ozubec/', '1 SEX M', '1 BIRT', '2 DATE 1870', '1 DEAT', '2 DATE 1930',
+        `1 _UID ${UID}`, '1 FAMS @F1@', '1 FAMS @F2@',
+        '0 @I2@ INDI', '1 NAME Bělinka /Vrbecká/', '1 SEX F', '1 BIRT', '2 DATE 1875', '1 DEAT', '2 DATE 1940',
+        '1 _UID 0B1C2D3E4F5061728394A5B6C7D8E9F0', '1 FAMS @F1@', '1 FAMS @F2@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 _UID AAAA0000BBBB1111CCCC2222DDDD3333', '1 RIN 1',
+        '1 MARR', '2 DATE 1900', '1 DIV', '2 DATE 1905',
+        '0 @F2@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 _UID EEEE4444FFFF5555AAAA6666BBBB7777', '1 RIN 2',
+        '1 MARR', '2 DATE 1910',
+        '0 TRLR', '',
+    ].join('\n');
+    const read = (file: string): StromData =>
+        migrateData(convertToStrom(parseGedcom(FILE), { importOrigin: { at: '2026-11-10', file } }).data);
+    /**
+     * "Back to {program}" as the app makes it (for the tree's last import), as
+     * the other program reads it: without the export date and Strom's own blocks.
+     */
+    const back = (data: StromData): string[] => {
+        const out: string[] = [];
+        let skipBelow = -1;
+        const lines = exportToGedcom(applyLivingPrivacy(data, 'full', 2026, { keepDeceasedSources: true }), 'Ozubec',
+            { content: CONTENT_PRESETS.back, origins: true, backTo: data.imports![data.imports!.length - 1].id }).content.split('\n');
+        for (const line of lines) {
+            const level = parseInt(line, 10);
+            if (skipBelow >= 0 && level > skipBelow) continue;
+            skipBelow = /^\d+ _STROM_/.test(line) ? level : -1;
+            if (skipBelow < 0 && !/^1 DATE /.test(line)) out.push(line);
+        }
+        return out;
+    };
+
+    it('the same file merged again: one family, the ids of both imports, and "Back to" is the first one\'s', async () => {
+        const tree = read('a.ged');
+        const first = back(tree);
+        const merged = (await executeMerge(createMergeState(tree, read('b.ged')))).mergedData;
+        expect(Object.keys(merged.persons)).toHaveLength(2);
+        const families = Object.values(merged.partnerships);
+        expect(families).toHaveLength(1);
+        expect(families[0].originalIds?.map(e => [e.from, e.xref])).toEqual([['I1', 'F1'], ['I2', 'F1']]);
+        expect(families[0].originalIds![1].ids).toEqual(families[0].originalIds![0].ids);
+        expect(back(merged)).toEqual(first);
+        expect(first).toEqual(expect.arrayContaining(['0 @F1@ FAM', '0 @F2@ FAM', '1 _UID EEEE4444FFFF5555AAAA6666BBBB7777']));
+    });
+
+    it('a tree whose family has no ids yet takes them from the file merged into it', async () => {
+        const tree = read('a.ged');
+        for (const u of Object.values(tree.partnerships)) delete u.originalIds;
+        const merged = (await executeMerge(createMergeState(tree, read('b.ged')))).mergedData;
+        const family = Object.values(merged.partnerships)[0];
+        expect(family.originalIds?.map(e => [e.from, e.xref])).toEqual([['I2', 'F1']]);
     });
 });
