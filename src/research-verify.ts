@@ -454,13 +454,13 @@ export function postFactConfirm(base: string, fact: string, confirm: boolean, op
 
 /** `/status verify` (spec 065): counts of facts by their re-verification state. */
 export interface LiveVerifyStatus {
-    /** Waiting for an agent (`wait`). */
+    /** Waiting in an open task of re-verification: all of them (the sweep's, bulk, asked by a person, for scans, for a permission). */
     waiting: number;
-    /** Asked by a person (`asked`). */
+    /** Of the waiting ones, asked by a person (`asked`). */
     asked: number;
-    /** Waiting for scans (`images`). */
+    /** Of the waiting ones, waiting for scans (`images`). */
     images: number;
-    /** Waiting for an archive's permission (`permission`). */
+    /** Of the waiting ones, waiting for an archive's permission (`permission`). */
     permission: number;
     /** Kept as they were after a check (`kept`). */
     kept: number;

@@ -506,7 +506,8 @@ export const verifyPersonMethods = uiModule({
         if (!now || !researchVerifies(now.research, VERIFY_FEATURE) || DataManager.isViewMode()) return null;
         const v = now.status.verify;
         return {
-            waiting: (v?.waiting ?? 0) + (v?.asked ?? 0),
+            // The research's `asked` (and `images`, `permission`) are counted among its `waiting`.
+            waiting: v?.waiting ?? 0,
             stop: researchVerifies(now.research, VERIFY_STOP_FEATURE),
             bulk: researchVerifies(now.research, VERIFY_BULK_FEATURE),
         };
@@ -891,7 +892,7 @@ export const verifyPersonMethods = uiModule({
         let shown: string | null = null;
         try { shown = localStorage.getItem(TOAST_KEY(treeId)); } catch { /* no storage: shown once per page */ }
         if (shown === null) shown = shownThisPage.get(treeId) ?? null;
-        const waiting = v.waiting + v.asked;
+        const waiting = v.waiting;
         if (!queuedToastDue(v.fix, waiting, shown)) return;
         const at = v.fix!.at;
         shownThisPage.set(treeId, at);

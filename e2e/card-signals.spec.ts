@@ -1099,7 +1099,8 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
 
     test('the tree\'s Verifying: Stop, then the bulk dialog with the line, nearest ancestors first and a try on 5 people; the estimate follows the choice', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
-        const { verify } = await verifySetup(page, { verify: { waiting: 2, ...COUNTS } });
+        // The research's asked, images and permission are counts among its waiting ones, not more of them.
+        const { verify } = await verifySetup(page, { verify: { ...COUNTS, waiting: 2, asked: 2, images: 1 } });
         await page.evaluate(() => window.Strom.UI.showVerifyTreeDialog());
         const tree = page.locator('#verify-tree-modal');
         await expect(tree.locator('.vfy-sec-pending')).toContainText('Waiting to be verified: 2 facts');
@@ -1158,6 +1159,10 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await poll(page);
         await expect(toast).toHaveCount(1);
         await expect(toast).toContainText('1 fact with an original is waiting');
+        // A run that says no count: the waiting ones, the asked among them not counted twice.
+        bridge.statusExtra = { ...bridge.statusExtra, verify: { ...COUNTS, waiting: 2, asked: 2, fix: { ...FIX, at: '2026-11-09T09:00:00Z', facts: 0 } } };
+        await poll(page);
+        await expect(page.locator('.toast[data-kind="verify-queued"]', { hasText: '2 facts with an original are waiting' })).toHaveCount(1);
     });
 
     test('phone 390 × 844 with touch: the preview is a bottom sheet, its rows 52 px, its buttons 48 px, nothing wider than the screen', async ({ page }) => {
