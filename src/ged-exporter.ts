@@ -37,7 +37,7 @@ import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
 import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
-import { CONFIRMED_TAG, factVerifyInfo } from './verify.js';
+import { CONFIRMED_TAG, EID_TAG, factResearchEid, factVerifyInfo } from './verify.js';
 import { importProgramName } from './import-next.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -84,6 +84,9 @@ export interface GedcomExportOptions {
      * is a confirmation, one left out a take-back — and a Strom file read
      * back keeps it. Default: written; false: none. "Back to {prog}"
      * (`backTo`) never writes it (the other program does not read it).
+     * The fact's id in the research (`2 _STROM_EID`) goes with it to the
+     * research only (`research`): the id is that research's, another one
+     * would read it as its own fact's.
      */
     confirmations?: boolean;
     /**
@@ -1339,6 +1342,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
         const confirmed = writeConfirmations ? factVerifyInfo(holder, fact).confirmed : undefined;
         if (confirmed) lines.push(`2 ${CONFIRMED_TAG} ${confirmed}`);
+        // The fact's id in the research goes back with it (spec 065): the
+        // research takes a confirmation back only from a fact that carries it,
+        // one whose state the app saw (a copy from an older app has none).
+        // Only to the research: the id is that research's own.
+        const eid = writeConfirmations && options.research ? factResearchEid(holder, fact) : null;
+        if (eid) lines.push(`2 ${EID_TAG} ${eid}`);
         const o = options.origins ? holder.researchOrigins?.[fact] : undefined;
         if (!o) return;
         if (o.kind && fact !== 'sex') lines.push(`2 _STROM_ORIGIN ${researchOriginValue(o)}`);

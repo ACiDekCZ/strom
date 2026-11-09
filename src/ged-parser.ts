@@ -1324,6 +1324,8 @@ interface GedcomFamily {
      * never another one's date (a further one is the research's own record of it).
      */
     firstMarriageOnly?: boolean;
+    /** Which of the family's MARR / DIV records is the fact's (by order, see isFactUnionRecord). */
+    factUnionRecords?: { marriage?: number; divorce?: number };
     note: string;
     /** Standard facts with no field of their own — folded into the note. */
     noteFacts: RawNoteFact[];
@@ -2854,6 +2856,24 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
         return out;
     };
+    /**
+     * Whether the `1 MARR` / `1 DIV` being read is the family's record of the
+     * fact: its first one with a date or a place, else its first one. An
+     * empty record ahead of the dated one (MyHeritage: `1 MARR`, then `1 MARR`
+     * with DATE and PLAC; the research keeps both) is not the fact's: its
+     * date and place would be lost.
+     */
+    const isFactUnionRecord = (fam: GedcomFamily, type: 'marriage' | 'divorce'): boolean => {
+        const seen = fam.unionEvents.filter(e => e.type === type).length;
+        const chosen = (fam.factUnionRecords ??= {})[type] ??= (() => {
+            if (fam.recordLine === undefined) return 0;
+            const tag = type === 'marriage' ? 'MARR' : 'DIV';
+            const own = structuresOf(structureAt(fam.recordLine).slice(1)).filter(st => new RegExp(`^1 ${tag}( |$)`).test(st[0]));
+            const at = own.findIndex(st => st.some(l => /^2 (DATE|PLAC) \S/.test(l)));
+            return at < 0 ? 0 : at;
+        })();
+        return seen === chosen;
+    };
     const readNoted = (src: number, level: number, tag: string): void => {
         const open = noted;
         if (open?.sub && level <= 2) {
@@ -3761,7 +3781,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'DIV':
                             // A bare DIV (no date sub-record) still means divorced.
                             fam.divorced = true;
-                            laterUnionRecord = fam.unionEvents.some(e => e.type === 'divorce');
+                            laterUnionRecord = !isFactUnionRecord(fam, 'divorce');
                             fam.unionEvents.push({ type: 'divorce', date: '' });
                             break;
                         case 'SOUR':
@@ -3769,7 +3789,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (value) cite(fam.sourceRefs, value);
                             break;
                         case 'MARR':
-                            laterUnionRecord = fam.unionEvents.some(e => e.type === 'marriage');
+                            laterUnionRecord = !isFactUnionRecord(fam, 'marriage');
                             fam.unionEvents.push({ type: 'marriage', date: '' });
                             break;
                         case '_STORY':

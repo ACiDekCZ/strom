@@ -217,10 +217,10 @@ ${fam}0 TRLR
         expect(c.ages).toBeUndefined();
         expect(c.note).toBeUndefined();
         expect(c.researchVerify?.marriage).toEqual({ eid: 'E0073' });
-        // The first goes back as the research has it; the second is the
-        // research's own (a further wedding missing from the file is the shape
+        // The first goes back as the research has it, with its id; the second is
+        // the research's own (a further wedding missing from the file is the shape
         // of the app's union there), never mixed into the first.
-        expect(sentFamily(d)).toEqual(['1 MARR', '2 PLAC Hrbolcov', '2 _STROM_STATUS lead']);
+        expect(sentFamily(d)).toEqual(['1 MARR', '2 PLAC Hrbolcov', '2 _STROM_STATUS lead', '2 _STROM_EID E0073']);
     });
 
     it('two divorces: the divorce is the first one, with its id', () => {
@@ -239,7 +239,7 @@ ${fam}0 TRLR
         const c = couple(d);
         expect([c.status, c.endDate, c.endPlace]).toEqual(['divorced', '1905', 'Drnkalov']);
         expect(c.researchVerify?.divorce).toEqual({ eid: 'E0010' });
-        expect(sentFamily(d)).toEqual(['1 MARR', '2 DATE 1900', '1 DIV', '2 DATE 1905', '2 PLAC Drnkalov']);
+        expect(sentFamily(d)).toEqual(['1 MARR', '2 DATE 1900', '1 DIV', '2 DATE 1905', '2 PLAC Drnkalov', '2 _STROM_EID E0010']);
     });
 
     it('a person with two births: the birth is the first, the other an event with its own id', () => {
@@ -258,6 +258,46 @@ ${fam}0 TRLR
         expect(h.researchVerify?.birth).toEqual({ eid: 'E0001' });
         const alt = h.events!.find(e => e.date === '1851')!;
         expect(h.researchVerify?.[`event:${alt.id}`]).toEqual({ pending: 'asked', eid: 'E0002' });
+    });
+
+    it('an empty wedding ahead of the dated one (MyHeritage): the wedding is the dated one, its date, place, id and state, and it goes back so', () => {
+        const d = load(file(`1 MARR Y
+2 _STROM_EID E0080
+1 MARR
+2 _STROM_EID E0081
+2 DATE 12 MAY 1920
+2 PLAC Drnkalov
+2 _STROM_CONFIRMED 2026-11-02
+`));
+        const c = couple(d);
+        expect([c.status, c.startDate, c.startPlace]).toEqual(['married', '1920-05-12', 'Drnkalov']);
+        expect(c.researchVerify?.marriage).toEqual({ confirmed: '2026-11-02', eid: 'E0081' });
+        expect(sentFamily(d)).toEqual(['1 MARR', '2 DATE 12 MAY 1920', '2 PLAC Drnkalov', '2 _STROM_CONFIRMED 2026-11-02', '2 _STROM_EID E0081']);
+    });
+
+    it('an empty divorce ahead of the dated one: the divorce is the dated one', () => {
+        const d = load(file(`1 MARR
+2 DATE 1900
+1 DIV Y
+2 _STROM_EID E0090
+1 DIV
+2 _STROM_EID E0091
+2 DATE 1905
+2 PLAC Hrbolcov
+`));
+        const c = couple(d);
+        expect([c.status, c.endDate, c.endPlace]).toEqual(['divorced', '1905', 'Hrbolcov']);
+        expect(c.researchVerify?.divorce).toEqual({ eid: 'E0091' });
+    });
+
+    it("another program's file (MyHeritage): an empty wedding ahead of the dated one gives the couple the date and the place", () => {
+        const other = file(`1 MARR
+1 MARR
+2 DATE 12 MAY 1920
+2 PLAC Drnkalov
+`).replace('1 SOUR STROM_RESEARCH', '1 SOUR MYHERITAGE').replace('2 NAME Strom Research', '2 NAME MyHeritage Family Tree Builder');
+        const c = couple(load(other));
+        expect([c.status, c.startDate, c.startPlace]).toEqual(['married', '1920-05-12', 'Drnkalov']);
     });
 
     it("another program's file keeps reading a second wedding's date where the first has none", () => {
@@ -474,14 +514,41 @@ describe("the fact's id in the research and its place in the queue", () => {
         expect(h.researchVerify?.death).toEqual({ pending: 'asked', eid: 'E0013' });
     });
 
-    it('is neither sent back nor a change', () => {
+    it('the id goes back to the research under its fact (it takes a confirmation back only there), the place never; neither is a change', () => {
         const d = load(WITH_IDS);
         // The same tree without the ids and places (ids of records are fresh on every load).
         const plain = JSON.parse(JSON.stringify(d, (k, v) => (k === 'eid' || k === 'position' ? undefined : v))) as StromData;
         expect(contentFingerprint(d)).toBe(contentFingerprint(plain));
         const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
-        expect(ged).not.toMatch(/_STROM_EID|_POS/);
+        expect(ged).not.toMatch(/_POS/);
+        const idsOf = (text: string): Record<string, string> => {
+            const out: Record<string, string> = {};
+            let fact = '';
+            for (const line of text.split(/\r?\n/)) {
+                if (/^1 /.test(line)) fact = line.split(' ')[1];
+                const m = /^2 _STROM_EID (\S+)$/.exec(line);
+                if (m) out[m[1]] = fact;
+            }
+            return out;
+        };
+        expect(idsOf(ged)).toEqual({ E0012: 'BIRT', E0013: 'DEAT', E0014: 'BAPM', E0020: 'MARR' });
+        // Only the research's file: the id is that research's, the app's own
+        // file may reach another one; "Back to {prog}" never.
         const own = exportToGedcom(d, 'Ozubec', { origins: true, confirmations: true }).content;
         expect(own).not.toMatch(/_STROM_EID|_POS/);
+        const back = exportToGedcom(d, 'Ozubec', { backTo: 'PAF' } as never).content;
+        expect(back).not.toMatch(/_STROM_EID|_POS/);
+    });
+
+    it('a fact taken back here goes to the research without its confirmation but with its id: the take-back reaches it', () => {
+        const d = load(WITH_IDS);
+        const h = person(d, 'Hromoslav');
+        expect(h.researchVerify?.birth?.confirmed).toBe('2026-11-08');
+        // Taken back here as DataManager.unconfirmFact does it.
+        h.confirmed = { birth: { at: '2026-11-08', withdrawn: true } };
+        const ged = exportToGedcom(d, 'Ozubec', { research: { id: 'r1', head: 'abc' } } as never).content;
+        const birth = ged.split(/\r?\n(?=1 )/).find(b => b.startsWith('1 BIRT') && b.includes('E0012'))!;
+        expect(birth).toMatch(/^2 _STROM_EID E0012$/m);
+        expect(birth).not.toMatch(/_STROM_CONFIRMED/);
     });
 });
