@@ -941,6 +941,20 @@ function backToXrefs(data: StromData, backTo: string | undefined): BackXrefs {
     return out;
 }
 
+/**
+ * How many source records "Back to {prog}" writes (`backTo`: the import the
+ * file goes back to). The sources one record of that program's file became
+ * (one per page cited, see the import) go back as that one record, so a
+ * register cited at 81 pages is one source there, not 81 (spec 066 K3.1).
+ */
+export function backSourceRecordCount(data: StromData, backTo: string | undefined): number {
+    const groups = backToXrefs(data, backTo).sourceGroups;
+    return Object.keys(data.sources ?? {}).filter(id => {
+        const head = groups.get(id);
+        return !head || head === id;
+    }).length;
+}
+
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
     // Before the content options: a family link stays even without the notes.
     const alsoChild = alsoChildLinks(data);

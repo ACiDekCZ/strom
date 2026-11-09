@@ -9,7 +9,7 @@
 import { strings } from '../strings.js';
 import { StromData } from '../types.js';
 import { CONTENT_PRESETS, ContentOptions, PrivacyMode, countCitations, countLivingPersons, droppedSources } from '../privacy.js';
-import { firstResearchNoteSource } from '../ged-exporter.js';
+import { backSourceRecordCount, firstResearchNoteSource } from '../ged-exporter.js';
 import { importProgramName } from '../import-next.js';
 import { TreeManager } from '../tree-manager.js';
 import { uiModule } from './module.js';
@@ -23,6 +23,11 @@ let purpose: GedcomPurpose | null = null;
 interface GedcomTreeFacts {
     data: StromData;
     sources: number;
+    /**
+     * The source records "Back" writes: the sources one record of the
+     * program's file became (one per page cited) go back as that one record.
+     */
+    backSources: number;
     citations: number;
     living: number;
     /** The record(s) of the first research fact that gets a note; null: no such fact. */
@@ -132,6 +137,7 @@ export const exportGedcomMethods = uiModule({
         treeFacts = {
             data,
             sources: Object.keys(data.sources ?? {}).length,
+            backSources: backSourceRecordCount(data, last?.id),
             citations: countCitations(data),
             living: countLivingPersons(data),
             example: firstResearchNoteSource(data),
@@ -155,7 +161,7 @@ export const exportGedcomMethods = uiModule({
         if (summary) {
             const rows: [boolean, string][] = [
                 [true, s.sumFull],
-                [true, facts && (facts.sources > 0 || facts.citations > 0) ? s.sumSources(facts.sources, facts.citations) : s.sumNoSources],
+                [true, facts && (facts.sources > 0 || facts.citations > 0) ? s.sumSources(facts.backSources, facts.citations) : s.sumNoSources],
                 [true, strings.privacy.contentNotes],
                 [false, s.sumNoMedia],
             ];

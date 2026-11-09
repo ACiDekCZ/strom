@@ -532,6 +532,9 @@ Two limits of the model to plan around:
   xref, `AUTH` and own tags once, and each citation's `PAGE`, `QUAY` and
   `DATA` / `DATE` under the citation; the same holds after a merge and after a
   round trip through the research. Other exports write a record per source.
+  So the import's "Sources" tile counts the entries (two records cited at 81
+  pages: 81), while the "Back to {program}" summary counts the records that
+  file writes ("2 sources, 81 citations").
 - **The words of the entry go on the source, as `1 TEXT`.** `DATA` / `TEXT`
   under a citation is not read: other programs put machine-made summaries of
   matched records there, which would flood the notes. In a file imported from

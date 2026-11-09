@@ -13,11 +13,12 @@ import { openApp } from './helpers.js';
  * person citation), a living couple (the husband cites two sources, the
  * marriage one), loaded from "Ancestral Quill" when `withImport`.
  */
-async function seedTree(page: Page, opts: { sources?: boolean; withImport?: boolean; ids?: boolean } = {}): Promise<void> {
+async function seedTree(page: Page, opts: { sources?: boolean; withImport?: boolean; ids?: boolean; pages?: boolean } = {}): Promise<void> {
     const sources = opts.sources ?? true;
     const withImport = opts.withImport ?? true;
     const ids = opts.ids ?? false;
-    await page.evaluate(async ({ sources, withImport, ids }) => {
+    const pages = opts.pages ?? false;
+    await page.evaluate(async ({ sources, withImport, ids, pages }) => {
         const cite = (ids: string[]) => (sources ? ids : undefined);
         const persons = {
             d1: {
@@ -51,6 +52,14 @@ async function seedTree(page: Page, opts: { sources?: boolean; withImport?: bool
             };
         }
         if (withImport) data.imports = [{ id: 'I1', program: 'Ancestral Quill', at: '2026-10-01T10:00:00Z', file: 'harrowfield.ged' }];
+        if (sources && withImport && pages) {
+            // One record of the loaded file cited at two pages: two entries here, one record back.
+            const book = (data.sources as Record<string, Record<string, unknown>>);
+            const record = { importId: 'I1', originalIds: [{ from: 'I1', xref: 'S500001' }] };
+            Object.assign(book.s1, record);
+            book.s5 = { id: 's5', title: 'Baptisms Harrowmoor 1840-1860', reference: 'p. 44', ...record };
+            Object.assign(persons.l2, { birthSourceIds: ['s5'] });
+        }
         if (withImport && ids) {
             // Their records in the loaded file (spec 066 K3.2); I-7 is no GEDCOM 5.5.1 xref.
             Object.assign(persons.d1, { importId: 'I1', originalIds: [{ from: 'I1', xref: 'I500001', ids: [{ tag: '_UID', value: 'AB12CD34EF56AB12CD34EF56AB12CD34' }, { tag: 'RIN', value: '17' }] }] });
@@ -59,7 +68,7 @@ async function seedTree(page: Page, opts: { sources?: boolean; withImport?: bool
         }
         await window.Strom.DataManager.importAsNewTree(data as never, 'Harrowfield');
         await window.Strom.TreeRenderer.setFocus('d1' as never);
-    }, { sources, withImport, ids });
+    }, { sources, withImport, ids, pages });
 }
 
 async function openGedcomExport(page: Page, preset?: 'back') {
@@ -152,6 +161,17 @@ test('"Back": every source and citation of the deceased and the living, no media
     expect(all.find(r => /^0 @F\d+@ FAM/.test(r) && r.includes('MARR'))).toMatch(/SOUR @S\d+@/);
     expect(deceased).toContain('2 NOTE Derived by the Strom research (per: Baptisms Harrowmoor 1840-1860, p. 41)');
     expect((ged.match(/Derived by the Strom research/g) ?? []).length).toBe(1);
+});
+
+test('"Back" counts a record cited at several pages once, as the file writes it', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, { pages: true });
+    const pwd = await openGedcomExport(page, 'back');
+    // Five entries in the tree, two of them one record of the loaded file.
+    await expect(pwd.locator('#export-back-summary')).toContainText('Sources and citations (4 sources, 6 citations)');
+    const all = records(await download(page));
+    expect(all.filter(r => /^0 @[^@]+@ SOUR/.test(r))).toHaveLength(4);
+    expect(all.find(r => r.includes('Mirabeth'))).toMatch(/1 BIRT[\s\S]*2 SOUR @S500001@\n3 PAGE p\. 44/);
 });
 
 test('"Back" gives the program\'s records their own xrefs and ids again; one it cannot use goes as REFN', async ({ page }) => {
