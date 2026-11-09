@@ -50,7 +50,7 @@ export function suggestionHusband(data: StromData, personId: PersonId): Person |
         .map(u => ({ union: u, partner: data.persons[u.person1Id === personId ? u.person2Id : u.person1Id] }))
         .filter(e => e.partner?.gender === 'male');
     if (husbands.length === 0) return null;
-    // marriagesInOrder puts the dated ones first, chronologically.
+    // marriagesInOrder keeps the dated ones in the order of their weddings.
     const dated = husbands.filter(e => parseFlexDate(e.union.startDate));
     return (dated.length > 0 ? dated[dated.length - 1] : husbands[husbands.length - 1]).partner;
 }

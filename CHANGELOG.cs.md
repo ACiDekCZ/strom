@@ -6,6 +6,7 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle nejpozdějšího možného data sňatku: rozvodu (rozvod „před 1982“ je před sňatkem „kolem 1982“) nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství na kartách, partneři na jedné straně osoby i bubliny. Bubliny sourozenců a dětí uvádějí jména podle narození, bez data narození na konci.
 - **Drobnosti**: na telefonu drží dlaždice v *Více* své názvy uvnitř, dlouhý název (němčina, polština) se zalomí v dlaždici; *Kvalita dat* v nabídce stromu má stejnou barvu jako řádky kolem; ∞ ve značce sňatku stojí v jedné výšce s čísly vedle, na obrazovce i v exportovaném obrázku.
 
 ## 3.26.0

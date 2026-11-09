@@ -6466,7 +6466,7 @@ class TreeRendererClass {
      */
     private childrenByUnionHtml(personId: PersonId, ids: readonly PersonId[]): string {
         const groups = childrenByUnion(DataManager.getData(), personId, ids);
-        if (groups.length < 2) return this.nameGroupsHtml([{ pre: '', items: this.bubbleItems(ids) }]);
+        if (groups.length < 2) return this.nameGroupsHtml([{ pre: '', items: this.bubbleItems(groups[0]?.ids ?? []) }]);
         return this.nameGroupsHtml(groups.map(g => {
             const partner = g.partnerId ? DataManager.getPerson(g.partnerId) : null;
             const label = g.number > 0 ? strings.focus.childrenGroupUnion(g.number, partner ? shownName(partner, '?') : '?') : '';

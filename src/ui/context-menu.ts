@@ -16,6 +16,7 @@ import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
+import { inBirthOrder } from '../marriage-order.js';
 import { menuOffersLineJumps } from '../card-tap.js';
 import { personStoryChapterCount } from '../story-text.js';
 import { LineageIndex, RodId, realRodMembers, rodOf, spouseRodsOf } from '../lineage.js';
@@ -420,14 +421,15 @@ export const contextMenuMethods = uiModule({
     /**
      * Under the rows in place: the person's siblings (with the siblings tab)
      * and children (with the children tab) the view draws elsewhere in the
-     * tree, in the tabs' order, each once ("Already in the tree elsewhere"),
-     * a row each that moves the view to the card (also right under the
-     * bottom sheet's tiles).
+     * tree, in the tabs' order (each by birth), each once ("Already in the
+     * tree elsewhere"), a row each that moves the view to the card (also
+     * right under the bottom sheet's tiles).
      */
     elsewhereRows(personId: PersonId): PersonMenuAction[] {
+        const data = DataManager.getData();
         const ids = [
-            ...(TreeRenderer.canToggleSiblings(personId) ? TreeRenderer.siblingsElsewhereOf(personId) : []),
-            ...(TreeRenderer.canToggleChildren(personId) ? TreeRenderer.childrenElsewhereOf(personId) : []),
+            ...(TreeRenderer.canToggleSiblings(personId) ? inBirthOrder(data, TreeRenderer.siblingsElsewhereOf(personId)) : []),
+            ...(TreeRenderer.canToggleChildren(personId) ? inBirthOrder(data, TreeRenderer.childrenElsewhereOf(personId)) : []),
         ];
         return [...new Set(ids)]
             .map(id => DataManager.getPerson(id))

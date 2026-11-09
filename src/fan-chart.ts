@@ -18,7 +18,7 @@ import { StromData, Person, PersonId, ParentChildRelType, parentSlots } from './
 import { dateSortKey } from './dates.js';
 import { shownName, shownNameFull } from './person-name.js';
 import { strings } from './strings.js';
-import { compareMarriages } from './marriage-order.js';
+import { compareMarriages, marriageDates } from './marriage-order.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import { LineageIndex, buildLineages } from './lineage.js';
 import {
@@ -222,7 +222,8 @@ interface DescNode {
 
 /**
  * A person's families for the descendant fan: unions in marriage order (the
- * wedding date, then the data order), each with its children by birth; an
+ * wedding date or its latest possible date, then the data order;
+ * compareMarriages), each with its children by birth; an
  * unknown partner (none recorded, a "?" stand-in) collects the stand-in
  * families and the children outside any union, in one band.
  */
@@ -244,7 +245,7 @@ function familiesOf(data: StromData, p: Person): Array<{ partner: Person | null;
     const unions = p.partnerships
         .map((id, index) => ({ u: data.partnerships[id], index }))
         .filter(e => !!e.u)
-        .sort((a, b) => compareMarriages({ startDate: a.u.startDate, index: a.index }, { startDate: b.u.startDate, index: b.index }));
+        .sort((a, b) => compareMarriages(marriageDates(data, a.u, a.index), marriageDates(data, b.u, b.index)));
     const out: Array<{ partner: Person | null; childIds: PersonId[] }> = [];
     let unknown: { partner: null; childIds: PersonId[] } | null = null;
     for (const { u } of unions) {

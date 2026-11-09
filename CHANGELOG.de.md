@@ -6,6 +6,7 @@
 
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
+- **Reihenfolge von Ehen und Geschwistern**: Eine Ehe ohne Heiratsdatum steht nach dem spätesten möglichen Datum der Heirat: ihrer Scheidung (eine Scheidung „vor 1982“ kommt vor einer Heirat „um 1982“) oder der Geburt des ersten Kindes; eine Heirat „vor 1982“ kommt vor einer Heirat im Jahr 1982. Die Ehenummern auf den Karten, die Partner auf einer Seite einer Person und die Sprechblasen folgen dieser Reihenfolge. Die Sprechblasen der Geschwister und Kinder nennen die Namen nach der Geburt, ohne Geburtsdatum am Ende.
 - **Kleinere Änderungen**: Auf dem Telefon behalten die Kacheln unter *Mehr* ihre Namen innen, ein langer Name (Deutsch, Polnisch) bricht in seiner Kachel um; *Datenqualität* im Stammbaum-Menü hat dieselbe Farbe wie die Zeilen daneben; das ∞ in der Heiratsmarke steht auf gleicher Höhe wie die Zahlen daneben, auf dem Bildschirm und im exportierten Bild.
 
 ## 3.26.0

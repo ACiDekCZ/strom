@@ -61,12 +61,17 @@ describe('compareMarriages / marriagesInOrder', () => {
         expect(marriagesInOrder(family(), P('H'))).toEqual(['u1', 'u3', 'u2']);
     });
 
-    it('puts an undated union after the dated ones, ties in data order', () => {
+    it('puts a union with no date at all after the dated ones, ties in data order', () => {
         const data = family();
+        const persons = data.persons as Record<string, Person>;
         delete data.partnerships['u3' as PartnershipId].startDate;
+        // Without a wedding date the first child's birth stands in (T13): 1881.
+        expect(marriagesInOrder(data, P('H'))).toEqual(['u1', 'u3', 'u2']);
+        delete persons.c3.birthDate;
         expect(marriagesInOrder(data, P('H'))).toEqual(['u1', 'u2', 'u3']);
-        // Two undated: the data order decides.
+        // Two with no date: the data order decides.
         delete data.partnerships['u1' as PartnershipId].startDate;
+        delete persons.c1.birthDate;
         expect(marriagesInOrder(data, P('H'))).toEqual(['u2', 'u3', 'u1']);
         // Same year, a full date after the bare year; a qualifier does not move it.
         expect(compareMarriages({ startDate: '1866', index: 1 }, { startDate: '1866-05-02', index: 0 })).toBeLessThan(0);

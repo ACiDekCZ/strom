@@ -8,6 +8,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 *Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
 
+- **Kolejność małżeństw i rodzeństwa**: małżeństwo bez daty ślubu zajmuje miejsce według najpóźniejszej możliwej daty ślubu: rozwodu (rozwód „przed 1982” jest przed ślubem „ok. 1982”) lub urodzenia pierwszego dziecka; ślub „przed 1982” jest przed ślubem w roku 1982. Numery małżeństw na kartach, partnerzy po jednej stronie osoby i dymki są w tej kolejności. Dymki rodzeństwa i dzieci podają imiona według urodzenia, osoby bez daty urodzenia na końcu.
 - **Drobne zmiany**: na telefonie kafelki w *Więcej* trzymają nazwy w środku, długa nazwa (niemiecki, polski) łamie się w swoim kafelku; *Jakość danych* w menu drzewa ma ten sam kolor co sąsiednie wiersze; ∞ w znaczku ślubu stoi na tej samej wysokości co liczby obok, na ekranie i w eksportowanym obrazie.
 
 ## 3.26.0

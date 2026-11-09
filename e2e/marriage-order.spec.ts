@@ -3,8 +3,8 @@ import { readFileSync } from 'fs';
 import { openApp, card } from './helpers.js';
 
 /**
- * Marriage order (T13): a man with three wives — data order 1908, undated,
- * 1866 — in the expanded view. Each wife's card carries a pill on its top
+ * Marriage order (T13): a man with three wives — data order 1908, undated
+ * (no date of the child either), 1866 — in the expanded view. Each wife's card carries a pill on its top
  * edge at the corner pointing to him ("1st ∞ 1866", "2nd ∞ 1908", "3rd ∞"),
  * he has none, a couple of one marriage has none; the wives on one side
  * stand in the order of the marriages. Below 60 % zoom the pill hides; the
@@ -15,10 +15,10 @@ import { openApp, card } from './helpers.js';
  * (N18). Invented data.
  */
 
-async function setup(page: Page, width = 1440, height = 900): Promise<void> {
+async function setup(page: Page, width = 1440, height = 900, rudolfBorn?: string): Promise<void> {
     await page.setViewportSize({ width, height });
     await openApp(page);
-    await page.evaluate(async () => {
+    await page.evaluate(async (rudolfBorn) => {
         const p = (id: string, extra: Record<string, unknown>) => ({
             id, gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra,
         });
@@ -33,7 +33,8 @@ async function setup(page: Page, width = 1440, height = 900): Promise<void> {
                     partnerships: ['u4'], parentIds: ['j', 'a'] }),
                 l: p('l', { firstName: 'Ludmila', lastName: 'Fíšková', birthDate: '1870', partnerships: ['u4'] }),
                 h: p('h', { firstName: 'Hana', lastName: 'Fíšková', birthDate: '1909', parentIds: ['j', 'm'] }),
-                r: p('r', { firstName: 'Rudolf', lastName: 'Fíšek', gender: 'male', birthDate: '1885', parentIds: ['j', 'e'] }),
+                r: p('r', { firstName: 'Rudolf', lastName: 'Fíšek', gender: 'male', parentIds: ['j', 'e'],
+                    ...(rudolfBorn ? { birthDate: rudolfBorn } : {}) }),
             },
             partnerships: {
                 u1: { id: 'u1', person1Id: 'j', person2Id: 'a', status: 'married', childIds: ['k'], startDate: '1866-02-14', startPlace: 'Dolní Lhota' },
@@ -43,7 +44,7 @@ async function setup(page: Page, width = 1440, height = 900): Promise<void> {
             },
         } as never, 'Fíškovi');
         window.Strom.TreeRenderer.setFocus('j' as never);
-    });
+    }, rudolfBorn);
     await expect(card(page, 'Marie')).toBeVisible();
     await expect(card(page, 'Eva')).toBeVisible();
 }
@@ -136,6 +137,14 @@ test.describe('marriage-order pill (T13)', () => {
             if (side === 'right') expect(Math.abs(c.x + c.width - (b.x + b.width) - 12)).toBeLessThanOrEqual(1.5);
             else expect(Math.abs(b.x - c.x - 12)).toBeLessThanOrEqual(1.5);
         }
+    });
+
+    test('a marriage without a date stands by the birth of its first child (T13, T50)', async ({ page }) => {
+        await setup(page, 1440, 900, '1885');
+        await zoomTo(page, 1);
+        expect(await pillText(page, 'Anna')).toBe('1st ∞ 1866');
+        expect(await pillText(page, 'Eva')).toBe('2nd ∞');
+        expect(await pillText(page, 'Marie')).toBe('3rd ∞ 1908');
     });
 
     test('a mouse shows the bubble naming whose marriage it is, with the year and place; the card\'s hover card stays away', async ({ page }) => {

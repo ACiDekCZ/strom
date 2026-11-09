@@ -6,6 +6,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 *This version is in preparation; this section grows with every test version.*
 
+- **Order of marriages and siblings**: a marriage without a wedding date is placed by the latest date the wedding can have taken place: its divorce (a divorce “before 1982” comes before a wedding “about 1982”) or the birth of its first child; a wedding “before 1982” comes before a wedding in 1982. The marriage numbers on the cards, the partners on one side of a person and the bubbles follow this order. The bubbles of siblings and children list the names by birth, those without a birth date last.
 - **Smaller changes**: on a phone, the tiles of *More* keep their names inside, a long name (German, Polish) wraps within its tile; *Data quality* in the tree menu has the same colour as the rows around it; the ∞ in the marriage mark sits level with the numbers beside it, on screen and in an exported image.
 
 ## 3.26.0

@@ -2,8 +2,11 @@
  * Marriage order (T13).
  *
  * A person's unions in chronological order — by the wedding date, then by the
- * order they have in the data (the person's `partnerships` list); a union
- * without a usable date comes after the dated ones. The diagram uses it twice:
+ * order they have in the data (the person's `partnerships` list). A union
+ * without a wedding date takes the latest the wedding can have been (T50,
+ * T13): the end of the union (a divorce) or the birth of its first child,
+ * whichever is earlier; a union with none of them comes after the others.
+ * The diagram uses it twice:
  *
  * - the partners on one side of a person with several unions in a row
  *   (expanded view, partner chains) stand in this order, the earliest next
@@ -28,7 +31,7 @@ import { parseFlexDate, displayYear } from './dates.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import { childIdsShownInPlace, partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 
-/** Chronological key of a wedding date; Infinity when there is none (after every dated union). */
+/** Chronological key of a date (the qualifier ignored); Infinity when there is none. */
 function weddingKey(date: string | undefined): number {
     const d = parseFlexDate(date);
     if (!d) return Infinity;
@@ -36,15 +39,58 @@ function weddingKey(date: string | undefined): number {
 }
 
 /**
- * Compare two unions chronologically: the wedding date first, the order in
- * the data (`index`) on a tie or when neither has a date.
+ * A key just before a date: a bound the wedding came no later than ("before
+ * 1982", a divorce in 1982, a child born in 1982) sorts ahead of a wedding
+ * in that year ("1982", "about 1982") and after every earlier year.
  */
-export function compareMarriages(
-    a: { startDate?: string; index: number },
-    b: { startDate?: string; index: number }
-): number {
-    const ka = weddingKey(a.startDate);
-    const kb = weddingKey(b.startDate);
+const BOUND = 0.5;
+
+/** What the marriage order reads of a union. */
+export interface MarriageDates {
+    /** The wedding date. */
+    startDate?: string;
+    /** The end of the union (a divorce): the wedding was no later. */
+    endDate?: string;
+    /** Birth dates of the union's children: the union began no later than the first. */
+    childBirthDates?: readonly (string | undefined)[];
+    /** The union's place in the data (the person's `partnerships` list). */
+    index: number;
+}
+
+/**
+ * The chronological key of a union: its wedding date ("before 1982" just
+ * before 1982); without one the earliest of its end and its children's
+ * births, just before that date; Infinity when there is none of them.
+ */
+function marriageKey(m: MarriageDates): number {
+    const wedding = parseFlexDate(m.startDate);
+    if (wedding) return weddingKey(m.startDate) - (wedding.qualifier === '<' ? BOUND : 0);
+    let key = Infinity;
+    for (const date of [m.endDate, ...(m.childBirthDates ?? [])]) {
+        const k = weddingKey(date);
+        if (k !== Infinity) key = Math.min(key, k - BOUND);
+    }
+    return key;
+}
+
+/** The dates of a union the marriage order reads (marriageKey), `index` its place in the data. */
+export function marriageDates(data: StromData, union: Partnership, index: number): MarriageDates {
+    return {
+        startDate: union.startDate,
+        endDate: union.endDate,
+        childBirthDates: union.childIds.map(id => data.persons[id]).filter(p => p && !p.isPlaceholder).map(p => p.birthDate),
+        index,
+    };
+}
+
+/**
+ * Compare two unions chronologically (marriageKey): the wedding date, else
+ * the latest it can have been (the union's end, its first child's birth);
+ * the order in the data (`index`) on a tie or when neither has a date.
+ */
+export function compareMarriages(a: MarriageDates, b: MarriageDates): number {
+    const ka = marriageKey(a);
+    const kb = marriageKey(b);
     if (ka !== kb) return ka < kb ? -1 : 1;
     return a.index - b.index;
 }
@@ -59,9 +105,7 @@ export function marriagesInOrder(data: StromData, personId: PersonId): Partnersh
             const partnerId = e.union.person1Id === personId ? e.union.person2Id : e.union.person1Id;
             return !isDiagramStandIn(data, partnerId);
         })
-        .sort((a, b) => compareMarriages(
-            { startDate: a.union.startDate, index: a.index },
-            { startDate: b.union.startDate, index: b.index }))
+        .sort((a, b) => compareMarriages(marriageDates(data, a.union, a.index), marriageDates(data, b.union, b.index)))
         .map(e => e.id);
 }
 
@@ -436,17 +480,35 @@ export interface SiblingGroup {
 }
 
 /**
+ * `ids` by birth (T49): the year, then the month and the day where known
+ * ("about 1880" as 1880, "before 1880" just before it, "after 1880" just
+ * after it); those without a birth date after them, in the order of `ids`.
+ */
+export function inBirthOrder(data: StromData, ids: readonly PersonId[]): PersonId[] {
+    const key = (id: PersonId): number => {
+        const date = data.persons[id]?.birthDate;
+        const d = parseFlexDate(date);
+        if (!d) return Infinity;
+        return weddingKey(date) + (d.qualifier === '<' ? -BOUND : d.qualifier === '>' ? BOUND : 0);
+    };
+    return ids
+        .map((id, index) => ({ id, index, key: key(id) }))
+        .sort((a, b) => (a.key !== b.key ? (a.key < b.key ? -1 : 1) : a.index - b.index))
+        .map(e => e.id);
+}
+
+/**
  * `ids` (siblings of the person) by the union they were born to: the full
  * siblings first, then for each parent (the person's order of parents) the
  * children of the parent's other unions in the order of the marriages.
  * Empty groups are left out; siblings of no such union close the list in a
- * group of their own (no parent).
+ * group of their own (no parent). Each group by birth (inBirthOrder).
  */
 export function siblingGroups(data: StromData, personId: PersonId, ids: readonly PersonId[]): SiblingGroup[] {
     const person = data.persons[personId];
     if (!person) return [];
     const left = new Set(ids);
-    const take = (kids: readonly PersonId[]): PersonId[] => ids.filter(id => kids.includes(id) && left.delete(id));
+    const take = (kids: readonly PersonId[]): PersonId[] => inBirthOrder(data, ids.filter(id => kids.includes(id) && left.delete(id)));
     const own = Object.values(data.partnerships).find(u => u.childIds.includes(personId));
     const out: SiblingGroup[] = [];
     const full = take(own?.childIds ?? []);
@@ -464,7 +526,7 @@ export function siblingGroups(data: StromData, personId: PersonId, ids: readonly
             out.push({ full: false, parentId: q, partnerId, ids: kids });
         }
     }
-    const rest = ids.filter(id => left.has(id));
+    const rest = inBirthOrder(data, ids.filter(id => left.has(id)));
     if (rest.length) out.push({ full: false, parentId: null, partnerId: null, ids: rest });
     return out;
 }
@@ -579,7 +641,7 @@ export interface ChildrenUnionGroup {
 /**
  * The person's children `ids` by the union they were born to, in the order
  * of the marriages (marriagesInOrder, as the marriage-order pill numbers
- * them; a "?" stand-in family after them), each in the order of `ids`.
+ * them; a "?" stand-in family after them), each by birth (inBirthOrder).
  * Children of no union of the person close the list. Empty groups are left
  * out. The bubble labels the groups only when there is more than one.
  */
@@ -593,13 +655,13 @@ export function childrenByUnion(data: StromData, personId: PersonId, ids: readon
     for (const uid of unions) {
         const u = data.partnerships[uid];
         if (!u) continue;
-        const kids = ids.filter(id => u.childIds.includes(id) && left.delete(id));
+        const kids = inBirthOrder(data, ids.filter(id => u.childIds.includes(id) && left.delete(id)));
         if (kids.length === 0) continue;
         const other = u.person1Id === personId ? u.person2Id : u.person1Id;
         const partnerId = other !== personId && data.persons[other] && !data.persons[other].isPlaceholder ? other : null;
         out.push({ partnershipId: uid, number: ordered.indexOf(uid) + 1, partnerId, ids: kids });
     }
-    const rest = ids.filter(id => left.has(id));
+    const rest = inBirthOrder(data, ids.filter(id => left.has(id)));
     if (rest.length) out.push({ partnershipId: null, number: 0, partnerId: null, ids: rest });
     return out;
 }

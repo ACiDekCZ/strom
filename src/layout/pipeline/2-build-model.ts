@@ -11,7 +11,7 @@
  */
 
 import { PersonId, PartnershipId, StromData, coupleSides } from '../../types.js';
-import { compareMarriages } from '../../marriage-order.js';
+import { compareMarriages, marriageDates } from '../../marriage-order.js';
 import {
     BuildModelInput,
     LayoutModel,
@@ -515,10 +515,11 @@ function expandPartnerChains(
         if (!primaryUnion) continue;
 
         // Collect all partnerships for this person that are in selection, in
-        // chronological order (wedding date, then data order — T13): the
-        // extra partners on one side of the shared person then stand in the
-        // order of the marriages, the earliest next to the person
-        // (buildChainBlockPersonOrder walks them in this order).
+        // chronological order (wedding date, else its latest possible date —
+        // the union's end, its first child's birth — then data order; T13,
+        // T50): the extra partners on one side of the shared person then
+        // stand in the order of the marriages, the earliest next to the
+        // person (buildChainBlockPersonOrder walks them in this order).
         // A chain limited to some unions (DisplayPolicy.chainPartnershipsOf)
         const allowed = chainPartnershipsOf?.get(sharedPersonId);
         const personPartnerships = person.partnerships
@@ -527,8 +528,8 @@ function expandPartnerChains(
             .filter(p => !allowed || allowed.has(p.id) || p.id === primaryUnion.partnershipId)
             .filter(p => p.partnership && selection.persons.has(p.partnership.person1Id) && selection.persons.has(p.partnership.person2Id))
             .sort((a, b) => compareMarriages(
-                { startDate: a.partnership.startDate, index: a.index },
-                { startDate: b.partnership.startDate, index: b.index }));
+                marriageDates(data, a.partnership, a.index),
+                marriageDates(data, b.partnership, b.index)));
 
         if (personPartnerships.length <= 1) {
             continue;
