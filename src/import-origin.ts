@@ -38,7 +38,7 @@ export type ExtraHolder = { gedcomExtra?: GedcomExtra[] };
 export type IdsHolder = { originalIds?: OriginalIds[] };
 
 const FACT_PARTS: readonly FactPart[] = ['DATE', 'PLAC', 'VAL', 'GIVN', 'SURN', 'SEX'];
-const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research'];
+const ORIGIN_KINDS: readonly FactOriginKind[] = ['import', 'user', 'research', 'tree'];
 
 /** The GEDCOM tag that carries the import of a record, a fact or a link (spec 066). */
 export const IMPORT_TAG = '_STROM_IMPORT';

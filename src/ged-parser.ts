@@ -294,7 +294,7 @@ function toResearchOrigin(raw: RawFactOrigin, mapRefs: (refs?: string[]) => stri
             out.importId = mark.id;
             if (mark.parts) out.parts = mark.parts;
         }
-    } else if (kind === 'user' || kind === 'research') {
+    } else if (kind === 'user' || kind === 'research' || kind === 'tree') {
         out.kind = kind;
     }
     if (raw.was.length > 0) {

@@ -553,7 +553,7 @@ function pushLongValue(lines: string[], level: number, tag: string, text: string
     });
 }
 
-/** The value of `_STROM_ORIGIN`: `import I1 [DATE PLAC…]`, `user` or `research`. */
+/** The value of `_STROM_ORIGIN`: `import I1 [DATE PLAC…]`, `user`, `research` or `tree`. */
 function researchOriginValue(o: ResearchFactOrigin): string {
     return o.kind === 'import' ? ['import', o.importId ?? '', ...(o.importId ? o.parts ?? [] : [])].filter(Boolean).join(' ') : o.kind ?? '';
 }

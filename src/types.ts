@@ -742,8 +742,13 @@ export interface ImportedValue {
     value: string;
 }
 
-/** Whose a fact is according to the research (GEDCOM `_STROM_ORIGIN`). */
-export type FactOriginKind = 'import' | 'user' | 'research';
+/**
+ * Whose a fact is according to the research (GEDCOM `_STROM_ORIGIN`): `tree` a
+ * value taken from the user's own Strom tree and not changed by a person since
+ * (research 1.30.0+), `user` a person's change (an edit, a revert, an accepted
+ * proposal, a value added).
+ */
+export type FactOriginKind = 'import' | 'user' | 'research' | 'tree';
 
 /** A part of a fact (GEDCOM `_PART`, the parts list of `_STROM_IMPORT` / `_STROM_ORIGIN`). */
 export type FactPart = 'DATE' | 'PLAC' | 'VAL' | 'GIVN' | 'SURN' | 'SEX';
