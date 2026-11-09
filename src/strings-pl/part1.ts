@@ -819,7 +819,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         tryFirstSub: (n: number) => `Po ${n} osobach weryfikacja się zatrzyma i pokaże wynik.`,
         tryN: (n: number) => `Wypróbuj na ${n}`,
         bulkEstimate: (facts: number, people: number) => `${nPl(facts, 'dana', 'dane', 'danych')} u ${nPl(people, 'osoby', 'osób', 'osób')}`,
-        bulkLeft: (n: number) => `${nPl(n, 'kolejna dana', 'kolejne dane', 'kolejnych danych')} na następną rundę`,
+        bulkLeft: (n: number) => `${nPl(n, 'kolejna osoba', 'kolejne osoby', 'kolejnych osób')} na następną rundę`,
         bulkNote: 'Działa w tle badania; można zatrzymać w „Co wie badanie”.',
         bulkStarted: (n: number) => `${nPl(n, 'dana czeka', 'dane czekają', 'danych czeka')} w kolejce do weryfikacji.`,
         section: 'Weryfikacja',

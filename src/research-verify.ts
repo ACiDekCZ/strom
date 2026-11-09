@@ -174,7 +174,7 @@ export interface VerifyBulkDone {
     facts: number;
     /** The tasks made (none for `dry`). */
     tasks: string[];
-    /** Facts left for another round (beyond `try` or `budget`). */
+    /** People left for another round (beyond `try` or `budget`): the research counts the people it did not take, not their facts. */
     left: number;
     estimate: VerifyEstimate;
     head: string;

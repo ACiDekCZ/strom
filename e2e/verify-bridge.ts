@@ -61,9 +61,12 @@ export async function fakeVerify(page: Page, bridge: FakeBridge, init: Partial<F
             const all = v.counts[(body.scope as keyof FakeVerify['counts']) ?? 'tree'] ?? 0;
             const tried = typeof body.try === 'number';
             const facts = tried ? Math.min(all, 7) : all;
+            const everyone = Math.ceil(all / 2);
+            const people = tried ? Math.min(5, all) : everyone;
             await json(200, {
-                ok: true, people: tried ? Math.min(5, all) : Math.ceil(all / 2), facts, tasks: dry ? [] : ['T0050'],
-                left: all - facts, estimate: { sessions: Math.max(1, Math.round(facts / 4)), usd: facts * 0.3 }, head: bridge.head,
+                ok: true, people, facts, tasks: dry ? [] : ['T0050'],
+                // As the research: the people not taken in this round, not their facts.
+                left: Math.max(0, everyone - people), estimate: { sessions: Math.max(1, Math.round(facts / 4)), usd: facts * 0.3 }, head: bridge.head,
             });
             return;
         }

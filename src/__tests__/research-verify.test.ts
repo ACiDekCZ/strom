@@ -10,6 +10,7 @@ import {
     postVerifyStop, verifyStopRequestBody, verifyStopReply, VERIFY_STOP_FEATURE,
 } from '../research-verify.js';
 import { sanitizeLiveStatus } from '../research-link.js';
+import { getStringsForLang } from '../strings.js';
 
 const BASE = 'http://127.0.0.1:4711/abc123';
 const ALL = ['verify', 'verify.bulk', 'facts.confirm'];
@@ -169,6 +170,17 @@ describe('requests', () => {
         expect(calls[0].url.startsWith(`${BASE}/verify/bulk`)).toBe(true);
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ scope: 'line', of: 'P1', try: 5 });
         expect(res).toEqual({ ok: true, people: 4, facts: 11, tasks: ['T1', 'T2'], left: 3, estimate: { sessions: 3, usd: 2 }, head: HEAD });
+    });
+
+    it("a bulk round's `left` is the people not taken, and the dialog says people in every language", () => {
+        const say = (lang: 'en' | 'cs' | 'de' | 'pl', n: number): string => getStringsForLang(lang).verify.bulkLeft(n);
+        expect(say('en', 1)).toBe('1 more person for another round');
+        expect(say('en', 3)).toBe('3 more people for another round');
+        expect([say('cs', 1), say('cs', 3), say('cs', 5)])
+            .toEqual(['1 další osoba na další kolo', '3 další osoby na další kolo', '5 dalších osob na další kolo']);
+        expect([say('de', 1), say('de', 3)]).toEqual(['1 weitere Person für eine weitere Runde', '3 weitere Personen für eine weitere Runde']);
+        expect([say('pl', 1), say('pl', 3), say('pl', 5)])
+            .toEqual(['1 kolejna osoba na następną rundę', '3 kolejne osoby na następną rundę', '5 kolejnych osób na następną rundę']);
     });
 
     it('POST /facts/confirm', async () => {
