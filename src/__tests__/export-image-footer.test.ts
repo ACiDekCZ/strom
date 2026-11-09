@@ -70,7 +70,7 @@ const svgSize = (svg: string): { width: number; height: number } => {
 };
 
 const LONG_NAMES: Record<'de' | 'cs', { tree: string; name: string }> = {
-    de: { tree: 'Familie Wetterhahn', name: 'Kunigunde-Philippa Wetterhahn-Zirbelstein' },
+    de: { tree: 'Familie Quastenbrück', name: 'Wunibalda-Ottiline Quastenbrück-Zwiebelhain' },
     cs: { tree: 'Rodina Pomněnkových', name: 'Bohumila Květoslava Pomněnková-Bezinková' },
 };
 
@@ -144,7 +144,7 @@ describe('a footer row break never loses or tears a character (1109)', () => {
         return ((seed >>> 0) % 100000) / 100000;
     };
     const PIECES = ['Novák', ' ', ' ', '-', '–', 'é', 'ño', '👨‍👩‍👧', '🇨🇿', '👍🏽', '1️⃣', '山田太郎', '花子',
-        'カタカナ', 'Zirbelstein', '(Tiefe 3/3)', '·', 'Ł', '&<>'];
+        'カタカナ', 'Zwiebelhain', '(Tiefe 3/3)', '·', 'Ł', '&<>'];
     const textOf = (n: number): string => Array.from({ length: n }, () => PIECES[Math.floor(rand() * PIECES.length)]).join('');
 
     it('joined rows give the text back (or its start before "…"), every break between whole characters', () => {
