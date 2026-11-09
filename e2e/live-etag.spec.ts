@@ -105,9 +105,18 @@ async function follow(page: Page, o: { etag: boolean; sendsTag?: boolean; head?:
 const card = (page: Page, name: string) => page.locator('#tree-canvas .person-card', { hasText: name });
 const link = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research ?? null);
 const downloads = (b: Bridge) => b.asks.filter(a => a.status === 200).length;
-/** The cards as drawn: name and classes (marks of the research and of the agent's work included). */
+/**
+ * The cards as drawn: name and classes (marks of the research and of the
+ * agent's work included). The name comes from the card's data, not its text:
+ * how a long name is fitted (lines, shortened meta) depends on when the card
+ * fonts arrive after a reload.
+ */
 const cards = (page: Page) => page.locator('#tree-canvas .person-card').evaluateAll(els => els
-    .map(el => `${(el.textContent ?? '').replace(/\s+/g, ' ').trim()}|${[...el.classList].sort().join(' ')}`).sort());
+    .map(el => {
+        const name = el.querySelector<HTMLElement>('.name-text');
+        const full = `${name?.dataset.given ?? ''} ${name?.dataset.surname ?? ''}`.trim();
+        return `${full}|${[...el.classList].sort().join(' ')}`;
+    }).sort());
 
 /** Reopen the app: following resumes from the remembered bridge. */
 async function reopen(page: Page): Promise<void> {
@@ -125,6 +134,7 @@ test.describe('follow live with a tagged tree (ged.etag)', () => {
         await expect.poll(async () => (await link(page))?.treeEtag?.tag).toBe(tagOf(OLD));
         await expect(page.locator('#live-panel')).toContainText('Bolemír');
         const before = await cards(page);
+        expect(before.some(c => c.startsWith('Blahomil '))).toBe(true);
         const asked = bridge.asks.length;
 
         await reopen(page);
