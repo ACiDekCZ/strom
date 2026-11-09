@@ -558,7 +558,7 @@ test.describe('linked in the view only: a phone (touch)', () => {
     test('a ghost’s sheet: its state, Unlink and what research knows above the tiles, 44px rows', async ({ page }) => {
         await setup(page);
         await store(page, [B]);
-        await card(page, 'Jakub').tap();
+        await card(page, 'Jakub').locator('.name').tap();
         const sheet = await settledSheet(page);
         const head = sheet.locator('.sheet-view-link-head');
         await expect(head.locator('.bottom-sheet-caption')).toHaveText('Linked in the view only · H0022 B');
