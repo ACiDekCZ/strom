@@ -1281,6 +1281,10 @@ interface GedcomFamily {
     importIds?: RawOriginalIds[];
     /** Another program's own level-1 tags kept as written (spec 066 G8). */
     extras?: RawExtra[];
+    /** `1 OBJE @O1@`: the family's links to media records, and where each link is in the file. */
+    mediaLinks?: { ref: string; line: number }[];
+    /** The media records whose lines the family keeps for "Back to {prog}" (see extras). */
+    keptMedia?: string[];
     /** The record's `0 @F1@ FAM` line in the file. */
     recordLine?: number;
     /**
@@ -2462,6 +2466,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     };
     /** `0 @O1@ OBJE` media records, by xref. */
     const mediaRecords = new Map<string, RawMedia>();
+    /** Where each media record starts in the file (a family's picture keeps its lines). */
+    const mediaRecordLines = new Map<string, number>();
     /** The media record being read, its level-1 tag, and whether that FILE is the record's first (later ones are left). */
     let currentObje: RawMedia | null = null;
     let objeSubTag: string | null = null;
@@ -3296,6 +3302,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // and sources take its file like an OBJE written in place.
                 currentObje = { title: '', form: '', file: '', stromKind: '' };
                 mediaRecords.set(recordId, currentObje);
+                mediaRecordLines.set(recordId, rec.src);
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
@@ -3839,8 +3846,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (NOTED_FAM_TAGS.has(tag)) {
                                 fam.noteFacts.push({ tag, value, date: '', place: '' });
                             } else if (tag === 'OBJE' && GED_POINTER.test(value.trim())) {
-                                // A family's link to a media record: the record is
-                                // counted once if nothing else takes it (convertToStrom).
+                                // A family's link to a media record: its lines are kept
+                                // for "Back to {prog}" below; a record nothing takes is
+                                // counted once (convertToStrom).
+                                if (level === 1 && keepsExtra(tag)) (fam.mediaLinks ??= []).push({ ref: value.trim(), line: rec.src });
+                            } else if (tag === 'OBJE' && level === 1 && keepsExtra(tag)) {
+                                // A family's picture written in place: Strom has no
+                                // picture of a couple, so its lines are kept as written
+                                // for "Back to {prog}" (spec 066 G8).
+                                extraBlock = { target: fam, tag, start: rec.src, pointer: false };
                             } else if (tag.startsWith('_') && !KNOWN_FAM_TAGS.has(tag)
                                 && (!IGNORED_BOOKKEEPING_TAGS.has(tag) || KEPT_BOOKKEEPING_TAGS.has(tag)) && keepsExtra(tag)) {
                                 extraBlock = { target: fam, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()), quiet: KEPT_BOOKKEEPING_TAGS.has(tag) };
@@ -4484,6 +4498,33 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
+    // A family's picture by a link to a media record: the record's lines go
+    // under the family as a picture written in place (one level deeper), the
+    // link's own lines after them — the form a program reads without the
+    // record. Kept as written for "Back to {prog}" like one written in place.
+    /** The lines below line `at` of the file (deeper than it), trimmed. */
+    const linesBelow = (at: number): string[] => {
+        const out: string[] = [];
+        const top = parseInt(lines[at].trim(), 10);
+        for (let i = at + 1; i < lines.length; i++) {
+            const l = lines[i].trim();
+            if (!l) continue;
+            if (!(parseInt(l, 10) > top)) break;
+            out.push(l);
+        }
+        return out;
+    };
+    for (const fam of families.values()) {
+        for (const link of fam.mediaLinks ?? []) {
+            const start = mediaRecordLines.get(link.ref);
+            if (start === undefined) continue;
+            const block = ['1 OBJE', ...linesBelow(start).map(l => l.replace(/^\d+/, n => String(Number(n) + 1))), ...linesBelow(link.line)];
+            if (!validExtraBlock(block) || block.some(l => DATA_URL_IN_LINE.test(l) || /^\d+ @|\s@[^@\s]+@|^\d+ _STROM_/.test(l))) continue;
+            (fam.extras ??= []).push({ tag: 'OBJE', lines: block });
+            (fam.keptMedia ??= []).push(link.ref);
+        }
+    }
+
     // One source cited at several pages (a register book, an entry per page):
     // here a source is the entry and its reference the page, so a citation of
     // another page than the source's gets a source of its own — same book,
@@ -5037,7 +5078,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
         persons[personId] = person;
     }
-    // Media records no person or source took (a family's photo, one nobody links): counted once each.
+    // A family's picture kept as written (or counted with the family's other kept tags).
+    for (const fam of gedcom.families.values()) for (const ref of fam.keptMedia ?? []) usedMedia.add(ref);
+    // Media records no person, family or source took (one nobody links): counted once each.
     for (const ref of gedcom.mediaRecords?.keys() ?? []) if (!usedMedia.has(ref)) skipMedia();
 
     /** Is this link the one the child was born into? No PEDI means birth. */

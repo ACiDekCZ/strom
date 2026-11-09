@@ -5,7 +5,7 @@
  * {prog}"; a deeper `_XXX` nothing reads is counted. Strom's own file drops
  * nothing.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
@@ -13,7 +13,10 @@ import {
 } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
-import { applyLivingPrivacy } from '../privacy.js';
+import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
+import { StorageManager } from '../storage.js';
+import { createMergeState, updateMatchDecision } from '../merge/matching.js';
+import { executeMerge } from '../merge/executor.js';
 import {
     carryMergedImports, cleanImportOrigin, forgetHiddenImports, keepImports, pruneImportOrigin, remapHolderImports,
 } from '../import-origin.js';
@@ -142,9 +145,11 @@ describe('media records (0 @O1@ OBJE)', () => {
         const src = Object.values(r.data.sources!)[0];
         expect(src.excerpts).toHaveLength(1);
         expect(src.excerpts![0]).toMatchObject({ dataUrl: JPEG, caption: 'folio 12' });
-        // A link to a record the file lacks, a record nobody takes, the family's photo.
-        expect(r.stats.skippedMedia).toBe(3);
-        expect(r.stats.droppedTagSummary).toContain('OBJE ×3');
+        // A link to a record the file lacks, a record nobody takes; the family's
+        // photo is kept for "Back to {prog}" instead.
+        expect(r.stats.skippedMedia).toBe(2);
+        expect(r.stats.droppedTagSummary).toContain('OBJE ×2');
+        expect(r.stats.keptTagSummary).toBe('OBJE');
         // The data URLs live in the attachment and the excerpt only.
         expect(JSON.stringify(r.data).split(JPEG).length - 1).toBe(2);
     });
@@ -168,7 +173,7 @@ describe('media records (0 @O1@ OBJE)', () => {
         const r = load(GRAMPS.replace(`1 FILE ${JPEG}\n2 FORM jpeg\n2 TITL Kupní smlouva`, `1 FILE ${svg}\n2 FORM svg`));
         expect(byName(r.data, 'Vřesomil').attachments).toBeUndefined();
         expect(JSON.stringify(r.data)).not.toContain('svg+xml');
-        expect(r.stats.skippedMedia).toBe(4);
+        expect(r.stats.skippedMedia).toBe(3);
     });
 
     it('a record with no file is counted once, as its link', () => {
@@ -234,6 +239,110 @@ describe('media records (0 @O1@ OBJE)', () => {
         }
         expect(isUnreadUnderscoreTag('_JOB_POSITION')).toBe(true);
         expect(isUnreadUnderscoreTag('_CUTOUTS')).toBe(true);
+    });
+});
+
+// ---------- a family's picture ----------
+
+/** Two couples, one picture each: written in place, and a link to a media record with the link's own line. */
+const FAMILY_PHOTOS = `0 HEAD
+1 SOUR MYHERITAGE
+2 NAME MyHeritage Family Tree Builder
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Vřesomil /Kapradník/
+1 SEX M
+1 DEAT Y
+1 FAMS @F1@
+1 FAMS @F2@
+0 @I2@ INDI
+1 NAME Tolinda /Mechová/
+1 SEX F
+1 DEAT Y
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Orsina /Korvalová/
+1 SEX F
+1 DEAT Y
+1 FAMS @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1904
+1 OBJE
+2 FORM jpg
+2 FILE https://www.myheritage.com/photos/svatba.jpg
+2 TITL Svatba v Mlžnově
+2 _DATE 12 JUN 1904
+0 @F2@ FAM
+1 HUSB @I1@
+1 WIFE @I3@
+1 OBJE @O1@
+2 _PRIM Y
+0 @O1@ OBJE
+1 FILE photos/statek.jpg
+2 FORM jpg
+2 TITL Na statku
+1 _DATE ABT 1925
+0 TRLR
+`;
+
+/** "Back to {prog}" as the app makes it, for the tree's last import. */
+const backTo = (data: StromData): string => exportToGedcom(applyLivingPrivacy(data, 'full', 2026, { keepDeceasedSources: true }), 'Kapradník',
+    { content: CONTENT_PRESETS.back, origins: true, backTo: data.imports![data.imports!.length - 1].id }).content;
+const familyOf = (ged: string, wife: string): string[] => {
+    const wifeXref = personRecord(ged, wife)[0].split(' ')[1];
+    return recordOf(ged, (head, body) => / FAM$/.test(head) && body.includes(`1 WIFE ${wifeXref}`));
+};
+const undated = (ged: string): string => ged.replace(/^(0 HEAD\n(?:[1-9].*\n)*?)1 DATE [^\n]*\n/, '$1');
+
+describe('a family’s picture', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('is kept for "Back to {prog}": the summary says so, nothing is counted as not carried over', () => {
+        const r = load(FAMILY_PHOTOS);
+        expect(r.stats.droppedTagSummary).toBe('');
+        expect(r.stats.skippedMedia).toBe(0);
+        expect(r.stats.keptTags).toBe(2);
+        expect(r.stats.keptTagSummary).toBe('OBJE');
+    });
+
+    it('goes back written in place, its _DATE with it; a media record\'s lines go under the family one level deeper', () => {
+        const ged = backTo(migrateData(load(FAMILY_PHOTOS).data));
+        expect(familyOf(ged, 'Tolinda')).toEqual(expect.arrayContaining(['1 OBJE', '2 FORM jpg',
+            '2 FILE https://www.myheritage.com/photos/svatba.jpg', '2 TITL Svatba v Mlžnově', '2 _DATE 12 JUN 1904']));
+        const second = familyOf(ged, 'Orsina');
+        const at = second.indexOf('1 OBJE');
+        expect(second.slice(at, at + 6)).toEqual(['1 OBJE', '2 FILE photos/statek.jpg', '3 FORM jpg', '3 TITL Na statku', '2 _DATE ABT 1925', '2 _PRIM Y']);
+        expect(ged).not.toMatch(/^0 @[^@]+@ OBJE/m);
+        // Strom's own file and the research's carry no picture of a couple.
+        expect(exportToGedcom(migrateData(load(FAMILY_PHOTOS).data)).content).not.toContain('svatba.jpg');
+    });
+
+    it('the second "Back to" is the first, but the export date', () => {
+        const first = backTo(migrateData(load(FAMILY_PHOTOS).data));
+        const again = load(first, { at: '2026-11-09', file: 'back.ged', encoding: 'utf-8' });
+        expect(again.stats.droppedTagSummary).toBe('');
+        expect(undated(backTo(migrateData(again.data)))).toBe(undated(first));
+    });
+
+    it('a tree loaded before it was kept takes it from the same file merged again', async () => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+        const fresh = backTo(migrateData(load(FAMILY_PHOTOS).data));
+        const tree = migrateData(load(FAMILY_PHOTOS).data);
+        for (const u of Object.values(tree.partnerships)) delete u.gedcomExtra;
+        expect(backTo(tree)).not.toContain('svatba.jpg');
+        const incoming = migrateData(load(FAMILY_PHOTOS, { at: '2026-11-09', file: 'export.ged', encoding: 'utf-8' }).data);
+        // (Every match the wizard leaves to confirm confirmed: the people have no dates.)
+        const state = createMergeState(tree, incoming);
+        for (const m of state.matches) updateMatchDecision(state, m.incomingId, 'confirm');
+        const merged = (await executeMerge(state)).mergedData;
+        expect(Object.keys(merged.partnerships)).toHaveLength(2);
+        // (Strom's own lines aside: the family also carries the ids of the second import.)
+        const ged = backTo(merged);
+        const theirs = (lines: string[]): string[] => lines.filter(l => !/^1 _STROM_|^2 _XREF /.test(l));
+        for (const wife of ['Tolinda', 'Orsina']) expect(theirs(familyOf(ged, wife))).toEqual(theirs(familyOf(fresh, wife)));
     });
 });
 
