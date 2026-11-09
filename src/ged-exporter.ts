@@ -458,7 +458,7 @@ const isRegionalIndicator = (cp: number): boolean => cp >= 0x1f1e6 && cp <= 0x1f
  * not around a zero-width joiner (👨‍👩‍👧) and not inside a flag's pair of
  * regional indicators. Some readers decode each physical line on its own.
  */
-function isClusterBoundary(text: string, i: number): boolean {
+export function isClusterBoundary(text: string, i: number): boolean {
     const unit = text.charCodeAt(i);
     if (unit >= 0xdc00 && unit <= 0xdfff) return false;
     if (unit < 0x80 && text.charCodeAt(i - 1) < 0x80) return true;

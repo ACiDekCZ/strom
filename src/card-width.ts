@@ -78,9 +78,10 @@ export function cardPlaceOffset(dateColumn: number): number {
  * The card's text styles: the name, a date, a place, a label (labels style),
  * the years under the name, the "+1" after the marriage's place (with its
  * space; the place's font at 600), the Normal card's name on its rows
- * (12.5px, index.html .name-fit-2lines).
+ * (12.5px, index.html .name-fit-2lines); and the image export's footer: the
+ * tree name and the rest (src/export-image.ts posterFooterLayout).
  */
-export type CardTextKind = 'name' | 'date' | 'place' | 'label' | 'years' | 'more' | 'nameSmall';
+export type CardTextKind = 'name' | 'date' | 'place' | 'label' | 'years' | 'more' | 'nameSmall' | 'posterTitle' | 'posterNote';
 
 /** Widths of texts in one style; returns a width for every text asked for. */
 export type MeasureTexts = (kind: CardTextKind, texts: Iterable<string>) => Map<string, number>;
@@ -925,6 +926,8 @@ const KIND_STYLE: Record<CardTextKind, string> = {
     more: 'font: 600 12px var(--font-sans); font-variant-numeric: tabular-nums;',
     years: 'font: 400 11px var(--font-sans); font-variant-numeric: tabular-nums;',
     nameSmall: 'font: 600 12.5px var(--font-serif);',
+    posterTitle: 'font: 600 16px var(--font-serif);',
+    posterNote: 'font: 400 12px var(--font-serif);',
 };
 /** The faces those styles use, to know whether they are loaded yet. */
 const KIND_FACES = ['600 15px "Strom Serif"', '500 12px "Instrument Sans"', '400 12px "Instrument Sans"', '600 12px "Instrument Sans"'];

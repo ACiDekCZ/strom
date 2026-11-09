@@ -20,7 +20,7 @@ import {
 import { strings } from './strings.js';
 import { historyKindSvg } from './history-symbols.js';
 import {
-    posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
+    posterFooterSvg, posterFooterHeight, PosterFooterMeta, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
 
 /** Axis-label band above the rows, and the right-hand plot padding. */
@@ -312,15 +312,16 @@ export interface TimelinePosterGeometry {
  * optional footer strip) and a content predicate for tile skipping. The
  * timeline is dense — a filled axis+rows band spans the whole inner rectangle —
  * so the predicate is simply "the inner band OR the footer strip". Conservative:
- * it never drops a sheet that could carry a bar.
+ * it never drops a sheet that could carry a bar. The footer strip is as tall
+ * as `meta`'s footer takes in the poster's width (posterFooterHeight).
  */
-export function timelinePosterGeometry(model: TimelineModel, hasFooter: boolean): TimelinePosterGeometry {
+export function timelinePosterGeometry(model: TimelineModel, meta: PosterFooterMeta): TimelinePosterGeometry {
     const span = Math.max(0, model.axis.maxYear - model.axis.minYear);
     const plotW = Math.max(600, Math.round(span * POSTER_PX_PER_YEAR));
     const innerW = POSTER_LABEL_W + plotW + PAD_R;
     const innerH = TOP + model.rows.length * POSTER_ROW_H + 12;
-    const footer = hasFooter ? FOOTER_HEIGHT : 0;
     const width = innerW + POSTER_PADDING * 2;
+    const footer = posterFooterHeight(meta, width);
     const height = innerH + POSTER_PADDING * 2 + footer;
 
     const inner = { x: POSTER_PADDING, y: POSTER_PADDING, w: innerW, h: innerH };
@@ -344,8 +345,7 @@ export function buildTimelinePosterSvg(
     opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor' | 'unknownColor'>,
     meta: PosterFooterMeta
 ): string {
-    const hasFooter = !!(meta.treeName || meta.viewLabel || meta.dateLabel);
-    const g = timelinePosterGeometry(model, hasFooter);
+    const g = timelinePosterGeometry(model, meta);
 
     // Poster-safe timeline: self-contained colours, plain-text labels, no search
     // dimming (the poster prints every row at full opacity). Bar fills are the
@@ -375,7 +375,8 @@ export function buildTimelinePosterSvg(
     out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${g.width}" height="${g.height}" viewBox="0 0 ${g.width} ${g.height}" font-family="${POSTER_FONT}">`);
     out.push(`<rect x="0" y="0" width="${g.width}" height="${g.height}" fill="${POSTER_BG}"/>`);
     out.push(nested);
-    if (hasFooter) out.push(posterFooterSvg(meta, g.height));
+    const footer = posterFooterSvg(meta, g.height, g.width);
+    if (footer) out.push(footer);
     out.push('</svg>');
     return out.join('\n');
 }

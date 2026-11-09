@@ -9,7 +9,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import {
-    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING,
+    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING,
 } from '../export-image.js';
 import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
 import { computeTimelineModel } from '../timeline.js';
@@ -215,6 +215,8 @@ function buildCurrentPoster(): PosterBuild | null {
         // full in the footer while their card shows only initials (audit K2).
         viewLabel: viewLabelFor(mode, focusNameFrom(data)),
         dateLabel: new Date().toLocaleDateString(),
+        // Wrapped within the image's width by the texts' widths in its fonts.
+        measureFooterTexts: measureCardTexts,
     };
 
     if (mode === 'timeline') {
@@ -234,7 +236,7 @@ function buildCurrentPoster(): PosterBuild | null {
             femaleColor: rootStyle.getPropertyValue('--female').trim() || '#a1706e',
             unknownColor: rootStyle.getPropertyValue('--unknown').trim() || '#857d6c',
         }, meta);
-        const geom = timelinePosterGeometry(model, true);
+        const geom = timelinePosterGeometry(model, meta);
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 
@@ -258,7 +260,7 @@ function buildCurrentPoster(): PosterBuild | null {
             mmPerPx: MM_PER_PX,
             fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, true, { colorMode });
+        const geom = fanPosterGeometry(model, meta, { colorMode });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 
@@ -282,7 +284,8 @@ function buildCurrentPoster(): PosterBuild | null {
     const bounds = computeBounds(layout, cardConfig);
     const cfg = cardConfig;
     const widthPx = bounds.width + POSTER_PADDING * 2;
-    const heightPx = bounds.height + POSTER_PADDING * 2 + FOOTER_HEIGHT;
+    const footerPx = posterFooterHeight(meta, widthPx);
+    const heightPx = bounds.height + POSTER_PADDING * 2 + footerPx;
     const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
     for (const [id, pos] of layout.positions) {
         occupied.push({
@@ -292,7 +295,7 @@ function buildCurrentPoster(): PosterBuild | null {
             h: personCardHeight(cfg, id),
         });
     }
-    occupied.push({ x: POSTER_PADDING, y: heightPx - FOOTER_HEIGHT, w: 420, h: FOOTER_HEIGHT });
+    occupied.push({ x: POSTER_PADDING, y: heightPx - footerPx, w: 420, h: footerPx });
     const hasContent = (x: number, y: number, w: number, h: number): boolean =>
         occupied.some(o => o.x < x + w && o.x + o.w > x && o.y < y + h && o.y + o.h > y);
     return { svg, widthPx, heightPx, hasContent };

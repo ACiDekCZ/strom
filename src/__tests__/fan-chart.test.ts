@@ -222,14 +222,14 @@ describe('fanPosterGeometry (tile skipping)', () => {
     ]), 'me' as PersonId, 5)!;
 
     it('reports a poster larger than the bare fan (padding + footer)', () => {
-        const noFooter = fanPosterGeometry(model(), false);
-        const withFooter = fanPosterGeometry(model(), true);
+        const noFooter = fanPosterGeometry(model(), {});
+        const withFooter = fanPosterGeometry(model(), { treeName: 'T' });
         expect(withFooter.height).toBeGreaterThan(noFooter.height);
         expect(withFooter.width).toBe(noFooter.width);
     });
 
     it('keeps the fan and skips a far bottom-right corner tile', () => {
-        const g = fanPosterGeometry(model(), true);
+        const g = fanPosterGeometry(model(), { treeName: 'T' });
         // A tile at the top of the arc, under the title, has content.
         expect(g.hasContent(g.width / 2 - 20, 120, 40, 40)).toBe(true);
         // The extreme bottom-right corner is outside the semicircle → empty.
@@ -630,7 +630,7 @@ describe('fan poster (spec 029 §9)', () => {
         const opts = { measure: estimate };
         const at = (shape: 'half' | 'full' | 'two') => {
             const m = buildFanModel(fam(), 'me' as PersonId, { generations: 5, shape, descGenerations: 2 })!;
-            const g = fanPosterGeometry(m, true, opts);
+            const g = fanPosterGeometry(m, { treeName: 'T' }, opts);
             // The fan centre in poster px: under the header, at the model's origin.
             const svg = buildFanPosterSvg(m, { ...svgOpts, ...opts }, { treeName: 'T' });
             const [, fx, fy, fw] = svg.match(/<svg class="fan-svg" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/)!.map(Number);

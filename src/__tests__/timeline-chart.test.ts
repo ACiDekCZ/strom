@@ -157,7 +157,7 @@ describe('buildTimelinePosterSvg', () => {
         expect((tag.match(/\bwidth=/g) ?? []).length).toBe(1);
         expect((tag.match(/\bheight=/g) ?? []).length).toBe(1);
         // And the nested viewport equals the geometry's inner size (1:1 mapping).
-        const g = timelinePosterGeometry(model, true);
+        const g = timelinePosterGeometry(model, { treeName: 'T' });
         expect(tag).toContain(`width="${g.innerW}"`);
         expect(tag).toContain(`height="${g.innerH}"`);
         expect(tag).toContain(`x="`);
@@ -178,8 +178,8 @@ describe('timelinePosterGeometry (tile skipping)', () => {
     it('reports a wide-and-short poster larger than the bare timeline', () => {
         const d = fam();
         const model = computeTimelineModel(d, ids(d), TODAY);
-        const noFooter = timelinePosterGeometry(model, false);
-        const withFooter = timelinePosterGeometry(model, true);
+        const noFooter = timelinePosterGeometry(model, {});
+        const withFooter = timelinePosterGeometry(model, { treeName: 'T' });
         expect(withFooter.height).toBeGreaterThan(noFooter.height);
         expect(withFooter.width).toBe(noFooter.width);
         expect(withFooter.width).toBeGreaterThan(withFooter.innerH); // wide and short
@@ -188,7 +188,7 @@ describe('timelinePosterGeometry (tile skipping)', () => {
     it('keeps the dense row band and the footer, skips far padding corners', () => {
         const d = fam();
         const model = computeTimelineModel(d, ids(d), TODAY);
-        const g = timelinePosterGeometry(model, true);
+        const g = timelinePosterGeometry(model, { treeName: 'T' });
         // A tile over the middle of the row band has content.
         expect(g.hasContent(g.width / 2 - 20, g.height / 2 - 20, 40, 40)).toBe(true);
         // The footer strip at the bottom-left is content.

@@ -22,7 +22,7 @@ import { compareMarriages, marriageDates } from './marriage-order.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import { LineageIndex, buildLineages } from './lineage.js';
 import {
-    posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
+    posterFooterSvg, posterFooterHeight, PosterFooterMeta, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
 import {
     FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanRodColors, FanRodColors, fanLegend, fanHasRepeats,
@@ -772,7 +772,7 @@ interface PosterLayout {
     subtitle: string;
 }
 
-function posterLayout(model: FanModel, mode: FanColorMode, hasFooter: boolean, measure: FanMeasure, rodIndex?: LineageIndex,
+function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure, rodIndex?: LineageIndex,
     protect?: (p: Person) => boolean): PosterLayout {
     const s = posterScale(model);
     const b = model.bounds;
@@ -807,7 +807,7 @@ function posterLayout(model: FanModel, mode: FanColorMode, hasFooter: boolean, m
     const fan = { x: POSTER_PADDING + (contentW - fanW) / 2, y: POSTER_PADDING + headerH + POSTER_GAP, w: fanW, h: fanH };
     const legendW = rows.reduce((m, r) => Math.max(m, r[r.length - 1].x + r[r.length - 1].w), 0);
     const legend = { x: POSTER_PADDING, y: fan.y + fanH + POSTER_GAP, w: legendW, h: legendH, rows };
-    const footer = hasFooter ? FOOTER_HEIGHT : 0;
+    const footer = posterFooterHeight(meta, width);
     const height = legend.y + legendH + POSTER_PADDING + footer;
     return { width, height, scale: s, header, fan, legend, footer, title, subtitle };
 }
@@ -843,12 +843,12 @@ function posterOccupancy(model: FanModel, L: PosterLayout): FanOccupancy {
 
 /**
  * Poster-space geometry for a fan chart of the model's shape: total pixel
- * size (header, fan, legend, optional footer) and a content predicate for
- * tile skipping.
+ * size (header, fan, legend, the footer `meta` gives) and a content predicate
+ * for tile skipping.
  */
-export function fanPosterGeometry(model: FanModel, hasFooter: boolean,
+export function fanPosterGeometry(model: FanModel, meta: PosterFooterMeta,
     opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'protect'>): FanPosterGeometry {
-    const L = posterLayout(model, opts?.colorMode ?? 'gender', hasFooter, opts?.measure ?? defaultFanMeasure, opts?.rodIndex, opts?.protect);
+    const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts?.rodIndex, opts?.protect);
     return { width: L.width, height: L.height, hasContent: posterOccupancy(model, L) };
 }
 
@@ -859,10 +859,9 @@ export function fanPosterGeometry(model: FanModel, hasFooter: boolean,
  * poster footer (tree name · view label · date).
  */
 export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta: PosterFooterMeta): string {
-    const hasFooter = !!(meta.treeName || meta.viewLabel || meta.dateLabel);
     const mode = opts.colorMode ?? 'gender';
     const measure = opts.measure ?? defaultFanMeasure;
-    const L = posterLayout(model, mode, hasFooter, measure, opts.rodIndex, opts.protect);
+    const L = posterLayout(model, mode, meta, measure, opts.rodIndex, opts.protect);
     const { esc } = opts;
 
     // Never editable (no "+" slots), always self-contained print colours.
@@ -903,7 +902,8 @@ export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta:
         }
     });
     if (lg.length) out.push(`<g class="fan-poster-legend" font-family="${SANS}">${lg.join('')}</g>`);
-    if (hasFooter) out.push(posterFooterSvg(meta, L.height));
+    const footer = posterFooterSvg(meta, L.height, L.width);
+    if (footer) out.push(footer);
     out.push('</svg>');
     return out.join('\n');
 }

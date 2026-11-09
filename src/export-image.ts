@@ -23,6 +23,7 @@ import {
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
 import { unionOrderGlyphLift } from './union-order-measure.js';
+import { isClusterBoundary } from './ged-exporter.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
     segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, PillSegment, EDGE_GAP, lineLinksOf, lineLinkTabs, LineLinkTab,
@@ -59,7 +60,13 @@ const COLORS = {
 
 const FONT = "'Strom Serif', Georgia, 'Times New Roman', serif";
 const PADDING = 40;
+/** The footer strip of one row; each further row adds FOOTER_ROW_GAP. */
 export const FOOTER_HEIGHT = 44;
+/** Between the middles of two footer rows. */
+const FOOTER_ROW_GAP = 20;
+/** The footer takes at most this many rows; the last ends in "…" when the text goes on. */
+const FOOTER_MAX_ROWS = 2;
+const FOOTER_SEPARATOR = '  ·  ';
 
 /** Poster geometry/style shared with other poster builders (e.g. the fan). */
 export const POSTER_PADDING = PADDING;
@@ -266,7 +273,7 @@ export interface SvgBounds {
     height: number;
 }
 
-export interface PosterOptions {
+export interface PosterOptions extends PosterFooterMeta {
     /** Footer title (tree name). */
     treeName?: string;
     /** Footer date/subtitle. */
@@ -366,6 +373,7 @@ const estimateCardTexts: MeasureTexts = (kind, texts) => {
     const out = new Map<string, number>();
     for (const t of texts) {
         out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'nameSmall' ? estWidth(t, 12.5, true)
+            : kind === 'posterTitle' ? estWidth(t, 16, true)
             : kind === 'label' || kind === 'more' ? estWidth(t, 12, true)
             : kind === 'years' ? estWidth(t, 11, false) : estWidth(t, 12, false));
     }
@@ -553,26 +561,145 @@ export interface PosterFooterMeta {
     treeName?: string;
     viewLabel?: string;
     dateLabel?: string;
+    /**
+     * Widths of the footer's texts in the image's fonts ('posterTitle' the
+     * tree name, 'posterNote' the rest; the screen measures them); estimated
+     * when absent.
+     */
+    measureFooterTexts?: MeasureTexts;
+}
+
+/** The footer as drawn: its text, its rows and its height. */
+export interface PosterFooterLayout {
+    /** The tree name, then the view label and the date, each after "  ·  ". */
+    text: string;
+    /** Where the tree name ends in `text` (it is drawn larger and bold). */
+    titleEnd: number;
+    /** The rows as [start, end) in `text`: one after another, all of it unless `cut`. */
+    rows: Array<[number, number]>;
+    /** The text did not fit the rows: the last one ends in "…". */
+    cut: boolean;
+    /** The footer strip's height (0: no footer). */
+    height: number;
+}
+
+const FOOTER_SPACE = /\s/;
+const FOOTER_BREAK_AFTER = /[-–]/;
+/** Scripts written without spaces: a row may break between any two of their characters. */
+const FOOTER_NO_SPACES = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+
+/**
+ * The footer's rows in an image `width` px wide: one row when the whole text
+ * fits between the paddings (as before); otherwise the text wraps onto a
+ * second row, after a space, "-" or "–" (between characters where no such
+ * break fits, never inside a character: an accent, an emoji or a flag stays
+ * whole; between any two CJK characters), and when two rows do not take it,
+ * the second ends in "…". Widths come from `meta.measureFooterTexts`.
+ */
+export function posterFooterLayout(meta: PosterFooterMeta, width: number): PosterFooterLayout {
+    const title = meta.treeName ?? '';
+    let text = title;
+    for (const note of [meta.viewLabel, meta.dateLabel]) if (note) text += (text ? FOOTER_SEPARATOR : '') + note;
+    const titleEnd = title.length;
+    if (!text) return { text, titleEnd, rows: [], cut: false, height: 0 };
+    const measure = meta.measureFooterTexts ?? estimateCardTexts;
+    const room = width - 2 * PADDING;
+    const len = text.length;
+
+    // The widths of the rows from `a` to each end, `tail` after the row.
+    const widths = (a: number, ends: readonly number[], tail = ''): number[] => {
+        const parts = ends.map(b => footerRowParts(text, titleEnd, a, b, tail));
+        const t = measure('posterTitle', parts.map(p => p[0]).filter(Boolean));
+        const n = measure('posterNote', parts.map(p => p[1]).filter(Boolean));
+        return parts.map(([x, y]) => (x ? t.get(x) ?? 0 : 0) + (y ? n.get(y) ?? 0 : 0));
+    };
+    const longestFitting = (a: number, ends: readonly number[], tail = ''): number | undefined => {
+        const w = widths(a, ends, tail);
+        let best: number | undefined;
+        ends.forEach((b, k) => { if (w[k] <= room + 0.01) best = b; });
+        return best;
+    };
+    // Where a row may end: between two characters (never inside one) ...
+    const charBreaks = (a: number): number[] => {
+        const out: number[] = [];
+        for (let i = a + 1; i < len; i++) if (isClusterBoundary(text, i)) out.push(i);
+        return out;
+    };
+    // ... and preferably after a space, "-" or "–", or beside a CJK character.
+    const wordBreaks = (a: number): number[] => charBreaks(a).filter(i =>
+        (FOOTER_SPACE.test(text[i - 1]) || FOOTER_BREAK_AFTER.test(text[i - 1])) && !FOOTER_SPACE.test(text[i])
+        || FOOTER_NO_SPACES.test(text.slice(i - 2, i)) || FOOTER_NO_SPACES.test(text.slice(i, i + 2)));
+
+    const rows: Array<[number, number]> = [];
+    let cut = false;
+    let a = 0;
+    while (a < len) {
+        if (widths(a, [len])[0] <= room + 0.01) {
+            rows.push([a, len]);
+            break;
+        }
+        if (rows.length === FOOTER_MAX_ROWS - 1) {
+            // The last row: as much as fits with "…" after it.
+            rows.push([a, longestFitting(a, charBreaks(a), '…') ?? a]);
+            cut = true;
+            break;
+        }
+        const chars = charBreaks(a);
+        const end = longestFitting(a, wordBreaks(a)) ?? longestFitting(a, chars) ?? chars[0] ?? len;
+        rows.push([a, end]);
+        a = end;
+    }
+    const height = FOOTER_HEIGHT + Math.max(0, rows.length - 1) * FOOTER_ROW_GAP;
+    return { text, titleEnd, rows, cut, height };
+}
+
+/** The footer strip's height in an image `width` px wide (0: no footer). */
+export function posterFooterHeight(meta: PosterFooterMeta, width: number): number {
+    return posterFooterLayout(meta, width).height;
+}
+
+/**
+ * A footer row's text in its two fonts: the tree name's part and the rest's,
+ * without the spaces at the row's ends, `tail` after the last part.
+ */
+function footerRowParts(text: string, titleEnd: number, a: number, b: number, tail = ''): [string, string] {
+    const row = text.slice(a, b);
+    const start = a + (row.length - row.trimStart().length);
+    const end = start + row.trim().length;
+    const t = text.slice(start, Math.max(start, Math.min(end, titleEnd)));
+    const n = text.slice(Math.max(start, titleEnd), Math.max(end, titleEnd));
+    return end > titleEnd ? [t, n + tail] : [t + tail, n];
 }
 
 /**
  * Shared poster footer: "<tree name>  ·  <view label>  ·  <date>" on the
  * bottom-left. Title, view label and date sit TOGETHER on the left — a lone
  * date in the far-right corner used to force a nearly-empty last print sheet.
+ * Within the image's `width` it wraps onto a second row (posterFooterLayout).
  * Returns '' when there is nothing to show. Positioned against `totalHeight`
  * (the poster's full pixel height, footer strip included).
  */
-export function posterFooterSvg(meta: PosterFooterMeta, totalHeight: number): string {
-    const title = meta.treeName ? escapeXml(meta.treeName) : '';
-    const view = meta.viewLabel ? escapeXml(meta.viewLabel) : '';
-    const date = meta.dateLabel ? escapeXml(meta.dateLabel) : '';
-    if (!title && !view && !date) return '';
-    const fy = totalHeight - FOOTER_HEIGHT / 2;
-    const parts: string[] = [];
-    if (title) parts.push(`<tspan font-size="16" font-weight="600" fill="${COLORS.text}">${title}</tspan>`);
-    if (view) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${parts.length ? '  ·  ' : ''}${view}</tspan>`);
-    if (date) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${parts.length ? '  ·  ' : ''}${date}</tspan>`);
-    return `<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`;
+export function posterFooterSvg(meta: PosterFooterMeta, totalHeight: number, width: number): string {
+    const layout = posterFooterLayout(meta, width);
+    if (layout.rows.length === 0) return '';
+    const titleTspan = (t: string): string => `<tspan font-size="16" font-weight="600" fill="${COLORS.text}">${escapeXml(t)}</tspan>`;
+    const noteTspan = (t: string): string => `<tspan font-size="12" fill="${COLORS.footer}">${escapeXml(t)}</tspan>`;
+    if (layout.rows.length === 1 && !layout.cut) {
+        // One row: the parts as they have always been drawn.
+        const fy = totalHeight - FOOTER_HEIGHT / 2;
+        const parts: string[] = [];
+        if (meta.treeName) parts.push(titleTspan(meta.treeName));
+        if (meta.viewLabel) parts.push(noteTspan(`${parts.length ? FOOTER_SEPARATOR : ''}${meta.viewLabel}`));
+        if (meta.dateLabel) parts.push(noteTspan(`${parts.length ? FOOTER_SEPARATOR : ''}${meta.dateLabel}`));
+        return `<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`;
+    }
+    const top = totalHeight - layout.height + FOOTER_HEIGHT / 2;
+    return layout.rows.map(([a, b], k) => {
+        const tail = layout.cut && k === layout.rows.length - 1 ? '…' : '';
+        const [t, n] = footerRowParts(layout.text, layout.titleEnd, a, b, tail);
+        const y = top + k * FOOTER_ROW_GAP;
+        return `<text x="${PADDING}" y="${y.toFixed(1)}" dominant-baseline="middle">${t ? titleTspan(t) : ''}${n ? noteTspan(n) : ''}</text>`;
+    }).join('');
 }
 
 /**
@@ -618,9 +745,9 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     const heightOf = (id: string): number => personCardHeight(config, id as keyof StromData['persons']);
     const bounds = computeBounds(result, config);
 
-    const hasFooter = !!(options.treeName || options.dateLabel || options.viewLabel);
-    const footer = hasFooter ? FOOTER_HEIGHT : 0;
     const width = bounds.width + PADDING * 2;
+    const footer = posterFooterHeight(options, width);
+    const hasFooter = footer > 0;
     const height = bounds.height + PADDING * 2 + footer;
     const ox = -bounds.minX + PADDING;
     const oy = -bounds.minY + PADDING;
@@ -901,7 +1028,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     // --- Footer (tree name · view label · date) ---
     if (hasFooter) {
-        out.push(posterFooterSvg(options, height));
+        out.push(posterFooterSvg(options, height, width));
     }
 
     out.push('</svg>');
