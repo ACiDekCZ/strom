@@ -22,7 +22,7 @@ import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
 import { cardLines, cardYears } from '../card-fields.js';
-import { measureCardTexts } from '../card-width.js';
+import { measureCardTexts, cardNameMaxRows } from '../card-width.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { unionOrderBadges } from '../marriage-order.js';
@@ -165,6 +165,8 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
     const drawing: PosterOptions = {
         config: cardConfig,
         ...(custom ? {} : { cardDensity: density as 'compact' | 'normal' }),
+        // The Normal card wraps a long name on the rows the screen measured (T40).
+        ...(density === 'normal' ? { measureCardTexts } : {}),
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
@@ -181,6 +183,8 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
             cardDateColumn: TreeRenderer.getPosterCardMetrics()?.dateColumn ?? 0,
             // The rows a detail takes, wrapped as on screen (same function, same measure).
             cardValueLines: fields.lines,
+            // The name's rows: the Detailed card's whole name, the others' two at most (T40).
+            cardNameMaxRows: cardNameMaxRows(density),
             cardStyle: fields.style,
             cardLabelColumn: TreeRenderer.getPosterCardMetrics()?.labelColumn ?? 0,
             ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),

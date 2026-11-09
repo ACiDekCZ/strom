@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { readFileSync } from 'fs';
 import { openApp, seedSetting, seedTree, card, cardBoxesMatchLayout } from './helpers.js';
 
 /**
@@ -136,4 +137,44 @@ test('printed, the Normal card keeps its name rows whole inside the 2px print bo
     await page.emulateMedia({ media: 'print' });
     await expect.poll(() => problems(page)).toEqual(NONE);
     await page.emulateMedia({ media: 'screen' });
+});
+
+/** The poster's SVG of the view as drawn now (Export → Poster → SVG). */
+async function posterSvg(page: Page): Promise<string> {
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    await page.keyboard.press('Escape');
+    await expect(poster).toBeHidden();
+    return svg;
+}
+
+test('the image export draws the long name whole on its rows, each card as tall as on screen (Normal, Detailed)', async ({ page }) => {
+    await setup(page, 'de', 1440);
+    for (const kind of ['normal', 'detailed'] as const) {
+        await density(page, kind);
+        const svg = await posterSvg(page);
+        const rows = [...svg.matchAll(/<text class="card-name-row"[^>]*>([^<]*)</g)].map(m => m[1]);
+        expect(rows.join(' '), kind).not.toContain('…');
+        // Rosamunda's name: every letter, across its rows.
+        expect(rows.join('').replace(/\s/g, ''), kind).toContain(`${LONG_GIVEN}${LONG_WORD}`.replace(/\s/g, ''));
+        // The cards as tall as the screen's, none over another.
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="([\d.]+)" rx="8"/g)]
+            .map(m => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] }));
+        const screen = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
+            .map(c => c.offsetHeight).sort((a, b) => a - b));
+        expect(rects.map(r => r.h).sort((a, b) => a - b), kind).toEqual(screen);
+        expect(Math.max(...rects.map(r => r.h)), kind).toBeGreaterThan(kind === 'normal' ? 64 : 0);
+        for (let i = 0; i < rects.length; i++) {
+            for (let j = i + 1; j < rects.length; j++) {
+                const a = rects[i], b = rects[j];
+                expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h, `${kind}: cards ${i} × ${j}`).toBe(false);
+            }
+        }
+    }
 });

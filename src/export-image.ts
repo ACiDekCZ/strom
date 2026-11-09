@@ -18,6 +18,7 @@ import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_BIRTH_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
     MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock, CARD_STATUS_MARK_ROOM,
+    CARD_NAME_MAX_ROWS, normalCardNameRows, NORMAL_CARD_NAME_ROW_HEIGHT,
 } from './card-width.js';
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
@@ -303,13 +304,23 @@ export interface PosterOptions {
      * rows are the screen's (src/card-width.ts customCardRows).
      */
     cardValueLines?: CardValueLines;
+    /**
+     * Rows a custom card's name may take when details may wrap
+     * (src/card-width.ts cardNameMaxRows): 2 (default, the Register and
+     * Custom cards, the last ends in "…"), 0 the whole name (the Detailed
+     * card, T40).
+     */
+    cardNameMaxRows?: CardValueLines;
     /** The custom card's line style: marks (default) or labels (the event's word before the value). */
     cardStyle?: CardLineStyle;
     /** Labels style: the label column (the view's longest label, src/card-width.ts). */
     cardLabelColumn?: number;
     /** The years under the name per person (the option "Years under the name"; src/card-fields.ts cardYears). */
     cardYears?: Map<string, string>;
-    /** Text widths in the card's fonts (the screen measures them); estimated when absent. */
+    /**
+     * Text widths in the card's fonts (the screen measures them); estimated
+     * when absent. The Normal card wraps its name on rows by them (T40).
+     */
     measureCardTexts?: MeasureTexts;
     /**
      * @font-face rules of the app's fonts (src/poster-fonts.ts), embedded so
@@ -354,7 +365,8 @@ const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sa
 const estimateCardTexts: MeasureTexts = (kind, texts) => {
     const out = new Map<string, number>();
     for (const t of texts) {
-        out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'label' || kind === 'more' ? estWidth(t, 12, true)
+        out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'nameSmall' ? estWidth(t, 12.5, true)
+            : kind === 'label' || kind === 'more' ? estWidth(t, 12, true)
             : kind === 'years' ? estWidth(t, 11, false) : estWidth(t, 12, false));
     }
     return out;
@@ -365,6 +377,8 @@ interface CustomCardLook {
     dateColumn: number;
     labelColumn: number;
     valueLines: CardValueLines;
+    /** Rows the name may take when details may wrap (0: the whole name). */
+    nameMaxRows: CardValueLines;
     style: CardLineStyle;
     measure: MeasureTexts;
     /** Widths measured by the screen: texts are drawn at them. */
@@ -385,7 +399,8 @@ interface CustomCardLook {
  * the place; every row at the value's start). The rows are the screen's (the
  * same wrapping, src/card-width.ts customCardRows), one text a row, 3px
  * between details that may wrap. When details may wrap a long name takes the
- * screen's two rows; with one row a detail it shrinks to 13px and only then
+ * screen's rows (two at most, or the whole name on the Detailed card, T40);
+ * with one row a detail it shrinks to 13px and only then
  * shortens, as on screen. With `exact` (widths measured by the screen) texts
  * are drawn at their measured widths, so the geometry holds in whatever font
  * a viewer sets them.
@@ -394,7 +409,7 @@ function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
     lines: PosterCardLine[], ring: string, clipId: string, years: string, look: CustomCardLook,
 ): string {
-    const { dateColumn, labelColumn, valueLines, style, measure, exact, statusRoom } = look;
+    const { dateColumn, labelColumn, valueLines, nameMaxRows, style, measure, exact, statusRoom } = look;
     const out: string[] = [];
     const left = pos.x + CUSTOM_CARD_PAD_X;
     const right = pos.x + cw - CUSTOM_CARD_PAD_X;
@@ -403,11 +418,11 @@ function customCardSvg(
     const birthRow = birthNoteText(birth);
     const metrics = { cardWidth: cw, dateColumn, ...(style === 'labels' ? { labelColumn } : {}) };
     const entry = { name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}), ...(birthRow ? { birth: birthRow } : {}) };
-    let { rows, heads } = customCardRows([entry], metrics, measure, valueLines, style);
+    let { rows, heads } = customCardRows([entry], metrics, measure, valueLines, style, nameMaxRows);
     // The last line clear of the status mark, as the screen wraps it, unless that
     // takes a row more than the card was laid out with (then it stays as it was).
     if (statusRoom && lines.length > 0) {
-        const kept = customCardRows([{ ...entry, lastLineReserve: CARD_STATUS_MARK_ROOM }], metrics, measure, valueLines, style);
+        const kept = customCardRows([{ ...entry, lastLineReserve: CARD_STATUS_MARK_ROOM }], metrics, measure, valueLines, style, nameMaxRows);
         const count = (r: typeof rows) => lines.reduce((n, l) => n + Math.max(1, r.get(l)?.rows.length ?? 0), 0);
         if (count(kept.rows) === count(rows)) ({ rows, heads } = kept);
     }
@@ -447,7 +462,7 @@ function customCardSvg(
             : nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
         out.push(`<text x="${textX.toFixed(1)}" y="${(blockTop + 14.5).toFixed(1)}" font-size="${fs}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(name)}</text>`);
     } else {
-        // The rows the screen draws (two at most), each at its measured width.
+        // The rows the screen draws (two at most, or all of the Detailed card's), each at its measured width.
         const widths = measure('name', head.name);
         head.name.forEach((row, i) => {
             const w = Math.min(widths.get(row) ?? 0, nameRoom);
@@ -724,7 +739,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`,
                 options.cardYears?.get(personId) ?? '', {
                     dateColumn: options.cardDateColumn ?? 0, labelColumn: options.cardLabelColumn ?? 0,
-                    valueLines: options.cardValueLines ?? 1, style: options.cardStyle ?? 'marks',
+                    valueLines: options.cardValueLines ?? 1, nameMaxRows: options.cardNameMaxRows ?? CARD_NAME_MAX_ROWS,
+                    style: options.cardStyle ?? 'marks',
                     measure: options.measureCardTexts ?? estimateCardTexts, exact: !!options.measureCardTexts,
                     statusRoom: !!markCls,
                 }));
@@ -773,32 +789,47 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
             const parts = shownNameParts(person, '?');
             const birthText = parts.birthNote ? fitBirthRow(parts.birthNote, contentW, t => estWidth(t, 11, false)) : '';
-            if (!birthText) {
+            // The name on the screen's rows (renderer.ts fitCardNames, src/card-width.ts
+            // normalCardNameRows): given names, then the surname, each wrapped at 12.5px,
+            // never shortened. More than two rows: the card was laid out taller for them
+            // (T40, config.personHeights).
+            const measure = options.measureCardTexts ?? estimateCardTexts;
+            const split = normalCardNameRows([{ given: parts.given, surname: parts.surname, avatar: true }], measure)[0];
+            const nameRows = [...split.given, ...split.surname];
+            const wrapped = nameRows.length > 2;
+            // With the birth surname's row the name stays on one line 15 → 14 → 13px, else goes on rows.
+            const oneLine = wrapped || !birthText ? undefined : [15, 14, 13].find(fs => estWidth(fullName, fs, true) <= contentW);
+            if (!wrapped && !birthText) {
                 out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
                 if (meta) {
                     out.push(fittedText(meta, cx - markRoom / 2, pos.y + 45, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
                 }
+            } else if (oneLine) {
+                out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 24).toFixed(1)}" text-anchor="middle" font-size="${oneLine}" font-weight="600" fill="${COLORS.text}">${escapeXml(fullName)}</text>`);
+                out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 38.5).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
+                if (meta) out.push(fittedText(meta, cx - markRoom / 2, pos.y + 52.5, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
             } else {
-                // With the birth surname's row: the screen's rows (fitCardNames) — the
-                // name on one line 15 → 14 → 13px, else given name / surname at
-                // 12.5px; then "roz. …" at 11px, then the meta (years only after a
-                // split name). The birth row shortens, never squeezes.
-                const oneLine = [15, 14, 13].find(fs => estWidth(fullName, fs, true) <= contentW);
-                const nameText = (t: string, y: number, fs: number) => {
-                    let shown = t;
-                    for (let n = t.length - 1; n > 0 && estWidth(shown, fs, true) > contentW; n--) shown = `${t.slice(0, n).trimEnd()}…`;
-                    return `<text x="${cx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${fs}" font-weight="600" fill="${COLORS.text}">${escapeXml(shown)}</text>`;
-                };
-                if (oneLine) {
-                    out.push(nameText(fullName, pos.y + 24, oneLine));
-                    out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 38.5).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
-                    if (meta) out.push(fittedText(meta, cx - markRoom / 2, pos.y + 52.5, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
-                } else {
-                    out.push(nameText(parts.given, pos.y + 15, 12.5));
-                    out.push(nameText(parts.surname, pos.y + 29.5, 12.5));
-                    out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 43).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
-                    if (metaYears) out.push(fittedText(metaYears, cx - markRoom / 2, pos.y + 56.5, contentW - markRoom, [10.5], false, COLORS.textLight));
+                // The rows (12.5px, 14.375px a row), then "roz. …" at 11px, then the
+                // years only, in 13.5px rows: one block in the middle of the card.
+                const smallRow = 13.5;
+                const top = pos.y + (ch - nameRows.length * NORMAL_CARD_NAME_ROW_HEIGHT
+                    - (birthText ? smallRow : 0) - (meta ? smallRow : 0)) / 2;
+                const widths = measure('nameSmall', nameRows);
+                nameRows.forEach((row, i) => {
+                    const w = widths.get(row) ?? 0;
+                    // Measured by the screen: drawn at that width (inside the column in any font).
+                    const clamp = options.measureCardTexts && w > 0
+                        ? ` textLength="${Math.min(w, contentW).toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
+                        : w > contentW ? ` textLength="${contentW.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+                    const y = top + NORMAL_CARD_NAME_ROW_HEIGHT * i + 10.9;
+                    out.push(`<text class="card-name-row" x="${cx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(row)}</text>`);
+                });
+                let y = top + NORMAL_CARD_NAME_ROW_HEIGHT * nameRows.length + 10;
+                if (birthText) {
+                    out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
+                    y += smallRow;
                 }
+                if (metaYears) out.push(fittedText(metaYears, cx - markRoom / 2, y, contentW - markRoom, [10.5], false, COLORS.textLight));
             }
         }
 

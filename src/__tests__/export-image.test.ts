@@ -5,6 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildTreeSvg, computeBounds, PosterLayout } from '../export-image.js';
 import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { MeasureTexts, normalCardHeights, cardNameMaxRows } from '../card-width.js';
+import type { CardValueLines } from '../card-fields.js';
 
 function person(id: string, over: Partial<Person> = {}): Person {
     return {
@@ -161,10 +163,20 @@ describe('buildTreeSvg', () => {
     });
 
     it('long names shrink and clamp instead of overflowing the card', () => {
-        const data = makeData(person('a', { firstName: 'Maximilian Alexander Wolfgang Amadeus' } as never));
+        // Each part fits a row of its own, the whole is too long for one line: shrunk and clamped (two rows at most).
+        const data = makeData(person('a', { firstName: 'Maximilian', lastName: 'Wolfensteiner' } as never));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
         expect(svg).toContain('lengthAdjust="spacingAndGlyphs"');
-        expect(svg).not.toContain('font-size="15" font-weight="600" fill="#2b2822">Maximilian Alexander');
+        expect(svg).not.toContain('font-size="15" font-weight="600" fill="#2b2822">Maximilian Wolfensteiner');
+    });
+
+    it('a name too long for two rows goes on more rows, never squeezed past reading (T40)', () => {
+        const data = makeData(person('a', { firstName: 'Maximilian Alexander Wolfgang Amadeus' } as never));
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
+        const rows = [...svg.matchAll(/<text class="card-name-row"[^>]*>([^<]*)</g)].map(m => m[1]);
+        expect(rows.length).toBeGreaterThan(2);
+        expect(rows.join(' ')).toBe('Maximilian Alexander Wolfgang Amadeus Novák');
+        expect(svg).not.toContain('textLength');
     });
 });
 
@@ -356,5 +368,84 @@ describe('the card corner in the image (spec 066 P4 §7)', () => {
         const a = nameX(buildTreeSvg(data, l, { config: compact, cardDensity: 'compact' }));
         const b = nameX(buildTreeSvg(data, l, { config: compact, cardDensity: 'compact', cardMarks: new Map([['a', { status: 'cs-p2' }]]) }));
         expect(a - b).toBeCloseTo(13, 1);
+    });
+});
+
+describe('a long name on the card is never shortened in the image (T40)', () => {
+    /** Every text a fixed 7px a character (the 126px column holds 18). */
+    const measure: MeasureTexts = (_kind, texts) => new Map([...texts].map(t => [t, t.length * 7]));
+    const long = person('a', { firstName: 'Bartoloměj Kryštof Maximilián', lastName: 'Wolfensteiner-Hohenbrandt', birthDate: '1888', deathDate: '1950' });
+    const word = person('a', { firstName: 'Ondřej', lastName: 'Wolfensteinerhohenbrandtovský' });
+    const rows = (svg: string) => [...svg.matchAll(/<text class="card-name-row"[^>]*>([^<]*)</g)].map(m => m[1]);
+    const rectH = (svg: string) => Number(/<rect x="[\d.-]+" y="[\d.-]+" width="\d+" height="(\d+)" rx="8"/.exec(svg)![1]);
+    const heightOf = (p: Person) => normalCardHeights(new Map([['a', { given: p.firstName, surname: p.lastName, avatar: true }]]), measure)?.get('a');
+
+    it('normal: the name on as many rows as it needs, whole, the card as tall as the screen laid it out', () => {
+        const h = heightOf(long)!;
+        expect(h).toBeGreaterThan(64);
+        const config = { ...DEFAULT_LAYOUT_CONFIG, personHeights: new Map([['a' as PersonId, h]]) };
+        const svg = buildTreeSvg(makeData(long), layout({ a: { x: 0, y: 0 } }), { config, cardDensity: 'normal', measureCardTexts: measure });
+        const r = rows(svg);
+        expect(r.length).toBeGreaterThan(2);
+        expect(r.join(' ').replace('- ', '-')).toBe('Bartoloměj Kryštof Maximilián Wolfensteiner-Hohenbrandt');
+        expect(svg).not.toContain('…');
+        expect(rectH(svg)).toBe(h);
+        // Every row inside the column (drawn at its measured width) and inside the card's height.
+        for (const m of svg.matchAll(/<text class="card-name-row"[^>]*y="([\d.]+)"[^>]*textLength="([\d.]+)"/g)) {
+            expect(Number(m[2])).toBeLessThanOrEqual(125);
+            expect(Number(m[1])).toBeLessThan(h);
+        }
+        // The years only, under the rows, inside the card.
+        const years = /<text x="[\d.]+" y="([\d.]+)"[^>]*>1888 – 1950</.exec(svg)!;
+        expect(Number(years[1])).toBeLessThan(h);
+    });
+
+    it('normal: one long word without spaces breaks between characters, nothing cut', () => {
+        const h = heightOf(word)!;
+        const config = { ...DEFAULT_LAYOUT_CONFIG, personHeights: new Map([['a' as PersonId, h]]) };
+        const svg = buildTreeSvg(makeData(word), layout({ a: { x: 0, y: 0 } }), { config, cardDensity: 'normal', measureCardTexts: measure });
+        const r = rows(svg);
+        expect(r.length).toBe(3);
+        expect(r.slice(1).join('')).toBe('Wolfensteinerhohenbrandtovský');
+        expect(svg).not.toContain('…');
+    });
+
+    it('normal: a short name stays the one-line 64px card', () => {
+        const svg = buildTreeSvg(makeData(person('a')), layout({ a: { x: 0, y: 0 } }), { cardDensity: 'normal', measureCardTexts: measure });
+        expect(rows(svg)).toEqual([]);
+        expect(rectH(svg)).toBe(64);
+        expect(svg).toMatch(/<text x="[\d.]+" y="28.0"[^>]*>Jan Novák</);
+    });
+
+    it('normal with the birth surname: the rows, then "roz.", never "…"', () => {
+        const married = person('a', { gender: 'female', firstName: 'Bartolomějka Kryštofa', lastName: 'Lindenthalová', marriedSurname: 'Wolfensteinerová-Hohenbrandtová' });
+        const svg = buildTreeSvg(makeData(married), layout({ a: { x: 0, y: 0 } }), { cardDensity: 'normal', measureCardTexts: measure,
+            config: { ...DEFAULT_LAYOUT_CONFIG, personHeights: new Map([['a' as PersonId, 79]]) } });
+        expect(rows(svg).join(' ')).toContain('Wolfensteinerová-');
+        expect(svg).toContain('class="card-birth"');
+        expect(svg.split('class="card-birth"')[0]).not.toContain('…');
+    });
+
+    it('compact stays one shortened row', () => {
+        const svg = buildTreeSvg(makeData(long), layout({ a: { x: 0, y: 0 } }), {
+            config: { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 }, cardDensity: 'compact', measureCardTexts: measure,
+        });
+        expect(rows(svg)).toEqual([]);
+        expect(svg.match(/<text /g)).toHaveLength(1);
+        expect(svg).toMatch(/textLength="128"/);
+    });
+
+    it('detailed: the whole name on rows; register and custom keep two rows, the last ending in "…"', () => {
+        const draw = (nameRows: CardValueLines) => buildTreeSvg(makeData(long), layout({ a: { x: 0, y: 0 } }), {
+            config: { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 200, cardHeight: 120 },
+            cardLines: new Map([['a', []]]), cardDateColumn: 0, cardValueLines: 0, measureCardTexts: measure,
+            ...(nameRows === 2 ? {} : { cardNameMaxRows: nameRows }),
+        });
+        const detailed = rows(draw(cardNameMaxRows('detailed')));
+        expect(detailed.length).toBeGreaterThan(2);
+        expect(detailed.join(' ').replace('- ', '-')).toBe('Bartoloměj Kryštof Maximilián Wolfensteiner-Hohenbrandt');
+        const register = rows(draw(cardNameMaxRows('register')));
+        expect(register).toHaveLength(2);
+        expect(register[1].endsWith('…')).toBe(true);
     });
 });
