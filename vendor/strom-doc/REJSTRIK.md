@@ -587,12 +587,12 @@ konci. Všechny mají definice ve všech čtyřech jazycích.
 
 | Jazyk | Termín | Definice |
 |---|---|---|
-| cs | Doloženo · Částečně doloženo · Nedoloženo (`treeHealth.evFull/evPartial/evNone`); zvýraznění Doložení; karta Doložení prameny | Kolik toho o osobě cituje pramen (narození, úmrtí). Počítá aplikace sama jen z citací, bez stupně jistoty. |
-| en | Documented · Partly documented · Undocumented; Evidence; Evidence from sources | How much about a person a source cites (birth, death). The app counts it by itself from citations only, without the degree of certainty. |
-| de | Belegt · Teilweise belegt · Unbelegt; Belege; Belege aus Quellen | Wie viel über eine Person eine Quelle zitiert (Geburt, Tod). Die App berechnet sie selbst nur aus Zitationen, ohne Grad der Sicherheit. |
-| pl | Udokumentowane · Częściowo udokumentowane · Nieudokumentowane; Udokumentowanie; Udokumentowanie w źródłach | Ile o osobie cytuje źródło (urodzenie, zgon). Aplikacja liczy to sama tylko z cytatów, bez stopnia pewności. |
+| cs | Doloženo · Částečně doloženo · Nedoloženo (`treeHealth.evFull/evPartial/evNone`); režim Doložení; Doložení ve stromu | Kolik toho o osobě cituje pramen (narození, úmrtí). Počítá aplikace sama jen z citací, bez stupně jistoty. |
+| en | Documented · Partly documented · Undocumented; Evidence; Evidence in the tree | How much about a person a source cites (birth, death). The app counts it by itself from citations only, without the degree of certainty. |
+| de | Belegt · Teilweise belegt · Unbelegt; Belege; Belege im Baum | Wie viel über eine Person eine Quelle zitiert (Geburt, Tod). Die App berechnet sie selbst nur aus Zitationen, ohne Grad der Sicherheit. |
+| pl | Udokumentowane · Częściowo udokumentowane · Nieudokumentowane; Udokumentowanie; Udokumentowanie w drzewie | Ile o osobie cytuje źródło (urodzenie, zgon). Aplikacja liczy to sama tylko z cytatów, bez stopnia pewności. |
 
-- **Čísla:** [R3.8.1](cs/R3-verification-and-citation.md#R3.8.1), R3.8
+- **Čísla:** [R3.8.1](cs/R3-verification-and-citation.md#R3.8.1), R3.8, [A3.7](cs/A3-evidence-in-the-app.md#A3.7), [S7.2](cs/S7-reliability-and-verification.md#S7.2)
 
 <a id="lead"></a>
 ### Vodítko
@@ -1349,12 +1349,12 @@ Pojmy aplikace a jejího spojení s výzkumem, v abecedním pořadí.
 
 | Jazyk | Termín | Definice |
 |---|---|---|
-| cs | Z rodokmenu | Značka spolehlivosti údaje převzatého z rodokmenu jiného programu, který nikdo neověřil ani nezměnil; platí, dokud má údaj hodnotu ze souboru. |
-| en | From family tree | The reliability mark of a fact taken from another program's family tree that nobody verified or changed; it holds while the fact has the file's value. |
-| de | Aus dem Stammbaum | Die Zuverlässigkeitsmarke einer Angabe aus dem Stammbaum eines anderen Programms, die niemand geprüft oder geändert hat; sie gilt, solange die Angabe den Wert aus der Datei hat. |
-| pl | Z drzewa | Znacznik wiarygodności danej przejętej z drzewa innego programu, której nikt nie sprawdził ani nie zmienił; obowiązuje, dopóki dana ma wartość z pliku. |
+| cs | Z rodokmenu | Značka spolehlivosti údaje převzatého z rodokmenu jiného programu, který nikdo neověřil ani nezměnil; platí, dokud má údaj hodnotu ze souboru. Ve stromu výzkumu ji má i údaj bez stupně jistoty z rodokmenu z aplikace Strom, který výzkum převzal a nikdo ho nezměnil. |
+| en | From family tree | The reliability mark of a fact taken from another program's family tree that nobody verified or changed; it holds while the fact has the file's value. In a research tree, a fact without a degree of certainty from a family tree from the Strom app, taken in by the research and changed by nobody, has it too. |
+| de | Aus dem Stammbaum | Die Zuverlässigkeitsmarke einer Angabe aus dem Stammbaum eines anderen Programms, die niemand geprüft oder geändert hat; sie gilt, solange die Angabe den Wert aus der Datei hat. In einem Forschungsbaum trägt sie auch eine Angabe ohne Sicherheitsgrad aus einem Stammbaum aus der App Strom, den die Forschung übernommen hat und die niemand geändert hat. |
+| pl | Z drzewa | Znacznik wiarygodności danej przejętej z drzewa innego programu, której nikt nie sprawdził ani nie zmienił; obowiązuje, dopóki dana ma wartość z pliku. W drzewie badania ma go też dana bez stopnia pewności z drzewa z aplikacji Strom, które badanie przejęło, jeśli nikt jej nie zmienił. |
 
-- **Čísla:** [S6.2](cs/S6-tree-from-another-program.md#S6.2), S6.3
+- **Čísla:** [S6.2](cs/S6-tree-from-another-program.md#S6.2), S6.3, S7.1, S7.2
 
 <a id="placeholder-person"></a>
 ### Zástupná osoba

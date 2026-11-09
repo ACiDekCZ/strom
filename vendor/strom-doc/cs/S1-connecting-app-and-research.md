@@ -19,6 +19,8 @@ nejdou.
     nebo do vypnutí počítače. Sám skončí jen tehdy, když to člověk zvolil (`live.idleMinutes`, v aplikaci **Po
     2 hodinách nečinnosti**): když se ho ta doba nikdo na nic nezeptá a ve stromu přitom nikdo nepracuje.
     Pravidelný dotaz aplikace na stav most při životě nedrží.
+  - Most skončí sám také tehdy, když jeho výzkum ze složky zmizí a chybí i při další kontrole aspoň o 10 s později.
+    Disk nedostupný jen na chvíli most neukončí. Most téhož výzkumu spuštěný navíc vedle běžícího hned skončí.
   - Když se most spustí znovu sám (aktualizace, nečinnost, pád), drží si adresu: stejný port, je-li volný, a stejný
     klíč. Aplikace se pak spojí bez nového odkazu.
   - `strom live stop` klíč zahodí: aplikaci pak znovu spojí až `strom app`. Je-li port obsazený jiným programem,
@@ -31,8 +33,10 @@ nejdou.
 - **Platí od:** výzkum 1.0.0. Stejná adresa po novém spuštění od 1.8.0, `live.idleMinutes` od 1.25.0.
 - **Od výzkumu 1.29.0:** most sám po nečinnosti nekončí (výchozí `live.idleMinutes` 0); dřív skončil sám po dvou
   hodinách. Hodnota, kterou si člověk uložil, zůstává.
+- **Od výzkumu 1.30.0:** most, jehož výzkum zmizel, skončí až po druhé kontrole aspoň o 10 s později (dřív hned);
+  druhý most téhož výzkumu hned skončí.
 
-<!-- zdroj: research:src/core/live.ts (v1.25.2) header :1-80, token crypto.randomBytes :1702, leaked :1809, :1995, LIVE_IDLE_MS / live.idleMinutes :1705, config.ts DEFAULT_LIVE_IDLE_MINUTES = 0 (od 1.29.0), live-last.json :518, seal.foreign / tree.not-downloaded / disk.full · src/commands/start.ts live · src/core/config.ts live.idleMinutes -->
+<!-- zdroj: research:src/core/live.ts (v1.25.2) header :1-80, token crypto.randomBytes :1702, leaked :1809, :1995, LIVE_IDLE_MS / live.idleMinutes :1705, config.ts DEFAULT_LIVE_IDLE_MINUTES = 0 (od 1.29.0), live-last.json :518, seal.foreign / tree.not-downloaded / disk.full · src/commands/start.ts live · src/core/config.ts live.idleMinutes · research:94d75934 src/core/live.ts GONE_MS 10_000 (researchGone: dvě kontroly aspoň 10 s od sebe), otherBridge (most téhož stromu už běží → konec) · CHANGELOG.cs.md 1.30.0 -->
 
 <a id="S1.2"></a>
 ## S1.2 Výzkum se otevře v aplikaci odkazem z terminálu
@@ -107,8 +111,15 @@ Při sledování živě přicházejí změny z výzkumu do aplikace samy. Sledov
   - Když se automatické sledování nepodaří, aplikace mlčí a strom zůstane, jak byl.
 - **Ovládání:** aplikace: **Sledovat živě** · terminál: `strom app --live`
 - **Platí od:** aplikace 3.0.0; přepnutí na strom s agentem od 3.13.1
+- **Od aplikace 3.26.0 s výzkumem 1.30.0:**
+  - výzkum má strom pro aplikaci sestavený pro každý stav a drží ho i po novém spuštění mostu;
+  - aplikace ukáže strom hned v poslední sestavené podobě. Když výzkum mezitím pokročil, panel výzkumu ukáže
+    „Připravuje se novější verze…“ a novější verze strom sama nahradí, jakmile je hotová;
+  - když se výzkum od posledního načtení nezměnil a strom v aplikaci je stále přesně ten načtený, aplikace ho znovu
+    nestahuje ani nenačítá;
+  - během sledování výzkum změnu ohlásí, až je její strom připravený.
 
-<!-- zdroj: app:src/ui/research-ui.ts startLiveFollow :2376 (opts.auto), researchReconnectOnly · strings.ts live.followLive, live.followingTree, live.followStarted, live.followMoved, live.liveEndedArchive, live.liveEndedNoAgent · CHANGELOG.cs.md 3.13.1 · spec 011 -->
+<!-- zdroj: app:src/ui/research-ui.ts startLiveFollow :2376 (opts.auto), researchReconnectOnly · strings.ts live.followLive, live.followingTree, live.followStarted, live.followMoved, live.liveEndedArchive, live.liveEndedNoAgent · CHANGELOG.cs.md 3.13.1 · spec 011 · app:669c08f0 src/research-tree-file.ts (ged.stale → tree.ged?stale=1, treeFileState preparing; ged.etag → If-None-Match jen u stromu přesně z toho souboru, 304 = strom zůstává), src/ui/research-ui.ts livePreparing, strings.ts research.newerPreparing · research:94d75934 src/core/liveged.ts (strom pro aplikaci jednou pro stav a variantu, na disku i po restartu mostu), src/core/live.ts (change až s hotovým stromem; ETag u tree.ged) · CHANGELOG.cs.md 1.30.0 -->
 
 <a id="S1.5"></a>
 ## S1.5 Když výzkum neběží nebo spojení nejde

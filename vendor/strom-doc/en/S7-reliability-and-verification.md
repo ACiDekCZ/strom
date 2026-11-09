@@ -23,7 +23,7 @@ colour alone.
 | **Proven** (●●) | **Proven by AI: two readers of the record agree** |
 | **Proven** (●○) | **Proven by AI: one reader of the record** |
 | Probable, Possible, Lead | the research's degree of certainty ([R3.1](R3-verification-and-citation.md#R3.1)) |
-| **From family tree** (○○) | taken from another program's family tree, unverified ([S6.2](S6-tree-from-another-program.md#S6.2)) |
+| **From family tree** (○○) | taken from another program's family tree, or from a family tree from the Strom app that the research took in; unverified ([S6.2](S6-tree-from-another-program.md#S6.2)) |
 
 - **The tip at the mark** (on a click): the fact's sources; with two readers **two readers agree**; for a fact that
   stayed probable or possible after verification, the line “Stays {degree} · verified by the research on {date}” and
@@ -34,6 +34,12 @@ colour alone.
 - **Enforced by the code:**
   - two dots go only to a fact for which two readers of the record agreed when the research verified it
     ([R8.8.1](R8-reading-scans.md#R8.8.1)); a fact proven otherwise has one;
+  - only a person gives ✓: by confirming against the scan, or by writing, changing or putting back the value
+    themselves, or by accepting a proposal of the research. A fact the research took in from a family tree from the
+    Strom app and nobody has changed since has the mark of its degree of certainty, without a degree **From family
+    tree** (○○); never ✓ ([S6.3](S6-tree-from-another-program.md#S6.3));
+  - the marks of a research tree are the same with the bridge and without it, also right after the page loads: the
+    app takes them from the stored tree, not from the running bridge;
   - a person's confirmation holds only while the fact has the confirmed value ([S7.8](#S7.8)).
 - **Limits:** the app does not yet show the mark **No source** at a fact: a fact without a source has no mark. A
   person without a source is shown by the mark on the card ([S7.2](#S7.2)).
@@ -41,7 +47,7 @@ colour alone.
   Reliability at facts in the person card** (on by default).
 - **Since:** app 3.26.0, research 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree → import, nikdy human), treeOriginWords, reliabilityOptionsOf (původ z dat stromu, ne z mostu) · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/import.ts (soubor aplikace Strom → user + tree) -->
 
 <a id="S7.2"></a>
 ## S7.2 One mark on the card in the tree
@@ -55,7 +61,7 @@ behind the facts. It takes the weakest of the card's three facts: name, birth an
 | ●● | proven, whatever the number of readers |
 | ●○ | probable or possible with a citation of the original or of a copy with primary information (quality 2 or 3) |
 | ○ | only a trace: a lead, or probable or possible without such a citation |
-| ○○ (dashed) | from another program's family tree, unverified |
+| ○○ (dashed) | from a family tree (another program's, or from the Strom app, taken in by the research), unverified |
 | a dotted frame | no source |
 
 - **Enforced by the code:**
@@ -63,6 +69,8 @@ behind the facts. It takes the weakest of the card's three facts: name, birth an
     other facts and those of their families decide (residence, occupation, a marriage): one confirmed or proven
     fact, or a citation of quality 2 or 3, is enough and the mark is ●○ (the person is known from a record, for
     example as the father in a child's baptism);
+  - a research tree whose stored data carry the research's origin of facts has the mark by degrees right after the
+    page loads, the same with the bridge and without it; this holds for trees stored earlier too;
   - a tree that does not know where its facts come from (without research and without an import from another
     program) shows the mark by the person's citations: ●● documented, ●○ partly documented, the dotted frame no
     source. A tree with neither sources nor origin has no mark;
@@ -71,7 +79,7 @@ behind the facts. It takes the weakest of the card's three facts: name, birth an
 - **Controls:** **Settings → Person card → Show on card → Sources and reliability** (on by default).
 - **Since:** app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) · app:669c08f0 src/reliability.ts reliabilityOptionsOf, treeOriginWords (strom výzkumu s původem v datech: stejně s mostem i bez) -->
 
 <a id="S7.3"></a>
 ## S7.3 Verify at a fact
@@ -98,12 +106,13 @@ on the lines.
 - **Limits:** a tree without research has, instead of the action, the line “With the ancestor research an AI agent
   verifies the fact in the registers itself.” in the tip. When the research does not respond: “Verifying could not
   start; the research does not respond.”; when there is nothing to verify: “The research has nothing to verify here
-  now.”
+  now.” When the research refuses the verification, the tip says why, for example that the research is an archive,
+  that it no longer has the fact, or that it is busy right now.
 - **Controls:** app: the person card → the fact's mark → **Verify** → **Start verifying**. Terminal:
   `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Verify facts at a person
@@ -152,7 +161,8 @@ facts in the tree** shows the scope, the order and the cost estimate first and v
 - **Enforced by the code:**
   - it takes births, baptisms, marriages, deaths and burials with a citation of the original that no person has
     confirmed; proven ones too (another reader reads them), except those the current model has already verified; and
-    leads from the family tree (the record is searched for);
+    leads from another program's family tree and from a family tree from the Strom app that nobody has changed (the
+    record is searched for);
   - never living people (born less than 100 years ago with no death recorded);
   - one task per person (a marriage per family), with low priority, after the work on the lines;
   - only a person may start it: in the app, or at their own terminal. The agent may only run `--dry-run` (how many and
@@ -166,7 +176,7 @@ facts in the tree** shows the scope, the order and the cost estimate first and v
   `strom verify stop [--bulk]`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) -->
+<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) · research:94d75934 src/core/verify.ts verifyBulk (origin import nebo tree → search) -->
 
 <a id="S7.6"></a>
 ## S7.6 Verifying by itself in the research's queue
@@ -241,6 +251,13 @@ at the mark click **Confirm against the scan**. The fact is then **Confirmed** (
 tip shows the state “✓ Confirmed against the scan on {date}” and **Undo**.
 
 - **Enforced by the code:**
+  - **Confirm against the scan** is offered only for a fact with a source: a citation, or the record the research read
+    the value from. A fact without a source does not have it: there is nothing to confirm against;
+  - what is confirmed is the value the person sees. When the research has changed it meanwhile, nothing is confirmed:
+    the tip closes, the app says “The fact has changed meanwhile; nothing was confirmed. Only the research's current
+    value can be confirmed.” and loads the research's current version (a tree with changes the research does not have
+    yet asks first, **Load the research version?**). A value changed in the app and not sent yet is not sent to be
+    confirmed; the tip says the same;
   - **Undo** takes the confirmation back (“Confirmation undone”); the fact then has the degree it had before;
   - a confirmation holds only for the confirmed value: a change of the fact ends it, and when the value comes back it
     holds again;
@@ -255,7 +272,9 @@ tip shows the state “✓ Confirmed against the scan on {date}” and **Undo**.
   - in the terminal only a person at their own terminal confirms: `strom verify confirm E… [--undo]`. To the agent
     `strom` refuses the confirmation.
 - **Limits:** a tree linked to the research whose bridge does not run offers neither **Confirm against the scan** nor
-  **Undo**; confirming works only with the bridge running, or in the terminal.
+  **Undo**; confirming works only with the bridge running, or in the terminal. When the research refuses the
+  confirmation, the tip says why, for example that the research is an archive, or that another session holds it;
+  “Not changed: the research does not respond.” only when it does not respond.
 - **Why:** certainty about a fact comes from a person seeing the record themselves. Verification by the agent is a
   reading by AI; ✓ says that a person saw the record. A confirmed transcript
   ([A3.1.1](A3-evidence-in-the-app.md#A3.1.1), [R3.4.1](R3-verification-and-citation.md#R3.4.1)) confirms the
@@ -264,14 +283,14 @@ tip shows the state “✓ Confirmed against the scan on {date}” and **Undo**.
   `strom verify confirm E…`, `strom verify confirm E… --undo`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) · app:669c08f0 src/verify-offer.ts verifyOffer (scan jen se source: citace nebo záznam, ze kterého výzkum četl), src/verify.ts factConfirmMark (3 _TXT; changed), src/ui/verify-ui.ts verifyConfirm (409 confirm.changed → zavřít bublinu, toast, researchLoadNewer; změněno tady → jen důvod), strings.ts verify.confirmChanged, confirmLocked, confirmBusy, confirmFailed, sync.loadTitle · research:94d75934 POST /facts/confirm {txt} → 409 confirm.changed, feature facts.confirm.value -->
 
 <a id="S7.9"></a>
 ## S7.9 What works with the bridge and what without it
 
 | | Tree linked to the research, the bridge runs | Tree linked to the research, the bridge does not run | Tree without research |
 |---|---|---|---|
-| Marks at facts and on the card | yes | yes, by the last state from the file | yes, from the import and the citations |
+| Marks at facts and on the card | yes | yes, the same as with the bridge (by the last state from the file) | yes, from the import and the citations |
 | **Verify**, **Verify facts · N**, **Verify facts in the tree…** | yes | no | no (a line about the ancestor research) |
 | **Confirm against the scan**, **Undo** | yes, the research writes it | no | yes, the app keeps it |
 | **Stop** verifying | yes | no; `strom verify stop` in the terminal | – |

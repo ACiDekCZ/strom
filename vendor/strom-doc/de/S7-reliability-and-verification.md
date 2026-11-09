@@ -24,7 +24,7 @@ Häkchen, Punkte und Rahmen, nie nur durch die Farbe.
 | **Belegt** (●●) | **Von KI belegt: zwei Leser des Eintrags übereinstimmend** |
 | **Belegt** (●○) | **Von KI belegt: ein Leser des Eintrags** |
 | Wahrscheinlich, Möglich, Hinweis | Grad der Sicherheit der Forschung ([R3.1](R3-verification-and-citation.md#R3.1)) |
-| **Aus dem Stammbaum** (○○) | übernommen aus dem Stammbaum eines anderen Programms, ungeprüft ([S6.2](S6-tree-from-another-program.md#S6.2)) |
+| **Aus dem Stammbaum** (○○) | übernommen aus dem Stammbaum eines anderen Programms oder aus einem Stammbaum aus der App Strom, den die Forschung übernommen hat; ungeprüft ([S6.2](S6-tree-from-another-program.md#S6.2)) |
 
 - **Popup der Marke** (nach einem Klick): die Quellen der Angabe; bei zwei Lesern **zwei Leser übereinstimmend**; bei
   einer Angabe, die nach der Prüfung wahrscheinlich oder möglich geblieben ist, die Zeile „Bleibt {stufe} · von der
@@ -35,6 +35,12 @@ Häkchen, Punkte und Rahmen, nie nur durch die Farbe.
 - **Prüft der Code:**
   - zwei Punkte bekommt nur eine Angabe, bei der sich bei der Prüfung durch die Forschung zwei Leser des Eintrags
     einig waren ([R8.8.1](R8-reading-scans.md#R8.8.1)); eine anders belegte hat einen;
+  - ✓ gibt nur ein Mensch: durch die Bestätigung anhand des Scans, oder indem er den Wert selbst geschrieben,
+    geändert oder zurückgesetzt oder einen Vorschlag der Forschung angenommen hat. Eine Angabe, die die Forschung aus
+    einem Stammbaum aus der App Strom übernommen hat und die seitdem niemand geändert hat, hat die Marke ihrer
+    Sicherheitsstufe, ohne Stufe **Aus dem Stammbaum** (○○); ✓ nie ([S6.3](S6-tree-from-another-program.md#S6.3));
+  - die Marken eines Forschungsbaums sind mit der Brücke und ohne sie gleich, auch gleich nach dem Laden der Seite:
+    die App nimmt sie aus dem gespeicherten Stammbaum, nicht aus der laufenden Brücke;
   - die Bestätigung durch einen Menschen gilt nur, solange die Angabe den bestätigten Wert hat ([S7.8](#S7.8)).
 - **Grenzen:** die Marke **Ohne Quelle** zeigt die App bei einer Angabe noch nicht: eine Angabe ohne Quelle hat keine
   Marke. Eine Person ohne Quelle zeigt die Marke auf dem Kärtchen ([S7.2](#S7.2)).
@@ -42,7 +48,7 @@ Häkchen, Punkte und Rahmen, nie nur durch die Farbe.
   Personenkarte → Verlässlichkeit bei Angaben in der Personenkarte** (standardmäßig ein).
 - **Gilt seit:** App 3.26.0, Forschung 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree → import, nikdy human), treeOriginWords, reliabilityOptionsOf (původ z dat stromu, ne z mostu) · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/import.ts (soubor aplikace Strom → user + tree) -->
 
 <a id="S7.2"></a>
 ## S7.2 Eine Marke auf der Karte im Baum
@@ -56,7 +62,7 @@ Angaben steht. Sie nimmt die schwächste der drei Angaben des Kärtchens: Name, 
 | ●● | belegt, unabhängig von der Zahl der Leser |
 | ●○ | wahrscheinlich oder möglich mit einer Zitation des Originals oder einer Abschrift mit Primärinformation (Qualität 2 oder 3) |
 | ○ | nur eine Spur: ein Hinweis, oder wahrscheinlich oder möglich ohne eine solche Zitation |
-| ○○ (gestrichelt) | aus dem Stammbaum eines anderen Programms, ungeprüft |
+| ○○ (gestrichelt) | aus einem Stammbaum (eines anderen Programms oder aus der App Strom, von der Forschung übernommen), ungeprüft |
 | gepunkteter Rahmen | ohne Quelle |
 
 - **Prüft der Code:**
@@ -64,6 +70,9 @@ Angaben steht. Sie nimmt die schwächste der drei Angaben des Kärtchens: Name, 
     übrigen Angaben der Person und ihrer Familien (Wohnort, Beruf, Heirat): eine bestätigte oder belegte Angabe oder
     eine Zitation der Qualität 2 oder 3 genügt, und die Marke ist ●○ (die Person ist aus einem Eintrag bekannt, etwa
     als Vater in der Taufe eines Kindes);
+  - ein Forschungsbaum, dessen gespeicherte Daten die Herkunft der Angaben von der Forschung tragen, hat die Marke
+    nach Stufen gleich nach dem Laden der Seite, mit der Brücke und ohne sie gleich; das gilt auch für früher
+    gespeicherte Stammbäume;
   - ein Stammbaum, der die Herkunft der Angaben nicht kennt (ohne Forschung und ohne Import aus einem anderen
     Programm), zeigt die Marke nach den Zitationen der Person: ●● belegt, ●○ teilweise belegt, gepunkteter Rahmen ohne
     Quelle. Ein Stammbaum ohne Quellen und ohne Herkunft hat keine Marke;
@@ -73,7 +82,7 @@ Angaben steht. Sie nimmt die schwächste der drei Angaben des Kärtchens: Name, 
   ein).
 - **Gilt seit:** App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) · app:669c08f0 src/reliability.ts reliabilityOptionsOf, treeOriginWords (strom výzkumu s původem v datech: stejně s mostem i bez) -->
 
 <a id="S7.3"></a>
 ## S7.3 Prüfen an einer Angabe
@@ -100,12 +109,14 @@ den Linien.
   - Name, Geschlecht, Scheidung und die übrigen Ereignisse werden nicht geprüft.
 - **Grenzen:** ein Stammbaum ohne Forschung hat im Popup statt der Aktion die Zeile „Mit der Ahnenforschung prüft ein
   KI-Agent die Angabe selbst in den Matriken.“ Antwortet die Forschung nicht: „Prüfung konnte nicht starten; die
-  Recherche antwortet nicht.“; gibt es nichts zu prüfen: „Die Recherche hat hier gerade nichts zu prüfen.“
+  Recherche antwortet nicht.“; gibt es nichts zu prüfen: „Die Recherche hat hier gerade nichts zu prüfen.“ Lehnt die
+  Forschung die Prüfung ab, sagt das Popup warum, zum Beispiel dass die Forschung ein Archiv ist, dass sie die Angabe
+  nicht mehr hat oder dass sie gerade beschäftigt ist.
 - **Bedienung:** App: Personenkarte → Marke der Angabe → **Prüfen** → **Prüfung starten**. Terminal:
   `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Angaben prüfen bei einer Person
@@ -155,7 +166,8 @@ ungeprüfte Angaben (wahrscheinlich, möglich, Hinweis, aus dem Stammbaum).
 - **Prüft der Code:**
   - genommen werden Geburt, Taufe, Heirat, Tod und Begräbnis mit einer Zitation des Originals, die kein Mensch
     bestätigt hat; auch belegte (ein weiterer Leser liest sie), außer denen, die das aktuelle Modell schon geprüft hat;
-    und Hinweise aus dem Stammbaum (der Eintrag wird gesucht);
+    und Hinweise aus dem Stammbaum eines anderen Programms und aus einem Stammbaum aus der App Strom, die niemand
+    geändert hat (der Eintrag wird gesucht);
   - nie lebende Personen (vor weniger als 100 Jahren geboren, ohne eingetragenen Tod);
   - eine Aufgabe je Person (eine Heirat je Familie), mit niedriger Priorität, nach der Arbeit an den Linien;
   - starten darf nur ein Mensch: in der App oder an seinem Terminal. Der Agent darf nur `--dry-run` (wie viel und zu
@@ -169,7 +181,7 @@ ungeprüfte Angaben (wahrscheinlich, möglich, Hinweis, aus dem Stammbaum).
   `strom verify stop [--bulk]`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) -->
+<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) · research:94d75934 src/core/verify.ts verifyBulk (origin import nebo tree → search) -->
 
 <a id="S7.6"></a>
 ## S7.6 Prüfung von selbst in der Warteschlange der Forschung
@@ -246,6 +258,14 @@ im Popup der Marke auf **Anhand des Scans bestätigen**. Die Angabe ist dann **B
 statt der Aktion den Stand „✓ Am {datum} anhand des Scans bestätigt“ und **Zurücknehmen**.
 
 - **Prüft der Code:**
+  - **Anhand des Scans bestätigen** wird nur bei einer Angabe mit Quelle angeboten: mit einer Zitation oder mit dem
+    Eintrag, aus dem die Forschung den Wert gelesen hat. Eine Angabe ohne Quelle hat es nicht: es gibt nichts, wogegen
+    bestätigt würde;
+  - bestätigt wird der Wert, den der Mensch sieht. Hat die Forschung ihn inzwischen geändert, wird nichts bestätigt:
+    das Popup schließt sich, die App sagt „Die Angabe hat sich inzwischen geändert; nichts wurde bestätigt. Bestätigen
+    lässt sich nur der aktuelle Wert der Recherche.“ und lädt die aktuelle Version der Forschung (ein Stammbaum mit
+    Änderungen, die die Forschung noch nicht hat, fragt vorher: **Version der Forschung laden?**). Ein in der App
+    geänderter und noch nicht gesendeter Wert wird nicht zur Bestätigung gesendet; das Popup sagt dasselbe;
   - **Zurücknehmen** hebt die Bestätigung auf („Bestätigung zurückgenommen“); die Angabe hat dann wieder die Stufe,
     die sie hatte;
   - die Bestätigung gilt nur für den bestätigten Wert: eine Änderung der Angabe beendet sie, und kehrt der Wert zurück,
@@ -263,7 +283,9 @@ statt der Aktion den Stand „✓ Am {datum} anhand des Scans bestätigt“ und 
   - im Terminal bestätigt nur ein Mensch an seinem Terminal: `strom verify confirm E… [--undo]`. Einem Agenten lehnt
     `strom` die Bestätigung ab.
 - **Grenzen:** ein an die Forschung gebundener Stammbaum, dessen Brücke nicht läuft, bietet weder **Anhand des Scans
-  bestätigen** noch **Zurücknehmen** an; bestätigen lässt sich erst mit laufender Brücke oder im Terminal.
+  bestätigen** noch **Zurücknehmen** an; bestätigen lässt sich erst mit laufender Brücke oder im Terminal. Lehnt die
+  Forschung die Bestätigung ab, sagt das Popup warum, zum Beispiel dass die Forschung ein Archiv ist oder dass eine
+  andere Sitzung sie hält; „Nicht geändert; die Recherche antwortet nicht.“ nur, wenn sie nicht antwortet.
 - **Warum:** Gewissheit über eine Angabe entsteht dadurch, dass ein Mensch den Eintrag selbst sieht. Die Prüfung durch
   einen Agenten ist eine Lesung durch KI; ✓ sagt, dass ein Mensch den Eintrag gesehen hat. Die bestätigte Abschrift
   ([A3.1.1](A3-evidence-in-the-app.md#A3.1.1), [R3.4.1](R3-verification-and-citation.md#R3.4.1)) bestätigt den Text
@@ -272,14 +294,14 @@ statt der Aktion den Stand „✓ Am {datum} anhand des Scans bestätigt“ und 
   `strom verify confirm E…`, `strom verify confirm E… --undo`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) · app:669c08f0 src/verify-offer.ts verifyOffer (scan jen se source: citace nebo záznam, ze kterého výzkum četl), src/verify.ts factConfirmMark (3 _TXT; changed), src/ui/verify-ui.ts verifyConfirm (409 confirm.changed → zavřít bublinu, toast, researchLoadNewer; změněno tady → jen důvod), strings.ts verify.confirmChanged, confirmLocked, confirmBusy, confirmFailed, sync.loadTitle · research:94d75934 POST /facts/confirm {txt} → 409 confirm.changed, feature facts.confirm.value -->
 
 <a id="S7.9"></a>
 ## S7.9 Was mit der Brücke geht und was ohne sie
 
 | | An die Forschung gebundener Stammbaum, Brücke läuft | An die Forschung gebundener Stammbaum, Brücke läuft nicht | Stammbaum ohne Forschung |
 |---|---|---|---|
-| Marken an Angaben und auf dem Kärtchen | ja | ja, nach dem letzten Stand aus der Datei | ja, aus dem Import und aus den Zitationen |
+| Marken an Angaben und auf dem Kärtchen | ja | ja, gleich wie mit der Brücke (nach dem letzten Stand aus der Datei) | ja, aus dem Import und aus den Zitationen |
 | **Prüfen**, **Angaben prüfen · N**, **Angaben im Baum prüfen…** | ja | nein | nein (Zeile zur Ahnenforschung) |
 | **Anhand des Scans bestätigen**, **Zurücknehmen** | ja, schreibt die Forschung | nein | ja, hält die App |
 | **Anhalten** der Prüfung | ja | nein; `strom verify stop` im Terminal | – |

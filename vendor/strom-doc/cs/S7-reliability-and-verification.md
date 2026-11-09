@@ -21,7 +21,7 @@ jiného programu a nikdo ho neověřil. Stupně se liší fajfkou, tečkami a r�
 | **Doloženo** (●●) | **Doloženo AI: dva čtenáři záznamu shodně** |
 | **Doloženo** (●○) | **Doloženo AI: jeden čtenář záznamu** |
 | Pravděpodobné, Možné, Vodítko | stupeň jistoty výzkumu ([R3.1](R3-verification-and-citation.md#R3.1)) |
-| **Z rodokmenu** (○○) | převzato z rodokmenu jiného programu, neověřeno ([S6.2](S6-tree-from-another-program.md#S6.2)) |
+| **Z rodokmenu** (○○) | převzato z rodokmenu jiného programu, nebo z rodokmenu z aplikace Strom, který převzal výzkum; neověřeno ([S6.2](S6-tree-from-another-program.md#S6.2)) |
 
 - **Bublina u značky** (po kliknutí): prameny údaje; u dvou čtenářů **dva čtenáři shodně**; u údaje, který po
   ověření zůstal pravděpodobný nebo možný, řádek „Zůstává {stupeň} · výzkum ověřil {datum}“ a důvod, proč se doložit
@@ -31,6 +31,11 @@ jiného programu a nikdo ho neověřil. Stupně se liší fajfkou, tečkami a r�
 - **Hlídá kód:**
   - dvě tečky dostane jen údaj, u kterého se při ověření výzkumem shodli dva čtenáři záznamu
     ([R8.8.1](R8-reading-scans.md#R8.8.1)); doložený jinak má jednu;
+  - ✓ dává jen člověk: potvrzením podle skenu, nebo tím, že hodnotu sám zapsal, změnil, vrátil, nebo přijal návrh
+    výzkumu. Údaj, který výzkum převzal z rodokmenu z aplikace Strom a nikdo ho od té doby nezměnil, má značku podle
+    stupně jistoty, bez stupně **Z rodokmenu** (○○); ✓ nikdy ([S6.3](S6-tree-from-another-program.md#S6.3));
+  - značky stromu výzkumu jsou stejné s mostem i bez něj, i hned po načtení stránky: aplikace je bere z uloženého
+    stromu, ne z běžícího mostu;
   - potvrzení člověkem platí, jen dokud má údaj potvrzenou hodnotu ([S7.8](#S7.8)).
 - **Hranice:** značku **Bez pramene** u údaje aplikace zatím neukazuje: údaj bez pramene je bez značky. Osobu bez
   pramene ukáže značka na kartičce ([S7.2](#S7.2)).
@@ -38,7 +43,7 @@ jiného programu a nikdo ho neověřil. Stupně se liší fajfkou, tečkami a r�
   Spolehlivost u údajů v kartě osoby** (výchozí zapnuto).
 - **Platí od:** aplikace 3.26.0, výzkum 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree → import, nikdy human), treeOriginWords, reliabilityOptionsOf (původ z dat stromu, ne z mostu) · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/import.ts (soubor aplikace Strom → user + tree) -->
 
 <a id="S7.2"></a>
 ## S7.2 Jedna značka na kartičce ve stromu
@@ -52,13 +57,15 @@ nejslabší ze tří údajů kartičky: jméno, narození a úmrtí.
 | ●● | doloženo, bez ohledu na počet čtenářů |
 | ●○ | pravděpodobné nebo možné s citací originálu nebo opisu s primární informací (kvalita 2 nebo 3) |
 | ○ | jen stopa: vodítko, nebo pravděpodobné či možné bez takové citace |
-| ○○ (čárkovaně) | z rodokmenu jiného programu, neověřeno |
+| ○○ (čárkovaně) | z rodokmenu (jiného programu, nebo z aplikace Strom, který převzal výzkum), neověřeno |
 | tečkovaný rámeček | bez pramene |
 
 - **Hlídá kód:**
   - počítají se jen údaje, které mají stupeň; když ho nemá ani jméno, ani narození, ani úmrtí, rozhodnou ostatní údaje
     osoby a jejích rodin (bydliště, povolání, sňatek): stačí jeden potvrzený nebo doložený údaj, nebo citace kvality
     2 nebo 3, a značka je ●○ (osoba je známá ze záznamu, třeba jako otec v křtu dítěte);
+  - strom výzkumu, jehož uložená data nesou původ údajů od výzkumu, má značku podle stupňů hned po načtení stránky,
+    stejnou s mostem i bez něj; platí i pro stromy uložené dřív;
   - strom, který původ údajů nezná (bez výzkumu a bez importu z jiného programu), ukáže značku podle citací osoby:
     ●● doloženo, ●○ doloženo zčásti, tečkovaný rámeček bez pramene. Strom bez pramenů i bez původu značku nemá;
   - zástupná osoba („?“) značku nemá.
@@ -66,7 +73,7 @@ nejslabší ze tří údajů kartičky: jméno, narození a úmrtí.
 - **Ovládání:** **Nastavení → Karta osoby → Na kartě ukázat → Doložení a spolehlivost** (výchozí zapnuto).
 - **Platí od:** aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) · app:669c08f0 src/reliability.ts reliabilityOptionsOf, treeOriginWords (strom výzkumu s původem v datech: stejně s mostem i bez) -->
 
 <a id="S7.3"></a>
 ## S7.3 Ověřit u údaje
@@ -90,12 +97,13 @@ Výzkum pak údaj ověří podle originálu záznamu: na pozadí, mimo práci na
   - jméno, pohlaví, rozvod a ostatní události se neověřují.
 - **Hranice:** strom bez výzkumu má v bublině místo akce řádek „S výzkumem předků AI agent údaj ověří v matrikách
   sám.“ Když výzkum neodpoví: „Ověření se nepodařilo spustit, výzkum neodpovídá.“; když není co ověřit: „Výzkum tu
-  teď nemá co ověřit.“
+  teď nemá co ověřit.“ Když výzkum ověření odmítne, řekne bublina proč, například že výzkum je archiv, že údaj už
+  nemá, nebo že je teď zaneprázdněný.
 - **Ovládání:** aplikace: karta osoby → značka údaje → **Ověřit** → **Spustit ověření**. Terminál:
   `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Ověřit údaje u osoby
@@ -140,7 +148,8 @@ rozsah, pořadí a odhad ceny předem a ověřuje jen neověřené údaje (pravd
     **Vyzkoušet na 5**, jinak **Ověřit (N)**.
 - **Hlídá kód:**
   - bere narození, křest, sňatek, úmrtí a pohřeb s citací originálu, které člověk nepotvrdil; i doložené (přečte je
-    další čtenář), kromě těch, které už ověřil současný model; a vodítka z rodokmenu (záznam se hledá);
+    další čtenář), kromě těch, které už ověřil současný model; a vodítka z rodokmenu jiného programu i z rodokmenu
+    z aplikace Strom, která nikdo nezměnil (záznam se hledá);
   - nikdy žijící osoby (narozené před méně než 100 lety bez zapsaného úmrtí);
   - jeden úkol na osobu (sňatek na rodinu), s nízkou prioritou, po práci na liniích;
   - spustit smí jen člověk: v aplikaci, nebo u svého terminálu. Agent smí jen `--dry-run` (kolik a za kolik).
@@ -152,7 +161,7 @@ rozsah, pořadí a odhad ceny předem a ověřuje jen neověřené údaje (pravd
   `strom verify stop [--bulk]`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) -->
+<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) · research:94d75934 src/core/verify.ts verifyBulk (origin import nebo tree → search) -->
 
 <a id="S7.6"></a>
 ## S7.6 Ověřování samo ve frontě výzkumu
@@ -224,6 +233,12 @@ podle skenu**. Údaj je pak **Potvrzeno** (✓) a bublina místo akce ukazuje st
 a **Vzít zpět**.
 
 - **Hlídá kód:**
+  - **Potvrdit podle skenu** se nabízí jen u údaje s pramenem: s citací, nebo se záznamem, ze kterého výzkum hodnotu
+    přečetl. Údaj bez pramene ho nemá: není podle čeho potvrdit;
+  - potvrzuje se hodnota, kterou člověk vidí. Když ji výzkum mezitím změnil, nic se nepotvrdí: bublina se zavře,
+    aplikace řekne „Údaj se mezitím změnil, nic se nepotvrdilo. Potvrdit jde jen aktuální hodnotu z výzkumu.“ a načte
+    aktuální verzi výzkumu (strom se změnami, které výzkum ještě nemá, se nejdřív zeptá **Načíst verzi výzkumu?**).
+    Hodnota změněná v aplikaci a ještě neposlaná se k potvrzení nepošle; bublina řekne totéž;
   - **Vzít zpět** potvrzení zruší („Potvrzení vzato zpět“); údaj má pak zase stupeň, který měl;
   - potvrzení platí jen pro potvrzenou hodnotu: změna údaje ho ukončí, a když se hodnota vrátí, platí zase;
   - potvrzený údaj agent nikdy nezmění, jen navrhne ([S6.3](S6-tree-from-another-program.md#S6.3));
@@ -237,7 +252,8 @@ a **Vzít zpět**.
   - v terminálu potvrzuje jen člověk u svého terminálu: `strom verify confirm E… [--undo]`. Agentovi `strom`
     potvrzení odmítne.
 - **Hranice:** strom napojený na výzkum, jehož most neběží, **Potvrdit podle skenu** ani **Vzít zpět** nenabídne;
-  potvrdit jde až s běžícím mostem, nebo v terminálu.
+  potvrdit jde až s běžícím mostem, nebo v terminálu. Když výzkum potvrzení odmítne, řekne bublina proč, například
+  že výzkum je archiv, nebo že ho drží jiná relace; „Nezměněno, výzkum neodpovídá.“ jen tehdy, když neodpoví.
 - **Proč:** jistota o údaji vzniká tím, že člověk sám vidí záznam. Ověření agentem je čtení AI; ✓ říká, že záznam
   viděl člověk. Potvrzený přepis ([A3.1.1](A3-evidence-in-the-app.md#A3.1.1),
   [R3.4.1](R3-verification-and-citation.md#R3.4.1)) potvrzuje text záznamu, **Potvrdit podle skenu** údaj osoby.
@@ -245,14 +261,14 @@ a **Vzít zpět**.
   `strom verify confirm E…`, `strom verify confirm E… --undo`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) · app:669c08f0 src/verify-offer.ts verifyOffer (scan jen se source: citace nebo záznam, ze kterého výzkum četl), src/verify.ts factConfirmMark (3 _TXT; changed), src/ui/verify-ui.ts verifyConfirm (409 confirm.changed → zavřít bublinu, toast, researchLoadNewer; změněno tady → jen důvod), strings.ts verify.confirmChanged, confirmLocked, confirmBusy, confirmFailed, sync.loadTitle · research:94d75934 POST /facts/confirm {txt} → 409 confirm.changed, feature facts.confirm.value -->
 
 <a id="S7.9"></a>
 ## S7.9 Co jde s mostem a co bez něj
 
 | | Strom napojený na výzkum, most běží | Strom napojený na výzkum, most neběží | Strom bez výzkumu |
 |---|---|---|---|
-| Značky u údajů a na kartičce | ano | ano, podle posledního stavu ze souboru | ano, z importu a z citací |
+| Značky u údajů a na kartičce | ano | ano, stejné jako s mostem (podle posledního stavu ze souboru) | ano, z importu a z citací |
 | **Ověřit**, **Ověřit údaje · N**, **Ověřit údaje ve stromu…** | ano | ne | ne (řádek o výzkumu předků) |
 | **Potvrdit podle skenu**, **Vzít zpět** | ano, zapíše výzkum | ne | ano, drží aplikace |
 | **Zastavit** ověřování | ano | ne; `strom verify stop` v terminálu | – |

@@ -10,7 +10,8 @@ w [A7](A7-book-pages-and-export.md), scalanie w [A8](A8-merging-trees.md), a prz
 w [R11.3](R11-material-from-the-user.md#R11.3).
 
 Plik, który napisał sam Strom (nagłówek `1 SOUR STROM`), ani plik JSON aplikacji nie jest drzewem z innego programu:
-nie ma znacznika pochodzenia, karty **Co dalej** ani ochrony danych z drzewa.
+nie ma znacznika pochodzenia, karty **Co dalej** ani ochrony danych z drzewa. Badanie, które taki plik przejmie, ma
+jego wartości za drzewo użytkownika ([S6.3](#S6.3)).
 
 <!-- zdroj: dirigent:spec/066-import-ged-a-ai/spec.md (rozhodnutí: GED s 1 SOUR STROM není import) · app:1c9b2392 src/ui/import-next-ui.ts, src/reliability.ts · research:v1.30.0 CHANGELOG.cs.md 1.30.0 -->
 
@@ -64,6 +65,9 @@ znacznik na karcie w drzewie i weryfikację danych według oryginałów opisuje 
     z badania; w przeciwnym razie z zapisu o imporcie w aplikacji;
   - drzewo bez zapisu o imporcie (starszy import, plik Stromu) znacznika **Z drzewa** nie pokazuje: niczego się nie
     zgaduje;
+  - w drzewie badania dana, którą badanie przejęło z drzewa z aplikacji Strom i której od tej pory nikt nie zmienił,
+    ma znacznik według stopnia pewności, bez stopnia **Z drzewa**; ✓ nigdy
+    ([S6.3](S6-tree-from-another-program.md#S6.3));
   - wiersz przy osobie mówi, skąd pochodzą dane: „Wszystkie dane osoby pochodzą z {program} (plik {data}, wczytano
     {data}).” albo „Dane oznaczone „z drzewa” pochodzą z …”.
 - **Granice:** że dana nie ma źródła, aplikacja przy danej jeszcze nie pokazuje: znacznika **Bez źródła** przy danej
@@ -76,7 +80,7 @@ znacznik na karcie w drzewie i weryfikację danych według oryginałów opisuje 
   badanie zgodzili się dwaj czytelnicy aktu; karta w drzewie ma jeden znacznik zamiast dawnych dwóch opcji.
 - **Obowiązuje od:** aplikacja 3.26.0, badanie 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree) -->
 
 <a id="S6.3"></a>
 ## S6.3 Dane z drzewa są wskazówkami: agent proponuje, człowiek decyduje
@@ -87,6 +91,10 @@ lub w badaniu, agent nigdy nie zmienia: tylko proponuje.
 
 - **Pilnuje kod:**
   - każda dana w badaniu ma pochodzenie: z drzewa, od człowieka albo z badania;
+  - wartość z drzewa z aplikacji Strom (plik albo drzewo aplikacji, które badanie przejęło), której od przejęcia nikt
+    nie zmienił, należy do drzewa użytkownika: agent jej nie zmieni, tylko zaproponuje, jak przy danej człowieka, ale
+    nie uchodzi za potwierdzoną przez człowieka. Edycja, przywrócona wartość, przyjęta propozycja i edycja wysłana
+    z aplikacji są daną człowieka;
   - daną z drzewa agent zmienia tylko z cytowanym aktem; bez niego, a zawsze wtedy, gdy o hipotezach rozstrzyga
     człowiek ([R10.3.2](R10-people-and-hypotheses.md#R10.3.2)), powstaje propozycja jako sprzeczność do
     rozstrzygnięcia przez człowieka;
@@ -105,7 +113,7 @@ lub w badaniu, agent nigdy nie zmienia: tylko proponuje.
   (propozycja agenta i skąd pochodzi obecna wartość), `strom conflict resolve X… --take research|user`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/origin.ts (user i tree: agent jen navrhuje), src/core/import.ts importGedcom/importStromJson (soubor aplikace → user + tree) -->
 
 <a id="S6.3.1"></a>
 ### S6.3.1 Pierwotnie z drzewa i Przywróć
@@ -255,11 +263,14 @@ Badanie przejmuje drzewo z innego programu poleceniem `strom intake` jako wskaz�
     odczytać, jest zgłaszany, nigdy nie zostaje po cichu zastąpiony;
   - identyfikatory wracają z badaniem do aplikacji Strom;
   - badanie założone wcześniej po aktualizacji raz samo się oznacza (które dane przyszły z drzewa, a które są
-    człowieka); żadna wartość się nie zmienia. Gdzie nie jest to pewne, dana uchodzi za daną człowieka.
+    człowieka); żadna wartość się nie zmienia. Gdzie nie jest to pewne, dana uchodzi za daną człowieka. Wartość
+    z drzewa z aplikacji Strom rozpoznaje po historii badania: zaraz po przejęciu drzewa była, wcześniej nie, i jest
+    taka sama dziś; tylko taka wartość należy do drzewa użytkownika ([S6.3](#S6.3)).
     `strom fixes undo origins` cofa oznaczenia, `strom fixes run origins` nadaje je potem ponownie. Także przed
     oznaczeniem ponownie przejęte drzewo znajduje ludzi według identyfikatorów wcześniejszych importów.
 - **Obsługa:** terminal: `strom intake rodokmen.ged`, `strom conflict list`, `strom event revert`,
-  `strom person revert`, `strom fixes undo origins`, `strom fixes run origins`.
+  `strom person revert`, `strom fixes show origins` (czym jest poprawka i co tu znalazła),
+  `strom fixes undo origins`, `strom fixes run origins`.
 - **Obowiązuje od:** badanie 1.30.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) · research:94d75934 src/core/originfix.ts ORIGINS_TREE_SETTLED origins-tree-1 (podle historie: stejná hodnota hned po převzetí, ne před ním, stejná dnes), settleOrigins · cs.json ui.fixes.origins.example.tree · strom help fixes show -->

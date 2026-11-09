@@ -9,7 +9,8 @@ Podrobnosti čtení souboru jsou v [A2](A2-loading-a-family-tree.md), export v [
 slučování v [A8](A8-merging-trees.md) a převzetí rodokmenu výzkumem v [R11.3](R11-material-from-the-user.md#R11.3).
 
 Soubor, který napsal sám Strom (hlavička `1 SOUR STROM`), ani soubor JSON aplikace není rodokmen z jiného programu:
-nemá značku původu, kartu **Co teď** ani ochranu údajů z rodokmenu.
+nemá značku původu, kartu **Co teď** ani ochranu údajů z rodokmenu. Výzkum, který takový soubor převezme, má jeho
+hodnoty za rodokmen uživatele ([S6.3](#S6.3)).
 
 <!-- zdroj: dirigent:spec/066-import-ged-a-ai/spec.md (rozhodnutí: GED s 1 SOUR STROM není import) · app:1c9b2392 src/ui/import-next-ui.ts, src/reliability.ts · research:v1.30.0 CHANGELOG.cs.md 1.30.0 -->
 
@@ -60,6 +61,8 @@ na kartičce ve stromu a ověření údajů podle originálů popisuje [S7](S7-r
   - u stromu napojeného na výzkum ([S1](S1-connecting-app-and-research.md)) bere aplikace původ údaje z výzkumu;
     jinak ze záznamu o importu v aplikaci;
   - strom bez záznamu o importu (starší import, soubor Stromu) značku **Z rodokmenu** neukáže: nic se nehádá;
+  - ve stromu výzkumu má údaj, který výzkum převzal z rodokmenu z aplikace Strom a nikdo ho od té doby nezměnil,
+    značku podle stupně jistoty, bez stupně **Z rodokmenu**; ✓ nikdy ([S7.1](S7-reliability-and-verification.md#S7.1));
   - řádek u osoby říká, odkud údaje jsou: „Všechny údaje osoby jsou z {program} (soubor {datum}, načteno {datum}).“,
     nebo „Údaje se značkou z rodokmenu jsou z …“.
 - **Hranice:** že údaj nemá pramen, aplikace u údaje zatím neukazuje: značka **Bez pramene** u údaje není
@@ -71,7 +74,7 @@ na kartičce ve stromu a ověření údajů podle originálů popisuje [S7](S7-r
   čtenáři záznamu; kartička ve stromu má jednu značku místo dřívějších dvou voleb.
 - **Platí od:** aplikace 3.26.0, výzkum 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree) -->
 
 <a id="S6.3"></a>
 ## S6.3 Údaje z rodokmenu jsou vodítka: agent navrhuje, člověk rozhoduje
@@ -82,6 +85,9 @@ nezmění: jen navrhne.
 
 - **Hlídá kód:**
   - každý údaj ve výzkumu má původ: z rodokmenu, od člověka, nebo z výzkumu;
+  - hodnota z rodokmenu z aplikace Strom (soubor nebo strom aplikace, který výzkum převzal), kterou nikdo od převzetí
+    nezměnil, je z rodokmenu uživatele: agent ji nezmění, jen navrhne, jako údaj člověka, ale za potvrzenou člověkem
+    neplatí. Úprava, vrácení, přijatý návrh a úprava poslaná z aplikace jsou údaj člověka;
   - údaj z rodokmenu agent změní jen s citovaným záznamem; bez něj, a vždy když o hypotézách rozhoduje člověk
     ([R10.3.2](R10-people-and-hypotheses.md#R10.3.2)), vznikne návrh jako rozpor k rozhodnutí člověka;
   - údaj člověka agent nezmění nikdy, ani souborem načteným přes `strom sync`; vždy jen návrh;
@@ -98,7 +104,7 @@ nezmění: jen navrhne.
   agenta a odkud je dnešní hodnota), `strom conflict resolve X… --take research|user`.
 - **Platí od:** výzkum 1.30.0, aplikace 3.26.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/origin.ts (user i tree: agent jen navrhuje), src/core/import.ts importGedcom/importStromJson (soubor aplikace → user + tree) -->
 
 <a id="S6.3.1"></a>
 ### S6.3.1 Původně z rodokmenu a Vrátit
@@ -242,11 +248,13 @@ a drží si původ každého údaje ([S6.3](#S6.3)).
     se ohlásí, nikdy se tiše nenahradí;
   - ID se s výzkumem vracejí do aplikace Strom;
   - výzkum založený dřív se po aktualizaci jednou sám označí (které údaje přišly z rodokmenu a které jsou člověka);
-    žádná hodnota se nemění. Kde to jisté není, platí údaj za údaj člověka. `strom fixes undo origins` značky vezme
-    zpět, `strom fixes run origins` je pak dá znovu. I před označením najde znovu převzatý rodokmen lidi podle ID
+    žádná hodnota se nemění. Kde to jisté není, platí údaj za údaj člověka. Hodnotu z rodokmenu z aplikace Strom pozná
+    podle historie výzkumu: hned po převzetí rodokmenu byla, předtím ne, a je stejná i dnes; jen ta je z rodokmenu
+    uživatele ([S6.3](#S6.3)). `strom fixes undo origins` značky vezme zpět, `strom fixes run origins` je pak dá znovu. I před označením najde znovu převzatý rodokmen lidi podle ID
     dřívějších importů.
 - **Ovládání:** terminál: `strom intake rodokmen.ged`, `strom conflict list`, `strom event revert`,
-  `strom person revert`, `strom fixes undo origins`, `strom fixes run origins`.
+  `strom person revert`, `strom fixes show origins` (co oprava je a co tu našla), `strom fixes undo origins`,
+  `strom fixes run origins`.
 - **Platí od:** výzkum 1.30.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) · research:94d75934 src/core/originfix.ts ORIGINS_TREE_SETTLED origins-tree-1 (podle historie: stejná hodnota hned po převzetí, ne před ním, stejná dnes), settleOrigins · cs.json ui.fixes.origins.example.tree · strom help fixes show -->

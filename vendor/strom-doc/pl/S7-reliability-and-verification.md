@@ -23,7 +23,7 @@ kolorem.
 | **Udokumentowane** (●●) | **Udokumentowane przez AI: dwóch czytelników zapisu zgodnie** |
 | **Udokumentowane** (●○) | **Udokumentowane przez AI: jeden czytelnik zapisu** |
 | Prawdopodobne, Możliwe, Wskazówka | stopień pewności badania ([R3.1](R3-verification-and-citation.md#R3.1)) |
-| **Z drzewa** (○○) | przejęte z drzewa innego programu, niezweryfikowane ([S6.2](S6-tree-from-another-program.md#S6.2)) |
+| **Z drzewa** (○○) | przejęte z drzewa innego programu albo z drzewa z aplikacji Strom, które przejęło badanie; niezweryfikowane ([S6.2](S6-tree-from-another-program.md#S6.2)) |
 
 - **Podpowiedź przy znaczniku** (po kliknięciu): źródła danej; przy dwóch czytelnikach **dwóch czytających
   zgodnie**; przy danej, która po weryfikacji została prawdopodobna lub możliwa, wiersz „Pozostaje {stopień} · badanie
@@ -34,6 +34,12 @@ kolorem.
 - **Pilnuje kod:**
   - dwie kropki dostaje tylko dana, przy której podczas weryfikacji przez badanie zgodzili się dwaj czytelnicy aktu
     ([R8.8.1](R8-reading-scans.md#R8.8.1)); udokumentowana inaczej ma jedną;
+  - ✓ daje tylko człowiek: potwierdzeniem według skanu albo tym, że sam wartość zapisał, zmienił, przywrócił albo
+    przyjął propozycję badania. Dana, którą badanie przejęło z drzewa z aplikacji Strom i której od tej pory nikt nie
+    zmienił, ma znacznik według stopnia pewności, bez stopnia **Z drzewa** (○○); ✓ nigdy
+    ([S6.3](S6-tree-from-another-program.md#S6.3));
+  - znaczniki drzewa badania są takie same z mostem i bez niego, także zaraz po wczytaniu strony: aplikacja bierze je
+    z zapisanego drzewa, nie z działającego mostu;
   - potwierdzenie przez człowieka obowiązuje tylko dopóty, dopóki dana ma potwierdzoną wartość ([S7.8](#S7.8)).
 - **Granice:** znacznika **Bez źródła** przy danej aplikacja jeszcze nie pokazuje: dana bez źródła jest bez znacznika.
   Osobę bez źródła pokazuje znacznik na karcie ([S7.2](#S7.2)).
@@ -41,7 +47,7 @@ kolorem.
   Wiarygodność przy danych w karcie osoby** (domyślnie włączone).
 - **Obowiązuje od:** aplikacja 3.26.0, badanie 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (RELIABILITY_ORDER, reliabilityStep: readers ≥ 2 → dvě tečky; noSource se z aplikace nekrmí, verifyLocalEvidence dává jen confirmedByHuman) · src/verify.ts factVerifyReaders (_STROM_CHECKED proven, readers) · src/ui/fact-status.ts titleProven2/titleProven1 · src/ui/status-tip.ts readersAgree · src/settings.ts display.reliabilityCard (ON) · index.html settings-group-card · strings.ts reliability.*, verify.reasonHead, verify.confirmedAt · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree → import, nikdy human), treeOriginWords, reliabilityOptionsOf (původ z dat stromu, ne z mostu) · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/import.ts (soubor aplikace Strom → user + tree) -->
 
 <a id="S7.2"></a>
 ## S7.2 Jeden znacznik na karcie w drzewie
@@ -55,7 +61,7 @@ Bierze najsłabszą z trzech danych karty: imię, urodzenie i zgon.
 | ●● | udokumentowane, bez względu na liczbę czytelników |
 | ●○ | prawdopodobne lub możliwe z cytatem oryginału albo odpisu z informacją pierwotną (jakość 2 lub 3) |
 | ○ | tylko ślad: wskazówka albo prawdopodobne lub możliwe bez takiego cytatu |
-| ○○ (linią przerywaną) | z drzewa innego programu, niezweryfikowane |
+| ○○ (linią przerywaną) | z drzewa (innego programu albo z aplikacji Strom, przejętego przez badanie), niezweryfikowane |
 | kropkowana ramka | bez źródła |
 
 - **Pilnuje kod:**
@@ -63,6 +69,8 @@ Bierze najsłabszą z trzech danych karty: imię, urodzenie i zgon.
     dane osoby i jej rodzin (miejsce zamieszkania, zawód, ślub): wystarczy jedna dana potwierdzona lub udokumentowana
     albo cytat jakości 2 lub 3, a znacznik to ●○ (osoba jest znana z aktu, na przykład jako ojciec w chrzcie
     dziecka);
+  - drzewo badania, którego zapisane dane niosą pochodzenie danych od badania, ma znacznik według stopni zaraz po
+    wczytaniu strony, taki sam z mostem i bez niego; dotyczy to też drzew zapisanych wcześniej;
   - drzewo, które nie zna pochodzenia danych (bez badania i bez importu z innego programu), pokazuje znacznik według
     cytatów osoby: ●● udokumentowane, ●○ częściowo udokumentowane, kropkowana ramka bez źródła. Drzewo bez źródeł
     i bez pochodzenia znacznika nie ma;
@@ -72,7 +80,7 @@ Bierze najsłabszą z trzech danych karty: imię, urodzenie i zgon.
   włączone).
 - **Obowiązuje od:** aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts CARD_STATUS_FACTS, CardStatusClass, cardStatusClassOfFact, otherFactsClass, card status bez původu (full/partial/none) · src/ui/card-signals-ui.ts (signál status, CARD_SIGNAL_DEFAULTS vše zapnuto) · strings.ts cardDensity.cardShow, cardStatus, cardStatusSub, cardShowHint, reliability.cardFacts, cardMark.* · CHANGELOG.cs.md 3.26.0 (Jedna značka na kartičce) · app:669c08f0 src/reliability.ts reliabilityOptionsOf, treeOriginWords (strom výzkumu s původem v datech: stejně s mostem i bez) -->
 
 <a id="S7.3"></a>
 ## S7.3 Zweryfikuj przy danej
@@ -97,12 +105,13 @@ znacznika oferuje **Zweryfikuj**. Badanie weryfikuje wtedy daną według orygina
   - imienia, płci, rozwodu i pozostałych zdarzeń się nie weryfikuje.
 - **Granice:** drzewo bez badania ma w podpowiedzi zamiast akcji wiersz „Z badaniem przodków agent AI sam zweryfikuje
   daną w księgach.” Gdy badanie nie odpowiada: „Nie udało się rozpocząć weryfikacji; badanie nie odpowiada.”; gdy nie
-  ma czego weryfikować: „Badanie nie ma tu teraz nic do zweryfikowania.”
+  ma czego weryfikować: „Badanie nie ma tu teraz nic do zweryfikowania.” Gdy badanie odrzuci weryfikację, podpowiedź
+  mówi dlaczego, na przykład że badanie jest archiwum, że już nie ma tej danej albo że jest teraz zajęte.
 - **Obsługa:** aplikacja: karta osoby → znacznik danej → **Zweryfikuj** → **Rozpocznij weryfikację**. Terminal:
   `strom verify facts P…|F…|E… [--fact …] [--dry-run]`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts verifyOffer (Verify jen u nedoložených, s feature verify, ne archiv, ne čekající; cost low/high) · src/verify-ui-model.ts verifyFactKind (BIRT, BAPM, MARR, DEAT, BURI) · strings.ts verify.btn, previewHead, what, how, estimate1, howRead, howSearch, costLow, costHigh, sessions, previewNote, previewNoteSearch, start, pending, failed, nothing, noResearch · app:669c08f0 strings.ts verify.busy, locked, whyArchive, whyRetracted, whyGone, whyMerged, whyOld, whyRefused (odmítnutí podle kódu) · research:6c6e7c3b strom help verify facts (první ve frontě; bez přečteného originálu se záznam hledá) -->
 
 <a id="S7.4"></a>
 ## S7.4 Zweryfikuj dane przy osobie
@@ -151,7 +160,7 @@ w drzewie** pokazuje z góry zakres, kolejność i szacunek kosztu i weryfikuje 
 - **Pilnuje kod:**
   - bierze urodzenie, chrzest, ślub, zgon i pogrzeb z cytatem oryginału, których człowiek nie potwierdził; także
     udokumentowane (odczyta je kolejny czytelnik), poza tymi, które już zweryfikował obecny model; oraz wskazówki
-    z drzewa (akt się wyszukuje);
+    z drzewa innego programu i z drzewa z aplikacji Strom, których nikt nie zmienił (akt się wyszukuje);
   - nigdy osób żyjących (urodzonych mniej niż 100 lat temu bez wpisanego zgonu);
   - jedno zadanie na osobę (ślub na rodzinę), z niskim priorytetem, po pracy nad liniami;
   - uruchomić może tylko człowiek: w aplikacji albo przy swoim terminalu. Agent może tylko `--dry-run` (ile i za
@@ -165,7 +174,7 @@ w drzewie** pokazuje z góry zakres, kolejność i szacunek kosztu i weryfikuje 
   `strom verify stop [--bulk]`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) -->
+<!-- zdroj: app:7b0471f8 src/ui/verify-person-ui.ts verifyRowsHtml, treeVerifyBlock, showVerifyBulkDialog · src/ui/research-actions-ui.ts:371 (nabídka výzkumu) · src/import-next.ts IMPORT_NEXT_VERIFY_FEATURES ['verify.bulk'] · src/verify-ui-model.ts VERIFY_TRY_PEOPLE 5 · strings.ts verify.bulkRow, bulkRowSub, bulkTitle, bulkSub, scope, order, scopeLine, scopeSurname, scopeTree, orderAncestors, orderWeakest, orderOldest, tryFirst, tryFirstSub, tryN, startN, bulkNote, section, pendingRow, pendingRowSub, stop, stopped · research:6c6e7c3b strom help verify bulk, verify stop, verify status · src/core/verify.ts (žijící) · research:94d75934 src/core/verify.ts verifyBulk (origin import nebo tree → search) -->
 
 <a id="S7.6"></a>
 ## S7.6 Weryfikacja sama w kolejce badania
@@ -240,6 +249,13 @@ Najsilniejszy znacznik daje człowiek: patrzy na skan aktu, porównuje go z dan�
 „✓ Potwierdzone według skanu {data}” i **Cofnij**.
 
 - **Pilnuje kod:**
+  - **Potwierdź według skanu** jest oferowane tylko przy danej ze źródłem: z cytatem albo z aktem, z którego badanie
+    odczytało wartość. Dana bez źródła go nie ma: nie ma według czego potwierdzić;
+  - potwierdza się wartość, którą człowiek widzi. Gdy badanie ją w międzyczasie zmieniło, nic się nie potwierdza:
+    podpowiedź się zamyka, aplikacja mówi „Dana w międzyczasie się zmieniła; nic nie potwierdzono. Potwierdzić można
+    tylko aktualną wartość z badania.” i wczytuje aktualną wersję badania (drzewo ze zmianami, których badanie jeszcze
+    nie ma, najpierw pyta: **Wczytać wersję badania?**). Wartość zmieniona w aplikacji i jeszcze niewysłana nie jest
+    wysyłana do potwierdzenia; podpowiedź mówi to samo;
   - **Cofnij** anuluje potwierdzenie („Potwierdzenie cofnięte”); dana ma wtedy znowu stopień, który miała;
   - potwierdzenie obowiązuje tylko dla potwierdzonej wartości: zmiana danej je kończy, a gdy wartość wróci, obowiązuje
     znowu;
@@ -254,7 +270,9 @@ Najsilniejszy znacznik daje człowiek: patrzy na skan aktu, porównuje go z dan�
   - w terminalu potwierdza tylko człowiek przy swoim terminalu: `strom verify confirm E… [--undo]`. Agentowi `strom`
     potwierdzenie odrzuca.
 - **Granice:** drzewo powiązane z badaniem, którego most nie działa, nie oferuje **Potwierdź według skanu** ani
-  **Cofnij**; potwierdzić można dopiero przy działającym moście albo w terminalu.
+  **Cofnij**; potwierdzić można dopiero przy działającym moście albo w terminalu. Gdy badanie odrzuci potwierdzenie,
+  podpowiedź mówi dlaczego, na przykład że badanie jest archiwum albo że trzyma je inna sesja; „Bez zmian; badanie
+  nie odpowiada.” tylko wtedy, gdy nie odpowiada.
 - **Dlaczego:** pewność o danej powstaje wtedy, gdy człowiek sam widzi akt. Weryfikacja przez agenta to odczyt AI; ✓
   mówi, że akt widział człowiek. Potwierdzona transkrypcja ([A3.1.1](A3-evidence-in-the-app.md#A3.1.1),
   [R3.4.1](R3-verification-and-citation.md#R3.4.1)) potwierdza tekst aktu, **Potwierdź według skanu** daną osoby.
@@ -262,14 +280,14 @@ Najsilniejszy znacznik daje człowiek: patrzy na skan aktu, porównuje go z dan�
   `strom verify confirm E…`, `strom verify confirm E… --undo`.
 - **Obowiązuje od:** badanie 1.30.0, aplikacja 3.26.0
 
-<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) -->
+<!-- zdroj: app:7b0471f8 src/verify-offer.ts (human → Vzít zpět; bez výzkumu scan u citovaného; ve stromu výzkumu scan jen s researchConfirms) · src/verify.ts factConfirmation/researchConfirmation (platí jen s nezměněnou hodnotou) · src/verify-ui-model.ts (jméno, pohlaví bez scan ve stromu výzkumu) · strings.ts verify.scan, undo, undone, confirmedAt · app:7eb903a3 src/ui/verify-ui.ts (✓ jen u stavu, akce bez ✓; verifyConfirm: bez mostu DataManager.confirmFact) · src/data.ts confirmFact/unconfirmFact (undo.confirmFact, unconfirmFact, auditLog.confirmedFact, unconfirmedFact) · strings.ts verify.scan, confirmedAt · CHANGELOG.cs.md 3.26.0 · dirigent:test/vysledek-1109-zaver-c-potvrzeni.md (N2: bez mostu ✓ ani Vzít zpět ve stromu výzkumu) · prace/1109-app-potvrzeni-zmena · research:6c6e7c3b strom help verify confirm (jen uživatel, most; mimo něj requireHuman) · app:669c08f0 src/verify-offer.ts verifyOffer (scan jen se source: citace nebo záznam, ze kterého výzkum četl), src/verify.ts factConfirmMark (3 _TXT; changed), src/ui/verify-ui.ts verifyConfirm (409 confirm.changed → zavřít bublinu, toast, researchLoadNewer; změněno tady → jen důvod), strings.ts verify.confirmChanged, confirmLocked, confirmBusy, confirmFailed, sync.loadTitle · research:94d75934 POST /facts/confirm {txt} → 409 confirm.changed, feature facts.confirm.value -->
 
 <a id="S7.9"></a>
 ## S7.9 Co działa z mostem, a co bez niego
 
 | | Drzewo powiązane z badaniem, most działa | Drzewo powiązane z badaniem, most nie działa | Drzewo bez badania |
 |---|---|---|---|
-| Znaczniki przy danych i na karcie | tak | tak, według ostatniego stanu z pliku | tak, z importu i z cytatów |
+| Znaczniki przy danych i na karcie | tak | tak, takie same jak z mostem (według ostatniego stanu z pliku) | tak, z importu i z cytatów |
 | **Zweryfikuj**, **Zweryfikuj dane · N**, **Zweryfikuj dane w drzewie…** | tak | nie | nie (wiersz o badaniu przodków) |
 | **Potwierdź według skanu**, **Cofnij** | tak, zapisuje badanie | nie | tak, przechowuje aplikacja |
 | **Zatrzymaj** weryfikację | tak | nie; `strom verify stop` w terminalu | – |

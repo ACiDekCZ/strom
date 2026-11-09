@@ -86,7 +86,9 @@ Ein Stammbaum (GEDCOM oder eine Datei der Strom-App) sind die Schlüsse eines an
   - jede Angabe hat eine Herkunft (aus dem Stammbaum, vom Menschen, aus der Forschung). Eine Angabe aus dem Stammbaum
     ändert der Agent nur mit einem zitierten Eintrag, sonst schlägt er vor; bei einer Angabe des Menschen schlägt er
     nur vor. Der Wert aus dem Stammbaum bleibt gespeichert, und zurücksetzen darf ihn nur der Mensch
-    (`strom event revert`, `strom person revert`) ([S6.3](S6-tree-from-another-program.md#S6.3));
+    (`strom event revert`, `strom person revert`) ([S6.3](S6-tree-from-another-program.md#S6.3)). Ein Wert aus einer
+    Datei der App Strom, den seit der Übernahme niemand geändert hat, stammt aus dem eigenen Stammbaum des Menschen:
+    geschützt wie eine Angabe des Menschen, gilt aber nicht als vom Menschen bestätigt;
   - Programm-IDs (`_UID`, `EXID`, `_FSFTID` …) bleiben erhalten: derselbe Stammbaum, erneut übernommen, fügt niemanden
     zweimal hinzu; eine nur möglicherweise identische Person wird nicht verbunden, und das Ergebnis nennt sie
     (`candidates`); was nicht übernommen wurde, zählt das Ergebnis (`notTaken`)
@@ -96,7 +98,7 @@ Ein Stammbaum (GEDCOM oder eine Datei der Strom-App) sind die Schlüsse eines an
   - eine früher angelegte Forschung wird nach der Aktualisierung einmal gekennzeichnet (`strom fixes undo origins`
     nimmt das zurück).
 
-<!-- zdroj: research:src/core/import.ts hlavička ("as LEADS", oursByRefn), source kind family-tree form authored :113-117, status lead :294 · research:src/commands/intake.ts --no-import · research:assets/method/intake.md krok 5 -->
+<!-- zdroj: research:src/core/import.ts hlavička ("as LEADS", oursByRefn), source kind family-tree form authored :113-117, status lead :294 · research:src/commands/intake.ts --no-import · research:assets/method/intake.md krok 5 · research:94d75934 src/core/import.ts (soubor aplikace Strom → origin user + tree), src/core/model.ts ValueOrigin.tree -->
 
 <a id="R11.4"></a>
 ## R11.4 Ein Stapel aus der App

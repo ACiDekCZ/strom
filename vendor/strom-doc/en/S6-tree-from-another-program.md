@@ -10,7 +10,8 @@ again does. Describes the Strom app 3.26.0 and the research 1.30.0. The details 
 [A8](A8-merging-trees.md) and the research taking over a family tree in [R11.3](R11-material-from-the-user.md#R11.3).
 
 A file written by Strom itself (the header `1 SOUR STROM`) and the app's JSON file are not a family tree from another
-program: they have no origin mark, no card **What next** and no protection of the family tree's facts.
+program: they have no origin mark, no card **What next** and no protection of the family tree's facts. Research that
+takes in such a file has its values as the user's family tree ([S6.3](#S6.3)).
 
 <!-- zdroj: dirigent:spec/066-import-ged-a-ai/spec.md (rozhodnutí: GED s 1 SOUR STROM není import) · app:1c9b2392 src/ui/import-next-ui.ts, src/reliability.ts · research:v1.30.0 CHANGELOG.cs.md 1.30.0 -->
 
@@ -65,6 +66,9 @@ mark on the card in the tree and verifying facts against the originals are descr
     the research; otherwise from the app's record of the import;
   - a tree without a record of the import (an older import, Strom's file) does not show the mark **From family
     tree**: nothing is guessed;
+  - in a research tree, a fact the research took in from a family tree from the Strom app and nobody has changed since
+    has the mark of its degree of certainty, without a degree **From family tree**; never ✓
+    ([S6.3](S6-tree-from-another-program.md#S6.3));
   - a line at the person says where the facts come from: “All of this person's facts come from {program} (file {date},
     loaded {date}).”, or “Facts marked “from family tree” come from …”.
 - **Limits:** that a fact has no source the app does not yet show at the fact: there is no mark **No source** at a
@@ -77,7 +81,7 @@ mark on the card in the tree and verifying facts against the originals are descr
   research verified it; the card in the tree has one mark instead of the earlier two settings.
 - **Since:** app 3.26.0, research 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree) -->
 
 <a id="S6.3"></a>
 ## S6.3 Facts from a family tree are leads: the agent proposes, a person decides
@@ -88,6 +92,10 @@ app or in the research, the agent never changes: it only proposes.
 
 - **Enforced by the code:**
   - each fact in the research has an origin: from the family tree, from a person, or from the research;
+  - a value from a family tree from the Strom app (a file or a tree of the app that the research took in) that nobody
+    has changed since it was taken in is the user's family tree's: the agent does not change it, it only proposes, as
+    for a person's fact, but it does not count as confirmed by a person. An edit, a value put back, an accepted proposal
+    and an edit sent from the app are a person's fact;
   - a fact from the family tree the agent changes only with a cited record; without one, and always when a person
     decides about hypotheses ([R10.3.2](R10-people-and-hypotheses.md#R10.3.2)), a proposal arises as a conflict for
     a person to decide;
@@ -106,7 +114,7 @@ app or in the research, the agent never changes: it only proposes.
   agent's proposal and where today's value comes from), `strom conflict resolve X… --take research|user`.
 - **Since:** research 1.30.0, app 3.26.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/origin.ts (user i tree: agent jen navrhuje), src/core/import.ts importGedcom/importStromJson (soubor aplikace → user + tree) -->
 
 <a id="S6.3.1"></a>
 ### S6.3.1 Originally from the family tree and Revert
@@ -259,11 +267,14 @@ The research takes over a family tree from another program with the command `str
     cannot be read is reported, never silently replaced;
   - the IDs go back with the research into the Strom app;
   - research set up earlier marks itself once after the update (which facts came from the family tree and which are a
-    person's); no value changes. Where this is not certain, the fact counts as a person's. `strom fixes undo origins`
-    takes the marks back, `strom fixes run origins` then sets them again. Even before the marking, a family tree taken
+    person's); no value changes. Where this is not certain, the fact counts as a person's. A value from a family tree
+    from the Strom app is told by the research's history: it was there right after the family tree was taken in, not
+    before, and it is the same today; only such a value is the user's family tree's ([S6.3](#S6.3)).
+    `strom fixes undo origins` takes the marks back, `strom fixes run origins` then sets them again. Even before the marking, a family tree taken
     over again finds people by the IDs of earlier imports.
 - **Controls:** terminal: `strom intake rodokmen.ged`, `strom conflict list`, `strom event revert`,
-  `strom person revert`, `strom fixes undo origins`, `strom fixes run origins`.
+  `strom person revert`, `strom fixes show origins` (what the fix is and what it found here),
+  `strom fixes undo origins`, `strom fixes run origins`.
 - **Since:** research 1.30.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) · research:94d75934 src/core/originfix.ts ORIGINS_TREE_SETTLED origins-tree-1 (podle historie: stejná hodnota hned po převzetí, ne před ním, stejná dnes), settleOrigins · cs.json ui.fixes.origins.example.tree · strom help fixes show -->

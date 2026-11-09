@@ -80,7 +80,9 @@ whole, but only as leads.
   - each fact has an origin (from the family tree, from a person, from the research). The agent changes a fact from
     the family tree only with a cited record, otherwise it proposes; a person's fact it only proposes. The value from
     the family tree stays stored and only a person may revert it (`strom event revert`, `strom person revert`)
-    ([S6.3](S6-tree-from-another-program.md#S6.3));
+    ([S6.3](S6-tree-from-another-program.md#S6.3)). A value from a Strom app file that nobody has changed since it was
+    taken in is from the user's own family tree: protected like a person's fact, but it does not count as confirmed
+    by a person;
   - program IDs (`_UID`, `EXID`, `_FSFTID` …) are kept: the same family tree taken over again adds nobody twice;
     a person who is only possibly the same is not joined and the result names them (`candidates`); what was not taken
     over the result counts (`notTaken`) ([S6.8](S6-tree-from-another-program.md#S6.8));
@@ -88,7 +90,7 @@ whole, but only as leads.
   - the family tree's source has no page (`PAGE`): each fact gives its own line from the family tree;
   - research set up earlier is marked once after the update (`strom fixes undo origins` takes it back).
 
-<!-- zdroj: research:src/core/import.ts hlavička ("as LEADS", oursByRefn), source kind family-tree form authored :113-117, status lead :294 · research:src/commands/intake.ts --no-import · research:assets/method/intake.md krok 5 -->
+<!-- zdroj: research:src/core/import.ts hlavička ("as LEADS", oursByRefn), source kind family-tree form authored :113-117, status lead :294 · research:src/commands/intake.ts --no-import · research:assets/method/intake.md krok 5 · research:94d75934 src/core/import.ts (soubor aplikace Strom → origin user + tree), src/core/model.ts ValueOrigin.tree -->
 
 <a id="R11.4"></a>
 ## R11.4 A batch from the app

@@ -12,7 +12,8 @@ Stammbaums durch die Forschung in [R11.3](R11-material-from-the-user.md#R11.3).
 
 Eine Datei, die Strom selbst geschrieben hat (Kopf `1 SOUR STROM`), und eine JSON-Datei der App sind kein Stammbaum
 aus einem anderen Programm: sie haben keine Marke der Herkunft, keine Karte **Wie weiter** und keinen Schutz der
-Angaben aus dem Stammbaum.
+Angaben aus dem Stammbaum. Eine Forschung, die eine solche Datei übernimmt, hält ihre Werte für den Stammbaum des
+Nutzers ([S6.3](#S6.3)).
 
 <!-- zdroj: dirigent:spec/066-import-ged-a-ai/spec.md (rozhodnutí: GED s 1 SOUR STROM není import) · app:1c9b2392 src/ui/import-next-ui.ts, src/reliability.ts · research:v1.30.0 CHANGELOG.cs.md 1.30.0 -->
 
@@ -68,6 +69,9 @@ Marken, die Marke auf dem Kärtchen im Stammbaum und die Prüfung der Angaben an
     Herkunft der Angabe aus der Forschung, sonst aus dem Vermerk über den Import in der App;
   - ein Stammbaum ohne Vermerk über den Import (ein älterer Import, eine Datei von Strom) zeigt die Marke **Aus dem
     Stammbaum** nicht: nichts wird erraten;
+  - in einem Forschungsbaum hat eine Angabe, die die Forschung aus einem Stammbaum aus der App Strom übernommen hat
+    und die seitdem niemand geändert hat, die Marke ihrer Sicherheitsstufe, ohne Stufe **Aus dem Stammbaum**; ✓ nie
+    ([S6.3](S6-tree-from-another-program.md#S6.3));
   - eine Zeile bei der Person sagt, woher die Angaben stammen: „Alle Angaben der Person stammen aus {program} (Datei
     vom {datum}, geladen am {datum}).“ oder „Angaben mit der Marke „aus dem Stammbaum“ stammen aus …“.
 - **Grenzen:** dass eine Angabe keine Quelle hat, zeigt die App bei der Angabe noch nicht: die Marke **Ohne Quelle**
@@ -81,7 +85,7 @@ Marken, die Marke auf dem Kärtchen im Stammbaum und die Prüfung der Angaben an
   Optionen.
 - **Gilt seit:** App 3.26.0, Forschung 1.30.0
 
-<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard -->
+<!-- zdroj: app:7b0471f8 src/reliability.ts (pořadí human, proven, probable, possible, import, lead, none; tečky, ✓ a rámeček, ne barva; feature origin; bez záznamu o importu žádné Z rodokmenu; readers z _STROM_CHECKED, noSource nekrmeno) · src/ui/fact-status.ts · src/ui/person-reliability-ui.ts · src/settings.ts display.reliabilityCard (ON) · src/ui/card-signals-ui.ts (signál status, výchozí zapnuto) · index.html settings-group-card · strings.ts reliability.settingCard, cardDensity.cardStatus, settings.groupCard · app:669c08f0 src/reliability.ts userTreeOrigin (_STROM_ORIGIN tree) -->
 
 <a id="S6.3"></a>
 ## S6.3 Angaben aus einem Stammbaum sind Hinweise: der Agent schlägt vor, ein Mensch entscheidet
@@ -92,6 +96,11 @@ eingetragen oder geändert hat, in der Strom-App oder in der Forschung, ändert 
 
 - **Prüft der Code:**
   - jede Angabe in der Forschung hat eine Herkunft: aus dem Stammbaum, vom Menschen oder aus der Forschung;
+  - ein Wert aus einem Stammbaum aus der App Strom (eine Datei oder ein Stammbaum der App, den die Forschung übernommen
+    hat), den seit der Übernahme niemand geändert hat, gehört zum Stammbaum des Nutzers: der Agent ändert ihn nicht,
+    er schlägt nur vor, wie bei einer Angabe des Menschen, aber er gilt nicht als vom Menschen bestätigt. Eine
+    Bearbeitung, ein zurückgesetzter Wert, ein angenommener Vorschlag und eine aus der App gesendete Bearbeitung sind
+    Angaben des Menschen;
   - eine Angabe aus dem Stammbaum ändert der Agent nur mit einem zitierten Eintrag; ohne ihn, und immer wenn über
     Hypothesen der Mensch entscheidet ([R10.3.2](R10-people-and-hypotheses.md#R10.3.2)), entsteht ein Vorschlag als
     Widerspruch zur Entscheidung des Menschen;
@@ -113,7 +122,7 @@ eingetragen oder geändert hat, in der Strom-App oder in der Forschung, ändert 
   (der Vorschlag des Agenten und woher der heutige Wert stammt), `strom conflict resolve X… --take research|user`.
 - **Gilt seit:** Forschung 1.30.0, App 3.26.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 (údaje z převzatého rodokmenu jsou chráněné) · dirigent:prace/1108-vyzkum-066-u3/karta.md, u3-nalezy, u3-nalezy2 Výsledek (původ import/user/research; --cite/--locator; conflict proposal; event edit/retract, person edit, name primary, place rewrite, source edit --transcript, sync; conflict.stale) · strom help conflict resolve (--take user|research) · app:1c9b2392 strings.ts origin.proposeImport, proposeUser, conflictOpen, sideImport, sideUser, sideProposal, keepImport, accept, acceptNote · research:94d75934 src/core/model.ts ValueOrigin.tree, src/core/origin.ts (user i tree: agent jen navrhuje), src/core/import.ts importGedcom/importStromJson (soubor aplikace → user + tree) -->
 
 <a id="S6.3.1"></a>
 ### S6.3.1 Ursprünglich aus dem Stammbaum und Zurücksetzen
@@ -277,11 +286,15 @@ Die Forschung übernimmt einen Stammbaum aus einem anderen Programm mit dem Befe
   - die IDs kommen mit der Forschung in die Strom-App zurück;
   - eine früher angelegte Forschung wird nach der Aktualisierung einmal von selbst gekennzeichnet (welche Angaben aus
     dem Stammbaum kamen und welche vom Menschen sind); kein Wert ändert sich. Wo das nicht sicher ist, gilt die Angabe
-    als Angabe des Menschen. `strom fixes undo origins` nimmt die Kennzeichnung zurück, `strom fixes run origins` setzt
+    als Angabe des Menschen. Einen Wert aus einem Stammbaum aus der App Strom erkennt sie an der Geschichte der
+    Forschung: gleich nach der Übernahme des Stammbaums war er da, vorher nicht, und er ist heute derselbe; nur ein
+    solcher Wert gehört zum Stammbaum des Nutzers ([S6.3](#S6.3)). `strom fixes undo origins` nimmt die Kennzeichnung
+    zurück, `strom fixes run origins` setzt
     sie dann erneut. Auch vor der Kennzeichnung findet ein erneut übernommener Stammbaum die Personen nach den IDs
     früherer Importe.
 - **Bedienung:** Terminal: `strom intake rodokmen.ged`, `strom conflict list`, `strom event revert`,
-  `strom person revert`, `strom fixes undo origins`, `strom fixes run origins`.
+  `strom person revert`, `strom fixes show origins` (was die Korrektur ist und was sie hier gefunden hat),
+  `strom fixes undo origins`, `strom fixes run origins`.
 - **Gilt seit:** Forschung 1.30.0
 
-<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) -->
+<!-- zdroj: research:v1.30.0 CHANGELOG.cs.md 1.30.0 · src/core/import.ts ImportResult.candidates, notTaken · src/commands/intake.ts:300-313 · assets/lang/cs.json ui.intake.candidates, ui.intake.notTaken* · strom help fixes run („readers, proven-originals and origins are set right by themselves once, run again only after strom fixes undo“) · dirigent:prace/1108-vyzkum-066-u3, 1108-vyzkum-066-u8 Výsledek (origins-1, nejisté → user; Gramps bez _UID kandidáti) · research:94d75934 src/core/originfix.ts ORIGINS_TREE_SETTLED origins-tree-1 (podle historie: stejná hodnota hned po převzetí, ne před ním, stejná dnes), settleOrigins · cs.json ui.fixes.origins.example.tree · strom help fixes show -->
