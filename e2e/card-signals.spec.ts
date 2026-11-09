@@ -753,7 +753,9 @@ test.describe('card signals', () => {
         await expect(card(page, 'Josef')).toHaveClass(/evl-none/);
         await expect(page.locator('.person-card.evidence-dim')).toHaveCount(0);
         const pill = page.locator('#evidence-pill');
-        await expect(pill.locator('.evidence-pill-level')).toHaveText(['● 1', '◐ 0', '○ 3']);
+        await expect(pill.locator('.evidence-pill-level')).toHaveText(['1', '0', '3']);
+        // Each level drawn as the cards' frame in this mode, no glyph of another font's size (1109).
+        await expect(pill.locator('.evidence-pill-swatch')).toHaveCount(3);
         await pill.locator('.evidence-pill-level-none').click();
         await expect(card(page, 'Josef')).toHaveClass(/evidence-hit/);
         await expect(card(page, 'Jan')).toHaveClass(/evidence-dim/);

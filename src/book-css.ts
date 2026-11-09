@@ -97,6 +97,9 @@ a { color: inherit; }
 .book-person-see { color: #4a4438; font-size: 11pt; }
 .book-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
 .book-mark { font: 10pt ${SANS}; color: #5c5546; margin-left: 6px; white-space: nowrap; }
+.book-dot { display: inline-block; width: 0.62em; height: 0.62em; margin-right: 0.3em; border: 1px solid currentColor; border-radius: 50%; box-sizing: border-box; vertical-align: 0.02em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.book-dot-full { background: currentColor; }
+.book-dot-half { background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
 .book-story { margin-top: 10px; text-align: justify; hyphens: auto; }
 .book-story h4 { font-size: 12pt; margin: 8px 0 4px; }
 .book-story h4 .book-story-title { font-weight: 400; font-style: italic; color: #4a4438; }

@@ -555,7 +555,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         evOfTotal: (n: number, total: number) => `${n} z ${total}`,
         evOfAncestors: (n: number, total: number) => `${n} z ${total} ${plPl(total, 'przodka', 'przodków', 'przodków')}`,
         evAllGood: 'Wszyscy mają źródło i rodziców.',
-        evLevels: 'Udokumentowanie w drzewie (● ◐ ○ na kartach)',
+        evLevels: 'Udokumentowanie w drzewie',
         structureTitle: 'Struktura',
         unions: (n: number) => nPl(n, 'związek', 'związki', 'związków'),
         parts: (k: number) => `${k} ${plPl(k, 'niepołączona część', 'niepołączone części', 'niepołączonych części')}:`,
@@ -602,7 +602,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         remSummary: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
         // Data quality: certainty of the research's facts
         certaintyTitle: 'Pewność danych z badania',
-        certaintyDesc: 'Jak pewna jest informacja według badania. Nie mylić z udokumentowaniem źródłem (● ◐ ○ w sekcji Gdzie brakuje dowodów).',
+        certaintyDesc: 'Jak pewna jest informacja według badania. Nie mylić z udokumentowaniem źródłem (w sekcji Gdzie brakuje dowodów).',
         certaintyRows: { birth: 'Urodzenie', death: 'Zgon', marriage: 'Ślub' },
         certaintyNone: 'na razie bez stanu',
     },

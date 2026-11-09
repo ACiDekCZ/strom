@@ -466,6 +466,14 @@ const CONFLICT_FACTS: Record<'birth' | 'baptism' | 'death' | 'burial', string[]>
     birth: ['BIRT'], baptism: ['CHR', 'BAPM'], death: ['DEAT'], burial: ['BURI', 'CREM'],
 };
 
+/**
+ * A dot of the evidence mark, drawn (full, half, empty) at one size: the glyph ◐ comes from a fallback font
+ * larger than ● and ○.
+ */
+function bookDot(kind: 'full' | 'half' | 'empty'): string {
+    return `<span class="book-dot book-dot-${kind}" aria-hidden="true"></span>`;
+}
+
 /** The evidence mark after a fact (§5.8): ● documented / ◐ conflict: {value} in P{n} / ○ not documented. */
 function evidenceMark(ctx: BookCtx, p: Person, fact: keyof typeof CONFLICT_FACTS, status: string | undefined, sourceIds: readonly string[] | undefined, shown: string): string {
     if (!ctx.research) return '';
@@ -476,12 +484,12 @@ function evidenceMark(ctx: BookCtx, p: Person, fact: keyof typeof CONFLICT_FACTS
         const sid = (other?.sourceIds ?? []).find(id => !!ctx.sources.source(id));
         const marker = sid ? ctx.sources.cite(sid).replace(/<[^>]*>/g, '') : '';
         const value = other ? stripResearchIds(other.value).text.trim() : '';
-        return `<span class="book-mark">◐ ${esc(B.evidence.conflict(value, marker || '?'))}</span>`;
+        return `<span class="book-mark">${bookDot('half')}${esc(B.evidence.conflict(value, marker || '?'))}</span>`;
     }
     const sourced = (sourceIds ?? []).some(id => !!ctx.sources.source(id));
     return status === 'proven' || sourced
-        ? `<span class="book-mark">● ${esc(B.evidence.proven)}</span>`
-        : `<span class="book-mark">○ ${esc(B.evidence.unproven)}</span>`;
+        ? `<span class="book-mark">${bookDot('full')}${esc(B.evidence.proven)}</span>`
+        : `<span class="book-mark">${bookDot('empty')}${esc(B.evidence.unproven)}</span>`;
 }
 
 function factsHtml(ctx: BookCtx, p: Person): string {

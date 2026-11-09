@@ -19507,7 +19507,13 @@
             height: 30px; padding: 0 10px; border-radius: 15px; border: 0; background: transparent;
             color: var(--text); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
         }
+        .evidence-pill-level { display: inline-flex; align-items: center; gap: 6px; }
         .evidence-pill-level-full, .evidence-pill-level-partial { color: var(--primary); }
+        /* The level as the cards' frame in the Evidence mode (.person-card.evl-*), not a glyph. */
+        .evidence-pill-swatch { display: inline-block; width: 14px; height: 10px; border-radius: 3px; box-sizing: border-box; flex: none; }
+        .evl-swatch-full { border: 1.5px solid var(--primary); background: var(--primary-soft); }
+        .evl-swatch-partial { border: 1.5px dashed var(--primary); }
+        .evl-swatch-none { border: 1.5px dotted var(--text-faint); background: var(--surface-2); }
         .evidence-pill-level-none { color: var(--text-faint); }
         .evidence-pill-level[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
         @media (hover: hover) { .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); } }

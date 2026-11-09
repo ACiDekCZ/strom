@@ -70,7 +70,6 @@ let levelsMode = false;
 let listening = false;
 
 const LEVELS: EvidenceLevel[] = ['full', 'partial', 'none'];
-const LEVEL_GLYPH: Record<EvidenceLevel, string> = { full: '●', partial: '◐', none: '○' };
 
 function levelLabel(level: EvidenceLevel): string {
     const s = strings.treeHealth;
@@ -280,7 +279,12 @@ export const evidenceUiMethods = uiModule({
                 btn.setAttribute('aria-pressed', String(evidence?.kind === level));
                 btn.setAttribute('aria-label', `${levelLabel(level)}: ${n}`);
                 btn.title = levelLabel(level);
-                btn.textContent = `${LEVEL_GLYPH[level]} ${n}`;
+                // The level drawn as the cards' frame in this mode (solid, dashed, dotted): a glyph like ◐ comes
+                // from a fallback font at another size.
+                const swatch = document.createElement('span');
+                swatch.className = `evidence-pill-swatch evl-swatch-${level}`;
+                swatch.setAttribute('aria-hidden', 'true');
+                btn.append(swatch, document.createTextNode(String(n)));
                 btn.disabled = n === 0;
                 btn.onclick = () => this.toggleEvidenceLevelGroup(level);
                 pill.append(btn);

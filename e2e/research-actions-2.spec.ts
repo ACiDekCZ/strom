@@ -998,7 +998,7 @@ test.describe('Where evidence is missing (tree overview, Data quality)', () => {
         // so that row is not shown.
         await expect(block.locator('.tov-ev-label')).toHaveText(['People without a source', /^Line ends ◉$/]);
         await expect(block.locator('.tov-ev-count')).toHaveText(['1 of 4', '2 of 3 ancestors']);
-        await expect(block.locator('.tov-ev-levels')).toHaveText('Evidence in the tree (● ◐ ○ on cards)');
+        await expect(block.locator('.tov-ev-levels')).toHaveText('Evidence in the tree');
 
         await block.locator('[data-kind="lineEnds"]').click();
         await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
