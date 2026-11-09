@@ -1,0 +1,1133 @@
+{
+  "persons": {
+    "p_1794189370026_000bmk6b5": {
+      "id": "p_1794189370026_000bmk6b5",
+      "firstName": "Kvasibor",
+      "lastName": "Hrbolec",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_001yudzk9"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1860-02-02",
+      "birthPlace": "Hrbolcov",
+      "deathDate": "1930-05-05",
+      "deathPlace": "Hrbolcov",
+      "sourceIds": [
+        "src_1794189370026_00020mfzq",
+        "src_1794189370026_0006t8wp8"
+      ],
+      "birthSourceIds": [
+        "src_1794189370026_0001ygfb5"
+      ],
+      "deathSourceIds": [
+        "src_1794189370026_0005lidw2"
+      ]
+    },
+    "p_1794189370026_000cmifqh": {
+      "id": "p_1794189370026_000cmifqh",
+      "firstName": "Lesněna",
+      "lastName": "Plotýnková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_001yudzk9"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1864",
+      "birthPlace": "Drnkalov",
+      "birthSourceIds": [
+        "src_1794189370026_0006t8wp8"
+      ]
+    },
+    "p_1794189370026_000dpdipm": {
+      "id": "p_1794189370026_000dpdipm",
+      "firstName": "Bystroň",
+      "lastName": "Šustrák",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1870"
+    },
+    "p_1794189370026_000enljob": {
+      "id": "p_1794189370026_000enljob",
+      "firstName": "Mechuna",
+      "lastName": "Šustráková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1872"
+    },
+    "p_1794189370026_000fqtrcl": {
+      "id": "p_1794189370026_000fqtrcl",
+      "firstName": "Trnoslav",
+      "lastName": "Vrtějšek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0021vbrsu"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000hs5kuw"
+      ],
+      "birthDate": "1862"
+    },
+    "p_1794189370026_000gx4lfe": {
+      "id": "p_1794189370026_000gx4lfe",
+      "firstName": "Kapruna",
+      "lastName": "Vrtějšková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0021vbrsu"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000hs5kuw"
+      ],
+      "birthDate": "1866"
+    },
+    "p_1794189370026_000hs5kuw": {
+      "id": "p_1794189370026_000hs5kuw",
+      "firstName": "Hladimír",
+      "lastName": "Vrtějšek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_000fqtrcl",
+        "p_1794189370026_000gx4lfe"
+      ],
+      "childIds": [],
+      "birthDate": "1890",
+      "notes": "Also recorded as adopted child of Hrachobor Cvrčkovský."
+    },
+    "p_1794189370026_000iu1w20": {
+      "id": "p_1794189370026_000iu1w20",
+      "firstName": "Hrachobor",
+      "lastName": "Cvrčkovský",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1858"
+    },
+    "p_1794189370026_000jsgjs1": {
+      "id": "p_1794189370026_000jsgjs1",
+      "firstName": "Lopuchán",
+      "lastName": "Drnkal",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0023969ch"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000ljeqiu"
+      ],
+      "birthDate": "1861"
+    },
+    "p_1794189370026_000ktb03p": {
+      "id": "p_1794189370026_000ktb03p",
+      "firstName": "Rosuna",
+      "lastName": "Drnkalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0023969ch"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000ljeqiu"
+      ],
+      "birthDate": "1863"
+    },
+    "p_1794189370026_000ljeqiu": {
+      "id": "p_1794189370026_000ljeqiu",
+      "firstName": "Sasanuna",
+      "lastName": "Drnkalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_000jsgjs1",
+        "p_1794189370026_000ktb03p"
+      ],
+      "childIds": [],
+      "birthDate": "1892",
+      "notes": "Also recorded as adopted child of Kvasimír Šiškoun and Jasanuna Šiškounová."
+    },
+    "p_1794189370026_000mgsp5c": {
+      "id": "p_1794189370026_000mgsp5c",
+      "firstName": "Kvasimír",
+      "lastName": "Šiškoun",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0024zb36a"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1859"
+    },
+    "p_1794189370026_000n8fixq": {
+      "id": "p_1794189370026_000n8fixq",
+      "firstName": "Jasanuna",
+      "lastName": "Šiškounová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0024zb36a"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1860"
+    },
+    "p_1794189370026_000o1nev3": {
+      "id": "p_1794189370026_000o1nev3",
+      "firstName": "Duhoslava",
+      "lastName": "Plotýnková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "marriedSurname": "Hrbolcová",
+      "birthDate": "1895"
+    },
+    "p_1794189370026_000pot4o2": {
+      "id": "p_1794189370026_000pot4o2",
+      "firstName": "Hladoš",
+      "lastName": "Šustrák",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0025riljs"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000r4d984"
+      ],
+      "birthDate": "1900"
+    },
+    "p_1794189370026_000q4zqr8": {
+      "id": "p_1794189370026_000q4zqr8",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794189370026_0025riljs"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_000r4d984"
+      ]
+    },
+    "p_1794189370026_000r4d984": {
+      "id": "p_1794189370026_000r4d984",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "unknown",
+      "isPlaceholder": true,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_000pot4o2",
+        "p_1794189370026_000q4zqr8"
+      ],
+      "childIds": []
+    },
+    "p_1794189370026_000sysmgs": {
+      "id": "p_1794189370026_000sysmgs",
+      "firstName": "Rosomil",
+      "lastName": "Hrbolec",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1866",
+      "isDeceased": true,
+      "deathSourceIds": [
+        "src_1794189370026_00084oa4h"
+      ]
+    },
+    "p_1794189370026_000t91oed": {
+      "id": "p_1794189370026_000t91oed",
+      "firstName": "Vrbuna",
+      "lastName": "Hrbolcová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1868",
+      "isDeceased": true
+    },
+    "p_1794189370026_000uttdz3": {
+      "id": "p_1794189370026_000uttdz3",
+      "firstName": "Bukovít",
+      "lastName": "Plotýnek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1871",
+      "birthPlace": "Drnkalov",
+      "notes": "Birth: Age: 0 years"
+    },
+    "p_1794189370026_000vlewh9": {
+      "id": "p_1794189370026_000vlewh9",
+      "firstName": "Ostružín",
+      "lastName": "Plotýnek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "notes": "Birth: Born in the forge, says the family."
+    },
+    "p_1794189370026_000w8q8kg": {
+      "id": "p_1794189370026_000w8q8kg",
+      "firstName": "Pěnkoš",
+      "lastName": "Vrtějšek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0026eu9j1"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1874"
+    },
+    "p_1794189370026_000x47lmw": {
+      "id": "p_1794189370026_000x47lmw",
+      "firstName": "Rosuna",
+      "lastName": "Cvrčkovská",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_0026eu9j1"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1876"
+    },
+    "p_1794189370026_000ygpvqx": {
+      "id": "p_1794189370026_000ygpvqx",
+      "firstName": "Hrachobor",
+      "lastName": "Šiškoun",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_00278lp07"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1880"
+    },
+    "p_1794189370026_000z2mcrl": {
+      "id": "p_1794189370026_000z2mcrl",
+      "firstName": "Mechuna",
+      "lastName": "Drnkalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_00278lp07"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1882"
+    },
+    "p_1794189370026_00105tdrd": {
+      "id": "p_1794189370026_00105tdrd",
+      "firstName": "Trnoslav",
+      "lastName": "Plotýnek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1878"
+    },
+    "p_1794189370026_0011gd1rs": {
+      "id": "p_1794189370026_0011gd1rs",
+      "firstName": "Bystroň",
+      "lastName": "Drnkal",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1883",
+      "notes": "Number of children: 4",
+      "events": [
+        {
+          "id": "ev_1794189370028_002oj7vez",
+          "type": "residence",
+          "address": "Drnkalov 7",
+          "note": "E-mail: bystron@example.org"
+        }
+      ]
+    },
+    "p_1794189370026_0012sbnsr": {
+      "id": "p_1794189370026_0012sbnsr",
+      "firstName": "Kořenoslav",
+      "lastName": "Šustrník",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002819o70"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_0014hewhf"
+      ],
+      "birthDate": "1885"
+    },
+    "p_1794189370026_0013e1brn": {
+      "id": "p_1794189370026_0013e1brn",
+      "firstName": "Mlhuna",
+      "lastName": "Kvíčalínová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002819o70"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_0014hewhf"
+      ],
+      "birthDate": "1888"
+    },
+    "p_1794189370026_0014hewhf": {
+      "id": "p_1794189370026_0014hewhf",
+      "firstName": "Drobuna",
+      "lastName": "Šustrníková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_0012sbnsr",
+        "p_1794189370026_0013e1brn"
+      ],
+      "childIds": [],
+      "birthDate": "1916"
+    },
+    "p_1794189370026_00153pv7v": {
+      "id": "p_1794189370026_00153pv7v",
+      "firstName": "Cvrkoš",
+      "lastName": "Tlučhubek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1890",
+      "deathDate": "1896",
+      "deathAge": "1 year 30 months 1100 days"
+    },
+    "p_1794189370026_00163nmow": {
+      "id": "p_1794189370026_00163nmow",
+      "firstName": "Hromoslav",
+      "lastName": "Kvíčalín",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002abfh7n"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "deathDate": "1790-03-03",
+      "deathPlace": "Hrbolcov",
+      "notes": "Birth: Date as written: 10 JAN\nDeath: Date in the Julian calendar: 3 MAR 1790"
+    },
+    "p_1794189370026_0017egt9u": {
+      "id": "p_1794189370026_0017egt9u",
+      "firstName": "Zvonimila",
+      "lastName": "Šindelníková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002abfh7n"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthPlace": "Drnkalov",
+      "notes": "Birth: Date as written: 1735/1736"
+    },
+    "p_1794189370026_0018b07iq": {
+      "id": "p_1794189370026_0018b07iq",
+      "firstName": "Lnislav",
+      "lastName": "Pěnkavec",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002b3pmpq"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1870"
+    },
+    "p_1794189370026_0019d34dx": {
+      "id": "p_1794189370026_0019d34dx",
+      "firstName": "Ječmína",
+      "lastName": "Šustrníková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002b3pmpq"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1872"
+    },
+    "p_1794189370026_001auh6wf": {
+      "id": "p_1794189370026_001auh6wf",
+      "firstName": "Ťukoslav",
+      "lastName": "Bručoun",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002c7whfs"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1890"
+    },
+    "p_1794189370026_001bmiidh": {
+      "id": "p_1794189370026_001bmiidh",
+      "firstName": "Zvonimíra",
+      "lastName": "Kvákalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002c7whfs"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1893"
+    },
+    "p_1794189370026_001ciakie": {
+      "id": "p_1794189370026_001ciakie",
+      "firstName": "Šimrdoš",
+      "lastName": "Hřebíček",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002ez2q64"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1895"
+    },
+    "p_1794189370026_001db1t6l": {
+      "id": "p_1794189370026_001db1t6l",
+      "firstName": "Lupuna",
+      "lastName": "Bručounová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002ez2q64"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1898"
+    },
+    "p_1794189370026_001eaofa0": {
+      "id": "p_1794189370026_001eaofa0",
+      "firstName": "Hnětislav",
+      "lastName": "Pazderník",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002go0wac"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001g2poqn"
+      ],
+      "birthDate": "1862"
+    },
+    "p_1794189370026_001fm5ntu": {
+      "id": "p_1794189370026_001fm5ntu",
+      "firstName": "Šťovíka",
+      "lastName": "Bryndová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002go0wac"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001g2poqn"
+      ],
+      "birthDate": "1865"
+    },
+    "p_1794189370026_001g2poqn": {
+      "id": "p_1794189370026_001g2poqn",
+      "firstName": "Klíčenka",
+      "lastName": "Pazderníková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_001eaofa0",
+        "p_1794189370026_001fm5ntu"
+      ],
+      "childIds": [],
+      "birthDate": "1888",
+      "notes": "Also recorded as child of Hnětislav Pazderník and Šťovíka Bryndová."
+    },
+    "p_1794189370026_001h0kl18": {
+      "id": "p_1794189370026_001h0kl18",
+      "firstName": "Brumislav",
+      "lastName": "Čmelda",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002iokjo2"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1870"
+    },
+    "p_1794189370026_001ivp7tm": {
+      "id": "p_1794189370026_001ivp7tm",
+      "firstName": "Pěnava",
+      "lastName": "Hroudová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002iokjo2"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1872"
+    },
+    "p_1794189370026_001j44vhg": {
+      "id": "p_1794189370026_001j44vhg",
+      "firstName": "Vrtimír",
+      "lastName": "Škrobek",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1868"
+    },
+    "p_1794189370026_001kodpfn": {
+      "id": "p_1794189370026_001kodpfn",
+      "firstName": "Bublislav",
+      "lastName": "Žbluňk",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1850",
+      "deathDate": "1920",
+      "events": [
+        {
+          "id": "ev_1794189370028_002pecu1c",
+          "type": "education",
+          "date": "1862"
+        },
+        {
+          "id": "ev_1794189370028_002q3n3p6",
+          "type": "residence"
+        },
+        {
+          "id": "ev_1794189370028_002rqn67h",
+          "type": "custom",
+          "customLabel": "Mill",
+          "date": "1880",
+          "note": "Blessing of the new mill"
+        },
+        {
+          "id": "ev_1794189370028_002s4k67o",
+          "type": "burial",
+          "date": "1920"
+        }
+      ]
+    },
+    "p_1794189370026_001l601si": {
+      "id": "p_1794189370026_001l601si",
+      "firstName": "Bláboslava",
+      "lastName": "Žbluňková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1852",
+      "birthSourceIds": [
+        "src_1794189370026_00045vbiw"
+      ]
+    },
+    "p_1794189370026_001m28te7": {
+      "id": "p_1794189370026_001m28te7",
+      "firstName": "Ťapkoslav",
+      "lastName": "Čvachta",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002kmcz04"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001owgvhi",
+        "p_1794189370026_001prerld"
+      ],
+      "birthDate": "1840"
+    },
+    "p_1794189370026_001nc12kb": {
+      "id": "p_1794189370026_001nc12kb",
+      "firstName": "Bláboslava",
+      "lastName": "Kvákalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002kmcz04"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001owgvhi",
+        "p_1794189370026_001prerld"
+      ],
+      "birthDate": "1844"
+    },
+    "p_1794189370026_001owgvhi": {
+      "id": "p_1794189370026_001owgvhi",
+      "firstName": "?",
+      "lastName": "Čvachtová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_001m28te7",
+        "p_1794189370026_001nc12kb"
+      ],
+      "childIds": []
+    },
+    "p_1794189370026_001prerld": {
+      "id": "p_1794189370026_001prerld",
+      "firstName": "?",
+      "lastName": "Čvachtová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_001m28te7",
+        "p_1794189370026_001nc12kb"
+      ],
+      "childIds": []
+    },
+    "p_1794189370026_001q8o6m8": {
+      "id": "p_1794189370026_001q8o6m8",
+      "firstName": "Mračoslav",
+      "lastName": "Kroupal",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002lbjp9m"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1860"
+    },
+    "p_1794189370026_001rwpg2f": {
+      "id": "p_1794189370026_001rwpg2f",
+      "firstName": "Kapradina",
+      "lastName": "Mlaskalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002lbjp9m"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1863"
+    },
+    "p_1794189370026_001s2rrl5": {
+      "id": "p_1794189370026_001s2rrl5",
+      "firstName": "Bručimír",
+      "lastName": "Huňáček",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002mn2fnn"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1898"
+    },
+    "p_1794189370026_001tslrd4": {
+      "id": "p_1794189370026_001tslrd4",
+      "firstName": "Šmoulina",
+      "lastName": "Kvákalová",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002mn2fnn"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1901"
+    },
+    "p_1794189370026_001uzucem": {
+      "id": "p_1794189370026_001uzucem",
+      "firstName": "Kvákoslav",
+      "lastName": "Huňáček",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_1794189370026_002ni9dod"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001ws18j3",
+        "p_1794189370026_001xe1o83"
+      ],
+      "birthDate": "1700"
+    },
+    "p_1794189370026_001v3qora": {
+      "id": "p_1794189370026_001v3qora",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "female",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_1794189370026_002ni9dod"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_1794189370026_001ws18j3",
+        "p_1794189370026_001xe1o83"
+      ],
+      "notes": "Unknown"
+    },
+    "p_1794189370026_001ws18j3": {
+      "id": "p_1794189370026_001ws18j3",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": true,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_001uzucem",
+        "p_1794189370026_001v3qora"
+      ],
+      "childIds": [],
+      "birthDate": "1720",
+      "deathDate": "1720",
+      "notes": "Son"
+    },
+    "p_1794189370026_001xe1o83": {
+      "id": "p_1794189370026_001xe1o83",
+      "firstName": "?",
+      "lastName": "Huňáčková",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_1794189370026_001uzucem",
+        "p_1794189370026_001v3qora"
+      ],
+      "childIds": [],
+      "birthDate": "1722",
+      "deathDate": "1722",
+      "notes": "Baptised at home.\nDaughter"
+    }
+  },
+  "partnerships": {
+    "u_1794189370026_001yudzk9": {
+      "id": "u_1794189370026_001yudzk9",
+      "person1Id": "p_1794189370026_000bmk6b5",
+      "person2Id": "p_1794189370026_000cmifqh",
+      "childIds": [],
+      "status": "married",
+      "startPlace": "Hrbolcov",
+      "startDate": "1885",
+      "sourceIds": [
+        "src_1794189370026_0007hkiee"
+      ]
+    },
+    "u_1794189370026_0021vbrsu": {
+      "id": "u_1794189370026_0021vbrsu",
+      "person1Id": "p_1794189370026_000fqtrcl",
+      "person2Id": "p_1794189370026_000gx4lfe",
+      "childIds": [
+        "p_1794189370026_000hs5kuw"
+      ],
+      "status": "married",
+      "startDate": "1888"
+    },
+    "u_1794189370026_0023969ch": {
+      "id": "u_1794189370026_0023969ch",
+      "person1Id": "p_1794189370026_000jsgjs1",
+      "person2Id": "p_1794189370026_000ktb03p",
+      "childIds": [
+        "p_1794189370026_000ljeqiu"
+      ],
+      "status": "married",
+      "startDate": "1889"
+    },
+    "u_1794189370026_0024zb36a": {
+      "id": "u_1794189370026_0024zb36a",
+      "person1Id": "p_1794189370026_000mgsp5c",
+      "person2Id": "p_1794189370026_000n8fixq",
+      "childIds": [],
+      "status": "married",
+      "startDate": "1884"
+    },
+    "u_1794189370026_0025riljs": {
+      "id": "u_1794189370026_0025riljs",
+      "person1Id": "p_1794189370026_000pot4o2",
+      "person2Id": "p_1794189370026_000q4zqr8",
+      "childIds": [
+        "p_1794189370026_000r4d984"
+      ],
+      "status": "married"
+    },
+    "u_1794189370026_0026eu9j1": {
+      "id": "u_1794189370026_0026eu9j1",
+      "person1Id": "p_1794189370026_000w8q8kg",
+      "person2Id": "p_1794189370026_000x47lmw",
+      "childIds": [],
+      "status": "married",
+      "startPlace": "Drnkalov",
+      "note": "Married at the mill chapel,\nthe miller standing witness.",
+      "startDate": "1899"
+    },
+    "u_1794189370026_00278lp07": {
+      "id": "u_1794189370026_00278lp07",
+      "person1Id": "p_1794189370026_000ygpvqx",
+      "person2Id": "p_1794189370026_000z2mcrl",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_1794189370026_002819o70": {
+      "id": "u_1794189370026_002819o70",
+      "person1Id": "p_1794189370026_0012sbnsr",
+      "person2Id": "p_1794189370026_0013e1brn",
+      "childIds": [
+        "p_1794189370026_0014hewhf"
+      ],
+      "status": "divorced",
+      "startPlace": "Drnkalov",
+      "startDate": "1911-04-01",
+      "endDate": "1912-05-02",
+      "note": "Married again at the town hall,\nthe same witnesses as before.\nThe second wedding of the two.",
+      "sourceIds": [
+        "src_1794189370026_0009mxwr1"
+      ],
+      "events": [
+        {
+          "id": "ev_1794189370029_002tgck43",
+          "type": "custom",
+          "customLabel": "Blessing",
+          "date": "1915"
+        }
+      ]
+    },
+    "u_1794189370026_002abfh7n": {
+      "id": "u_1794189370026_002abfh7n",
+      "person1Id": "p_1794189370026_00163nmow",
+      "person2Id": "p_1794189370026_0017egt9u",
+      "childIds": [],
+      "status": "married",
+      "note": "Date as written: 1755/1756"
+    },
+    "u_1794189370026_002b3pmpq": {
+      "id": "u_1794189370026_002b3pmpq",
+      "person1Id": "p_1794189370026_0018b07iq",
+      "person2Id": "p_1794189370026_0019d34dx",
+      "childIds": [],
+      "status": "divorced",
+      "startPlace": "Drnkalov",
+      "startDate": "1892",
+      "endDate": "1905"
+    },
+    "u_1794189370026_002c7whfs": {
+      "id": "u_1794189370026_002c7whfs",
+      "person1Id": "p_1794189370026_001auh6wf",
+      "person2Id": "p_1794189370026_001bmiidh",
+      "childIds": [],
+      "status": "married",
+      "startPlace": "Hrbolcov",
+      "startDate": "1920-05-12",
+      "ages": {
+        "p_1794189370026_001auh6wf": "30 years"
+      }
+    },
+    "u_1794189370026_002ez2q64": {
+      "id": "u_1794189370026_002ez2q64",
+      "person1Id": "p_1794189370026_001ciakie",
+      "person2Id": "p_1794189370026_001db1t6l",
+      "childIds": [],
+      "status": "married",
+      "startDate": "1922-03-03"
+    },
+    "u_1794189370026_002go0wac": {
+      "id": "u_1794189370026_002go0wac",
+      "person1Id": "p_1794189370026_001eaofa0",
+      "person2Id": "p_1794189370026_001fm5ntu",
+      "childIds": [
+        "p_1794189370026_001g2poqn"
+      ],
+      "status": "divorced",
+      "startPlace": "Hrbolcov",
+      "startDate": "1887-02-09",
+      "endDate": "1890"
+    },
+    "u_1794189370026_002iokjo2": {
+      "id": "u_1794189370026_002iokjo2",
+      "person1Id": "p_1794189370026_001h0kl18",
+      "person2Id": "p_1794189370026_001ivp7tm",
+      "childIds": [],
+      "status": "divorced",
+      "startPlace": "Hrbolcov",
+      "startDate": "1894-05-05",
+      "endDate": "1897",
+      "participants": [
+        {
+          "id": "pt_1794189370029_002uz3gby",
+          "role": "witness",
+          "name": "Mračoslav Bzučák"
+        },
+        {
+          "id": "pt_1794189370029_002vc4crz",
+          "role": "witness",
+          "personId": "p_1794189370026_001j44vhg"
+        },
+        {
+          "id": "pt_1794189370029_002w8he14",
+          "role": "witness",
+          "name": "Čučmíra Ťapková"
+        }
+      ]
+    },
+    "u_1794189370026_002kmcz04": {
+      "id": "u_1794189370026_002kmcz04",
+      "person1Id": "p_1794189370026_001m28te7",
+      "person2Id": "p_1794189370026_001nc12kb",
+      "childIds": [
+        "p_1794189370026_001owgvhi",
+        "p_1794189370026_001prerld"
+      ],
+      "status": "married"
+    },
+    "u_1794189370026_002lbjp9m": {
+      "id": "u_1794189370026_002lbjp9m",
+      "person1Id": "p_1794189370026_001q8o6m8",
+      "person2Id": "p_1794189370026_001rwpg2f",
+      "childIds": [],
+      "status": "divorced",
+      "startPlace": "Hrbolcov",
+      "endPlace": "Drnkalov",
+      "startDate": "1885",
+      "endDate": "1890",
+      "sourceIds": [
+        "src_1794189370026_000agdho8"
+      ]
+    },
+    "u_1794189370026_002mn2fnn": {
+      "id": "u_1794189370026_002mn2fnn",
+      "person1Id": "p_1794189370026_001s2rrl5",
+      "person2Id": "p_1794189370026_001tslrd4",
+      "childIds": [],
+      "status": "married",
+      "startPlace": "Hrbolcov",
+      "startDate": "1925"
+    },
+    "u_1794189370026_002ni9dod": {
+      "id": "u_1794189370026_002ni9dod",
+      "person1Id": "p_1794189370026_001uzucem",
+      "person2Id": "p_1794189370026_001v3qora",
+      "childIds": [
+        "p_1794189370026_001ws18j3",
+        "p_1794189370026_001xe1o83"
+      ],
+      "status": "married"
+    }
+  },
+  "sources": {
+    "src_1794189370026_0001ygfb5": {
+      "id": "src_1794189370026_0001ygfb5",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 3",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3,
+      "recordDate": "1860-02-03"
+    },
+    "src_1794189370026_00020mfzq": {
+      "id": "src_1794189370026_00020mfzq",
+      "title": "Drnkalov chronicle",
+      "quality": 3
+    },
+    "src_1794189370026_00036uun7": {
+      "id": "src_1794189370026_00036uun7",
+      "title": "Drnkalov estate inventory"
+    },
+    "src_1794189370026_00045vbiw": {
+      "id": "src_1794189370026_00045vbiw",
+      "title": "Kňouralov parish register online",
+      "reference": "p. 14",
+      "transcript": "Births 1850-1860, scan 7, also at archive.example.org"
+    },
+    "src_1794189370026_0005lidw2": {
+      "id": "src_1794189370026_0005lidw2",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 77",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    },
+    "src_1794189370026_0006t8wp8": {
+      "id": "src_1794189370026_0006t8wp8",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 9",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    },
+    "src_1794189370026_0007hkiee": {
+      "id": "src_1794189370026_0007hkiee",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 51",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    },
+    "src_1794189370026_00084oa4h": {
+      "id": "src_1794189370026_00084oa4h",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 120",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    },
+    "src_1794189370026_0009mxwr1": {
+      "id": "src_1794189370026_0009mxwr1",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 14",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    },
+    "src_1794189370026_000agdho8": {
+      "id": "src_1794189370026_000agdho8",
+      "title": "Parish register Hrbolcov",
+      "reference": "fol. 41",
+      "note": "Author: Hrbolcov parish office\nPublication: Hrbolcov 1860",
+      "quality": 3
+    }
+  },
+  "version": 14
+}

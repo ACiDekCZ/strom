@@ -20,7 +20,7 @@ import {
     Source,
     generatePersonId,
     generatePartnershipId,
-    PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, mergedPrimaryName,
+    PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName,
     ImportRecord,
 } from '../types.js';
 import { importProgramName } from '../import-next.js';
@@ -191,6 +191,12 @@ export function buildIdMapping(state: MergeState): IdMapping {
         }
     }
 
+    // The "?" of a family of one named parent the tree already has is the
+    // tree's "?" of that family (see standInsOfKnownFamilies).
+    for (const [incomingId, existingId] of standInsOfKnownFamilies(state, personMapping)) {
+        personMapping.set(incomingId, existingId);
+    }
+
     // Also map placeholders that might be needed
     for (const id of Object.keys(state.incomingData.persons)) {
         const personId = id as PersonId;
@@ -208,6 +214,71 @@ export function buildIdMapping(state: MergeState): IdMapping {
         persons: personMapping,
         partnerships: partnershipMapping
     };
+}
+
+/**
+ * The incoming "?" partners (placeholders) of a family of one named parent
+ * that the tree already holds, each with the tree's "?" of that family: the
+ * same family record of the file (same program, same xref), or — in a tree
+ * loaded before the families' ids were kept — the named parent's only family
+ * with a "?" and no ids that has the same children: none on both sides, or
+ * every child of the incoming family that merges into the tree in it and as
+ * many "?" children (a nameless child) beside them as the incoming family
+ * has, with at least one child told so. Those "?" children pair in their
+ * order too. Mapped onto each other, the family merges instead of coming in
+ * again beside the tree's own with a second "?". The named parent counts as
+ * it merges under the current decisions; a "?" already paired (matching's
+ * family-record stand-ins) is left as it is.
+ */
+function standInsOfKnownFamilies(state: MergeState, personMapping: Map<PersonId, PersonId>): Map<PersonId, PersonId> {
+    const { existingData, incomingData } = state;
+    const out = new Map<PersonId, PersonId>();
+    const inTree = (incomingId: PersonId): PersonId | undefined => {
+        const id = out.get(incomingId) ?? personMapping.get(incomingId);
+        return id && existingData.persons[id] ? id : undefined;
+    };
+    const claimed = new Set<PersonId>();
+    for (const id of personMapping.values()) if (existingData.persons[id]?.isPlaceholder) claimed.add(id);
+    const freeStandIn = (id: PersonId): boolean => !!existingData.persons[id]?.isPlaceholder && !claimed.has(id);
+    const otherOf = (union: Partnership, id: PersonId): PersonId => union.person1Id === id ? union.person2Id : union.person1Id;
+    /** The pairs of "?" children when the two families have the same children, else null. */
+    const sameChildren = (existingUnion: Partnership, incomingUnion: Partnership): [PersonId, PersonId][] | null => {
+        if (incomingUnion.childIds.length === 0) return existingUnion.childIds.length === 0 ? [] : null;
+        const mapped = incomingUnion.childIds.map(inTree).filter((id): id is PersonId => !!id);
+        if (!mapped.every(id => existingUnion.childIds.includes(id))) return null;
+        const incomingStandIns = incomingUnion.childIds.filter(id => !inTree(id) && incomingData.persons[id]?.isPlaceholder);
+        const existingStandIns = existingUnion.childIds.filter(id => !mapped.includes(id) && freeStandIn(id));
+        if (incomingStandIns.length !== existingStandIns.length || mapped.length + incomingStandIns.length === 0) return null;
+        const pairs = incomingStandIns.map((id, i): [PersonId, PersonId] => [id, existingStandIns[i]]);
+        return pairs.every(([a, b]) => gendersCompatible(existingData.persons[b].gender, incomingData.persons[a].gender)) ? pairs : null;
+    };
+    for (const incomingUnion of Object.values(incomingData.partnerships)) {
+        for (const [named, other] of [[incomingUnion.person1Id, incomingUnion.person2Id], [incomingUnion.person2Id, incomingUnion.person1Id]]) {
+            const standIn = incomingData.persons[other];
+            if (!standIn?.isPlaceholder || inTree(other)) continue;
+            if (incomingData.persons[named]?.isPlaceholder) continue;
+            const namedId = inTree(named);
+            if (!namedId) continue;
+            const candidates = (existingData.persons[namedId].partnerships ?? [])
+                .map(id => existingData.partnerships[id])
+                .filter((u): u is Partnership => !!u && freeStandIn(otherOf(u, namedId)));
+            const byRecord = candidates.filter(u => sameFileRecord(u, incomingUnion, existingData, incomingData));
+            const loadedBefore = byRecord.length > 0 ? [] : candidates
+                .filter(u => !u.originalIds?.length)
+                .map(u => ({ union: u, children: sameChildren(u, incomingUnion) }))
+                .filter((c): c is { union: Partnership; children: [PersonId, PersonId][] } => !!c.children);
+            const union = byRecord.length === 1 ? byRecord[0] : loadedBefore.length === 1 ? loadedBefore[0].union : undefined;
+            if (!union) continue;
+            const existing = existingData.persons[otherOf(union, namedId)];
+            if (!gendersCompatible(existing.gender, standIn.gender)) continue;
+            const pairs: [PersonId, PersonId][] = [[other, existing.id], ...(byRecord.length ? [] : loadedBefore[0].children)];
+            for (const [incomingId, existingId] of pairs) {
+                out.set(incomingId, existingId);
+                claimed.add(existingId);
+            }
+        }
+    }
+    return out;
 }
 
 // ==================== MERGE EXECUTION ====================
@@ -322,6 +393,17 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 }
             }
             // Rejected matches are added as new persons below
+        }
+        // A "?" of a family the tree already has (standInsOfKnownFamilies) is
+        // the tree's "?": it takes what the file says of it (its ids).
+        const matchedIncoming = new Set(state.matches.map(m => m.incomingId));
+        for (const [incomingId, incoming] of Object.entries(state.incomingData.persons) as [PersonId, Person][]) {
+            if (!incoming.isPlaceholder || matchedIncoming.has(incomingId)) continue;
+            const existingId = mapping.persons.get(incomingId)!;
+            const existingPerson = mergedData.persons[existingId];
+            if (!existingPerson?.isPlaceholder) continue;
+            mergePersonData(existingPerson, incoming, [], mapping.persons, state.incomingData.persons);
+            carryMergedImports(existingPerson, state.existingData.persons[existingId], incoming, importMap);
         }
 
         // Which incoming persons get added as NEW persons.
@@ -848,6 +930,9 @@ function takeCitationQuality(kept: Source, incoming: Source, mergedData: StromDa
  * wrote no marriage for the couple (no MARR): a tree loaded before that was
  * noted (marriageUnrecorded) takes it, while it says nothing else of the
  * wedding and has the same status — "Back to {prog}" then adds no empty MARR.
+ * A tree loaded before files' records kept their ids (no import record, the
+ * couple no ids) has no record to compare: there the file's couple of the
+ * same two people is that family record.
  */
 function takeUnrecordedMarriage(
     merged: Partnership,
@@ -859,6 +944,10 @@ function takeUnrecordedMarriage(
     if (!before || before.marriageUnrecorded || !incoming.marriageUnrecorded) return;
     if (merged.status !== incoming.status || before.status !== incoming.status) return;
     if (merged.startDate || merged.startPlace || merged.address || merged.participants?.length || merged.startStatus) return;
+    if (!existingImports?.length && !before.originalIds?.length && !before.importId && incoming.originalIds?.length) {
+        merged.marriageUnrecorded = true;
+        return;
+    }
     const program = (list: readonly ImportRecord[] | undefined, id: string): string | undefined => {
         const rec = list?.find(r => r.id === id);
         return rec ? importProgramName(rec) : undefined;

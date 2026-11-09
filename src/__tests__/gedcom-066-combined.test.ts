@@ -23,8 +23,8 @@ import { migrateData } from '../data.js';
 import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import { StorageManager } from '../storage.js';
-import { createMergeState } from '../merge/matching.js';
-import { detectPartnershipConflicts, executeMerge, updatePartnershipConflictResolution } from '../merge/executor.js';
+import { createMergeState, updateMatchDecision } from '../merge/matching.js';
+import { detectPartnershipConflicts, executeMerge, isEffectivelyConfirmed, updatePartnershipConflictResolution } from '../merge/executor.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { factCitations } from '../import-origin.js';
 import { StromData, STROM_DATA_VERSION, Partnership } from '../types.js';
@@ -674,6 +674,62 @@ describe('Cases 26 and 27 in a tree an earlier beta imported, the file merged ag
         const ofCase = (ged: string) => records(ged).filter(r => /^0 @I270[234]@ /.test(r));
         expect(ofCase(backTo(merged))).toEqual(ofCase(backTo(fresh)));
         expect(Object.values(merged.persons).find(p => p.notes === 'Son')).toBeDefined();
+    });
+});
+
+/**
+ * test/gedcom-066-combined.v3.25.0.json: the tree Strom 3.25.0 made of
+ * test/gedcom-066-combined.ged, as it stored it (data version 14). Made with
+ * the parser of tag v3.25.0 (`git archive v3.25.0 src`, then a tsx script):
+ * `convertToStrom(parseGedcom(text)).data`, `version = 14` set as its
+ * createTreeFromImport did, written as JSON. 3.25.0 kept no import records
+ * nor record ids, no family of one spouse without children, and read a
+ * couple without a MARR as married with nothing noted of it.
+ */
+describe('The file merged into the tree 3.25.0 made of it', () => {
+    beforeEach(() => { vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never); });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    const OLD = readFileSync(join(process.cwd(), 'test', 'gedcom-066-combined.v3.25.0.json'), 'utf-8');
+
+    /** The wizard's "Merge with existing", every match it leaves to confirm confirmed. */
+    const mergedAgain = async (): Promise<StromData> => {
+        // The stored tree as the app opens it (DataManager → migrateData).
+        const tree = migrateData(JSON.parse(OLD));
+        // The file as the import dialog hands it to the wizard (MergerUI.startMerge).
+        const state = createMergeState(tree, importOf(FILE, '2026-11-09').data);
+        for (const m of state.matches) if (!isEffectivelyConfirmed(state, m)) updateMatchDecision(state, m.incomingId, 'confirm');
+        return (await executeMerge(state)).mergedData!;
+    };
+    const named = (d: StromData, first: string) => Object.values(d.persons).find(p => p.firstName === first)!;
+    const exported = (d: StromData): string[] =>
+        lines(exportToGedcom(applyLivingPrivacy(d, 'full', 2026), 'Hrbolec', { origins: true }).content);
+    /** `1 MARR` lines, and those with nothing under them. */
+    const marriages = (l: string[]) => [count(l, /^1 MARR/), l.filter((x, i) => x === '1 MARR' && !/^[2-9] /.test(l[i + 1] ?? '')).length];
+
+    it('a family of one named parent and a "?" stays one family: no second "?" beside it', async () => {
+        const fresh = load(FILE, '2026-11-09');
+        const merged = await mergedAgain();
+        expect(Object.keys(merged.persons)).toHaveLength(Object.keys(fresh.persons).length);
+        expect(Object.keys(merged.partnerships)).toHaveLength(Object.keys(fresh.partnerships).length);
+        const standIns = (d: StromData) => Object.values(d.persons).filter(p => p.isPlaceholder).length;
+        expect(standIns(merged)).toBe(standIns(fresh));
+        for (const first of ['Hladoš', 'Kvákoslav']) {
+            expect(named(merged, first).partnerships, first).toHaveLength(named(fresh, first).partnerships.length);
+        }
+        // The nameless child of case 6 is the tree's, with its ids from the file.
+        const child = merged.persons[merged.partnerships[named(merged, 'Hladoš').partnerships[0]].childIds[0]];
+        expect(child.isPlaceholder).toBe(true);
+        expect(child.originalIds?.[0]?.xref).toBe('I603');
+    });
+
+    it('no MARR the file does not have: the couples without one go out as a fresh import writes them', async () => {
+        const fresh = load(FILE, '2026-11-09');
+        const merged = await mergedAgain();
+        expect(marriages(exported(merged))).toEqual(marriages(exported(fresh)));
+        const ofCase = (ged: string) => records(ged).filter(r => /^0 @(F601|F1101|F2401|F2701)@ /.test(r));
+        expect(ofCase(backTo(fresh))).toHaveLength(4);
+        expect(ofCase(backTo(merged))).toEqual(ofCase(backTo(fresh)));
     });
 });
 
