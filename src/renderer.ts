@@ -1360,6 +1360,7 @@ class TreeRendererClass {
         const signalCtx = this.signalContext();
         const visible = (pid: PersonId) => positions.has(pid);
         let anyBirth = false;
+        this.prepareCrossTreePills(positions.keys(), this.lastCrossTrees);
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -1525,6 +1526,22 @@ class TreeRendererClass {
         if (!person) return { left: false, right: false };
         const left = this.partnersPillOf(id, visible) !== null;
         return { left, right: this.hasCrossTreePill(person, crossTrees) || this.siblingOrderCandidate(id) };
+    }
+
+    /**
+     * Match the people of these cards to the other trees at once (one
+     * matching pass for all of them, cached): asked card by card, each would
+     * work out every tree's surname rules again.
+     */
+    private prepareCrossTreePills(ids: Iterable<PersonId>, crossTrees: Map<TreeId, { name: string; data: StromData }> | null): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!crossTrees || !treeId) return;
+        const persons: Person[] = [];
+        for (const id of ids) {
+            const person = DataManager.getPerson(id);
+            if (person) persons.push(person);
+        }
+        CrossTree.prepareCrossTreeMatches(treeId, persons, crossTrees);
     }
 
     /** The card carries the ⇄ pill (the person is in other trees too) on its bottom-right edge. */
@@ -4268,6 +4285,8 @@ class TreeRendererClass {
             { positions: this.positions, spouseLines: this.spouseLines }, DataManager.getData(), this.focusPersonId);
         const orderSlots = this.unionOrderSlots(orderBadges, partnershipChildIds, signalCtx);
         const shownHere = this.shownHereIds();
+        // The ⇄ pills of all the cards in one matching pass (findCrossTreeMatches below reads the cache).
+        this.prepareCrossTreePills(this.positions.keys(), allTrees);
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);

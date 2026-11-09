@@ -4,7 +4,7 @@
  */
 
 import { PersonId, Person, StromData, TreeId } from './types.js';
-import { quickMatch, QuickMatchReason } from './merge/matching.js';
+import { quickMatch, QuickMatchReason, inMatchPass, normalizeName, firstNameMayQuickMatch } from './merge/matching.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { strings } from './strings.js';
 
@@ -49,12 +49,71 @@ function leanForMatching(data: import('./types.js').StromData): import('./types.
 }
 
 /**
+ * What a card is matched against in one other tree, worked out once per
+ * tree data (kept by tree id with the data it was made of, so a tree read
+ * anew, or invalidated, gets a new one). A card used to run quickMatch on
+ * every person of every other tree; quickMatch never passes two people whose
+ * first names are too far apart (firstNameMayQuickMatch), so the people are
+ * grouped by their normalized first name and only the groups a card's first
+ * name may match are compared, in the tree's own order.
+ */
+interface TreeMatchIndex {
+    /** The tree's people that are matched (no placeholders), in the tree's order. */
+    persons: Person[];
+    /** Normalized first name → the positions (in `persons`, ascending) of the people of that name. */
+    groups: Map<string, number[]>;
+    /** A card's normalized first name → the positions of the people it may match, ascending. */
+    candidates: Map<string, number[]>;
+}
+
+const indexCache = new Map<TreeId, { data: StromData; index: TreeMatchIndex }>();
+
+function matchIndexOf(treeId: TreeId, data: StromData): TreeMatchIndex {
+    const cached = indexCache.get(treeId);
+    if (cached && cached.data === data) return cached.index;
+    const persons: Person[] = [];
+    const groups = new Map<string, number[]>();
+    for (const p of Object.values(data.persons)) {
+        if (p.isPlaceholder) continue;
+        const at = persons.length;
+        persons.push(p);
+        // No first name: never similar enough to pass (stringSimilarity of '' is 0).
+        const first = normalizeName(p.firstName ?? '');
+        if (!first) continue;
+        const group = groups.get(first);
+        if (group) group.push(at);
+        else groups.set(first, [at]);
+    }
+    const index: TreeMatchIndex = { persons, groups, candidates: new Map() };
+    indexCache.set(treeId, { data, index });
+    return index;
+}
+
+/** The positions of the people a card of this (normalized) first name may match, ascending. */
+function candidatesOf(index: TreeMatchIndex, first: string): number[] {
+    let out = index.candidates.get(first);
+    if (out) return out;
+    out = [];
+    let groups = 0;
+    for (const [name, at] of index.groups) {
+        if (!firstNameMayQuickMatch(first, name)) continue;
+        for (const i of at) out.push(i);
+        groups++;
+    }
+    // Several groups interleave: back to the tree's order.
+    if (groups > 1) out.sort((a, b) => a - b);
+    index.candidates.set(first, out);
+    return out;
+}
+
+/**
  * Invalidate entire cache
  * Call when any tree data changes
  */
 export function invalidateCache(): void {
     matchCache.clear();
     treeDataCache.clear();
+    indexCache.clear();
 }
 
 /**
@@ -70,6 +129,7 @@ export function invalidateCache(): void {
 export function invalidateCacheForTree(treeId: TreeId): void {
     matchCache.clear();
     treeDataCache.delete(treeId);
+    indexCache.delete(treeId);
 }
 
 // ==================== MAIN FUNCTIONS ====================
@@ -87,26 +147,60 @@ export function findCrossTreeMatches(
     if (person.isPlaceholder) return [];
 
     // Check cache
-    const cacheKey = `${currentTreeId}:${person.id}`;
-    const cached = matchCache.get(cacheKey);
+    const cached = matchCache.get(`${currentTreeId}:${person.id}`);
     if (cached !== undefined) {
         return cached;
     }
+    return inCrossTreePass(currentTreeId, allTrees, () => matchPerson(currentTreeId, person, allTrees));
+}
 
+/**
+ * Work out (and cache) the matches of these persons in one matching pass:
+ * the cards of a render ask one after another, and a pass per card would
+ * work out every tree's surname rules again for each.
+ */
+export function prepareCrossTreeMatches(
+    currentTreeId: TreeId,
+    persons: Iterable<Person>,
+    allTrees: Map<TreeId, { name: string; data: StromData }>
+): void {
+    const todo: Person[] = [];
+    for (const p of persons) {
+        if (!p.isPlaceholder && !matchCache.has(`${currentTreeId}:${p.id}`)) todo.push(p);
+    }
+    if (todo.length === 0) return;
+    inCrossTreePass(currentTreeId, allTrees, () => {
+        for (const p of todo) matchPerson(currentTreeId, p, allTrees);
+    });
+}
+
+/** One matching pass over the current tree and every other tree (see inMatchPass). */
+function inCrossTreePass<T>(currentTreeId: TreeId, allTrees: Map<TreeId, { name: string; data: StromData }>, fn: () => T): T {
+    const current = allTrees.get(currentTreeId)?.data;
+    const trees = [...(current ? [current] : []), ...[...allTrees].filter(([id]) => id !== currentTreeId).map(([, t]) => t.data)];
+    return inMatchPass(trees, fn);
+}
+
+/** The matches of one person (not a placeholder), cached. */
+function matchPerson(
+    currentTreeId: TreeId,
+    person: Person,
+    allTrees: Map<TreeId, { name: string; data: StromData }>
+): CrossTreeMatch[] {
     const matches: CrossTreeMatch[] = [];
     const MATCH_THRESHOLD = 50;
     const currentData = allTrees.get(currentTreeId)?.data;
+    const first = normalizeName(person.firstName ?? '');
 
-    // Search in all other trees
-    for (const [treeId, tree] of allTrees.entries()) {
+    // Search in all other trees (a person without a first name matches no one)
+    for (const [treeId, tree] of first ? allTrees.entries() : []) {
         // Skip current tree
         if (treeId === currentTreeId) continue;
 
-        // Search persons in this tree
-        for (const otherPerson of Object.values(tree.data.persons)) {
-            // Skip placeholders
-            if (otherPerson.isPlaceholder) continue;
-
+        // Only the people whose first name may match (placeholders are not in the index)
+        const index = matchIndexOf(treeId, tree.data);
+        for (const at of candidatesOf(index, first)) {
+            const otherPerson = index.persons[at];
             const { score, reasons } = quickMatch(person, otherPerson, currentData, tree.data);
 
             if (score >= MATCH_THRESHOLD) {
@@ -129,7 +223,7 @@ export function findCrossTreeMatches(
     matches.sort((a, b) => b.confidence - a.confidence);
 
     // Cache result
-    matchCache.set(cacheKey, matches);
+    matchCache.set(`${currentTreeId}:${person.id}`, matches);
 
     return matches;
 }

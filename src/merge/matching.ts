@@ -35,6 +35,8 @@ interface MatchPass {
     /** bestLastNameMatch by tree, file and the two persons' surname signatures. */
     bestLastNames: Map<StromData, Map<StromData, Map<string, Map<string, LastNameResult>>>>;
     signatures: WeakMap<object, string>;
+    /** firstNameMayQuickMatch by the two normalized first names. */
+    firstNameBound: Map<string, Map<string, boolean>>;
 }
 
 let matchPass: MatchPass | null = null;
@@ -51,10 +53,15 @@ function memo2<V>(table: Map<string, Map<string, V>>, a: string, b: string, comp
     return value as V;
 }
 
-/** Run `fn` as one matching pass over these trees (see MatchPass); passes do not nest. */
-function inMatchPass<T>(trees: StromData[], fn: () => T): T {
+/**
+ * Run `fn` as one matching pass over these trees (see MatchPass); passes do
+ * not nest (inside a pass `fn` simply runs in it). The trees must not change
+ * while it runs. Cross-tree matching ("Also in" on the cards) runs its card
+ * loop in one pass over the current tree and every other tree.
+ */
+export function inMatchPass<T>(trees: StromData[], fn: () => T): T {
     if (matchPass) return fn();
-    matchPass = { normalized: new Map(), similarity: new Map(), firstNames: new Map(), lastNames: new Map(), sameSurname: new Map(), bestLastNames: new Map(), signatures: new WeakMap() };
+    matchPass = { normalized: new Map(), similarity: new Map(), firstNames: new Map(), lastNames: new Map(), sameSurname: new Map(), bestLastNames: new Map(), signatures: new WeakMap(), firstNameBound: new Map() };
     try {
         const run = trees.reduceRight<() => T>((inner, data) => () => withSurnameRules(data, inner), fn);
         return run();
@@ -119,9 +126,11 @@ export function stringSimilarity(a: string, b: string): number {
 }
 
 function stringSimilarityNow(a: string, b: string): number {
-    const normalizedA = normalizeName(a);
-    const normalizedB = normalizeName(b);
+    return normalizedSimilarity(normalizeName(a), normalizeName(b));
+}
 
+/** stringSimilarity of two names already normalized (normalizeName). */
+function normalizedSimilarity(normalizedA: string, normalizedB: string): number {
     // No name is not a name: two blanks (or two names in a script the
     // normalizer cannot read) must never count as the same name.
     if (normalizedA.length === 0 || normalizedB.length === 0) return 0;
@@ -1622,14 +1631,14 @@ export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: St
     // The same rule/group answer full matching uses (Fíšek/Fíšková is one
     // family), so cross-tree suggestions agree with the merge matcher.
     const rulesSay = (data?: StromData): boolean =>
-        !!data && sameSurname(p1.lastName, p2.lastName, data);
+        !!data && sameSurnameIn(p1.lastName, p2.lastName, data);
     const lastNameSim = rulesSay(data1) || rulesSay(data2)
         ? 1.0
         : stringSimilarity(p1.lastName, p2.lastName);
     const nameSim = (firstNameSim + lastNameSim) / 2;
 
     // Names too different - no match
-    if (nameSim < 0.7) return NO_QUICK_MATCH;
+    if (nameSim < QUICK_NAME_MIN) return NO_QUICK_MATCH;
 
     const birth = compareEventDates(p1.birthDate, p2.birthDate);
     const death = compareEventDates(p1.deathDate, p2.deathDate);
@@ -1666,6 +1675,75 @@ export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: St
     }
 
     return { score: Math.min(score, 100), reasons };
+}
+
+/** The least name similarity ((first + last) / 2) quickMatch takes. */
+const QUICK_NAME_MIN = 0.7;
+
+/**
+ * Whether two persons of these first names (both normalized, normalizeName)
+ * can pass quickMatch's name test at all: even with the surnames the same
+ * (similarity 1) the first names must carry the rest. Exact, never a guess:
+ * the test is the very expression quickMatch computes, with the surname's
+ * part at its most (floating-point addition is monotone, so a smaller part
+ * never gives more), and the similarity (1 - distance / longer length)
+ * falls as the edit distance grows, so it is the same as the distance
+ * staying within the largest one that still passes — which a distance
+ * computation may stop at as soon as it is exceeded. Lets cross-tree
+ * matching skip whole groups of people by their first name.
+ */
+export function firstNameMayQuickMatch(normalizedA: string, normalizedB: string): boolean {
+    if (matchPass) return memo2(matchPass.firstNameBound, normalizedA, normalizedB, () => firstNameMayQuickMatchNow(normalizedA, normalizedB));
+    return firstNameMayQuickMatchNow(normalizedA, normalizedB);
+}
+
+function firstNameMayQuickMatchNow(normalizedA: string, normalizedB: string): boolean {
+    const passes = (firstSim: number): boolean => (firstSim + 1.0) / 2 >= QUICK_NAME_MIN;
+    // As normalizedSimilarity: no name is 0, the same name 1.
+    if (normalizedA.length === 0 || normalizedB.length === 0) return passes(0);
+    if (normalizedA === normalizedB) return passes(1);
+    const maxLength = Math.max(normalizedA.length, normalizedB.length);
+    // The largest distance whose similarity, computed as normalizedSimilarity does, still passes.
+    let allowed = 0;
+    while (allowed < maxLength && passes(1 - (allowed + 1) / maxLength)) allowed++;
+    if (!passes(1 - allowed / maxLength)) return false;
+    // The distance is at least the difference of the lengths.
+    if (Math.abs(normalizedA.length - normalizedB.length) > allowed) return false;
+    return levenshteinWithin(normalizedA, normalizedB, allowed);
+}
+
+/** Two rows of levenshteinWithin's matrix, kept between calls. */
+let withinRows = new Int32Array(64);
+
+/**
+ * levenshteinDistance(a, b) <= limit, the same matrix row by row, stopping
+ * once a whole row exceeds the limit (the distance is at least a row's least
+ * value: every edit path crosses each row and no step costs less than 0).
+ */
+function levenshteinWithin(a: string, b: string, limit: number): boolean {
+    const width = a.length + 1;
+    if (withinRows.length < 2 * width) withinRows = new Int32Array(2 * width);
+    const rows = withinRows;
+    let previous = 0;
+    let current = width;
+    for (let j = 0; j < width; j++) rows[j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        rows[current] = i;
+        let least = i;
+        const ch = b.charCodeAt(i - 1);
+        for (let j = 1; j < width; j++) {
+            const value = ch === a.charCodeAt(j - 1)
+                ? rows[previous + j - 1]
+                : Math.min(rows[previous + j - 1], rows[current + j - 1], rows[previous + j]) + 1;
+            rows[current + j] = value;
+            if (value < least) least = value;
+        }
+        if (least > limit) return false;
+        const done = previous;
+        previous = current;
+        current = done;
+    }
+    return rows[previous + width - 1] <= limit;
 }
 
 /** The score part of quickMatch (0-100, threshold 50+ = match). */

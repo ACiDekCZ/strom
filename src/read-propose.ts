@@ -12,7 +12,7 @@ import type { Gender, LifeEvent, LifeEventType, Person, PersonId, StromData, Par
 import type { ReadEntry, ReadEvent, ReadPerson, ReadVariant } from './research-read.js';
 import { researchPersonRef } from './research-link.js';
 import { gedcomTagEventType, parseGedcomDate } from './ged-parser.js';
-import { quickMatch, QuickMatchReason, normalizeName, stringSimilarity, compareEventDates } from './merge/matching.js';
+import { quickMatch, QuickMatchReason, normalizeName, stringSimilarity, compareEventDates, inMatchPass } from './merge/matching.js';
 import { parseFlexDate } from './dates.js';
 import { sameSurname } from './surnames.js';
 import { sameGivenName } from './given-names.js';
@@ -234,13 +234,16 @@ function appCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: S
     const alive = aliveDates(entry, p.ref);
     let best: ProposeCandidate | null = null;
     let tie = false;
-    for (const other of Object.values(data.persons)) {
-        if (other.isPlaceholder || taken.has(other.id) || diedBefore(other, alive)) continue;
-        const q = quickMatch(me, other, draft, data);
-        if (q.score < MATCH_THRESHOLD) continue;
-        if (!best || q.score > best.score) { best = { id: other.id, byResearch: false, score: q.score, reasons: q.reasons, why: '' }; tie = false; }
-        else if (q.score === best.score) tie = true;
-    }
+    // One matching pass over both: the surname rules of each are worked out once, not per person.
+    inMatchPass([draft, data], () => {
+        for (const other of Object.values(data.persons)) {
+            if (other.isPlaceholder || taken.has(other.id) || diedBefore(other, alive)) continue;
+            const q = quickMatch(me, other, draft, data);
+            if (q.score < MATCH_THRESHOLD) continue;
+            if (!best || q.score > best.score) { best = { id: other.id, byResearch: false, score: q.score, reasons: q.reasons, why: '' }; tie = false; }
+            else if (q.score === best.score) tie = true;
+        }
+    });
     // Two tree persons fit equally: the choice is the user's.
     if (tie) return null;
     return best ?? givenOnlyCandidate(me, alive, data, draft, taken);
