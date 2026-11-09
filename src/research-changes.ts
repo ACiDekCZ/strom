@@ -5,7 +5,7 @@
  * Pure: no DOM, no storage.
  */
 
-import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName } from './types.js';
+import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName, personSourceIds } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
@@ -781,11 +781,26 @@ function citedKey(id: string, sources: Record<string, Source>): string {
     return src ? [src.title, src.repository, src.reference].map(v => (v ?? '').trim()).join('\u0000') : `\u0001${id}`;
 }
 
-/** Of citations `a` (sources `as`), those `b` (sources `bs`) does not cite: neither the same id nor the same entry and page. */
-function citedOnlyIn(a: readonly string[], as: Record<string, Source>, b: readonly string[], bs: Record<string, Source>): string[] {
+/**
+ * The same source record names another page there (the page of a record's first citation is kept on the
+ * record itself, so the research changing it keeps the id).
+ */
+function pageMoved(id: string, as: Record<string, Source>, bs: Record<string, Source>): boolean {
+    const x = as[id];
+    const y = bs[id];
+    return !!x && !!y && (x.reference ?? '').trim() !== (y.reference ?? '').trim();
+}
+
+/**
+ * Of citations `a` (sources `as`), those `b` (sources `bs`) does not cite: neither the same entry and page,
+ * nor the same id (unless that record names another page there: `moved`; the page's change is a row, never an
+ * added citation).
+ */
+function citedOnlyIn(a: readonly string[], as: Record<string, Source>, b: readonly string[], bs: Record<string, Source>,
+    moved = true): string[] {
     const ids = new Set(b);
     const keys = new Set(b.map(id => citedKey(id, bs)));
-    return a.filter(id => !ids.has(id) && !keys.has(citedKey(id, as)));
+    return a.filter(id => !(ids.has(id) && !(moved && pageMoved(id, as, bs))) && !keys.has(citedKey(id, as)));
 }
 
 /**
@@ -892,7 +907,9 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
             rows.push({ personId: h.id, name: fullName(h), field: 'person', here: fullName(h), there: '' });
             continue;
         }
-        if (stable(h) === stable(t)) continue;
+        // A person the same apart from a page of a record cited (kept on the record): its citation row still.
+        if (stable(h) === stable(t) && ![...personSourceIds(h), ...(h.events ?? []).flatMap(e => e.sourceIds ?? [])]
+            .some(id => pageMoved(id, hs, ts))) continue;
         const open = openConflictFacts(t);
         field(h, 'name', fullName(h) === '?' ? '' : titledName(h), fullName(t) === '?' ? '' : titledName(t),
             open.has('NAME') || open.has('NPFX') || open.has('NSFX') ? { conflict: true } : {});
@@ -934,7 +951,7 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
             const b = t[key] ?? [];
             const gone = citedOnlyIn(a, hs, b, ts);
             if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of, here: sourceTitles(gone, hs), there: sourceTitles(b, ts) });
-            addedFacts += citedOnlyIn(b, ts, a, hs).length;
+            addedFacts += citedOnlyIn(b, ts, a, hs, false).length;
         }
     }
     // Couples: the wedding's date and place.

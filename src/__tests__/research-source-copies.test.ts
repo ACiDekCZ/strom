@@ -17,6 +17,8 @@ interface Opts {
     occuPage?: string;
     /** Ole's residence cites the register too. */
     residenceCited?: boolean;
+    /** The page of Ole's birth citation (the record's first citation: its page kept on the record). */
+    birthPage?: string;
 }
 
 function researchGed(opts: Opts = {}): string {
@@ -24,7 +26,7 @@ function researchGed(opts: Opts = {}): string {
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 VERS 1.4.0', '2 NAME Strom Research', '1 DATE 9 NOV 2026',
         '1 CHAR UTF-8',
         '0 @P0001@ INDI', '1 NAME Ole /Brekke/', '1 SEX M', '1 REFN P0001',
-        '1 BIRT', '2 DATE 1850', '2 SOUR @S0001@', '3 PAGE fol. 12', '3 QUAY 3',
+        '1 BIRT', '2 DATE 1850', '2 SOUR @S0001@', `3 PAGE ${opts.birthPage ?? 'fol. 12'}`, '3 QUAY 3',
         // The same page, another QUAY: a source of its own.
         '1 OCCU sedlák', '2 SOUR @S0001@', `3 PAGE ${opts.occuPage ?? 'fol. 12'}`, '3 QUAY 1',
         '1 RESI', '2 PLAC Tovik', ...(opts.residenceCited ? ['2 SOUR @S0001@', '3 PAGE fol. 40', '3 QUAY 2'] : []),
@@ -66,6 +68,18 @@ describe('sources of their own per citation across readings', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0]).toMatchObject({ field: 'citation', of: 'occupation',
             here: 'Matrika Tovik 1840–1860 · fol. 12', there: 'Matrika Tovik 1840–1860 · fol. 13' });
+    });
+
+    it('another page at the record\'s first citation (kept on the record, the same id) is a row, nothing added (1109 N1)', () => {
+        const first = read(researchGed());
+        const moved = stabilizeIds(read(researchGed({ birthPage: 'fol. 13' })), first);
+        const rows = citationRows(first, moved);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ of: 'birth' });
+        expect(rows[0].here).toContain('fol. 12');
+        expect(rows[0].there).toContain('fol. 13');
+        expect(diffValues(first, moved).rows).toHaveLength(1);
+        expect(diffValues(first, moved).addedFacts).toBe(0);
     });
 
     it('a citation taken away is still a row; it coming back is none', () => {
