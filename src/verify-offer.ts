@@ -23,6 +23,13 @@ export interface VerifyOfferInput {
     research: VerifyResearch | null;
     /** The fact cites a source. */
     cited: boolean;
+    /**
+     * The fact has a record to confirm it against: a citation, or the record
+     * the research read its value from (what the tip lists under Sources).
+     * Absent: as `cited`. Without one there is no scan, so no "Confirm against
+     * the scan".
+     */
+    source?: boolean;
     /** It waits for re-verification in the research. */
     pending?: FactVerifyPending;
     /** Where it was confirmed (factVerifyInfo.confirmedBy). */
@@ -84,19 +91,22 @@ export function researchConfirms(research: VerifyResearch | null): boolean {
  * 9. no research: the scan when the fact cites a source, and the row that a
  *    research would verify it.
  * A fact with no mark offers the scan alone (with a source) and no row.
+ * The scan stands only where the fact has a record to confirm it against
+ * (`source`): a fact the tip lists without a source offers none.
  */
 export function verifyOffer(input: VerifyOfferInput): VerifyOffer {
     const { step, research, cited } = input;
+    const sourced = input.source ?? cited;
     const none: VerifyOffer = { verify: false, scan: false, undo: false, row: null };
     if (step === 'human') {
         const undo = input.confirmedBy === 'app' || (input.confirmedBy === 'research' && researchConfirms(research));
         return { ...none, undo, row: input.confirmedBy ? 'confirmed' : null };
     }
     if (!research) {
-        if (step === null) return { ...none, scan: cited };
-        return { ...none, scan: cited, row: 'noResearch' };
+        if (step === null) return { ...none, scan: sourced };
+        return { ...none, scan: sourced, row: 'noResearch' };
     }
-    const scan = step !== 'none' && researchConfirms(research);
+    const scan = step !== 'none' && sourced && researchConfirms(research);
     if (input.pending) return { ...none, scan, row: 'pending' };
     const canVerify = step !== null && step !== 'proven' && researchVerifies(research);
     const offer: VerifyOffer = { ...none, scan };

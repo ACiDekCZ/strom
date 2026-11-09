@@ -33,8 +33,11 @@ describe('table 10z', () => {
         for (const step of ['probable', 'possible'] as const) {
             expect(verifyOffer({ step, research: FULL, cited: true }))
                 .toEqual({ verify: true, cost: 'low', scan: true, undo: false, row: null });
-            expect(verifyOffer({ step, research: FULL, cited: false }))
+            // Without a citation the scan stands only on the record the research read the value from.
+            expect(verifyOffer({ step, research: FULL, cited: false, source: true }))
                 .toEqual({ verify: true, cost: 'high', scan: true, undo: false, row: null });
+            expect(verifyOffer({ step, research: FULL, cited: false }))
+                .toEqual({ verify: true, cost: 'high', scan: false, undo: false, row: null });
             expect(verifyOffer({ step, research: FULL, cited: true, why: 'Two records disagree' }))
                 .toEqual({ verify: true, cost: 'low', scan: true, undo: false, row: 'reason' });
         }
@@ -43,15 +46,29 @@ describe('table 10z', () => {
     it('row 4: lead — Verify (costlier), scan, the reason if any', () => {
         expect(verifyOffer({ step: 'lead', research: FULL, cited: true }))
             .toEqual({ verify: true, cost: 'high', scan: true, undo: false, row: null });
-        expect(verifyOffer({ step: 'lead', research: FULL, cited: false, why: 'No record found yet' }))
+        expect(verifyOffer({ step: 'lead', research: FULL, cited: false, source: true, why: 'No record found yet' }))
             .toEqual({ verify: true, cost: 'high', scan: true, undo: false, row: 'reason' });
+        expect(verifyOffer({ step: 'lead', research: FULL, cited: false, why: 'No record found yet' }))
+            .toEqual({ verify: true, cost: 'high', scan: false, undo: false, row: 'reason' });
     });
 
-    it('row 5: from the family tree — Verify (cheap with its citation), scan, cited or not', () => {
+    it('row 5: from the family tree — Verify (cheap with its citation), the scan only when cited', () => {
         expect(verifyOffer({ step: 'import', research: FULL, cited: true }))
             .toEqual({ verify: true, cost: 'low', scan: true, undo: false, row: 'importCited' });
         expect(verifyOffer({ step: 'import', research: FULL, cited: false }))
-            .toEqual({ verify: true, cost: 'high', scan: true, undo: false, row: 'importUncited' });
+            .toEqual({ verify: true, cost: 'high', scan: false, undo: false, row: 'importUncited' });
+    });
+
+    it('a fact without a source never offers "Confirm against the scan" (no scan to confirm against)', () => {
+        for (const research of [FULL, CONFIRM_ONLY, null]) {
+            for (const step of ['proven', 'probable', 'possible', 'lead', 'import', null] as const) {
+                expect(verifyOffer({ step, research, cited: false }).scan).toBe(false);
+                expect(verifyOffer({ step, research, cited: false, source: false }).scan).toBe(false);
+            }
+        }
+        // The record the research read the value from is a source the scan confirms against.
+        expect(verifyOffer({ step: 'probable', research: FULL, cited: false, source: true }).scan).toBe(true);
+        expect(verifyOffer({ step: 'probable', research: null, cited: false, source: true }).scan).toBe(true);
     });
 
     it('row 6: no source — Verify (costlier), no scan', () => {

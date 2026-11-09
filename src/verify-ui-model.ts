@@ -42,6 +42,8 @@ export interface FactOfferInput {
     /** The tree is the research's (linked to it). */
     researchTree: boolean;
     cited: boolean;
+    /** A record to confirm it against (a citation, or the record the research read its value from); absent: as `cited`. */
+    source?: boolean;
     info: FactVerifyInfo;
     /** It waits for re-verification since a start here (not yet in the research's file). */
     localPending?: boolean;
@@ -74,7 +76,7 @@ export function factOffer(holder: FactHolder, fact: string, input: FactOfferInpu
     const kind = verifyFactKind(holder, fact);
     const pending = input.info.pending ?? (input.localPending ? 'wait' : undefined);
     const base = verifyOffer({
-        step: input.step, research: input.research, cited: input.cited, pending,
+        step: input.step, research: input.research, cited: input.cited, source: input.source, pending,
         confirmedBy: input.info.confirmedBy, why: input.info.checked?.why,
     });
     const out: FactOffer = { ...base, eid, scanViaBridge: false, undoViaBridge: false };

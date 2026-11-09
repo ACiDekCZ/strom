@@ -306,11 +306,17 @@ export const verifyUiMethods = uiModule({
         if (!holder) return null;
         const info = infoWithLocal(holder, fact);
         const step = ctx.step ?? null;
+        const data = DataManager.getData();
+        // What the tip lists under Sources: the fact's citations and, at a fact's pill, the record
+        // the research read its value from. A fact listed "No source" has no scan to confirm against.
+        const cited = factCitations(data, holder, fact).length > 0;
+        const valueRecord = ctx.kind === 'fact' && (ctx.reliability?.sourceIds ?? []).some(id => !!data.sources?.[id]);
         const offer = factOffer(holder, fact, {
             step,
             research: this.verifyResearchNow(),
             researchTree: this.reliabilityOptionsNow().researchTree,
-            cited: factCitations(DataManager.getData(), holder, fact).length > 0,
+            cited,
+            source: cited || valueRecord,
             info,
             localPending: !!localOf(holder, fact)?.pending,
             editable: !DataManager.isReadOnly(),

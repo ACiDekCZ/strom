@@ -111,6 +111,13 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
         expect(factOffer(p, 'event:e1', input({ step: 'import', cited: false }))).toMatchObject({ verify: true, cost: 'high', row: 'importUncited' });
     });
 
+    it('a fact without a source (no citation, no record the research read): no "Confirm against the scan"', () => {
+        for (const step of ['proven', 'probable', 'possible', 'lead', 'import'] as const) {
+            expect(factOffer(p, 'birth', input({ step, cited: false }))).toMatchObject({ scan: false, scanViaBridge: false });
+        }
+        expect(factOffer(p, 'birth', input({ step: 'probable', cited: false, source: true }))).toMatchObject({ scan: true, scanViaBridge: true });
+    });
+
     it('row 6: no source — Verify (higher), no scan', () => {
         expect(factOffer(p, 'event:e2', input({ step: 'none', cited: false }))).toMatchObject({ verify: true, cost: 'high', scan: false, row: null });
     });

@@ -61,10 +61,10 @@ function tree(withValues = true): StromData {
 const OPTS = { researchTree: false, originFeature: false };
 const BRIDGE = { features: ['verify', 'facts.confirm'] };
 
-/** The offer of the fact's tip as the page builds it (verify-ui verifyFactView). */
+/** The offer of the fact's tip as the page builds it (verify-ui verifyFactView); the fact has a record to confirm against. */
 function offerOf(h: Person | Partnership, fact: string) {
     const step = factReliability({}, h, fact, OPTS)?.step ?? null;
-    return factOffer(h, fact, { step, research: BRIDGE, researchTree: true, cited: false, info: factVerifyInfo(h, fact), editable: true });
+    return factOffer(h, fact, { step, research: BRIDGE, researchTree: true, cited: false, source: true, info: factVerifyInfo(h, fact), editable: true });
 }
 
 describe("a change of the value ends the research's confirmation", () => {

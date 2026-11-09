@@ -408,8 +408,8 @@ async function verifyRoutes(page: Page, opts: { position?: number } = {}): Promi
 }
 
 /** The research's tree with its bridge saying `features`; Jan's person editor open. */
-async function openVerifyTree(page: Page, opts: { features?: string[]; extra?: string[]; position?: number } = {}): Promise<VerifyAsks> {
-    const ged = verifyGed(opts.extra);
+async function openVerifyTree(page: Page, opts: { features?: string[]; extra?: string[]; position?: number; ged?: string } = {}): Promise<VerifyAsks> {
+    const ged = opts.ged ?? verifyGed(opts.extra);
     await fakeBridge(page, { features: opts.features ?? ['verify', 'facts.confirm'], treeGed: ged });
     const asks = await verifyRoutes(page, { position: opts.position });
     await openResearch(page, { ged });
@@ -563,6 +563,27 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(card(page, 'Jan')).toBeVisible();
         await cardAction(page, 'Jan', 'edit');
         await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-probable/);
+    });
+
+    test('a fact without a source: Verify, but no "Confirm against the scan" (nothing to confirm against)', async ({ page }) => {
+        await openVerifyTree(page, {
+            ged: researchGed(HEAD, [
+                '1 BIRT', '2 DATE 3 FEB 1862', '2 PLAC Čapkov', '2 _STROM_STATUS probable', '2 _STROM_EID E0001',
+                '1 DEAT', '2 DATE 1919', '2 _STROM_STATUS proven', '2 _STROM_EID E0002', '2 SOUR @S0001@',
+            ]),
+        });
+        const pill = factPill(page, 'Birth');
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-src-none')).toHaveText('No source');
+        await expect(vAct(page, 'verify')).toBeVisible();
+        await expect(vAct(page, 'scan')).toHaveCount(0);
+        // The cited death keeps its scan.
+        await factPill(page, 'Death').click();
+        await expect(tip.locator('.st-src-none')).toHaveCount(0);
+        await expect(vAct(page, 'scan')).toBeVisible();
     });
 
     test('a research without verify: no action of the AI', async ({ page }) => {
