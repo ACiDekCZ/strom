@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.27.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Kleinere Änderungen**: Auf dem Telefon behalten die Kacheln unter *Mehr* ihre Namen innen, ein langer Name (Deutsch, Polnisch) bricht in seiner Kachel um; *Datenqualität* im Stammbaum-Menü hat dieselbe Farbe wie die Zeilen daneben; das ∞ in der Heiratsmarke steht auf gleicher Höhe wie die Zahlen daneben, auf dem Bildschirm und im exportierten Bild.
+
 ## 3.26.0
 
 *Veröffentlicht am 9. November 2026.*

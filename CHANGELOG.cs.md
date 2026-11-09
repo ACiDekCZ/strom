@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.27.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Drobnosti**: na telefonu drží dlaždice v *Více* své názvy uvnitř, dlouhý název (němčina, polština) se zalomí v dlaždici; *Kvalita dat* v nabídce stromu má stejnou barvu jako řádky kolem; ∞ ve značce sňatku stojí v jedné výšce s čísly vedle, na obrazovce i v exportovaném obrázku.
+
 ## 3.26.0
 
 *Vydáno 9. listopadu 2026.*

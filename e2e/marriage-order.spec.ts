@@ -61,6 +61,46 @@ async function pillText(page: Page, name: string): Promise<string> {
     });
 }
 
+/**
+ * The middle of the ink (page px, from the top) of what is drawn inside
+ * `box`: a screenshot of it, every pixel unlike the most common one (the
+ * ground) counts as ink.
+ */
+async function inkMiddle(page: Page, box: { x: number; y: number; width: number; height: number }): Promise<number> {
+    const png = await page.screenshot({ clip: box });
+    const [top, bottom] = await page.evaluate(async (b64) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        const counts = new Map<number, number>();
+        for (let i = 0; i < d.length; i += 4) {
+            const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        const ground = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        const [gr, gg, gb] = [ground >> 16, (ground >> 8) & 255, ground & 255];
+        let t = -1, btm = -1;
+        for (let y = 0; y < c.height; y++) {
+            for (let x = 0; x < c.width; x++) {
+                const i = (y * c.width + x) * 4;
+                if (Math.abs(d[i] - gr) + Math.abs(d[i + 1] - gg) + Math.abs(d[i + 2] - gb) > 90) {
+                    if (t < 0) t = y;
+                    btm = y;
+                }
+            }
+        }
+        return [t, btm];
+    }, png.toString('base64'));
+    expect(top, 'no ink found').toBeGreaterThanOrEqual(0);
+    return box.y + (top + bottom + 1) / 2;
+}
+
 async function zoomTo(page: Page, scale: number, around = 'j'): Promise<void> {
     await page.evaluate(([s, id]) => window.Strom.ZoomPan.glideToPerson(id as never, s as number, 0), [scale, around] as const);
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 2);
@@ -109,6 +149,59 @@ test.describe('marriage-order pill (T13)', () => {
         await expect(card(page, 'Anna').locator('.card-tooltip')).not.toBeVisible();
         await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Fíšek's 2nd marriage, 1908, Praha");
         await expect(pill(page, 'Anna')).toHaveCSS('cursor', 'default');
+    });
+
+    test('the ∞ sits level with the digits beside it, on the screen and in the image export (T47)', async ({ page }) => {
+        const Z = 4;
+        await setup(page);
+        await zoomTo(page, Z, 'a');
+        const p = pill(page, 'Anna');
+        await expect(p).toBeVisible();
+        // The pill alone: no hairline, no shadow (its ground stays).
+        await p.evaluate(el => { el.style.borderColor = 'transparent'; el.style.boxShadow = 'none'; });
+        const pb = (await p.boundingBox())!;
+        const inner = (el: { x: number; width: number }) => ({ x: el.x, y: pb.y + Z, width: el.width, height: pb.height - 2 * Z });
+        const glyph = (await p.locator('.uo-glyph').boundingBox())!;
+        const year = (await p.locator('.uo-year').boundingBox())!;
+        const screenOff = (await inkMiddle(page, inner(glyph)) - await inkMiddle(page, inner(year))) / Z;
+        expect(Math.abs(screenOff), `screen: the ∞'s middle ${screenOff.toFixed(2)}px below the year's`).toBeLessThanOrEqual(0.5);
+
+        // The SVG export's pill drawn in the page at the same scale.
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await page.locator('#export-modal .menu-option', { hasText: 'Poster' }).click();
+        const poster = page.locator('#poster-modal');
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+        ]);
+        const svg = readFileSync(await download.path(), 'utf-8');
+        const group = /<g class="union-order-pill" data-union-order="1" data-person="a"[^>]*>.*?<\/g>/.exec(svg)![0];
+        await page.keyboard.press('Escape');
+        await page.evaluate(([g, z]) => {
+            const host = document.createElement('div');
+            host.id = 'ink-host';
+            host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;';
+            host.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:20px;top:20px;overflow:visible">${g}</svg>`;
+            document.body.appendChild(host);
+            const svgEl = host.querySelector('svg')!;
+            const r = (svgEl.querySelector('rect') as SVGRectElement).getBBox();
+            svgEl.setAttribute('viewBox', `${r.x} ${r.y} ${r.width} ${r.height}`);
+            svgEl.setAttribute('width', String(r.width * z));
+            svgEl.setAttribute('height', String(r.height * z));
+        }, [group, Z] as const);
+        const rect = (await page.locator('#ink-host rect').boundingBox())!;
+        const box = { x: rect.x + 2 * Z, y: rect.y + Z, width: rect.width - 4 * Z, height: rect.height - 2 * Z };
+        // One text of the pill shown at a time (the hairline hidden), its ink across the pill.
+        const only = (text: string) => page.evaluate((t) => {
+            document.querySelector('#ink-host rect')!.setAttribute('stroke', 'none');
+            for (const el of document.querySelectorAll<SVGTextElement>('#ink-host text')) el.style.visibility = el.textContent === t ? '' : 'hidden';
+        }, text);
+        await only('∞');
+        const svgGlyphMid = await inkMiddle(page, box);
+        await only('1866');
+        const svgYearMid = await inkMiddle(page, box);
+        const svgOff = (svgGlyphMid - svgYearMid) / Z;
+        expect(Math.abs(svgOff), `export: the ∞'s middle ${svgOff.toFixed(2)}px below the year's`).toBeLessThanOrEqual(0.5);
     });
 
     test('whole from 60 % zoom, hidden below', async ({ page }) => {

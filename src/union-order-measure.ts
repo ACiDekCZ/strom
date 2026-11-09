@@ -482,6 +482,100 @@ export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: 
     return out;
 }
 
+/**
+ * How far the pill's ∞ is lifted so the middle of its ink sits level with
+ * the middle of the digits beside it (T47). The ∞ is not in the embedded
+ * face, so it comes from the platform's fallback font, whose ∞ sits lower
+ * than the digits by a different amount on every platform: measured once,
+ * in the fonts this browser really draws. `ink`: the lift of the ∞ standing
+ * on the digits' baseline (the image export); `baseline`: how much lower the
+ * screen's ∞ stands than the digits (11px beside 10px, each centred in the
+ * pill), lifted on the screen besides. 0 for both without a document or a
+ * canvas.
+ */
+export interface GlyphLift { baseline: number; ink: number }
+
+let glyphLiftCache: GlyphLift | null = null;
+
+/**
+ * The middle of the ink of `text` above its baseline (px) in `el`'s font:
+ * drawn ten times larger on a canvas and the ink rows found (a canvas's
+ * measureText does not report a fallback glyph's ink in every engine).
+ */
+function inkMiddle(el: HTMLElement, text: string): number | null {
+    const SCALE = 10;
+    const cs = getComputedStyle(el);
+    const size = parseFloat(cs.fontSize) * SCALE;
+    if (!size) return null;
+    const w = Math.ceil(size * text.length * 1.5), h = Math.ceil(size * 3), base = Math.round(size * 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.font = `${cs.fontWeight} ${size}px ${cs.fontFamily}`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#000';
+    ctx.fillText(text, size * 0.25, base);
+    const d = ctx.getImageData(0, 0, w, h).data;
+    let top = -1, bottom = -1;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (d[(y * w + x) * 4 + 3] > 127) {
+                if (top < 0) top = y;
+                bottom = y;
+                break;
+            }
+        }
+    }
+    if (top < 0) return null;
+    return (base - (top + bottom + 1) / 2) / SCALE;
+}
+
+export function unionOrderGlyphLift(): GlyphLift {
+    if (glyphLiftCache) return glyphLiftCache;
+    const none: GlyphLift = { baseline: 0, ink: 0 };
+    if (typeof document === 'undefined' || !document.body) return none;
+    const host = hiddenHost();
+    // A probe of no height sits on its line's baseline.
+    const probe = '<i style="display:inline-block;width:0;height:0;vertical-align:baseline"></i>';
+    host.innerHTML = `<span class="union-order-pill"><span class="uo-num">1</span><span class="pill-glyph uo-glyph">∞${probe}</span><span class="uo-year">1899${probe}</span></span>`;
+    document.body.appendChild(host);
+    let lift = none;
+    try {
+        const glyphEl = host.querySelector<HTMLElement>('.uo-glyph')!;
+        const yearEl = host.querySelector<HTMLElement>('.uo-year')!;
+        const [gProbe, yProbe] = [glyphEl, yearEl].map(el => el.querySelector('i')!.getBoundingClientRect());
+        if (gProbe.height === 0 && yProbe.height === 0) {
+            const glyphMid = inkMiddle(glyphEl, '∞');
+            const digitsMid = inkMiddle(yearEl, '1899');
+            if (glyphMid !== null && digitsMid !== null) {
+                const ink = Math.round((digitsMid - glyphMid) * 20) / 20;
+                // On the screen the ∞'s baseline lies lower than the digits' by the probes'
+                // difference: lifted by exactly that (index.html: top), both stand on one
+                // baseline, which the browser rounds to a whole pixel for both alike; the
+                // ink's own lift on top of it as a transform (not rounded to a pixel).
+                lift = { baseline: gProbe.top - yProbe.top, ink };
+            }
+        }
+    } catch {
+        lift = none;
+    }
+    host.remove();
+    if (fontsReady()) glyphLiftCache = lift;
+    return lift;
+}
+
+/** The screen's lift of the pill's ∞ (unionOrderGlyphLift) set on the document (index.html: --uo-glyph-base, --uo-glyph-ink). */
+export function applyUnionOrderGlyphLift(): void {
+    if (typeof document === 'undefined') return;
+    const lift = unionOrderGlyphLift();
+    const root = document.documentElement;
+    for (const [name, v] of [['--uo-glyph-base', lift.baseline], ['--uo-glyph-ink', lift.ink]] as const) {
+        if (root.style.getPropertyValue(name) !== `${v}px`) root.style.setProperty(name, `${v}px`);
+    }
+}
+
 /** One pill measured (see measureUnionOrderPills). */
 export function measureUnionOrderPill(ordinal: string, year: string, glyph = true): PillMetrics {
     return measureUnionOrderPills([{ ordinal, year, glyph }]).get(pillKey(ordinal, year, glyph))!;

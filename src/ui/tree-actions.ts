@@ -64,8 +64,6 @@ export interface TreeActionRow {
     hint?: string;
     /** Opens the research: its mark at the row's end. */
     research?: boolean;
-    /** A secondary shortcut drawn muted (the overview's "Data quality" under "Tree overview"). */
-    quiet?: boolean;
 }
 
 export type TreeActionGroupKey = 'overview' | 'outputs' | 'research' | 'settings' | 'structure' | 'manage' | 'trees';
@@ -190,7 +188,8 @@ export const treeActionsMethods = uiModule({
             { key: 'overview', rows: [
                 { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },
                 {
-                    key: 'overview-quality', label: strings.treeOverview.menuQuality, quiet: true,
+                    // A shortcut to the overview's quality section, drawn like its neighbours (T43).
+                    key: 'overview-quality', label: strings.treeOverview.menuQuality,
                     run: () => void this.showTreeOverview(id, { section: 'quality', scroll: true, parent }),
                 },
                 ...(editable ? [{ key: 'snapshots', label: strings.snapshots.menu, editOnly: true, run: () => void this.showSnapshotsDialog(id, parent) }] : []),
@@ -342,7 +341,7 @@ export const treeActionsMethods = uiModule({
         const rowButton = (row: TreeActionRow): HTMLButtonElement => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'bottom-sheet-item tree-actions-row' + (row.danger ? ' danger' : '') + (row.quiet ? ' is-quiet' : '');
+            btn.className = 'bottom-sheet-item tree-actions-row' + (row.danger ? ' danger' : '');
             btn.dataset.action = row.key;
             const label = document.createElement('span');
             label.className = 'bottom-sheet-label';

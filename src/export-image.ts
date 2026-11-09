@@ -21,6 +21,7 @@ import {
 } from './card-width.js';
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
+import { unionOrderGlyphLift } from './union-order-measure.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
     segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, PillSegment, EDGE_GAP, lineLinksOf, lineLinkTabs, LineLinkTab,
@@ -215,7 +216,9 @@ export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number,
         `<text x="${(x + m.numX).toFixed(2)}" y="${base}" ${font}>${escapeXml(num)}</text>`,
     ];
     if (label !== 'ordinal') {
-        parts.push(`<text x="${(x + m.glyphX).toFixed(2)}" y="${base}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`);
+        // The ∞ lifted level with the digits, as on the screen (T47).
+        const glyphBase = (y + 12.5 - unionOrderGlyphLift().ink).toFixed(2);
+        parts.push(`<text x="${(x + m.glyphX).toFixed(2)}" y="${glyphBase}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`);
     }
     if (b.year && label === 'full') parts.push(`<text x="${(x + m.yearX).toFixed(2)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
     return `<g class="union-order-pill" data-union-order="${b.number}" data-person="${escapeXml(b.personId)}" data-toward="${escapeXml(b.towardId)}"${dimmed ? ' opacity="0.5"' : ''}${label !== 'full' ? ` data-label="${label}"` : ''}>${parts.join('')}</g>`;

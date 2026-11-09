@@ -475,7 +475,7 @@ export const treeManagementMethods = uiModule({
         const rowItem = (row: TreeActionRow): HTMLElement => {
             const item = document.createElement('div');
             item.className = 'tree-switcher-action actions-tree-action'
-                + (row.quiet ? ' is-quiet' : '') + (row.danger ? ' danger' : '') + (row.editOnly ? ' edit-only' : '');
+                + (row.danger ? ' danger' : '') + (row.editOnly ? ' edit-only' : '');
             item.setAttribute('role', row.checked !== undefined ? 'menuitemcheckbox' : 'menuitem');
             item.tabIndex = 0;
             item.dataset.action = row.key;
@@ -1068,7 +1068,6 @@ export const treeManagementMethods = uiModule({
             item.className = 'tree-row-menu-item';
             item.dataset.action = row.key;
             if (row.danger) item.classList.add('danger');
-            if (row.quiet) item.classList.add('is-quiet');
             if (row.editOnly) item.classList.add('edit-only');
             if (row.hint) item.title = row.hint;
             const label = document.createElement('span');

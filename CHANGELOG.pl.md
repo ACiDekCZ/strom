@@ -4,6 +4,12 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.27.0
+
+*Ta wersja jest w przygotowaniu; ta część rośnie z każdą wersją testową.*
+
+- **Drobne zmiany**: na telefonie kafelki w *Więcej* trzymają nazwy w środku, długa nazwa (niemiecki, polski) łamie się w swoim kafelku; *Jakość danych* w menu drzewa ma ten sam kolor co sąsiednie wiersze; ∞ w znaczku ślubu stoi na tej samej wysokości co liczby obok, na ekranie i w eksportowanym obrazie.
+
 ## 3.26.0
 
 *Wydano 9 listopada 2026.*

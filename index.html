@@ -950,8 +950,6 @@
         .tree-switcher-action:last-child {
             border-radius: 0 0 10px 10px;
         }
-        /* A secondary shortcut (the overview's "Data quality"): text level, quieter than its neighbours. */
-        .tree-switcher-action.is-quiet { color: var(--text-faint); }
         .tree-switcher-badge {
             margin-left: auto;
             min-width: 18px;
@@ -3535,7 +3533,9 @@
         .bottom-sheet-sub { display: block; font-size: 12px; color: var(--text-faint); font-weight: 400; }
         .bottom-sheet-menu .bottom-sheet-label { flex: 1; }
         .bottom-sheet-pair { display: flex; gap: 8px; padding: 0 8px; }
-        .bottom-sheet-pair .bottom-sheet-label { flex: none; }
+        /* A tile's name may shrink to the tile and wrap inside it (flex: none
+           kept it one line wider than the tile on a 360px phone). */
+        .bottom-sheet-pair .bottom-sheet-label { flex: 0 1 auto; min-width: 0; }
         .bottom-sheet-pair .bottom-sheet-item {
             flex: 1; justify-content: center;
             background: var(--surface-2); border-radius: var(--r-md);
@@ -3548,13 +3548,16 @@
         .bottom-sheet-more .bottom-sheet-handle { margin-bottom: 6px; }
         .bottom-sheet-more .bottom-sheet-pair { align-items: center; padding: 2px 8px; }
         .bottom-sheet-more .bottom-sheet-pair .bottom-sheet-item {
-            min-height: 44px; min-width: 0; padding: 0 8px; gap: 8px; white-space: nowrap;
+            min-height: 44px; min-width: 0; padding: 0 8px; gap: 8px;
+            text-align: center; line-height: 1.2; overflow-wrap: break-word;
         }
         .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { min-height: 48px; margin: 2px 4px; }
-        /* Settings | How Strom works | About: three tiles; a long name (de, pl)
-           wraps inside its tile instead of pushing the row wider. */
+        /* Settings | How Strom works | About: three tiles, each as wide as its
+           name allows (a longer name gets more of the row); a long name (de,
+           pl on a 360px phone) wraps between words inside its tile, no tile
+           is narrower than its longest word, none pushes the row wider (T52). */
         .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item {
-            white-space: normal; text-align: center; line-height: 1.2; overflow-wrap: anywhere; padding: 4px 6px;
+            flex: 1 1 auto; width: auto; min-width: auto; padding: 4px;
         }
         .bottom-sheet-pair-label { flex: none; font-size: 13px; color: var(--text-light); padding: 0 4px 0 8px; }
         /* Shortcut chips only with a mouse (a touch screen has no keyboard to hint at). */
@@ -3575,7 +3578,7 @@
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-divider { display: none; }
             .bottom-sheet-more .bottom-sheet-item { min-height: 44px; }
             .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item {
-                justify-content: flex-start; padding: 10px 16px; background: none; border-radius: 8px;
+                justify-content: flex-start; padding: 10px 16px; background: none; border-radius: 8px; text-align: left;
             }
             .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item { text-align: left; padding: 10px 16px; }
             .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { margin: 0; width: 100%; min-height: 44px; }
@@ -3656,7 +3659,6 @@
         }
         .tree-actions-row .bottom-sheet-label { flex: 1; min-width: 0; }
         .tree-actions-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        .bottom-sheet-menu .bottom-sheet-item.tree-actions-row.is-quiet { color: var(--text-light); }
         .tree-actions-value {
             max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
             font-size: 14px; color: var(--text-faint);
@@ -4227,7 +4229,12 @@
             font-variant-numeric: tabular-nums;
             cursor: default;
         }
-        .union-order-pill .uo-glyph { color: var(--accent); font-size: 11px; line-height: 1; }
+        /* The ∞ comes from the platform's fallback font and sits lower than the
+           digits: on their baseline (top) and lifted so its middle is level
+           with theirs (transform; T47, measured in src/union-order-measure.ts
+           unionOrderGlyphLift). */
+        .union-order-pill .uo-glyph { color: var(--accent); font-size: 11px; line-height: 1;
+            position: relative; top: calc(-1 * var(--uo-glyph-base, 0px)); transform: translateY(calc(-1 * var(--uo-glyph-ink, 0px))); }
         .union-order-pill .uo-tip { min-width: 0; white-space: nowrap; font-variant-numeric: normal; }
         @media (hover: hover) { .union-order-pill:hover .badge-tooltip { display: block; } }
         #tree-canvas.zoom-order-hidden .union-order-pill { display: none; }
@@ -14178,7 +14185,6 @@
         }
         .tree-row-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tree-row-menu-item.danger { color: var(--danger); }
-        .tree-row-menu-item.is-quiet { color: var(--text-light); }
         .tree-row-menu-check { display: inline-flex; width: 14px; color: var(--primary); }
         .tree-row-menu { max-width: min(320px, calc(100vw - 16px)); }
         .tree-row-menu-note {

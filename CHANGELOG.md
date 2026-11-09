@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.27.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Smaller changes**: on a phone, the tiles of *More* keep their names inside, a long name (German, Polish) wraps within its tile; *Data quality* in the tree menu has the same colour as the rows around it; the ∞ in the marriage mark sits level with the numbers beside it, on screen and in an exported image.
+
 ## 3.26.0
 
 *Released 9 November 2026.*

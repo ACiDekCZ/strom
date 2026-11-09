@@ -364,7 +364,9 @@ test.describe('tree overview', () => {
         await page.locator('#actions-tree-row').hover();
         const rows = page.locator('#actions-tree-submenu .tree-switcher-action[data-action^="overview"]');
         await expect(rows).toHaveText(['Tree overview', 'Data quality']);
-        await expect(rows.nth(1)).toHaveClass(/is-quiet/);
+        // Data quality reads like its neighbour, not muted as if it were off (T43).
+        const [overviewColor, qualityColor] = await rows.evaluateAll(els => els.map(el => getComputedStyle(el).color));
+        expect(qualityColor).toBe(overviewColor);
         await page.keyboard.press('Escape');
 
         // The tree manager's ⋯ → Tree overview: the manager steps aside and comes back on Escape.
@@ -946,7 +948,7 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(section(dialog, 'quality').locator('.tov-sec-head')).toBeInViewport();
         await page.keyboard.press('Escape');
 
-        // In the manager, for a tree that is not open: muted at text level, opens Data quality read only.
+        // In the manager, for a tree that is not open: drawn like its neighbours, opens Data quality read only.
         await importTree(page, { persons: { x: { id: 'x', firstName: 'Ida', lastName: 'Berg', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } }, partnerships: {} }, 'Berg', 'x');
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item', { hasText: 'Lindqvist' });
@@ -958,15 +960,9 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
             item.locator('.tree-row-menu-label').evaluate(el => el.getBoundingClientRect().x),
         ]);
         expect(qualityX).toBe(overviewX);
-        const [quietColor, textLight] = await item.evaluate(el => [getComputedStyle(el).color, (() => {
-            const probe = document.createElement('span');
-            probe.style.color = 'var(--text-light)';
-            document.body.appendChild(probe);
-            const c = getComputedStyle(probe).color;
-            probe.remove();
-            return c;
-        })()]);
-        expect(quietColor).toBe(textLight);
+        // The same colour as Tree overview above it (T43).
+        const overviewColor = await row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview"]').evaluate(el => getComputedStyle(el).color);
+        expect(await item.evaluate(el => getComputedStyle(el).color)).toBe(overviewColor);
         await item.click();
         dialog = page.locator('#tree-overview-modal .modal.tov');
         await expect(dialog.locator('.tov-inactive')).toBeVisible();
@@ -983,7 +979,9 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         const sheet = page.locator('.bottom-sheet-tree-actions');
         const item = sheet.locator('.tree-actions-row[data-action="overview-quality"]');
         await expect(item).toHaveText('Data quality');
-        await expect(item).toHaveClass(/is-quiet/);
+        // The same colour as Tree overview above it, not muted as if it were off (T43).
+        const overviewColor = await sheet.locator('.tree-actions-row[data-action="overview"]').evaluate(el => getComputedStyle(el).color);
+        expect(await item.evaluate(el => getComputedStyle(el).color)).toBe(overviewColor);
         expect(Math.round((await item.boundingBox())!.height)).toBeGreaterThanOrEqual(48);
         await item.click();
         const dialog = page.locator('#tree-overview-modal .modal.tov');
