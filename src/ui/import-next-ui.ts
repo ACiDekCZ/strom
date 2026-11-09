@@ -24,16 +24,16 @@ import { isMobile, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { researchBridgeActionLabel, setResearchActionLabel } from './research-open-mark.js';
 import { onComputer } from './research-ui.js';
 import { isHelpOpen } from './help-ui.js';
+import { HELP_LINKS } from '../help/topics.js';
 import { uiModule } from './module.js';
 import type { TreeId } from '../types.js';
 
 /**
- * The help chapter the card's help link opens. "A tree from another program"
- * (strom-doc, spec 066 K4.2) is not written yet; until it is, the chapter on
- * loading a family tree (GEDCOM) is the nearest one. Point this at the new
- * chapter's number once strom-doc has it.
+ * The help chapter the card's help link opens: "A tree from another program"
+ * (strom-doc S6, spec 066 K4.2) — the card itself (S6.4), the reliability
+ * marks of an imported tree (S6.2, onward to S7) and its facts as leads.
  */
-export const IMPORT_NEXT_HELP_TOPIC = 'A2';
+export const IMPORT_NEXT_HELP_TOPIC = HELP_LINKS.importNext;
 
 /** The card waiting to be shown (the import just made), or on screen. */
 interface ImportNextPending {

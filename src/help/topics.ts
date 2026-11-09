@@ -27,3 +27,11 @@ export const HELP_TOPICS = {
 } as const;
 
 export type HelpTopic = keyof typeof HELP_TOPICS;
+
+/**
+ * Help links without a "?" mark, each its number (checked with HELP_TOPICS):
+ * the "What next" card after an import, link "A tree from another program" (import-next-ui.ts).
+ */
+export const HELP_LINKS = {
+    importNext: 'S6',
+} as const;

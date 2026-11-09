@@ -30,6 +30,8 @@ the conclusion is from all the fact's sources, not how good one source is ([R3.2
   the label in the app 3.9.0
 - **From research 1.26.0:** the terminal names the degrees in the app's words: **proven**, **probable**, **possible**,
   **lead**, **disproven**. The summary `strom stats` still writes “only leads”.
+- **From research 1.30.0:** `strom event show` and `strom event edit` print the fact for a person in the research's
+  language (for example “[lead]”); the agent still gets the output in English.
 
 <!-- zdroj: research:src/core/model.ts:36 STATUSES · assets/method/core.md:8-12 · src/cli/human.ts:138 statusName · assets/lang/cs.json ui.st.*, ui.stats.facts · src/commands/people.ts:115 wordsFor · src/core/actions.ts:629 notRetracted · app:src/ui/fact-status.ts · strings.ts factStatus · 1.26.0: src/cli/human.ts:139 STATUS, cs.json ui.st.* (commit fe59fb40) -->
 

@@ -28,6 +28,8 @@ ze všech pramenů údaje, ne jak dobrý je jeden pramen ([R3.2.1](#R3.2.1)).
 - **Platí od:** výzkum 1.0.0; české názvy v terminálu 1.1.0 (u `strom person show` 1.12.0); štítek v aplikaci 3.9.0
 - **Od výzkumu 1.26.0:** terminál říká stupně slovy aplikace: **doložené**, **pravděpodobné**, **možné**,
   **vodítko**, **vyvrácené**. Souhrn `strom stats` píše dál „jen stopy“.
+- **Od výzkumu 1.30.0:** `strom event show` a `strom event edit` vypisují údaj člověku v jazyce výzkumu
+  (například „[vodítko]“); agent dostává výpis dál anglicky.
 
 <!-- zdroj: research:src/core/model.ts:36 STATUSES · assets/method/core.md:8-12 · src/cli/human.ts:138 statusName · assets/lang/cs.json ui.st.*, ui.stats.facts · src/commands/people.ts:115 wordsFor · src/core/actions.ts:629 notRetracted · app:src/ui/fact-status.ts · strings.ts factStatus · 1.26.0: src/cli/human.ts:139 STATUS, cs.json ui.st.* (commit fe59fb40) -->
 
