@@ -26,7 +26,7 @@ import {
     VERIFY_BULK_FEATURE, VERIFY_FEATURE, VERIFY_STOP_FEATURE, factResearchEid, factVerifyInfo, personResearchRef,
 } from '../verify.js';
 import {
-    VerifyBulkDone, VerifyBulkOrder, VerifyFact, VerifyTarget, postVerify, postVerifyBulk, postVerifyStop,
+    VerifyBulkDone, VerifyBulkOrder, VerifyBulkResult, VerifyFact, VerifyTarget, postVerify, postVerifyBulk, postVerifyStop,
 } from '../research-verify.js';
 import {
     BulkScopeOption, FactOffer, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
@@ -154,12 +154,21 @@ interface BulkState {
     estimate: VerifyBulkDone | null;
     /** Each ask of the estimate gets the next number: a late answer to an older one is dropped. */
     ask: number;
+    /** The dialog's requests to the bridge, one after another (the research takes one at a time). */
+    queue: Promise<void>;
     busy: boolean;
     error: string | null;
     opener: HTMLElement | null;
 }
 
 let bulk: BulkState | null = null;
+
+/** Run `job` after the dialog's requests before it (the research's bridge takes one at a time). */
+function bulkQueued(st: BulkState, job: () => Promise<void>): Promise<void> {
+    const next = st.queue.then(job, job);
+    st.queue = next.catch(() => { /* a failed request does not hold up the next */ });
+    return next;
+}
 
 const ORDERS: readonly VerifyBulkOrder[] = ['ancestors', 'weakest', 'oldest'];
 
@@ -183,10 +192,17 @@ function usdText(usd: number | undefined): string {
     }
 }
 
-/** A refusal said in words: nothing to verify, else that it could not start. */
-function refusalText(code: string, reason: string): string {
-    if (code === 'verify.nothing') return strings.verify.nothing;
-    return reason || strings.verify.failed;
+/**
+ * A refusal said in the app's words: nothing to verify, the research busy or
+ * held by another session, else that it could not start. Never the bridge's
+ * own sentence (`reason`, English and for the details only).
+ */
+export function verifyRefusalText(code: string): string {
+    const v = strings.verify;
+    if (code === 'verify.nothing') return v.nothing;
+    if (code === 'busy') return v.busy;
+    if (code === 'locked') return v.locked;
+    return v.failed;
 }
 
 /**
@@ -387,7 +403,7 @@ export const verifyPersonMethods = uiModule({
         if (preview !== st) return;
         st.loading = false;
         if (!r || !r.ok) {
-            st.error = r ? refusalText(r.code, r.reason) : strings.verify.failed;
+            st.error = r ? verifyRefusalText(r.code) : strings.verify.failed;
         } else {
             const state = this.personVerifyState(st.personId);
             const byEid = new Map<string, PersonFact>();
@@ -497,7 +513,7 @@ export const verifyPersonMethods = uiModule({
             let last: { ok: boolean; head?: string } = { ok: false };
             for (const target of targets) {
                 const r = await postVerify(base, target, { features });
-                if (!r.ok) { failure = refusalText(r.code, r.reason); break; }
+                if (!r.ok) { failure = verifyRefusalText(r.code); break; }
                 const asked = new Set(r.facts.map(f => f.fact));
                 const rows = 'person' in target ? checked.filter(x => asked.size === 0 || asked.has(x.eid)) : checked.filter(x => 'fact' in target && x.eid === target.fact);
                 started.push(...rows.filter(x => x.holderId && x.fact).map(x => ({ holderId: x.holderId, fact: x.fact })));
@@ -605,7 +621,7 @@ export const verifyPersonMethods = uiModule({
         const r = await this.postResearchBridgeWrite((base, features) => postVerifyStop(base, { features }));
         if (btn) btn.disabled = false;
         if (!r || !r.ok) {
-            this.showToast(r ? refusalText(r.code, r.reason) : strings.verify.failed, 5000, { alert: true });
+            this.showToast(r ? verifyRefusalText(r.code) : strings.verify.failed, 5000, { alert: true });
             return;
         }
         this.showToast(strings.verify.stopped, 4000);
@@ -741,7 +757,7 @@ export const verifyPersonMethods = uiModule({
         const active = document.activeElement;
         bulk = {
             rid: now.rid, scopes: this.verifyBulkScopes(now.rid).map(s => ({ ...s, count: null })), scope: 0,
-            order: 'ancestors', tryFirst: true, estimate: null, ask: 0, busy: false, error: null,
+            order: 'ancestors', tryFirst: true, estimate: null, ask: 0, queue: Promise.resolve(), busy: false, error: null,
             opener: active instanceof HTMLElement ? active : null,
         };
         document.getElementById(VERIFY_BULK_DIALOG_ID)?.remove();
@@ -765,8 +781,9 @@ export const verifyPersonMethods = uiModule({
         this.pushDialog(VERIFY_BULK_DIALOG_ID);
         this.renderVerifyBulk();
         overlay.querySelector<HTMLElement>('input[name="vfy-scope"]:checked')?.focus({ preventScroll: true });
-        void this.verifyBulkCounts();
+        // One request at a time: the estimate of the chosen scope first, then each scope's count.
         void this.verifyBulkEstimate();
+        void this.verifyBulkCounts();
     },
 
     closeVerifyBulkDialog(): void {
@@ -775,19 +792,23 @@ export const verifyPersonMethods = uiModule({
         removeDialog(VERIFY_BULK_DIALOG_ID, opener, this);
     },
 
-    /** Each scope's count of facts (dry runs, no try). */
+    /** Each scope's count of facts (dry runs, no try), one scope after another. */
     async verifyBulkCounts(): Promise<void> {
         const st = bulk;
         const base = st ? bridgeBase(st.rid) : null;
         if (!st || !base) return;
         const features = this.researchStatusOf(st.rid)?.features ?? null;
-        await Promise.all(st.scopes.map(async (s) => {
-            const r = await postVerifyBulk(base, { scope: s.scope, ...(s.of ? { of: s.of } : {}), dry: true }, { features });
-            if (bulk !== st) return;
-            s.count = r.ok ? r.facts : null;
-            const count = document.querySelector<HTMLElement>(`#${VERIFY_BULK_DIALOG_ID} [data-scope-count="${s.scope}"]`);
-            if (count) count.textContent = s.count !== null ? strings.verify.scopeCount(s.count) : '';
-        }));
+        await bulkQueued(st, async () => {
+            for (const s of st.scopes) {
+                // Closed, or started: the counts no longer matter.
+                if (bulk !== st || st.busy) return;
+                const r = await postVerifyBulk(base, { scope: s.scope, ...(s.of ? { of: s.of } : {}), dry: true }, { features });
+                if (bulk !== st) return;
+                s.count = r.ok ? r.facts : null;
+                const count = document.querySelector<HTMLElement>(`#${VERIFY_BULK_DIALOG_ID} [data-scope-count="${s.scope}"]`);
+                if (count) count.textContent = s.count !== null ? strings.verify.scopeCount(s.count) : '';
+            }
+        });
     },
 
     /** The estimate of the chosen scope, order and try (a dry run). */
@@ -799,14 +820,18 @@ export const verifyPersonMethods = uiModule({
         st.estimate = null;
         st.error = null;
         this.renderVerifyBulkEstimate();
-        const s = st.scopes[st.scope];
-        const r = await postVerifyBulk(base, {
-            scope: s.scope, ...(s.of ? { of: s.of } : {}), order: st.order, ...(st.tryFirst ? { try: VERIFY_TRY_PEOPLE } : {}), dry: true,
-        }, { features: this.researchStatusOf(st.rid)?.features ?? null });
-        if (bulk !== st || st.ask !== ask) return;
-        if (r.ok) st.estimate = r;
-        else st.error = refusalText(r.code, r.reason);
-        this.renderVerifyBulkEstimate();
+        await bulkQueued(st, async () => {
+            // A newer choice asks its own estimate: this one is not sent at all.
+            if (bulk !== st || st.ask !== ask || st.busy) return;
+            const s = st.scopes[st.scope];
+            const r = await postVerifyBulk(base, {
+                scope: s.scope, ...(s.of ? { of: s.of } : {}), order: st.order, ...(st.tryFirst ? { try: VERIFY_TRY_PEOPLE } : {}), dry: true,
+            }, { features: this.researchStatusOf(st.rid)?.features ?? null });
+            if (bulk !== st || st.ask !== ask) return;
+            if (r.ok) st.estimate = r;
+            else st.error = verifyRefusalText(r.code);
+            this.renderVerifyBulkEstimate();
+        });
     },
 
     renderVerifyBulk(): void {
@@ -896,13 +921,18 @@ export const verifyPersonMethods = uiModule({
         st.busy = true;
         this.renderVerifyBulkEstimate();
         const s = st.scopes[st.scope];
-        const r = await this.postResearchBridgeWrite((base, features) => postVerifyBulk(base, {
-            scope: s.scope, ...(s.of ? { of: s.of } : {}), order: st.order, ...(st.tryFirst ? { try: VERIFY_TRY_PEOPLE } : {}),
-        }, { features }));
+        // After the dialog's dry run under way (the counts still to come are not asked any more).
+        const answer: { r: VerifyBulkResult | null } = { r: null };
+        await bulkQueued(st, async () => {
+            answer.r = await this.postResearchBridgeWrite((base, features) => postVerifyBulk(base, {
+                scope: s.scope, ...(s.of ? { of: s.of } : {}), order: st.order, ...(st.tryFirst ? { try: VERIFY_TRY_PEOPLE } : {}),
+            }, { features }));
+        });
+        const r = answer.r;
         if (bulk !== st) return;
         st.busy = false;
         if (!r || !r.ok) {
-            st.error = r ? refusalText(r.code, r.reason) : strings.verify.failed;
+            st.error = r ? verifyRefusalText(r.code) : strings.verify.failed;
             this.renderVerifyBulkEstimate();
             return;
         }

@@ -790,6 +790,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         pendingAria: 'czeka na weryfikację',
         loading: 'Pytanie badania…',
         failed: 'Nie udało się rozpocząć weryfikacji; badanie nie odpowiada.',
+        busy: 'Badanie jest teraz zajęte. Za chwilę weryfikacja znów będzie możliwa.',
+        locked: 'Nie można teraz rozpocząć weryfikacji: badanie jest zajęte przez inną sesję.',
         confirmFailed: 'Bez zmian; badanie nie odpowiada.',
         nothing: 'Badanie nie ma tu teraz nic do zweryfikowania.',
         noResearch: 'Z badaniem przodków agent AI sam zweryfikuje daną w księgach.',

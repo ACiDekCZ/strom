@@ -1215,6 +1215,71 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         for (const tag of ['BIRT', 'OCCU', 'CENS', 'EDUC', 'EVEN']) await expect(page.locator('#verify-person-modal')).not.toContainText(tag);
     });
 
+    test('the bulk dialog asks the research one request at a time: no "busy" refusal while it counts and estimates (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: verifyGed(), statusExtra: { researches: [LINE] } });
+        // As the research: a request that comes while another is answered gets 503 research.busy.
+        const verify = await fakeVerify(page, bridge, { busy: 'overlap', delayMs: 150 });
+        await openResearch(page, { ged: verifyGed() });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+        await page.evaluate(() => window.Strom.UI.showVerifyBulkDialog());
+        const bulk = page.locator('#verify-bulk-modal');
+        await expect(bulk.locator('.vfy-est-head')).toContainText('4 facts');
+        await expect(bulk.locator('[data-scope-count="line"]')).toHaveText('4 facts');
+        await expect(bulk.locator('[data-scope-count="lineage"]')).toHaveText('9 facts');
+        await expect(bulk.locator('[data-scope-count="tree"]')).toHaveText('30 facts');
+        // A new choice while the counts are asked waits its turn too.
+        await bulk.locator('input[name="vfy-scope"]').nth(2).check();
+        await expect(bulk.locator('.vfy-est-head')).toContainText('7 facts');
+        await expect(bulk.locator('.vfy-error')).toHaveCount(0);
+        expect(verify.busyAnswers).toBe(0);
+        expect(verify.maxInFlight).toBe(1);
+        await expect(bulk.locator('[data-vfy="start"]')).toBeEnabled();
+        await bulk.locator('[data-vfy="start"]').click();
+        await expect(page.locator('.toast', { hasText: 'facts queued for verification.' })).toBeVisible();
+        expect(verify.busyAnswers).toBe(0);
+        expect(verify.maxInFlight).toBe(1);
+    });
+
+    test('a dry run the research refuses as busy is asked again shortly; the estimate comes (1109)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: verifyGed(), statusExtra: { researches: [LINE] } });
+        const verify = await fakeVerify(page, bridge, { busy: 2 });
+        await openResearch(page, { ged: verifyGed() });
+        await poll(page);
+        const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+        await page.evaluate(() => window.Strom.UI.showVerifyBulkDialog());
+        const bulk = page.locator('#verify-bulk-modal');
+        await expect(bulk.locator('.vfy-est-head')).toContainText('4 facts');
+        await expect(bulk.locator('.vfy-error')).toHaveCount(0);
+        expect(verify.busyAnswers).toBe(2);
+        // The same estimate asked three times: twice busy, then answered.
+        const estimates = verify.posts.filter(p => p.route === 'verify/bulk' && p.body.try === 5);
+        expect(estimates.length).toBe(3);
+    });
+
+    test.describe('in Czech', () => {
+        test.use({ locale: 'cs-CZ' });
+
+        test('a research busy all the time: the bulk dialog says so in the app\'s language, never the bridge\'s English (1109)', async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: verifyGed(), statusExtra: { researches: [LINE] } });
+            await fakeVerify(page, bridge, { busy: 'always' });
+            await openResearch(page, { ged: verifyGed() });
+            await poll(page);
+            const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+            await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), jan);
+            await page.evaluate(() => window.Strom.UI.showVerifyBulkDialog());
+            const error = page.locator('#verify-bulk-modal .vfy-error');
+            await expect(error).toHaveText('Výzkum je teď zaneprázdněný. Ověřování půjde za chvíli znovu.', { timeout: 10_000 });
+            await expect(page.locator('#verify-bulk-modal')).not.toContainText('busy');
+            await expect(page.locator('#verify-bulk-modal [data-vfy="start"]')).toBeDisabled();
+        });
+    });
+
     test('the toast after a run of re-verification comes once per run', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         const { bridge } = await verifySetup(page, { verify: { waiting: 3, ...COUNTS, fix: FIX } });

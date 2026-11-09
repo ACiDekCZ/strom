@@ -275,6 +275,51 @@ describe('refusals', () => {
     });
 });
 
+describe('a busy research (503 research.busy)', () => {
+    /** Busy for the first `busy` asks, then the answer; every ask kept. */
+    function stubBusy(busy: number, answer: unknown): Call[] {
+        const calls: Call[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+            calls.push({ url, init });
+            const refused = calls.length <= busy;
+            return new Response(JSON.stringify(refused ? { ok: false, code: 'research.busy', error: 'the research is busy' } : answer),
+                { status: refused ? 503 : 200, headers: { 'Content-Type': 'application/json' } });
+        }));
+        return calls;
+    }
+    const BULK = { ok: true, people: 2, facts: 4, tasks: [], left: 0, estimate: { sessions: 1 }, head: HEAD };
+
+    it('a dry run is asked again after a short pause, and its answer comes', async () => {
+        const calls = stubBusy(2, BULK);
+        expect(await postVerifyBulk(BASE, { scope: 'tree', dry: true }, { features: ALL, busyRetryMs: [1, 1, 1] }))
+            .toMatchObject({ ok: true, facts: 4 });
+        expect(calls).toHaveLength(3);
+        const one = stubBusy(1, { ok: true, task: null, facts: [], estimate: { sessions: 1 }, head: HEAD });
+        expect(await postVerify(BASE, { person: 'P1' }, { features: ALL, dry: true, busyRetryMs: [1] })).toMatchObject({ ok: true });
+        expect(one).toHaveLength(2);
+    });
+
+    it('busy each time: the refusal after the last pause', async () => {
+        const calls = stubBusy(99, BULK);
+        expect(await postVerifyBulk(BASE, { scope: 'tree', dry: true }, { features: ALL, busyRetryMs: [1, 1] }))
+            .toMatchObject({ ok: false, code: 'busy', status: 503 });
+        expect(calls).toHaveLength(3);
+    });
+
+    it('a start (no dry run) is asked once: the caller decides', async () => {
+        const calls = stubBusy(1, BULK);
+        expect(await postVerifyBulk(BASE, { scope: 'tree' }, { features: ALL, busyRetryMs: [1] })).toMatchObject({ ok: false, code: 'busy' });
+        expect(calls).toHaveLength(1);
+    });
+
+    it('another refusal is not asked again', async () => {
+        const calls = stubFetch(409, { ok: false, code: 'verify.nothing' });
+        expect(await postVerifyBulk(BASE, { scope: 'tree', dry: true }, { features: ALL, busyRetryMs: [1, 1] }))
+            .toMatchObject({ ok: false, code: 'verify.nothing' });
+        expect(calls).toHaveLength(1);
+    });
+});
+
 describe('/status verify', () => {
     const verify = { waiting: 3, asked: 1, images: 2, permission: 0, kept: 4, confirmed: 7, fix: { at: '2026-11-08T10:00:00Z', facts: 12, people: 3 } };
 

@@ -408,26 +408,52 @@ function bridgePost<T>(base: string, path: string, payload: object, reply: (stat
 
 const notSent = <C extends string>(code: C): BridgeRefused<C> => ({ ok: false, code, status: 0, reason: '' });
 
+/**
+ * The pauses (ms) before a dry run the research refused as busy (503
+ * `research.busy`: it takes one request at a time, or a send is being
+ * written) is asked again. A dry run writes nothing, so asking again is safe.
+ */
+export const BUSY_RETRY_MS: readonly number[] = [300, 700, 1500];
+
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/** `ask`, again after each pause of `waits` while the research answers busy. */
+async function retriedWhileBusy<T extends { ok: boolean; code?: string }>(ask: () => Promise<T>, waits: readonly number[]): Promise<T> {
+    let r = await ask();
+    for (const ms of waits) {
+        if (r.ok || r.code !== 'busy') return r;
+        await pause(ms);
+        r = await ask();
+    }
+    return r;
+}
+
 interface PostOptions {
     /** The bridge's /status.features: without the route's feature nothing is sent (`unsupported`). */
     features: Features;
     timeoutMs?: number;
+    /** A dry run's pauses before asking again while the research is busy (default BUSY_RETRY_MS; [] asks once). */
+    busyRetryMs?: readonly number[];
 }
 
-/** POST /verify: re-verify a person's, a family's facts or one fact (`dry`: only say what it would do). */
+/** POST /verify: re-verify a person's, a family's facts or one fact (`dry`: only say what it would do; asked again while busy). */
 export function postVerify(base: string, target: VerifyTarget, opts: PostOptions & { dry?: boolean }): Promise<VerifyResult> {
     if (!bridgeVerifies(opts.features, VERIFY_FEATURE)) return Promise.resolve(notSent('unsupported'));
     const payload = verifyRequestBody(target, opts.dry === true);
     if (!payload) return Promise.resolve(notSent('invalid'));
-    return bridgePost(base, 'verify', payload, verifyReply, notSent<VerifyErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
+    const ask = (): Promise<VerifyResult> =>
+        bridgePost(base, 'verify', payload, verifyReply, notSent<VerifyErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
+    return payload.dry === true ? retriedWhileBusy(ask, opts.busyRetryMs ?? BUSY_RETRY_MS) : ask();
 }
 
-/** POST /verify/bulk: re-verify a line, a lineage or the whole tree. */
+/** POST /verify/bulk: re-verify a line, a lineage or the whole tree (a dry run is asked again while busy). */
 export function postVerifyBulk(base: string, req: VerifyBulkRequest, opts: PostOptions): Promise<VerifyBulkResult> {
     if (!bridgeVerifies(opts.features, VERIFY_BULK_FEATURE)) return Promise.resolve(notSent('unsupported'));
     const payload = verifyBulkRequestBody(req);
     if (!payload) return Promise.resolve(notSent('invalid'));
-    return bridgePost(base, 'verify/bulk', payload, verifyBulkReply, notSent<VerifyErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
+    const ask = (): Promise<VerifyBulkResult> =>
+        bridgePost(base, 'verify/bulk', payload, verifyBulkReply, notSent<VerifyErrorCode>('network'), opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
+    return payload.dry === true ? retriedWhileBusy(ask, opts.busyRetryMs ?? BUSY_RETRY_MS) : ask();
 }
 
 /**

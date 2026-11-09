@@ -19,6 +19,18 @@ export interface FakeVerify {
     facts?: typeof VERIFY_FACTS;
     /** The facts a start (not dry) answers it queued, when they differ from `facts`. */
     startFacts?: typeof VERIFY_FACTS;
+    /**
+     * When the research answers 503 `research.busy` as the real one does:
+     * 'overlap' a request that comes while another is being answered, a
+     * number the first that many requests, 'always' every one.
+     */
+    busy?: 'overlap' | number | 'always';
+    /** How long each answer takes (ms; default 0). */
+    delayMs?: number;
+    /** The busy answers given. */
+    busyAnswers: number;
+    /** The most requests being answered at once. */
+    maxInFlight: number;
 }
 
 /** Jan's facts the research verifies: the birth by reading a record, the death by searching one. */
@@ -40,7 +52,9 @@ export function verifyGed(head?: string, extra: string[] = []): string {
 export const VERIFY_FEATURES = ['verify', 'verify.bulk', 'verify.stop'];
 
 export async function fakeVerify(page: Page, bridge: FakeBridge, init: Partial<FakeVerify> = {}): Promise<FakeVerify> {
-    const v: FakeVerify = { posts: [], counts: { line: 4, lineage: 9, tree: 30 }, position: 2, ...init };
+    const v: FakeVerify = { posts: [], counts: { line: 4, lineage: 9, tree: 30 }, position: 2, busyAnswers: 0, maxInFlight: 0, ...init };
+    let inFlight = 0;
+    let asked = 0;
     const cors = { 'access-control-allow-origin': '*' };
     const serve = async (route: Route): Promise<void> => {
         const req = route.request();
@@ -54,6 +68,25 @@ export async function fakeVerify(page: Page, bridge: FakeBridge, init: Partial<F
         v.posts.push({ route: path, body });
         const json = (status: number, b: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(b) });
         const dry = body.dry === true;
+        asked++;
+        const busy = v.busy === 'always' || (v.busy === 'overlap' && inFlight > 0) || (typeof v.busy === 'number' && asked <= v.busy);
+        inFlight++;
+        v.maxInFlight = Math.max(v.maxInFlight, inFlight);
+        try {
+            if (v.delayMs) await new Promise(resolve => setTimeout(resolve, v.delayMs));
+            if (busy) {
+                v.busyAnswers++;
+                await json(503, { ok: false, code: 'research.busy', error: 'the research is busy, try again in a moment' });
+            } else {
+                await answer(route, path, body, dry, json);
+            }
+        } finally {
+            inFlight--;
+        }
+    };
+    /** The research's answer to one request. */
+    const answer = async (route: Route, path: string, body: Record<string, unknown>, dry: boolean,
+        json: (status: number, b: unknown) => Promise<void>): Promise<void> => {
         if (path === 'verify') {
             const all = (!dry && v.startFacts) || v.facts || VERIFY_FACTS;
             const facts = typeof body.fact === 'string' ? all.filter(f => f.fact === body.fact) : all;
