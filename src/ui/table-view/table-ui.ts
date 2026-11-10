@@ -11,6 +11,13 @@
  * The column work (§4.3–§4.6) changes the row type's state here: the
  * Columns panel (table-colpanel.ts), the head's drags and keys and its menu
  * (table-grid.ts, table-headmenu.ts); each change draws the table again.
+ *
+ * The findings of Data quality (§7) are computed after the table is first
+ * drawn, in idle time (table-checks.ts maps them to the cells); until then
+ * the Findings cells show "…" and the status line says the checks run. A
+ * change of the tree computes them again while the last ones stay shown. A
+ * click on a finding's cell opens its bubble (table-bubble.ts); "Not an
+ * error" there marks it as Data quality does, with the same toast and Undo.
  */
 
 import { DataManager } from '../../data.js';
@@ -20,7 +27,7 @@ import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
 import { columnById, columnLabel, columnNote, type SortSpec } from './table-columns.js';
 import { sortRows } from './table-filter.js';
-import { buildTableModel, modelIsCurrent, ROW_TYPES, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { buildTableModel, modelIsCurrent, ROW_TYPES, rowKey, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { TableGrid } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
@@ -33,6 +40,14 @@ import { anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, setAllExpand
 import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
 import type { ColumnDef } from './table-columns.js';
 import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem } from './table-headmenu.js';
+import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
+import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
+import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
+import type { Partnership, StromData } from '../../types.js';
+import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
+import { lineCell, lineKey, type GridLine } from './table-subrows.js';
+import { markHtml, type CellIssueMark } from './table-grid.js';
+import { bubbleHeading, bubbleHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement } from './table-bubble.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -68,12 +83,57 @@ function coverageOf(m: TableModel, type: RowType, rows: readonly TableRow[], col
     return cell;
 }
 
+/**
+ * The findings of the tree last drawn (§7.1): the data object and revision
+ * they are for, the index shown (the last one while new ones are computed;
+ * null before the first) and whether a computation runs.
+ */
+let checks: { tree: string; data: StromData; rev: number; issues: ValidationIssue[] | null; index: CheckIndex | null; running: boolean } | null = null;
+let checksJob = 0;
+/** Findings mapped per idle slice (§7.1). */
+const CHECK_BATCH = 500;
+const DISMISS_TOAST_MS = 6000;
+
+function whenIdle(fn: (deadline: { timeRemaining(): number } | null) => void): void {
+    const ric = (window as Window & { requestIdleCallback?: (cb: (d: { timeRemaining(): number }) => void, o?: { timeout: number }) => number })
+        .requestIdleCallback;
+    if (ric) ric(d => fn(d), { timeout: 400 });
+    else setTimeout(() => fn(null), 1);
+}
+
+/** The table listens for marks changed elsewhere (Data quality, the research's bridge, an undo). */
+let listening = false;
+let redrawFrame = 0;
+
+/** The table on screen, drawn again (after the checks finish or a finding is marked). */
+function redrawTable(draw: (el: HTMLElement) => void): void {
+    const el = document.getElementById('table-container');
+    if (el && TreeRenderer.getViewMode() === 'table') draw(el);
+}
+
+/** The union a line reads in a union column of the People table (none for a "more" line or the Unions table). */
+function lineUnion(line: GridLine): Partnership | null {
+    if (line.kind === 'more' || line.row.kind !== 'person' || line.union === null) return null;
+    return line.row.unions[line.union] ?? null;
+}
+
+/** The findings of a line's cell: its union for a union column of the People table, the value of a place cell. */
+function cellFindings(index: CheckIndex, m: TableModel, line: GridLine, col: ColumnDef): CellFinding[] {
+    if (line.kind === 'more') return [];
+    const row = line.row;
+    const union = col.unionScoped ? lineUnion(line) : null;
+    const text = isPlaceColumn(col.id) ? lineCell(m, line, col).text : '';
+    return index.cellAll(row, col.id, union, text);
+}
+
 function treeKey(): string {
     return DataManager.getCurrentTreeId() ?? '';
 }
 
 function sortedRows(m: TableModel, type: RowType, sort: readonly SortSpec[]): TableRow[] {
-    const key = JSON.stringify(sort);
+    // Sorted by a column of the findings: sorted again when they change (else the order stays, §13i).
+    const byChecks = sort.some(s => CHECK_COLUMNS.includes(s.col));
+    const key = JSON.stringify(sort) + (byChecks ? `|${m.ctx.checks?.version ?? 0}` : '');
     if (sorted && sorted.model === m && sorted.type === type && sorted.sort === key) return sorted.rows;
     const rows = sortRows(m, type, rowsOf(m, type), sort);
     sorted = { model: m, type, sort: key, rows };
@@ -92,6 +152,8 @@ export const tableMethods = uiModule({
         }
         const m = model;
         const tree = treeKey();
+        const index = this.tableChecksFor(tree, data, rev);
+        applyChecks(m, index);
         const state = tableStateFor(tree);
         const type = state.rowType;
         const st = state.types[type];
@@ -116,6 +178,7 @@ export const tableMethods = uiModule({
                     s.types[s.rowType].selected = key;
                     this.renderTableView(container);
                 },
+                onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
                 onAllUnions: (expand) => this.changeTableColumns(st => setAllExpanded(st.unions, expand)),
                 onRevealUnions: (personId) => this.changeTableColumns(st => {
@@ -134,7 +197,19 @@ export const tableMethods = uiModule({
                     return moveColumnRun(t, st, d.starts[start], d.ends[end], to);
                 }),
             });
+            if (!listening) {
+                listening = true;
+                // A mark set in Data quality or by the research, an undo: drawn again once per frame.
+                const later = (): void => {
+                    if (redrawFrame) return;
+                    redrawFrame = requestAnimationFrame(() => { redrawFrame = 0; redrawTable(el => this.renderTableView(el)); });
+                };
+                window.addEventListener(QUALITY_CHANGED_EVENT, later);
+                window.addEventListener('strom:user-change', later);
+            }
             const status = createStatus();
+            const legendBtn = status.querySelector<HTMLButtonElement>('.tv-legend-btn')!;
+            legendBtn.addEventListener('click', () => this.showTableLegend(legendBtn));
             const colsBtn = document.createElement('button');
             colsBtn.type = 'button';
             colsBtn.className = 'tv-cols-btn';
@@ -163,7 +238,7 @@ export const tableMethods = uiModule({
         mounted.colsBtn.setAttribute('aria-label', `${strings.table.columns}, ${strings.table.columnsCount(st.columns.length, total)}`);
         container.dataset.rowtype = type;
         updateBar(mounted.bar, type, counts);
-        updateStatus(mounted.status, type, rows.length, counts[type], st.sort);
+        updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running);
         const drawn = `${tree}|${type}`;
         const restore = mounted.drawn !== drawn ? { top: st.top, left: st.left } : undefined;
         mounted.drawn = drawn;
@@ -174,8 +249,180 @@ export const tableMethods = uiModule({
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
+            issueAt: index ? (line, col): CellIssueMark | null => {
+                const f = cellFindings(index, m, line, col)[0];
+                return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
+            } : undefined,
+            bandCell: index ? (line, band) => {
+                const row = line.row;
+                const union = lineUnion(line);
+                const sev = bandSeverity(index, row, band.columns.map(c => c.id),
+                    id => (columnById(type, id)?.unionScoped ? union : null),
+                    id => { const c = columnById(type, id); return c ? lineCell(m, line, c).text : ''; });
+                return sev ? markHtml(sev) : '';
+            } : undefined,
         }, restore);
         panel?.panel.update(type, st);
+    },
+
+    /**
+     * The findings to show for the tree's data now (§7.1). Computed once per
+     * data object and revision, after this draw, in idle time: the tree is
+     * checked in one go, its findings mapped to the cells CHECK_BATCH at a
+     * time; then the table is drawn again. Meanwhile the last findings of the
+     * same tree stay shown (null before the first: the cells show "…").
+     */
+    tableChecksFor(tree: string, data: StromData, rev: number): CheckIndex | null {
+        if (checks && checks.data === data && checks.rev === rev) return checks.index;
+        const stale = checks && checks.tree === tree ? checks.index : null;
+        const job = ++checksJob;
+        const state = { tree, data, rev, issues: null as ValidationIssue[] | null, index: stale, running: true };
+        checks = state;
+        whenIdle(() => {
+            if (job !== checksJob) return;
+            const issues = validateTreeData(data).issues;
+            const index = new CheckIndex(data);
+            let at = 0;
+            const step = (deadline: { timeRemaining(): number } | null): void => {
+                if (job !== checksJob) return;
+                do {
+                    index.add(issues.slice(at, at + CHECK_BATCH));
+                    at += CHECK_BATCH;
+                } while (at < issues.length && deadline && deadline.timeRemaining() > 4);
+                if (at < issues.length) { whenIdle(step); return; }
+                state.issues = issues;
+                state.index = index;
+                state.running = false;
+                redrawTable(el => this.renderTableView(el));
+            };
+            step(null);
+        });
+        return stale;
+    },
+
+    /** After a finding was marked or its mark taken back: the same findings, mapped again with the tree's marks now. */
+    remapTableChecks(): void {
+        const data = DataManager.getData();
+        if (checks?.issues && checks.data === data) {
+            // A computation started meanwhile (an event of the same change) is not needed.
+            checksJob++;
+            const index = new CheckIndex(data);
+            index.add(checks.issues);
+            checks = { ...checks, rev: DataManager.getRevision(), index, running: false };
+        }
+        redrawTable(el => this.renderTableView(el));
+    },
+
+    /** A finding's cell was clicked or Enter pressed on it (§7.4): the row selected, the bubble opened. */
+    showTableFinding(line: GridLine, colPos: number, cell: HTMLElement): void {
+        const m = model;
+        const index = checks?.index;
+        const col = mounted?.display?.columns[colPos];
+        if (!m || !index || !col || !mounted) return;
+        const list = cellFindings(index, m, line, col);
+        if (!list.length) return;
+        const rect = cell.getBoundingClientRect();
+        const treeId = treeKey();
+        const readOnly = this.treeValidationReadOnly(treeId);
+        const container = mounted.container;
+        const s = tableStateFor(treeId);
+        const key = rowKey(line.row);
+        if (s.types[s.rowType].selected !== key) {
+            s.types[s.rowType].selected = key;
+            this.renderTableView(container);
+        }
+        const grid = mounted.grid;
+        const cellKey = lineKey(line);
+        const findCell = (): HTMLElement | null => [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
+            .find(r => r.dataset.key === cellKey)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null;
+        const shown = list.map(f => ({
+            severity: f.severity, title: translateValidationType(f.issue.type), detail: f.issue.detail ?? '',
+        }));
+        const act = (what: string, i: number): void => {
+            const f = list[i];
+            if (!f) return;
+            if (what === 'dismiss') this.dismissTableFinding(f, treeId);
+            else if (what === 'restore') this.restoreTableFinding(f, treeId);
+            else if (what === 'quality') {
+                void this.showTreeValidationDialog(treeId, undefined, {
+                    focus: { type: f.issue.type, category: issueCategory(f.issue), dismissed: f.dismissed },
+                });
+            }
+        };
+        const title = bubbleHeading(list[0].severity);
+        if (isPhoneBar()) {
+            this.showTableSheet(sheetElement(title, bubbleHtml(shown, readOnly, true), 'finding', () => this.hideBottomSheet(), act));
+            return;
+        }
+        openBubblePanel({
+            rect, label: `${title}: ${shown[0].title}`, html: bubbleHtml(shown, readOnly, false), kind: 'finding',
+            focusBack: findCell, scroller: grid.el, onAction: act,
+        });
+    },
+
+    /** "Not an error" in a finding's bubble (§7.5): marked as Data quality marks it, a toast with Undo. */
+    dismissTableFinding(f: CellFinding, treeId: string): void {
+        if (this.treeValidationReadOnly(treeId)) return;
+        const mark = dismissalFor(f.issue);
+        const label = this.qualityMarkLabel(mark, DataManager.getData());
+        if (!DataManager.dismissQualityFinding(mark, label)) return;
+        this.qualityMarksChanged();
+        this.remapTableChecks();
+        const key = dismissalKey(mark);
+        this.showToast(strings.table.dismissedToast, DISMISS_TOAST_MS, {
+            kind: 'quality-dismiss',
+            action: {
+                label: strings.treeManager.valUndo,
+                run: () => {
+                    if (treeKey() !== treeId || DataManager.isReadOnly()) return;
+                    if (DataManager.restoreQualityDismissal(key, label)) {
+                        this.qualityMarksChanged();
+                        this.remapTableChecks();
+                    }
+                },
+            },
+        });
+    },
+
+    /** "Report again" on a finding marked "Not an error". */
+    restoreTableFinding(f: CellFinding, treeId: string): void {
+        if (this.treeValidationReadOnly(treeId)) return;
+        const data = DataManager.getData();
+        const mark = (data.qualityDismissed ?? []).find(d => dismissalKey(d) === f.key);
+        if (!mark) return;
+        if (DataManager.restoreQualityDismissal(f.key, this.qualityMarkLabel(mark, data))) {
+            this.qualityMarksChanged();
+            this.remapTableChecks();
+        }
+    },
+
+    /** "Marks ⓘ" in the status line (§7.3): what each mark and the other cell states mean. */
+    showTableLegend(btn: HTMLElement): void {
+        const title = strings.table.legendTitle;
+        if (isPhoneBar()) {
+            this.showTableSheet(sheetElement(title, legendHtml(), 'legend', () => this.hideBottomSheet()));
+            return;
+        }
+        openBubblePanel({
+            rect: btn.getBoundingClientRect(), label: title, kind: 'legend', focusBack: () => btn,
+            html: `<div class="tv-bub-title">${title}</div>${legendHtml()}`,
+        });
+    },
+
+    /** A bubble's content in a sheet from the bottom (a phone). */
+    showTableSheet(el: HTMLElement): void {
+        closeTableBubble(false);
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay tv-bubble-overlay';
+        overlay.appendChild(el);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.hideBottomSheet(); });
+        overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); this.hideBottomSheet(); } });
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        requestAnimationFrame(() => overlay.classList.add('active'));
+        (el.querySelector<HTMLElement>('.tv-bub-sheet-body button') ?? el.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
     },
 
     /** Change the shown row type's columns (§4.3–§4.6) and draw again when something changed. */

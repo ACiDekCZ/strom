@@ -23,11 +23,15 @@
  * walk rows and cells, Home/End, Ctrl+Home/End, PageUp/PageDown; on the name
  * cell → expands and ← collapses (on a sub-row ← goes to the person's row);
  * `*` expands all, Shift+`*` collapses all.
+ *
+ * A finding of Data quality on a cell (§7.3) tints it and puts its mark at
+ * the end of the text (after the number in a numeric cell); a click on such
+ * a cell, or Enter on it, asks for the finding's bubble (`onIssue`).
  */
 
 import { strings } from '../../strings.js';
 import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
-import { rowKey, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, type CellSeverity, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
@@ -64,8 +68,16 @@ export interface GridInput {
     bands?: readonly (CollapsedBand | null)[];
     /** The group row has −/+ and the head can be dragged and resized (not on a phone, §4.3). */
     editableHead?: boolean;
-    /** What a band shows in a row (§4.3: the highest finding of its columns, part C). */
-    bandCell?: (row: TableRow, band: CollapsedBand) => string;
+    /** What a band shows in a line (§4.3: the highest finding of its columns, HTML). */
+    bandCell?: (line: GridLine, band: CollapsedBand) => string;
+    /** The finding shown in a cell (§7.3) and its title; null: none (or the checks still run). */
+    issueAt?: (line: GridLine, col: ColumnDef, value: CellValue) => CellIssueMark | null;
+}
+
+/** A finding's mark in a cell: its level (or `unusual`) and the finding's title (for the mark's name). */
+export interface CellIssueMark {
+    severity: CellSeverity;
+    label: string;
 }
 
 export interface GridHandlers {
@@ -89,6 +101,8 @@ export interface GridHandlers {
     onMoveColumn?(colId: string, offset: number): void;
     /** A group's drawn columns [start, end] move before drawn position `before` (drag or Alt+←/→ on its cell). */
     onMoveGroup?(start: number, end: number, before: number): void;
+    /** A cell with a finding was clicked or Enter was pressed on it (§7.4): its line, its drawn column, the cell. */
+    onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
 }
 
 /** How far a press moves before it is a drag; how long a touch holds for the header menu. */
@@ -107,8 +121,22 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** The classes of a cell for its value (§5: computed, n/a, uncertain, substitute). */
-export function cellClasses(value: CellValue, col: ColumnDef): string {
+/** The glyph of each mark (§7.3): a ring for a lead is drawn by CSS. */
+const MARK_GLYPH: Record<CellSeverity, string> = { error: '!', warning: '?', info: '', unusual: '☆' };
+
+/**
+ * A mark (§7.3): a red circle with "!", an amber square with "?", a hollow
+ * ring, ☆. `label` names it for a screen reader (the level word alone when
+ * the mark only stands beside a value, e.g. in the Findings column).
+ */
+export function markHtml(severity: CellSeverity, label?: string): string {
+    const word = strings.table.sev[severity];
+    const name = label ? strings.table.issueAria(word, label) : word;
+    return `<span class="tv-mark tv-mark--${severity}" role="img" aria-label="${esc(name)}" title="${esc(name)}">${MARK_GLYPH[severity]}</span>`;
+}
+
+/** The classes of a cell for its value (§5: computed, n/a, uncertain, substitute; §7.3: a finding). */
+export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverity | null = null): string {
     let cls = 'tv-cell';
     if (col.align === 'right') cls += ' tv-right';
     if (col.id === 'name' || col.id === 'p1' || col.id === 'p2') cls += ' tv-name';
@@ -117,6 +145,8 @@ export function cellClasses(value: CellValue, col: ColumnDef): string {
     else if (value.computed && !value.empty) cls += ' tv-cell--computed';
     if (value.uncertain) cls += ' tv-cell--uncertain';
     if (value.subst) cls += ' tv-cell--subst';
+    if (value.ghost) cls += ' tv-cell--ghost';
+    if (issue) cls += ` tv-cell--${issue} has-issue`;
     return cls;
 }
 
@@ -133,7 +163,14 @@ const COMP_BAR = 30;
  * A cell's inner HTML (§5, §6.2): a substitute's label before the value in
  * italics, a date qualifier's word, a completeness percentage with its bar.
  */
-export function cellInner(value: CellValue, col: ColumnDef): string {
+export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null): string {
+    if (issue) return cellValueHtml(value, col) + markHtml(issue.severity, issue.label);
+    if (!value.mark) return cellValueHtml(value, col);
+    // A level beside a value (Findings: after the number; Highest level: before its word).
+    return col.align === 'right' ? cellValueHtml(value, col) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col);
+}
+
+function cellValueHtml(value: CellValue, col: ColumnDef): string {
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
         const fill = Math.round((value.percent * COMP_BAR) / 100);
         return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`
@@ -212,6 +249,10 @@ export class TableGrid {
             }
             if (line.kind === 'row' && line.expanded !== null && t.closest('.tv-toggle, .tv-unions-pill')) {
                 this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
+                return;
+            }
+            if (cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
+                this.handlers.onIssue(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
                 return;
             }
             this.handlers.onSelect?.(rowKey(line.row), line.row);
@@ -800,7 +841,7 @@ export class TableGrid {
                 const band = input.bands?.[i];
                 if (band) {
                     html += `<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
-                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(row, band) ?? ''}</div>`;
+                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(line, band) ?? ''}</div>`;
                     continue;
                 }
                 if (input.subRows && col.id === 'name') {
@@ -808,10 +849,11 @@ export class TableGrid {
                     continue;
                 }
                 const value = lineCell(input.model, line, col);
+                const issue = line.kind === 'more' ? null : input.issueAt?.(line, col, value) ?? null;
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
-                html += `<div class="${cellClasses(value, col)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col)}</div>`;
+                html += `<div class="${cellClasses(value, col, issue?.severity ?? null)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue)}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
         }
@@ -833,11 +875,16 @@ export class TableGrid {
         }
         const value = lineCell(input.model, line, col);
         const name = cellText(value);
+        const issue = input.issueAt?.(line, col, value) ?? null;
         const toggle = line.expanded === null
             ? '<span class="tv-toggle tv-toggle--none" aria-hidden="true"></span>'
             : `<span class="tv-toggle" aria-hidden="true" title="${esc(line.expanded ? `${t.collapseAll} (←)` : `${t.expandAll} (→)`)}">${line.expanded ? '▾' : '▸'}</span>`;
         const pill = line.expanded === false ? `<span class="tv-unions-pill" aria-hidden="true">${esc(t.unionsN(line.n))}</span>` : '';
-        return `${open}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${esc(name)}</span>${pill}</div>`;
+        const head = issue
+            ? `<div class="tv-cell tv-name tv-cell--${issue.severity} has-issue${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`
+            : open;
+        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${esc(name)}</span>${pill}`
+            + `${issue ? markHtml(issue.severity, issue.label) : ''}</div>`;
     }
 
     // -----------------------------------------------------------------------
@@ -932,11 +979,17 @@ export class TableGrid {
                 to = [at, col - 1];
                 break;
             case 'Enter':
-            case ' ':
+            case ' ': {
                 e.preventDefault();
+                const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+                if (e.key === 'Enter' && line.kind !== 'more' && cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
+                    this.handlers.onIssue(line, col, cellEl);
+                    return;
+                }
                 if (line.kind === 'more') this.handlers.onRevealUnions?.(line.row.id);
                 else this.handlers.onSelect?.(rowKey(line.row), line.row);
                 return;
+            }
             case '*':
                 if (!input.subRows || !input.unionsButton) return;
                 e.preventDefault();

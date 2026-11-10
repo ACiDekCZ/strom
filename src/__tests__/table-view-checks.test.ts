@@ -85,7 +85,7 @@ describe('findings mapped to cells (§7.2)', () => {
     });
 
     it('a type with no cell of its own has no targets, only the person counts', () => {
-        const issue = { severity: 'error' as const, type: 'circularReference', message: '', personIds: ['g' as PersonId] };
+        const issue = { id: 'x', severity: 'error' as const, type: 'circularReference', message: '', personIds: ['g' as PersonId] };
         expect(issueTargets(issue, tree())).toEqual([]);
     });
 

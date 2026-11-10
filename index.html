@@ -9594,6 +9594,70 @@
         .tv-colpanel--sheet .tv-cp-move { opacity: 1; width: 40px; height: 40px; }
         .tv-colpanel--sheet .tv-cp-item:focus-within { box-shadow: none; }
         .tv-colpanel--sheet .tv-cp-cov { min-height: 48px; }
+        /* §7.3 a finding on a cell: the tint and the mark at the end of the text (after a number). */
+        .tv-body .tv-cell--error { background: var(--danger-soft); }
+        .tv-body .tv-cell--warning { background: var(--warning-soft); }
+        .tv-body .tv-cell.has-issue { cursor: pointer; color: var(--text); }
+        .tv-cell--ghost { color: var(--text-ghost); }
+        .tv-mark {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+            font-family: var(--font-sans, inherit); font-style: normal; line-height: 1; user-select: none;
+        }
+        .tv-cell > .tv-mark { margin-left: 6px; }
+        .tv-cell:not(.tv-right) > .tv-mark:last-child { margin-left: auto; }
+        .tv-cell.has-issue:not(.tv-right) > .tv-cell-text { margin-right: 6px; }
+        .tv-cell > .tv-mark:first-child { margin-left: 0; margin-right: 6px; }
+        .tv-mark--error { width: 16px; height: 16px; border-radius: 50%; background: var(--danger); color: var(--on-primary); font-size: 11px; font-weight: 700; }
+        .tv-mark--warning { width: 16px; height: 16px; border-radius: 3px; background: var(--warning); color: var(--on-warning); font-size: 11px; font-weight: 700; }
+        .tv-mark--info { width: 10px; height: 10px; margin-right: 3px; border-radius: 50%; border: 1.5px solid var(--text-faint); }
+        .tv-mark--unusual { width: 16px; height: 16px; color: var(--text-faint); font-size: 14px; }
+        .tv-band > .tv-mark { margin: 0; }
+        .tv-status-checks { color: var(--text-faint); font-size: 12px; white-space: nowrap; }
+        .tv-status-checks[hidden] { display: none; }
+        .tv-checks-ring { display: inline-block; }
+        /* §7.4 the bubble of a finding and the legend: a panel under the cell, a sheet on a phone. */
+        .tv-bubble {
+            position: fixed; z-index: 3000; width: 310px; max-width: calc(100vw - 16px); box-sizing: border-box;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg); font-size: 13px; outline: none; overflow: hidden;
+        }
+        .tv-bubble--legend { width: 340px; padding: 6px 0 8px; }
+        .tv-bub-finding + .tv-bub-finding { border-top: 1px solid var(--border); }
+        .tv-bub-count { padding: 8px 14px 0; font-size: 11px; color: var(--text-faint); }
+        .tv-bub-head { display: flex; align-items: center; gap: 8px; padding: 8px 14px 2px; }
+        .tv-bub-level { font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .tv-bub-msg { padding: 2px 14px; font-size: 13.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+        .tv-bub-detail { padding: 0 14px 8px; font-size: 12.5px; color: var(--text-light); line-height: 1.45; overflow-wrap: anywhere; }
+        .tv-bub-note { padding: 0 14px 8px; font-size: 12px; color: var(--text-faint); line-height: 1.45; }
+        .tv-bub-actions { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--divider); }
+        .tv-bub-btn {
+            height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .tv-bub-link { border: none; background: none; padding: 0; height: 30px; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; }
+        .tv-bub-btn:focus-visible, .tv-bub-link:focus-visible, .tv-bub-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .tv-bub-title { padding: 4px 14px 6px; font-weight: 600; }
+        .tv-bub-sep { height: 1px; margin: 6px 0; background: var(--divider); }
+        .tv-leg-row { display: grid; grid-template-columns: 64px auto; column-gap: 8px; padding: 4px 14px; align-items: baseline; }
+        .tv-leg-sym { grid-row: span 2; display: flex; align-items: center; min-height: 18px; }
+        .tv-leg-name { font-size: 12.5px; font-weight: 600; }
+        .tv-leg-text { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        .tv-leg-sample { font-size: 12px; white-space: nowrap; }
+        .tv-leg-computed { color: var(--text-light); }
+        .tv-leg-pill { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1.5px solid var(--primary); border-radius: 999px; color: var(--primary); font-size: 11px; }
+        .tv-bubble.tv-bubble--sheet {
+            position: relative; width: 100%; max-width: 560px; border: none; border-radius: 16px 16px 0 0;
+            padding: 0 0 env(safe-area-inset-bottom, 0px); max-height: 85vh; overflow-y: auto; font-size: 15px;
+        }
+        .tv-bub-sheet-head { display: flex; align-items: center; height: 52px; padding: 0 6px 0 20px; border-bottom: 1px solid var(--divider); }
+        .tv-bub-sheet-title { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; }
+        .tv-bub-close { width: 44px; height: 44px; border: none; background: none; color: var(--text-light); font-size: 22px; cursor: pointer; }
+        .tv-bubble--sheet .tv-bub-msg { font-size: 15px; padding-top: 10px; }
+        .tv-bubble--sheet .tv-bub-detail { font-size: 14px; }
+        .tv-bubble--sheet .tv-bub-btn { flex: 1 1 auto; height: 44px; font-size: 15px; }
+        .tv-bubble--sheet .tv-bub-link { height: 44px; padding: 0 8px; font-size: 15px; }
+        .tv-bubble--sheet .tv-leg-name { font-size: 14px; }
+        .tv-bubble--sheet .tv-leg-text { font-size: 13.5px; }
         @media (hover: hover) {
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
@@ -9609,6 +9673,9 @@
             .tv-toggle:not(.tv-toggle--none):hover, .tv-head-all:hover { color: var(--text); }
             .tv-unions-pill:hover { border-color: var(--primary); }
             .tv-more-btn:hover { text-decoration: underline; }
+            .tv-bub-btn:hover { border-color: var(--primary); }
+            .tv-bub-link:hover { text-decoration: underline; }
+            .tv-bub-close:hover { color: var(--text); }
         }
         /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
         @media (pointer: coarse) {
@@ -9624,6 +9691,7 @@
             .table-view { --tv-more-h: var(--tv-row-h); }
             .tv-toggle { width: 44px; margin-left: -10px; margin-right: -8px; }
             .tv-head-all { height: 100%; }
+            .tv-bub-btn, .tv-bub-link { height: 44px; }
         }
         /* Phone (≤ 640) and a phone held sideways: the row type as a button with a sheet, 40 px rows. */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -9635,6 +9703,7 @@
             .tv-cols-btn { height: 40px; }
             .tv-group-toggle, .tv-resize { display: none; }
             .tv-groupcell { cursor: default; }
+            .tv-status-checks { font-size: 11.5px; }
         }
         .map-canvas { position: absolute; inset: 0; }
         .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }

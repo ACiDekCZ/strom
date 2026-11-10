@@ -2,7 +2,8 @@
  * The Table view on a 5 000-person tree (spec 073 K1.8): it opens within 1 s
  * — the row model, the default sort (birth date) and the cells of the first
  * window of rows — and a sort by three columns on a fresh model (no cell
- * cached yet) takes under 300 ms. Timed against a calibration run right
+ * cached yet) takes under 300 ms; the tree's findings (§7.1: Data quality's
+ * check and their mapping to the cells) are computed under 1 s. Timed against a calibration run right
  * before each run (helpers/perf-budget.ts), so a loaded machine does not
  * decide the result and a slower code still fails.
  */
@@ -16,9 +17,12 @@ import { sortRows } from '../ui/table-view/table-filter.js';
 import { rowWindow } from '../ui/table-view/table-window.js';
 import { defaultTableState, shownColumns } from '../ui/table-view/table-state.js';
 import type { PersonId } from '../types.js';
+import { validateTreeData } from '../validation.js';
+import { buildCheckIndex } from '../ui/table-view/table-checks.js';
 
 const OPEN_BUDGET_MS = 1000;
 const SORT_BUDGET_MS = 300;
+const CHECKS_BUDGET_MS = 1000;
 /** Calibration rounds: about as long as the measured work (5.5 ms a round, as in the other perf tests). */
 const CALIBRATION_ROUNDS = 4;
 const CALIBRATION_REFERENCE_MS = 22;
@@ -62,5 +66,16 @@ describe('table view performance', () => {
         });
         console.log(budgetReport('table sort by 3 columns, 5000 people', m, SORT_BUDGET_MS));
         if (m.judged) expect(m.ms).toBeLessThan(SORT_BUDGET_MS);
+    }, 120_000);
+
+    it('computes the findings of 5 000 people and maps them to the cells within the budget', () => {
+        const run = () => buildCheckIndex(data, validateTreeData(data).issues).issues.length;
+        expect(run()).toBeGreaterThanOrEqual(0);
+        const m = measureAgainstBudget(run, {
+            budgetMs: CHECKS_BUDGET_MS, calibrationRounds: CALIBRATION_ROUNDS, referenceMs: CALIBRATION_REFERENCE_MS,
+            minPairs: 2, maxPairs: 5, maxWallMs: 20_000,
+        });
+        console.log(budgetReport('table checks, 5000 people', m, CHECKS_BUDGET_MS));
+        if (m.judged) expect(m.ms).toBeLessThan(CHECKS_BUDGET_MS);
     }, 120_000);
 });

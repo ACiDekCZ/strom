@@ -95,12 +95,15 @@ export function createStatus(): HTMLElement {
     el.innerHTML = '<span class="tv-status-count" aria-live="polite"></span>'
         + '<span class="tv-status-sort"></span>'
         + '<span class="tv-status-right">'
-        + `<button type="button" class="tv-legend-btn" hidden>${esc(strings.table.legend)} ⓘ</button>`
+        + `<span class="tv-status-checks" role="status" hidden><span class="tv-checks-ring" aria-hidden="true">◌</span> ${esc(strings.table.checksRunning)}</span>`
+        + `<button type="button" class="tv-legend-btn" aria-haspopup="dialog">${esc(strings.table.legend)} ⓘ</button>`
         + '</span>';
     return el;
 }
 
-export function updateStatus(el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[]): void {
+/** The count, the sort and (§13i) "Checks are running…" while the tree's findings are computed. */
+export function updateStatus(el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[], checking = false): void {
     el.querySelector('.tv-status-count')!.textContent = countText(type, shown, total);
     el.querySelector('.tv-status-sort')!.textContent = sortText(type, sort);
+    el.querySelector<HTMLElement>('.tv-status-checks')!.hidden = !checking;
 }
