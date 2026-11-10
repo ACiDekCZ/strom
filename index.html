@@ -9506,6 +9506,11 @@
         }
         .tv-nm--person { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .tv-nm:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        /* §14.2: a source's title, its web address (a link into a new window) and its readers (the pill of 066). */
+        .tv-src-title { font-weight: 500; }
+        .tv-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+        .tv-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        .tv-cell .fact-status.tv-readers { margin: 0; vertical-align: middle; }
         .tv-cell--computed { color: var(--text-light); }
         .tv-cell--na { color: var(--text-faint); font-style: italic; }
         .tv-cell--uncertain .tv-cell-text { border-bottom: 1px dotted var(--text-faint); }
@@ -9903,6 +9908,7 @@
             .tv-chip-x:hover, .tv-chip-edit:hover { background: var(--surface-2); }
             .tv-nm:hover { text-decoration: underline; }
             .tv-nm--person:hover { color: var(--primary-dark); }
+            .tv-link:hover { color: var(--primary-dark); }
             .tv-chips-clear:hover { color: var(--primary-dark); }
             .tv-fpanel-cancel:hover { border-color: var(--primary); }
             .tv-fpanel-apply:hover, .tv-nomatch-clear:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: var(--on-primary); }
@@ -22835,6 +22841,8 @@
             border-radius: 6px; background: var(--card-bg, #fafafa); font-size: 14px;
         }
         .source-row .source-main { flex: 1; min-width: 0; }
+        /* The source a row of the Table view opened the manager on (§14.2). */
+        .source-row.is-target { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
         .source-title { font-weight: 600; }
         .source-meta { color: var(--text-secondary, #777); font-size: 13px; }
         .source-count { margin-left: 6px; color: var(--text-secondary, #999); font-size: 12px; }

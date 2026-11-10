@@ -182,16 +182,25 @@ export function returnFocusAfterViewer(btn: HTMLElement, redrawn?: () => HTMLEle
 export const sourcesMethods = uiModule({
     // ==================== SOURCES MANAGER ====================
 
-    showSourcesDialog(): void {
+    /** The sources manager; `focusSourceId` (the Table view's Sources rows): that source's row marked, scrolled to and focused. */
+    showSourcesDialog(focusSourceId?: string): void {
         if (DataManager.isTreeLocked()) return;
         const search = document.getElementById('sources-search') as HTMLInputElement | null;
         if (search) {
             search.value = '';
             search.oninput = () => this.renderSourcesList();
         }
+        if (focusSourceId) this.sourcesFilter = 'all';
         this.researchImagesSourcesOpened();
         this.renderSourcesList();
         document.getElementById('sources-modal')?.classList.add('active');
+        if (!focusSourceId) return;
+        const open = document.querySelector<HTMLElement>(`#sources-list .source-row-open[data-source-id="${CSS.escape(focusSourceId)}"]`);
+        const row = open?.closest<HTMLElement>('.source-row');
+        if (!open || !row) return;
+        row.classList.add('is-target');
+        row.scrollIntoView({ block: 'nearest' });
+        open.focus({ preventScroll: true });
     },
 
     closeSourcesDialog(): void {

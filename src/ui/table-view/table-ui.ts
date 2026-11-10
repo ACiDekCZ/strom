@@ -36,7 +36,7 @@ import {
 } from './table-filterbar.js';
 import {
     buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf,
-    type CellName, type EventRow, type RowType, type TableModel, type TableRow,
+    type CellName, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
 import { TableGrid, type RowAction } from './table-grid.js';
@@ -124,8 +124,16 @@ const NONE: ReadonlySet<string> = new Set();
  */
 let view: { tree: string; model: TableModel; type: RowType; key: string; checks: number; kept: boolean; result: ShownRows } | null = null;
 
-/** An edit opened from the table (§10.3): the person and the records the edit may change, as stored before. */
-let watching: { tree: string; personId: PersonId; keys: Map<string, string> } | null = null;
+/** An edit opened from the table (§10.3): what it edits (the toast's name) and the records the edit may change, as stored before. */
+let watching: { tree: string; name: () => string; keys: Map<string, string> } | null = null;
+
+/** A person's name for "Saved: {name}", read when the edit is saved. */
+function personNameOf(personId: PersonId): () => string {
+    return () => {
+        const p = DataManager.getPerson(personId);
+        return p ? personName(p) : '';
+    };
+}
 /** Records changed (entity keys) whose rows light up at the next draw (§10.3). */
 let flashNext: { tree: string; keys: readonly string[] } | null = null;
 const BRIDGE_TOAST_MS = 8000;
@@ -442,7 +450,7 @@ export const tableMethods = uiModule({
         mounted.unionsButton = unionsButton;
         const openView = openViewOf(state, type, data.tableViews);
         this.drawTableEmpty(tableEmptyState({
-            persons: counts.persons, unions: counts.unions, events: counts.events, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
+            persons: counts.persons, unions: counts.unions, events: counts.events, sources: counts.sources, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
             search: st.search, shown: rows.length, checksDone: !!index && !checks?.running,
             leads: index ? index.issues.filter(i => i.severity === 'info').length : 0,
             allComplete: () => {
@@ -921,6 +929,11 @@ export const tableMethods = uiModule({
 
     /** ⌖ show in the tree, ▤ open the person, ✎ edit (a sub-row or a union row: the relationships panel at that union). */
     tableRowAction(action: RowAction, line: GridLine): void {
+        if (line.row.kind === 'source') {
+            closeHeadMenu();
+            if (action !== 'tree') this.openTableSource(line.row);
+            return;
+        }
         const personId = personOfRow(line.row);
         if (!personId || !DataManager.getPerson(personId)) return;
         closeHeadMenu();
@@ -940,7 +953,7 @@ export const tableMethods = uiModule({
         if (line.row.kind === 'event') { this.editTableEvent(line.row); return; }
         const data = DataManager.getData();
         const union = unionOfLine(line);
-        watching = { tree: treeKey(), personId, keys: watchEdit(data, familyKeys(data, personId)) };
+        watching = { tree: treeKey(), name: personNameOf(personId), keys: watchEdit(data, familyKeys(data, personId)) };
         if (!union) {
             this.clearDialogStack();
             this.pushDialog('person-modal');
@@ -950,6 +963,19 @@ export const tableMethods = uiModule({
         this.showRelationshipsPanel(personId);
         const grid = document.querySelector<HTMLElement>(`#relationships-content .partnership-grid[data-partnership-id="${CSS.escape(union)}"]`);
         grid?.scrollIntoView({ block: 'nearest' });
+    },
+
+    /**
+     * A source row's Open source and Edit (§14.2): the sources manager on that
+     * source; a locked tree, which has no manager, shows the source itself.
+     */
+    openTableSource(row: SourceRow): void {
+        const data = DataManager.getData();
+        if (!data.sources?.[row.id]) return;
+        if (DataManager.isTreeLocked()) { this.showSourceViewer(row.id, null, { readOnly: true }); return; }
+        watching = { tree: treeKey(), name: () => DataManager.getData().sources?.[row.id]?.title ?? '', keys: watchEdit(data, [`s:${row.id}`]) };
+        this.clearDialogStack();
+        this.showSourcesDialog(row.id);
     },
 
     /**
@@ -965,7 +991,7 @@ export const tableMethods = uiModule({
         if (row.union) keys.add(`u:${row.union.id}`);
         const personId = target.kind === 'coupleEvent' ? row.persons[0]?.id : target.personId;
         if (!personId) return;
-        watching = { tree: treeKey(), personId, keys: watchEdit(data, [...keys]) };
+        watching = { tree: treeKey(), name: personNameOf(personId), keys: watchEdit(data, [...keys]) };
         switch (target.kind) {
             case 'person':
             case 'personEvent':
@@ -1027,10 +1053,13 @@ export const tableMethods = uiModule({
         if (isPhoneBar()) { this.showTableRowSheet(line); return; }
         const t = strings.table;
         const run = (a: RowAction) => () => this.tableRowAction(a, line);
-        const entries: MenuEntry[] = [
-            { id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') },
-            { id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') },
-        ];
+        const src = line.row.kind === 'source' ? line.row : null;
+        const entries: MenuEntry[] = src
+            ? [{ id: 'open', label: t.act.openSource, icon: '▤', hint: 'Enter', run: run('open') }]
+            : [
+                { id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') },
+                { id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') },
+            ];
         if (!tableReadOnly()) entries.push({ id: 'edit', label: t.act.edit, icon: '✎', hint: t.dblClickHint, run: run('edit') });
         if (line.kind === 'row' && line.expanded !== null) {
             const expand = !line.expanded;
@@ -1043,7 +1072,7 @@ export const tableMethods = uiModule({
         const person = personOfRow(line.row);
         const p = person ? DataManager.getPerson(person) : null;
         const menu = openHeadMenu(anchor, '', '', entries);
-        menu.setAttribute('aria-label', t.actionsOf(p ? personName(p) : ''));
+        menu.setAttribute('aria-label', t.actionsOf(src ? src.source.title : p ? personName(p) : ''));
     },
 
     /**
@@ -1053,6 +1082,7 @@ export const tableMethods = uiModule({
      */
     showTableRowSheet(line: GridLine): void {
         if (line.kind === 'more') return;
+        if (line.row.kind === 'source') { this.showTableSourceSheet(line); return; }
         const personId = personOfRow(line.row);
         const person = personId ? DataManager.getPerson(personId) : null;
         if (!personId || !person) return;
@@ -1087,6 +1117,20 @@ export const tableMethods = uiModule({
         this.presentMenuSheet(title, blocks, sub ? { subtitle: sub } : {});
     },
 
+    /** A source row's sheet (§14.2): its title and archive on top, Open source and Edit. */
+    showTableSourceSheet(line: GridLine): void {
+        if (line.kind === 'more' || line.row.kind !== 'source') return;
+        const src = line.row.source;
+        const t = strings.table;
+        const run = (a: RowAction) => () => this.tableRowAction(a, line);
+        const rows = [{ label: t.act.openSource, icon: '▤', run: run('open') }];
+        if (!tableReadOnly()) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
+        const sub = [src.repository, src.reference].map(x => x?.trim()).filter(Boolean).join(' · ');
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        this.presentMenuSheet(src.title, [{ rows }], sub ? { subtitle: sub } : {});
+    },
+
     /** The dialog or panel opened from the table was saved (§10.3): its changed rows lit, "Saved: {name}". */
     tableEditSaved(): void {
         const w = watching;
@@ -1095,8 +1139,7 @@ export const tableMethods = uiModule({
         const changed = changedKeys(DataManager.getData(), w.keys);
         if (!changed.length) return;
         flashNext = { tree: w.tree, keys: changed };
-        const person = DataManager.getPerson(w.personId);
-        this.showToast(strings.table.savedToast(person ? personName(person) : ''));
+        this.showToast(strings.table.savedToast(w.name()));
     },
 
     /** A load from the research's bridge (§10.3, 10d): its rows lit and a toast whose Show selects the first. True when the table shows it. */
