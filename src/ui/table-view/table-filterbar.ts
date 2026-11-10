@@ -371,20 +371,34 @@ export function closeFilterPanel(): void {
  * A form in a panel under its anchor: Cancel · Apply (Enter applies, Escape
  * closes); the focus goes back to the anchor.
  */
-export function openFilterPanel(anchor: HTMLElement, title: string, form: HTMLElement, apply: () => void): HTMLElement {
+/** How a panel differs from a filter's (the view name §9.3, Export §11.1). */
+export interface PanelOptions {
+    /** The primary button's text (default Apply). */
+    applyLabel?: string;
+    /** The dialog's accessible name (default "Filter: {title}"). */
+    ariaLabel?: string;
+    /** An extra class of the panel. */
+    cls?: string;
+    /** No Cancel button. */
+    noCancel?: boolean;
+    /** False keeps the panel open (an empty name). */
+    validate?: () => boolean;
+}
+
+export function openFilterPanel(anchor: HTMLElement, title: string, form: HTMLElement, apply: () => void, opts: PanelOptions = {}): HTMLElement {
     closeFilterPanel();
     closeHeadMenu();
     const t = strings.table;
     const el = document.createElement('div');
-    el.className = 'tv-fpanel';
+    el.className = 'tv-fpanel' + (opts.cls ? ` ${opts.cls}` : '');
     el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', strings.table.filterOf(title));
-    el.innerHTML = `<div class="tv-fpanel-title">${esc(title)}</div>`;
+    el.setAttribute('aria-label', opts.ariaLabel ?? strings.table.filterOf(title));
+    el.innerHTML = title ? `<div class="tv-fpanel-title">${esc(title)}</div>` : '';
     el.appendChild(form);
     const foot = document.createElement('div');
     foot.className = 'tv-fpanel-foot';
-    foot.innerHTML = `<button type="button" class="tv-fpanel-cancel">${esc(t.cancel)}</button>`
-        + `<button type="button" class="tv-fpanel-apply">${esc(t.apply)}</button>`;
+    foot.innerHTML = (opts.noCancel ? '' : `<button type="button" class="tv-fpanel-cancel">${esc(t.cancel)}</button>`)
+        + `<button type="button" class="tv-fpanel-apply">${esc(opts.applyLabel ?? t.apply)}</button>`;
     el.appendChild(foot);
     document.body.appendChild(el);
 
@@ -407,16 +421,23 @@ export function openFilterPanel(anchor: HTMLElement, title: string, form: HTMLEl
     };
     const onOutside = (e: PointerEvent): void => { if (!el.contains(e.target as Node)) close(false); };
     const onResize = (): void => close(false);
-    foot.querySelector('.tv-fpanel-cancel')!.addEventListener('click', () => close(true));
-    foot.querySelector('.tv-fpanel-apply')!.addEventListener('click', () => { close(true); apply(); });
+    const done = (): void => {
+        if (opts.validate && !opts.validate()) return;
+        close(true);
+        apply();
+    };
+    foot.querySelector('.tv-fpanel-cancel')?.addEventListener('click', () => close(true));
+    foot.querySelector('.tv-fpanel-apply')!.addEventListener('click', done);
     el.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
-        else if (e.key === 'Enter' && !(e.target as Element).closest('button, select')) { e.preventDefault(); close(true); apply(); }
+        else if (e.key === 'Enter' && !(e.target as Element).closest('button, select')) { e.preventDefault(); done(); }
     });
     setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
     window.addEventListener('resize', onResize);
     openPanel = { el, close };
-    el.querySelector<HTMLElement>('input:not([type="checkbox"]), select, input')?.focus({ preventScroll: true });
+    const first = el.querySelector<HTMLElement>('input:not([type="checkbox"]), select, input') ?? el.querySelector<HTMLElement>('.tv-fpanel-apply');
+    first?.focus({ preventScroll: true });
+    if (opts.validate && first instanceof HTMLInputElement) first.select();
     return el;
 }
 

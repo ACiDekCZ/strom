@@ -9616,6 +9616,63 @@
         }
         .tv-cols-btn[aria-expanded="true"] { border-color: var(--primary); background: var(--primary-soft); }
         .tv-cols-count { font-weight: 400; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        /* §9.2 the view picker ("View  Overview ▾", "● changed", Save · Save as new · Discard changes); §11.1 Export. */
+        .tv-slot-view { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+        .tv-view-label { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .tv-view-btn {
+            display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 260px; height: 32px; padding: 0 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .tv-view-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-view-caret, .tv-export-caret { flex: none; font-weight: 400; color: var(--text-light); }
+        .tv-view-dot { flex: none; font-size: 10px; color: var(--accent-text); }
+        .tv-view-changed {
+            flex: none; padding: 0; border: none; background: none; font: inherit; font-size: 12px; font-weight: 600;
+            color: var(--accent-text); white-space: nowrap; cursor: default;
+        }
+        .tv-view-changed.is-note { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+        .tv-view-act {
+            flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .tv-view-discard {
+            flex: none; padding: 0 2px; border: none; background: none; font: inherit; font-size: 12.5px;
+            color: var(--text-light); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
+        }
+        .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
+        .tv-export-btn {
+            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .tv-menu-heading {
+            padding: 6px 14px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint);
+        }
+        .tv-menu-foot { padding: 2px 14px 6px; font-size: 11.5px; color: var(--text-faint); }
+        .tv-menu-item[aria-checked="true"] { font-weight: 600; }
+        .tv-menu-item[aria-checked="true"] .tv-menu-icon { color: var(--primary); }
+        .tv-bub-note { padding: 8px 12px; max-width: 280px; font-size: 12.5px; }
+        /* §9.3 the view name panel; §11.1 the Export panel. */
+        .tv-fpanel.tv-vpanel { width: 330px; }
+        .tv-vname { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+        .tv-vname-label { font-size: 12px; color: var(--text-light); }
+        .tv-ff input.tv-vname-input[type="text"] { width: 100%; flex: none; }
+        .tv-vname-input[aria-invalid="true"] { border-color: var(--danger); }
+        .tv-vname-what { margin: 0; font-size: 12px; color: var(--text-light); }
+        .tv-fpanel.tv-xpanel { width: 380px; padding-top: 6px; }
+        .tv-xlab { padding: 4px 14px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+        .tv-xopt { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 14px; }
+        .tv-xopt-dot { flex: none; width: 16px; text-align: center; color: var(--primary); }
+        .tv-xsep { height: 1px; margin: 5px 0; background: var(--divider); }
+        .tv-xfile, .tv-xwhat { margin: 0; padding: 2px 14px; font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
+        .tv-xfile { color: var(--text); }
+        .tv-xwhat { padding-bottom: 6px; }
+        .tv-fsheet .tv-xopt { min-height: 44px; padding: 0 16px; font-size: 15px; }
+        .tv-fsheet .tv-xlab, .tv-fsheet .tv-xfile, .tv-fsheet .tv-xwhat { padding-left: 16px; padding-right: 16px; }
+        .tv-fsheet .tv-xfile, .tv-fsheet .tv-xwhat { font-size: 13.5px; }
+        /* 11d the Export dialog's link into the Table view. */
+        .export-table-link { align-self: flex-start; padding: 4px 14px; font-size: 13px; font-weight: 600; text-decoration: none; text-align: left; }
         .tv-colpanel {
             position: absolute; top: 0; right: 0; bottom: 30px; z-index: 6; width: 360px; max-width: 100%;
             display: flex; flex-direction: column; box-sizing: border-box;
@@ -9757,6 +9814,9 @@
             .tv-head-menu:hover, .tv-group-toggle:hover, .tv-cp-close:hover, .tv-cp-gall:hover, .tv-cp-gcollapse:hover { background: var(--surface-2); }
             .tv-menu-item:not([aria-disabled="true"]):hover { background: var(--surface-2); }
             .tv-cols-btn:hover { border-color: var(--primary); }
+            .tv-view-btn:hover, .tv-view-act:hover, .tv-export-btn:hover { border-color: var(--primary); }
+            .tv-view-discard:hover { color: var(--text); }
+            .export-table-link:hover { text-decoration: underline; }
             .tv-cp-item:hover { background: var(--surface-2); }
             .tv-cp-item:hover .tv-cp-move { opacity: 1; }
             .tv-cp-move:not([aria-disabled="true"]):hover { border-color: var(--primary); }
@@ -9780,7 +9840,9 @@
             .table-view { --tv-row-h: 36px; }
             .tv-rowtype .segment-btn { height: 44px; }
             .tv-legend-btn { height: 44px; }
-            .tv-cols-btn { height: 44px; }
+            .tv-cols-btn, .tv-export-btn, .tv-view-btn, .tv-view-act { height: 44px; }
+            .tv-view-discard, .tv-view-changed.is-note { min-height: 44px; }
+            .export-table-link { min-height: 44px; }
             .tv-head-menu { display: none; }
             .tv-menu-item { height: 44px; }
             .tv-cp-item, .tv-cp-ghead, .tv-cp-gtoggle { min-height: 44px; }
@@ -9807,7 +9869,11 @@
             .tv-rowtype { display: none; }
             .tv-rowtype-btn { display: inline-flex; }
             .tv-status { padding: 0 12px; }
-            .tv-cols-btn { height: 40px; }
+            .tv-cols-btn, .tv-export-btn { height: 40px; }
+            /* 12a the view as a button that grows and shortens with "…"; its sheet carries Save, Save as new, Discard. */
+            .tv-slot-view { flex: 1 1 auto; }
+            .tv-view-label, .tv-view-changed, .tv-view-act, .tv-view-discard { display: none; }
+            .tv-view-btn { height: 40px; max-width: none; font-size: 14px; }
             .tv-group-toggle, .tv-resize { display: none; }
             .tv-groupcell { cursor: default; }
             .tv-status-checks { font-size: 11.5px; }
@@ -27522,6 +27588,8 @@
                             <span class="option-desc" data-i18n="exportMenu.csvDesc"></span>
                         </span>
                     </button>
+                    <!-- 073 §11.4 (11d): the Table view's own CSV (the current tree only). -->
+                    <button type="button" class="link-button export-table-link active-tree-only" onclick="window.Strom.UI.showTableExportFromDialog()" data-i18n="table.exportLink"></button>
                 </div>
             </div>
             <div class="buttons">

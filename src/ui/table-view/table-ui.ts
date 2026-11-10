@@ -21,6 +21,7 @@
  */
 
 import { DataManager } from '../../data.js';
+import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
@@ -30,14 +31,16 @@ import {
     CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
 } from './table-filter.js';
-import { chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState } from './table-filterbar.js';
+import {
+    chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions,
+} from './table-filterbar.js';
 import { buildTableModel, modelIsCurrent, ROW_TYPES, rowKey, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { TableGrid } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
     filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
-    sortOnly, sortShiftClick, tableStateFor, unpinColumn, type DisplayColumns, type RowTypeState,
+    columnSetupOf, shownColumns, sortOnly, sortShiftClick, tableStateFor, unpinColumn, type DisplayColumns, type RowTypeState, type TableState,
 } from './table-state.js';
 import { ColumnPanel } from './table-colpanel.js';
 import {
@@ -45,11 +48,17 @@ import {
 } from './table-subrows.js';
 import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
 import type { ColumnDef } from './table-columns.js';
-import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem } from './table-headmenu.js';
+import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem, type MenuEntry } from './table-headmenu.js';
 import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
 import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
-import type { Partnership, StromData } from '../../types.js';
+import type { Partnership, StromData, TableView, TreeId } from '../../types.js';
+import {
+    discardViewChanges, dropMissingViews, isBuiltinId, newViewId, openViewOf, readTableWork, restoreTableState, switchView,
+    tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
+} from './table-views.js';
+import { ExportSummary, exportForm, ViewBar, viewNameForm } from './table-viewbar.js';
+import { buildTableCsv, tableCsvFileName, type TableCsv } from './table-export.js';
 import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { markHtml, type CellIssueMark } from './table-grid.js';
@@ -71,6 +80,10 @@ interface Mounted {
     filters: FilterBar;
     /** The filter's state as last drawn (the phone's sheet follows it). */
     filterState: FilterBarState | null;
+    /** The view picker (§9.2). */
+    views: ViewBar;
+    /** The bar's Export button (§11.1). */
+    exportBtn: HTMLButtonElement;
 }
 
 /** The phone's Filters sheet while it is open (8h). */
@@ -143,6 +156,30 @@ function treeKey(): string {
     return DataManager.getCurrentTreeId() ?? '';
 }
 
+function storedViews(): readonly TableView[] | undefined {
+    return DataManager.getData().tableViews;
+}
+
+/** The tree's table state; the first time, as the tree's table was left (§9.1, localStorage). */
+function stateOf(tree: string): TableState {
+    const state = tableStateFor(tree);
+    if (!state.restored) restoreTableState(state, tree ? readTableWork(tree) : null, storedViews());
+    return state;
+}
+
+/** The working state last written, so a draw writes only a change. */
+let keptWork = '';
+
+/** Keep the tree's table for the next visit (§9.1); a read-only tree's views are for this opening only. */
+function keepWork(tree: string, state: TableState): void {
+    if (!tree || DataManager.isReadOnly()) return;
+    const work = tableWorkOf(state, storedViews());
+    const key = `${tree}|${JSON.stringify(work)}`;
+    if (key === keptWork) return;
+    keptWork = key;
+    writeTableWork(tree, work);
+}
+
 /**
  * The rows shown (§8): filtered and searched, then sorted (a union column by
  * each person's first passing union, §3.3). Kept while the model, the row
@@ -177,7 +214,9 @@ export const tableMethods = uiModule({
         const tree = treeKey();
         const index = this.tableChecksFor(tree, data, rev);
         applyChecks(m, index);
-        const state = tableStateFor(tree);
+        const state = stateOf(tree);
+        // An undo or a delete took the open view away: back to the default one (§9.3).
+        dropMissingViews(state, data.tableViews);
         const type = state.rowType;
         const st = state.types[type];
 
@@ -195,12 +234,12 @@ export const tableMethods = uiModule({
             });
             const grid = new TableGrid({
                 onScroll: (top, left) => {
-                    const s = tableStateFor(treeKey());
+                    const s = stateOf(treeKey());
                     s.types[s.rowType].top = top;
                     s.types[s.rowType].left = left;
                 },
                 onSelect: (key) => {
-                    const s = tableStateFor(treeKey());
+                    const s = stateOf(treeKey());
                     s.types[s.rowType].selected = key;
                     this.renderTableView(container);
                 },
@@ -266,8 +305,24 @@ export const tableMethods = uiModule({
                 onClear: () => this.changeTableFilter(f => clearFilter(f), true),
                 onSheet: () => this.showTableFilters(),
             });
+            const views = new ViewBar(bar.querySelector<HTMLElement>('.tv-slot-view')!, {
+                onList: () => this.showTableViewList(),
+                onSave: () => this.saveOpenTableView(),
+                onSaveAs: (anchor) => this.saveTableViewAs(anchor),
+                onDiscard: () => this.discardTableViewChanges(),
+                onBuiltinNote: (anchor) => this.showTableBuiltinNote(anchor),
+            });
+            const exportBtn = document.createElement('button');
+            exportBtn.type = 'button';
+            exportBtn.className = 'tv-export-btn';
+            exportBtn.setAttribute('aria-haspopup', 'dialog');
+            exportBtn.innerHTML = `${strings.table.export}<span class="tv-export-caret" aria-hidden="true">▾</span>`;
+            exportBtn.addEventListener('click', () => this.showTableExport());
+            bar.querySelector('.tv-slot-export')!.appendChild(exportBtn);
             container.append(bar, grid.el, status);
-            mounted = { container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null };
+            mounted = {
+                container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
+            };
         }
 
         const counts = { persons: m.persons.length, unions: m.unions.length } as Record<RowType, number>;
@@ -322,6 +377,11 @@ export const tableMethods = uiModule({
             } : undefined,
         }, restore);
         panel?.panel.update(type, st);
+        const open = openViewOf(state, type, data.tableViews);
+        mounted.views.update({
+            name: open.name, builtin: isBuiltinId(open.id), changed: viewChanged(open, st), readOnly: DataManager.isReadOnly(),
+        });
+        keepWork(tree, state);
     },
 
     /**
@@ -384,7 +444,7 @@ export const tableMethods = uiModule({
         const treeId = treeKey();
         const readOnly = this.treeValidationReadOnly(treeId);
         const container = mounted.container;
-        const s = tableStateFor(treeId);
+        const s = stateOf(treeId);
         const key = rowKey(line.row);
         if (s.types[s.rowType].selected !== key) {
             s.types[s.rowType].selected = key;
@@ -486,7 +546,7 @@ export const tableMethods = uiModule({
 
     /** Change the shown row type's columns (§4.3–§4.6) and draw again when something changed. */
     changeTableColumns(change: (st: RowTypeState, type: RowType) => boolean | void): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const st = state.types[state.rowType];
         if (change(st, state.rowType) === false) return;
         const el = document.getElementById('table-container');
@@ -498,7 +558,7 @@ export const tableMethods = uiModule({
         if (!mounted || panel) return;
         closeHeadMenu();
         const phone = isPhoneBar();
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const p = new ColumnPanel(state.rowType, state.types[state.rowType], phone, {
             onShow: (id, on) => this.changeTableColumns((st, t) => (on ? showColumn(t, st, id) : hideColumn(t, st, id))),
             onGroupShown: (group, on) => this.changeTableColumns((st, t) => setGroupShown(t, st, group, on)),
@@ -547,7 +607,7 @@ export const tableMethods = uiModule({
 
     /** The header menu of a column (§4.6): a menu under the head cell, on a phone a sheet. */
     showTableHeadMenu(colId: string, anchor: HTMLElement): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const type = state.rowType;
         const st = state.types[type];
         const col = columnById(type, colId);
@@ -598,7 +658,7 @@ export const tableMethods = uiModule({
      * `toTop`: the rows start from the top (Clear filters).
      */
     changeTableFilter(change: (filter: TableFilter, st: RowTypeState) => boolean | void, toTop = false): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const st = state.types[state.rowType];
         if (change(st.filter, st) === false) return;
         filterChanged(st);
@@ -610,7 +670,7 @@ export const tableMethods = uiModule({
     /** A column's filter (8d): a panel under the head or its chip; on a phone a sheet. */
     showTableColumnFilter(colId: string, anchor: HTMLElement): void {
         if (!model) return;
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const type = state.rowType;
         const col = columnById(type, colId);
         if (!col) return;
@@ -622,7 +682,7 @@ export const tableMethods = uiModule({
     /** The Family line or Generation chip's choice (8b). */
     showTableChipChoice(chip: ChipId, anchor: HTMLElement): void {
         if (!model) return;
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const form = chipChoiceForm(model, chip, chipItem(state.types[state.rowType].filter, chip));
         const apply = (): void => this.changeTableFilter(f => {
             const choice = form.read();
@@ -631,23 +691,26 @@ export const tableMethods = uiModule({
         this.showTableFilterForm(anchor, strings.table.chip[chip], form.el, apply);
     },
 
-    /** A filter's form: a panel on a computer and a tablet; a sheet with Cancel · Apply on a phone. */
-    showTableFilterForm(anchor: HTMLElement, title: string, form: HTMLElement, apply: () => void): void {
+    /**
+     * A filter's form: a panel on a computer and a tablet; a sheet with Cancel
+     * · Apply on a phone. `opts` makes it the view name (§9.3) or Export (§11.1).
+     */
+    showTableFilterForm(anchor: HTMLElement, title: string, form: HTMLElement, apply: () => void, opts: PanelOptions = {}): void {
         closeHeadMenu();
         if (!isPhoneBar()) {
-            openFilterPanel(anchor, title, form, apply);
+            openFilterPanel(anchor, title, form, apply, opts);
             return;
         }
         const t = strings.table;
         const el = document.createElement('div');
-        el.className = 'tv-colpanel tv-colpanel--sheet bottom-sheet tv-fsheet';
+        el.className = 'tv-colpanel tv-colpanel--sheet bottom-sheet tv-fsheet' + (opts.cls ? ` ${opts.cls}` : '');
         el.setAttribute('role', 'dialog');
         el.setAttribute('aria-modal', 'true');
-        el.setAttribute('aria-label', t.filterOf(title));
+        el.setAttribute('aria-label', opts.ariaLabel ?? t.filterOf(title));
         const head = document.createElement('div');
         head.className = 'tv-cp-head';
         head.innerHTML = `<h2 class="tv-cp-title"></h2>`;
-        head.querySelector('h2')!.textContent = title;
+        head.querySelector('h2')!.textContent = title || opts.ariaLabel || '';
         const body = document.createElement('div');
         body.className = 'tv-cp-list tv-fs-body';
         body.appendChild(form);
@@ -655,17 +718,30 @@ export const tableMethods = uiModule({
         foot.className = 'tv-cp-foot';
         foot.innerHTML = '<button type="button" class="link-button tv-cp-reset tv-fs-cancel"></button><button type="button" class="primary tv-cp-done tv-fs-apply"></button>';
         foot.querySelector('.tv-fs-cancel')!.textContent = t.cancel;
-        foot.querySelector('.tv-fs-apply')!.textContent = t.apply;
+        foot.querySelector('.tv-fs-apply')!.textContent = opts.applyLabel ?? t.apply;
+        const done = (): void => {
+            if (opts.validate && !opts.validate()) return;
+            this.hideBottomSheet();
+            apply();
+        };
         foot.querySelector('.tv-fs-cancel')!.addEventListener('click', () => this.hideBottomSheet());
-        foot.querySelector('.tv-fs-apply')!.addEventListener('click', () => { this.hideBottomSheet(); apply(); });
+        foot.querySelector('.tv-fs-apply')!.addEventListener('click', done);
+        if (opts.validate) {
+            // The view name: Enter saves (§9.3).
+            form.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.target as Element).matches('input')) { e.preventDefault(); done(); }
+            });
+        }
         el.append(head, body, foot);
         this.showTableSheet(el);
-        el.querySelector<HTMLElement>('input:not([type="checkbox"]), select, input')?.focus({ preventScroll: true });
+        const first = el.querySelector<HTMLElement>('input:not([type="checkbox"]), select, input');
+        first?.focus({ preventScroll: true });
+        if (opts.validate && first instanceof HTMLInputElement) first.select();
     },
 
     /** A coverage cell (§6.1): only empty / only filled as the column's filter. */
     showTableCoverageMenu(colId: string, anchor: HTMLElement): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const col = columnById(state.rowType, colId);
         if (!col) return;
         const t = strings.table;
@@ -721,7 +797,7 @@ export const tableMethods = uiModule({
      * selected and scrolled to (the People table); the diagram's focus stays.
      */
     revealTablePerson(personId: string): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         state.rowType = 'persons';
         const key = `p:${personId}`;
         state.types.persons.selected = key;
@@ -731,10 +807,228 @@ export const tableMethods = uiModule({
         mounted?.grid.revealKey(key);
     },
 
+    /** Draw the table again now when it is shown. */
+    redrawTableNow(): void {
+        const el = document.getElementById('table-container');
+        if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
+    },
+
+    /**
+     * The list of views (9a): under the view button on a computer and a
+     * tablet; on a phone a sheet that also carries Save, Save as new and
+     * Discard changes while the view is changed.
+     */
+    showTableViewList(): void {
+        if (!mounted) return;
+        const t = strings.table;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const stored = storedViews();
+        const ro = DataManager.isReadOnly();
+        const list = viewList(state, stored, ro);
+        const anchor = mounted.views.button;
+        if (!isPhoneBar()) {
+            const item = (e: { id: string; name: string; rowNote: string; active: boolean }): MenuEntry => ({
+                id: e.id, label: e.name, icon: '', hint: e.rowNote || undefined, checked: e.active, run: () => this.openTableView(e.id),
+            });
+            const entries: MenuEntry[] = [{ heading: t.views.builtin }, ...list.builtin.map(item)];
+            if (list.custom.length) entries.push(SEP, { heading: t.views.custom }, ...list.custom.map(item));
+            if (list.canSaveAs) {
+                entries.push(SEP,
+                    { id: 'saveAs', label: t.saveAsMenu, icon: '+', run: () => this.saveTableViewAs(anchor) },
+                    { id: 'rename', label: t.renameMenu, icon: '', disabled: !list.canEdit, run: () => this.renameOpenTableView(anchor) },
+                    { id: 'delete', label: t.deleteMenu, icon: '', disabled: !list.canEdit, run: () => { void this.deleteOpenTableView(); } });
+                if (list.builtinOpen) entries.push({ note: t.builtinLocked });
+            }
+            openHeadMenu(anchor, '', '', entries);
+            return;
+        }
+        const type = state.rowType;
+        const open = openViewOf(state, type, stored);
+        const changed = viewChanged(open, state.types[type]);
+        const row = (e: { id: string; name: string; rowNote: string; active: boolean }) => ({
+            label: e.name, value: e.rowNote || undefined, active: e.active, run: () => this.openTableView(e.id),
+        });
+        const blocks: { header?: string; rows: { label: string; run: () => void; value?: string; active?: boolean }[]; divider?: boolean; note?: string }[] = [];
+        if (changed) {
+            const rows = [];
+            if (!ro && !list.builtinOpen) rows.push({ label: t.save, run: () => this.saveOpenTableView() });
+            if (!ro) rows.push({ label: t.saveAsMenu, run: () => this.saveTableViewAs(anchor) });
+            rows.push({ label: t.discard, run: () => this.discardTableViewChanges() });
+            blocks.push({ header: `● ${t.changed}`, rows, ...(list.builtinOpen && !ro ? { note: t.builtinNote } : {}) });
+        }
+        blocks.push({ header: t.views.builtin, rows: list.builtin.map(row) });
+        if (list.custom.length) blocks.push({ header: t.views.custom, rows: list.custom.map(row) });
+        if (!ro) {
+            const rows = [];
+            if (!changed) rows.push({ label: t.saveAsMenu, run: () => this.saveTableViewAs(anchor) });
+            if (list.canEdit) {
+                rows.push({ label: t.renameMenu, run: () => this.renameOpenTableView(anchor) });
+                rows.push({ label: t.deleteMenu, run: () => { void this.deleteOpenTableView(); } });
+            }
+            if (rows.length || list.builtinOpen) blocks.push({ rows, ...(list.builtinOpen ? { note: t.builtinLocked } : {}) });
+        }
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        this.presentMenuSheet(t.view, blocks.map((b, i) => (i ? { ...b, divider: true } : b)));
+    },
+
+    /** Open a view (§9.2); its row type is shown, the view left keeps its changes (§9.3). */
+    openTableView(id: string): void {
+        const state = stateOf(treeKey());
+        if (!switchView(state, id, storedViews())) return;
+        this.redrawTableNow();
+    },
+
+    /** "Save" (§9.3): the open saved view takes the shown state. */
+    saveOpenTableView(): void {
+        if (DataManager.isReadOnly()) return;
+        const state = stateOf(treeKey());
+        const type = state.rowType;
+        const st = state.types[type];
+        const open = openViewOf(state, type, storedViews());
+        if (isBuiltinId(open.id)) return;
+        if (!DataManager.saveTableView(viewFromState(type, st, open.id, open.name, new Date().toISOString()))) return;
+        st.base = columnSetupOf(st);
+        this.redrawTableNow();
+    },
+
+    /** "Save as new" (§9.3): a name panel ("{name} 2"); the new view opens with the shown state. */
+    saveTableViewAs(anchor?: HTMLElement): void {
+        if (DataManager.isReadOnly() || !mounted) return;
+        const t = strings.table;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const type = state.rowType;
+        const open = openViewOf(state, type, storedViews());
+        const form = viewNameForm(t.viewCopyName(open.name));
+        const save = (): void => {
+            if (treeKey() !== tree || DataManager.isReadOnly()) return;
+            const st = state.types[type];
+            const name = uniqueViewName(form.read(), takenViewNames(storedViews()));
+            const id = newViewId();
+            if (!DataManager.saveTableView(viewFromState(type, st, id, name, new Date().toISOString()))) return;
+            // The changes went into the new view: the view left has none.
+            delete state.drafts[open.id];
+            state.open[type] = id;
+            st.base = columnSetupOf(st);
+            this.redrawTableNow();
+        };
+        this.showTableFilterForm(anchor ?? mounted.views.button, t.saveAsTitle, form.el, save, {
+            applyLabel: t.save, ariaLabel: t.saveAsTitle, cls: 'tv-vpanel',
+            validate: () => { if (form.read()) return true; form.invalid(); return false; },
+        });
+    },
+
+    /** "Rename…" (§9.3): the same panel; the unsaved changes stay unsaved. */
+    renameOpenTableView(anchor?: HTMLElement): void {
+        if (DataManager.isReadOnly() || !mounted) return;
+        const t = strings.table;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const open = openViewOf(state, state.rowType, storedViews());
+        if (isBuiltinId(open.id)) return;
+        const form = viewNameForm(open.name);
+        const rename = (): void => {
+            if (treeKey() !== tree || DataManager.isReadOnly()) return;
+            const name = uniqueViewName(form.read(), takenViewNames(storedViews(), open.id));
+            if (name === open.name) return;
+            if (DataManager.saveTableView({ ...open, name, updated: new Date().toISOString() }, true)) this.redrawTableNow();
+        };
+        this.showTableFilterForm(anchor ?? mounted.views.button, t.renameTitle, form.el, rename, {
+            applyLabel: t.save, ariaLabel: t.renameTitle, cls: 'tv-vpanel',
+            validate: () => { if (form.read()) return true; form.invalid(); return false; },
+        });
+    },
+
+    /** "Delete" (§9.3): after a confirmation; Undo in the usual toast brings it back. */
+    async deleteOpenTableView(): Promise<void> {
+        if (DataManager.isReadOnly()) return;
+        const t = strings.table;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const open = openViewOf(state, state.rowType, storedViews());
+        if (isBuiltinId(open.id)) return;
+        const ok = await this.showConfirm(strings.danger.undoHint, t.deleteConfirm(open.name), { confirmLabel: t.deleteMenu, variant: 'danger' });
+        if (!ok || treeKey() !== tree) return;
+        if (DataManager.deleteTableView(open.id)) {
+            dropMissingViews(state, storedViews());
+            this.redrawTableNow();
+        }
+    },
+
+    /** "Discard changes" (§9.3). */
+    discardTableViewChanges(): void {
+        discardViewChanges(stateOf(treeKey()), storedViews());
+        this.redrawTableNow();
+    },
+
+    /** "● changed" of a built-in view: why there is no Save (9c). */
+    showTableBuiltinNote(anchor: HTMLElement): void {
+        const note = strings.table.builtinNote;
+        openBubblePanel({
+            rect: anchor.getBoundingClientRect(), label: note, kind: 'legend', focusBack: () => anchor,
+            html: `<div class="tv-bub-note">${note.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`,
+        });
+    },
+
+    /** The CSV of what the table shows now (§11.2) and its file name (§11.1). */
+    tableCsvNow(): { csv: TableCsv; file: string; type: RowType } | null {
+        if (!model) return null;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const type = state.rowType;
+        const st = state.types[type];
+        const display = displayColumns(type, st, isPhoneBar());
+        const { rows, pass } = viewRows(model, type, st.filter, st.search, st.sort, display.columns);
+        const csv = buildTableCsv({ model, type, rows, columns: shownColumns(type, st, false).columns, pass });
+        const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
+        const file = tableCsvFileName(treeName, openViewOf(state, type, storedViews()).name, new Date());
+        return { csv, file, type };
+    },
+
+    /** Export (11a): a 380 px panel under the button; on a phone a sheet. */
+    showTableExport(): void {
+        if (!mounted) return;
+        const now = this.tableCsvNow();
+        if (!now) return;
+        const t = strings.table;
+        const sum: ExportSummary = { items: now.csv.items, columns: now.csv.columns, file: now.file };
+        this.showTableFilterForm(mounted.exportBtn, '', exportForm(now.type, sum), () => this.downloadTableCsv(), {
+            applyLabel: t.exportDownload, ariaLabel: t.export, cls: 'tv-xpanel', noCancel: true,
+        });
+    },
+
+    /** Download the CSV (§11.2) and say what went in (11b). */
+    downloadTableCsv(): void {
+        const now = this.tableCsvNow();
+        if (!now) return;
+        const blob = new Blob([now.csv.csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = now.file;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        const k = now.type === 'persons' ? 'p' : 'u';
+        this.showToast(strings.table.exportedToast[k](now.file, now.csv.items, now.csv.lines, now.csv.columns), 5000);
+    },
+
+    /** The Export dialog's link (11d): the dialog closes, the Table view opens with its Export. */
+    showTableExportFromDialog(): void {
+        this.closeExportDialog();
+        if (TreeRenderer.getViewMode() !== 'table') this.setDisplayViewMode('table');
+        requestAnimationFrame(() => {
+            if (TreeRenderer.getViewMode() === 'table') this.showTableExport();
+        });
+    },
+
     /** Switch the table's rows (§2); each type keeps its own state. */
     setTableRowType(type: RowType): void {
         if (!ROW_TYPES.includes(type)) return;
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         if (state.rowType === type) return;
         state.rowType = type;
         const el = document.getElementById('table-container');
@@ -743,7 +1037,7 @@ export const tableMethods = uiModule({
 
     /** The phone's row-type sheet (§2): the types with their counts and a note. */
     showTableRowTypeSheet(): void {
-        const state = tableStateFor(treeKey());
+        const state = stateOf(treeKey());
         const counts: Record<RowType, number> = { persons: model?.persons.length ?? 0, unions: model?.unions.length ?? 0 };
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();

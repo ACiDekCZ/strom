@@ -19,12 +19,19 @@ export interface HeadMenuItem {
     /** The shortcut on the right. */
     hint?: string;
     disabled?: boolean;
+    /** The chosen one of a list (the open view, §9.2): a check before the label. */
+    checked?: boolean;
     run(): void;
 }
 
 /** A separator between the menu's parts. */
 export const SEP = null;
 export type HeadMenuEntry = HeadMenuItem | typeof SEP;
+/** A quiet label over a part of the menu ("Built-in", §9.2). */
+export interface MenuHeading { heading: string }
+/** A quiet sentence in the menu ("A built-in view cannot be renamed or deleted."). */
+export interface MenuNote { note: string }
+export type MenuEntry = HeadMenuEntry | MenuHeading | MenuNote;
 
 export interface HeadMenuContext {
     pinned: boolean;
@@ -88,20 +95,26 @@ export function isHeadMenuOpen(): boolean {
  * Show the menu under a head cell. Keys: ↑ ↓ Home End move, Enter / Space
  * choose, Escape or Tab close; the focus goes back to the head cell.
  */
-export function openHeadMenu(anchor: HTMLElement, title: string, note: string, entries: HeadMenuEntry[]): HTMLElement {
+export function openHeadMenu(anchor: HTMLElement, title: string, note: string, entries: MenuEntry[]): HTMLElement {
     closeHeadMenu();
     const el = document.createElement('div');
     el.className = 'tv-menu';
     el.setAttribute('role', 'menu');
-    el.setAttribute('aria-label', title);
-    let html = `<div class="tv-menu-title" aria-hidden="true">${esc(title)}</div>`
-        + (note ? `<div class="tv-menu-note" aria-hidden="true">${esc(note)}</div>` : '')
-        + '<div class="tv-menu-sep" role="separator"></div>';
+    el.setAttribute('aria-label', title || anchor.getAttribute('aria-label') || anchor.textContent || '');
+    let html = title
+        ? `<div class="tv-menu-title" aria-hidden="true">${esc(title)}</div>`
+            + (note ? `<div class="tv-menu-note" aria-hidden="true">${esc(note)}</div>` : '')
+            + '<div class="tv-menu-sep" role="separator"></div>'
+        : '';
     entries.forEach((e, i) => {
         if (!e) { html += '<div class="tv-menu-sep" role="separator"></div>'; return; }
-        html += `<button type="button" class="tv-menu-item" role="menuitem" tabindex="-1" data-i="${i}" data-id="${e.id}"`
+        if ('heading' in e) { html += `<div class="tv-menu-heading" role="presentation">${esc(e.heading)}</div>`; return; }
+        if ('note' in e) { html += `<div class="tv-menu-note tv-menu-foot" role="presentation">${esc(e.note)}</div>`; return; }
+        const checkable = e.checked !== undefined;
+        html += `<button type="button" class="tv-menu-item" role="${checkable ? 'menuitemradio' : 'menuitem'}" tabindex="-1" data-i="${i}" data-id="${esc(e.id)}"`
+            + (checkable ? ` aria-checked="${e.checked}"` : '')
             + `${e.disabled ? ' aria-disabled="true"' : ''}>`
-            + `<span class="tv-menu-icon" aria-hidden="true">${esc(e.icon)}</span>`
+            + `<span class="tv-menu-icon" aria-hidden="true">${esc(e.checked ? '✓' : e.icon)}</span>`
             + `<span class="tv-menu-label">${esc(e.label)}</span>`
             + (e.hint ? `<span class="tv-menu-hint" aria-hidden="true">${esc(e.hint)}</span>` : '')
             + '</button>';
@@ -135,7 +148,7 @@ export function openHeadMenu(anchor: HTMLElement, title: string, note: string, e
         if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
         const entry = entries[Number(btn.dataset.i)];
         close(true);
-        entry?.run();
+        if (entry && 'run' in entry) entry.run();
     });
     el.addEventListener('keydown', (e) => {
         const list = items();
@@ -159,6 +172,6 @@ export function openHeadMenu(anchor: HTMLElement, title: string, note: string, e
     setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
     window.addEventListener('resize', onResize);
     openMenu = { el, close };
-    items()[0]?.focus({ preventScroll: true });
+    (el.querySelector<HTMLElement>('.tv-menu-item[aria-checked="true"]') ?? items()[0])?.focus({ preventScroll: true });
     return el;
 }
