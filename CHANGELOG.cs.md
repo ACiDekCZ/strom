@@ -6,16 +6,13 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
-- **Pohled Tabulka**: nový pohled vedle *Vějíře* a *Mapy* (na telefonu a tabletu v *Více*) ukáže celý strom jako tabulku osob nebo svazků: svazky osoby jako podřádky, skupiny sloupců k výběru, přesunutí a ukotvení, dopočtené věky (z nepřesného data jako rozsah), řádek pokrytí a úplnost osoby, nálezy kontrol přímo v buňkách s *Není chyba*, rychlé čipy, filtr ve sloupci, hledání a řazení podle více sloupců, uložené pohledy u stromu (jdou se stromem do zálohy i exportu), akce u řádku (*Ukázat ve stromu*, *Otevřít osobu*, *Upravit*) a export do CSV. Zvládne i strom s tisíci osob; u stromu jen ke čtení jde vše kromě úprav.
+- **Pohled Tabulka**: nový pohled vedle *Vějíře* a *Mapy* (na telefonu a tabletu v *Více*) ukáže strom jako tabulku osob nebo svazků se sloupci k výběru, dopočtenými věky, úplností osoby, nálezy kontrol v buňkách, filtry, hledáním a řazením, uloženými pohledy u stromu, akcemi u řádku a exportem do CSV. Zvládne i strom s tisíci osob.
 - **Kvalita dat: nové kontroly**: matka mladší 16 nebo starší 45 let a otec mladší 18 nebo starší 60 let při narození dítěte, sňatek před 16. rokem a zapsaný věk, který se od dat liší o víc než dva roky, se hlásí *k ověření*; varování se všude jmenují *k ověření*.
-- **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle nejpozdějšího možného data sňatku: rozvodu nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství na kartách, partneři vedle osoby i bubliny; bubliny sourozenců a dětí uvádějí jména podle narození.
-- **Import GEDCOM: měsíc a rok číslicemi**: datum jako „07/1987“, „7/1987“ nebo „07.1987“, i s „kolem“, „před“ nebo „po“, se čte jako ten měsíc a nezůstává jen v poznámce.
-- **Tečka výročí**: tečka u *Akce* (u *Více* na telefonu a v úzkém okně) po otevření *Výročí* zhasne, i po znovunačtení, a rozsvítí se znovu další den nebo když se výročí v příštích 7 dnech změní.
-- **Přečíst dokument, *Navrhnout do stromu***: osoba, jejíž shoda stojí jen na nejistě přečteném jméně (označeném „?“), je předvybraná na *Ne* místo *Spojit*.
-- **Dlouhá jména na kartách**: na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“, na obrazovce, v tisku a PDF i v exportovaném obrázku; karta *Kompaktní* zůstává zkrácená.
-- **GEDCOM: sloučení a *Zpět do …***: fotka rodiny ze souboru jiného programu se vrátí v *Zpět do {programu}* tak, jak ji soubor měl; ruční sloučení dvou osob zachová poznámky obou osob i obou rodin; ID ze souboru (třeba _UID z MyHeritage), které nese víc osob, shodu jen nabídne.
-- **Patička exportovaného obrázku**: dlouhý popis pohledu se zalomí na druhý řádek uvnitř obrázku místo přetečení přes okraj, ve stromu, vějíři i časové ose.
-- **Drobnosti**: na telefonu drží dlaždice v *Více* své názvy uvnitř; *Kvalita dat* v nabídce stromu má barvu okolních řádků; ∞ ve značce sňatku stojí v jedné výšce s čísly vedle.
+- **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle rozvodu nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství, partneři i bubliny; bubliny sourozenců a dětí uvádějí jména podle narození.
+- **Dlouhá jména a popisy**: na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“, i v tisku, PDF a exportovaném obrázku; dlouhý popis pohledu v patičce exportovaného obrázku se zalomí uvnitř obrázku.
+- **GEDCOM**: datum jako „07/1987“ nebo „07.1987“ se čte jako ten měsíc; fotka rodiny ze souboru jiného programu se vrátí v *Zpět do {programu}*; ruční sloučení dvou osob zachová poznámky obou osob i obou rodin; ID, které nese víc osob (třeba _UID z MyHeritage), shodu jen nabídne.
+- **Přečíst dokument, *Navrhnout do stromu***: shoda, která stojí jen na nejistě přečteném jméně (označeném „?“), je předvybraná na *Ne*.
+- **Drobnosti**: tečka u *Akce* po otevření *Výročí* zhasne a rozsvítí se znovu s novými výročími; na telefonu drží dlaždice v *Více* své názvy uvnitř; *Kvalita dat* v nabídce stromu má barvu okolních řádků; ∞ ve značce sňatku stojí v jedné výšce s čísly.
 
 ## 3.26.0
 
