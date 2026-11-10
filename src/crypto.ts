@@ -22,6 +22,68 @@ const SALT_LENGTH = 16;  // 128 bits
 const IV_LENGTH = 12;    // 96 bits for GCM
 const KEY_LENGTH = 256;  // AES-256
 
+// ==================== AVAILABILITY & ERRORS ====================
+
+/**
+ * Browsers expose `crypto.subtle` only in a secure context (https, or
+ * localhost / 127.0.0.1). Over plain http on a network address it is
+ * undefined, so encryption cannot work there at all.
+ */
+export function isCryptoAvailable(): boolean {
+    const g = globalThis as { isSecureContext?: unknown; crypto?: Crypto };
+    if (g.isSecureContext === false) return false;
+    return !!g.crypto?.subtle;
+}
+
+/** Web Crypto is missing: the page is not in a secure context. */
+export class CryptoUnavailableError extends Error {
+    constructor() {
+        super('Web Crypto is not available (insecure context)');
+        this.name = 'CryptoUnavailableError';
+    }
+}
+
+/** AES-GCM refused the data: the key (password) does not match. */
+export class WrongPasswordError extends Error {
+    constructor() {
+        super('Decryption failed - incorrect password');
+        this.name = 'WrongPasswordError';
+    }
+}
+
+/** Why an encryption or decryption step failed. */
+export type CryptoFailure = 'wrong-password' | 'unavailable' | 'error';
+
+/**
+ * Sort a thrown error: an incorrect password only when AES-GCM itself
+ * refused the data (WrongPasswordError), missing Web Crypto as
+ * 'unavailable', anything else (corrupt data, storage, a bug) as 'error'.
+ */
+export function classifyCryptoError(err: unknown): CryptoFailure {
+    if (err instanceof WrongPasswordError) return 'wrong-password';
+    if (err instanceof CryptoUnavailableError || !isCryptoAvailable()) return 'unavailable';
+    return 'error';
+}
+
+/** The SubtleCrypto interface, or CryptoUnavailableError outside a secure context. */
+function subtle(): SubtleCrypto {
+    if (!isCryptoAvailable()) throw new CryptoUnavailableError();
+    return crypto.subtle;
+}
+
+/**
+ * Run an AES-GCM decrypt: an OperationError (authentication failed) means
+ * the password is wrong; any other error passes through unchanged.
+ */
+async function decryptOrWrongPassword(run: () => Promise<ArrayBuffer>): Promise<ArrayBuffer> {
+    try {
+        return await run();
+    } catch (err) {
+        if ((err as { name?: unknown } | null)?.name === 'OperationError') throw new WrongPasswordError();
+        throw err;
+    }
+}
+
 // ==================== HELPERS ====================
 
 /**
@@ -60,7 +122,7 @@ function generateRandomBytes(length: number): Uint8Array {
  */
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
     // Import password as key material
-    const passwordKey = await crypto.subtle.importKey(
+    const passwordKey = await subtle().importKey(
         'raw',
         new TextEncoder().encode(password),
         'PBKDF2',
@@ -69,7 +131,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     );
 
     // Derive AES key
-    return crypto.subtle.deriveKey(
+    return subtle().deriveKey(
         {
             name: 'PBKDF2',
             salt: salt as BufferSource,
@@ -118,7 +180,7 @@ export async function encrypt(data: string, password: string): Promise<Encrypted
     const key = await deriveKey(password, salt);
 
     // Encrypt data
-    const encryptedBuffer = await crypto.subtle.encrypt(
+    const encryptedBuffer = await subtle().encrypt(
         {
             name: 'AES-GCM',
             iv: iv as BufferSource
@@ -141,7 +203,8 @@ export async function encrypt(data: string, password: string): Promise<Encrypted
  * @param encrypted Encrypted data object
  * @param password User password
  * @returns Decrypted plain text data
- * @throws Error if decryption fails (wrong password)
+ * @throws WrongPasswordError when the password does not match,
+ *         CryptoUnavailableError outside a secure context
  */
 export async function decrypt(encrypted: EncryptedData, password: string): Promise<string> {
     // Decode base64 values
@@ -153,20 +216,16 @@ export async function decrypt(encrypted: EncryptedData, password: string): Promi
     const key = await deriveKey(password, salt);
 
     // Decrypt data
-    try {
-        const decryptedBuffer = await crypto.subtle.decrypt(
-            {
-                name: 'AES-GCM',
-                iv
-            },
-            key,
-            data
-        );
+    const decryptedBuffer = await decryptOrWrongPassword(() => subtle().decrypt(
+        {
+            name: 'AES-GCM',
+            iv
+        },
+        key,
+        data
+    ));
 
-        return new TextDecoder().decode(decryptedBuffer);
-    } catch {
-        throw new Error('Decryption failed - incorrect password');
-    }
+    return new TextDecoder().decode(decryptedBuffer);
 }
 
 // ==================== SESSION MANAGEMENT ====================
@@ -220,7 +279,7 @@ class CryptoSessionClass {
 
         const iv = generateRandomBytes(IV_LENGTH);
 
-        const encryptedBuffer = await crypto.subtle.encrypt(
+        const encryptedBuffer = await subtle().encrypt(
             {
                 name: 'AES-GCM',
                 iv: iv as BufferSource
@@ -252,20 +311,17 @@ class CryptoSessionClass {
         const iv = new Uint8Array(base64ToBuffer(encrypted.iv));
         const data = base64ToBuffer(encrypted.data);
 
-        try {
-            const decryptedBuffer = await crypto.subtle.decrypt(
-                {
-                    name: 'AES-GCM',
-                    iv
-                },
-                this.derivedKey,
-                data
-            );
+        const key = this.derivedKey;
+        const decryptedBuffer = await decryptOrWrongPassword(() => subtle().decrypt(
+            {
+                name: 'AES-GCM',
+                iv
+            },
+            key,
+            data
+        ));
 
-            return new TextDecoder().decode(decryptedBuffer);
-        } catch {
-            throw new Error('Decryption failed - incorrect password');
-        }
+        return new TextDecoder().decode(decryptedBuffer);
     }
 
     /**
@@ -292,7 +348,7 @@ class CryptoSessionClass {
         if (!this.derivedKey) {
             throw new Error('Session is locked - unlock first');
         }
-        const out = await crypto.subtle.encrypt(
+        const out = await subtle().encrypt(
             { name: 'AES-GCM', iv: new Uint8Array(IV_LENGTH) as BufferSource },
             this.derivedKey,
             new TextEncoder().encode('strom-content-id')

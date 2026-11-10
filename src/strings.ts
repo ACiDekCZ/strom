@@ -5304,6 +5304,8 @@ const stringsEN = {
         encryptionDisabled: 'Encryption disabled',
         unlockData: 'Unlock data',
         decryptionFailed: 'Failed to decrypt data',
+        encryptionFailed: 'Failed to encrypt data',
+        insecureContext: 'Encryption works only over https or on this computer (localhost). This address is not secure.',
         optional: '(optional)',
         enterPasswordToView: 'Enter password to view'
     },
@@ -13618,6 +13620,8 @@ const stringsCZ: StringsType = {
         encryptionDisabled: 'Šifrování vypnuto',
         unlockData: 'Odemknout data',
         decryptionFailed: 'Nepodařilo se dešifrovat data',
+        encryptionFailed: 'Nepodařilo se zašifrovat data',
+        insecureContext: 'Šifrování funguje jen přes https nebo na tomto počítači (localhost). Tato adresa není zabezpečená.',
         optional: '(volitelné)',
         enterPasswordToView: 'Pro zobrazení je potřeba heslo'
     },
@@ -21829,6 +21833,8 @@ const stringsDE: StringsType = {
         encryptionDisabled: 'Verschlüsselung deaktiviert',
         unlockData: 'Daten entsperren',
         decryptionFailed: 'Daten konnten nicht entschlüsselt werden',
+        encryptionFailed: 'Daten konnten nicht verschlüsselt werden',
+        insecureContext: 'Verschlüsselung funktioniert nur über https oder auf diesem Computer (localhost). Diese Adresse ist nicht sicher.',
         optional: '(optional)',
         enterPasswordToView: 'Passwort eingeben, um anzusehen'
     },

@@ -22,7 +22,7 @@ import {
     STROM_DATA_VERSION
 } from './types.js';
 import { strings } from './strings.js';
-import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js';
+import { isEncrypted, EncryptedData, CryptoSession, decrypt, classifyCryptoError, CryptoFailure } from './crypto.js';
 import { SettingsManager } from './settings.js';
 import { peekReloadPoint, forgetLastView } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
@@ -762,10 +762,12 @@ class TreeManagerClass {
      * normally again.
      * - 'ok': readable now (re-encrypted, or it already was readable);
      * - 'wrong-password': the password does not open this tree, nothing changed;
+     * - 'unavailable' / 'error': no Web Crypto here (insecure address) or
+     *   another failure (corrupt record) — not a password issue;
      * - 'locked': the session itself is locked — unlock it first;
      * - 'missing': no such record.
      */
-    async recoverTreeWithPassword(id: TreeId, password: string): Promise<'ok' | 'wrong-password' | 'locked' | 'missing'> {
+    async recoverTreeWithPassword(id: TreeId, password: string): Promise<'ok' | CryptoFailure | 'locked' | 'missing'> {
         const current = await this.readTreeData(id);
         if (current.status === 'ok') return 'ok';
         if (current.status === 'missing') return 'missing';
@@ -779,8 +781,9 @@ class TreeManagerClass {
                 const text = await decrypt(raw.encrypted, password);
                 const out = await unpoolJson(text, enc => decrypt(enc, password));
                 pooled = JSON.parse(out.json) as StromData;
-            } catch {
-                return 'wrong-password';
+            } catch (err) {
+                // Only an AES-GCM refusal is a wrong password (GitHub #13).
+                return classifyCryptoError(err);
             }
             // Re-saved under the session key: images get ids and encryption
             // of that key, the old ones go with the next pool cleanup.
@@ -795,8 +798,8 @@ class TreeManagerClass {
         try {
             plainText = await decrypt(raw, password);
             data = JSON.parse(plainText) as StromData;
-        } catch {
-            return 'wrong-password';
+        } catch (err) {
+            return classifyCryptoError(err);
         }
         const reencrypted = await CryptoSession.encrypt(plainText);
         await StorageManager.set('trees', id, reencrypted);

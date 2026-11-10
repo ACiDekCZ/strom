@@ -289,3 +289,78 @@ test('a tree re-encrypted under another password in another tab asks for that pa
             .filter(p => !p.isPlaceholder).map(p => p.firstName).sort() : null;
     }, secondId)).toEqual(['Karel', 'Ota']);
 });
+
+/**
+ * GitHub #13: over plain http on a network address (http://192.168.x.y, not
+ * localhost) the browser has no `crypto.subtle`. Simulated here per tab: while
+ * the session flag is set, the page loads as an insecure context.
+ */
+const INSECURE_FLAG = 'e2e-insecure-context';
+const INSECURE_NOTICE = 'Encryption works only over https or on this computer (localhost). This address is not secure.';
+
+async function setInsecure(page: Page, on: boolean): Promise<void> {
+    await page.evaluate(([flag, value]) => {
+        if (value) sessionStorage.setItem(flag, '1');
+        else sessionStorage.removeItem(flag);
+    }, [INSECURE_FLAG, on] as const);
+    await page.reload();
+    await expect(page.locator('.toolbar')).toBeVisible();
+}
+
+test('at an insecure address the password dialogs say encryption needs https or localhost, never "Incorrect password" (GitHub #13)', async ({ page }) => {
+    await page.addInitScript((flag) => {
+        if (sessionStorage.getItem(flag) !== '1') return;
+        Object.defineProperty(window, 'isSecureContext', { get: () => false, configurable: true });
+        Object.defineProperty(Crypto.prototype, 'subtle', { get: () => undefined, configurable: true });
+    }, INSECURE_FLAG);
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await waitForPersist(page, 'Jan');
+
+    // Switching encryption on: the notice is there before any password is typed,
+    // and saving one changes nothing.
+    await setInsecure(page, true);
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    expect(await page.evaluate(() => window.isSecureContext || !!crypto.subtle)).toBe(false);
+    const settings = await openSettings(page);
+    await settings.locator('#encryption-toggle').check();
+    const setup = page.locator('#password-setup-modal');
+    await expect(setup).toBeVisible();
+    const setupError = setup.locator('#password-setup-error');
+    await expect(setupError).toHaveText(INSECURE_NOTICE);
+    await setup.locator('#password-setup-input').fill(PASSWORD);
+    await setup.locator('#password-setup-confirm').fill(PASSWORD);
+    await setup.getByRole('button', { name: 'Save' }).click();
+    await expect(setupError).toHaveText(INSECURE_NOTICE);
+    await expect(setup).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.SettingsManager.isEncryptionEnabled())).toBe(false);
+    expect(await dumpDb(page)).not.toContain('"encrypted":true');
+    await setup.getByRole('button', { name: 'Cancel' }).click();
+    await expect(setup).toBeHidden();
+
+    // Encrypted at a secure address, then opened at the insecure one: the
+    // unlock prompt says why no password can open it, the right one included.
+    await setInsecure(page, false);
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await enableEncryption(page, PASSWORD);
+    await page.keyboard.press('Escape');
+    await setInsecure(page, true);
+    const prompt = page.locator('#password-prompt-modal');
+    await expect(prompt).toBeVisible();
+    const promptError = prompt.locator('#password-prompt-error');
+    await expect(promptError).toHaveText(INSECURE_NOTICE);
+    await submitPrompt(page, PASSWORD);
+    await expect(promptError).toHaveText(INSECURE_NOTICE);
+    await submitPrompt(page, 'not-the-password');
+    await expect(promptError).toHaveText(INSECURE_NOTICE);
+    await expect(prompt).toBeVisible();
+    await expect(card(page, 'Jan')).toHaveCount(0);
+
+    // Back at a secure address the same password opens the tree.
+    await setInsecure(page, false);
+    await expect(prompt).toBeVisible();
+    await expect(promptError).toBeHidden();
+    await submitPrompt(page, PASSWORD);
+    await expect(prompt).toBeHidden();
+    await expect(card(page, 'Jan')).toBeVisible();
+});

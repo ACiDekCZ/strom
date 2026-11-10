@@ -186,8 +186,8 @@ describe('K8 undecryptable tree is not empty', () => {
             b: { name: 'B', data: shown },
         }), 'file-password');
 
-        expect(await DataManager.decryptEmbeddedData('nope')).toBe(false);
-        expect(await DataManager.decryptEmbeddedData('file-password')).toBe(true);
+        expect(await DataManager.decryptEmbeddedData('nope')).toBe('wrong-password');
+        expect(await DataManager.decryptEmbeddedData('file-password')).toBe('ok');
         expect(CryptoSession.getSalt()).toBe(localSalt);
         expect(dm.viewMode).toBe(true);
         // Password-protected "Export all" restores every tree, and the

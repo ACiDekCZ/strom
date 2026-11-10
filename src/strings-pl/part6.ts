@@ -569,6 +569,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         encryptionDisabled: 'Szyfrowanie wyłączone',
         unlockData: 'Odblokuj dane',
         decryptionFailed: 'Nie udało się odszyfrować danych',
+        encryptionFailed: 'Nie udało się zaszyfrować danych',
+        insecureContext: 'Szyfrowanie działa tylko przez https lub na tym komputerze (localhost). Ten adres nie jest bezpieczny.',
         optional: '(opcjonalne)',
         enterPasswordToView: 'Do wyświetlenia wymagane jest hasło'
     },

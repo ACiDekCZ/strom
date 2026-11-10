@@ -66,7 +66,8 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog, uniqueIdSuffix } from '../types.js';
-import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
+import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData, classifyCryptoError, CryptoFailure } from '../crypto.js';
+import { cryptoErrorText, cryptoFailureText, resetPasswordError } from '../crypto-errors.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -991,12 +992,10 @@ export const importExportMethods = uiModule({
 
         if (!modal || !input) return;
 
-        // Clear fields but keep modal behind tree manager
+        // Clear fields but keep modal behind tree manager (outside a
+        // secure context the notice shows at once)
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
 
         // Set callback for this specific import - callback manages dialog
         this.passwordPromptCallback = async (password: string) => {
@@ -1016,21 +1015,15 @@ export const importExportMethods = uiModule({
 
         const error = document.getElementById('password-prompt-error');
 
+        let decrypted: string;
         try {
             const { decrypt } = await import('../crypto.js');
-            const decrypted = await decrypt(this.pendingEncryptedImport, password);
-
-            // Success - close dialog and reset flag
-            document.getElementById('password-prompt-modal')?.classList.remove('active');
-            this.passwordPromptCallbackManagesDialog = false;
-            this.pendingEncryptedImport = null;
-
-            // Same routing as a plain file (single tree or "Export all" backup)
-            await this.importJsonString(decrypted);
-        } catch {
-            // Wrong password - show error and keep dialog open
+            decrypted = await decrypt(this.pendingEncryptedImport, password);
+        } catch (err) {
+            // Wrong password (or another failure, said as what it is):
+            // show the error and keep the dialog open (GitHub #13)
             if (error) {
-                error.textContent = strings.encryption.wrongPassword;
+                error.textContent = cryptoErrorText(err);
                 error.style.display = 'block';
             }
             // Clear input for retry
@@ -1039,7 +1032,16 @@ export const importExportMethods = uiModule({
                 input.value = '';
                 input.focus();
             }
+            return;
         }
+
+        // Success - close dialog and reset flag
+        document.getElementById('password-prompt-modal')?.classList.remove('active');
+        this.passwordPromptCallbackManagesDialog = false;
+        this.pendingEncryptedImport = null;
+
+        // Same routing as a plain file (single tree or "Export all" backup)
+        await this.importJsonString(decrypted);
     },
 
     // ---- SAVE CURRENT DATA DIALOG ----
@@ -1230,11 +1232,11 @@ export const importExportMethods = uiModule({
                         if (isMultiTreeBackup(parsed)) trees = parsed;
                     }
                     if (envEnc) single = JSON.parse(await decrypt(envEnc, password)) as StromData;
-                } catch {
-                    return false;
+                } catch (err) {
+                    return classifyCryptoError(err);
                 }
                 await this.continueHtmlImport(trees, single ?? (envData as StromData | undefined) ?? null);
-                return true;
+                return 'ok';
             });
             return;
         }
@@ -1260,32 +1262,30 @@ export const importExportMethods = uiModule({
 
     /**
      * Ask for a file's password in the shared prompt. `tryPassword` resolves
-     * false on a wrong password (the prompt stays open for a retry).
+     * 'ok', or why it failed (the prompt stays open for a retry).
      */
-    promptFilePassword(tryPassword: (password: string) => Promise<boolean>): void {
+    promptFilePassword(tryPassword: (password: string) => Promise<'ok' | CryptoFailure>): void {
         const modal = document.getElementById('password-prompt-modal');
         const input = document.getElementById('password-prompt-input') as HTMLInputElement;
         const error = document.getElementById('password-prompt-error');
         if (!modal || !input) return;
 
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
         this.pendingEncryptedData = null;
         this.passwordPromptOnCancel = null;
         this.passwordPromptCallback = async (password: string) => {
             // Close BEFORE continuing: the import flow opens its own dialogs.
             modal.classList.remove('active');
-            const ok = await tryPassword(password);
-            if (ok) {
+            const result = await tryPassword(password);
+            if (result === 'ok') {
                 this.passwordPromptCallbackManagesDialog = false;
                 return;
             }
             modal.classList.add('active');
             if (error) {
-                error.textContent = strings.encryption.wrongPassword;
+                // Wrong password only when AES-GCM refused it (GitHub #13).
+                error.textContent = cryptoFailureText(result);
                 error.style.display = 'block';
             }
             input.value = '';

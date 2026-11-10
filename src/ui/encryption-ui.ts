@@ -39,7 +39,8 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog, PERSON_CITATION_FIELDS } from '../types.js';
-import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
+import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData, isCryptoAvailable } from '../crypto.js';
+import { cryptoErrorText, cryptoFailureText, resetPasswordError, requireCrypto } from '../crypto-errors.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -105,12 +106,9 @@ export const encryptionUiMethods = uiModule({
             return;
         }
 
-        // Clear fields
+        // Clear fields (outside a secure context the notice shows at once)
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
 
         // Set callback for password verification - callback manages dialog
         this.passwordPromptCallback = async (password: string) => {
@@ -127,9 +125,9 @@ export const encryptionUiMethods = uiModule({
      */
     async tryDisableEncryption(password: string): Promise<void> {
         const error = document.getElementById('password-prompt-error');
-        const showWrongPassword = () => {
+        const showFailure = (text: string) => {
             if (error) {
-                error.textContent = strings.encryption.wrongPassword;
+                error.textContent = text;
                 error.style.display = 'block';
             }
             // Clear input for retry
@@ -152,13 +150,14 @@ export const encryptionUiMethods = uiModule({
         if (probe) {
             try {
                 await decrypt(probe, password);
-            } catch {
-                showWrongPassword();
+                // Password verified - unlock session to decrypt data
+                const salt = new Uint8Array(atob(probe.salt).split('').map(c => c.charCodeAt(0)));
+                await CryptoSession.unlock(password, salt);
+            } catch (err) {
+                // Only an AES-GCM refusal is a wrong password (GitHub #13).
+                showFailure(cryptoErrorText(err));
                 return;
             }
-            // Password verified - unlock session to decrypt data
-            const salt = new Uint8Array(atob(probe.salt).split('').map(c => c.charCodeAt(0)));
-            await CryptoSession.unlock(password, salt);
         }
 
         // Close dialog first: from here on failures are not a password issue.
@@ -226,13 +225,10 @@ export const encryptionUiMethods = uiModule({
 
         if (!modal || !input || !confirm) return;
 
-        // Clear fields
+        // Clear fields (outside a secure context the notice shows at once)
         input.value = '';
         confirm.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
 
         modal.classList.add('active');
         input.focus();
@@ -273,6 +269,9 @@ export const encryptionUiMethods = uiModule({
 
         const password = input.value;
         const confirmPassword = confirm.value;
+
+        // No Web Crypto at this address: no password can help (GitHub #13).
+        if (!requireCrypto(error)) return;
 
         // Validate password
         if (password.length < 6) {
@@ -320,7 +319,7 @@ export const encryptionUiMethods = uiModule({
             if (failed > 0) this.showToast(strings.storageSafety.reencodeFailed(failed), 6000);
         } catch (err) {
             if (error) {
-                error.textContent = strings.encryption.decryptionFailed;
+                error.textContent = cryptoErrorText(err, 'encrypt');
                 error.style.display = 'block';
             }
         }
@@ -340,12 +339,9 @@ export const encryptionUiMethods = uiModule({
 
         if (!modal || !input) return;
 
-        // Clear fields
+        // Clear fields (outside a secure context the notice shows at once)
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
 
         modal.classList.add('active');
         input.focus();
@@ -369,6 +365,10 @@ export const encryptionUiMethods = uiModule({
         if (!input || !this.passwordPromptCallback) return;
 
         const password = input.value;
+
+        // Every prompt here ends in Web Crypto: without it (an insecure
+        // address) say so instead of judging the password (GitHub #13).
+        if (!requireCrypto(error)) return;
 
         if (!password) {
             if (error) {
@@ -397,10 +397,10 @@ export const encryptionUiMethods = uiModule({
                 this.pendingEncryptedData = null;
                 this.passwordPromptOnCancel = null;
                 callback(password);
-            } catch {
-                // Wrong password
+            } catch (err) {
+                // Wrong password, or another failure said as what it is
                 if (error) {
-                    error.textContent = strings.encryption.wrongPassword;
+                    error.textContent = cryptoErrorText(err);
                     error.style.display = 'block';
                 }
                 input.select();
@@ -504,16 +504,13 @@ export const encryptionUiMethods = uiModule({
         if (!modal || !input) return;
 
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
         this.pendingEncryptedData = null;
         this.passwordPromptCallback = async (password: string) => {
-            const ok = await DataManager.decryptEmbeddedData(password);
-            if (!ok) {
+            const result = await DataManager.decryptEmbeddedData(password);
+            if (result !== 'ok') {
                 if (error) {
-                    error.textContent = strings.encryption.wrongPassword;
+                    error.textContent = cryptoFailureText(result);
                     error.style.display = 'block';
                 }
                 input.select();
@@ -660,16 +657,13 @@ export const encryptionUiMethods = uiModule({
         };
 
         input.value = '';
-        if (error) {
-            error.style.display = 'none';
-            error.textContent = '';
-        }
+        resetPasswordError(error);
         this.pendingEncryptedData = null;
         this.passwordPromptCallback = async (password: string) => {
             const result = await TreeManager.recoverTreeWithPassword(treeId, password);
-            if (result === 'wrong-password') {
+            if (result === 'wrong-password' || result === 'unavailable' || result === 'error') {
                 if (error) {
-                    error.textContent = strings.encryption.wrongPassword;
+                    error.textContent = cryptoFailureText(result);
                     error.style.display = 'block';
                 }
                 input.select();
@@ -1036,6 +1030,8 @@ export const encryptionUiMethods = uiModule({
             error.style.display = 'none';
             error.textContent = '';
         }
+        // A quick save starts with encryption on: the insecure-address notice at once.
+        if (quick) resetPasswordError(error);
 
         // Show audit log checkbox only for full backup (Export All) when audit logging is enabled
         const auditLogSection = document.getElementById('export-audit-log-section');
@@ -1125,6 +1121,9 @@ export const encryptionUiMethods = uiModule({
             if (input) input.value = '';
             if (confirm) confirm.value = '';
             if (error) error.style.display = 'none';
+        } else if (!isCryptoAvailable()) {
+            // Said before a password is typed: it cannot encrypt here (GitHub #13).
+            resetPasswordError(error);
         }
         const btn = document.getElementById('export-submit-btn');
         if (btn) {
@@ -1171,6 +1170,9 @@ export const encryptionUiMethods = uiModule({
 
         const password = input.value;
         const confirmPassword = confirm.value;
+
+        // No Web Crypto at this address: an encrypted file cannot be made (GitHub #13).
+        if (!requireCrypto(error)) return;
 
         // Password is required for encrypted export
         if (password.length < 6) {

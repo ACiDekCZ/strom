@@ -46,7 +46,8 @@ import { isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
-import { isEncrypted, EncryptedData, decrypt } from './crypto.js';
+import { isEncrypted, EncryptedData, decrypt, classifyCryptoError, CryptoFailure } from './crypto.js';
+import { cryptoErrorText } from './crypto-errors.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
@@ -546,14 +547,15 @@ class DataManagerClass {
      * the user's own encrypted trees become unreadable and get overwritten
      * (review K8). Returns false on a wrong password.
      */
-    async decryptEmbeddedData(password: string): Promise<boolean> {
+    async decryptEmbeddedData(password: string): Promise<'ok' | CryptoFailure> {
         const pending = this.pendingEncryptedEmbedded;
-        if (!pending) return false;
+        if (!pending) return 'error';
         let data: StromData;
         try {
             data = JSON.parse(await decrypt(pending, password)) as StromData;
-        } catch {
-            return false;
+        } catch (err) {
+            // Only an AES-GCM refusal is a wrong password (GitHub #13).
+            return classifyCryptoError(err);
         }
         if (this.pendingEncryptedAllTrees) {
             try {
@@ -565,7 +567,7 @@ class DataManagerClass {
             this.pendingEncryptedAllTrees = null;
         }
         this.loadDecryptedEmbeddedData(data);
-        return true;
+        return 'ok';
     }
 
     /**
@@ -4226,22 +4228,24 @@ class DataManagerClass {
 
                     // Show password prompt for decryption
                     window.Strom?.UI?.showPasswordPrompt(async (password: string) => {
+                        let data: StromData;
                         try {
-                            const decrypted = await decrypt(imported, password);
-                            const data = JSON.parse(decrypted) as StromData;
-
-                            // Check version compatibility
-                            if (!window.Strom?.UI?.checkJsonVersionBeforeImport(data)) {
-                                return;
-                            }
-
-                            this.beginMutation();
-                            this.data = migrateData(data);
-                            this.commitMutation(strings.undo.loadedData, true);
-                            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
-                        } catch {
-                            window.Strom?.UI?.showAlert(strings.encryption.wrongPassword, 'error');
+                            data = JSON.parse(await decrypt(imported, password)) as StromData;
+                        } catch (err) {
+                            // Wrong password only when AES-GCM refused it (GitHub #13).
+                            window.Strom?.UI?.showAlert(cryptoErrorText(err), 'error');
+                            return;
                         }
+
+                        // Check version compatibility
+                        if (!window.Strom?.UI?.checkJsonVersionBeforeImport(data)) {
+                            return;
+                        }
+
+                        this.beginMutation();
+                        this.data = migrateData(data);
+                        this.commitMutation(strings.undo.loadedData, true);
+                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
                     });
                     return;
                 }
