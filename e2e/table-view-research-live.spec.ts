@@ -271,6 +271,20 @@ test.describe('phone (390): Research and Line right after the name (16x, 16zh)',
         expect(over).toBeLessThanOrEqual(0);
     }
 
+    test('not following, the Research view: its head keeps its name, the status line keeps the legend on the screen (1110)', async ({ page }) => {
+        await openResearchTree(page);
+        await openTable(page);
+        await openView(page, 'r:research');
+        await nextToName(page, 'rSum', true);
+        const label = page.locator('#table-container .tv-headrow [data-col="rSum"] .tv-cell-text');
+        expect(await label.evaluate(el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth)).toBe(true);
+        // "Research: as of …" gives way with "…" before the legend leaves the line.
+        await expect(page.locator('#table-container .tv-status-res')).toBeVisible();
+        const legend = await page.locator('#table-container .tv-legend-btn').boundingBox();
+        expect(legend!.x + legend!.width).toBeLessThanOrEqual(390);
+        expect(await page.locator('#table-container .tv-status').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+    });
+
     test('the Research view and a Line view while following, the agent\'s bar on the name', async ({ page }) => {
         await follow(page, { width: 390, height: 844 });
         await openTable(page);

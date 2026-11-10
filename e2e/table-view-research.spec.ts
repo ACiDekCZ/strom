@@ -567,6 +567,9 @@ test.describe('research chips and views (§16.5)', () => {
         await page.locator('.tv-menu .tv-menu-item').filter({ hasText: /^Research$/ }).click();
         expect(await headOrder(page)).toEqual(['name', 'rSum', 'rWait', 'rConf', 'rHyp', 'rAgent', 'rTasks', 'bDate', 'dDate']);
         await expect(changed(page)).toBeHidden();
+        // Research's head keeps its name beside ↓1 and the filter's pill.
+        const label = head(page, 'rSum').locator('.tv-cell-text');
+        expect(await label.evaluate(el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth)).toBe(true);
     });
 
     test('a tree without research: no research chip and no research views', async ({ page }) => {

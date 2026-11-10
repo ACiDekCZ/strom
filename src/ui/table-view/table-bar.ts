@@ -131,5 +131,6 @@ export function updateResearchStatus(el: HTMLElement, state: { live: true } | { 
     const text = !state ? '' : state.live ? strings.table.res.following : state.when ? strings.table.res.stale(state.when) : '';
     res.hidden = !text;
     res.textContent = text;
+    res.title = text;
     res.classList.toggle('is-following', !!state?.live);
 }

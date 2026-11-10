@@ -151,8 +151,9 @@ function researchView(id: string): TableView | null {
     let sort: { col: string; dir: 1 | -1 }[];
     if (key === 'research') {
         name = R.research;
+        // Research's head keeps its name beside the sort's ↓1 and the filter's pill (de 155 px).
         columns = ['name', 'rSum', 'rWait', 'rConf', 'rHyp', 'rAgent', 'rTasks', 'bDate', 'dDate'];
-        widths = { name: 230, rSum: 84, rWait: 230, rConf: 190, rHyp: 84, rAgent: 230, rTasks: 190, bDate: 120, dDate: 120 };
+        widths = { name: 230, rSum: 156, rWait: 230, rConf: 190, rHyp: 84, rAgent: 230, rTasks: 190, bDate: 120, dDate: 120 };
         items = [filledItem('rSum')];
         sort = [{ col: 'rSum', dir: -1 }, { col: 'name', dir: 1 }];
     } else if (key === 'exchange') {

@@ -9978,6 +9978,12 @@
         .tv-status-res { color: var(--text-faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .tv-status-res.is-following { color: var(--primary); font-weight: 600; }
         .tv-status-res[hidden] { display: none; }
+        /* The research's state gives way with "…" before the legend leaves the status line (a phone, de). */
+        .tv-status-right:has(> .tv-status-res:not([hidden])) { flex: 0 1 auto; min-width: 0; }
+        /* A phone following a research: the table ends above the research's strip (its status line and legend stay in sight). */
+        @media (max-width: 640px) {
+            body[data-view-mode="table"]:has(> #live-panel.phone-strip:not([hidden])) .table-container { bottom: var(--live-strip-h, 0px); }
+        }
         .tv-mark {
             flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
             font-family: var(--font-sans, inherit); font-style: normal; line-height: 1; user-select: none;
@@ -10229,6 +10235,8 @@
             .tv-empty-link { min-height: 44px; }
             /* 13j on a phone: the read-only sentence takes the sort's place. */
             .tv-status:has(.tv-status-ro:not([hidden])) .tv-status-sort { display: none; }
+            /* §16.2 on a phone: the research's state takes the sort's place too (the heads show the sort). */
+            .tv-status:has(.tv-status-res:not([hidden])) .tv-status-sort { display: none; }
             .tv-ro-long { display: none; }
             .tv-ro-short { display: inline; }
         }

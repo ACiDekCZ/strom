@@ -1012,7 +1012,8 @@ export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): numb
     if (pinned && (col.id === 'name' || col.id === 'p1' || col.id === 'srcTitle')) return 156;
     if (pinned && col.id === 'evType') return 96;
     if (pinned && col.id === 'evWho') return 140;
-    if (col.id === 'rSum') return 96;
+    // Research: 96 in the group; widened (the Research view, sorted and filtered by it) its head keeps its name (de 135 px).
+    if (col.id === 'rSum') return width > 100 ? 136 : 96;
     // The Line and Exchange views put Line or Sync right after the pinned name: both whole on a 390 px phone (156 + 222 + a 12 px edge).
     if (col.id === 'rLine' || col.id === 'rSync') return Math.min(PHONE_LINE_WIDTH, Math.round(width * 0.8));
     return Math.max(PHONE_MIN_WIDTH[col.kind] ?? 70, Math.round(width * 0.8));
