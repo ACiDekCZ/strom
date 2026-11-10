@@ -25219,6 +25219,10 @@
             .card-tooltip, .collapse-chain-btn, .fan-toolbar, .fan-zoom-controls,
             .fan-legend-chip, .fan-legend-head, .fan-sheet, .fan-origin-pill, .fan-press-ring, .fan-swap-old,
             .tree-tabs, .tree-legend, .gen-labels, #empty-state { display: none !important; }
+            /* The focus chip and the descendants badge are the screen's controls, fixed
+               over the top of the view: on paper they would cover the first cards (1110).
+               The tree itself shows who it is about; the poster prints its own caption. */
+            .focus-controls, .descendants-badge { display: none !important; }
 
             /* The fan prints whole (fan-view.ts redraws it so before printing),
                the legend expanded under it. */
