@@ -10,6 +10,7 @@
 
 import type { CoupleEvent, EventParticipant, LifeEvent, ParticipantRole, Partnership, PartnershipId, Person, PersonId, Source, StromData } from '../../types.js';
 import { parseFlexDate } from '../../dates.js';
+import { marriagesInOrder } from '../../marriage-order.js';
 import { assignGenerations } from '../../generations.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
 import { buildLineages, rodLabels, type LineageIndex, type RodId } from '../../lineage.js';
@@ -298,11 +299,27 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
     };
 }
 
-/** The unions of a person by date; undated ones last, in data order. */
-export function unionsByDate(unions: readonly Partnership[]): Partnership[] {
+/**
+ * The unions of a person in the marriage order the diagram counts
+ * (marriagesInOrder: union 1 is the "1. ∞" of the badge and the hover
+ * card); "?" stand-in families and unions missing from the person's list
+ * after them, in data order.
+ */
+export function unionsInMarriageOrder(data: StromData, personId: PersonId, unions: readonly Partnership[]): Partnership[] {
+    const rank = new Map<PartnershipId, number>(marriagesInOrder(data, personId).map((id, i) => [id, i]));
+    const listed = data.persons[personId]?.partnerships ?? [];
+    const late = (id: PartnershipId): number => {
+        const i = listed.indexOf(id);
+        return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
     return unions
-        .map((u, i) => ({ u, i, k: dateNumber(u.startDate) }))
-        .sort((a, b) => a.k === null ? (b.k === null ? a.i - b.i : 1) : b.k === null ? -1 : a.k - b.k || a.i - b.i)
+        .map((u, i) => ({ u, i, r: rank.get(u.id), d: late(u.id) }))
+        .sort((a, b) => {
+            if (a.r !== undefined && b.r !== undefined) return a.r - b.r;
+            if (a.r !== undefined) return -1;
+            if (b.r !== undefined) return 1;
+            return a.d - b.d || a.i - b.i;
+        })
         .map(x => x.u);
 }
 
@@ -330,7 +347,7 @@ export function buildTableModel(data: StromData, opts: BuildOptions): TableModel
     for (const p of Object.values(data.persons)) {
         if (p.isPlaceholder) continue;
         const own = unionsOf.get(p.id);
-        const row: PersonRow = { kind: 'person', id: p.id, person: p, unions: own ? unionsByDate(own) : [], cache: new Map() };
+        const row: PersonRow = { kind: 'person', id: p.id, person: p, unions: own ? unionsInMarriageOrder(data, p.id, own) : [], cache: new Map() };
         persons.push(row);
         personRows.set(p.id, row);
     }

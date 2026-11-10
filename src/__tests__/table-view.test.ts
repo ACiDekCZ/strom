@@ -6,7 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { getStringsForLang, type Language } from '../strings.js';
-import { buildTableModel, modelIsCurrent, rowKey, rowsOf, unionsByDate, type TableRow } from '../ui/table-view/table-model.js';
+import { marriagesInOrder } from '../marriage-order.js';
+import { buildTableModel, modelIsCurrent, rowKey, rowsOf, unionsInMarriageOrder, type TableRow } from '../ui/table-view/table-model.js';
 import { cellOf, columnById, columnsOf, DEFAULT_VIEWS, PERSON_COLUMNS, UNION_COLUMNS, phoneWidth } from '../ui/table-view/table-columns.js';
 import { columnOffsets, columnWindow, rowWindow } from '../ui/table-view/table-window.js';
 import { sortRows } from '../ui/table-view/table-filter.js';
@@ -47,11 +48,38 @@ describe('table model', () => {
         expect(rowKey(m.unions[0])).toBe(`u:${m.unions[0].id}`);
     });
 
-    it('orders a person\'s unions by date, the undated last in data order', () => {
+    it('orders a person\'s unions as the diagram counts them (union 1 = "1. ∞"), "?" families last', () => {
         const m = build();
         expect(m.personRows.get('a' as PersonId)!.unions.map(u => u.id)).toEqual(['u1', 'u2']);
+        // A man with four unions: one dated, one undated whose child was born first, one undated with a
+        // divorce, one with nothing to date it, and an empty "?" family. A union without a wedding date
+        // goes by its divorce or its first child (not to the end), as the badge and the hover card count.
+        const person = (id: string, gender: 'male' | 'female', extra: Record<string, unknown> = {}) =>
+            ({ id, firstName: id, lastName: 'Varnik', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
+        const data = {
+            persons: {
+                h: person('h', 'male', { partnerships: ['n1', 'q', 'd2', 'c1', 'v1'] }),
+                w1: person('w1', 'female', { partnerships: ['n1'] }),
+                w2: person('w2', 'female', { partnerships: ['d2'] }),
+                w3: person('w3', 'female', { partnerships: ['c1'] }),
+                w4: person('w4', 'female', { partnerships: ['v1'] }),
+                k: person('k', 'male', { birthDate: '1999', parentIds: ['h', 'w3'] }),
+                x: { ...person('x', 'female', { partnerships: ['q'], childIds: ['y'] }), firstName: '?', lastName: '', isPlaceholder: true },
+                y: person('y', 'male', { parentIds: ['h', 'x'] }),
+            },
+            partnerships: {
+                v1: { id: 'v1', person1Id: 'h', person2Id: 'w4', childIds: [], status: 'divorced', endDate: '2005' },
+                d2: { id: 'd2', person1Id: 'h', person2Id: 'w2', childIds: [], status: 'married', startDate: '2009' },
+                n1: { id: 'n1', person1Id: 'h', person2Id: 'w1', childIds: [], status: 'married' },
+                c1: { id: 'c1', person1Id: 'w3', person2Id: 'h', childIds: ['k'], status: 'married' },
+                q: { id: 'q', person1Id: 'h', person2Id: 'x', childIds: ['y'], status: 'married' },
+            },
+        } as unknown as StromData;
+        const order = build(data, 1, 'h').personRows.get('h' as PersonId)!.unions.map(u => u.id);
+        expect(order).toEqual(['c1', 'v1', 'd2', 'n1', 'q']);
+        expect(order.slice(0, 4)).toEqual(marriagesInOrder(data, 'h' as PersonId));
         const u = (id: string, startDate?: string) => ({ id, startDate }) as never;
-        expect(unionsByDate([u('n1'), u('d2', '1900'), u('n2'), u('d1', '1890')]).map((x: { id: string }) => x.id)).toEqual(['d1', 'd2', 'n1', 'n2']);
+        expect(unionsInMarriageOrder(data, 'h' as PersonId, [u('zz'), u('n1'), u('d2', '2009')]).map((x: { id: string }) => x.id)).toEqual(['d2', 'n1', 'zz']);
     });
 
     it('partner 1 of a union is the home person\'s blood relative', () => {
