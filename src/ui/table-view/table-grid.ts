@@ -16,13 +16,23 @@
  * content), the ▾ / right click / Shift+F10 / long press for the header
  * menu, and the keys Alt+←/→ (move), Alt+Shift+←/→ (width). The grid only
  * reports these; table-ui.ts changes the state and draws again.
+ *
+ * The body draws lines (§3): a person's row, the union sub-rows of a person
+ * with 2+ unions (`aria-level` 2) and the quiet "n outside the filter · show"
+ * line. One cell holds the body's tab stop (roving tabindex, §3.4): arrows
+ * walk rows and cells, Home/End, Ctrl+Home/End, PageUp/PageDown; on the name
+ * cell → expands and ← collapses (on a sub-row ← goes to the person's row);
+ * `*` expands all, Shift+`*` collapses all.
  */
 
 import { strings } from '../../strings.js';
-import { cellOf, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
+import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
 import { rowKey, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
-import { columnOffsets, columnWindow, rowWindow, type ColumnWindow } from './table-window.js';
+import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
+import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
+import type { CoverageCell } from './table-coverage.js';
+import { shownNameOrEmpty as personName } from '../../person-name.js';
 
 export interface GridInput {
     model: TableModel;
@@ -40,8 +50,14 @@ export interface GridInput {
     selected: string | null;
     /** The grid's accessible name. */
     label: string;
-    /** The coverage row's text of a column (§6.1; empty until it is computed). */
-    coverage?: (col: ColumnDef) => string;
+    /** The lines drawn (§3: rows with their union sub-rows); default one line per row. */
+    lines?: readonly GridLine[];
+    /** The People table: the name cell has the sub-rows' ▾/▸ slot (§3.2). */
+    subRows?: boolean;
+    /** The name head's "Expand unions" / "Collapse unions" (§3.2); null: no one has 2+ unions. */
+    unionsButton?: 'expand' | 'collapse' | null;
+    /** The coverage row's cell of a column (§6.1). */
+    coverage?: (col: ColumnDef) => CoverageCell | null;
     /** The coverage row is shown (§6.1; default yes). */
     coverageRow?: boolean;
     /** A collapsed group's band at each position (§4.3; null for a plain column). */
@@ -55,8 +71,14 @@ export interface GridInput {
 export interface GridHandlers {
     /** The grid scrolled (the view keeps its position per row type). */
     onScroll?(top: number, left: number): void;
-    /** A row was clicked. */
+    /** A row was clicked (a sub-row selects its person). */
     onSelect?(key: string, row: TableRow): void;
+    /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
+    onToggleUnions?(personId: string, expand: boolean): void;
+    /** "Expand unions" / "Collapse unions" in the name head, `*` / Shift+`*` (§3.2, §3.4). */
+    onAllUnions?(expand: boolean): void;
+    /** "n outside the filter · show" (§3.3). */
+    onRevealUnions?(personId: string): void;
     /** A group's −/+ or a band was used (§4.3). */
     onToggleGroup?(group: string, collapse: boolean): void;
     /** The header menu of a column was asked for (§4.6). */
@@ -90,7 +112,8 @@ export function cellClasses(value: CellValue, col: ColumnDef): string {
     let cls = 'tv-cell';
     if (col.align === 'right') cls += ' tv-right';
     if (col.id === 'name' || col.id === 'p1' || col.id === 'p2') cls += ' tv-name';
-    if (value.na) cls += ' tv-cell--na';
+    if (value.aggregate) cls += ' tv-cell--aggregate';
+    else if (value.na) cls += ' tv-cell--na';
     else if (value.computed && !value.empty) cls += ' tv-cell--computed';
     if (value.uncertain) cls += ' tv-cell--uncertain';
     if (value.subst) cls += ' tv-cell--subst';
@@ -101,6 +124,29 @@ export function cellClasses(value: CellValue, col: ColumnDef): string {
 export function cellText(value: CellValue): string {
     if (value.na && !value.text) return '–';
     return value.text;
+}
+
+/** Completeness bar width (§6.2: 30 px, the filled part is the value). */
+const COMP_BAR = 30;
+
+/**
+ * A cell's inner HTML (§5, §6.2): a substitute's label before the value in
+ * italics, a date qualifier's word, a completeness percentage with its bar.
+ */
+export function cellInner(value: CellValue, col: ColumnDef): string {
+    if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
+        const fill = Math.round((value.percent * COMP_BAR) / 100);
+        return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`
+            + `<span class="tv-comp-bar" aria-hidden="true"><span class="tv-comp-fill" style="width:${fill}px"></span></span></span>`;
+    }
+    let html = '';
+    if (value.subst) {
+        const s = strings.table.subst;
+        const tip = value.subst === 'bap' ? s.bap : s.bur;
+        html += `<span class="tv-subst" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(value.subst === 'bap' ? s.bapShort : s.burShort)}</span>`;
+    }
+    if (value.prefix) html += `<span class="tv-qual">${esc(value.prefix)}</span>`;
+    return html + `<span class="tv-cell-text">${esc(cellText(value))}</span>`;
 }
 
 export class TableGrid {
@@ -122,6 +168,13 @@ export class TableGrid {
     /** A drag or a long press just ended: the click that follows is not a click. */
     private swallowClick = false;
     private measureCtx: CanvasRenderingContext2D | null = null;
+    /** The lines drawn and their tops (§3). */
+    private lines: readonly GridLine[] = [];
+    private tops: number[] = [0];
+    private topsFor = '';
+    /** The body's active cell (roving tabindex, §3.4): the line's key and the column's drawn position. */
+    private activeKey: string | null = null;
+    private activeCol = 0;
 
     constructor(private readonly handlers: GridHandlers = {}) {
         const el = document.createElement('div');
@@ -145,13 +198,40 @@ export class TableGrid {
             this.schedule();
         }, { passive: true });
         this.body.addEventListener('click', (e) => {
-            const band = (e.target as Element).closest<HTMLElement>('.tv-band[data-band]');
+            const t = e.target as Element;
+            const rowEl = t.closest<HTMLElement>('.tv-row[data-key]');
+            const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
+            const cellEl = t.closest<HTMLElement>('[aria-colindex]');
+            if (line && cellEl) { this.activeKey = lineKey(line); this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1; }
+            const band = t.closest<HTMLElement>('.tv-band[data-band]');
             if (band) { this.handlers.onToggleGroup?.(band.dataset.band!, false); return; }
-            const rowEl = (e.target as Element).closest<HTMLElement>('.tv-row[data-key]');
-            const key = rowEl?.dataset.key;
-            if (!key || !this.input) return;
-            const row = this.input.rows[Number(rowEl!.dataset.index)];
-            if (row) this.handlers.onSelect?.(key, row);
+            if (!line || !this.input) return;
+            if (line.kind === 'more') {
+                if (t.closest('.tv-more-btn')) this.handlers.onRevealUnions?.(line.row.id);
+                return;
+            }
+            if (line.kind === 'row' && line.expanded !== null && t.closest('.tv-toggle, .tv-unions-pill')) {
+                this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
+                return;
+            }
+            this.handlers.onSelect?.(rowKey(line.row), line.row);
+        });
+        this.body.addEventListener('keydown', (e) => this.onBodyKey(e));
+        // The grid itself focused (its tab stop): an arrow enters the body at the active cell.
+        el.addEventListener('keydown', (e) => {
+            if (e.target !== el || !/^(Arrow(Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(e.key)) return;
+            e.preventDefault();
+            this.focusCell(Math.max(0, this.activeLineIndex()), this.activeCol);
+        });
+        this.body.addEventListener('focusin', (e) => {
+            const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+            const rowEl = cellEl?.closest<HTMLElement>('.tv-row[data-index]');
+            const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
+            if (!cellEl || !line) return;
+            this.activeKey = lineKey(line);
+            this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
+            for (const other of this.body.querySelectorAll<HTMLElement>('[aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
+            cellEl.tabIndex = 0;
         });
         this.wireHead();
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.schedule()) : null;
@@ -161,13 +241,15 @@ export class TableGrid {
     /** New rows or columns: drawn now; `scroll` restores a kept position. */
     setInput(input: GridInput, scroll?: { top: number; left: number }): void {
         this.input = input;
+        this.lines = input.lines ?? plainLines(input.rows);
+        this.topsFor = '';
         this.offsets = columnOffsets(input.widths);
         this.headKey = '';
         this.bodyKey = '';
         this.el.setAttribute('aria-label', input.label);
-        this.el.setAttribute('aria-rowcount', String(input.rows.length + 3));
+        this.el.setAttribute('aria-rowcount', String(this.lines.length + 3));
         this.el.setAttribute('aria-colcount', String(input.columns.length));
-        this.body.style.height = `${input.rows.length * this.rowHeight()}px`;
+        this.body.style.height = `${this.lineTops(this.rowHeight())[this.lines.length]}px`;
         this.body.style.width = `${this.offsets[input.columns.length]}px`;
         this.covRow.hidden = input.coverageRow === false;
         if (scroll) {
@@ -184,6 +266,23 @@ export class TableGrid {
         return Number.isFinite(v) && v > 0 ? v : ROW_HEIGHT_FALLBACK;
     }
 
+    /** The "more" line's height (`--tv-more-h`, §3.3: 26 px; as tall as a row on touch). */
+    private moreHeight(rowH: number): number {
+        const v = parseFloat(getComputedStyle(this.el).getPropertyValue('--tv-more-h'));
+        return Number.isFinite(v) && v > 0 ? v : rowH;
+    }
+
+    /** Each line's top for this row height (and the body's height last). */
+    private lineTops(rowH: number): number[] {
+        const hasMore = this.lines.some(l => l.kind === 'more');
+        const moreH = hasMore ? this.moreHeight(rowH) : rowH;
+        const key = `${rowH}|${moreH}`;
+        if (this.topsFor === key) return this.tops;
+        this.tops = lineOffsets(this.lines.map(l => (l.kind === 'more' ? moreH : rowH)));
+        this.topsFor = key;
+        return this.tops;
+    }
+
     private schedule(): void {
         if (this.frame) return;
         this.frame = requestAnimationFrame(() => { this.frame = 0; this.draw(); });
@@ -195,9 +294,10 @@ export class TableGrid {
         if (!input) return;
         const rowH = this.rowHeight();
         const headH = this.head.offsetHeight;
-        this.body.style.height = `${input.rows.length * rowH}px`;
+        const tops = this.lineTops(rowH);
+        this.body.style.height = `${tops[this.lines.length]}px`;
         const cw = columnWindow(input.widths, input.pinned, this.el.scrollLeft, this.el.clientWidth);
-        const rw = rowWindow(Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight - headH), rowH, input.rows.length);
+        const rw = lineWindow(tops, Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight - headH));
         const colKey = cw.indices.join(',');
         if (colKey !== this.headKey) {
             this.headKey = colKey;
@@ -206,7 +306,7 @@ export class TableGrid {
         const bodyKey = `${colKey}|${rw.start}-${rw.end}|${rowH}`;
         if (bodyKey !== this.bodyKey) {
             this.bodyKey = bodyKey;
-            this.drawBody(input, cw, rw.start, rw.end, rowH);
+            this.drawBody(input, cw, rw.start, rw.end, tops);
         }
     }
 
@@ -291,11 +391,17 @@ export class TableGrid {
                 + ` aria-colindex="${i + 1}" data-col="${esc(col.id)}" data-index="${i}" tabindex="${col.id === focusCol ? 0 : -1}"`
                 + ` title="${esc(label)}" aria-label="${esc(label)}"${ariaSort} style="${this.pinStyle(i, input)}">`
                 + `<span class="tv-cell-text">${esc(label)}</span>${arrow}`
+                + (col.id === 'name' && input.unionsButton
+                    ? `<button type="button" class="tv-head-all" tabindex="-1" data-expand="${input.unionsButton === 'expand' ? 1 : 0}">`
+                        + `${esc(input.unionsButton === 'expand' ? strings.table.expandAll : strings.table.collapseAll)}</button>`
+                    : '')
                 + `<button type="button" class="tv-head-menu" tabindex="-1" aria-haspopup="menu" aria-label="${esc(strings.table.columnMenu(label))}"></button>`
                 + (editable ? '<span class="tv-resize" aria-hidden="true"></span>' : '')
                 + '</div>';
-            cov += `<div class="tv-cell tv-covcell${right}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}"`
-                + ` data-col="${esc(col.id)}" style="${this.pinStyle(i, input)}">${esc(input.coverage?.(col) ?? '')}</div>`;
+            const cc = input.coverage?.(col) ?? null;
+            const ccls = cc?.label ? ' tv-cov-label' : cc?.low ? ' tv-cov-low' : '';
+            cov += `<div class="tv-cell tv-covcell${right}${ccls}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}"`
+                + ` data-col="${esc(col.id)}" style="${this.pinStyle(i, input)}"${cc?.title ? ` title="${esc(cc.title)}"` : ''}>${esc(cc?.text ?? '')}</div>`;
             prev = i;
         }
         flush();
@@ -324,6 +430,12 @@ export class TableGrid {
             if (toggle) {
                 e.stopPropagation();
                 this.handlers.onToggleGroup?.(toggle.dataset.group!, toggle.getAttribute('aria-expanded') === 'true');
+                return;
+            }
+            const all = t.closest<HTMLElement>('.tv-head-all');
+            if (all) {
+                e.stopPropagation();
+                this.handlers.onAllUnions?.(all.dataset.expand === '1');
                 return;
             }
             const menu = t.closest<HTMLElement>('.tv-head-menu');
@@ -637,8 +749,8 @@ export class TableGrid {
         ctx.font = getComputedStyle(sample ?? this.el).font;
         const from = this.drawnRange().start;
         let max = 0;
-        for (let r = from; r < Math.min(input.rows.length, from + FIT_ROWS); r++) {
-            max = Math.max(max, ctx.measureText(cellText(cellOf(input.model, input.rows[r], col))).width);
+        for (let r = from; r < Math.min(this.lines.length, from + FIT_ROWS); r++) {
+            max = Math.max(max, ctx.measureText(cellPlainText(lineCell(input.model, this.lines[r], col))).width);
         }
         const headText = this.headRow.querySelector<HTMLElement>(`[data-col="${col.id}"] .tv-cell-text`);
         if (headText) {
@@ -649,36 +761,194 @@ export class TableGrid {
         return Math.max(MIN_COLUMN_WIDTH, Math.min(FIT_MAX, Math.ceil(max) + 20 + 22));
     }
 
-    private drawBody(input: GridInput, cw: ColumnWindow, start: number, end: number, rowH: number): void {
+    private drawBody(input: GridInput, cw: ColumnWindow, start: number, end: number, tops: readonly number[]): void {
+        const refocus = this.body.contains(document.activeElement);
+        const activeLine = this.activeLineIndex();
+        const activeCol = Math.min(this.activeCol, input.columns.length - 1);
+        const selectedPerson = input.selected;
         let html = '';
         for (let r = start; r < end; r++) {
-            const row = input.rows[r];
-            const key = rowKey(row);
+            const line = this.lines[r];
+            const row = line.row;
+            const key = lineKey(line);
             const home = row.kind === 'person' && row.id === input.homeId ? ' is-home' : '';
-            const selected = key === input.selected ? 'true' : 'false';
-            html += `<div class="tv-row${home}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"`
-                + ` aria-selected="${selected}" style="top:${r * rowH}px;width:${cw.total}px">`;
+            const rowSelected = rowKey(row) === selectedPerson;
+            let attrs = ` aria-level="${lineLevel(line)}"`;
+            let cls = 'tv-row' + home;
+            if (line.kind === 'row') {
+                attrs += ` aria-selected="${rowSelected ? 'true' : 'false'}"`;
+                if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
+                if (line.expanded === false && row.kind === 'person') {
+                    attrs += ` aria-label="${esc(strings.table.a11y.collapsed(personName(row.person), line.n))}"`;
+                }
+            } else {
+                cls += line.kind === 'sub' ? ' tv-row--sub' : ' tv-row--more';
+                if (rowSelected) cls += ' is-selected-sub';
+                if (line.kind === 'sub') {
+                    if (line.dimmed) cls += ' is-dimmed';
+                    attrs += ` aria-label="${esc(strings.table.a11y.unionRow(line.k, line.n, personName(line.row.person)))}"`;
+                }
+            }
+            html += `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"${attrs}`
+                + ` style="top:${tops[r]}px;height:${tops[r + 1] - tops[r]}px;width:${cw.total}px">`;
             let prev = -1;
             for (const i of cw.indices) {
                 if (prev >= 0 && i !== prev + 1) html += this.spacer(cw.before);
+                prev = i;
                 const col = input.columns[i];
+                const tab = r === activeLine && i === activeCol ? 0 : -1;
                 const band = input.bands?.[i];
                 if (band) {
-                    html += `<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" data-band="${esc(band.group)}"`
-                        + ` style="width:${input.widths[i]}px">${input.bandCell?.(row, band) ?? ''}</div>`;
-                    prev = i;
+                    html += `<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
+                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(row, band) ?? ''}</div>`;
                     continue;
                 }
-                const value = cellOf(input.model, row, col);
-                const title = value.title ?? (value.text.length > 24 ? value.text : '');
-                html += `<div class="${cellClasses(value, col)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}"`
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>`
-                    + `<span class="tv-cell-text">${esc(cellText(value))}</span></div>`;
-                prev = i;
+                if (input.subRows && col.id === 'name') {
+                    html += this.nameCell(input, line, col, i, tab);
+                    continue;
+                }
+                const value = lineCell(input.model, line, col);
+                const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
+                const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
+                html += `<div class="${cellClasses(value, col)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col)}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
         }
         this.body.innerHTML = html;
+        if (refocus) this.focusActive(false);
+    }
+
+    /** The name cell of the People table (§3.1, §3.2): ▾/▸ and the count pill, a sub-row's "Union k of n", the "more" button. */
+    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number): string {
+        const t = strings.table;
+        const open = `<div class="tv-cell tv-name${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`;
+        if (line.kind === 'more') {
+            return `${open}><span class="tv-sub-indent" aria-hidden="true"></span>`
+                + `<button type="button" class="tv-more-btn" tabindex="-1">${esc(t.hiddenUnions(line.hidden))}</button></div>`;
+        }
+        if (line.kind === 'sub') {
+            return `${open}><span class="tv-sub-indent" aria-hidden="true"></span><span class="tv-sub-branch" aria-hidden="true">└</span>`
+                + `<span class="tv-cell-text tv-sub-label">${esc(t.unionKofN(line.k, line.n))}</span></div>`;
+        }
+        const value = lineCell(input.model, line, col);
+        const name = cellText(value);
+        const toggle = line.expanded === null
+            ? '<span class="tv-toggle tv-toggle--none" aria-hidden="true"></span>'
+            : `<span class="tv-toggle" aria-hidden="true" title="${esc(line.expanded ? `${t.collapseAll} (←)` : `${t.expandAll} (→)`)}">${line.expanded ? '▾' : '▸'}</span>`;
+        const pill = line.expanded === false ? `<span class="tv-unions-pill" aria-hidden="true">${esc(t.unionsN(line.n))}</span>` : '';
+        return `${open}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${esc(name)}</span>${pill}</div>`;
+    }
+
+    // -----------------------------------------------------------------------
+    // The body's keys (§3.4)
+
+    /** The active line's index (its key, else its person's row, else the first line). */
+    private activeLineIndex(): number {
+        if (!this.lines.length) return -1;
+        const key = this.activeKey;
+        if (key) {
+            let at = this.lines.findIndex(l => lineKey(l) === key);
+            if (at < 0) {
+                const base = key.split('#')[0];
+                at = this.lines.findIndex(l => lineKey(l) === base);
+            }
+            if (at >= 0) return at;
+        }
+        return 0;
+    }
+
+    /** Scroll a line and a column into view (drawing them), then focus the cell. */
+    private focusCell(line: number, col: number): void {
+        const input = this.input;
+        if (!input || !this.lines.length) return;
+        line = Math.max(0, Math.min(this.lines.length - 1, line));
+        col = Math.max(0, Math.min(input.columns.length - 1, col));
+        this.activeKey = lineKey(this.lines[line]);
+        this.activeCol = col;
+        const tops = this.lineTops(this.rowHeight());
+        const headH = this.head.offsetHeight;
+        const el = this.el;
+        const top = tops[line];
+        const bottom = tops[line + 1];
+        if (top < el.scrollTop) el.scrollTop = top;
+        else if (bottom + headH > el.scrollTop + el.clientHeight) el.scrollTop = bottom + headH - el.clientHeight;
+        if (col >= input.pinned) {
+            const pinnedW = this.offsets[Math.min(input.pinned, input.columns.length)];
+            const x = this.offsets[col];
+            const w = input.widths[col];
+            if (x - pinnedW < el.scrollLeft) el.scrollLeft = Math.max(0, x - pinnedW);
+            else if (x + w > el.scrollLeft + el.clientWidth) el.scrollLeft = x + w - el.clientWidth;
+        }
+        this.bodyKey = '';
+        this.draw();
+        this.focusActive(true);
+    }
+
+    /** Focus the active cell if it is drawn. */
+    private focusActive(force: boolean): void {
+        const at = this.activeLineIndex();
+        const cell = this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        if (cell && (force || document.activeElement !== cell)) cell.focus({ preventScroll: true });
+    }
+
+    private onBodyKey(e: KeyboardEvent): void {
+        const input = this.input;
+        if (!input || !this.lines.length) return;
+        if (e.altKey) return;
+        const at = this.activeLineIndex();
+        const line = this.lines[at];
+        const col = Math.min(this.activeCol, input.columns.length - 1);
+        const onName = input.columns[col]?.id === 'name' && !input.bands?.[col];
+        const page = Math.max(1, Math.floor((this.el.clientHeight - this.head.offsetHeight) / this.rowHeight()) - 1);
+        const ctrl = e.ctrlKey || e.metaKey;
+        let to: [number, number] | null = null;
+        switch (e.key) {
+            case 'ArrowDown': to = [at + 1, col]; break;
+            case 'ArrowUp': to = [at - 1, col]; break;
+            case 'PageDown': to = [at + page, col]; break;
+            case 'PageUp': to = [at - page, col]; break;
+            case 'Home': to = ctrl ? [0, 0] : [at, 0]; break;
+            case 'End': to = ctrl ? [this.lines.length - 1, input.columns.length - 1] : [at, input.columns.length - 1]; break;
+            case 'ArrowRight':
+                if (onName && line.kind === 'row' && line.expanded === false) {
+                    e.preventDefault();
+                    this.handlers.onToggleUnions?.(line.row.id, true);
+                    return;
+                }
+                to = [at, col + 1];
+                break;
+            case 'ArrowLeft':
+                if (onName && line.kind === 'row' && line.expanded === true) {
+                    e.preventDefault();
+                    this.handlers.onToggleUnions?.(line.row.id, false);
+                    return;
+                }
+                if (onName && line.kind !== 'row') {
+                    const parent = this.lines.findIndex(l => l.kind === 'row' && l.row === line.row);
+                    to = [parent >= 0 ? parent : at, col];
+                    break;
+                }
+                to = [at, col - 1];
+                break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                if (line.kind === 'more') this.handlers.onRevealUnions?.(line.row.id);
+                else this.handlers.onSelect?.(rowKey(line.row), line.row);
+                return;
+            case '*':
+                if (!input.subRows || !input.unionsButton) return;
+                e.preventDefault();
+                // The number pad: * expands, Shift+* collapses. A main keyboard needs Shift for * itself,
+                // so there * does what the head's button says.
+                this.handlers.onAllUnions?.(e.code === 'NumpadMultiply' ? !e.shiftKey : input.unionsButton === 'expand');
+                return;
+            default:
+                return;
+        }
+        e.preventDefault();
+        this.focusCell(to[0], to[1]);
     }
 
     /** The rows drawn now (their indexes), for tests and keyboard moves. */

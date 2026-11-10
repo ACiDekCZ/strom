@@ -29,6 +29,9 @@ import {
     tableStateFor, unpinColumn, type DisplayColumns, type RowTypeState,
 } from './table-state.js';
 import { ColumnPanel } from './table-colpanel.js';
+import { anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, setAllExpanded, setExpanded, type UnionPredicate } from './table-subrows.js';
+import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
+import type { ColumnDef } from './table-columns.js';
 import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem } from './table-headmenu.js';
 
 interface Mounted {
@@ -51,6 +54,19 @@ let panel: { panel: ColumnPanel; overlay: HTMLElement | null } | null = null;
 let model: TableModel | null = null;
 let sorted: { model: TableModel; type: RowType; sort: string; rows: TableRow[] } | null = null;
 let mounted: Mounted | null = null;
+/** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
+let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
+
+function coverageOf(m: TableModel, type: RowType, rows: readonly TableRow[], col: ColumnDef, pass: UnionPredicate | null): CoverageCell {
+    if (col.id === lockedColumn(type)) return coverageLabel();
+    if (!coverage || coverage.rows !== rows) coverage = { rows, cells: new Map() };
+    let cell = coverage.cells.get(col.id);
+    if (!cell) {
+        cell = coverageCell(columnCoverage(m, rows, col, coverageUnionsOf(pass)));
+        coverage.cells.set(col.id, cell);
+    }
+    return cell;
+}
 
 function treeKey(): string {
     return DataManager.getCurrentTreeId() ?? '';
@@ -100,6 +116,13 @@ export const tableMethods = uiModule({
                     s.types[s.rowType].selected = key;
                     this.renderTableView(container);
                 },
+                onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
+                onAllUnions: (expand) => this.changeTableColumns(st => setAllExpanded(st.unions, expand)),
+                onRevealUnions: (personId) => this.changeTableColumns(st => {
+                    if (st.revealedUnions.includes(personId)) return false;
+                    st.revealedUnions = [...st.revealedUnions, personId];
+                    return true;
+                }),
                 onToggleGroup: (group, collapse) => this.changeTableColumns(st => setGroupCollapsed(st, group, collapse)),
                 onHeadMenu: (colId, anchor) => this.showTableHeadMenu(colId, anchor),
                 onResize: (colId, width) => this.changeTableColumns(st => setColumnWidth(st, colId, width)),
@@ -125,6 +148,11 @@ export const tableMethods = uiModule({
 
         const counts = { persons: m.persons.length, unions: m.unions.length } as Record<RowType, number>;
         const rows = sortedRows(m, type, st.sort);
+        // The union filters (§3.3) come with part C2's filter; until then every union passes.
+        const pass: UnionPredicate | null = null;
+        const persons = type === 'persons';
+        const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
+        const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const phone = isPhoneBar();
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
@@ -142,6 +170,8 @@ export const tableMethods = uiModule({
         mounted.grid.setInput({
             model: m, type, rows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
             bands: display.bands, coverageRow: st.coverageRow, editableHead: !phone,
+            lines, subRows: persons, unionsButton,
+            coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
         }, restore);
