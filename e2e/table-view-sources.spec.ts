@@ -152,3 +152,39 @@ test.describe('phone (390)', () => {
         expect(overflow).toBeLessThanOrEqual(0);
     });
 });
+
+test.describe('phone held sideways (844 × 390)', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('Sources from the type sheet; their quick filters in the Filters sheet; XLSX from ⋯; nothing overflows', async ({ page }) => {
+        await openTable(page, true);
+        await page.locator('#table-container .tv-rowtype-btn').tap();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await sheet.locator('.bottom-sheet-item', { hasText: 'Sources' }).tap();
+        await expect(page.locator('#table-container .tv-rowtype-btn')).toHaveText('Sources · 3 ▾');
+        expect(Math.round((await page.locator('#table-container .tv-bar-row1').boundingBox())!.height)).toBe(50);
+
+        // The quick filters of Sources in the sheet.
+        await page.locator('#table-container .tv-filters-btn').tap();
+        const fs = page.locator('.tv-fsheet');
+        await expect(fs.locator('.tv-fs-row:has(.tv-cp-check[data-chip]) .tv-fs-label')).toHaveText(['No person', 'Unread', 'With transcript', 'Online']);
+        await fs.locator('.tv-cp-check[data-chip="srcUnread"]').tap();
+        await expect(fs.locator('.tv-fs-show')).toHaveText(/^Show 1 source/);
+        await fs.locator('.tv-fs-show').tap();
+        await expect(status(page)).toHaveText('1 of 3 sources');
+
+        // ⋯: Columns, Export, Coverage row (no unions for Sources); Export with XLSX.
+        await page.locator('#table-container .tv-more-menu-btn').tap();
+        await expect(sheet.locator('.bottom-sheet-item .bottom-sheet-label')).toHaveText(['Columns', 'Export', 'Coverage row']);
+        await sheet.locator('.bottom-sheet-item', { hasText: 'Export' }).tap();
+        const xs = page.locator('.tv-fsheet.tv-xpanel');
+        await expect(xs).toBeVisible();
+        await xs.locator('.tv-xopt-pick').nth(1).tap();
+        await expect(xs.locator('.tv-fs-apply')).toHaveText('Download XLSX');
+        await expect(xs.locator('.tv-xfile')).toContainText('.xlsx');
+        const box = (await xs.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(844);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    });
+});

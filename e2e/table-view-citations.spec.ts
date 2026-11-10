@@ -179,3 +179,28 @@ test.describe('phone (390)', () => {
         expect(overflow).toBeLessThanOrEqual(0);
     });
 });
+
+test.describe('phone held sideways (844 × 390)', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('the pill\'s sheet fits the low screen; its rows are 44 px; nothing overflows', async ({ page }) => {
+        await openTable(page, true);
+        await showColumns(page, true, ['Birth: reference']);
+        const pill = (await cell(page, 'p:a', 'bRef')).locator('.tv-cites-more');
+        await pill.scrollIntoViewIfNeeded();
+        await settle(page);
+        await pill.tap();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toContainText('Other citations');
+        const items = sheet.locator('.bottom-sheet-item');
+        await expect(items).toHaveCount(2);
+        for (const i of [0, 1]) {
+            await items.nth(i).scrollIntoViewIfNeeded();
+            const b = (await items.nth(i).boundingBox())!;
+            expect(b.height).toBeGreaterThanOrEqual(44);
+            expect(b.y + b.height).toBeLessThanOrEqual(390);
+            expect(b.x + b.width).toBeLessThanOrEqual(844);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    });
+});
