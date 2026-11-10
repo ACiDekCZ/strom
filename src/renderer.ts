@@ -728,11 +728,16 @@ class TreeRendererClass {
         document.documentElement.classList.remove('app-booting');
         if (persons.length === 0) {
             if (live) canvas.querySelectorAll('.person-card').forEach(c => c.remove());
+            this.focusPersonId = null;
+            // The Table view keeps its bar and says in place of the grid that it is empty (spec 073 §13a).
+            if (this.viewMode === 'table') {
+                if (empty) empty.style.display = 'none';
+                this.showTableView(canvas);
+                return;
+            }
             if (empty) empty.style.display = 'block';
-            // The welcome of an empty tree, not an empty table over it.
             const table = document.getElementById('table-container');
             if (table) table.style.display = 'none';
-            this.focusPersonId = null;
             this.updateFocusUI();
             UI.updateViewLinksIndicator?.();
             return;

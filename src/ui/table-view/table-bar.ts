@@ -3,8 +3,9 @@
  *
  * Row 1: the row type (a segmented radio group; on a phone a button that
  * opens a sheet), then slots the later parts fill (the view picker §9, search
- * §8, Columns §4, Export §11). Row 2 holds the filter chips (§8; hidden while
- * empty). The status line under the grid: "N of M people", the sort, and the
+ * §8, Columns §4, Export §11) and the phone's ⋯ (§12, which takes Columns and
+ * Export). Row 2 holds the filter chips (§8; hidden while empty) — the slot
+ * whose content the selection bar of a later phase replaces (§15). The status line under the grid: "N of M people", the sort, and the
  * Marks button (§7, hidden until it has its bubble).
  */
 
@@ -17,6 +18,8 @@ export interface BarHandlers {
     onRowType(type: RowType): void;
     /** The phone's row-type button: open the sheet. */
     onRowTypeSheet(): void;
+    /** The phone's ⋯ (12a): Columns, Export, Coverage row, Expand or Collapse unions. */
+    onMoreMenu(): void;
 }
 
 function esc(text: string): string {
@@ -50,6 +53,9 @@ export function createBar(handlers: BarHandlers): HTMLElement {
         + '<div class="tv-slot tv-slot-search"></div>'
         + '<div class="tv-slot tv-slot-cols"></div>'
         + '<div class="tv-slot tv-slot-export"></div>'
+        + '<div class="tv-slot tv-slot-more">'
+        + `<button type="button" class="tv-more-menu-btn" aria-haspopup="menu" aria-label="${esc(strings.table.moreActions)}" title="${esc(strings.table.moreActions)}">⋯</button>`
+        + '</div>'
         + '</div>'
         + '<div class="tv-bar-row2 tv-chips" hidden></div>';
     const seg = bar.querySelector<HTMLElement>('.tv-rowtype')!;
@@ -69,6 +75,7 @@ export function createBar(handlers: BarHandlers): HTMLElement {
         seg.querySelector<HTMLElement>(`[data-rowtype="${btns[next].dataset.rowtype}"]`)?.focus();
     });
     bar.querySelector('.tv-rowtype-btn')!.addEventListener('click', () => handlers.onRowTypeSheet());
+    bar.querySelector('.tv-more-menu-btn')!.addEventListener('click', () => handlers.onMoreMenu());
     return bar;
 }
 
@@ -96,13 +103,19 @@ export function createStatus(): HTMLElement {
         + '<span class="tv-status-sort"></span>'
         + '<span class="tv-status-right">'
         + `<span class="tv-status-checks" role="status" hidden><span class="tv-checks-ring" aria-hidden="true">◌</span> ${esc(strings.table.checksRunning)}</span>`
+        + `<span class="tv-status-ro" title="${esc(strings.table.readOnly)}" hidden><span class="tv-ro-long">${esc(strings.table.readOnly)}</span>`
+        + `<span class="tv-ro-short">${esc(strings.table.readOnlyShort)}</span></span>`
         + `<button type="button" class="tv-legend-btn" aria-haspopup="dialog">${esc(strings.table.legend)} ⓘ</button>`
         + '</span>';
     return el;
 }
 
-/** The count, the sort and (§13i) "Checks are running…" while the tree's findings are computed. */
-export function updateStatus(el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[], checking = false): void {
+/**
+ * The count, the sort, (§13i) "Checks are running…" while the tree's
+ * findings are computed and (§13j) the read-only sentence.
+ */
+export function updateStatus(el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[], checking = false, readOnly = false): void {
+    el.querySelector<HTMLElement>('.tv-status-ro')!.hidden = !readOnly;
     el.querySelector('.tv-status-count')!.textContent = countText(type, shown, total);
     el.querySelector('.tv-status-sort')!.textContent = sortText(type, sort);
     el.querySelector<HTMLElement>('.tv-status-checks')!.hidden = !checking;

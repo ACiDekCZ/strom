@@ -26,7 +26,7 @@ import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
-import { columnById, columnLabel, columnNote, type SortSpec } from './table-columns.js';
+import { cellOf, columnById, columnLabel, columnNote, type SortSpec } from './table-columns.js';
 import {
     CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
@@ -69,6 +69,8 @@ import { isCoarsePointer } from '../bottom-sheet.js';
 import { ZoomPan } from '../../zoom.js';
 import { fanYears } from '../../fan-labels.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
+import { emptyStateHtml } from '../empty-state.js';
+import { tableEmptyState, type TableEmptyState } from './table-empty.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -90,6 +92,12 @@ interface Mounted {
     views: ViewBar;
     /** The bar's Export button (§11.1). */
     exportBtn: HTMLButtonElement;
+    /** The state drawn in place of the grid (§13a, 13e–13g). */
+    empty: HTMLElement;
+    /** Its kind as last drawn (the content changes only with it). */
+    emptyKey: string;
+    /** What the phone's ⋯ offers for unions (§3.2): expand, collapse or nothing. */
+    unionsButton: 'expand' | 'collapse' | null;
 }
 
 /** The phone's Filters sheet while it is open (8h). */
@@ -243,6 +251,10 @@ function unionOfLine(line: GridLine): PartnershipId | null {
     return null;
 }
 
+function escHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 /** No edits here (13j): a read-only page or a locked tree. */
 function tableReadOnly(): boolean {
     return DataManager.isReadOnly() || DataManager.isTreeLocked();
@@ -279,6 +291,7 @@ export const tableMethods = uiModule({
             const bar = createBar({
                 onRowType: (t) => this.setTableRowType(t),
                 onRowTypeSheet: () => this.showTableRowTypeSheet(),
+                onMoreMenu: () => this.showTableMoreMenu(),
             });
             const grid = new TableGrid({
                 onScroll: (top, left) => {
@@ -292,6 +305,12 @@ export const tableMethods = uiModule({
                     this.renderTableView(container);
                 },
                 onRowClick: (line) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line); },
+                // §6.2 by touch: the completeness bubble on a tap of its cell (a mouse has its title).
+                onComp: (line, col, cell) => {
+                    if (!isPhoneBar() && !isCoarsePointer()) return false;
+                    this.showTableCompleteness(line, col, cell);
+                    return true;
+                },
                 onRowAction: (action, line) => this.tableRowAction(action, line),
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
@@ -378,9 +397,18 @@ export const tableMethods = uiModule({
             exportBtn.innerHTML = `${strings.table.export}<span class="tv-export-caret" aria-hidden="true">▾</span>`;
             exportBtn.addEventListener('click', () => this.showTableExport());
             bar.querySelector('.tv-slot-export')!.appendChild(exportBtn);
-            container.append(bar, grid.el, status);
+            const empty = document.createElement('div');
+            empty.className = 'tv-empty';
+            empty.hidden = true;
+            empty.addEventListener('click', (e) => {
+                const act = (e.target as Element).closest<HTMLElement>('[data-empty-act]')?.dataset.emptyAct;
+                if (act === 'add') this.showAddPersonModal();
+                else if (act === 'quality') void this.showTreeValidationDialog(treeKey() as TreeId);
+            });
+            container.append(bar, grid.el, empty, status);
             mounted = {
                 container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
+                empty, emptyKey: '', unionsButton: null,
             };
         }
 
@@ -406,7 +434,19 @@ export const tableMethods = uiModule({
         mounted.colsBtn.setAttribute('aria-label', `${strings.table.columns}, ${strings.table.columnsCount(st.columns.length, total)}`);
         container.dataset.rowtype = type;
         updateBar(mounted.bar, type, counts);
-        updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running);
+        updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly());
+        mounted.unionsButton = unionsButton;
+        const openView = openViewOf(state, type, data.tableViews);
+        this.drawTableEmpty(tableEmptyState({
+            persons: counts.persons, unions: counts.unions, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
+            search: st.search, shown: rows.length, checksDone: !!index && !checks?.running,
+            leads: index ? index.issues.filter(i => i.severity === 'info').length : 0,
+            allComplete: () => {
+                const comp = columnById('persons', 'comp');
+                return !!comp && rows.every(r => { const c = cellOf(m, r, comp); return c.na || c.percent === 100; });
+            },
+            readOnly: tableReadOnly(),
+        }));
         const drawn = `${tree}|${type}`;
         const restore = mounted.drawn !== drawn ? { top: st.top, left: st.left } : undefined;
         mounted.drawn = drawn;
@@ -1250,6 +1290,74 @@ export const tableMethods = uiModule({
         state.rowType = type;
         const el = document.getElementById('table-container');
         if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
+    },
+
+    /** A state in place of the grid (§13a, 13e–13g), or the grid. */
+    drawTableEmpty(state: TableEmptyState | null): void {
+        if (!mounted) return;
+        const key = state ? `${state.kind}|${state.text}|${state.action?.id ?? ''}` : '';
+        if (state) mounted.container.dataset.empty = state.kind;
+        else delete mounted.container.dataset.empty;
+        mounted.grid.el.hidden = !!state;
+        mounted.empty.hidden = !state;
+        if (key === mounted.emptyKey) return;
+        mounted.emptyKey = key;
+        if (!state) { mounted.empty.innerHTML = ''; return; }
+        const add = state.action?.id === 'add';
+        mounted.empty.innerHTML = emptyStateHtml({ title: state.title, text: state.text, actionLabel: add ? state.action!.label : undefined });
+        mounted.empty.querySelector('.empty-block-action')?.setAttribute('data-empty-act', 'add');
+        if (state.action?.id === 'quality') {
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'tv-empty-link';
+            link.dataset.emptyAct = 'quality';
+            link.textContent = state.action.label;
+            mounted.empty.querySelector('.empty-block')?.appendChild(link);
+        }
+    },
+
+    /** The phone's ⋯ (12a): Columns, Export, Coverage row and Expand or Collapse unions. */
+    showTableMoreMenu(): void {
+        const state = stateOf(treeKey());
+        const st = state.types[state.rowType];
+        const t = strings.table;
+        const rows: { label: string; run: () => void; value?: string; active?: boolean; ariaLabel?: string }[] = [
+            { label: t.columns, value: String(st.columns.length), run: () => this.showTableColumns() },
+            { label: t.export, run: () => this.showTableExport() },
+            {
+                label: t.coverageRow, value: st.coverageRow ? '✓' : '', active: st.coverageRow,
+                ariaLabel: `${t.coverageRow}: ${st.coverageRow ? t.yes : t.no}`,
+                run: () => this.changeTableColumns(s2 => { s2.coverageRow = !s2.coverageRow; }),
+            },
+        ];
+        const unions = mounted?.unionsButton;
+        if (unions) {
+            rows.push({
+                label: unions === 'expand' ? t.expandAll : t.collapseAll,
+                run: () => this.changeTableColumns(s2 => setAllExpanded(s2.unions, unions === 'expand')),
+            });
+        }
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        this.presentMenuSheet(t.moreActions, [{ rows }]);
+    },
+
+    /** A completeness cell's bubble by touch (§6.2): the share, what is missing, what it counts. */
+    showTableCompleteness(line: GridLine, col: number, cell: HTMLElement): void {
+        const def = mounted?.display?.columns[col];
+        if (!def || !model || line.kind === 'more') return;
+        const value = lineCell(model, line, def);
+        if (!value.title) return;
+        const [head, ...rest] = value.title.split('\n');
+        const body = rest.map(r => `<div class="tv-bub-detail">${escHtml(r)}</div>`).join('');
+        if (isPhoneBar()) {
+            this.showTableSheet(sheetElement(head, `<div class="tv-bub-comp">${body}</div>`, 'legend', () => this.hideBottomSheet()));
+            return;
+        }
+        openBubblePanel({
+            rect: cell.getBoundingClientRect(), label: head, kind: 'legend', focusBack: () => cell, scroller: mounted?.grid.el,
+            html: `<div class="tv-bub-title">${escHtml(head)}</div><div class="tv-bub-comp">${body}</div>`,
+        });
     },
 
     /** The phone's row-type sheet (§2): the types with their counts and a note. */

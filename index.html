@@ -9830,7 +9830,45 @@
         .tv-bubble--sheet .tv-bub-link { height: 44px; padding: 0 8px; font-size: 15px; }
         .tv-bubble--sheet .tv-leg-name { font-size: 14px; }
         .tv-bubble--sheet .tv-leg-text { font-size: 13.5px; }
+        /* §12 the phone's ⋯ (Columns, Export, Coverage row, unions); hidden on wider screens. */
+        .tv-slot-more { display: none; }
+        .tv-more-menu-btn {
+            display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 40px; padding: 0;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light);
+            font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        /* §6.2 a completeness bubble by touch. */
+        .tv-bub-comp { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
+        /* §13 a state in place of the grid (13a, 13e–13g); 13j the read-only sentence in the status line. */
+        .tv-grid[hidden], .tv-empty[hidden], .tv-status-ro[hidden] { display: none; }
+        .tv-empty {
+            flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center;
+            padding: 40px 24px; box-sizing: border-box; background: var(--surface);
+        }
+        .tv-empty .empty-block { padding: 0; max-width: 480px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .tv-empty .empty-block-title { font-size: 24px; margin: 0; }
+        .tv-empty .empty-block-text { max-width: 460px; font-size: 14px; }
+        .tv-empty .empty-block-action {
+            margin-top: 8px; height: 38px; padding: 0 16px; border: none; border-radius: var(--r-md);
+            background: var(--primary); color: var(--on-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .tv-empty-link {
+            margin-top: 4px; padding: 0 4px; min-height: 32px; border: none; background: none; font: inherit; font-size: 14px;
+            font-weight: 600; color: var(--primary); cursor: pointer;
+        }
+        .table-container[data-empty="empty"] .tv-chips { display: none; }
+        .tv-status-ro { color: var(--text-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-ro-short { display: none; }
+        .tv-status-right:has(> .tv-status-ro:not([hidden])) { flex: 0 1 auto; min-width: 0; }
+        .tv-status-right > .tv-legend-btn, .tv-status-right > .tv-status-checks { flex: none; }
+        /* §4.7 de: a long word of a head breaks with a hyphen before it is cut with "…". */
+        .tv-headcell .tv-cell-text { hyphens: auto; -webkit-hyphens: auto; }
+        /* The tablet toolbar's focus and depth belong to the diagram, not to the table (12d). */
+        body[data-view-mode="table"] .toolbar-focus { display: none !important; }
         @media (hover: hover) {
+            .tv-more-menu-btn:hover { color: var(--text); border-color: var(--primary); }
+            .tv-empty-link:hover { text-decoration: underline; }
+            .tv-empty .empty-block-action:hover { background: var(--primary-dark); }
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
             .tv-body .tv-row:hover .tv-acts { display: inline-flex; }
@@ -9922,6 +9960,29 @@
             .tv-ff-check { min-height: 48px; }
             .tv-ff-values { max-height: none; }
             .tv-nomatch { padding: 28px 12px; }
+            /* 12a row 1: the row type · the view (grows, "…") · ⋯ with Columns and Export; row 2: search · Filters. */
+            .tv-slot-cols, .tv-slot-export, .tv-bar-spacer { display: none; }
+            .tv-slot-more { display: flex; flex: none; }
+            .tv-empty { padding: 32px 16px; }
+            .tv-empty .empty-block-title { font-size: 21px; }
+            .tv-empty .empty-block-text { max-width: 300px; font-size: 14.5px; }
+            .tv-empty .empty-block-action { height: 44px; padding: 0 18px; }
+            .tv-empty-link { min-height: 44px; }
+            /* 13j on a phone: the read-only sentence takes the sort's place. */
+            .tv-status:has(.tv-status-ro:not([hidden])) .tv-status-sort { display: none; }
+            .tv-ro-long { display: none; }
+            .tv-ro-short { display: inline; }
+        }
+        /* 12c a phone held sideways: the table's bar in one row of 50 px (type · view · search · Filters · ⋯), a 26 px status line. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tv-bar-row1 { flex-wrap: nowrap; min-height: 50px; padding: 5px 12px; }
+            .tv-bar-row1::after { display: none; }
+            .tv-slot-view { flex: 0 1 auto; max-width: 220px; }
+            .tv-slot-search { order: 2; flex: 1 1 0; }
+            .tv-filters-btn { order: 3; }
+            .tv-slot-more { order: 4; }
+            .tv-status { height: 26px; }
+            .tv-empty { padding: 16px; }
         }
         .map-canvas { position: absolute; inset: 0; }
         .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }

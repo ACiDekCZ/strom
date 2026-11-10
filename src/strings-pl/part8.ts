@@ -1379,5 +1379,18 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             u: (file: string, n: number, r: number, k: number) => `Pobrano: ${file} · ${nPl(n, 'związek', 'związki', 'związków')}, ${nPl(r, 'wiersz', 'wiersze', 'wierszy')}, ${nPl(k, 'kolumna', 'kolumny', 'kolumn')}`,
         },
         exportLink: 'Własne kolumny, filtr i sortowanie: widok Tabela ›',
+        moreActions: 'Więcej działań tabeli',
+        emptyTitle: 'Tabela jest na razie pusta',
+        emptyText: 'Pokaże wszystkie osoby drzewa obok siebie: daty i miejsca, wiek, luki i wyniki kontroli.',
+        noUnionsTitle: 'W drzewie nie ma żadnego związku',
+        noUnionsText: 'Związki pojawią się tu, gdy któraś osoba będzie mieć partnera.',
+        noFindingsTitle: 'Bez błędów i rzeczy do sprawdzenia',
+        noFindingsText: (n: number) => (n > 0
+            ? `Kontrole nie znalazły niczego, co warto sprawdzić. Tropy (${n}) są w Jakości danych.`
+            : 'Kontrole nie znalazły niczego, co warto sprawdzić.'),
+        nothingMissingTitle: 'Niczego nie brakuje',
+        nothingMissingText: (n: number) => `Wszystkie śledzone pola (urodzenie, związki, zgon i ich źródła) są wypełnione ${n === 1 ? 'u jedynej osoby' : `u wszystkich osób (${n})`}.`,
+        readOnly: 'Tylko do odczytu: edycji i „To nie błąd” tu nie ma.',
+        readOnlyShort: 'Tylko do odczytu',
     },
 };

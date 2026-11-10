@@ -8534,6 +8534,19 @@ const stringsEN = {
             u: (file: string, n: number, r: number, k: number) => `Downloaded: ${file} · ${nEn(n, 'union', 'unions')}, ${nEn(r, 'row', 'rows')}, ${nEn(k, 'column', 'columns')}`,
         },
         exportLink: 'Custom columns, filter and sort: Table view ›',
+        moreActions: 'More table actions',
+        emptyTitle: 'The table is empty so far',
+        emptyText: 'It will show all people of the tree side by side: dates and places, ages, gaps and the findings of the checks.',
+        noUnionsTitle: 'There is no union in the tree',
+        noUnionsText: 'Unions appear here as soon as someone has a partner.',
+        noFindingsTitle: 'No errors and nothing to check',
+        noFindingsText: (n: number) => (n > 0
+            ? `The checks found nothing worth checking. Leads (${numEn(n)}) are in Data quality.`
+            : 'The checks found nothing worth checking.'),
+        nothingMissingTitle: 'Nothing is missing',
+        nothingMissingText: (n: number) => `All tracked fields (birth, unions, death and their sources) are filled in for ${n === 1 ? 'the one person' : `all ${numEn(n)} people`}.`,
+        readOnly: 'Read only: edits and “Not an error” are not available here.',
+        readOnlyShort: 'Read only',
     },
 };
 
@@ -16762,6 +16775,19 @@ const stringsCZ: StringsType = {
             u: (file: string, n: number, r: number, k: number) => `Staženo: ${file} · ${nCs(n, 'svazek', 'svazky', 'svazků')}, ${nCs(r, 'řádek', 'řádky', 'řádků')}, ${nCs(k, 'sloupec', 'sloupce', 'sloupců')}`,
         },
         exportLink: 'Vlastní sloupce, filtr a řazení: pohled Tabulka ›',
+        moreActions: 'Další akce tabulky',
+        emptyTitle: 'Tabulka je zatím prázdná',
+        emptyText: 'Ukáže všechny osoby stromu vedle sebe: data a místa, věky, mezery a nálezy kontrol.',
+        noUnionsTitle: 'Ve stromu není žádný svazek',
+        noUnionsText: 'Svazky se tu ukážou, jakmile bude mít některá osoba partnera.',
+        noFindingsTitle: 'Bez chyb a k ověření',
+        noFindingsText: (n: number) => (n > 0
+            ? `Kontroly nenašly nic, co by stálo za ověření. Stopy (${numCs(n)}) jsou v Kvalitě dat.`
+            : 'Kontroly nenašly nic, co by stálo za ověření.'),
+        nothingMissingTitle: 'Nic nechybí',
+        nothingMissingText: (n: number) => `Všechna sledovaná pole (narození, svazky, úmrtí a jejich prameny) jsou vyplněná ${n === 1 ? 'u jediné osoby' : `u všech ${numCs(n)} osob`}.`,
+        readOnly: 'Jen ke čtení: úpravy a „Není chyba“ tu nejsou.',
+        readOnlyShort: 'Jen ke čtení',
     },
 };
 
@@ -24909,6 +24935,19 @@ const stringsDE: StringsType = {
             u: (file: string, n: number, r: number, k: number) => `Heruntergeladen: ${file} · ${nDe(n, 'Verbindung', 'Verbindungen')}, ${nDe(r, 'Zeile', 'Zeilen')}, ${nDe(k, 'Spalte', 'Spalten')}`,
         },
         exportLink: 'Eigene Spalten, Filter und Sortierung: Ansicht Tabelle ›',
+        moreActions: 'Weitere Tabellenaktionen',
+        emptyTitle: 'Die Tabelle ist noch leer',
+        emptyText: 'Hier stehen alle Personen des Stammbaums nebeneinander: Daten und Orte, Alter, Lücken und die Befunde der Prüfungen.',
+        noUnionsTitle: 'Im Stammbaum gibt es keine Verbindung',
+        noUnionsText: 'Verbindungen erscheinen hier, sobald eine Person einen Partner hat.',
+        noFindingsTitle: 'Keine Fehler und nichts zu prüfen',
+        noFindingsText: (n: number) => (n > 0
+            ? `Die Prüfungen fanden nichts, was eine Prüfung lohnt. Spuren (${numDe(n)}) stehen in der Datenqualität.`
+            : 'Die Prüfungen fanden nichts, was eine Prüfung lohnt.'),
+        nothingMissingTitle: 'Nichts fehlt',
+        nothingMissingText: (n: number) => `Alle beobachteten Felder (Geburt, Verbindungen, Tod und ihre Quellen) sind ${n === 1 ? 'bei der einen Person' : `bei allen ${numDe(n)} Personen`} ausgefüllt.`,
+        readOnly: 'Nur lesen: Bearbeiten und „Kein Fehler“ gibt es hier nicht.',
+        readOnlyShort: 'Nur lesen',
     },
 };
 

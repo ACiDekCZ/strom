@@ -133,6 +133,8 @@ export interface GridHandlers {
     onMoveGroup?(start: number, end: number, before: number): void;
     /** A cell with a finding was clicked or Enter was pressed on it (§7.4): its line, its drawn column, the cell. */
     onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
+    /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse has the title). */
+    onComp?(line: GridLine, col: number, cell: HTMLElement): boolean;
     /** A click on a column's head (§8.4); `add`: with Shift, a further sort key. */
     onHeadSort?(colId: string, add: boolean): void;
     /** A click on a coverage cell (§6.1: only empty / only filled). */
@@ -307,6 +309,7 @@ export class TableGrid {
                 return;
             }
             this.select(line);
+            if (cellEl?.querySelector('.tv-comp') && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl)) return;
             this.handlers.onRowClick?.(line);
         });
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
