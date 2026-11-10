@@ -46,17 +46,22 @@ const status = (page: Page) => page.locator('#table-container .tv-status-count')
 const col = (page: Page, key: string, i: number) => row(page, key).locator(`[aria-colindex="${i}"]`);
 const partChip = (page: Page) => page.locator('#table-container .tv-chips .tv-chip--part');
 
-async function openTable(page: Page, phone = false): Promise<void> {
+async function openTable(page: Page, phone = false, family = FAMILY, people = '5 of 5 people', table = 'Table'): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
     await openApp(page);
-    await seedTree(page, FAMILY, 'Želvíř', 'c');
+    await seedTree(page, family, 'Želvíř', 'c');
     if (phone) {
         await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: table }).tap();
     } else {
         await page.locator('#view-mode-table').click();
     }
-    await expect(status(page)).toHaveText('5 of 5 people');
+    await expect(status(page)).toHaveText(people);
+}
+
+/** The page never scrolls sideways. */
+async function noPageOverflow(page: Page): Promise<void> {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 }
 
 test.describe('desktop (1440)', () => {
@@ -174,6 +179,26 @@ test.describe('desktop (1440)', () => {
     });
 });
 
+test.describe('desktop in German (1440)', () => {
+    test.use({ viewport: { width: 1440, height: 900 }, locale: 'de-DE' });
+
+    test('four row types, a changed view with its buttons, search, Columns and Export stay in one row', async ({ page }) => {
+        await openTable(page, false, FAMILY, '5 von 5 Personen');
+        await page.locator('#table-container .tv-rowtype [data-rowtype="events"]').click();
+        await page.locator('#table-container .tv-chips .tv-chip[data-chip="evOther"]').click();
+        await expect(page.locator('#table-container .tv-view-saveas')).toBeVisible();
+        await expect(page.locator('#table-container .tv-view-discard')).toBeVisible();
+        const bar = (await page.locator('#table-container .tv-bar-row1').boundingBox())!;
+        const exp = (await page.locator('#table-container .tv-export-btn').boundingBox())!;
+        const seg = (await page.locator('#table-container .tv-rowtype').boundingBox())!;
+        expect(Math.abs((exp.y + exp.height / 2) - (seg.y + seg.height / 2))).toBeLessThan(2);
+        expect(bar.height).toBeLessThanOrEqual(53);
+        // The search gave way, not below its 160 px.
+        expect((await page.locator('#table-container .tv-search-q').boundingBox())!.width).toBeGreaterThanOrEqual(159);
+        await noPageOverflow(page);
+    });
+});
+
 test.describe('phone (390)', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -202,5 +227,57 @@ test.describe('phone (390)', () => {
 
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow).toBeLessThanOrEqual(0);
+    });
+});
+
+test.describe('phone, a long name (390)', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('a name too long for its cell ends in "…" inside the cell', async ({ page }) => {
+        const family = { ...FAMILY, x: { firstName: 'Bartoloměj Kvido Radovan', lastName: 'Želvíř-Krápal', birthDate: '1884-02-02', parents: ['a', 'b'] } };
+        await openTable(page, true, family, '6 of 6 people');
+        await page.locator('#table-container .tv-rowtype-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Events' }).tap();
+        const cell = col(page, 'e:b:x', 2);
+        const name = cell.locator('.tv-nm--person');
+        await expect(name).toHaveText('Bartoloměj Kvido Radovan Želvíř-Krápal');
+        const fit = await name.evaluate((el) => {
+            const cellBox = el.closest('.tv-cell')!.getBoundingClientRect();
+            return {
+                cut: el.scrollWidth > el.clientWidth, ellipsis: getComputedStyle(el).textOverflow,
+                inside: el.getBoundingClientRect().right <= cellBox.right + 0.5,
+            };
+        });
+        expect(fit).toEqual({ cut: true, ellipsis: 'ellipsis', inside: true });
+        await noPageOverflow(page);
+    });
+});
+
+test.describe('phone held sideways (844 × 390)', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('Events in the one-row bar; the godparent\'s filter in the Filters sheet; nothing overflows', async ({ page }) => {
+        await openTable(page, true);
+        await page.locator('#table-container .tv-rowtype-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Events' }).tap();
+        const btn = page.locator('#table-container .tv-rowtype-btn');
+        await expect(btn).toHaveText('Events · 9 ▾');
+        const bar = (await page.locator('#table-container .tv-bar-row1').boundingBox())!;
+        expect(Math.round(bar.height)).toBe(50);
+        for (const sel of ['.tv-rowtype-btn', '.tv-view-btn', '.tv-search-q', '.tv-filters-btn', '.tv-more-menu-btn']) {
+            const b = (await page.locator(`#table-container ${sel}`).boundingBox())!;
+            expect(b.y + b.height, sel).toBeLessThanOrEqual(bar.y + bar.height);
+        }
+
+        await row(page, 'e:l:c:bc').locator('.tv-nm', { hasText: 'Bořivoj Mlýnek' }).tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item').first().tap();
+        await expect(status(page)).toHaveText('2 of 9 events');
+        await page.locator('#table-container .tv-filters-btn').tap();
+        const part = page.locator('.tv-fs-part');
+        await part.scrollIntoViewIfNeeded();
+        await expect(part).toContainText('Godparent: Bořivoj Mlýnek');
+        const box = (await part.boundingBox())!;
+        expect(box.x + box.width).toBeLessThanOrEqual(844);
+        await noPageOverflow(page);
     });
 });

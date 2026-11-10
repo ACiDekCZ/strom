@@ -9358,9 +9358,13 @@
         .tv-bar-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-top: 1px solid var(--divider); }
         .tv-bar-row2[hidden], .tv-slot:empty { display: none; }
         /* §8.3 search in the bar; §8.1 the quick chips in row 2 (one line; what does not fit goes into More filters). */
-        .tv-search { display: flex; align-items: center; gap: 8px; }
+        /* The search gives way first (240 → 160 px) before the bar wraps: four row types, a changed view's
+           Save as new and Discard, Columns and Export stay in one row at 1440 in de. */
+        .tv-slot-search { flex: 1 1 160px; min-width: 0; max-width: 240px; }
+        .tv-slot-search:has(.tv-matches:not(:empty)) { max-width: 340px; }
+        .tv-search { display: flex; align-items: center; gap: 8px; width: 100%; }
         .tv-search-q {
-            width: 240px; height: 34px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-md);
+            flex: 1 1 auto; width: 100%; min-width: 0; height: 34px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-md);
             background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
         }
         .tv-search-q:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-focus); }
@@ -9500,9 +9504,12 @@
         .tv-name { font-family: var(--font-serif); font-size: 14px; }
         .tv-row.is-home .tv-name { font-weight: 600; }
         /* §14.1: names in a cell. A tree's person is a link (opens the person); a participant's name offers its filter. */
+        /* A button is an atomic inline box: the cell's ellipsis can only hide it whole, so a name too long
+           for its cell ends in its own "…" (a phone's 156 px column) instead of being cut off. */
         .tv-nm {
-            display: inline; padding: 0; margin: 0; border: none; background: none;
-            font: inherit; color: inherit; text-align: inherit; white-space: inherit; cursor: pointer;
+            display: inline-block; max-width: 100%; vertical-align: bottom; overflow: hidden; text-overflow: ellipsis;
+            padding: 0 0 2px; margin: 0 0 -2px; border: none; background: none;
+            font: inherit; color: inherit; text-align: inherit; white-space: nowrap; cursor: pointer;
         }
         .tv-nm--person { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .tv-nm:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
@@ -9990,7 +9997,7 @@
             .tv-groupcell { cursor: default; }
             .tv-status-checks { font-size: 11.5px; }
             /* 8h the search and the Filters button on a line of their own; no chips' row. */
-            .tv-slot-search { order: 10; flex: 1 1 0; min-width: 0; }
+            .tv-slot-search { order: 10; flex: 1 1 0; min-width: 0; max-width: none; }
             .tv-search { width: 100%; }
             .tv-search-q { width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
             .tv-filters-btn {
