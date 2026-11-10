@@ -921,10 +921,11 @@ export interface PillSegment { x1: number; y1: number; x2: number; y2: number }
 
 /**
  * The label a pill shows: whole ("2nd ∞ 1908"; "3rd ∞" without a date),
- * without the year ("2nd ∞"), or the ordinal alone ("2nd"). The bubble and
- * the accessible label always say it all.
+ * without the year ("2nd ∞"), or the ordinal alone ("2nd"); in the dense
+ * spacing the short form ("∞ 2", strings.marriageOrder.short). The bubble
+ * and the accessible label always say it all.
  */
-export type PillLabel = 'full' | 'noYear' | 'ordinal';
+export type PillLabel = 'full' | 'noYear' | 'ordinal' | 'short';
 
 /** One label of a pill: its parts (the screen's markup draws them, the measure measures them). */
 export interface PillLabelForm {
@@ -934,6 +935,8 @@ export interface PillLabelForm {
     year: string;
     /** False for the ordinal alone (no ∞). */
     glyph: boolean;
+    /** The dense spacing's short pill ("∞ 2"): `ordinal` holds its whole text. */
+    short?: boolean;
 }
 
 /**
@@ -950,8 +953,8 @@ export function pillLabelForms(ordinal: string, year: string): PillLabelForm[] {
 
 /** The widths placeUnionOrderPill takes, from the labels (pillLabelForms) and their measures, in that order. */
 export function pillLabelWidths(forms: ReadonlyArray<PillLabelForm>, widths: ReadonlyArray<number>):
-    Pick<PillPlacementInput, 'pillWidth' | 'shorter'> {
-    return { pillWidth: widths[0], shorter: forms.slice(1).map((f, i) => ({ label: f.label, width: widths[i + 1] })) };
+    Pick<PillPlacementInput, 'pillWidth' | 'pillLabel' | 'shorter'> {
+    return { pillWidth: widths[0], pillLabel: forms[0].label, shorter: forms.slice(1).map((f, i) => ({ label: f.label, width: widths[i + 1] })) };
 }
 
 export interface PillPlacementInput {
@@ -960,6 +963,8 @@ export interface PillPlacementInput {
     side: 'left' | 'right';
     /** Width of the whole pill. */
     pillWidth: number;
+    /** The whole pill's label (default 'full'; the dense spacing's 'short'). */
+    pillLabel?: PillLabel;
     /**
      * Widths of its shorter labels, longest first (pillLabelForms): tried in
      * turn when the whole pill does not fit in its half of the card.
@@ -979,6 +984,12 @@ export interface PillPlacementInput {
     rightHover?: number;
     /** The view's lines near the card, card-relative. */
     segments?: ReadonlyArray<PillSegment>;
+    /**
+     * Only on the top edge, never above the tabs (the dense spacing, D1: the
+     * row above them would reach the bus 24px over the card). Where the pill
+     * does not fit beside the tabs in its half, the card shows none.
+     */
+    edgeOnly?: boolean;
 }
 
 export interface PillPlacement {
@@ -1029,7 +1040,7 @@ function hitsLine(x: number, y: number, w: number, segments: ReadonlyArray<PillS
  * shows no pill rather than one over the middle of its top edge.
  */
 export function placeUnionOrderPill(input: PillPlacementInput): PillPlacement | null {
-    const forms: Array<{ label: PillLabel; width: number }> = [{ label: 'full', width: input.pillWidth }, ...(input.shorter ?? [])];
+    const forms: Array<{ label: PillLabel; width: number }> = [{ label: input.pillLabel ?? 'full', width: input.pillWidth }, ...(input.shorter ?? [])];
     for (const clearOnly of [true, false]) {
         for (const f of forms) {
             const slot = placeWidth(input, f.width, clearOnly);
@@ -1068,6 +1079,8 @@ function placeWidth(input: PillPlacementInput, w: number, clearOnly: boolean):
         }
     }
 
+    if (input.edgeOnly) return clearOnly ? null : edgeSlot(input, w);
+
     // Above the tabs: in the half, within the card, the corner first.
     const lo = side === 'left' ? 0 : mid + CENTRE_CLEAR;
     const hi = side === 'left' ? mid - CENTRE_CLEAR - w : W - w;
@@ -1082,6 +1095,27 @@ function placeWidth(input: PillPlacementInput, w: number, clearOnly: boolean):
         }
     }
     return clearOnly ? null : { x: corner, y: ABOVE_ROW_Y, row: 'above', clear: false };
+}
+
+/**
+ * The pill on the top edge beside the corner's tabs whatever lines it meets
+ * there (edgeOnly, no place clear of them), or null when it is wider than
+ * the room there in its half.
+ */
+function edgeSlot(input: PillPlacementInput, w: number): { x: number; y: number; row: 'edge'; clear: boolean } | null {
+    const { cardWidth: W, side, leftTabs, rightTabs, leftInset, rightInset } = input;
+    const mid = W / 2;
+    const leftEnd = leftTabs > 0 ? leftInset + leftTabs : -Infinity;
+    const rightStart = rightTabs > 0 ? W - rightInset - rightTabs : Infinity;
+    const hover = input.rightHover ?? 0;
+    const rightHoverStart = hover > 0 ? (rightTabs > 0 ? rightStart - EDGE_GAP : W - rightInset) - hover : Infinity;
+    if (side === 'left') {
+        const x = leftTabs > 0 ? leftEnd + EDGE_GAP : leftInset;
+        return x + w <= mid - CENTRE_CLEAR && x + w + EDGE_GAP <= Math.min(rightStart, rightHoverStart)
+            ? { x, y: EDGE_ROW_Y, row: 'edge', clear: false } : null;
+    }
+    const x = (rightTabs > 0 ? rightStart - EDGE_GAP : W - rightInset) - w;
+    return x >= mid + CENTRE_CLEAR && x >= leftEnd + EDGE_GAP ? { x, y: EDGE_ROW_Y, row: 'edge', clear: false } : null;
 }
 
 /**

@@ -80,7 +80,7 @@ import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
     unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
-    viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
+    viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, PillLabelForm, PillSegment, pillLabelForms, pillLabelWidths, unionSummaries,
     childrenDrawnElsewhere, siblingOrderMark, SiblingOrderMark,
     siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
     offeredPartners, OfferedPartner, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
@@ -5037,6 +5037,19 @@ class TreeRendererClass {
                 const tip = host.querySelector<HTMLElement>(':scope > .badge-tooltip');
                 if (tip) this.bindTabBubble(host, tip);
             });
+            // The dense spacing's short marriage-order pill ("∞ 2", D1): its bubble
+            // says it all, by a mouse, the keyboard, a long press and a tap
+            const shortOrder = card.querySelector<HTMLElement>('.union-order-pill[data-label="short"]');
+            const shortOrderTip = shortOrder?.querySelector<HTMLElement>(':scope > .uo-tip');
+            if (shortOrder && shortOrderTip) {
+                this.bindTabBubble(shortOrder, shortOrderTip);
+                shortOrder.addEventListener('click', (e) => {
+                    if ((e as PointerEvent).pointerType !== 'touch' || e.target instanceof Element && e.target.closest('.uo-tip')) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.bubbleOpeners.get(shortOrder)?.();
+                });
+            }
 
             // The children tab shows (hides) the children in place
             const childrenTab = card.querySelector<HTMLElement>('.branch-tab.children-tab');
@@ -5501,7 +5514,11 @@ class TreeRendererClass {
         const dots = v.named ? '<span class="research-edge-dots"></span>' : '';
         const label = v.label && (all || v.kind !== 'proof') ? `<span class="research-edge-label">${this.escapeHtml(v.label)}</span>` : '';
         const popup = v.named ? ' aria-haspopup="dialog"' : '';
-        return `<button type="button" class="${cls.join(' ')}" data-edge-person="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(v.aria)}"${popup}>`
+        // Dense: a line of another family closer than 24px over the stub (a bus in a lane
+        // toward the cards) shortens it, so it still ends 4px below that line (spec 069 §3)
+        const cap = this.denseEdgeCap(id, v);
+        const style = cap !== null ? ` style="--edge-cap:${cap.toFixed(1)}px"` : '';
+        return `<button type="button" class="${cls.join(' ')}" data-edge-person="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(v.aria)}"${popup}${style}>`
             + `<i class="research-edge-line" aria-hidden="true">${dots}</i>${label}</button>`;
     }
 
@@ -5510,10 +5527,42 @@ class TreeRendererClass {
         const v = this.edgeViews.get(id);
         const pos = this.positions.get(id);
         if (!v || !pos || v.kind === 'proof') return null;
+        const h = v.kind === 'muted' ? 14 : v.shape === 'closed' ? 18 : this.config.dense ? 20 : v.named ? 37 : 26;
+        const cap = this.denseEdgeCap(id, v);
+        return { x: this.edgeStubX(pos.x, v), y: pos.y - (cap !== null ? Math.min(h, cap) : h) };
+    }
+
+    /** The x of a person's stub (canvas coordinates): over the missing parent's side, else the middle. */
+    private edgeStubX(cardX: number, v: EdgeView): number {
         const w = this.config.cardWidth;
-        const x = pos.x + (v.side === 'father' ? w * 40 / 188 : v.side === 'mother' ? w * 148 / 188 : w / 2);
-        const h = v.kind === 'muted' ? 14 : v.shape === 'closed' ? 18 : v.named ? 37 : 26;
-        return { x, y: pos.y - h };
+        return cardX + (v.side === 'father' ? w * 40 / 188 : v.side === 'mother' ? w * 148 / 188 : w / 2);
+    }
+
+    /** The lines across the view (buses, connectors, partner lines), for denseEdgeCap; per set of connections. */
+    private denseEdgeLines: { of: Connection[]; lines: PillSegment[] } | null = null;
+
+    /**
+     * In the dense spacing the stub is 20px and the bus of its gap 24px over
+     * the card; a bus in a lane toward the cards (16px over them) or another
+     * line over the stub lower than 24px leaves it the room down to 4px below
+     * that line (px; null: the whole stub fits, or the normal spacing).
+     */
+    private denseEdgeCap(id: PersonId, v: EdgeView): number | null {
+        const pos = this.positions.get(id);
+        if (!this.config.dense || !pos || v.kind === 'proof') return null;
+        if (this.denseEdgeLines?.of !== this.connections) {
+            const lines = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines })
+                .filter(l => Math.abs(l.y1 - l.y2) < 0.5);
+            this.denseEdgeLines = { of: this.connections, lines };
+        }
+        const x = this.edgeStubX(pos.x, v);
+        let room = Infinity;
+        for (const l of this.denseEdgeLines.lines) {
+            if (x < Math.min(l.x1, l.x2) - 1.5 || x > Math.max(l.x1, l.x2) + 1.5) continue;
+            const d = pos.y - l.y1;
+            if (d > 0 && d < 24) room = Math.min(room, d - 4);
+        }
+        return room === Infinity ? null : Math.max(4, room);
     }
 
     /**
@@ -6537,11 +6586,25 @@ class TreeRendererClass {
     private unionOrderPillHtml(b: UnionOrderBadge, label: PillLabel): string {
         const toward = DataManager.getPerson(b.towardId);
         const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married, toward ? shownName(toward, '?') : '?');
-        const form = pillLabelForms(strings.focus.unionOrdinal(b.number), b.year).find(f => f.label === label)!;
-        return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"`
+        const form = this.unionOrderPillForms(b).find(f => f.label === label)!;
+        // The dense spacing's short pill ("∞ 2", D1) says the rest in its bubble: the keyboard reaches it too
+        const focusable = form.short ? ' tabindex="0"' : '';
+        return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"${focusable}`
             + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}" data-label="${label}">`
-            + unionOrderPillPartsHtml(form.ordinal, form.year, form.glyph)
+            + unionOrderPillPartsHtml(form.ordinal, form.year, form.glyph, form.short)
             + `<span class="badge-tooltip uo-tip">${this.escapeHtml(tip)}</span></span>`;
+    }
+
+    /**
+     * The labels a marriage-order pill may show (pillLabelForms), longest
+     * first; in the dense spacing (D1) only the short one, "∞ 2" (the
+     * marriage's number, strings.marriageOrder.short), on the top edge.
+     */
+    private unionOrderPillForms(b: UnionOrderBadge): PillLabelForm[] {
+        if (this.config.dense) {
+            return [{ label: 'short', ordinal: strings.marriageOrder.short(b.number), year: '', glyph: true, short: true }];
+        }
+        return pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
     }
 
     /**
@@ -6558,7 +6621,7 @@ class TreeRendererClass {
         if (badges.size === 0) return out;
         const data = DataManager.getData();
         const showTabs = this.viewMode !== 'descendants';
-        const formsOf = (b: UnionOrderBadge) => pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
+        const formsOf = (b: UnionOrderBadge) => this.unionOrderPillForms(b);
         const pills = measureUnionOrderPills([...badges.values()].flatMap(formsOf));
         applyUnionOrderGlyphLift();
         const tabsOf = new Map<PersonId, BranchTab[]>();
@@ -6591,13 +6654,15 @@ class TreeRendererClass {
             const slot = placeUnionOrderPill({
                 cardWidth: W,
                 side: b.side,
-                ...pillLabelWidths(forms, forms.map(f => pills.get(unionOrderPillKey(f.ordinal, f.year, f.glyph))!.width)),
+                ...pillLabelWidths(forms, forms.map(f => pills.get(unionOrderPillKey(f.ordinal, f.year, f.glyph, f.short))!.width)),
                 leftTabs: 0,
                 rightTabs: rowsByForm.get(formOf.get(id) ?? 'full')?.get(rowKey(tabsOf.get(id)!, formOf.get(id) ?? 'full')) ?? 0,
                 leftInset: border + EDGE_INSET,
                 rightInset: border + EDGE_INSET + (signal ? 8 : 0),
                 rightHover: DataManager.isPersonLocked(id) ? 0 : hoverIcon,
                 segments: segmentsNearCard(segments, pos.x, pos.y, W),
+                // Dense (D1): never in the row above the tabs, which would reach the bus
+                edgeOnly: !!this.config.dense,
             });
             if (slot) out.set(id, { ...slot, border });
         }

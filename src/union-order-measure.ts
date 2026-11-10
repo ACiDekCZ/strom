@@ -45,11 +45,27 @@ const escapeHtml = (s: string): string =>
  * The visible inside of a pill: its number, the ∞ and the year (the screen's
  * markup); `glyph` false: the ordinal alone (the shortest label).
  */
-export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = true): string {
+export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = true, short = false): string {
+    if (short) return unionOrderShortPartsHtml(ordinal);
     if (!glyph) return `<span class="uo-num">${escapeHtml(ordinal)}</span>`;
     return `<span class="uo-num">${escapeHtml(ordinal)}</span>`
         + `<span class="pill-glyph uo-glyph">∞</span>`
         + (year ? `<span class="uo-year">${escapeHtml(year)}</span>` : '');
+}
+
+/**
+ * The visible inside of the dense spacing's short pill ("∞ 2",
+ * strings.marriageOrder.short): its ∞ drawn as the pill's glyph, the rest
+ * as its number, in the order the language puts them (the pill's gap
+ * stands for the space between them).
+ */
+function unionOrderShortPartsHtml(text: string): string {
+    const at = text.indexOf('∞');
+    if (at < 0) return `<span class="uo-num">${escapeHtml(text.trim())}</span>`;
+    const before = text.slice(0, at).trim(), after = text.slice(at + 1).trim();
+    return (before ? `<span class="uo-num">${escapeHtml(before)}</span>` : '')
+        + `<span class="pill-glyph uo-glyph">∞</span>`
+        + (after ? `<span class="uo-num">${escapeHtml(after)}</span>` : '');
 }
 
 /**
@@ -434,7 +450,8 @@ function hiddenHost(): HTMLElement {
     return host;
 }
 
-const pillKey = (ordinal: string, year: string, glyph = true): string => `${ordinal}\u0000${year}\u0000${glyph ? 1 : 0}`;
+const pillKey = (ordinal: string, year: string, glyph = true, short = false): string =>
+    `${ordinal}\u0000${year}\u0000${glyph ? 1 : 0}${short ? '\u0000s' : ''}`;
 
 /**
  * Pills measured in the screen's markup and styles, in the font the screen
@@ -442,22 +459,26 @@ const pillKey = (ordinal: string, year: string, glyph = true): string => `${ordi
  * parts sit. One hidden batch for the ones not cached yet; without a
  * document, the estimate. `glyph` false: the ordinal alone.
  */
-export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: string; glyph?: boolean }>): Map<string, PillMetrics> {
+export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: string; glyph?: boolean; short?: boolean }>): Map<string, PillMetrics> {
     const out = new Map<string, PillMetrics>();
-    const todo: Array<{ ordinal: string; year: string; glyph: boolean; key: string }> = [];
-    for (const { ordinal, year, glyph = true } of items) {
-        const key = pillKey(ordinal, year, glyph);
+    const todo: Array<{ ordinal: string; year: string; glyph: boolean; short: boolean; key: string }> = [];
+    for (const { ordinal, year, glyph = true, short = false } of items) {
+        const key = pillKey(ordinal, year, glyph, short);
         if (out.has(key)) continue;
         const hit = pillCache.get(key);
         if (hit) out.set(key, hit);
-        else { out.set(key, estimatePillMetrics(ordinal, year, glyph)); todo.push({ ordinal, year, glyph, key }); }
+        else {
+            // The short pill ("∞ 2") estimated as its number with the ∞ (the same parts)
+            out.set(key, short ? estimatePillMetrics(ordinal.replace('∞', '').trim(), '', true) : estimatePillMetrics(ordinal, year, glyph));
+            todo.push({ ordinal, year, glyph, short, key });
+        }
     }
     if (todo.length === 0 || typeof document === 'undefined' || !document.body) return out;
     const host = hiddenHost();
     const els = todo.map(t => {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:block;width:max-content;';
-        wrap.innerHTML = `<span class="union-order-pill">${unionOrderPillPartsHtml(t.ordinal, t.year, t.glyph)}</span>`;
+        wrap.innerHTML = `<span class="union-order-pill">${unionOrderPillPartsHtml(t.ordinal, t.year, t.glyph, t.short)}</span>`;
         host.appendChild(wrap);
         return wrap.firstElementChild as HTMLElement;
     });

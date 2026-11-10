@@ -1355,6 +1355,11 @@ const stringsEN = {
         smallHint: 'On a small screen, the Compact card helps too.',
     },
 
+    // The marriage-order pill in the dense spacing: the marriage's number only (the bubble says it all)
+    marriageOrder: {
+        short: (n: number) => `∞ ${n}`,
+    },
+
     // Sticky generation labels
     genLabels: {
         settingLabel: 'Generation labels',
@@ -9731,6 +9736,11 @@ const stringsCZ: StringsType = {
         smallHint: 'Na malé obrazovce pomůže i Kompaktní karta.',
     },
 
+    // The marriage-order pill in the dense spacing: the marriage's number only (the bubble says it all)
+    marriageOrder: {
+        short: (n: number) => `∞ ${n}`,
+    },
+
     // Sticky generation labels
     genLabels: {
         settingLabel: 'Popisky generací',
@@ -18006,6 +18016,11 @@ const stringsDE: StringsType = {
         scope: 'Gilt für das Diagramm auf diesem Gerät.',
         scopeExport: 'Gilt für Bildexport, Poster und PDF-Druck.',
         smallHint: 'Auf einem kleinen Bildschirm hilft auch die Kompakt-Karte.',
+    },
+
+    // The marriage-order pill in the dense spacing: the marriage's number only (the bubble says it all)
+    marriageOrder: {
+        short: (n: number) => `∞ ${n}`,
     },
 
     // Sticky generation labels

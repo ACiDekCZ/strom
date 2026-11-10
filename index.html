@@ -4597,6 +4597,28 @@
             :is(.edge-top-right, .edge-top-left) > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge)::before { bottom: 50%; }
             :is(.edge-bottom-left, .edge-bottom-right) > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge)::before { top: 50%; }
         }
+        /* Dense spacing (spec 069 §3 Touch): 48px between the rows leave no
+           room for 35px out of each card; every edge pill takes the taps on
+           44 × 44 px centred on the edge, 22px out and 22px into the card
+           (inside the card the pill wins, the card gets the rest), so the
+           areas of two rows never meet (22 + 22 < 48). The marriage-order
+           pill joins them: its tap opens its bubble ("∞ 2", D1). */
+        @media (pointer: coarse) {
+            .tree-dense .card-edge > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge, .sibling-order-pill, .union-order-pill) { position: relative; }
+            .tree-dense .card-edge > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge, .sibling-order-pill, .union-order-pill)::before {
+                content: '';
+                position: absolute;
+                z-index: -1;
+                top: 50%;
+                bottom: auto;
+                left: 50%;
+                right: auto;
+                width: 100%;
+                min-width: 44px;
+                height: 44px;
+                transform: translate(-50%, -50%);
+            }
+        }
 
         /* Sibling-order pill (children shown in place, src/marriage-order.ts
            siblingOrderMark): "2 of 5" on the bottom-right edge of the
@@ -12600,6 +12622,36 @@
         @media (pointer: coarse) {
             .research-edge { width: 44px; height: 44px; }
             .research-edge.edge-kind-muted, .research-edge.edge-kind-proof, .research-edge.edge-named { height: 44px; }
+        }
+        /* Dense spacing (spec 069 §3, .tree-dense on the canvas): the bus runs
+           24px over the card, the stub stops 4px below it: 20px (the closed
+           one keeps its 18px, the muted one its 14px, the proof label its
+           place); the named parents' circles stand beside the line's top,
+           not over it, their words after them. Far out (.zoom-edge-bar) as
+           in the normal spacing. By touch the stub takes the taps 24px out
+           of the card and 20px into it, its line in the part outside. */
+        /* A line of another family closer over the stub (a bus in its lane
+           toward the cards, 16px) shortens it to 4px below that line
+           (--edge-cap, src/renderer.ts denseEdgeCap). */
+        @media not all and (pointer: coarse) {
+            .tree-dense:not(.zoom-edge-bar) .research-edge:not(.edge-kind-muted):not(.edge-kind-proof) { height: min(20px, var(--edge-cap, 20px)); }
+            .tree-dense:not(.zoom-edge-bar) .research-edge.edge-kind-muted { height: min(14px, var(--edge-cap, 14px)); }
+        }
+        .tree-dense:not(.zoom-edge-bar) .research-edge:not(.edge-closed):not(.edge-kind-muted) .research-edge-line { height: min(20px, var(--edge-cap, 20px)); }
+        .tree-dense:not(.zoom-edge-bar) .research-edge.edge-closed:not(.edge-kind-muted) .research-edge-line { height: min(18px, var(--edge-cap, 18px)); }
+        .tree-dense:not(.zoom-edge-bar) .research-edge.edge-kind-muted .research-edge-line { height: min(14px, var(--edge-cap, 14px)); }
+        .tree-dense:not(.zoom-edge-bar) .research-edge-dots { bottom: auto; top: 0; left: calc(50% + 5px); transform: none; }
+        .tree-dense .research-edge.edge-named .research-edge-label { bottom: 6px; left: calc(50% + 32px); }
+        @media (pointer: coarse) {
+            .tree-dense:not(.zoom-edge-bar) .research-edge {
+                height: 44px;
+                bottom: calc(100% - 20px);
+                padding-bottom: 20px;
+                box-sizing: border-box;
+            }
+            .tree-dense .research-edge .research-edge-label,
+            .tree-dense .research-edge.edge-kind-proof .research-edge-label { bottom: 31px; }
+            .tree-dense .research-edge.edge-named .research-edge-label { bottom: 26px; }
         }
 
         /* A person of a family nothing links to the tree yet. */

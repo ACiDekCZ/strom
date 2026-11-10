@@ -291,6 +291,42 @@ describe('where the pill sits (N18)', () => {
         expect(p.x).toBeGreaterThan(20);
         expect(p.x + 58).toBeLessThanOrEqual(94 - CENTRE_CLEAR);
     });
+
+    describe('dense spacing: the short "∞ 2" pill only on the card edge (spec 069 D1)', () => {
+        const short = { pillLabel: 'short' as const, edgeOnly: true };
+
+        it('never above the tabs: beside them on the edge, or no pill', () => {
+            const p = placeUnionOrderPill({ ...base, ...short, cardWidth: 240, side: 'right', pillWidth: 30, rightTabs: 60 })!;
+            expect(p).toEqual({ x: 240 - 13 - 60 - 4 - 30, y: EDGE_ROW_Y, row: 'edge', clear: true, label: 'short', width: 30 });
+            // The widow on a normal card: no room beside the tabs in its half. The normal
+            // pill goes above them; the dense one is left out rather than above the edge.
+            expect(placeUnionOrderPill({ ...base, ...short, cardWidth: 188, side: 'right', pillWidth: 30, rightTabs: 135 })).toBeNull();
+            expect(placeUnionOrderPill({ ...base, cardWidth: 188, side: 'right', pillWidth: 30, rightTabs: 135 })!.row).toBe('above');
+        });
+
+        it('the corner without tabs, with its short label', () => {
+            expect(placeUnionOrderPill({ ...base, ...short, cardWidth: 150, side: 'left', pillWidth: 30, rightTabs: 0 }))
+                .toEqual({ x: 13, y: EDGE_ROW_Y, row: 'edge', clear: true, label: 'short', width: 30 });
+            expect(placeUnionOrderPill({ ...base, ...short, cardWidth: 150, side: 'right', pillWidth: 30, rightTabs: 0 }))
+                .toEqual({ x: 150 - 13 - 30, y: EDGE_ROW_Y, row: 'edge', clear: true, label: 'short', width: 30 });
+        });
+
+        it('a line over the corner keeps it on the edge (not clear) instead of moving it above', () => {
+            // A bus runs low over the left corner of the card's top.
+            const segments = [{ x1: -50, y1: 4, x2: 60, y2: 4 }];
+            const dense = placeUnionOrderPill({ ...base, ...short, cardWidth: 188, side: 'left', pillWidth: 30, rightTabs: 0, segments })!;
+            expect(dense).toMatchObject({ row: 'edge', y: EDGE_ROW_Y, label: 'short' });
+            expect(dense.x + 30).toBeLessThanOrEqual(94 - CENTRE_CLEAR);
+            const normal = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'left', pillWidth: 30, rightTabs: 0, segments });
+            expect(normal?.row === 'edge' && normal.x === dense.x && !normal.clear).toBe(false);
+        });
+
+        it('pillLabelWidths carries the first label', () => {
+            expect(pillLabelWidths([{ label: 'short', ordinal: '∞ 2', year: '', glyph: true, short: true }], [30]))
+                .toMatchObject({ pillWidth: 30, pillLabel: 'short' });
+            expect(pillLabelWidths(pillLabelForms('2nd', '1908'), [70, 40, 28])).toMatchObject({ pillWidth: 70, pillLabel: 'full' });
+        });
+    });
 });
 
 // ---------------------------------------------------------------------------

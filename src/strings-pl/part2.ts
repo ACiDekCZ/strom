@@ -8,7 +8,7 @@ const notWrittenPl = (n: number): string =>
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
 export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap'
-    | 'name' | 'person' | 'titles' | 'spacing' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
+    | 'name' | 'person' | 'titles' | 'spacing' | 'marriageOrder' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
     crop: {
@@ -114,6 +114,11 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         scope: 'Dotyczy diagramu na tym urządzeniu.',
         scopeExport: 'Dotyczy eksportu obrazu, plakatu i druku do PDF.',
         smallHint: 'Na małym ekranie pomogą też karty Kompaktowe.',
+    },
+
+    // The marriage-order pill in the dense spacing: the marriage's number only (the bubble says it all)
+    marriageOrder: {
+        short: (n: number) => `∞ ${n}`,
     },
 
     // Sticky generation labels
