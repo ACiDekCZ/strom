@@ -145,7 +145,8 @@ test.describe('desktop (1440)', () => {
         const panel = page.locator('.tv-fpanel.tv-xpanel');
         await expect(panel).toBeVisible();
         expect(Math.round((await panel.boundingBox())!.width)).toBe(380);
-        await expect(panel.locator('.tv-xopt')).toHaveText(['●CSV · for Excel and Google Sheets', '○XLSX · groups, frozen panes, check colours', '●Everything shown · 5 people']);
+        await expect(panel.locator('.tv-xopt')).toHaveText(['●CSV · for Excel and Google Sheets', '○XLSX · groups, frozen panes, check colours',
+            '●Shown · 5 of 7 people (filter: Deceased)', '○All people without the filter · 7']);
         await expect(panel.locator('.tv-xfile')).toHaveText('File: Oskvelt_Overview_2026-06-15.csv');
         await expect(panel.locator('.tv-fpanel-cancel')).toHaveCount(0);
         const [download] = await Promise.all([
@@ -203,7 +204,7 @@ test.describe('phone (390)', () => {
         await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Export' }).tap();
         const xs = page.locator('.tv-fsheet.tv-xpanel');
         await expect(xs).toBeVisible();
-        await expect(xs.locator('.tv-xopt').last()).toHaveText('●Everything shown · 5 people');
+        await expect(xs.locator('.tv-xopt').nth(2)).toHaveText('●Shown · 5 of 7 people (filter: Deceased)');
         const box = (await xs.boundingBox())!;
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(390);

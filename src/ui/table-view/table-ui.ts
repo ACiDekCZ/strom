@@ -62,7 +62,7 @@ import {
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
 } from './table-views.js';
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
-import { buildTableCsv, tableCsvFileName, type TableCsvInput } from './table-export.js';
+import { buildTableCsv, exportColumnCount, tableCsvFileName, type TableCsvInput } from './table-export.js';
 import { buildTableXlsx } from './table-xlsx.js';
 import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
@@ -165,6 +165,8 @@ const CHECK_BATCH = 500;
 
 /** The export's format last chosen (§11.1: CSV · XLSX), kept while the app runs. */
 let exportFormat: ExportFormat = 'csv';
+/** The open Export takes all rows without the filter (1110); each Export opens with the rows shown. */
+let exportUnfiltered = false;
 
 /** What an export takes from the table shown now (tableExportNow). */
 interface TableExportNow {
@@ -175,6 +177,8 @@ interface TableExportNow {
     checks: CheckIndex | null;
     files: Record<ExportFormat, string>;
     type: RowType;
+    /** A filter or a search narrows the rows (1110): its words and all rows of the type; null without one. */
+    filtered: { filter: string; total: number } | null;
 }
 const DISMISS_TOAST_MS = 6000;
 
@@ -1402,8 +1406,11 @@ export const tableMethods = uiModule({
         });
     },
 
-    /** What the table shows now as the export takes it (§11.2): rows, columns, pinning, findings, file names. */
-    tableExportNow(): TableExportNow | null {
+    /**
+     * What the table shows now as the export takes it (§11.2): rows, columns, pinning, findings, file names.
+     * `unfiltered` (1110): all rows of the type in the sort shown, without the filter and the search.
+     */
+    tableExportNow(unfiltered = false): TableExportNow | null {
         if (!model) return null;
         const tree = treeKey();
         const state = stateOf(tree);
@@ -1411,18 +1418,24 @@ export const tableMethods = uiModule({
         const st = state.types[type];
         const display = displayColumns(type, st, isPhoneBar());
         const shown = viewRows(tree, model, type, st.filter, st.search, st.sort, display.columns);
+        const filter = filterSummary(model, type, st.filter, st.search);
+        const every = rowsOf(model, type);
+        const whole = unfiltered && !!filter;
         // A row kept after an edit that no longer passes (§10.3) is not part of the export.
-        const rows = shown.stale.size ? shown.rows.filter(r => !shown.stale.has(rowKey(r))) : shown.rows;
+        const rows = whole
+            ? (st.sort.length ? sortRows(model, type, every, st.sort) : [...every])
+            : shown.stale.size ? shown.rows.filter(r => !shown.stale.has(rowKey(r))) : shown.rows;
         const all = shownColumns(type, st, false);
         const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
         const view = openViewOf(state, type, storedViews()).name;
         const now = new Date();
         return {
-            input: { model, type, rows, columns: all.columns, pass: shown.pass },
+            input: { model, type, rows, columns: all.columns, pass: whole ? null : shown.pass },
             pinned: all.pinned, widths: all.widths, view,
             checks: checks && checks.tree === tree ? checks.index : null,
             files: { csv: tableCsvFileName(treeName, view, now, 'csv'), xlsx: tableCsvFileName(treeName, view, now, 'xlsx') },
             type,
+            filtered: filter ? { filter, total: every.length } : null,
         };
     },
 
@@ -1432,21 +1445,26 @@ export const tableMethods = uiModule({
         const now = this.tableExportNow();
         if (!now) return;
         const t = strings.table;
+        exportUnfiltered = false;
         const csv = buildTableCsv(now.input);
-        const sum: ExportSummary = { items: csv.items, columns: csv.columns, files: now.files };
+        const all = now.filtered ? this.tableExportNow(true) : null;
+        const sum: ExportSummary = {
+            items: csv.items, columns: csv.columns, files: now.files,
+            filtered: now.filtered && all ? { ...now.filtered, columnsAll: exportColumnCount(all.input) } : undefined,
+        };
         const form = exportForm(now.type, sum, exportFormat, (f) => {
             exportFormat = f;
             const btn = form.closest('.tv-fpanel, .tv-fsheet')?.querySelector('.tv-fpanel-apply, .tv-fs-apply');
             if (btn) btn.textContent = exportDownloadLabel(f);
-        });
+        }, (rows) => { exportUnfiltered = rows; });
         this.showTableFilterForm(mounted.exportBtn, '', form, () => this.downloadTableExport(), {
             applyLabel: exportDownloadLabel(exportFormat), ariaLabel: t.export, cls: 'tv-xpanel', noCancel: true,
         });
     },
 
     /** Download the CSV (§11.2) or the XLSX (§11.3) and say what went in (11b). */
-    downloadTableExport(format: ExportFormat = exportFormat): void {
-        const now = this.tableExportNow();
+    downloadTableExport(format: ExportFormat = exportFormat, unfiltered: boolean = exportUnfiltered): void {
+        const now = this.tableExportNow(unfiltered);
         if (!now) return;
         let blob: Blob;
         let made: { items: number; lines: number; columns: number };

@@ -121,6 +121,18 @@ export interface ExportSummary {
     columns: number;
     /** The file's name per format. */
     files: Record<ExportFormat, string>;
+    /**
+     * A filter or a search narrows the rows (1110): the choice of the rows
+     * shown or all of them. Absent without a filter: one fixed row as before.
+     */
+    filtered?: {
+        /** All rows of the type. */
+        total: number;
+        /** The filter in words ("Deceased · “ign”"). */
+        filter: string;
+        /** Columns written without the filter (the "Union" column may come or go). */
+        columnsAll: number;
+    };
 }
 
 /** The Download button's label of a format. */
@@ -129,53 +141,83 @@ export function exportDownloadLabel(format: ExportFormat): string {
 }
 
 /**
- * The Export form (11a, 14d): the format (CSV · XLSX, a radio group: click,
- * tap, arrows), the rows, the file name and what goes in. A change of the
- * format updates the file name here and calls `onFormat` (the panel's button).
+ * A radio group of buttons (click, tap, arrows): the checked one is the tab
+ * stop and shows ●, the others ○.
  */
-export function exportForm(type: RowType, sum: ExportSummary, format: ExportFormat, onFormat: (f: ExportFormat) => void): HTMLElement {
-    const t = strings.table;
-    const k = ROW_KEY[type];
-    const el = document.createElement('div');
-    el.className = 'tv-xform';
-    const pick = (f: ExportFormat, label: string): string => {
-        const on = f === format;
-        return `<button type="button" class="tv-xopt tv-xopt-pick" role="radio" data-format="${f}" aria-checked="${on}" tabindex="${on ? 0 : -1}">`
-            + `<span class="tv-xopt-dot" aria-hidden="true">${on ? '●' : '○'}</span><span>${esc(label)}</span></button>`;
-    };
-    const opt = (label: string): string => '<div class="tv-xopt" role="radio" aria-checked="true">'
-        + `<span class="tv-xopt-dot" aria-hidden="true">●</span><span>${esc(label)}</span></div>`;
-    el.innerHTML = `<div class="tv-xlab" id="tv-xf-format">${esc(t.exportFormat)}</div>`
-        + `<div class="tv-xformats" role="radiogroup" aria-labelledby="tv-xf-format">${pick('csv', t.exportCsv)}${pick('xlsx', t.exportXlsx)}</div>`
-        + '<div class="tv-xsep" role="separator"></div>'
-        + `<div class="tv-xlab" id="tv-xf-rows">${esc(t.exportRows)}</div>`
-        + `<div role="radiogroup" aria-labelledby="tv-xf-rows">${opt(t.exportAll[k](sum.items))}</div>`
-        + '<div class="tv-xsep" role="separator"></div>'
-        + `<p class="tv-xfile">${esc(t.exportFile(sum.files[format]))}</p>`
-        + `<p class="tv-xwhat">${esc(t.exportWhat[k](sum.columns))}</p>`;
-    const picks = [...el.querySelectorAll<HTMLButtonElement>('.tv-xopt-pick')];
-    const choose = (f: ExportFormat, focus: boolean): void => {
+function radioGroup<T extends string>(picks: HTMLButtonElement[], attr: string, choose: (v: T) => void): (v: T, focus: boolean) => void {
+    const mark = (v: T, focus: boolean): void => {
         for (const b of picks) {
-            const on = b.dataset.format === f;
+            const on = b.getAttribute(attr) === v;
             b.setAttribute('aria-checked', String(on));
             b.tabIndex = on ? 0 : -1;
             b.querySelector('.tv-xopt-dot')!.textContent = on ? '●' : '○';
             if (on && focus) b.focus();
         }
-        el.querySelector('.tv-xfile')!.textContent = t.exportFile(sum.files[f]);
-        if (f !== format) {
-            format = f;
-            onFormat(f);
-        }
+        choose(v);
     };
     for (const b of picks) {
-        b.addEventListener('click', () => choose(b.dataset.format as ExportFormat, false));
+        b.addEventListener('click', () => mark(b.getAttribute(attr) as T, false));
         b.addEventListener('keydown', (e) => {
             if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
             e.preventDefault();
             const i = picks.indexOf(b);
             const next = picks[(i + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : picks.length - 1)) % picks.length];
-            choose(next.dataset.format as ExportFormat, true);
+            mark(next.getAttribute(attr) as T, true);
+        });
+    }
+    return mark;
+}
+
+/**
+ * The Export form (11a, 14d): the format (CSV · XLSX, a radio group: click,
+ * tap, arrows), the rows, the file name and what goes in. A change of the
+ * format updates the file name here and calls `onFormat` (the panel's button).
+ * With a filter or a search (1110) the rows are a choice too: those shown
+ * (the default, the count and the filter said) or all without the filter;
+ * a change calls `onRows` and updates what goes in.
+ */
+export function exportForm(
+    type: RowType, sum: ExportSummary, format: ExportFormat, onFormat: (f: ExportFormat) => void,
+    onRows: (all: boolean) => void = () => {},
+): HTMLElement {
+    const t = strings.table;
+    const k = ROW_KEY[type];
+    const el = document.createElement('div');
+    el.className = 'tv-xform';
+    const pick = (attr: string, value: string, on: boolean, html: string): string =>
+        `<button type="button" class="tv-xopt tv-xopt-pick" role="radio" ${attr}="${value}" aria-checked="${on}" tabindex="${on ? 0 : -1}">`
+        + `<span class="tv-xopt-dot" aria-hidden="true">${on ? '●' : '○'}</span><span class="tv-xopt-text">${html}</span></button>`;
+    const opt = (label: string): string => '<div class="tv-xopt" role="radio" aria-checked="true">'
+        + `<span class="tv-xopt-dot" aria-hidden="true">●</span><span>${esc(label)}</span></div>`;
+    const f = sum.filtered;
+    const rows = f
+        ? pick('data-rows', 'shown', true, `${esc(t.exportShown(t.countOf[k](sum.items, f.total)))}`
+            + ` <span class="tv-xopt-note">${esc(t.exportFilterNote(f.filter))}</span>`)
+          + pick('data-rows', 'all', false, esc(t.exportUnfiltered[k](f.total)))
+        : opt(t.exportAll[k](sum.items));
+    el.innerHTML = `<div class="tv-xlab" id="tv-xf-format">${esc(t.exportFormat)}</div>`
+        + `<div class="tv-xformats" role="radiogroup" aria-labelledby="tv-xf-format">${pick('data-format', 'csv', format === 'csv', esc(t.exportCsv))}${pick('data-format', 'xlsx', format === 'xlsx', esc(t.exportXlsx))}</div>`
+        + '<div class="tv-xsep" role="separator"></div>'
+        + `<div class="tv-xlab" id="tv-xf-rows">${esc(t.exportRows)}</div>`
+        + `<div class="tv-xrows" role="radiogroup" aria-labelledby="tv-xf-rows">${rows}</div>`
+        + '<div class="tv-xsep" role="separator"></div>'
+        + `<p class="tv-xfile">${esc(t.exportFile(sum.files[format]))}</p>`
+        + `<p class="tv-xwhat">${esc(t.exportWhat[k](sum.columns))}</p>`;
+    radioGroup<ExportFormat>([...el.querySelectorAll<HTMLButtonElement>('[data-format]')], 'data-format', (v) => {
+        el.querySelector('.tv-xfile')!.textContent = t.exportFile(sum.files[v]);
+        if (v !== format) {
+            format = v;
+            onFormat(v);
+        }
+    });
+    if (f) {
+        let all = false;
+        radioGroup<'shown' | 'all'>([...el.querySelectorAll<HTMLButtonElement>('[data-rows]')], 'data-rows', (v) => {
+            el.querySelector('.tv-xwhat')!.textContent = v === 'all' ? t.exportWhatAll[k](f.columnsAll) : t.exportWhat[k](sum.columns);
+            if ((v === 'all') !== all) {
+                all = v === 'all';
+                onRows(all);
+            }
         });
     }
     return el;

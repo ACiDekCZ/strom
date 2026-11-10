@@ -9730,6 +9730,11 @@
         .tv-xopt-pick:focus-visible { outline: none; background: var(--surface-2); box-shadow: inset 2px 0 0 var(--primary); }
         @media (hover: hover) { .tv-xopt-pick:hover { background: var(--surface-2); } }
         @media (pointer: coarse) { .tv-xopt-pick { min-height: 44px; } }
+        /* 1110 the rows shown (their count and filter) or all without the filter: a label may wrap. */
+        .tv-xform .tv-xrows .tv-xopt-pick { padding-top: 5px; padding-bottom: 5px; }
+        .tv-xopt-text { min-width: 0; overflow-wrap: anywhere; }
+        .tv-xopt-note { font-size: 12px; color: var(--text-light); }
+        .tv-fsheet .tv-xopt-note { font-size: 13.5px; }
         .tv-xsep { height: 1px; margin: 5px 0; background: var(--divider); }
         .tv-xfile, .tv-xwhat { margin: 0; padding: 2px 14px; font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
         .tv-xfile { color: var(--text); }

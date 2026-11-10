@@ -74,12 +74,22 @@ export interface ExportTable {
     items: number;
 }
 
+/** Whether the export adds the "Union" column (§11.2): People with a person of 2+ unions, one of them passing. */
+function hasUnionColumn(input: TableCsvInput): boolean {
+    return input.type === 'persons'
+        && input.rows.some(r => r.kind === 'person' && r.unions.length > 1 && passingUnions(r, input.pass).length > 0);
+}
+
+/** The number of columns an export writes, without building its lines (the "Union" column included). */
+export function exportColumnCount(input: TableCsvInput): number {
+    return input.columns.length + (hasUnionColumn(input) ? 1 : 0);
+}
+
 /** The lines of the table as shown (§11.2), the "Union" column after the name when a person has 2+ passing unions. */
 export function buildExportTable(input: TableCsvInput): ExportTable {
-    const { model, type, rows, columns } = input;
-    const persons = type === 'persons';
+    const { model, rows, columns } = input;
     const unionsOf = (row: TableRow): number[] => (row.kind === 'person' ? passingUnions(row, input.pass) : []);
-    const unionCol = persons && rows.some(r => r.kind === 'person' && r.unions.length > 1 && unionsOf(r).length > 0);
+    const unionCol = hasUnionColumn(input);
     const nameAt = columns.findIndex(c => c.id === 'name');
     const head = columns.map(c => columnLabel(c));
     const cols: (ColumnDef | null)[] = [...columns];
