@@ -288,6 +288,36 @@ function reliabilityText(step: ReliabilityStepName): string {
 
 const RELIABILITY_RANK: Record<string, number> = { human: 0, proven: 1, probable: 2, possible: 3, import: 4, lead: 5, none: 6 };
 
+/** The checks still run (§13i): "…", faint, sorted last. */
+function checksPendingCell(): CellValue {
+    return { ...EMPTY, text: '…', empty: false, computed: true, ghost: true, title: strings.table.checksRunning };
+}
+
+/** Findings (§7.2): the person's findings still reported, with the mark of the highest; "0" faint. */
+function findingsCell(ctx: TableContext, row: TableRow): CellValue {
+    if (!ctx.checks) return checksPendingCell();
+    const f = ctx.checks.person(row.id);
+    if (!f.n) return { ...EMPTY, text: '0', sortKey: 0, empty: false, computed: true, ghost: true };
+    return { ...EMPTY, text: String(f.n), sortKey: f.n, empty: false, computed: true, ...(f.top ? { mark: f.top } : {}) };
+}
+
+/** Highest level (§7.2): the mark and its word; "unusual" when every finding is marked "Not an error". */
+function topSeverityCell(ctx: TableContext, row: TableRow): CellValue {
+    if (!ctx.checks) return checksPendingCell();
+    const f = ctx.checks.person(row.id);
+    const sev = f.top ?? (f.unusual ? 'unusual' : null);
+    if (!sev) return emptyCell(true);
+    const rank = { error: 3, warning: 2, info: 1, unusual: 0.5 }[sev];
+    return { ...EMPTY, text: strings.table.sev[sev], sortKey: rank, empty: false, computed: true, mark: sev };
+}
+
+/** Unusual, checked (§7.5): the person's findings marked "Not an error", with ☆. */
+function unusualCell(ctx: TableContext, row: TableRow): CellValue {
+    if (!ctx.checks) return checksPendingCell();
+    const n = ctx.checks.person(row.id).unusual;
+    return n ? { ...EMPTY, text: String(n), sortKey: n, empty: false, computed: true, mark: 'unusual' } : emptyCell(true);
+}
+
 function pillCell(ctx: TableContext, holder: Person | Partnership | null, fact: string): CellValue {
     if (!holder) return naCell();
     const r = factReliability(ctx.data, holder, fact, ctx.reliability);
@@ -516,9 +546,9 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
         },
     },
     // Checks (filled by §7)
-    { id: 'nFind', group: 'checks', label: 'nFind', width: 92, kind: 'number', computed: true, get: () => emptyCell(true) },
-    { id: 'topSev', group: 'checks', label: 'topSev', width: 130, computed: true, get: () => emptyCell(true) },
-    { id: 'unusual', group: 'checks', label: 'unusual', width: 130, computed: true, get: () => emptyCell(true) },
+    { id: 'nFind', group: 'checks', label: 'nFind', width: 92, kind: 'number', computed: true, get: (c, r) => findingsCell(c, r) },
+    { id: 'topSev', group: 'checks', label: 'topSev', width: 130, computed: true, get: (c, r) => topSeverityCell(c, r) },
+    { id: 'unusual', group: 'checks', label: 'unusual', width: 130, kind: 'number', computed: true, get: (c, r) => unusualCell(c, r) },
     {
         id: 'comp', group: 'checks', label: 'comp', width: 124, kind: 'percent', computed: true,
         get: (c, r) => personCompleteness(c, r as PersonRow),

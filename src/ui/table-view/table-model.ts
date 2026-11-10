@@ -15,14 +15,18 @@ import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
 import { buildLineages, rodLabels, type LineageIndex, type RodId } from '../../lineage.js';
 import type { ReliabilityOptions } from '../../reliability.js';
 import type { Language } from '../../strings.js';
+import type { CheckIndex } from './table-checks.js';
 
 /** What the rows of a table are. P2 adds events and sources, P3 places. */
 export type RowType = 'persons' | 'unions';
 export const ROW_TYPES: readonly RowType[] = ['persons', 'unions'];
 
+/** A cell's mark (§7.3): a finding's level, or `unusual` for one marked "Not an error". */
+export type CellSeverity = 'error' | 'warning' | 'info' | 'unusual';
+
 /** A finding shown in a cell (filled by the checks, §7). */
 export interface CellIssue {
-    severity: 'error' | 'warning' | 'info' | 'unusual';
+    severity: CellSeverity;
     /** The finding's text (the bubble's first line). */
     message: string;
     /** The validation issue's key, for "Not an error". */
@@ -49,6 +53,13 @@ export interface CellValue {
     uncertain: boolean;
     /** A finding in the cell (§7). */
     issue?: CellIssue;
+    /**
+     * A mark shown with the value without the cell being a finding's (§7: the
+     * Findings and Highest level columns show the level of the row's findings).
+     */
+    mark?: CellSeverity;
+    /** A faint value: no findings ("0"), the checks still running ("…"). */
+    ghost?: boolean;
     /** A reliability step for pill columns. */
     pill?: string;
     /** A percentage for completeness columns (0–100). */
@@ -99,6 +110,12 @@ export interface TableContext {
     /** Blood relatives of the home person (ancestors and all their descendants). */
     blood(): Set<string>;
     person(id: PersonId | null | undefined): Person | null;
+    /**
+     * The tree's findings mapped to rows and cells (§7, table-checks.ts); null
+     * while the checks run. Set by the view; a change drops the cached cells
+     * of the check columns (applyChecks).
+     */
+    checks: CheckIndex | null;
 }
 
 export interface TableModel {
@@ -180,6 +197,7 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
         },
         blood: () => blood ??= bloodOf(data, opts.homeId),
         person: id => realPerson(data, id),
+        checks: null,
     };
 }
 
