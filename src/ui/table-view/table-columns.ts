@@ -52,7 +52,7 @@ export interface ColumnDef {
      * The column needs the research (§16.1): offered only when the tree
      * offers it (setResearchOffer), else not in the catalog at all.
      */
-    research: boolean;
+    fromResearch: boolean;
     /** Default width (px, desktop). */
     width: number;
     align: 'left' | 'right';
@@ -397,14 +397,14 @@ function personStatusCell(ctx: TableContext, p: Person): CellValue {
 // ---------------------------------------------------------------------------
 // The catalog
 
-type Def = Omit<ColumnDef, 'rowType' | 'computed' | 'unionScoped' | 'phase' | 'align' | 'kind' | 'research'> & Partial<Pick<ColumnDef, 'computed' | 'unionScoped' | 'kind' | 'align' | 'research'>>;
+type Def = Omit<ColumnDef, 'rowType' | 'computed' | 'unionScoped' | 'phase' | 'align' | 'kind' | 'fromResearch'> & Partial<Pick<ColumnDef, 'computed' | 'unionScoped' | 'kind' | 'align' | 'fromResearch'>>;
 
 function cols(rowType: RowType, defs: Def[]): ColumnDef[] {
     return defs.map(d => {
         const kind = d.kind ?? 'text';
         const numeric = kind === 'age' || kind === 'number' || kind === 'percent';
         return {
-            computed: false, phase: 1 as const, ...d, rowType, kind, research: d.research ?? d.group === 'research',
+            computed: false, phase: 1 as const, ...d, rowType, kind, fromResearch: d.fromResearch ?? d.group === 'research',
             unionScoped: d.unionScoped ?? (rowType === 'persons' && (d.group === 'union' || d.group === 'divorce')),
             align: d.align ?? (numeric ? 'right' : 'left'),
         };
@@ -660,7 +660,7 @@ function partnerRec(ctx: TableContext, row: TableRow, k: 1 | 2): CellValue {
 export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'p1', group: 'pair', label: 'p1', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p1) },
     { id: 'p2', group: 'pair', label: 'p2', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p2) },
-    { id: 'uResearchId', group: 'pair', label: 'researchId', width: 110, research: true, get: (c, r) => c.research ? unionResearchIdCell(asUnion(r).union) : emptyCell() },
+    { id: 'uResearchId', group: 'pair', label: 'researchId', width: 110, fromResearch: true, get: (c, r) => c.research ? unionResearchIdCell(asUnion(r).union) : emptyCell() },
     { id: 'wDate', group: 'wed', label: 'wDate', width: 124, kind: 'date', get: (c, r) => dateCell(c, asUnion(r).union.startDate) },
     { id: 'wPlace', group: 'wed', label: 'wPlace', width: 210, get: (_c, r) => textCell(asUnion(r).union.startPlace) },
     { id: 'age1', group: 'wed', label: 'age1', width: 92, kind: 'age', computed: true, get: (c, r) => partnerAge(c, r, 1) },
@@ -863,7 +863,7 @@ function readersCell(row: TableRow): CellValue {
 
 export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcTitle', group: 'source', label: 'srcTitle', width: 280, get: (_c, r) => textCell(asSource(r).source.title) },
-    { id: 'srcResearchId', group: 'source', label: 'researchId', width: 110, research: true, get: (c, r) => c.research ? sourceResearchIdCell(asSource(r).source) : emptyCell() },
+    { id: 'srcResearchId', group: 'source', label: 'researchId', width: 110, fromResearch: true, get: (c, r) => c.research ? sourceResearchIdCell(asSource(r).source) : emptyCell() },
     { id: 'srcRepo', group: 'source', label: 'srcRepo', width: 200, get: (_c, r) => textCell(asSource(r).source.repository) },
     { id: 'srcRef', group: 'source', label: 'srcRef', width: 180, get: (_c, r) => textCell(asSource(r).source.reference) },
     { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => urlCell(asSource(r).source.url) },
@@ -896,7 +896,7 @@ export function setResearchOffer(next: Partial<Record<RowType, Iterable<string>>
 
 /** Whether the tree on screen offers a column (§16.1: a research column only in a research tree that has it). */
 export function columnOffered(col: ColumnDef): boolean {
-    return !col.research || offer[col.rowType].has(col.id);
+    return !col.fromResearch || offer[col.rowType].has(col.id);
 }
 
 export function columnsOf(type: RowType): readonly ColumnDef[] {

@@ -38,7 +38,7 @@
 
 import { strings } from '../../strings.js';
 import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
-import { rowKey, type CellName, type CellSeverity, type CellValue, type ResearchCellDetail, type ResearchMark, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, type CellName, type CellSeverity, type CellValue, type ResearchCellDetail, type ResearchSignal, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
@@ -255,14 +255,14 @@ export function moreCitesHtml(n: number): string {
 }
 
 /** A research mark's glyph (§16.3; its look and legend: the marks' own styles). */
-const RESEARCH_GLYPH: Record<ResearchMark, string> = { wait: '!', ext: '!', conf: '≠', q: '?', agent: '', done: '✓', queue: '·', new: '•' };
+const RESEARCH_GLYPH: Record<ResearchSignal, string> = { wait: '!', ext: '!', conf: '≠', q: '?', agent: '', done: '✓', queue: '·', new: '•' };
 
 /**
  * A research mark (§16.3): the card's marks with a rim (wait, conf, q), the
  * hollow "!" of a wait on others, the agent's arc (turning in step with
  * every other arc, as on the cards), ✓ done.
  */
-export function researchMarkHtml(mark: ResearchMark): string {
+export function researchMarkHtml(mark: ResearchSignal): string {
     const spin = mark === 'agent'
         ? ` style="animation-delay:${sharedPhaseDelay(AGENT_SPIN_MS, (typeof document !== 'undefined' ? document.timeline?.currentTime as number | undefined : undefined) ?? performance.now())}"`
         : '';
@@ -275,7 +275,7 @@ export function researchMarkHtml(mark: ResearchMark): string {
  */
 export function researchHtml(d: ResearchCellDetail, hit = ''): string {
     const text = (t: string): string => (hit ? highlightHtml(t, hit) : esc(t));
-    let html = d.mark ? researchMarkHtml(d.mark) : '';
+    let html = d.signal ? researchMarkHtml(d.signal) : '';
     if (d.count !== undefined) html += `<span class="tv-rcount">${d.count}</span>`;
     if (d.more) html += `<span class="tv-rmore">+${d.more}</span>`;
     for (const part of d.parts) {
@@ -288,7 +288,7 @@ export function researchHtml(d: ResearchCellDetail, hit = ''): string {
 
 function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
     const r = value.research;
-    if (r && !value.na && (r.parts.length > 0 || r.count !== undefined || r.mark)) return researchHtml(r, hit);
+    if (r && !value.na && (r.parts.length > 0 || r.count !== undefined || r.signal)) return researchHtml(r, hit);
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
         const fill = Math.round((value.percent * COMP_BAR) / 100);
         return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`

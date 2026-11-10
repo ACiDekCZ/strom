@@ -108,7 +108,7 @@ describe('≠ on a cell (§16.3)', () => {
         expect(researchMarkHtml('ext')).toContain('tv-rmark--ext');
         expect(researchMarkHtml('agent')).toMatch(/class="tv-rmark tv-rmark--agent" aria-hidden="true" style="animation-delay:-\d+ms"><\/span>$/);
         expect(researchMarkHtml('done')).toContain('>✓<');
-        expect(researchHtml({ mark: 'q', parts: [], export: '' })).toContain('tv-rmark--q');
+        expect(researchHtml({ signal: 'q', parts: [], export: '' })).toContain('tv-rmark--q');
     });
 });
 

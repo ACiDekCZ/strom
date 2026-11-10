@@ -13,7 +13,7 @@
 
 import { strings } from '../../strings.js';
 import { markHtml, researchMarkHtml } from './table-grid.js';
-import type { CellSeverity, ResearchMark } from './table-model.js';
+import type { CellSeverity, ResearchSignal } from './table-model.js';
 
 /** One finding as the bubble shows it. */
 export interface BubbleFinding {
@@ -101,7 +101,7 @@ export function legendHtml(research: 'full' | 'data' | null = null): string {
 /** The legend's block Research (§16.3, 16i): the research's marks with their rim, then the sentence under them. */
 function researchLegendHtml(full: boolean): string {
     const r = strings.table.res;
-    const marks: ResearchMark[] = full ? ['wait', 'ext', 'conf', 'q', 'agent', 'done'] : ['conf', 'q'];
+    const marks: ResearchSignal[] = full ? ['wait', 'ext', 'conf', 'q', 'agent', 'done'] : ['conf', 'q'];
     let html = `<div class="tv-bub-sep" role="separator"></div><div class="tv-leg-head">${esc(r.block)}</div>`;
     for (const m of marks) {
         const name = r.legendName[m as keyof typeof r.legendName];

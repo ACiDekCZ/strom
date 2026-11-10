@@ -248,21 +248,21 @@ describe('research cells', () => {
 
     it('rSum: the most urgent kind and "+n"; data only in an archive', () => {
         const c = researchCell(env, P('P0005'), 'rSum');
-        expect(c.research).toMatchObject({ mark: 'wait', more: 1, export: 'čeká; ve frontě' });
+        expect(c.research).toMatchObject({ signal: 'wait', more: 1, export: 'čeká; ve frontě' });
         expect(c.sortKey).toBe(5);
-        expect(researchCell(env, P('P0006'), 'rSum').research).toMatchObject({ mark: 'conf', export: 'rozpor (1)' });
-        expect(researchCell(env, P('P0013'), 'rSum').research?.mark).toBe('q');
-        expect(researchCell(env, P('P0003'), 'rSum').research).toMatchObject({ mark: 'agent', more: 1 });
+        expect(researchCell(env, P('P0006'), 'rSum').research).toMatchObject({ signal: 'conf', export: 'rozpor (1)' });
+        expect(researchCell(env, P('P0013'), 'rSum').research?.signal).toBe('q');
+        expect(researchCell(env, P('P0003'), 'rSum').research).toMatchObject({ signal: 'agent', more: 1 });
         const archive = researchTableEnv(data, input({ kind: 'archive', live: false }));
         expect(researchCell(archive, P('P0005'), 'rSum').empty).toBe(true);
         expect(researchCell(env, P('P0002'), 'rSum').sortKey).toBeNull();
     });
 
     it('rWait: count and first item; a story; waiting outside', () => {
-        expect(researchCell(env, P('P0005'), 'rWait').research).toMatchObject({ mark: 'wait', count: 2, export: '2: Rozhodnout otce Matěje' });
+        expect(researchCell(env, P('P0005'), 'rWait').research).toMatchObject({ signal: 'wait', count: 2, export: '2: Rozhodnout otce Matěje' });
         expect(text('P0004', 'rWait')).toBe(`1 ${strings.story.nvWaitingItem}`);
         const ext = researchCell(env, P('P0001'), 'rWait');
-        expect(ext.research?.mark).toBe('ext');
+        expect(ext.research?.signal).toBe('ext');
         expect(ext.text).toBe('zvenku: dopis odeslán 3. 10. 2026 · Farní úřad Lipová Stráň');
         // Without the bridge the file's sent wait says the same.
         const off = researchTableEnv(data, input({ live: false, waiting: [] }));
@@ -288,7 +288,7 @@ describe('research cells', () => {
         expect(text('P0003', 'rTasks')).toBe('2 · právě běží');
         expect(text('P0003', 'rAgent')).toBe('pracuje: Křest Josefa');
         expect(text('P0005', 'rAgent')).toBe('ve frontě');
-        expect(researchCell(env, P('P0013'), 'rAgent').research?.mark).toBe('done');
+        expect(researchCell(env, P('P0013'), 'rAgent').research?.signal).toBe('done');
         expect(researchCell(env, P('P0012'), 'rAgent').empty).toBe(true);
         const off = researchTableEnv(data, input({ live: false }));
         expect(researchColumnLiveOff(off, 'rAgent')).toBe(true);
@@ -325,8 +325,8 @@ describe('research cells', () => {
         expect(text('P0005', 'rOrig')).toBe('narození: 1822 → nyní 1821 (S0014)');
         expect(text('P0004', 'rStory')).toBe('hotový · nová verze 9. 11. 2026');
         expect(text('P0003', 'rWhere')).toBe('SOA Zelený Brod (archiv) · 2 úkoly · priorita 1');
-        expect(researchCell(env, P('P0001'), 'rNew').research).toMatchObject({ mark: 'new', export: 'nové: přidáno 9. 11. 2026' });
-        expect(researchCell(env, P('P0002'), 'rNew').research?.mark).toBeUndefined();
+        expect(researchCell(env, P('P0001'), 'rNew').research).toMatchObject({ signal: 'new', export: 'nové: přidáno 9. 11. 2026' });
+        expect(researchCell(env, P('P0002'), 'rNew').research?.signal).toBeUndefined();
         expect(text('P0005', 'rAvail')).toBe('jen badatelna: Matrika N Lipová Stráň 1784–1830 · online: Matrika O Lipová Stráň 1800–1850');
         expect(text('P0013', 'rParish')).toBe('fara Lipová Stráň od 1784');
         expect(researchCell(env, P('P0005'), 'rParish').research?.parts[0]).toMatchObject({ text: 'Horní Ouhrabka – neurčeno; pomůže: farnost', italic: true, tone: 'accent' });
@@ -394,7 +394,7 @@ describe('research columns in the table (§16.1, §16.2, 16zg, 16zm)', () => {
     it('union cells: the line of the line person, the agent on the couple, the couple\'s conflicts', () => {
         expect(unionResearchCell(env, U('F0001'), 'rLine').text).toBe('G0001 Předci Karla Pivoňkovského');
         expect(unionResearchCell(env, U('F0004'), 'rLine').text).toBe(researchCell(env, P('P0002'), 'rLine').text);
-        expect(unionResearchCell(env, U('F0004'), 'rAgent')).toMatchObject({ text: 'pracuje na páru: Sňatek 1850', research: { mark: 'agent' } });
+        expect(unionResearchCell(env, U('F0004'), 'rAgent')).toMatchObject({ text: 'pracuje na páru: Sňatek 1850', research: { signal: 'agent' } });
         expect(unionResearchCell(env, U('F0001'), 'rAgent').empty).toBe(true);
         const off = researchTableEnv(data, { ...base, live: false });
         expect(unionResearchCell(off, U('F0004'), 'rAgent')).toMatchObject({ text: '–', ghost: true });
@@ -404,7 +404,7 @@ describe('research columns in the table (§16.1, §16.2, 16zg, 16zm)', () => {
         const menv = researchTableEnv(marr, base);
         const u = Object.values(marr.partnerships).find(x => x.researchId === 'F0003')!;
         const c = unionResearchCell(menv, u, 'rConf');
-        expect(c.research).toMatchObject({ mark: 'conf', count: 1 });
+        expect(c.research).toMatchObject({ signal: 'conf', count: 1 });
         expect(c.research?.export).toMatch(/^1: /);
     });
 
@@ -441,7 +441,7 @@ describe('research columns in the table (§16.1, §16.2, 16zg, 16zm)', () => {
         setResearchOffer(researchOffer(env));
         for (const type of ['persons', 'unions', 'events', 'sources'] as const) {
             const st = defaultTypeState(type);
-            expect(shownColumns(type, st, false).columns.some(c => c.research || ['question', 'crossTree', 'personStatus'].includes(c.id))).toBe(false);
+            expect(shownColumns(type, st, false).columns.some(c => c.fromResearch || ['question', 'crossTree', 'personStatus'].includes(c.id))).toBe(false);
         }
     });
 

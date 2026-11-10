@@ -23,7 +23,7 @@ import { placeKey } from '../../places.js';
 import { formatFlexDate } from '../../dates.js';
 import { shownName } from '../../person-name.js';
 import { getCurrentLanguage, strings } from '../../strings.js';
-import type { CellValue, ResearchCellDetail, ResearchCellPart, ResearchMark, TableModel } from './table-model.js';
+import type { CellValue, ResearchCellDetail, ResearchCellPart, ResearchSignal, TableModel } from './table-model.js';
 
 // ==================== INPUT ====================
 
@@ -318,17 +318,17 @@ function externalWaits(env: ResearchTableEnv, p: Person): { text: string; id: st
 }
 
 /** The kinds of signal a person has, the most urgent first (§16.2 rSum: waiting 5 › conflict 4 › question 3 › agent 2 › queue 1). */
-function sumKinds(env: ResearchTableEnv, p: Person): { mark: ResearchMark; rank: number; word: string }[] {
+function sumKinds(env: ResearchTableEnv, p: Person): { signal: ResearchSignal; rank: number; word: string }[] {
     const R = strings.table.res.sum;
     const dataOnly = env.input.kind !== 'research' || !!env.input.readOnly;
-    const out: { mark: ResearchMark; rank: number; word: string }[] = [];
+    const out: { signal: ResearchSignal; rank: number; word: string }[] = [];
     const ref = p.refn;
-    if (!dataOnly && ref && (env.todo.get(ref)?.length ?? 0) > 0) out.push({ mark: 'wait', rank: 5, word: R.waiting });
+    if (!dataOnly && ref && (env.todo.get(ref)?.length ?? 0) > 0) out.push({ signal: 'wait', rank: 5, word: R.waiting });
     const conflicts = openConflicts(env, p).length;
-    if (conflicts > 0) out.push({ mark: 'conf', rank: 4, word: R.conflict(conflicts) });
-    if (p.question?.trim() || (p.research?.hypotheses ?? []).some(isOpenHypothesis)) out.push({ mark: 'q', rank: 3, word: R.question });
-    if (!dataOnly && ref && env.working.has(ref)) out.push({ mark: 'agent', rank: 2, word: R.agent });
-    if (!dataOnly && ref && env.queued.has(ref)) out.push({ mark: 'queue', rank: 1, word: R.queued });
+    if (conflicts > 0) out.push({ signal: 'conf', rank: 4, word: R.conflict(conflicts) });
+    if (p.question?.trim() || (p.research?.hypotheses ?? []).some(isOpenHypothesis)) out.push({ signal: 'q', rank: 3, word: R.question });
+    if (!dataOnly && ref && env.working.has(ref)) out.push({ signal: 'agent', rank: 2, word: R.agent });
+    if (!dataOnly && ref && env.queued.has(ref)) out.push({ signal: 'queue', rank: 1, word: R.queued });
     return out;
 }
 
@@ -337,9 +337,9 @@ function sumCell(env: ResearchTableEnv, p: Person): CellValue {
     if (kinds.length === 0) return emptyResearch();
     const top = kinds[0];
     const exported = kinds.map(k => k.word).join('; ');
-    const parts: ResearchCellPart[] = top.mark === 'queue' ? [{ text: strings.table.res.queued }] : [];
-    return cell(top.mark === 'queue' ? strings.table.res.queued : exported, top.rank, {
-        mark: top.mark, parts, export: exported, ...(kinds.length > 1 ? { more: kinds.length - 1 } : {}),
+    const parts: ResearchCellPart[] = top.signal === 'queue' ? [{ text: strings.table.res.queued }] : [];
+    return cell(top.signal === 'queue' ? strings.table.res.queued : exported, top.rank, {
+        signal: top.signal, parts, export: exported, ...(kinds.length > 1 ? { more: kinds.length - 1 } : {}),
     }, { title: exported });
 }
 
@@ -350,13 +350,13 @@ function waitCell(env: ResearchTableEnv, p: Person): CellValue {
     if (todo.length === 0 && ext.length === 0) return emptyResearch();
     const extText = ext.length > 0 ? R.external(ext[0].text) : '';
     if (todo.length === 0) {
-        return partsCell([{ text: extText, tone: 'light' }], 0.5, { mark: 'ext', export: extText });
+        return partsCell([{ text: extText, tone: 'light' }], 0.5, { signal: 'ext', export: extText });
     }
     const first = todo[0].kind === 'story' ? strings.story.nvWaitingItem : todo[0].what;
     const parts: ResearchCellPart[] = [{ text: first }];
     if (extText) parts.push({ text: '· ' + extText, tone: 'light' });
     return partsCell(parts, todo.length + (ext.length > 0 ? 0.5 : 0), {
-        mark: 'wait', count: todo.length, export: [`${todo.length}: ${first}`, extText].filter(Boolean).join('; '),
+        signal: 'wait', count: todo.length, export: [`${todo.length}: ${first}`, extText].filter(Boolean).join('; '),
     });
 }
 
@@ -367,7 +367,7 @@ function confCell(env: ResearchTableEnv, p: Person): CellValue {
     const parts: ResearchCellPart[] = [{ text: '· ' + words }];
     // Decidable in the app: never in a read-only copy (its bubbles have no actions).
     if (!env.input.readOnly && open.some(c => c.take)) parts.push({ text: '· ' + strings.table.res.decideHere, tone: 'primary' });
-    return partsCell(parts, open.length, { mark: 'conf', count: open.length, export: `${open.length}: ${words}` });
+    return partsCell(parts, open.length, { signal: 'conf', count: open.length, export: `${open.length}: ${words}` });
 }
 
 function hypCell(p: Person): CellValue {
@@ -404,11 +404,11 @@ function agentCell(env: ResearchTableEnv, p: Person): CellValue {
     if (!ref) return emptyResearch();
     if (env.working.has(ref)) {
         const text = R.working(env.working.get(ref) ?? '');
-        return cell(text, 3, { mark: 'agent', parts: [{ text }], export: text });
+        return cell(text, 3, { signal: 'agent', parts: [{ text }], export: text });
     }
     if (env.queued.has(ref)) return cell(R.queued, 2, { parts: [{ text: R.queued, tone: 'light' }], export: R.queued });
     const done = env.input.done?.get(ref);
-    if (done !== undefined && env.input.now - done < AGENT_DONE_MS) return cell(R.done, 1, { mark: 'done', parts: [{ text: R.done }], export: R.done });
+    if (done !== undefined && env.input.now - done < AGENT_DONE_MS) return cell(R.done, 1, { signal: 'done', parts: [{ text: R.done }], export: R.done });
     return emptyResearch();
 }
 
@@ -585,7 +585,7 @@ function newCell(env: ResearchTableEnv, p: Person): CellValue {
     const R = strings.table.res;
     const fresh = researchAddedWithin(env, p, 'week') || researchAddedWithin(env, p, 'lastOpen');
     const parts: ResearchCellPart[] = [{ text: R.added(dayText(added)) }];
-    return partsCell(parts, t, fresh ? { mark: 'new', export: `${R.newLabel}: ${parts[0].text}` } : {});
+    return partsCell(parts, t, fresh ? { signal: 'new', export: `${R.newLabel}: ${parts[0].text}` } : {});
 }
 
 const ONLINE = ['online-free', 'online-login'];
@@ -770,7 +770,7 @@ export function unionResearchCell(env: ResearchTableEnv, u: Partnership, col: Un
             const w = ref ? (env.input.working ?? []).find(x => x.family === ref && !x.paused) : undefined;
             if (!w) return emptyResearch();
             const text = strings.table.res.workingPair(w.task || w.who || '');
-            return cell(text, 3, { mark: 'agent', parts: [{ text }], export: text });
+            return cell(text, 3, { signal: 'agent', parts: [{ text }], export: text });
         }
         case 'rConf': {
             const seen = new Set<string>();
@@ -786,7 +786,7 @@ export function unionResearchCell(env: ResearchTableEnv, u: Partnership, col: Un
             }
             if (open.length === 0) return emptyResearch();
             const words = [...new Set(open.map(c => factWord(c.fact, c.title)))].join(', ');
-            return partsCell([{ text: '· ' + words }], open.length, { mark: 'conf', count: open.length, export: `${open.length}: ${words}` });
+            return partsCell([{ text: '· ' + words }], open.length, { signal: 'conf', count: open.length, export: `${open.length}: ${words}` });
         }
     }
 }

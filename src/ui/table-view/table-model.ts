@@ -105,8 +105,8 @@ export interface CellValue {
     research?: ResearchCellDetail;
 }
 
-/** The research mark a cell starts with (§16.3). */
-export type ResearchMark = 'wait' | 'ext' | 'conf' | 'q' | 'agent' | 'done' | 'queue' | 'new';
+/** The research signal a cell starts with, drawn as its mark (§16.3). */
+export type ResearchSignal = 'wait' | 'ext' | 'conf' | 'q' | 'agent' | 'done' | 'queue' | 'new';
 
 /** One piece of a research cell's text, with its look (§16.2, §16.9, §16.10). */
 export interface ResearchCellPart {
@@ -118,8 +118,8 @@ export interface ResearchCellPart {
 
 /** What a research cell shows beyond its plain text (§16). */
 export interface ResearchCellDetail {
-    mark?: ResearchMark;
-    /** The count shown after the mark (600). */
+    signal?: ResearchSignal;
+    /** The count shown after the signal's mark (600). */
     count?: number;
     /** "+n": further kinds of signal (the Research column). */
     more?: number;
