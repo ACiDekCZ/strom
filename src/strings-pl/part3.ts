@@ -199,7 +199,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         done: 'Gotowe',
         filters: (n: number) => `Filtry · ${n}`,
         clearFilters: 'Wyczyść filtry',
-        noMatch: 'Żaden plik nie pasuje do filtra.',
+        noMatch: 'Żaden plik nie pasuje do filtru.',
         selected: (n: number) => nPl(n, 'zaznaczony plik', 'zaznaczone pliki', 'zaznaczonych plików'),
         nothingSelected: 'Nic nie zaznaczono',
         selectFolder: 'Zaznacz cały folder',

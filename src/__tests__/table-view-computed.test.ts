@@ -314,5 +314,20 @@ describe('union sub-rows (§3)', () => {
         }
         expect(getStringsForLang('cs').table.unionsN(5)).toBe('5 svazků');
         expect(getStringsForLang('cs').table.hiddenUnions(2)).toBe('2 svazky mimo filtr · ukázat');
+        // The line names what it hides in every language (1110).
+        expect(getStringsForLang('en').table.hiddenUnions(2)).toBe('2 unions outside the filter · show');
+        expect(getStringsForLang('de').table.hiddenUnions(1)).toBe('1 Verbindung außerhalb des Filters · zeigen');
+        expect(getStringsForLang('pl').table.hiddenUnions(5)).toBe('5 związków poza filtrem · pokaż');
+    });
+
+    it('one wording per term: pl "filtru", de "eingetragen" for a recorded age (1110)', () => {
+        const pl = getStringsForLang('pl').table;
+        expect(pl.staleRow).toBe('nie pasuje do filtru');
+        expect(pl.noMatch).toBe('Nic nie pasuje do filtru');
+        const de = getStringsForLang('de');
+        const cols = JSON.stringify(de.table);
+        expect(cols).not.toMatch(/[Aa]ngegeben/);
+        expect(de.table.col.wAgeRec).toBe('Eingetragenes Heiratsalter');
+        expect(de.treeManager.valRecordedAgeMismatch).toMatch(/^Eingetragenes Alter/);
     });
 });
