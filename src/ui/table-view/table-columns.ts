@@ -517,6 +517,15 @@ export function columnLabel(col: ColumnDef): string {
     return strings.table.col[col.label];
 }
 
+/**
+ * The sentence under a computed column's name in its header menu (§4.6,
+ * "Computed from …"; part B fills it with §5's `table.computedFrom`). Empty
+ * for a column that is not computed.
+ */
+export function columnNote(_col: ColumnDef): string {
+    return '';
+}
+
 export function groupLabel(group: ColumnGroup): string {
     return strings.table.group[group];
 }
