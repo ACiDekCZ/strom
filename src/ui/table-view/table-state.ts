@@ -7,6 +7,7 @@
 
 import { columnById, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
 import type { RowType } from './table-model.js';
+import { defaultUnionCollapse, type UnionCollapse } from './table-subrows.js';
 
 /** One row type's state (§2): its own columns, widths, pinning, sort, scroll and selection. */
 export interface RowTypeState {
@@ -21,6 +22,16 @@ export interface RowTypeState {
     collapsedGroups: string[];
     /** The coverage row under the head is shown (§6.1; switched in the Columns panel). */
     coverageRow: boolean;
+    /**
+     * The union sub-rows of the People table (§3.2): collapsed or not, with
+     * exceptions per person. Part of a saved view (§9.1 `unions`; part D).
+     */
+    unions: UnionCollapse;
+    /**
+     * People whose unions outside the filter are shown dimmed (§3.3 "show");
+     * cleared when the filter changes (part C2). Not part of a view.
+     */
+    revealedUnions: string[];
     /** The setup "Reset to default" returns to (part D: the open view's stored one; else the default view). */
     base?: ColumnSetup;
 }
@@ -33,7 +44,7 @@ export interface TableState {
 /** A row type's state as its default view gives it. */
 export function defaultTypeState(type: RowType): RowTypeState {
     const v = DEFAULT_VIEWS[type];
-    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true };
+    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [] };
 }
 
 export function defaultTableState(): TableState {

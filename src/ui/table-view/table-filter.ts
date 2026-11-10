@@ -17,11 +17,21 @@ function compareKeys(a: number | string, b: number | string): number {
     return collator.compare(String(a), String(b));
 }
 
-/** The rows sorted by the specs (the first spec first); unknown columns are skipped. */
-export function sortRows(model: TableModel, type: RowType, rows: readonly TableRow[], specs: readonly SortSpec[]): TableRow[] {
+/**
+ * The rows sorted by the specs (the first spec first); unknown columns are
+ * skipped. A union column of the People table sorts each person by the union
+ * `unionOf` gives (§3.3: the first passing one; default the first by date).
+ */
+export function sortRows(
+    model: TableModel, type: RowType, rows: readonly TableRow[], specs: readonly SortSpec[],
+    unionOf?: (row: TableRow) => number,
+): TableRow[] {
     const cols = specs.map(s => ({ col: columnById(type, s.col), dir: s.dir === 'desc' ? -1 : 1 })).filter(x => !!x.col);
     if (!cols.length) return [...rows];
-    const keyed = rows.map((row, i) => ({ row, i, keys: cols.map(c => cellOf(model, row, c.col!).sortKey) }));
+    const keyed = rows.map((row, i) => ({
+        row, i,
+        keys: cols.map(c => cellOf(model, row, c.col!, c.col!.unionScoped && unionOf ? unionOf(row) : undefined).sortKey),
+    }));
     keyed.sort((x, y) => {
         for (let k = 0; k < cols.length; k++) {
             const a = x.keys[k], b = y.keys[k];

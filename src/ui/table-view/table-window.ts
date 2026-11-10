@@ -22,6 +22,31 @@ export function rowWindow(scrollTop: number, viewport: number, rowHeight: number
     return { start, end: Math.max(start, end) };
 }
 
+/** Each line's top (and the total height as the last entry), for lines of differing heights (§3.3: the "more" line). */
+export function lineOffsets(heights: readonly number[]): number[] {
+    return columnOffsets(heights);
+}
+
+/** The lines [start, end) to draw for a scroll position, by their tops (`lineOffsets`). */
+export function lineWindow(offsets: readonly number[], scrollTop: number, viewport: number, overscan = ROW_OVERSCAN): { start: number; end: number } {
+    const total = offsets.length - 1;
+    if (total <= 0) return { start: 0, end: 0 };
+    const top = Math.max(0, scrollTop);
+    const bottom = top + Math.max(0, viewport);
+    // The first line whose bottom is below the top.
+    let lo = 0, hi = total - 1;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (offsets[mid + 1] <= top) lo = mid + 1; else hi = mid;
+    }
+    const first = lo;
+    let last = first;
+    while (last < total - 1 && offsets[last + 1] < bottom) last++;
+    const start = Math.max(0, first - overscan);
+    const end = Math.min(total, last + 1 + overscan);
+    return { start, end: Math.max(start, end) };
+}
+
 /** Each column's left edge (and the total width as the last entry). */
 export function columnOffsets(widths: readonly number[]): number[] {
     const out = new Array<number>(widths.length + 1);

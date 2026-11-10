@@ -390,6 +390,19 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de' | 'pl')
 }
 
 /**
+ * A date in parts for a compact display (the Table view, spec 073 §5.3): the
+ * qualifier apart (the caller says it as a short word), the date itself as
+ * formatFlexDate writes it, a range as "start–end". A period is said whole.
+ */
+export function flexDateParts(value: string | undefined, lang: 'cs' | 'en' | 'de' | 'pl'): { qualifier: DateQualifier; main: string } | null {
+    const d = parseFlexDate(value);
+    if (!d) return null;
+    if (d.period) return { qualifier: '', main: formatFlexDate(value, lang) };
+    if (d.end) return { qualifier: '', main: `${flexDateCore(d, lang, 'nom')}–${flexDateCore(d.end, lang, 'nom')}` };
+    return { qualifier: d.qualifier, main: flexDateCore(d, lang, d.qualifier && lang === 'pl' ? PL_QUALIFIER_CASE[d.qualifier] : 'nom') };
+}
+
+/**
  * Locale-aware form for EDIT INPUTS. Czech and German users see the dotted
  * day-first convention ('15.5.1880', '5.1880', '~1880'); English keeps the
  * canonical ISO form ('1880-05-15'), which no reader can misread. Every
@@ -440,6 +453,20 @@ export function ageRangeBetween(birth?: string, end?: string): { min: number; ma
     const max = yearsFromTo(firstDay(b), lastDay(e.end ?? e));
     if (max < 0) return null;
     return { min: Math.max(0, min), max };
+}
+
+/**
+ * An estimated age (spec 073 §5.1, "≈ 67"): the difference of the years when
+ * either date is only an estimate (~, <, >) — nothing finer can be said.
+ * Null when a date is missing or the end lies wholly before the start.
+ */
+export function approxAgeBetween(birth?: string, end?: string): number | null {
+    const b = parseFlexDate(birth);
+    const e = parseFlexDate(end);
+    if (!b || !e) return null;
+    const endYear = e.end?.year ?? e.year;
+    if (endYear < b.year) return null;
+    return Math.max(0, e.year - b.year);
 }
 
 /**

@@ -55,6 +55,13 @@ export interface CellValue {
     percent?: number;
     /** The cell's tooltip, when it says more than the text. */
     title?: string;
+    /** A date's qualifier as a short word shown before the text ("abt.", §5.3). */
+    prefix?: string;
+    /**
+     * A count shown where a value of one union would be (§3.1: "3 unions" in
+     * the Partner cell of a person whose unions are sub-rows).
+     */
+    aggregate?: boolean;
 }
 
 export interface PersonRow {

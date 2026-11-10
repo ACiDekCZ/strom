@@ -10,7 +10,7 @@
 
 import type { LifeEvent, LifeEventType, Partnership, Person, PersonId } from '../../types.js';
 import { parentSlots, partnershipSourceIds, personSourceIds } from '../../types.js';
-import { ageBetween, ageRangeBetween, formatFlexDate, parseFlexDate } from '../../dates.js';
+import { ageRangeBetween, approxAgeBetween, flexDateParts, parseFlexDate, type DateQualifier } from '../../dates.js';
 import { recordedAgeGap } from '../../recorded-age.js';
 import { shownNameOrEmpty } from '../../person-name.js';
 import { findRelationship } from '../../kinship.js';
@@ -70,33 +70,72 @@ function numberCell(n: number | null | undefined, computed = true, text?: string
     return { ...EMPTY, text: text ?? String(n), sortKey: n, empty: false, computed };
 }
 
-function dateCell(ctx: TableContext, value: string | undefined, subst: 'bap' | 'bur' | null = null): CellValue {
-    const d = parseFlexDate(value);
-    if (!value || !d) return value?.trim() ? textCell(value) : emptyCell();
+/** A qualifier as the short word before a date (§5.3: "abt.", "bef.", "aft."). */
+export function qualifierWord(q: DateQualifier): string {
+    const w = strings.table.qual;
+    return q === '~' ? w.about : q === '<' ? w.before : q === '>' ? w.after : '';
+}
+
+/**
+ * A date cell (§5.3): the date as the app writes it, a range as "1920–1925",
+ * a qualifier as a short word before it (`prefix`); qualified dates and
+ * ranges are `uncertain` (shown with a dotted underline; not a finding).
+ * Sorted by the start ("bef. 1950" = 1950). `subst` marks a baptism standing
+ * for the birth, a burial for the death (§5.2).
+ */
+export function dateCell(ctx: TableContext, value: string | undefined, subst: 'bap' | 'bur' | null = null): CellValue {
+    const parts = flexDateParts(value, ctx.lang);
+    if (!value || !parts) return value?.trim() ? textCell(value) : emptyCell();
+    const d = parseFlexDate(value)!;
+    const prefix = qualifierWord(parts.qualifier);
     return {
-        ...EMPTY, text: formatFlexDate(value, ctx.lang), sortKey: dateNumber(value), empty: false, subst,
-        uncertain: !!d.qualifier || !!d.end,
+        ...EMPTY, text: parts.main, sortKey: dateNumber(value), empty: false, subst,
+        uncertain: !!d.qualifier || !!d.end, ...(prefix ? { prefix } : {}),
     };
 }
 
 /**
- * An age between two dates (§5.1): exact on day dates, a range ("78–79") when
- * either is a year, month or range, "≈ n" when either is an estimate; nothing
- * when the end is before the start.
+ * An age between two dates (§5.1): exact on day dates ("72"), a range
+ * ("78–79") when either is a year, a month or a range, "≈ n" (the difference
+ * of the years) when either is an estimate (~, <, >); nothing when the end
+ * lies before the start (a finding, §7). `approxAlways`: a date stands in for
+ * another (a baptism for the birth, a burial for the death), so the age is
+ * always "≈ n" (§5.1; a range gives its upper end).
  */
 export function ageCell(birth: string | undefined, end: string | undefined, approxAlways = false): CellValue {
     if (!birth || !end) return emptyCell(true);
+    const b = parseFlexDate(birth);
+    const e = parseFlexDate(end);
+    if (!b || !e) return emptyCell(true);
     const range = ageRangeBetween(birth, end);
     if (range && !approxAlways) {
         const text = range.min === range.max ? String(range.min) : `${range.min}–${range.max}`;
         return { ...EMPTY, text, sortKey: range.min, empty: false, computed: true };
     }
-    const b = parseFlexDate(birth);
-    const e = parseFlexDate(end);
-    if (!b || !e) return emptyCell(true);
-    const est = ageBetween(birth, end);
-    if (!est || est.years < 0 || e.year < b.year) return emptyCell(true);
-    return { ...EMPTY, text: `≈ ${est.years}`, sortKey: est.years, empty: false, computed: true, approx: true };
+    const years = range ? range.max : (b.qualifier || e.qualifier) ? approxAgeBetween(birth, end) : null;
+    if (years === null) return emptyCell(true);
+    return { ...EMPTY, text: `≈ ${years}`, sortKey: years, empty: false, computed: true, approx: true };
+}
+
+/** A person's birth date, else the baptism's standing in for it (§5.2). */
+export function birthOrBaptism(p: Person): { date: string; subst: boolean } | null {
+    if (p.birthDate) return { date: p.birthDate, subst: false };
+    const bap = firstEvent(p, 'baptism')?.date;
+    return bap ? { date: bap, subst: true } : null;
+}
+
+/** A person's death date, else the burial's standing in for it (§5.2). */
+export function deathOrBurial(p: Person): { date: string; subst: boolean } | null {
+    if (p.deathDate) return { date: p.deathDate, subst: false };
+    const bur = firstEvent(p, 'burial')?.date;
+    return bur ? { date: bur, subst: true } : null;
+}
+
+/** The age at an event from the birth (or the baptism, then "≈"; §5.1). */
+function ageAt(p: Person | null | undefined, end: string | undefined, endSubst = false): CellValue {
+    if (!p || !end) return emptyCell(true);
+    const b = birthOrBaptism(p);
+    return b ? ageCell(b.date, end, b.subst || endSubst) : emptyCell(true);
 }
 
 function gapCell(recorded: string | undefined, birth: string | undefined, event: string | undefined): CellValue {
@@ -110,6 +149,27 @@ function percentCell(filled: number, total: number): CellValue {
     if (total === 0) return naCell('', true);
     const percent = Math.round((filled / total) * 100);
     return { ...EMPTY, text: `${percent} %`, sortKey: percent, empty: false, computed: true, percent };
+}
+
+/** One field of a completeness group (§6.2): its name for the "missing" list and whether it is filled. */
+type CompField = [keyof StringsType['table']['compField'], boolean];
+
+/**
+ * A completeness cell (§6.2): the share of filled fields, its bubble the
+ * column's name with the percentage, what is missing and what it counts.
+ */
+function compCell(fields: readonly CompField[], label: ColumnLabelKey, list: keyof StringsType['table']['compList']): CellValue {
+    const filled = fields.filter(f => f[1]).length;
+    const cell = percentCell(filled, fields.length);
+    if (cell.na) return cell;
+    const s = strings.table;
+    const missing = [...new Set(fields.filter(f => !f[1]).map(f => s.compField[f[0]]))];
+    const title = [
+        `${s.col[label]} ${cell.text}`,
+        missing.length ? s.missing(missing.join(', ')) : s.missingNone,
+        s.compCounts(s.compList[list]),
+    ].join('\n');
+    return { ...cell, title };
 }
 
 function yesNo(v: boolean): CellValue {
@@ -177,22 +237,36 @@ function unionLength(ctx: TableContext, u: Partnership): CellValue {
     return deaths.length ? ageCell(u.startDate, deaths[0]) : emptyCell(true);
 }
 
+/*
+ * Completeness (§6.2, decision of 10 Nov point 5). A substitute value (a
+ * baptism for the birth) does not fill a field.
+ */
+function oneUnionFields(u: Partnership, partner: Person | null): CompField[] {
+    return [['wDate', !!u.startDate], ['wPlace', !!u.startPlace?.trim()], ['partner', !!partner], ['wSrc', (u.sourceIds?.length ?? 0) > 0]];
+}
+
 function unionComp(u: Partnership, partner: Person | null): CellValue {
-    const fields = [!!u.startDate, !!u.startPlace?.trim(), !!partner, (u.sourceIds?.length ?? 0) > 0];
-    return percentCell(fields.filter(Boolean).length, fields.length);
+    return compCell(oneUnionFields(u, partner), 'uComp', 'union');
 }
 
-function birthFields(ctx: TableContext, p: Person): boolean[] {
+export function birthFields(ctx: TableContext, p: Person): CompField[] {
     const [father, mother] = parentsOf(ctx, p);
-    return [!!p.birthDate, !!p.birthPlace?.trim(), !!father, !!mother, (p.birthSourceIds?.length ?? 0) > 0];
+    return [['bDate', !!p.birthDate], ['bPlace', !!p.birthPlace?.trim()], ['father', !!father], ['mother', !!mother], ['bSrc', (p.birthSourceIds?.length ?? 0) > 0]];
 }
 
-function deathFields(p: Person): boolean[] {
-    return [!!p.deathDate, !!p.deathPlace?.trim(), (p.deathSourceIds?.length ?? 0) > 0];
+export function deathFields(p: Person): CompField[] {
+    return [['dDate', !!p.deathDate], ['dPlace', !!p.deathPlace?.trim()], ['dSrc', (p.deathSourceIds?.length ?? 0) > 0]];
 }
 
-function unionFields(ctx: TableContext, row: PersonRow): boolean[] {
-    return row.unions.flatMap(u => [!!u.startDate, !!u.startPlace?.trim(), !!otherPartner(ctx, u, row.id), (u.sourceIds?.length ?? 0) > 0]);
+/** The fields of all a person's unions together (§6.2). */
+export function unionFields(ctx: TableContext, row: PersonRow): CompField[] {
+    return row.unions.flatMap(u => oneUnionFields(u, otherPartner(ctx, u, row.id)));
+}
+
+/** Overall completeness (§6.2): birth, every union and (for the dead) death, weighted by their fields. */
+export function personCompleteness(ctx: TableContext, row: PersonRow): CellValue {
+    const living = ctx.living(row.person);
+    return compCell([...birthFields(ctx, row.person), ...unionFields(ctx, row), ...(living ? [] : deathFields(row.person))], 'comp', 'all');
 }
 
 function personSources(row: PersonRow): number {
@@ -311,20 +385,20 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     {
         id: 'fAge', group: 'birth', label: 'fAge', width: 104, kind: 'age', computed: true, get: (c, r) => {
             const [father] = parentsOf(c, asPerson(r));
-            return father ? ageCell(father.birthDate, asPerson(r).birthDate) : naCell('', true);
+            const b = birthOrBaptism(asPerson(r));
+            return father ? ageAt(father, b?.date, b?.subst) : naCell('', true);
         },
     },
     {
         id: 'mAge', group: 'birth', label: 'mAge', width: 104, kind: 'age', computed: true, get: (c, r) => {
             const [, mother] = parentsOf(c, asPerson(r));
-            return mother ? ageCell(mother.birthDate, asPerson(r).birthDate) : naCell('', true);
+            const b = birthOrBaptism(asPerson(r));
+            return mother ? ageAt(mother, b?.date, b?.subst) : naCell('', true);
         },
     },
     {
-        id: 'bComp', group: 'birth', label: 'bComp', width: 124, kind: 'percent', computed: true, get: (c, r) => {
-            const f = birthFields(c, asPerson(r));
-            return percentCell(f.filter(Boolean).length, f.length);
-        },
+        id: 'bComp', group: 'birth', label: 'bComp', width: 124, kind: 'percent', computed: true,
+        get: (c, r) => compCell(birthFields(c, asPerson(r)), 'bComp', 'birth'),
     },
     // Parents
     { id: 'father', group: 'parents', label: 'father', width: 190, get: (c, r) => nameOf(parentsOf(c, asPerson(r))[0]) },
@@ -348,10 +422,10 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'partner', group: 'union', label: 'partner', width: 200, get: inUnion((c, r, u) => nameOf(otherPartner(c, u, r.id))) },
     { id: 'wDate', group: 'union', label: 'wDate', width: 120, kind: 'date', get: inUnion((c, _r, u) => dateCell(c, u.startDate)) },
     { id: 'wPlace', group: 'union', label: 'wPlace', width: 200, get: inUnion((_c, _r, u) => textCell(u.startPlace)) },
-    { id: 'wAge', group: 'union', label: 'wAge', width: 96, kind: 'age', computed: true, get: inUnion((_c, r, u) => ageCell(r.person.birthDate, u.startDate), true) },
+    { id: 'wAge', group: 'union', label: 'wAge', width: 96, kind: 'age', computed: true, get: inUnion((_c, r, u) => ageAt(r.person, u.startDate), true) },
     { id: 'wAgeRec', group: 'union', label: 'wAgeRec', width: 104, get: inUnion((_c, r, u) => textCell(u.ages?.[r.id])) },
     { id: 'wAgeDiff', group: 'union', label: 'wAgeDiff', width: 104, kind: 'number', computed: true, get: inUnion((_c, r, u) => gapCell(u.ages?.[r.id], r.person.birthDate, u.startDate), true) },
-    { id: 'pAge', group: 'union', label: 'pAge', width: 104, kind: 'age', computed: true, get: inUnion((c, r, u) => ageCell(otherPartner(c, u, r.id)?.birthDate, u.startDate), true) },
+    { id: 'pAge', group: 'union', label: 'pAge', width: 104, kind: 'age', computed: true, get: inUnion((c, r, u) => ageAt(otherPartner(c, u, r.id), u.startDate), true) },
     {
         id: 'pAgeRec', group: 'union', label: 'pAgeRec', width: 104, get: inUnion((c, r, u) => {
             const other = otherPartner(c, u, r.id);
@@ -394,18 +468,15 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'burPlace', group: 'death', label: 'burPlace', width: 180, get: (c, r) => deathOnly(c, r, p => textCell(firstEvent(p, 'burial')?.place)) },
     {
         id: 'dAge', group: 'death', label: 'dAge', width: 100, kind: 'age', computed: true, get: (c, r) => deathOnly(c, r, p => {
-            if (p.deathDate) return ageCell(p.birthDate, p.deathDate);
-            const bur = firstEvent(p, 'burial')?.date;
-            return bur ? ageCell(p.birthDate, bur, true) : emptyCell(true);
+            const d = deathOrBurial(p);
+            return d ? ageAt(p, d.date, d.subst) : emptyCell(true);
         }),
     },
     { id: 'dAgeRec', group: 'death', label: 'dAgeRec', width: 110, get: (c, r) => deathOnly(c, r, p => textCell(p.deathAge)) },
     { id: 'dAgeDiff', group: 'death', label: 'dAgeDiff', width: 110, kind: 'number', computed: true, get: (c, r) => deathOnly(c, r, p => gapCell(p.deathAge, p.birthDate, p.deathDate)) },
     {
-        id: 'dComp', group: 'death', label: 'dComp', width: 124, kind: 'percent', computed: true, get: (c, r) => deathOnly(c, r, p => {
-            const f = deathFields(p);
-            return percentCell(f.filter(Boolean).length, f.length);
-        }, strings.table.living),
+        id: 'dComp', group: 'death', label: 'dComp', width: 124, kind: 'percent', computed: true,
+        get: (c, r) => deathOnly(c, r, p => compCell(deathFields(p), 'dComp', 'death'), strings.table.living),
     },
     // Events
     { id: 'occ', group: 'events', label: 'occ', width: 140, get: (_c, r) => eventValues(asPerson(r), 'occupation') },
@@ -449,11 +520,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'topSev', group: 'checks', label: 'topSev', width: 130, computed: true, get: () => emptyCell(true) },
     { id: 'unusual', group: 'checks', label: 'unusual', width: 130, computed: true, get: () => emptyCell(true) },
     {
-        id: 'comp', group: 'checks', label: 'comp', width: 124, kind: 'percent', computed: true, get: (c, r) => {
-            const row = r as PersonRow;
-            const f = [...birthFields(c, row.person), ...unionFields(c, row), ...(c.living(row.person) ? [] : deathFields(row.person))];
-            return percentCell(f.filter(Boolean).length, f.length);
-        },
+        id: 'comp', group: 'checks', label: 'comp', width: 124, kind: 'percent', computed: true,
+        get: (c, r) => personCompleteness(c, r as PersonRow),
     },
 ]);
 
@@ -470,7 +538,7 @@ const asUnion = (row: TableRow): UnionRow => row as UnionRow;
 function partnerAge(ctx: TableContext, row: TableRow, k: 1 | 2): CellValue {
     const r = asUnion(row);
     const p = unionPartners(ctx, r)[k === 1 ? 'p1' : 'p2'];
-    return p ? ageCell(p.birthDate, r.union.startDate) : naCell('', true);
+    return p ? ageAt(p, r.union.startDate) : naCell('', true);
 }
 
 function partnerRec(ctx: TableContext, row: TableRow, k: 1 | 2): CellValue {
@@ -522,8 +590,40 @@ export function columnLabel(col: ColumnDef): string {
  * "Computed from …"; part B fills it with §5's `table.computedFrom`). Empty
  * for a column that is not computed.
  */
-export function columnNote(_col: ColumnDef): string {
-    return '';
+export function columnNote(col: ColumnDef): string {
+    if (!col.computed) return '';
+    const s = strings.table;
+    const what = noteWhat(col);
+    return what ? s.computedFrom(what) : '';
+}
+
+/** What a computed column is computed from (§5.1, `table.computedFrom`). */
+function noteWhat(col: ColumnDef): string {
+    const s = strings.table;
+    const f = s.from;
+    switch (col.id) {
+        case 'bComp': return s.compList.birth;
+        case 'dComp': return s.compList.death;
+        case 'uComp': return s.compList.union;
+        case 'comp': return s.compList.all;
+        case 'age1': case 'age2': return f.pAge;
+        case 'srcCount': return col.rowType === 'unions' ? f.uSrcCount : f.srcCount;
+        case 'relN': case 'relB': case 'relD': case 'relW': return f.rel;
+        case 'nFind': case 'topSev': case 'unusual': return f.checks;
+    }
+    return (f as Record<string, string>)[col.id] ?? '';
+}
+
+/**
+ * A cell as plain text (search, CSV, width fitting): the substitute's label
+ * and a date's qualifier word in front of the value; "–" for a cell the
+ * column does not apply to.
+ */
+export function cellPlainText(value: CellValue): string {
+    if (value.na && !value.text) return '–';
+    const s = strings.table.subst;
+    const parts = [value.subst === 'bap' ? s.bapShort : value.subst === 'bur' ? s.burShort : '', value.prefix ?? '', value.text];
+    return parts.filter(Boolean).join(' ');
 }
 
 export function groupLabel(group: ColumnGroup): string {
