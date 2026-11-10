@@ -1,0 +1,214 @@
+{
+  "persons": {
+    "vendelin": {
+      "id": "vendelin",
+      "firstName": "Vendelin",
+      "lastName": "Brennwald",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_vendelin_wendelgard",
+        "u_vendelin_rosmarie"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "ansgar",
+        "reinmar"
+      ],
+      "birthDate": "1790-03-15"
+    },
+    "wendelgard": {
+      "id": "wendelgard",
+      "firstName": "Wendelgard",
+      "lastName": "Hollerbusch",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_vendelin_wendelgard"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "ansgar"
+      ],
+      "birthDate": "1793-03-15"
+    },
+    "ansgar": {
+      "id": "ansgar",
+      "firstName": "Ansgar",
+      "lastName": "Brennwald",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_ansgar_rosmarie"
+      ],
+      "parentIds": [
+        "vendelin",
+        "wendelgard"
+      ],
+      "childIds": [
+        "edeltraud",
+        "leopoldine"
+      ],
+      "birthDate": "1815-03-15"
+    },
+    "rosmarie": {
+      "id": "rosmarie",
+      "firstName": "Rosmarie",
+      "lastName": "Quellbrandt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_ansgar_rosmarie",
+        "u_vendelin_rosmarie"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "edeltraud",
+        "leopoldine",
+        "reinmar"
+      ],
+      "birthDate": "1820-03-15"
+    },
+    "edeltraud": {
+      "id": "edeltraud",
+      "firstName": "Edeltraud",
+      "lastName": "Brennwald",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gottlob_edeltraud"
+      ],
+      "parentIds": [
+        "ansgar",
+        "rosmarie"
+      ],
+      "childIds": [],
+      "birthDate": "1842-03-15"
+    },
+    "leopoldine": {
+      "id": "leopoldine",
+      "firstName": "Leopoldine",
+      "lastName": "Brennwald",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ansgar",
+        "rosmarie"
+      ],
+      "childIds": [],
+      "birthDate": "1846-03-15"
+    },
+    "reinmar": {
+      "id": "reinmar",
+      "firstName": "Reinmar",
+      "lastName": "Brennwald",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "vendelin",
+        "rosmarie"
+      ],
+      "childIds": [],
+      "birthDate": "1852-03-15"
+    },
+    "gottlob": {
+      "id": "gottlob",
+      "firstName": "Gottlob",
+      "lastName": "Wermuth",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gottlob_edeltraud"
+      ],
+      "parentIds": [
+        "edelbert",
+        "hyacinta"
+      ],
+      "childIds": [],
+      "birthDate": "1838-03-15"
+    },
+    "edelbert": {
+      "id": "edelbert",
+      "firstName": "Edelbert",
+      "lastName": "Wermuth",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_edelbert_hyacinta"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gottlob"
+      ],
+      "birthDate": "1805-03-15"
+    },
+    "hyacinta": {
+      "id": "hyacinta",
+      "firstName": "Hyacinta",
+      "lastName": "Wermuth",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_edelbert_hyacinta"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gottlob"
+      ],
+      "birthDate": "1808-03-15"
+    }
+  },
+  "partnerships": {
+    "u_vendelin_wendelgard": {
+      "id": "u_vendelin_wendelgard",
+      "person1Id": "vendelin",
+      "person2Id": "wendelgard",
+      "childIds": [
+        "ansgar"
+      ],
+      "status": "married",
+      "startDate": "1813-05-02"
+    },
+    "u_ansgar_rosmarie": {
+      "id": "u_ansgar_rosmarie",
+      "person1Id": "ansgar",
+      "person2Id": "rosmarie",
+      "childIds": [
+        "edeltraud",
+        "leopoldine"
+      ],
+      "status": "married",
+      "startDate": "1840-06-10"
+    },
+    "u_vendelin_rosmarie": {
+      "id": "u_vendelin_rosmarie",
+      "person1Id": "vendelin",
+      "person2Id": "rosmarie",
+      "childIds": [
+        "reinmar"
+      ],
+      "status": "married",
+      "startDate": "1850-09-21"
+    },
+    "u_edelbert_hyacinta": {
+      "id": "u_edelbert_hyacinta",
+      "person1Id": "edelbert",
+      "person2Id": "hyacinta",
+      "childIds": [
+        "gottlob"
+      ],
+      "status": "married",
+      "startDate": "1834-04-12"
+    },
+    "u_gottlob_edeltraud": {
+      "id": "u_gottlob_edeltraud",
+      "person1Id": "gottlob",
+      "person2Id": "edeltraud",
+      "childIds": [],
+      "status": "married",
+      "startDate": "1862-08-30"
+    }
+  }
+}

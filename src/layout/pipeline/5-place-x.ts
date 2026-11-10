@@ -198,6 +198,16 @@ function descendantRowWidth(block: FamilyBlock, parentBlock: FamilyBlock, model:
 }
 
 /**
+ * Blocks whose descendants are being placed right now (the current descent).
+ * Block children are meant to form a tree (4-measure never makes a block its
+ * own child); should a cycle still slip in, the descent stops at the block
+ * already on the way down instead of recursing without end.
+ * In a tree no block is ever met twice on one descent, so this never
+ * changes a layout.
+ */
+const descending = new Set<FamilyBlockId>();
+
+/**
  * Place all descendants of a block top-down using envelope widths.
  * Children are placed left-to-right using envelopeWidth for spacing,
  * then shifted so parent is centered over children's couple-bounds.
@@ -211,7 +221,23 @@ function placeDescendantsTopDown(
     placedBlocks: Set<FamilyBlockId>
 ): void {
     if (parentBlock.childBlockIds.length === 0) return;
+    if (descending.has(parentBlock.id)) return;
+    descending.add(parentBlock.id);
+    try {
+        placeChildrenOf(parentBlock, blocks, model, unionToBlock, config, placedBlocks);
+    } finally {
+        descending.delete(parentBlock.id);
+    }
+}
 
+function placeChildrenOf(
+    parentBlock: FamilyBlock,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig,
+    placedBlocks: Set<FamilyBlockId>
+): void {
     // Chain blocks: place children per-union under each partner's position
     if (parentBlock.chainInfo && parentBlock.chainInfo.unionChildBlockIds.size > 0) {
         placeChainChildrenPerUnion(parentBlock, blocks, model, unionToBlock, config, placedBlocks);

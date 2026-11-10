@@ -523,6 +523,19 @@ function faceLineSiblings(
 }
 
 /**
+ * An existing block that an ancestor block may take as its child: one no
+ * other block has claimed, and never the ancestor block itself. A child's
+ * own union can be one of the parents' chain unions (a widow who married her
+ * late husband's father: the son's union and the father's two unions form
+ * one partner chain), so it maps to this very block; taking it as a child
+ * would make the block its own child, and 5-place-x would descend into it
+ * without end (GitHub #11).
+ */
+function isUnclaimedChild(existing: FamilyBlock | undefined, blockId: FamilyBlockId): existing is FamilyBlock {
+    return !!existing && existing.id !== blockId && existing.parentBlockId === null;
+}
+
+/**
  * Build ancestor blocks for a person, traversing up the tree.
  * Each ancestor union gets a block with the specified side.
  * The ancestor block's children include ALL children of the ancestor union
@@ -667,7 +680,7 @@ function buildAncestorBlocks(
                     const existingBlockId = unionToBlock.get(directLineUnionId);
                     if (existingBlockId) {
                         const existingBlock = blocks.get(existingBlockId);
-                        if (existingBlock && existingBlock.parentBlockId === null) {
+                        if (isUnclaimedChild(existingBlock, blockId)) {
                             block.childBlockIds.push(existingBlockId);
                             existingBlock.parentBlockId = blockId;
                             perUnionChildBlocks.push(existingBlockId);
@@ -691,7 +704,7 @@ function buildAncestorBlocks(
                 } else {
                     const existingBlockId = unionToBlock.get(childUnionId)!;
                     const existingBlock = blocks.get(existingBlockId);
-                    if (existingBlock && existingBlock.parentBlockId === null) {
+                    if (isUnclaimedChild(existingBlock, blockId)) {
                         block.childBlockIds.push(existingBlockId);
                         existingBlock.parentBlockId = blockId;
                         perUnionChildBlocks.push(existingBlockId);
@@ -717,7 +730,7 @@ function buildAncestorBlocks(
                 const existingBlockId = unionToBlock.get(directLineUnionId);
                 if (existingBlockId) {
                     const existingBlock = blocks.get(existingBlockId);
-                    if (existingBlock && existingBlock.parentBlockId === null) {
+                    if (isUnclaimedChild(existingBlock, blockId)) {
                         block.childBlockIds.push(existingBlockId);
                         existingBlock.parentBlockId = blockId;
                     }
@@ -745,7 +758,7 @@ function buildAncestorBlocks(
                 // Block already exists - include as child only if unclaimed
                 const existingBlockId = unionToBlock.get(childUnionId)!;
                 const existingBlock = blocks.get(existingBlockId);
-                if (existingBlock && existingBlock.parentBlockId === null) {
+                if (isUnclaimedChild(existingBlock, blockId)) {
                     block.childBlockIds.push(existingBlockId);
                     existingBlock.parentBlockId = blockId;
                 }
