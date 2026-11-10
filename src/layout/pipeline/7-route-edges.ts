@@ -35,8 +35,73 @@ import {
 
 /**
  * Route all edges and create connections.
+ *
+ * Dense spacing (config.dense): the buses of a gap keep at most one lane
+ * above and one below its middle; a gap whose lines need more lanes grows
+ * (RoutedModel.gapExtra) and is routed again. The lanes depend on X only,
+ * so the second routing allocates the same lanes in the taller gap.
  */
 export function routeEdges(input: RouteEdgesInput): RoutedModel {
+    if (!input.config.dense) return routeEdgesOnce(input).routed;
+    let gapExtra = new Map<number, number>();
+    let { routed, laneSpan } = routeEdgesOnce(input, gapExtra);
+    for (let pass = 0; pass < 3; pass++) {
+        const needed = denseGapExtra(laneSpan);
+        if ([...needed].every(([gen, px]) => (gapExtra.get(gen) ?? 0) >= px)) break;
+        for (const [gen, px] of needed) gapExtra.set(gen, Math.max(px, gapExtra.get(gen) ?? 0));
+        ({ routed, laneSpan } = routeEdgesOnce(input, gapExtra));
+    }
+    centerDenseLanes(routed.connections, laneSpan);
+    return gapExtra.size > 0 ? { ...routed, gapExtra } : routed;
+}
+
+/**
+ * Per connection: the generation of its parents (the gap below them) and its
+ * lane (0 = the gap's middle, n = n * LANE_OFFSET below it).
+ */
+export interface LaneSpan {
+    lanes: Array<{ conn: Connection; gen: number; lane: number }>;
+}
+
+/**
+ * The px the dense spacing adds to each gap: its lanes 0..m are centred on
+ * the gap's middle (lane 0 at -floor(m/2) lanes, centerDenseLanes), so the
+ * farthest lane is ceil(m/2) lanes off the middle; every level beyond one
+ * adds 2 * LANE_OFFSET, the bus staying in the middle of the taller gap.
+ */
+export function denseGapExtra(laneSpan: LaneSpan): Map<number, number> {
+    const maxLane = new Map<number, number>();
+    for (const { gen, lane } of laneSpan.lanes) maxLane.set(gen, Math.max(lane, maxLane.get(gen) ?? 0));
+    const extra = new Map<number, number>();
+    for (const [gen, m] of maxLane) {
+        const levels = Math.ceil(m / 2) - 1;
+        if (levels > 0) extra.set(gen, levels * 2 * LANE_OFFSET);
+    }
+    return extra;
+}
+
+/**
+ * Dense spacing: move the lanes of every gap up by floor(m/2) lanes (m its
+ * lowest lane), so they lie at most one lane above and below the middle
+ * (two lanes: the middle and one below it, as in the normal spacing). A
+ * whole gap moves together: the order of its lanes, and with it every
+ * crossing decision, stays the same.
+ */
+function centerDenseLanes(connections: readonly Connection[], laneSpan: LaneSpan): void {
+    const maxLane = new Map<number, number>();
+    for (const { gen, lane } of laneSpan.lanes) maxLane.set(gen, Math.max(lane, maxLane.get(gen) ?? 0));
+    const inRoute = new Set(connections);
+    for (const { conn, gen } of laneSpan.lanes) {
+        const shift = Math.floor((maxLane.get(gen) ?? 0) / 2) * LANE_OFFSET;
+        if (shift === 0 || !inRoute.has(conn)) continue;
+        conn.branchY -= shift;
+        conn.connectorY -= shift;
+        conn.stemBottomY -= shift;
+        for (const drop of conn.drops) drop.topY -= shift;
+    }
+}
+
+function routeEdgesOnce(input: RouteEdgesInput, gapExtra?: ReadonlyMap<number, number>): { routed: RoutedModel; laneSpan: LaneSpan } {
     const { constrained, config } = input;
     const { placed } = constrained;
     const { measured, unionX, personX } = placed;
@@ -47,7 +112,7 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     const spouseLines: SpouseLine[] = [];
 
     // Band top and height of each generation (cards are top-aligned in it)
-    const bands = computeGenerationBands(genModel, personX, config);
+    const bands = computeGenerationBands(genModel, personX, config, gapExtra);
 
     // Build set of secondary chain union IDs (stem from card bottom, not spouse line)
     const secondaryChainUnions = new Set<UnionId>();
@@ -208,11 +273,24 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         resolveElbowClearance(connections, config);
     });
 
+    const laneSpan: LaneSpan = { lanes: [] };
+    if (config.dense) {
+        for (const conn of connections) {
+            const gen = unionGen.get(conn.unionId);
+            const zero = laneZeroY.get(conn);
+            if (gen === undefined || zero === undefined) continue;
+            laneSpan.lanes.push({ conn, gen, lane: Math.round((conn.branchY - zero) / LANE_OFFSET) });
+        }
+    }
+
     return {
-        constrained,
-        connections,
-        spouseLines,
-        ...(omittedEdges.length > 0 ? { omittedEdges } : {})
+        routed: {
+            constrained,
+            connections,
+            spouseLines,
+            ...(omittedEdges.length > 0 ? { omittedEdges } : {})
+        },
+        laneSpan,
     };
 }
 
@@ -877,6 +955,12 @@ function createSpouseLine(
 // ==================== BUS COLLISION RESOLUTION ====================
 
 /**
+ * Distance between two bus lanes (px). A constant, not a share of the
+ * generation gap: closer lanes would merge into one line when zoomed out.
+ */
+export const LANE_OFFSET = 8;
+
+/**
  * Resolve bus collisions via lane allocation.
  * When two buses are at the same Y level with overlapping X intervals,
  * offset the colliding bus to a different lane (small vertical offset).
@@ -891,8 +975,6 @@ function resolveBusCollisions(
     _branchModel: BranchModel | null
 ): void {
     if (connections.length < 2) return;
-
-    const LANE_OFFSET = Math.min(8, config.verticalGap * 0.1);
 
     // Group connections by branchY only (check all buses at same Y)
     const byGroup = new Map<string, Connection[]>();

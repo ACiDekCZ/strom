@@ -64,7 +64,7 @@ export function computeDebugGeometry(
     }
 
     // Band top and height of each generation (cards top-aligned in it)
-    const bands = computeGenerationBands(genModel, personX, config);
+    const bands = computeGenerationBands(genModel, personX, config, snapshot.routed?.gapExtra);
     const genY = bands.top;
     const bandHeight = (gen: number) => bands.height.get(gen) ?? config.cardHeight;
 

@@ -23,14 +23,15 @@ import { computeGenerationBands } from './bands.js';
  */
 export function emitLayoutResult(input: EmitInput): LayoutResult {
     const { routed, config } = input;
-    const { constrained, connections, spouseLines, omittedEdges } = routed;
+    const { constrained, connections, spouseLines, omittedEdges, gapExtra } = routed;
     const { placed, iterations } = constrained;
     const { measured, personX } = placed;
     const { genModel } = measured;
     const { model, personGen, minGen, maxGen } = genModel;
 
     // Band of each generation: every card's top is its band's top
-    const { bands, top: genY } = computeGenerationBands(genModel, personX, config);
+    // (a gap of the dense spacing grown for its bus lanes: gapExtra, step 7)
+    const { bands, top: genY } = computeGenerationBands(genModel, personX, config, gapExtra);
 
     // Build positions map
     const positions = new Map<PersonId, Position>();
@@ -77,7 +78,8 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
         diagnostics,
         partnerChains,
         bands,
-        ...(omittedEdges && omittedEdges.length > 0 ? { omittedEdges } : {})
+        ...(omittedEdges && omittedEdges.length > 0 ? { omittedEdges } : {}),
+        ...(gapExtra && gapExtra.size > 0 ? { gapExtra } : {})
     };
 }
 

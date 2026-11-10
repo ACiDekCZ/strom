@@ -46,14 +46,17 @@ export function auditBands(result: LayoutResult, config: LayoutConfig, uniform?:
     }
 
     // Bands follow each other: top(g+1) = top(g) + height(g) + verticalGap
+    // (+ the gap grown for the bus lanes of the dense spacing)
+    if (result.gapExtra && !config.dense) out.push('gaps grown without the dense spacing');
     const bandByTop = new Map<number, number>();  // rounded top -> index
     for (let i = 0; i < bands.length; i++) {
         const b = bands[i];
         if (i > 0) {
             const prev = bands[i - 1];
+            const gap = config.verticalGap + (result.gapExtra?.get(prev.generation) ?? 0);
             if (b.generation !== prev.generation + 1) out.push(`band ${b.generation} does not follow ${prev.generation}`);
-            if (Math.abs(b.top - (prev.top + prev.height + config.verticalGap)) > EPS) {
-                out.push(`band ${b.generation} top ${b.top} != ${prev.top} + ${prev.height} + ${config.verticalGap}`);
+            if (Math.abs(b.top - (prev.top + prev.height + gap)) > EPS) {
+                out.push(`band ${b.generation} top ${b.top} != ${prev.top} + ${prev.height} + ${gap}`);
             }
         }
         bandByTop.set(Math.round(b.top * 100), i);

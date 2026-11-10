@@ -1781,6 +1781,12 @@ export interface LayoutConfig {
      * partner line runs at the same height on every card of a row.
      */
     personHeights?: ReadonlyMap<PersonId, number>;
+    /**
+     * The dense spacing (Settings → Spacing → Dense, DENSE_LAYOUT_CONFIG):
+     * bus lanes stay at most one lane below a gap's middle; a gap that needs
+     * more lanes grows instead (step 7, bands.ts). Unset: the normal spacing.
+     */
+    dense?: boolean;
 }
 
 /** The partner line's distance from the card's top: the set offset, else the card's middle. */
@@ -1830,6 +1836,31 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
     padding: 50,
     minEdgeClearance: 14
 };
+
+/**
+ * Spacing of the tree view (Settings → Person card → Spacing): the normal
+ * gaps between cards and generations, or tighter ones that fit more cards
+ * into the view. A setting of this device, never stored with the tree data.
+ */
+export type TreeSpacing = 'normal' | 'dense';
+
+/**
+ * The dense spacing: the same cards, smaller gaps. Everything derived from
+ * the gaps (couple and chain widths, generation bands, the bus in the middle
+ * of a gap) follows by itself; `dense` caps the bus lanes (step 7).
+ */
+export const DENSE_LAYOUT_CONFIG: LayoutConfig = {
+    ...DEFAULT_LAYOUT_CONFIG,
+    horizontalGap: 20,
+    verticalGap: 48,
+    partnerGap: 14,
+    dense: true,
+};
+
+/** The layout configuration of a spacing (card size still to be spread over it). */
+export function layoutConfigFor(spacing: TreeSpacing): LayoutConfig {
+    return spacing === 'dense' ? DENSE_LAYOUT_CONFIG : DEFAULT_LAYOUT_CONFIG;
+}
 
 // ==================== AUDIT LOG ====================
 
@@ -2032,6 +2063,8 @@ export interface AppSettings {
     placesSort?: 'state' | 'name' | 'people';  // default: 'state' - Places dialog order (a stored 'unplaced' reads as 'state')
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
+    treeSpacing?: TreeSpacing;  // default: 'normal' - gaps between cards and generations in the tree view
+    posterSpacing?: TreeSpacing;  // default: 'normal' - the same for an exported image, poster or PDF
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */
     cardFields?: import('./card-fields.js').CardFieldSettings;
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard

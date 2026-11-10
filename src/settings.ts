@@ -3,7 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
+import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
@@ -558,6 +558,26 @@ class SettingsManagerClass {
 
     setExportScope(scope: 'tree' | 'view'): void {
         this.settings.exportScope = scope;
+        this.save();
+    }
+
+    /** Spacing of the tree view (Settings → Person card → Spacing); absent or unknown = normal. */
+    getTreeSpacing(): TreeSpacing {
+        return this.settings.treeSpacing === 'dense' ? 'dense' : 'normal';
+    }
+
+    setTreeSpacing(spacing: TreeSpacing): void {
+        this.settings.treeSpacing = spacing;
+        this.save();
+    }
+
+    /** Spacing of an exported image, poster or PDF (the export dialog); absent or unknown = normal. */
+    getPosterSpacing(): TreeSpacing {
+        return this.settings.posterSpacing === 'dense' ? 'dense' : 'normal';
+    }
+
+    setPosterSpacing(spacing: TreeSpacing): void {
+        this.settings.posterSpacing = spacing;
         this.save();
     }
 

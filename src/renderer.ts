@@ -15,6 +15,7 @@ import {
     Position,
     DEFAULT_LAYOUT_CONFIG,
     LayoutConfig,
+    layoutConfigFor,
     TreeId,
     StromData,
     personCardHeight
@@ -382,6 +383,8 @@ class TreeRendererClass {
     private generationBands: GenerationBand[] = [];
     /** The layout's generation bands (LayoutResult.bands): each as tall as its tallest card. */
     private layoutBands: LayoutBand[] = [];
+    /** The gaps the dense spacing grew for their bus lanes (LayoutResult.gapExtra). */
+    private layoutGapExtra: ReadonlyMap<number, number> | null = null;
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
@@ -720,6 +723,7 @@ class TreeRendererClass {
         this.lineLinks = new Map();
         this.generationBands = [];
         this.layoutBands = [];
+        this.layoutGapExtra = null;
         this.viewLayer = null;
         this.outputLayoutCache = null;
 
@@ -777,8 +781,12 @@ class TreeRendererClass {
         const { lines: valueLines, years, height: heightMode } = fieldCards ?? SettingsManager.getCardFields();
         const ownHeights = custom && heightMode === 'content';
         const spouseLineY = custom ? customCardSpouseLineY(valueLines, years, heightMode) : undefined;
+        // Spacing (Settings → Spacing): the gaps of the tree views; the views
+        // drawn their own way (fan, timeline, map) keep the normal layout.
+        const dense = SettingsManager.getTreeSpacing() === 'dense' && !STANDALONE_VIEWS.includes(this.viewMode);
+        canvas.classList.toggle('tree-dense', dense);
         this.config = {
-            ...this.config, ...size, spouseLineY, personHeights: undefined,
+            ...layoutConfigFor(dense ? 'dense' : 'normal'), ...size, spouseLineY, personHeights: undefined,
             ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth, cardHeight: this.customMetrics.cardHeight } : {}),
             ...(ownHeights && this.customMetrics?.personHeights ? { personHeights: this.customMetrics.personHeights } : {}),
             ...(density === 'normal' && this.normalHeights ? { personHeights: this.normalHeights } : {}),
@@ -857,6 +865,7 @@ class TreeRendererClass {
         this.lineLinks = lineLinksOf(this.omittedEdges);
         this.spouseLines = result.spouseLines;
         this.layoutBands = result.bands ?? [];
+        this.layoutGapExtra = result.gapExtra ?? null;
         this.viewLayer = result.viewLayer ?? null;
         this.depthEdge = new Set(result.ancestorDepthEdge ?? []);
         if (!descendantsOnly) this.pruneParentsShown(result.extraDepthDrawn ?? []);
@@ -5835,17 +5844,23 @@ class TreeRendererClass {
         const lineLeft = minX - pad;
         const lineRight = maxX + pad;
         const halfGap = this.config.verticalGap / 2;
+        // Half the gap between a band and the next one; a gap of the dense
+        // spacing grown for its bus lanes (LayoutResult.gapExtra) is taller.
+        const halfGapBelow = (generation: number): number => {
+            const extra = this.layoutGapExtra?.get(generation) ?? 0;
+            return extra > 0 ? (this.config.verticalGap + extra) / 2 : halfGap;
+        };
 
         for (const band of bands) {
             // Boundary rule just above the band.
-            const boundaryY = band.top - halfGap;
+            const boundaryY = band.top - halfGapBelow(band.generation - 1);
             const guideLine = this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
             // Record the band for the sticky HTML label overlay.
             this.generationBands.push({
                 label: this.generationLabel(band.generation),
                 rowCenterY: band.top + band.height / 2,
-                bandTopY: band.top - halfGap,
-                bandBottomY: band.top + band.height + halfGap,
+                bandTopY: boundaryY,
+                bandBottomY: band.top + band.height + halfGapBelow(band.generation),
                 guideLine,
                 guideLeftX: lineLeft,
                 guideRightX: lineRight,

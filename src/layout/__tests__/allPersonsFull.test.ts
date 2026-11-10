@@ -16,6 +16,12 @@
  * tallest card, buses between the bands, stems from the right card's bottom,
  * and the X placement and bus lanes of the uniform-card layout unchanged.
  *
+ * The "-dense" modes run all of it again with the dense spacing
+ * (DENSE_LAYOUT_CONFIG: tighter gaps, bus lanes at most one off the gap's
+ * middle) and check two more things: the same number of lines left out as
+ * the normal spacing, and no bus or connector closer than 13 px to a card's
+ * top or bottom edge (helpers/busClearance.ts).
+ *
  * Fixtures: set FIXTURES env var (comma-separated, without .json) to override.
  */
 
@@ -30,7 +36,8 @@ import {
 } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
-import { PersonId, LayoutConfig, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { auditBusClearance } from './helpers/busClearance.js';
+import { PersonId, LayoutConfig, StromData, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../../types.js';
 
 const DEFAULT_FIXTURES = [
     'comprehensive',
@@ -86,6 +93,8 @@ const FIXTURES = (process.env.FIXTURES || DEFAULT_FIXTURES.join(','))
 const DEPTH = parseInt(process.env.DEPTH || '5', 10);
 
 const config = DEFAULT_LAYOUT_CONFIG;
+/** Dense spacing: the closest a bus or connector may come to a card's top or bottom edge (pill 9 px out + 4 px). */
+const DENSE_BUS_CLEARANCE = 13;
 
 interface PersonFailure {
     personId: string;
@@ -94,12 +103,13 @@ interface PersonFailure {
     failures: string[];
 }
 
-const MODES = [
-    { name: 'standard', base: 'standard', heights: false, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
-    { name: 'expanded', base: 'expanded', heights: false, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
-    { name: 'standard-v3', base: 'standard', heights: true, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
-    { name: 'expanded-v3', base: 'expanded', heights: true, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
+const NORMAL_MODES = [
+    { name: 'standard', base: 'standard', heights: false, dense: false, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
+    { name: 'expanded', base: 'expanded', heights: false, dense: false, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
+    { name: 'standard-v3', base: 'standard', heights: true, dense: false, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
+    { name: 'expanded-v3', base: 'expanded', heights: true, dense: false, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
 ];
+const MODES = [...NORMAL_MODES, ...NORMAL_MODES.map(m => ({ ...m, name: `${m.name}-dense`, dense: true }))];
 
 /**
  * The focus, their ancestors and their descendants: lines to them are never
@@ -132,6 +142,7 @@ for (const fixtureName of FIXTURES) {
     const outputFile = join(process.cwd(), 'test', `failures-full-${fixtureName}.txt`);
     // Cards of their own heights, the partner line at the header (as the custom card)
     const v3Config: LayoutConfig = { ...config, spouseLineY: 25, personHeights: syntheticPersonHeights(personIds) };
+    const denseV3Config: LayoutConfig = { ...DENSE_LAYOUT_CONFIG, spouseLineY: 25, personHeights: v3Config.personHeights };
 
     describe(`Full Pipeline Invariants [${fixtureName}.json, depth=${DEPTH}]`, () => {
         for (const personId of personIds) {
@@ -141,7 +152,8 @@ for (const fixtureName of FIXTURES) {
             for (const mode of MODES) {
                 it(`${displayName} (${personId}) [${mode.name}]`, () => {
                     const failures: string[] = [];
-                    const modeConfig = mode.heights ? v3Config : config;
+                    const uniformConfig = mode.dense ? DENSE_LAYOUT_CONFIG : config;
+                    const modeConfig = mode.heights ? (mode.dense ? denseV3Config : v3Config) : uniformConfig;
                     const run = (cfg: LayoutConfig) => runLayoutPipeline({
                         data,
                         focusPersonId: personId,
@@ -209,8 +221,21 @@ for (const fixtureName of FIXTURES) {
                     // 5. Cards of their own heights: bands, stems, drops, and
                     // the uniform layout's X placement and bus lanes
                     if (mode.heights) {
-                        for (const v of auditBands(result, modeConfig, run(config)).slice(0, 5)) {
+                        for (const v of auditBands(result, modeConfig, run(uniformConfig)).slice(0, 5)) {
                             failures.push(`Bands: ${v}`);
+                        }
+                    }
+
+                    // 6. Dense spacing: as many lines left out as with the
+                    // normal spacing, and every bus clear of the cards' edges
+                    if (mode.dense) {
+                        const normal = run(mode.heights ? v3Config : config);
+                        const count = (r: typeof result) => r.omittedEdges?.length ?? 0;
+                        if (count(result) !== count(normal)) {
+                            failures.push(`Dense: ${count(result)} lines left out, normal spacing ${count(normal)}`);
+                        }
+                        for (const v of auditBusClearance(result, modeConfig, DENSE_BUS_CLEARANCE).slice(0, 5)) {
+                            failures.push(`Dense: ${v}`);
                         }
                     }
 

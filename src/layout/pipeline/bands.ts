@@ -8,11 +8,16 @@
  * consecutive bands:
  *
  *   top(minGen)  = padding
- *   top(g + 1)   = top(g) + height(g) + verticalGap
+ *   top(g + 1)   = top(g) + height(g) + verticalGap + extra(g)
  *   height(g)    = max card height of the persons drawn in generation g
+ *   extra(g)     = gapExtra(g), else 0
  *
- * Without personHeights every band is cardHeight tall, so
+ * Without personHeights and gapExtra every band is cardHeight tall, so
  * top(g) = padding + (g - minGen) * (cardHeight + verticalGap).
+ *
+ * gapExtra exists only in the dense spacing (LayoutConfig.dense): a gap
+ * whose buses need more than one lane above and one below its middle grows
+ * by 2 * LANE_OFFSET per further lane level (step 7 resolveDenseLanes).
  */
 
 import { LayoutConfig, PersonId, personCardHeight } from '../../types.js';
@@ -35,14 +40,16 @@ export interface GenerationBands {
 export function computeGenerationBands(
     genModel: Pick<GenerationalModel, 'model' | 'personGen' | 'minGen' | 'maxGen'>,
     personX: ReadonlyMap<PersonId, number>,
-    config: Pick<LayoutConfig, 'cardHeight' | 'verticalGap' | 'padding' | 'personHeights'>
+    config: Pick<LayoutConfig, 'cardHeight' | 'verticalGap' | 'padding' | 'personHeights'>,
+    gapExtra?: ReadonlyMap<number, number>
 ): GenerationBands {
     const { model, personGen, minGen, maxGen } = genModel;
     const top = new Map<number, number>();
     const height = new Map<number, number>();
     const bands: GenerationBand[] = [];
+    const extra = gapExtra && gapExtra.size > 0 ? gapExtra : null;
 
-    if (!config.personHeights) {
+    if (!config.personHeights && !extra) {
         // Uniform cards: today's formula, bit for bit
         const rowHeight = config.cardHeight + config.verticalGap;
         for (let gen = minGen; gen <= maxGen; gen++) {
@@ -56,7 +63,7 @@ export function computeGenerationBands(
 
     const tallest = new Map<number, number>();
     const hidden = model.hiddenPersonIds;
-    for (const personId of model.persons.keys()) {
+    if (config.personHeights) for (const personId of model.persons.keys()) {
         if (hidden?.has(personId) || !personX.has(personId)) continue;
         const gen = personGen.get(personId);
         if (gen === undefined) continue;
@@ -71,7 +78,7 @@ export function computeGenerationBands(
         top.set(gen, y);
         height.set(gen, h);
         bands.push({ generation: gen, top: y, height: h });
-        y += h + config.verticalGap;
+        y += h + config.verticalGap + (extra?.get(gen) ?? 0);
     }
     return { bands, top, height };
 }

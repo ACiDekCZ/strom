@@ -535,6 +535,12 @@ export interface RoutedModel {
     spouseLines: SpouseLine[];
     /** Lines not drawn (see OmittedEdge); absent when every line was drawn. */
     omittedEdges?: OmittedEdge[];
+    /**
+     * Dense spacing only (LayoutConfig.dense): px added to the gap below a
+     * generation whose buses need more lanes than one above and one below
+     * the gap's middle (bands.ts); absent when no gap grew.
+     */
+    gapExtra?: ReadonlyMap<number, number>;
 }
 
 // ==================== STEP 8: EMIT RESULT ====================
@@ -575,9 +581,12 @@ export interface LayoutResult {
     /**
      * Generation bands top to bottom (set by runLayoutPipeline). Every card
      * of a generation has its top at the band's top; the band is as tall as
-     * its tallest card (LayoutConfig.personHeights), verticalGap between bands.
+     * its tallest card (LayoutConfig.personHeights), verticalGap between bands
+     * (plus gapExtra below a generation in the dense spacing).
      */
     bands?: GenerationBand[];
+    /** See RoutedModel.gapExtra (generation → px added to the gap below it); absent when no gap grew. */
+    gapExtra?: ReadonlyMap<number, number>;
     /** The view links laid out (PipelineInput.viewLinks); absent when none was applied. */
     viewLayer?: LayoutViewLayer;
     /** Parent-child lines not drawn (see OmittedEdge); absent when every line was drawn. */

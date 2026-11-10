@@ -829,8 +829,22 @@ For each union with children:
 
 Post-processing:
 - `resolveBusCollisions`: lane-based bus routing for overlapping buses
+  (lane n sits n × `LANE_OFFSET` = 8 px below the gap's middle)
 - `resolveElbowClearance`: nudging drop positions for min distance
 - `omitUnroutableDrops`: lines that still cannot be drawn cleanly are left out
+
+### Dense spacing (Settings → Spacing)
+
+`DENSE_LAYOUT_CONFIG` (`layoutConfigFor('dense')`) lays the same cards out
+with gaps 20 / 48 / 14 (horizontal / generations / partners; normal 31 / 80
+/ 18) and sets `config.dense`. Everything derived from the gaps follows by
+itself. In the dense spacing the bus lanes of a gap stay at most one lane
+above and one below its middle (`centerDenseLanes`: lanes 0..m move up by
+floor(m/2) lanes), so every bus keeps 16 px from the cards. A gap whose lines
+need more lanes grows by 2 × `LANE_OFFSET` per further level
+(`denseGapExtra`, `LayoutResult.gapExtra`, bands.ts) and is routed again; the
+lanes depend on X only, so they stay the same. The normal spacing has no lane
+cap and is laid out exactly as before.
 
 ### Lines that cannot be routed (omitted edges)
 
