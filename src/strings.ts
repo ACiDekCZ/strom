@@ -1344,6 +1344,17 @@ const stringsEN = {
         settingHint: 'Titles before and after names (Dr., Jr.) on cards and in lists',
     },
 
+    // Tree spacing: Normal / Dense (Settings > Person card, image export)
+    spacing: {
+        label: 'Spacing',
+        normal: 'Normal',
+        dense: 'Dense',
+        desc: 'Smaller gaps between cards and generations; more people fit on the screen.',
+        scope: 'Applies to the diagram on this device.',
+        scopeExport: 'Applies to image export, poster and PDF print.',
+        smallHint: 'On a small screen, the Compact card helps too.',
+    },
+
     // Sticky generation labels
     genLabels: {
         settingLabel: 'Generation labels',
@@ -9709,6 +9720,17 @@ const stringsCZ: StringsType = {
         settingHint: 'Tituly před jménem a za ním (Ing., ml.) na kartách a v seznamech',
     },
 
+    // Tree spacing: Normal / Dense (Settings > Person card, image export)
+    spacing: {
+        label: 'Rozestupy',
+        normal: 'Normální',
+        dense: 'Husté',
+        desc: 'Menší mezery mezi kartami a generacemi, na obrazovku se vejde víc osob.',
+        scope: 'Platí pro diagram na tomto zařízení.',
+        scopeExport: 'Platí pro export obrázku, plakát a tisk do PDF.',
+        smallHint: 'Na malé obrazovce pomůže i Kompaktní karta.',
+    },
+
     // Sticky generation labels
     genLabels: {
         settingLabel: 'Popisky generací',
@@ -17973,6 +17995,17 @@ const stringsDE: StringsType = {
     titles: {
         settingLabel: 'Titel anzeigen',
         settingHint: 'Titel vor und nach dem Namen (Dr., jun.) auf Karten und in Listen',
+    },
+
+    // Tree spacing: Normal / Dense (Settings > Person card, image export)
+    spacing: {
+        label: 'Abstände',
+        normal: 'Normal',
+        dense: 'Dicht',
+        desc: 'Kleinere Abstände zwischen Karten und Generationen; mehr Personen passen auf den Bildschirm.',
+        scope: 'Gilt für das Diagramm auf diesem Gerät.',
+        scopeExport: 'Gilt für Bildexport, Poster und PDF-Druck.',
+        smallHint: 'Auf einem kleinen Bildschirm hilft auch die Kompakt-Karte.',
     },
 
     // Sticky generation labels

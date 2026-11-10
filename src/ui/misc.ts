@@ -375,6 +375,7 @@ export const miscMethods = uiModule({
         const relCardToggle = document.getElementById('reliability-card-toggle') as HTMLInputElement | null;
         if (relCardToggle) relCardToggle.checked = SettingsManager.isReliabilityCardEnabled();
         this.syncSurnameDisplaySetting();
+        this.syncTreeSpacingSetting();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;
@@ -420,6 +421,20 @@ export const miscMethods = uiModule({
         });
         const shared = document.getElementById('surname-display-sample');
         if (shared) shared.innerHTML = nameHtml(SURNAME_SAMPLE, { display: current });
+    },
+
+    /**
+     * Spacing (Settings > Person card): the checked option, and the hint
+     * about the Compact card while another type is chosen (spec 069 §5; the
+     * stylesheet shows it only on a small screen).
+     */
+    syncTreeSpacingSetting(): void {
+        const current = SettingsManager.getTreeSpacing();
+        document.querySelectorAll<HTMLInputElement>('input[name="tree-spacing"]').forEach(radio => {
+            radio.checked = radio.value === current;
+        });
+        const hint = document.getElementById('tree-spacing-hint');
+        if (hint) hint.hidden = SettingsManager.getCardDensity() === 'compact';
     },
 
     /**

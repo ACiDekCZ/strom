@@ -297,6 +297,8 @@ export const cardFieldsUiMethods = uiModule({
             <span class="settings-name" id="card-type-label">${esc(d.settingLabel)}</span>
             <div class="card-type-row" id="card-type-row" role="radiogroup" aria-labelledby="card-type-label"${current === 'custom' ? '' : ' aria-describedby="card-type-desc"'}>${tiles}</div>
             ${below}`;
+        // The hint under Spacing about the Compact card follows the type (spec 069 §5).
+        this.syncTreeSpacingSetting();
 
         const choose = (density: CardDensity): void => {
             if (density !== SettingsManager.getCardDensity()) this.setCardDensity(density);

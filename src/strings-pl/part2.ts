@@ -8,7 +8,7 @@ const notWrittenPl = (n: number): string =>
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
 export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap'
-    | 'name' | 'person' | 'titles' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
+    | 'name' | 'person' | 'titles' | 'spacing' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
     crop: {
@@ -103,6 +103,17 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
     titles: {
         settingLabel: 'Tytuły',
         settingHint: 'Tytuły przed nazwiskiem i po nim (dr, inż., jr.) na kartach i w listach',
+    },
+
+    // Tree spacing: Normal / Dense (Settings > Person card, image export)
+    spacing: {
+        label: 'Odstępy',
+        normal: 'Normalne',
+        dense: 'Gęste',
+        desc: 'Mniejsze odstępy między kartami i pokoleniami; na ekranie mieści się więcej osób.',
+        scope: 'Dotyczy diagramu na tym urządzeniu.',
+        scopeExport: 'Dotyczy eksportu obrazu, plakatu i druku do PDF.',
+        smallHint: 'Na małym ekranie pomogą też karty Kompaktowe.',
     },
 
     // Sticky generation labels

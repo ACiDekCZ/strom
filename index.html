@@ -2415,6 +2415,40 @@
             margin-top: 10px;
             line-height: 1.4;
         }
+        /* Spacing (Settings > Person card, spec 069 §1): a segment of two
+           options, each with a small picture of the density (two rows of
+           blocks, 30 x 14) before its label; under the description the hint
+           about the Compact card, only on a small screen (§5). */
+        .tree-spacing-options .settings-radio { gap: 9px; min-height: 38px; min-width: 0; }
+        .tree-spacing-options .spacing-glyph {
+            position: relative; flex: none; width: 30px; height: 14px; color: var(--text-faint);
+        }
+        .tree-spacing-options .settings-radio:has(input:checked) .spacing-glyph { color: rgba(255, 255, 255, 0.85); }
+        .spacing-glyph i {
+            position: absolute; width: 8px; height: 4px; border-radius: 1px; background: currentColor;
+        }
+        .spacing-glyph-normal i:nth-child(1) { left: 5.5px; top: 1px; }
+        .spacing-glyph-normal i:nth-child(2) { left: 16.5px; top: 1px; }
+        .spacing-glyph-normal i:nth-child(3) { left: 0; top: 9px; }
+        .spacing-glyph-normal i:nth-child(4) { left: 11px; top: 9px; }
+        .spacing-glyph-normal i:nth-child(5) { left: 22px; top: 9px; }
+        .spacing-glyph-dense i:nth-child(1) { left: 7.5px; top: 3px; }
+        .spacing-glyph-dense i:nth-child(2) { left: 15.5px; top: 3px; }
+        .spacing-glyph-dense i:nth-child(3) { left: 3px; top: 9px; }
+        .spacing-glyph-dense i:nth-child(4) { left: 12px; top: 9px; }
+        .spacing-glyph-dense i:nth-child(5) { left: 21px; top: 9px; }
+        .tree-spacing-options .spacing-opt-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-spacing-hint { display: none; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        @media (max-width: 640px) {
+            .tree-spacing-options .settings-radio { min-height: 44px; }
+            .tree-spacing-hint:not([hidden]) { display: block; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tree-spacing-hint:not([hidden]) { display: block; }
+        }
+        @media (pointer: coarse) {
+            .tree-spacing-options .settings-radio { min-height: 44px; }
+        }
         /* Surname display (Settings > Card): a segment like Theme with one
            shared sample under it; on a phone (and when the German labels do
            not fit the segment, .is-rows) three radio rows, each with its own
@@ -27268,6 +27302,24 @@
                     <div class="settings-row card-type-settings" id="card-type-settings"></div>
                     <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
                     <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
+                    <!-- Spacing of the tree view: Normal / Dense (spec 069 §1); the hint about the Compact card only on a small screen (§5). -->
+                    <div class="settings-row settings-row-stacked tree-spacing-setting" id="tree-spacing-setting">
+                        <span class="settings-name" id="settings-spacing-label" data-i18n="spacing.label"></span>
+                        <div class="settings-options settings-segment tree-spacing-options" role="radiogroup" aria-labelledby="settings-spacing-label">
+                            <label class="settings-radio">
+                                <input type="radio" name="tree-spacing" value="normal" onchange="window.Strom.UI.setTreeSpacing('normal')">
+                                <span class="spacing-glyph spacing-glyph-normal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                                <span class="spacing-opt-label" data-i18n="spacing.normal"></span>
+                            </label>
+                            <label class="settings-radio">
+                                <input type="radio" name="tree-spacing" value="dense" onchange="window.Strom.UI.setTreeSpacing('dense')">
+                                <span class="spacing-glyph spacing-glyph-dense" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                                <span class="spacing-opt-label" data-i18n="spacing.dense"></span>
+                            </label>
+                        </div>
+                        <span class="settings-desc tree-spacing-desc" id="tree-spacing-desc"><span data-i18n="spacing.desc"></span> <span data-i18n="spacing.scope"></span></span>
+                        <span class="tree-spacing-hint" id="tree-spacing-hint" data-i18n="spacing.smallHint"></span>
+                    </div>
                     <div class="settings-row card-signals-settings" id="card-signals-settings"></div>
                     <!-- The pills at the facts in the person dialog: its own frame under "Show on card" (spec 066 P4 §3). -->
                     <label class="settings-checkbox settings-row reliability-card-setting">

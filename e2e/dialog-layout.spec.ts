@@ -377,3 +377,44 @@ test('desktop: the person card footer keeps Delete person, Merge, Cancel and Sav
     await expect(page.locator('#person-modal')).toBeVisible();
     expect(await personFooter(page)).toMatchObject({ cancel: true, save: true, merge: true, delete: true, saveMergeOneRow: true, deleteIn: 'footer' });
 });
+
+// Settings > Person card > Spacing (spec 069 §1): the row right after the card
+// type's block, before "Show on card"; the two options and their pictures fit
+// in every language at the three widths.
+for (const width of [1440, 1024, 390]) {
+    test(`${width}px: the Spacing row sits after the card type, its options fit in en/cs/de/pl`, async ({ page }) => {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await openApp(page);
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+            const row = page.locator('#settings-modal #tree-spacing-setting');
+            await expect(row).toBeVisible();
+            const m = await row.evaluate((el) => {
+                const seg = el.querySelector('.tree-spacing-options') as HTMLElement;
+                const opts = [...seg.querySelectorAll<HTMLElement>('.settings-radio')];
+                const modal = el.closest('.modal') as HTMLElement;
+                return {
+                    prev: el.previousElementSibling?.id,
+                    next: el.nextElementSibling?.id,
+                    group: el.closest('.settings-group')?.getAttribute('aria-labelledby'),
+                    segFits: seg.scrollWidth <= seg.clientWidth,
+                    rowInModal: el.getBoundingClientRect().right <= modal.getBoundingClientRect().right + 0.5,
+                    labelsFit: [...seg.querySelectorAll<HTMLElement>('.spacing-opt-label')]
+                        .every(l => l.scrollWidth <= l.clientWidth && l.getBoundingClientRect().right <= l.closest('.settings-radio')!.getBoundingClientRect().right),
+                    glyphs: [...seg.querySelectorAll<HTMLElement>('.spacing-glyph')].map(g => `${g.offsetWidth}x${g.offsetHeight}`),
+                    minHeight: Math.min(...opts.map(o => o.getBoundingClientRect().height)),
+                    pageScroll: document.documentElement.scrollWidth > window.innerWidth,
+                };
+            });
+            expect(m, lang).toEqual({
+                prev: 'card-fields-settings', next: 'card-signals-settings', group: 'settings-group-card',
+                segFits: true, rowInModal: true, labelsFit: true, glyphs: ['30x14', '30x14'],
+                minHeight: m.minHeight, pageScroll: false,
+            });
+            expect(m.minHeight, lang).toBeGreaterThanOrEqual(width === 390 ? 44 : 38);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#settings-modal')).toBeHidden();
+        }
+    });
+}

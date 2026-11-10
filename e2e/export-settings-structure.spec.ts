@@ -217,3 +217,23 @@ test('switching the language with Settings open: what Settings draws from code s
     await expect(status).toHaveText(/Historie změn/);
     await page.evaluate(() => window.Strom.UI.setLanguage('en' as never));
 });
+
+test('Spacing (Person card): absent from the settings by default, stored as dense, checked again after a reload', async ({ page }) => {
+    await openApp(page);
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings') ?? '{}').treeSpacing);
+    expect(await stored()).toBeUndefined();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const row = page.locator('#settings-modal #tree-spacing-setting');
+    await expect(row.locator('.settings-name')).toHaveText('Spacing');
+    await expect(row.locator('.spacing-opt-label')).toHaveText(['Normal', 'Dense']);
+    await expect(row.locator('.settings-desc')).toHaveText(
+        'Smaller gaps between cards and generations; more people fit on the screen. Applies to the diagram on this device.');
+    await expect(row.locator('input[value="normal"]')).toBeChecked();
+    await row.locator('input[value="dense"]').check();
+    expect(await stored()).toBe('dense');
+    await expect(page.locator('#settings-modal')).toBeVisible();
+    await page.reload();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await expect(row.locator('input[value="dense"]')).toBeChecked();
+    await expect(row.locator('input[value="normal"]')).not.toBeChecked();
+});

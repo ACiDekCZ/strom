@@ -846,6 +846,15 @@ need more lanes grows by 2 × `LANE_OFFSET` per further level
 lanes depend on X only, so they stay the same. The normal spacing has no lane
 cap and is laid out exactly as before.
 
+The choice is the Spacing row of Settings → Person card (after the card
+type, before "Show on card"; `UI.setTreeSpacing`, stored as `treeSpacing`).
+A change of the spacing or of the card type draws the view again at once,
+without a transition, through `TreeRenderer.renderKeepingView`: the focus
+card stays where it stood on the screen when it was wholly in view,
+otherwise the card whose centre was nearest the view's centre
+(`keepCardInPlace` anchored on the card's centre). On a small screen the row
+adds a hint about the Compact card while another card type is chosen.
+
 ### Lines that cannot be routed (omitted edges)
 
 After the lanes and the elbow clearance, step 7 checks every line of the

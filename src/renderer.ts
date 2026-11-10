@@ -2490,12 +2490,19 @@ class TreeRendererClass {
      * every card's drift on the screen for that. Returns the shift (world
      * units: what stood at a world point now stands at the point plus it).
      */
-    private keepCardInPlace(anchorId: PersonId, beforeAll: ReadonlyMap<PersonId, Position>, restore: boolean): { x: number; y: number } {
+    private keepCardInPlace(anchorId: PersonId, beforeAll: ReadonlyMap<PersonId, Position>, restore: boolean,
+        beforeSize?: { w: number; h: number }): { x: number; y: number } {
         const before = beforeAll.get(anchorId), after = this.positions.get(anchorId);
         let sx = 0, sy = 0;
         if (before && after) {
             sx = after.x - before.x;
             sy = after.y - before.y;
+            // Anchored on the card's centre: the card itself may have changed its size (card type).
+            const box = beforeSize ? this.cardBox(anchorId) : null;
+            if (beforeSize && box) {
+                sx += (box.right - box.left - beforeSize.w) / 2;
+                sy += (box.bottom - box.top - beforeSize.h) / 2;
+            }
             const drift = this.childrenShownDrift.get(anchorId);
             if (restore && drift) { sx += drift.x; sy += drift.y; }
         }
@@ -2512,6 +2519,60 @@ class TreeRendererClass {
         }
         if (sx || sy) ZoomPan.shiftWorld(sx, sy);
         return { x: sx, y: sy };
+    }
+
+    /**
+     * The card that holds the view when the whole tree is laid out anew
+     * (spacing, card type): the focus when its card is wholly in the view,
+     * otherwise the card whose centre is nearest the view's centre. Null in
+     * the views of their own (fan, timeline, map, table) or with no card drawn.
+     */
+    private viewAnchorCard(): PersonId | null {
+        if (STANDALONE_VIEWS.includes(this.viewMode)) return null;
+        const container = document.getElementById('tree-container');
+        if (!container || this.positions.size === 0) return null;
+        const { scale, tx, ty } = ZoomPan.getTransform();
+        const vw = container.clientWidth, vh = container.clientHeight;
+        if (vw <= 0 || vh <= 0) return null;
+        const screenBox = (box: ChildrenRect) => ({
+            left: box.left * scale + tx, top: box.top * scale + ty,
+            right: box.right * scale + tx, bottom: box.bottom * scale + ty,
+        });
+        const focus = this.focusPersonId;
+        const focusBox = focus ? this.cardBox(focus) : null;
+        if (focus && focusBox) {
+            const b = screenBox(focusBox);
+            if (b.left >= 0 && b.top >= 0 && b.right <= vw && b.bottom <= vh) return focus;
+        }
+        const sizes = new Map<string, { w: number; h: number }>();
+        document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]').forEach(el => {
+            if (el.dataset.id) sizes.set(el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight });
+        });
+        let best: PersonId | null = null, bestD = Infinity;
+        for (const [id, p] of this.positions) {
+            const size = sizes.get(id);
+            if (!size) continue;
+            const dx = (p.x + size.w / 2) * scale + tx - vw / 2;
+            const dy = (p.y + size.h / 2) * scale + ty - vh / 2;
+            const d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = id; }
+        }
+        return best;
+    }
+
+    /**
+     * Draw the view again after a change that lays the whole tree out anew
+     * (tree spacing, card type), at once and without a transition, keeping
+     * the anchor card's centre on the same place of the screen (spec 069 D3).
+     * The zoom does not change.
+     */
+    async renderKeepingView(): Promise<void> {
+        const anchorId = this.viewAnchorCard();
+        const box = anchorId ? this.cardBox(anchorId) : null;
+        const beforeAll = new Map(this.positions);
+        await this.renderInternal();
+        if (!anchorId || !box || !this.positions.has(anchorId)) return;
+        this.keepCardInPlace(anchorId, beforeAll, false, { w: box.right - box.left, h: box.bottom - box.top });
     }
 
     // ---------- §1 the transition, §5 the zoom ----------

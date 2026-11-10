@@ -719,11 +719,22 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the toolbar family-button visibility
     },
 
+    /** Card type: the cards change their size, the view keeps its anchor card in place (spec 069 D3). */
     setCardDensity(density: string): void {
         SettingsManager.setCardDensity(normalizeCardDensity(density));
         forgetCardTypeCopy();
-        TreeRenderer.render();
+        void TreeRenderer.renderKeepingView();
         this.renderCardSignalSettings();
+    },
+
+    /**
+     * Settings > Person card > Spacing (spec 069 §1): the tree behind the
+     * open dialog is drawn again at once, its anchor card kept in place (D3).
+     */
+    setTreeSpacing(spacing: string): void {
+        SettingsManager.setTreeSpacing(spacing === 'dense' ? 'dense' : 'normal');
+        this.syncTreeSpacingSetting();
+        void TreeRenderer.renderKeepingView();
     },
 
     toggleFanKekule(enabled: boolean): void {
