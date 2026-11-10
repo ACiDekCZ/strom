@@ -10,18 +10,20 @@
  *    --danger-soft / --warning-soft) with the findings as its comment;
  *  - a person's continuation rows (further unions) one outline level under
  *    the person's row (Excel's level button 2);
- *  - every value a text (shared strings), formulas neutralised as in the CSV.
+ *  - a value a text as the table shows it (no formula neutralising: a shared
+ *    string never becomes a formula), except the counts, the ages in whole
+ *    years and the completeness percentages, which are numbers (chosen by
+ *    the column, never guessed from the text).
  */
 
 import { strings } from '../../strings.js';
-import { neutralizeFormula } from '../../csv-export.js';
 import { translateValidationType } from '../../validation.js';
 import { buildXlsx, XLSX_STYLE, type XlsxCell, type XlsxColumn, type XlsxRow } from '../../xlsx.js';
 import { groupLabel, type ColumnDef, type ColumnGroup } from './table-columns.js';
 import { columnCoverage, coverageCell, coverageLabel } from './table-coverage.js';
 import { isPlaceColumn, type CellFinding, type CheckIndex } from './table-checks.js';
 import { buildExportTable, type ExportLine, type TableCsvInput } from './table-export.js';
-import type { TableRow } from './table-model.js';
+import type { CellValue, TableRow } from './table-model.js';
 import { lockedColumn } from './table-state.js';
 import { coverageUnionsOf } from './table-subrows.js';
 
@@ -55,9 +57,23 @@ export const XLSX_HEAD_ROWS = 3;
 /** The "Union" column's width in px. */
 const UNION_WIDTH = 70;
 
-/** A cell's text as written: the CSV's neutralisation, so no formula can arise. */
-function cellText(raw: string): string {
-    return raw === '' ? '' : neutralizeFormula(raw);
+/** Count columns (kind "number"): written as numbers. Differences, generations and orders stay texts. */
+const COUNT_COLUMNS: ReadonlySet<string> = new Set(['nFind', 'unusual', 'uCount', 'uKids', 'sibs', 'srcCount', 'srcPersons', 'srcFacts']);
+
+/**
+ * The number a cell is written as, by its column: a count or an age in whole
+ * years (a plain integer; "≈ 67", "28–29", "–" stay texts), a completeness
+ * as its fraction. Null: a text.
+ */
+export function xlsxNumber(col: ColumnDef | null, value: CellValue | null, text: string): { number: number; percent: boolean } | null {
+    if (!col || !value || value.empty || value.na) return null;
+    if (col.kind === 'percent') {
+        return typeof value.percent === 'number' && /^\d+ %$/.test(text) ? { number: value.percent / 100, percent: true } : null;
+    }
+    if ((col.kind === 'number' && COUNT_COLUMNS.has(col.id)) || col.kind === 'age') {
+        return /^\d+$/.test(text) ? { number: Number(text), percent: false } : null;
+    }
+    return null;
 }
 
 function capital(s: string): string {
@@ -119,18 +135,27 @@ export function buildTableXlsx(input: TableXlsxInput): TableXlsx {
     const unitsOf = coverageUnionsOf(input.pass);
     const coverage: (XlsxCell | null)[] = t.columns.map((c, i) => {
         if (!c) return null;
-        const cell = c.id === lockedColumn(input.type) ? coverageLabel() : coverageCell(columnCoverage(input.model, input.rows, c, unitsOf));
-        return { text: cell.text, style: cell.low ? XLSX_STYLE.bold : XLSX_STYLE.faint };
+        if (c.id === lockedColumn(input.type)) return { text: coverageLabel().text, style: XLSX_STYLE.faint };
+        const cov = columnCoverage(input.model, input.rows, c, unitsOf);
+        const cell = coverageCell(cov);
+        const style = cell.low ? XLSX_STYLE.bold : XLSX_STYLE.faint;
+        // The share as a number shown "0%" ("–" where nothing applies stays a text).
+        return cov.percent === null ? { text: cell.text, style } : { text: cell.text, number: cov.percent / 100, percent: true, style };
     });
 
     let marked = 0;
     const rows: XlsxRow[] = [{ cells: groups }, { cells: head }, { cells: coverage }];
     for (const line of t.lines) {
         const cells: (XlsxCell | null)[] = line.texts.map((raw, i) => {
-            const text = cellText(raw);
+            const text = raw;
             const col = t.columns[i];
             const value = line.cells[i];
             const cell: XlsxCell = { text };
+            const num = xlsxNumber(col ?? null, value ?? null, text);
+            if (num) {
+                cell.number = num.number;
+                cell.percent = num.percent;
+            }
             const href = value?.link?.href;
             if (href) cell.href = href;
             if (col && input.checks) {

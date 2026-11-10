@@ -63,6 +63,13 @@ test.describe('desktop (1440)', () => {
         const read = readXlsx(new Uint8Array(bytes));
         expect(read.cell('A2')?.text).toBe('Name');
         expect(read.cell('A3')?.text).toBe('filled');
+        // The coverage row's shares are numbers shown as a percentage, the names texts, and
+        // Excel's "number stored as text" warning is off for the sheet.
+        const coverage = [...read.rows[2].cells.values()].filter(c => c.ref !== 'A3');
+        expect(coverage.length).toBeGreaterThan(0);
+        expect(coverage.every(c => c.type === '' || c.text === '–')).toBe(true);
+        expect(read.rows.slice(3).map(r => r.cells.get(`A${r.r}`)).filter(c => c?.text).every(c => c!.type === 's')).toBe(true);
+        expect(read.sheet).toMatch(/<ignoredErrors><ignoredError sqref="A1:[A-Z]+\d+" numberStoredAsText="1"\/><\/ignoredErrors>/);
         expect(read.sheet).toContain('state="frozen"');
         // Velimor's second union: a continuation row one outline level down.
         expect(read.rows.filter(r => r.outline === 1)).toHaveLength(1);

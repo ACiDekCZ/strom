@@ -3,7 +3,8 @@
  * read back — the zip (CRC and sizes), the content types and the workbook;
  * the sheet's group row (merged), head and coverage row; the column groups
  * and the union continuation rows as outlines; the frozen panes; a finding's
- * fill and comment; every value a text with formulas neutralised; links; the
+ * fill and comment; texts as written (never a formula), counts, whole-year
+ * ages and completeness as numbers; Excel's "number stored as text" off; links; the
  * other row types; and a fuzz test that a value comes back as it went in
  * (emoji, combining marks, CJK, XML specials, control characters).
  */
@@ -12,14 +13,13 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
 import { validateTreeData } from '../validation.js';
-import { neutralizeFormula } from '../csv-export.js';
 import { buildTableModel, type TableModel } from '../ui/table-view/table-model.js';
-import { columnById, columnLabel, columnsOf, type ColumnDef } from '../ui/table-view/table-columns.js';
+import { cellOf, columnById, columnLabel, columnsOf, type ColumnDef } from '../ui/table-view/table-columns.js';
 import { buildCheckIndex, applyChecks } from '../ui/table-view/table-checks.js';
 import { buildTableCsv, tableCsvFileName } from '../ui/table-view/table-export.js';
 import { buildTableXlsx } from '../ui/table-view/table-xlsx.js';
 import { sortRows } from '../ui/table-view/table-filter.js';
-import { buildXlsx, columnName, sheetName, xlsxText, XLSX_FILL, XLSX_STYLE } from '../xlsx.js';
+import { buildXlsx, columnName, sheetName, xlsxText, XLSX_FILL, XLSX_NUMBER, XLSX_PERCENT, XLSX_STYLE } from '../xlsx.js';
 import { readXlsx } from './helpers/xlsx-read.js';
 
 const WHEN = new Date('2026-06-15T10:00:00Z');
@@ -39,7 +39,7 @@ function tree(): StromData {
         b: person('b', 'Ottilie', 'Varnsdeck', 'female', { birthDate: '1843', deathDate: '1868', partnerships: ['u1'] }),
         c: person('c', 'Senta', 'Morwinkel', 'female', { birthDate: '1860-05-01', partnerships: ['u2'] }),
         d: person('d', 'Kasimir', 'Quellbarth', 'male', { birthDate: '1900', deathDate: '1890' }),
-        e: person('e', '=SUM(1)', 'Quellbarth', 'male', { birthDate: '1870' }),
+        e: person('e', '=1+1', 'Quellbarth', 'male', { birthDate: '1870' }),
     };
     const partnerships = {
         u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: [], status: 'married', startDate: '1864' },
@@ -110,6 +110,9 @@ describe('the package (zip and parts)', () => {
         expect(sheetRels).toContain('Target="../comments1.xml"');
         expect(sheetRels).toContain('Target="../drawings/vmlDrawing1.vml"');
         expect(read.sheet).toMatch(/<legacyDrawing r:id="rId\d+"\/><\/worksheet>$/);
+        // "Number stored as text" off for the whole sheet, after pageMargins and before legacyDrawing (CT_Worksheet order).
+        expect(read.sheet).toContain('<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+            + '<ignoredErrors><ignoredError sqref="A1:K9" numberStoredAsText="1"/></ignoredErrors><legacyDrawing ');
     });
 
     it('the archive is dated and the same input gives the same bytes', () => {
@@ -135,14 +138,17 @@ describe('the sheet (§11.3)', () => {
         const head = rowTexts(read, 2, n);
         expect(head.slice(0, 4)).toEqual(['Name', 'Union', 'Sex', 'Birth date']);
         expect(read.cell('A2')!.style).toBe(XLSX_STYLE.bold);
-        // Coverage: "filled" under the name, a percentage per column, none for "Union".
+        // Coverage: "filled" under the name, a percentage per column (a number shown "0%"), none for "Union".
         expect(read.cell('A3')!.text).toBe('filled');
         expect(read.cell('B3')).toBeUndefined();
-        expect(read.cell('D3')!.text).toBe('100 %');
+        expect(read.cell('D3')).toMatchObject({ type: '', text: '1', style: XLSX_STYLE.faint + XLSX_PERCENT });
         // Birth place: nobody has one → 0 % (bold, under 50 %).
-        expect(read.cell('E3')!.text).toBe('0 %');
-        expect(read.cell('E3')!.style).toBe(XLSX_STYLE.bold);
-        expect(read.cell('D3')!.style).toBe(XLSX_STYLE.faint);
+        expect(read.cell('E3')).toMatchObject({ type: '', text: '0', style: XLSX_STYLE.bold + XLSX_PERCENT });
+        const styles = read.files.get('xl/styles.xml')!;
+        const xfs = [...styles.split('<cellXfs')[1].matchAll(/<xf numFmtId="(\d+)"/g)].map(m => Number(m[1]));
+        expect(xfs[XLSX_STYLE.bold + XLSX_PERCENT]).toBe(9);
+        expect(xfs[XLSX_STYLE.normal + XLSX_NUMBER]).toBe(0);
+        expect(xfs[XLSX_STYLE.normal]).toBe(49);
         expect(out.items).toBe(5);
         expect(out.lines).toBe(6);
         expect(read.rows).toHaveLength(3 + 6);
@@ -198,7 +204,7 @@ describe('the sheet (§11.3)', () => {
         // Radomil's second wife was 14: "to check" on Partner's age in the continuation row.
         const cont = read.rows.find(r => r.outline === 1)!;
         const pAge = cont.cells.get(`H${cont.r}`)!;
-        expect(pAge.style).toBe(XLSX_STYLE.warningFill);
+        expect(pAge).toMatchObject({ type: '', text: '14', style: XLSX_STYLE.warningFill + XLSX_NUMBER });
         expect(read.comments.get(`H${cont.r}`)).toMatch(/^To check: /);
         expect(out.marked).toBe(read.comments.size);
         // The legacy drawing has one hidden note per comment, anchored on its cell.
@@ -218,15 +224,15 @@ describe('the sheet (§11.3)', () => {
         expect(out.marked).toBe(0);
     });
 
-    it('every value a text (shared strings), a formula neutralised, citations as the table shows them, links', () => {
+    it('texts as the table shows them (a formula-like text kept, never a formula), ages as numbers, citations, links', () => {
         const { read } = peopleXlsx();
         const cells = read.rows.slice(1).flatMap(r => [...r.cells.values()]);
         expect(cells.length).toBeGreaterThan(20);
-        expect(cells.every(c => c.type === 's')).toBe(true);
+        // Texts are shared strings; the only numbers are Partner's age (column H) and the coverage row.
+        expect(cells.filter(c => c.type !== 's').every(c => c.ref.startsWith('H') || /^[A-Z]+3$/.test(c.ref))).toBe(true);
         expect(read.sheet).not.toMatch(/<f>|t="n"|t="d"|<is>/);
-        const e = read.rows.find(r => r.cells.get(`A${r.r}`)?.text.includes('SUM'))!;
-        expect(e.cells.get(`A${e.r}`)!.text).toBe(neutralizeFormula('=SUM(1) Quellbarth'));
-        expect(e.cells.get(`A${e.r}`)!.text.startsWith("'=")).toBe(true);
+        const e = read.rows.find(r => r.cells.get(`A${r.r}`)?.text.startsWith('=1+1'))!;
+        expect(e.cells.get(`A${e.r}`)).toMatchObject({ type: 's', text: '=1+1 Quellbarth' });
         // Radomil's birth cites two sources: the first one's reference and "(+1)" as in the CSV.
         const a = read.rows.find(r => r.cells.get(`A${r.r}`)?.text.startsWith('Radomil'))!;
         expect(a.cells.get(`J${a.r}`)!.text).toBe('fol. 7 (+1)');
@@ -262,6 +268,61 @@ describe('the sheet (§11.3)', () => {
     });
 });
 
+describe('numbers by the column, never by the text', () => {
+    it('counts, whole-year ages and completeness are numbers; a name "1848", dates, ranges and "–" stay texts; the CSV unchanged', () => {
+        const data = tree();
+        const p = data.persons as unknown as Record<string, Record<string, unknown>>;
+        p.e.firstName = '1848';
+        p.e.lastName = '';
+        p.a.deathDate = '1901-03-01';
+        const m = build(data);
+        const index = buildCheckIndex(data, validateTreeData(data).issues);
+        applyChecks(m, index);
+        const columns = cols('persons', ['name', 'bDate', 'dAge', 'uCount', 'nFind', 'comp']);
+        const rows = sortRows(m, 'persons', m.persons, [{ col: 'name', dir: 'asc' }]);
+        const out = buildTableXlsx({ model: m, type: 'persons', rows, columns, pinned: 1, checks: index, sheetName: 'N', when: WHEN });
+        const read = readXlsx(out.bytes);
+        const at = (first: string) => read.rows.find(r => r.cells.get(`A${r.r}`)?.text.startsWith(first))!;
+        // The "Union" column follows the name (Radomil has two unions).
+        expect(out.columns).toBe(columns.length + 1);
+        const col = (r: ReturnType<typeof at>, id: string) => {
+            const i = columns.findIndex(c => c.id === id);
+            return r.cells.get(`${columnName(i === 0 ? 0 : i + 1)}${r.r}`);
+        };
+        const name = at('1848');
+        expect(col(name, 'name')).toMatchObject({ type: 's', text: '1848' });
+        // Radomil: the date a text, the age at death 61 a number, 2 unions, the completeness a fraction.
+        const a = at('Radomil');
+        expect(col(a, 'bDate')).toMatchObject({ type: 's', text: '3 Feb 1840' });
+        expect(col(a, 'dAge')).toMatchObject({ type: '', text: '61' });
+        expect(col(a, 'uCount')).toMatchObject({ type: '', text: '2' });
+        expect(col(a, 'nFind')!.type).toBe('');
+        const comp = col(a, 'comp')!;
+        expect(comp.type).toBe('');
+        expect(comp.style).toBe(XLSX_STYLE.normal + XLSX_PERCENT);
+        const shown = m.persons.find(r => r.id === 'a')!;
+        expect(Number(comp.text)).toBeCloseTo((cellOf(m, shown, columnById('persons', 'comp')!).percent ?? -1) / 100, 6);
+        // Ottilie (born 1843, died 1868): an age as a range stays the text the table shows.
+        const b = col(at('Ottilie'), 'dAge')!;
+        expect(b.type).toBe('s');
+        expect(b.text).toMatch(/\d+–\d+/);
+        // The CSV keeps its texts.
+        const csv = buildTableCsv({ model: m, type: 'persons', rows, columns }).csv;
+        expect(csv).toMatch(/;61;2;/);
+        expect(csv).toMatch(/\d+ %/);
+    });
+
+    it('Sources: People and Facts as numbers; Unions: children as a number', () => {
+        const m = build();
+        const src = readXlsx(buildTableXlsx({ model: m, type: 'sources', rows: m.sources, columns: cols('sources', ['srcTitle', 'srcPersons', 'srcFacts']), pinned: 1, sheetName: 'S', when: WHEN }).bytes);
+        expect(src.cell('A4')!.text).toBe('Matrika Brestovská');
+        expect(src.cell('B4')).toMatchObject({ type: '', text: '1' });
+        expect(src.cell('C4')).toMatchObject({ type: '', text: '1' });
+        const un = readXlsx(buildTableXlsx({ model: m, type: 'unions', rows: m.unions, columns: cols('unions', ['p1', 'uKids']), pinned: 1, sheetName: 'U', when: WHEN }).bytes);
+        expect(un.cell('B4')).toMatchObject({ type: '', text: '0' });
+    });
+});
+
 describe('text as a sheet holds it', () => {
     it('XML-invalid characters out; emoji, combining marks and CJK kept; long text cut without splitting a pair', () => {
         expect(xlsxText('a\u0000b\u0007c\u001Fd\tE\nF')).toBe('abcd\tE\nF');
@@ -283,7 +344,7 @@ describe('text as a sheet holds it', () => {
         expect([0, 25, 26, 51, 52, 701, 702].map(columnName)).toEqual(['A', 'Z', 'AA', 'AZ', 'BA', 'ZZ', 'AAA']);
     });
 
-    it('fuzz: a value → XLSX → read back is the value (after the XML cleanup and the formula neutralising)', () => {
+    it('fuzz: a value → XLSX → read back is the value (after the XML cleanup), always a shared string', () => {
         let seed = 20261110;
         const rnd = (n: number): number => {
             seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -306,12 +367,12 @@ describe('text as a sheet holds it', () => {
         const bytes = buildXlsx({
             name: 'Fuzz',
             columns: Array.from({ length: 6 }, () => ({ width: 10 })),
-            rows: values.map(row => ({ cells: row.map(text => ({ text: neutralizeFormula(text), comment: text })) })),
+            rows: values.map(row => ({ cells: row.map(text => ({ text, comment: text })) })),
         }, WHEN);
         const read = readXlsx(bytes);
         for (let r = 0; r < values.length; r++) {
             for (let c = 0; c < 6; c++) {
-                const want = xlsxText(neutralizeFormula(values[r][c]));
+                const want = xlsxText(values[r][c]);
                 const ref = `${columnName(c)}${r + 1}`;
                 expect(read.cell(ref)?.text ?? '', ref).toBe(want);
                 expect(read.comments.get(ref) ?? '', `${ref} comment`).toBe(xlsxText(values[r][c]));

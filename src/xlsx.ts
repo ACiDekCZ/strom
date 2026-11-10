@@ -1,11 +1,13 @@
 /**
  * A one-sheet .xlsx workbook without a library: the SpreadsheetML parts
  * (workbook, sheet, styles, shared strings, comments with their legacy VML
- * drawing) in a stored .zip (src/zip.ts). Every value is a text (a shared
- * string): no number, date or formula is ever written. What a sheet can
- * carry is what the table export needs: merged cells, column widths, column
- * and row outline levels, frozen panes, a few cell styles (bold, faint,
- * fills), comments and external hyperlinks.
+ * drawing) in a stored .zip (src/zip.ts). A value is a text (a shared
+ * string, written as it is: a text never becomes a formula) or a number
+ * (plain or a percentage); no date or formula is ever written. What a sheet
+ * can carry is what the table export needs: merged cells, column widths,
+ * column and row outline levels, frozen panes, a few cell styles (bold,
+ * faint, fills), comments and external hyperlinks. Excel's "number stored
+ * as text" warning is switched off for the whole sheet (ignoredErrors).
  */
 
 import { buildZip } from './zip.js';
@@ -21,8 +23,20 @@ export const XLSX_STYLE = {
 } as const;
 export type XlsxStyle = typeof XLSX_STYLE[keyof typeof XLSX_STYLE];
 
+/**
+ * The cellXfs of a number: each XLSX_STYLE again with the "General" format
+ * (+ XLSX_NUMBER) and with the built-in "0%" (+ XLSX_PERCENT).
+ */
+export const XLSX_NUMBER = 6;
+export const XLSX_PERCENT = 12;
+
 export interface XlsxCell {
+    /** The text; ignored when `number` is set. */
     text: string;
+    /** A numeric value instead of the text (a fraction when `percent`). */
+    number?: number;
+    /** The number shown as a percentage (0.25 → "25%"). */
+    percent?: boolean;
     style?: XlsxStyle;
     /** A note on the cell (shown as a comment). */
     comment?: string;
@@ -127,15 +141,16 @@ function styles(): string {
     const font = (extra: string): string => `<font>${extra}<sz val="11"/><name val="Calibri"/><family val="2"/></font>`;
     const fill = (rgb: string): string => `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
     // xf: numFmtId 49 is "@" (text): a value typed into the cell later stays text too.
-    const xf = (font: number, fill: number, extra = ''): string =>
-        `<xf numFmtId="49" fontId="${font}" fillId="${fill}" borderId="0" xfId="0" applyNumberFormat="1"`
+    const xf = (font: number, fill: number, extra = '', fmt = 49): string =>
+        `<xf numFmtId="${fmt}" fontId=""${font}" fillId="${fill}" borderId="0" xfId="0" applyNumberFormat="1"`
         + `${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${extra ? ` applyAlignment="1">${extra}</xf>` : '/>'}`;
     return HEAD + `<styleSheet xmlns="${NS}">`
         + `<fonts count="3">${font('')}${font('<b/>')}${font('<i/><color rgb="FF6B6B6B"/>')}</fonts>`
         + `<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${fill(XLSX_FILL.error)}${fill(XLSX_FILL.warning)}</fills>`
         + '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
         + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        + `<cellXfs count="6">${xf(0, 0)}${xf(1, 0)}${xf(2, 0)}${xf(1, 0, '<alignment horizontal="center"/>')}${xf(0, 2)}${xf(0, 3)}</cellXfs>`
+        // The six styles as text (49 "@"), as a number (0 "General") and as a percentage (9 "0%").
+        + `<cellXfs count="18">${[49, 0, 9].map(f => xf(0, 0, '', f) + xf(1, 0, '', f) + xf(2, 0, '', f) + xf(1, 0, '<alignment horizontal="center"/>', f) + xf(0, 2, '', f) + xf(0, 3, '', f)).join('')}</cellXfs>`
         + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
         + '</styleSheet>';
 }
@@ -193,9 +208,15 @@ export function buildXlsx(sheet: XlsxSheet, when: Date = new Date()): Uint8Array
         row.cells.forEach((cell, c) => {
             if (!cell) return;
             const ref = `${columnName(c)}${r + 1}`;
-            const text = xlsxText(cell.text);
-            const s = cell.style ? ` s="${cell.style}"` : '';
-            cells += text ? `<c r="${ref}"${s} t="s"><v>${stringIndex(text)}</v></c>` : (s ? `<c r="${ref}"${s}/>` : '');
+            const num = cell.number !== undefined && Number.isFinite(cell.number) ? cell.number : null;
+            const text = num === null ? xlsxText(cell.text) : '';
+            if (num !== null) {
+                const style = (cell.style ?? 0) + (cell.percent ? XLSX_PERCENT : XLSX_NUMBER);
+                cells += `<c r="${ref}" s="${style}"><v>${num}</v></c>`;
+            } else {
+                const s = cell.style ? ` s="${cell.style}"` : '';
+                cells += text ? `<c r="${ref}"${s} t="s"><v>${stringIndex(text)}</v></c>` : (s ? `<c r="${ref}"${s}/>` : '');
+            }
             const note = cell.comment ? xlsxText(cell.comment) : '';
             if (note) comments.push({ ref, row: r, col: c, text: note });
             const href = text ? safeHref(cell.href) : null;
@@ -230,6 +251,8 @@ export function buildXlsx(sheet: XlsxSheet, when: Date = new Date()): Uint8Array
     }
     if (links.length) tail += `<hyperlinks>${links.map(l => `<hyperlink ref="${l.ref}" r:id="${rel('hyperlink', l.href, true)}"/>`).join('')}</hyperlinks>`;
     tail += '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>';
+    // CT_Worksheet order: after pageMargins (pageSetup, headerFooter…), before drawing and legacyDrawing.
+    tail += `<ignoredErrors><ignoredError sqref="A1:${lastRef}" numberStoredAsText="1"/></ignoredErrors>`;
     if (comments.length) {
         rel('comments', '../comments1.xml');
         tail += `<legacyDrawing r:id="${rel('vmlDrawing', '../drawings/vmlDrawing1.vml')}"/>`;
