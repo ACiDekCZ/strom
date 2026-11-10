@@ -642,6 +642,30 @@ class TreeRendererClass {
         this.liveHooks = hooks;
     }
 
+    /** The Table view in its own container; the other views' containers and the canvas hidden. */
+    private showTableView(canvas: HTMLElement): void {
+        const leftFan = document.body.dataset.viewMode === 'fan';
+        this.fanView?.deactivate();
+        document.body.dataset.viewMode = 'table';
+        for (const id of ['timeline-container', 'fan-container', 'map-container']) {
+            const other = document.getElementById(id);
+            if (other) other.style.display = 'none';
+        }
+        canvas.querySelectorAll('.person-card').forEach(c => c.remove());
+        canvas.style.display = 'none';
+        const el = document.getElementById('table-container');
+        if (el) {
+            el.style.display = 'flex';
+            UI.renderTableView?.(el);
+        }
+        this.updateFocusUI();
+        UI.updateViewModeUI?.();
+        if (leftFan) UI.placeLivePanel?.();
+        UI.updateMinimap?.();
+        UI.updateGenLabels?.();
+        UI.updateViewLinksIndicator?.();
+    }
+
     private async renderInternal(liveLoad: { previous: StromData; quiet: boolean } | null = null): Promise<void> {
         // Sequence token: a newer render started while this one awaited must
         // win, or both append their cards to the same canvas (duplicates).
@@ -705,6 +729,9 @@ class TreeRendererClass {
         if (persons.length === 0) {
             if (live) canvas.querySelectorAll('.person-card').forEach(c => c.remove());
             if (empty) empty.style.display = 'block';
+            // The welcome of an empty tree, not an empty table over it.
+            const table = document.getElementById('table-container');
+            if (table) table.style.display = 'none';
             this.focusPersonId = null;
             this.updateFocusUI();
             UI.updateViewLinksIndicator?.();
@@ -716,6 +743,13 @@ class TreeRendererClass {
         if (!this.focusPersonId || !DataManager.getPerson(this.focusPersonId)) {
             this.focusPersonId = this.findDefaultFocusPerson();
             if (!this.focusPersonId) return;
+        }
+
+        // The table lists the whole tree (spec 073 §1.6): it runs no layout and
+        // leaves the diagram's selection of people as it is.
+        if (this.viewMode === 'table') {
+            this.showTableView(canvas);
+            return;
         }
 
         // Compute layout using the new layout engine
@@ -841,6 +875,8 @@ class TreeRendererClass {
             const el = document.getElementById(view.id);
             if (el) el.style.display = mode === this.viewMode ? view.display : 'none';
         }
+        const table = document.getElementById('table-container');
+        if (table) table.style.display = 'none';
         if (active) {
             const el = document.getElementById(active.id);
             if (el) {

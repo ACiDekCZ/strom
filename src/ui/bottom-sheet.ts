@@ -428,16 +428,17 @@ export const bottomSheetMethods = uiModule({
             ] });
         }
 
-        // 5) View: Fan | Map tiles (no bottom-bar tab of their own); on a phone under them the
+        // 5) View: Fan | Map | Table tiles (no bottom-bar tab of their own); on a phone under them the
         //    family line's choice (spec 039 §5.1: not on the timeline and the map, nor in a tree
         //    without a line; a tablet has it in its top bar).
         const rod = getSelectedRod();
-        const rodRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && rodPickerOffered()
+        const rodRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table' && rodPickerOffered()
             ? { label: s.rodView.row, value: rod ? rodLabel(rod) : s.familyPages.wholeTree, id: 'sheet-rod', run: () => this.showRodPickerSheet() }
             : undefined;
         blocks.push({ divider: true, rows: [], pairLabel: s.menu.sectionView, pair: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
+            { label: s.viewModeSwitch.table, run: () => this.setDisplayViewMode('table'), active: mode === 'table' },
         ], valueRow: rodRow });
 
         // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.

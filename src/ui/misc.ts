@@ -496,18 +496,18 @@ export const miscMethods = uiModule({
         // Standalone views (map/timeline/fan) have their own top-left controls;
         // the tree focus chip does not apply there and must not overlap them.
         document.body.classList.toggle('standalone-view',
-            mode === 'map' || mode === 'timeline' || mode === 'fan');
+            mode === 'map' || mode === 'timeline' || mode === 'fan' || mode === 'table');
         // The map's bottom bars lift the toasts and offers (index.html).
         document.body.classList.toggle('map-view', mode === 'map');
-        for (const m of ['family', 'descendants', 'timeline', 'fan', 'map']) {
+        for (const m of ['family', 'descendants', 'timeline', 'fan', 'map', 'table']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
         }
-        // Mobile bottom bar: three primary view tabs plus "More" (fan/map live
-        // in the More sheet, so More lights up while either is active).
+        // Mobile bottom bar: three primary view tabs plus "More" (fan, map and
+        // table live in the More sheet, so More lights up while one is active).
         document.getElementById('bb-view-family')?.classList.toggle('active', mode === 'family');
         document.getElementById('bb-view-descendants')?.classList.toggle('active', mode === 'descendants');
         document.getElementById('bb-view-timeline')?.classList.toggle('active', mode === 'timeline');
-        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map');
+        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map' || mode === 'table');
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');

@@ -192,7 +192,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     // "Ancestor research · New" only while it is new (menu 1020 §1.1); seen here: in the tree's sheet.
     expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
-    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
+    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Table']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
     // Tree management left the first level (Tree › and the tree switcher carry it).
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);

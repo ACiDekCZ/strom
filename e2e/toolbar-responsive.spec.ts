@@ -423,6 +423,40 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `@${width}px: no page scroll`).toBe(true);
         }
     });
+    test('1025 px, a long name and the Table tab: the view tabs stay whole, nothing runs over, the cut name has its tooltip', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 850 });
+        await openConnectedResearch(page, 'de-DE');
+        const long = 'Familie Fischer aus Mähren und Böhmen';
+        await page.evaluate(() => window.Strom.UI.showRenameTreeDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        await page.locator('#rename-tree-name').fill(long);
+        await page.locator('#rename-tree-modal .buttons .primary').click();
+        await expect(page.locator('#current-tree-name')).toHaveText(long);
+        await page.setViewportSize({ width: 1025, height: 850 });
+        await settleLayout(page);
+        await expect(page.locator('#view-mode-table')).toHaveText('Tabelle');
+        const fit = await page.evaluate(() => {
+            const vw = window.innerWidth;
+            const tb = document.querySelector('.toolbar') as HTMLElement;
+            const whole = (el: Element): boolean => {
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.left < -1 || r.right > vw + 1) return false;
+                const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !!top && (top === el || el.contains(top));
+            };
+            const tabs = Array.from(document.querySelectorAll('#view-mode-segment button'));
+            const name = document.getElementById('current-tree-name') as HTMLElement;
+            return {
+                tabs: tabs.length, tabsWhole: tabs.every(whole),
+                overflow: tb.scrollWidth - tb.clientWidth,
+                nameTitle: name.scrollWidth > name.clientWidth + 1 ? name.title : long,
+            };
+        });
+        expect(fit.tabs).toBe(6);
+        expect(fit.tabsWhole).toBe(true);
+        expect(fit.overflow).toBeLessThanOrEqual(0);
+        expect(fit.nameTitle).toBe(long);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
 });
 
 test.describe('the 1280 fold boundary', () => {

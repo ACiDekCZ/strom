@@ -126,6 +126,7 @@ import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import { tableMethods } from './table-view/table-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
 import { placesIdentifyMethods } from './places-identify-ui.js';
@@ -872,6 +873,10 @@ Object.assign(UIClass.prototype, slideshowMethods);
 type MapMethods = typeof mapMethods;
 export interface UIClass extends MapMethods {}
 Object.assign(UIClass.prototype, mapMethods);
+
+type TableMethods = typeof tableMethods;
+export interface UIClass extends TableMethods {}
+Object.assign(UIClass.prototype, tableMethods);
 
 type PlacesManagerMethods = typeof placesManagerMethods;
 export interface UIClass extends PlacesManagerMethods {}

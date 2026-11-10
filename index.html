@@ -337,6 +337,7 @@
             --follow-note-text: #2d5340;
             --line-selected-bg: #e4ede6;  /* the research panel's selected working line */
             --line-selected-ring: #b9cfbf;
+            --tv-pin-shadow: rgba(60, 50, 30, 0.35);  /* the table's pinned columns over scrolled ones */
             --dir-drop: var(--primary);          /* directions: drop line, handle focus ring, order spinner */
             --dir-drag-bg: var(--surface-2);     /* directions: the dragged row */
             --dir-paused: var(--text-light);     /* directions: a paused one's name and chip */
@@ -521,6 +522,7 @@
             --follow-note-bg: #2f3d35;
             --line-selected-bg: #2f3d35;
             --line-selected-ring: #4d6b58;
+            --tv-pin-shadow: rgba(0, 0, 0, 0.6);
             --dir-drop: #6f9c7f;
             --dir-drag-bg: #26241f;
             --dir-paused: #a89f8d;
@@ -3582,6 +3584,8 @@
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row),
             .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item { grid-column: auto; }
             .bottom-sheet-more .bottom-sheet-pair { display: contents; }
+            /* The View tiles (Fan · Map · Table) share one row across both columns. */
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) { display: flex; gap: 4px; padding: 0; }
             .bottom-sheet-more .bottom-sheet-pair-label,
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-divider { display: none; }
             .bottom-sheet-more .bottom-sheet-item { min-height: 44px; }
@@ -9332,6 +9336,110 @@
             cursor: grab;
         }
         .map-container.map-dragging { cursor: grabbing; }
+
+        /* ==================== Table view (spec 073, src/ui/table-view/) ==================== */
+        .table-container {
+            display: none;
+            position: absolute;
+            inset: 0;
+            flex-direction: column;
+            background: var(--surface);
+            color: var(--text);
+            cursor: default;
+            font-family: var(--font-sans);
+        }
+        .table-view { --tv-row-h: 32px; --tv-group-h: 26px; --tv-head-h: 44px; --tv-cov-h: 24px; }
+        .tv-bar { flex: none; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .tv-bar-row1 {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+            min-height: 52px; padding: 8px 16px; box-sizing: border-box;
+        }
+        .tv-bar-spacer { flex: 1 1 auto; }
+        .tv-bar-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-top: 1px solid var(--divider); }
+        .tv-bar-row2[hidden], .tv-slot:empty { display: none; }
+        /* Row type: a segmented radio group (§2), "People 38". */
+        .tv-rowtype { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
+        .tv-rowtype .segment-btn { padding: 0 14px; height: 34px; font-size: 13px; white-space: nowrap; border-radius: 0; }
+        .tv-rowtype .segment-btn.active { font-weight: 600; }
+        .tv-rowtype-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .tv-rowtype-btn {
+            display: none; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        /* The grid: scrolls both ways; the head sticks to the top, pinned cells to the left. */
+        .tv-grid {
+            flex: 1 1 auto; min-height: 0; position: relative;
+            overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y;
+            font-size: 13px; outline: none;
+        }
+        .tv-grid:focus-visible { box-shadow: inset var(--shadow-focus); }
+        .tv-head { position: sticky; top: 0; z-index: 3; background: var(--surface); }
+        .tv-row { display: flex; box-sizing: border-box; }
+        .tv-grouprow { height: var(--tv-group-h); background: var(--surface-2); }
+        .tv-headrow { height: var(--tv-head-h); background: var(--surface); border-bottom: 1px solid var(--border); }
+        .tv-covrow { height: var(--tv-cov-h); background: var(--surface-2); border-bottom: 1px solid var(--border); }
+        .tv-cell {
+            flex: none; box-sizing: border-box; height: 100%; padding: 0 10px;
+            display: flex; align-items: center; min-width: 0; overflow: hidden;
+            white-space: nowrap; text-overflow: ellipsis; background: inherit;
+        }
+        .tv-cell-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .tv-cell.tv-right { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+        .tv-spacer { flex: none; height: 100%; }
+        .tv-pinned { position: sticky; z-index: 1; }
+        .tv-pinned-last { border-right: 1px solid var(--border); }
+        .tv-grid.is-scrolled-x .tv-pinned-last { box-shadow: 6px 0 8px -6px var(--tv-pin-shadow); }
+        .tv-groupcell {
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--accent-text); border-right: 1px solid var(--divider);
+        }
+        .tv-headcell { font-size: 12px; font-weight: 600; color: var(--text-light); white-space: normal; line-height: 1.25; }
+        .tv-headcell .tv-cell-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .tv-headcell.is-computed { color: var(--text-faint); }
+        .tv-sort-mark { flex: none; margin-left: 4px; color: var(--text); }
+        .tv-covcell { font-size: 11px; color: var(--text-faint); }
+        .tv-body { position: relative; }
+        .tv-body .tv-row {
+            position: absolute; left: 0; height: var(--tv-row-h);
+            background: var(--surface); border-bottom: 1px solid var(--divider);
+        }
+        .tv-body .tv-row[aria-selected="true"] { background: var(--line-selected-bg); }
+        .tv-name { font-family: var(--font-serif); font-size: 14px; }
+        .tv-row.is-home .tv-name { font-weight: 600; }
+        .tv-cell--computed { color: var(--text-light); }
+        .tv-cell--na { color: var(--text-faint); font-style: italic; }
+        .tv-cell--uncertain .tv-cell-text { border-bottom: 1px dotted var(--text-faint); }
+        .tv-cell--subst .tv-cell-text { font-style: italic; }
+        .tv-status {
+            flex: none; display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px;
+            background: var(--surface-2); border-top: 1px solid var(--border); font-size: 12px; box-sizing: border-box;
+            white-space: nowrap; overflow: hidden;
+        }
+        .tv-status-count { font-weight: 600; color: var(--text); }
+        .tv-status-sort { color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .tv-status-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
+        .tv-legend-btn { border: none; background: none; padding: 0 4px; height: 26px; font-size: 12px; color: var(--text-light); cursor: pointer; }
+        .tv-legend-btn[hidden] { display: none; }
+        @media (hover: hover) {
+            .tv-body .tv-row:hover { background: var(--surface-2); }
+            .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
+            .tv-rowtype-btn:hover, .tv-legend-btn:hover { color: var(--text); border-color: var(--primary); }
+        }
+        /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
+        @media (pointer: coarse) {
+            .table-view { --tv-row-h: 36px; }
+            .tv-rowtype .segment-btn { height: 44px; }
+            .tv-legend-btn { height: 44px; }
+        }
+        /* Phone (≤ 640) and a phone held sideways: the row type as a button with a sheet, 40 px rows. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .table-view { --tv-row-h: 40px; --tv-group-h: 22px; --tv-head-h: 40px; --tv-cov-h: 22px; }
+            .tv-bar-row1 { padding: 6px 12px; gap: 8px; }
+            .tv-rowtype { display: none; }
+            .tv-rowtype-btn { display: inline-flex; }
+            .tv-status { padding: 0 12px; }
+        }
         .map-canvas { position: absolute; inset: 0; }
         .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }
         .map-markers { pointer-events: none; }
@@ -24544,6 +24652,8 @@
 
             /* The map is a live online view (tiles): nothing to print. */
             .map-container { display: none !important; }
+            /* The table draws only the rows in view (virtual): not printed. */
+            .table-container { display: none !important; }
             .tl-name { color: #222 !important; }
             .tl-tick { fill: #666 !important; }
             .tl-dot { fill: #444 !important; }
@@ -25298,6 +25408,7 @@
             <button id="view-mode-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')" data-i18n="viewModeSwitch.timeline"></button>
             <button id="view-mode-fan" onclick="window.Strom.UI.setDisplayViewMode('fan')" data-i18n="viewModeSwitch.fan"></button>
             <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
+            <button id="view-mode-table" onclick="window.Strom.UI.setDisplayViewMode('table')" data-i18n="viewModeSwitch.table"></button>
         </div>
 
         <!-- Undo / Redo (R3) — desktop-only ghost icon buttons; the mobile "More"
@@ -25483,6 +25594,7 @@
         </div>
         <div id="timeline-container" class="timeline-container"></div>
         <div id="map-container" class="map-container"></div>
+        <div id="table-container" class="table-container table-view"></div>
         <div id="fan-container" class="fan-container">
             <!-- The Fan view's own toolbar (spec 029 §9.5): shape, generations, descendants (two-way), colours. -->
             <div class="fan-toolbar" id="fan-toolbar" role="toolbar" data-i18n-aria-label="viewModeSwitch.fan">
