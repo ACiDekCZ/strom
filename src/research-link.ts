@@ -1990,6 +1990,8 @@ export interface LiveStatus {
     historyRev?: string;
     /** `quality.rev` (with `quality.read` in `features`): a print of what `GET /quality` returns (spec 021 §D). */
     qualityRev?: string;
+    /** `directions.rev` (with `directions.places` in `features`): a print of who stands where in the lines; read `GET /directions/people` again when it changes. */
+    directionsRev?: string;
     /** `experiments.historyPace` (with `experiments.pace` in `features`): how often the research looks for history. */
     historyPace?: HistoryPace;
     /** `history.placeEstimate` (with `history.place` in `features`): one place's own history, minutes and (measured) USD. */
@@ -2546,6 +2548,8 @@ export const DIRECTIONS_ORDER_FEATURE = 'directions.order';
 export const DIRECTIONS_FOUND_FEATURE = 'directions.found';
 /** `/status.features`: who is in which direction (`GET /directions/people`). */
 export const DIRECTIONS_PEOPLE_FEATURE = 'directions.people';
+/** `/status.features`: `GET /directions/people` also says where each person stands (`places`, `lines`, `branches`, `rev`; spec 073 §16.9). */
+export const DIRECTIONS_PLACES_FEATURE = 'directions.places';
 /** `/status.features`: branches outside the directions (`offLine.branches`, `GET|POST /offline…`). */
 export const OFF_LINE_BRANCHES_FEATURE = 'offLine.branches';
 /** `/status.features`: a task's own place in the queue (`POST /queue/<T…>`, `queue[].why`). */
@@ -3275,6 +3279,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(readAgainSaid(r.readAgain, features) ? { readAgain: readAgainSaid(r.readAgain, features)! } : {}),
         ...(waitingProposalsSaid(r.waiting, features) ? { sourceProposals: waitingProposalsSaid(r.waiting, features)! } : {}),
         ...qualitySaid(r, features),
+        ...directionsRevSaid(r, features),
         ...verifyStatusSaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
@@ -3343,6 +3348,13 @@ function qualitySaid(r: Record<string, unknown>, features: string[] | null): Pic
     const q = features?.includes('quality.read') ? asRecord(r.quality) : null;
     const rev = q ? cleanText(q.rev, 128) : '';
     return rev ? { qualityRev: rev } : {};
+}
+
+/** `directions.rev`, read only when `features` names `directions.places`. */
+function directionsRevSaid(r: Record<string, unknown>, features: string[] | null): Pick<LiveStatus, 'directionsRev'> {
+    const d = features?.includes(DIRECTIONS_PLACES_FEATURE) ? asRecord(r.directions) : null;
+    const rev = d ? cleanText(d.rev, 128) : '';
+    return rev ? { directionsRev: rev } : {};
 }
 
 /** `experiments` and `history.rev`, each read only when `features` names it. */

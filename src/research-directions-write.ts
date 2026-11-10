@@ -21,6 +21,7 @@ import {
     sanitizeDirections, sanitizeOffLine, sanitizeOffLineBranch, sanitizeQueue, withAppVersion,
 } from './research-link.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
+import type { ResearchBranch, ResearchLine, ResearchPlace } from './types.js';
 
 /**
  * Why nothing was written:
@@ -367,8 +368,89 @@ export type DirectionPeople = ReadonlyMap<string, readonly string[]>;
 /** Most persons read from one answer. */
 const MAX_PEOPLE = 50_000;
 
-/** `{ people: { "P0012": ["G0003", …] }, head }`, checked. */
-export function directionPeopleOf(r: Record<string, unknown>): { people: Map<string, string[]> } | null {
+/**
+ * Where each person stands in the lines, read live (`directions.places`,
+ * spec 073 §16.9): person (REFN) → places, the narrowest first; the lines in
+ * the research's order; the side branches; the print they were read at.
+ */
+export interface DirectionPlaces {
+    places: ReadonlyMap<string, readonly ResearchPlace[]>;
+    lines: readonly ResearchLine[];
+    branches: readonly ResearchBranch[];
+    rev: string;
+}
+
+const PLACE_ROLES: readonly string[] = ['line', 'partner', 'branch', 'island'];
+const LINE_KINDS: readonly string[] = ['ancestors', 'descendants', 'person', 'question'];
+const LINE_STATES: readonly string[] = ['active', 'paused', 'done'];
+const BRANCH_RELS: readonly string[] = ['sibling', 'partner', 'child', 'parent', 'other'];
+const BRANCH_MODES: readonly string[] = ['never', 'occasional', 'last', 'normal'];
+
+const oneOf = <T extends string>(v: unknown, list: readonly string[]): T | undefined =>
+    typeof v === 'string' && list.includes(v) ? v as T : undefined;
+
+/** `places`, `lines`, `branches` and `rev` of `/directions/people`, checked; null when the answer has no `places`. */
+export function directionPlacesOf(r: Record<string, unknown>): DirectionPlaces | null {
+    const p = asRecord(r.places);
+    if (!p) return null;
+    const places = new Map<string, ResearchPlace[]>();
+    for (const [refn, list] of Object.entries(p).slice(0, MAX_PEOPLE)) {
+        const person = researchPersonRef(refn);
+        if (!person || !Array.isArray(list)) continue;
+        const out: ResearchPlace[] = [];
+        const seen = new Set<string>();
+        for (const raw of list.slice(0, 50)) {
+            const x = asRecord(raw);
+            const role = oneOf<ResearchPlace['role']>(x?.role, PLACE_ROLES);
+            if (!x || !role) continue;
+            const line = researchDirectionRef(x.line);
+            const branch = researchBranchRef(x.branch);
+            if ((role === 'line' || role === 'partner') && !line) continue;
+            const key = `${role}|${line ?? ''}|${branch ?? ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({ role, ...(line ? { line } : {}), ...(branch ? { branch } : {}) });
+        }
+        if (out.length > 0) places.set(person, out);
+    }
+    const lines: ResearchLine[] = [];
+    const lineIds = new Set<string>();
+    for (const raw of Array.isArray(r.lines) ? r.lines.slice(0, 500) : []) {
+        const x = asRecord(raw);
+        const id = researchDirectionRef(x?.id);
+        const name = cleanText(x?.name, 200);
+        if (!x || !id || !name || lineIds.has(id)) continue;
+        lineIds.add(id);
+        const kind = oneOf<NonNullable<ResearchLine['kind']>>(x.direction, LINE_KINDS);
+        const focus = researchPersonRef(x.focus);
+        const state = oneOf<NonNullable<ResearchLine['state']>>(x.state, LINE_STATES);
+        lines.push({ id, name, ...(kind ? { kind } : {}), ...(focus ? { focus } : {}), ...(state ? { state } : {}) });
+    }
+    const branches: ResearchBranch[] = [];
+    const branchIds = new Set<string>();
+    for (const raw of Array.isArray(r.branches) ? r.branches.slice(0, 2000) : []) {
+        const x = asRecord(raw);
+        const id = researchBranchRef(x?.id);
+        if (!x || !id || branchIds.has(id)) continue;
+        branchIds.add(id);
+        const person = researchPersonRef(x.person) ?? id.slice(2);
+        const via = asRecord(x.via);
+        const viaPerson = researchPersonRef(via?.person);
+        const rel = oneOf<NonNullable<ResearchBranch['via']>['rel'] & string>(via?.rel, BRANCH_RELS);
+        const nearest = researchDirectionRef(x.nearest);
+        const line = researchDirectionRef(x.line);
+        const mode = oneOf<NonNullable<ResearchBranch['mode']>>(x.mode, BRANCH_MODES);
+        branches.push({
+            id, person,
+            ...(viaPerson ? { via: { person: viaPerson, ...(rel ? { rel } : {}) } } : {}),
+            ...(nearest ? { nearest } : {}), ...(line ? { line } : {}), ...(mode ? { mode } : {}),
+        });
+    }
+    return { places, lines, branches, rev: cleanText(r.rev, 128) };
+}
+
+/** `{ people: { "P0012": ["G0003", …] }, head }`, checked; with `places` (`directions.places`) those too. */
+export function directionPeopleOf(r: Record<string, unknown>): { people: Map<string, string[]>; places?: DirectionPlaces } | null {
     const p = asRecord(r.people);
     if (!p) return null;
     const people = new Map<string, string[]>();
@@ -378,28 +460,48 @@ export function directionPeopleOf(r: Record<string, unknown>): { people: Map<str
         const ids = [...new Set(list.slice(0, 50).map(researchDirectionRef).filter((x): x is string => !!x))];
         if (ids.length > 0) people.set(person, ids);
     }
-    return { people };
+    const places = directionPlacesOf(r);
+    return { people, ...(places ? { places } : {}) };
 }
 
-/** The last answer per bridge, by the research's head it was read at. */
-const peopleCache = new Map<string, { head: string; people: DirectionPeople }>();
+/** The last answer per bridge, by the research's head (and the places' print) it was read at. */
+const peopleCache = new Map<string, { head: string; rev: string; people: DirectionPeople; places: DirectionPlaces | null }>();
+
+/** Who wants to know when the places of a bridge were read anew. */
+const placesListeners = new Set<(base: string) => void>();
 
 /**
  * Who is in which direction (`GET /directions/people`), read again only when
  * the research's head moved since the last answer (`head`: the head the
- * status says now; '' = not known, always read).
+ * status says now; '' = not known, always read) or the places' print did
+ * (`rev`: `/status.directions.rev`; '' = not said, the head decides).
  */
-export async function fetchDirectionPeople(base: string, head: string): Promise<BridgeWriteResult<{ people: DirectionPeople }>> {
+export async function fetchDirectionPeople(base: string, head: string, rev = ''): Promise<BridgeWriteResult<{ people: DirectionPeople }>> {
     const kept = peopleCache.get(base);
-    if (kept && head && kept.head === head) return { ok: true, head: kept.head, people: kept.people };
+    if (kept && head && kept.head === head && (!rev || kept.rev === rev)) return { ok: true, head: kept.head, people: kept.people };
     const r = await researchBridgeWrite(base, 'GET', 'directions/people', undefined, directionPeopleOf);
-    if (r.ok) peopleCache.set(base, { head: r.head || head, people: r.people });
+    if (r.ok) {
+        const places = r.places ?? null;
+        peopleCache.set(base, { head: r.head || head, rev: places?.rev || rev, people: r.people, places });
+        if (places || kept?.places) for (const fn of placesListeners) fn(base);
+    }
     return r;
 }
 
 /** The people kept for a bridge (null: never read). */
 export function directionPeopleKept(base: string): DirectionPeople | null {
     return peopleCache.get(base)?.people ?? null;
+}
+
+/** Where people stand in the lines, as last read from a bridge (null: never read, or the research does not say). */
+export function directionPlacesKept(base: string): DirectionPlaces | null {
+    return peopleCache.get(base)?.places ?? null;
+}
+
+/** Be told when a bridge's places were read anew (the table's line column); returns the way to stop. */
+export function onDirectionPlaces(fn: (base: string) => void): () => void {
+    placesListeners.add(fn);
+    return () => { placesListeners.delete(fn); };
 }
 
 /** Forget what was read (tests; a bridge that went away). */

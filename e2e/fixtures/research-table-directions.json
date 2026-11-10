@@ -1,0 +1,30 @@
+{
+  "people": {
+    "P0001": ["G0001"], "P0003": ["G0001"], "P0004": ["G0001"], "P0005": ["G0001"], "P0009": ["G0001"],
+    "P0002": ["G0002"], "P0012": ["G0002"], "P0013": ["G0002"], "P0010": ["G0002"]
+  },
+  "places": {
+    "P0001": [{ "line": "G0001", "role": "line" }],
+    "P0003": [{ "line": "G0001", "role": "line" }],
+    "P0004": [{ "line": "G0001", "role": "partner" }],
+    "P0005": [{ "line": "G0001", "role": "line" }],
+    "P0006": [{ "role": "branch", "branch": "B-P0006" }],
+    "P0007": [{ "role": "branch", "branch": "B-P0006" }],
+    "P0008": [{ "role": "branch", "branch": "B-P0006" }],
+    "P0009": [{ "line": "G0001", "role": "branch", "branch": "B-P0009" }],
+    "P0002": [{ "line": "G0002", "role": "line" }],
+    "P0012": [{ "line": "G0002", "role": "partner" }],
+    "P0013": [{ "line": "G0002", "role": "line" }],
+    "P0010": [{ "line": "G0002", "role": "line" }]
+  },
+  "lines": [
+    { "id": "G0001", "name": "Předci Karla Pivoňkovského", "direction": "ancestors", "focus": "P0001", "state": "active" },
+    { "id": "G0002", "name": "Klikvové z Rebarborova", "direction": "descendants", "focus": "P0002", "state": "active" }
+  ],
+  "branches": [
+    { "id": "B-P0006", "person": "P0006", "via": { "person": "P0003", "rel": "sibling" }, "nearest": "G0001", "mode": "occasional" },
+    { "id": "B-P0009", "person": "P0009", "via": { "person": "P0004", "rel": "sibling" }, "nearest": "G0001", "line": "G0001", "mode": "last" }
+  ],
+  "rev": "d1r-0007",
+  "head": "abcdef7"
+}

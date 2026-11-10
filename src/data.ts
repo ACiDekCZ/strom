@@ -286,6 +286,11 @@ export function migrateData(data: unknown): StromData {
     if (typeof d.researchAsOf === 'string') {
         result.researchAsOf = d.researchAsOf;
     }
+    // The research's lines and side branches (spec 073 §16.9): kept as read from its file.
+    const dirs = d.researchDirections as StromData['researchDirections'] | undefined;
+    if (dirs && typeof dirs === 'object' && Array.isArray(dirs.lines) && Array.isArray(dirs.branches)) {
+        result.researchDirections = { complete: dirs.complete === true, lines: dirs.lines, branches: dirs.branches };
+    }
 
     // v14: manual lineage corrections; ids of people no longer in the tree go.
     if (d.lineageOverrides && typeof d.lineageOverrides === 'object') {

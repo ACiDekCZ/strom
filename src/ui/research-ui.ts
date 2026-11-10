@@ -148,6 +148,8 @@ export interface LiveSession {
     name: string;
     /** The research's commit the followed tree holds (the loaded file's head with `ged.stale`). */
     head: string;
+    /** `/status.directions.rev`: the print of who stands where in the lines (`directions.places`). */
+    directionsRev?: string;
     /**
      * The tree shown is an older one the bridge gave at once (`tree.ged?stale=1`):
      * a newer version is being built, loaded when it comes (false: none).
@@ -3242,6 +3244,7 @@ export const researchUiMethods = uiModule({
         s.lastIntake = status.lastIntake;
         // The latest status decides: without its count (an older research, a bridge just started) the history counts.
         s.recent = status.recent;
+        s.directionsRev = status.directionsRev;
         if (status.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
         this.refreshActionMenuBadges();
         if (status.head && status.head !== s.head) {

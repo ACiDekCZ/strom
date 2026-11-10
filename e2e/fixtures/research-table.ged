@@ -1,0 +1,289 @@
+0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.30.0
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 DATE 10 NOV 2026
+1 _STROM_TREE 7d3f2a10-5c4b-4e8a-9b61-1f0e2d3c4b5a
+1 _STROM_ASOF 2026-11-10
+1 NOTE Výzkum Pivoňkovských
+1 _STROM_DIRECTIONS Y
+1 _STROM_DIRECTION G0001
+2 NAME Předci Karla Pivoňkovského
+2 TYPE ancestors
+2 _FOCUS P0001
+2 STAT active
+2 _FUTURE something later
+1 _STROM_DIRECTION G0002
+2 NAME Klikvové z Rebarborova
+2 TYPE descendants
+2 _FOCUS P0002
+2 STAT paused
+1 _STROM_BRANCH B-P0006
+2 _VIA P0003
+3 TYPE sibling
+2 _NEAREST G0001
+2 _MODE occasional
+1 _STROM_BRANCH B-P0009
+2 _VIA P0004
+3 TYPE sibling
+2 _NEAREST G0001
+2 _DIRECTION G0001
+2 _MODE last
+0 @S0014@ SOUR
+1 TITL Matrika N Lipová Stráň 1784–1830
+1 REFN S0014
+0 @L0001@ _STROM_PLACE
+1 NAME Zelená Hora pod Klikvovým
+1 _STROM_JUR parish Lipová Stráň
+2 DATE FROM 1784
+1 _STROM_BY research
+0 @L0002@ _STROM_PLACE
+1 NAME Horní Ouhrabka
+1 _STROM_UNLOCATED No such village in the gazetteers
+2 _STROM_NEEDS farnost
+1 _STROM_BY research
+0 @I1@ INDI
+1 NAME Karel /Pivoňkovský/
+1 SEX M
+1 REFN P0001
+1 BIRT
+2 DATE 4 MAY 1880
+2 PLAC Lipová Stráň
+1 FAMC @F0001@
+1 _STROM_DIRECTION G0001
+2 TYPE line
+1 _STROM_WAIT T0101
+2 TYPE letter
+2 TITL Dopis faře o křtu Karla
+2 _ON P0001
+2 _GROUP Farní úřad Lipová Stráň
+3 TYPE office
+3 _KEY fu-lipova-stran
+2 STAT sent
+2 _SENT 2026-10-03
+2 _PRIO 2
+1 _STROM_ADDED 2026-11-09T14:20:00Z
+0 @I2@ INDI
+1 NAME Vendelín /Klikva/
+1 SEX M
+1 REFN P0002
+1 BIRT
+2 DATE 1820
+2 PLAC Rebarborov
+1 FAMS @F0004@
+1 _STROM_DIRECTION G0002
+2 TYPE line
+1 _STROM_ADDED 2026-10-01T10:00:00Z
+0 @I3@ INDI
+1 NAME Josef /Pivoňkovský/
+1 SEX M
+1 REFN P0003
+1 BIRT
+2 DATE 1850
+2 PLAC Lipová Stráň
+1 FAMC @F0002@
+1 FAMS @F0001@
+1 _STROM_DIRECTION G0001
+2 TYPE line
+1 _STROM_WAIT T0102
+2 TYPE images
+2 TITL Snímky matriky N 1840–1860
+2 _GROUP SOA Zelený Brod
+3 TYPE archive
+3 _KEY soa-zeleny-brod
+3 _URL https://example.org/soa
+2 STAT todo
+2 _PRIO 1
+1 _STROM_WAIT T0103
+2 TYPE check
+2 TITL Ověřit sňatek
+2 _GROUP SOA Zelený Brod
+3 TYPE archive
+3 _KEY soa-zeleny-brod
+2 STAT todo
+2 _PRIO 3
+0 @I4@ INDI
+1 NAME Rozálie /Hřebíčková/
+1 SEX F
+1 REFN P0004
+1 BIRT
+2 DATE 1852
+2 PLAC Rebarborov
+1 FAMS @F0001@
+1 _STROM_DIRECTION G0001
+2 TYPE partner
+1 _STORY
+2 TITL Rozálie z Rebarborova
+2 STAT final
+2 TEXT Rozálie se narodila v Rebarborově.
+2 _DRAFT
+3 TITL Rozálie z Rebarborova
+3 TEXT Rozálie se narodila v Rebarborově roku 1852.
+3 _AT 2026-11-09
+0 @I5@ INDI
+1 NAME Matěj /Pivoňkovský/
+1 SEX M
+1 REFN P0005
+1 BIRT
+2 DATE 1821
+2 PLAC Horní Ouhrabka
+3 _STROM_PLACE @L0002@
+2 SOUR @S0014@
+2 _STROM_ORIGIN research
+2 _STROM_WAS 1822
+3 _PART DATE
+1 FAMS @F0002@
+1 _STROM_DIRECTION G0001
+2 TYPE line
+1 _STROM_EDGE parents
+2 _SCOPE in
+2 _RESEARCH G0001
+2 _GEN 3
+2 _END unsearched
+2 _NEXT queued
+2 _EST 1821
+3 PLAC Horní Ouhrabka
+3 _BASIS MARR 1845
+2 DATE FROM 1816 TO 1826
+2 _BOOK B0001
+3 TITL Matrika N Lipová Stráň 1784–1830
+3 DATE FROM 1784 TO 1830
+3 _ACCESS onsite
+2 _BOOK B0002
+3 TITL Matrika O Lipová Stráň 1800–1850
+3 DATE FROM 1800 TO 1850
+3 _ACCESS online-free
+0 @I6@ INDI
+1 NAME Marie /Pivoňkovská/
+1 SEX F
+1 REFN P0006
+1 BIRT
+2 DATE 1853
+2 PLAC Lipová Stráň
+1 FAMC @F0002@
+1 FAMS @F0003@
+1 _STROM_DIRECTION
+2 TYPE branch
+2 _BRANCH B-P0006
+1 _STROM_CONFLICT X0001
+2 TYPE BIRT
+2 TITL Rok narození Marie
+2 STAT open
+2 _STROM_TAKE Y
+2 VAL 1853
+3 _STROM_SIDE user
+2 VAL 1854
+3 SOUR @S0014@
+3 _STROM_SIDE research
+0 @I7@ INDI
+1 NAME Ignác /Šťovík/
+1 SEX M
+1 REFN P0007
+1 BIRT
+2 DATE 1849
+2 PLAC Pelyňkov
+1 FAMS @F0003@
+1 _STROM_DIRECTION
+2 TYPE branch
+2 _BRANCH B-P0006
+0 @I8@ INDI
+1 NAME Anežka /Šťovíková/
+1 SEX F
+1 REFN P0008
+1 BIRT
+2 DATE 1878
+2 PLAC Pelyňkov
+1 FAMC @F0003@
+1 _STROM_DIRECTION
+2 TYPE branch
+2 _BRANCH B-P0006
+0 @I9@ INDI
+1 NAME Vojtěch /Brčál/
+1 SEX M
+1 REFN P0009
+1 BIRT
+2 DATE 1855
+2 PLAC Rebarborov
+1 _STROM_DIRECTION G0001
+2 TYPE branch
+2 _BRANCH B-P0009
+0 @I10@ INDI
+1 NAME Hana /Kvítková/
+1 SEX F
+1 REFN P0010
+1 BIRT
+2 DATE 1860
+2 PLAC Dolní Pivoňkov
+1 _STROM_DIRECTION
+2 TYPE island
+2 _FUTURE kept aside
+0 @I11@ INDI
+1 NAME Barbora /Zábrdlová/
+1 SEX F
+1 REFN P0011
+1 BIRT
+2 DATE 1858
+2 PLAC Dolní Pivoňkov
+1 _STROM_HYPO H0002
+2 TITL Byla Barbora dcerou Matěje?
+2 STAT decided
+2 _CHOSEN B
+2 _BY agent
+2 DECI Křest neodpovídá.
+2 _AT 2026-11-08
+1 _STROM_ADDED 2026-11-08T09:00:00Z
+0 @I12@ INDI
+1 NAME Kateřina /Klikvová/
+1 SEX F
+1 REFN P0012
+1 BIRT
+2 DATE 1824
+2 PLAC Rebarborov
+1 FAMS @F0004@
+1 _STROM_DIRECTION G0002
+2 TYPE partner
+0 @I13@ INDI
+1 NAME Václav /Klikva/
+1 SEX M
+1 REFN P0013
+1 BIRT
+2 DATE 1846
+2 PLAC Zelená Hora pod Klikvovým
+3 _STROM_PLACE @L0001@
+1 FAMC @F0004@
+1 _STROM_DIRECTION G0002
+2 TYPE line
+1 _STROM_HYPO H0003
+2 TITL Je Václav synem Vendelína?
+2 STAT open
+1 _STROM_SEARCHED
+2 TITL Matrika N Zelený Brod 1840–1850
+2 DATE FROM 1840 TO 1850
+2 RESN none
+1 _STROM_SEARCHED
+2 TITL Matrika N Rebarborov 1840–1850
+2 DATE FROM 1840 TO 1850
+2 RESN none
+0 @F0001@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+1 CHIL @I1@
+1 REFN F0001
+0 @F0002@ FAM
+1 HUSB @I5@
+1 CHIL @I3@
+1 CHIL @I6@
+1 REFN F0002
+0 @F0003@ FAM
+1 HUSB @I7@
+1 WIFE @I6@
+1 CHIL @I8@
+1 REFN F0003
+0 @F0004@ FAM
+1 HUSB @I2@
+1 WIFE @I12@
+1 CHIL @I13@
+1 REFN F0004
+0 TRLR

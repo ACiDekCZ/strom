@@ -149,7 +149,8 @@ const FACT_SCOPES: readonly string[] = ['living', 'off-tree'];
  * of the tree (what is missing and why, the window searched, the books, the
  * estimate, the hypotheses and the family outside the tree) and drops how
  * the research works on it: what comes next, the queue, tasks, searches,
- * sessions and their cost, the direction, a story's waiting new version.
+ * sessions and their cost, the direction, a story's waiting new version,
+ * the lines and side branches and who stands where in them, the waits.
  * That is the research's own state, stale in any copy and meaningless to
  * anyone else; the research tree gets it back with its next load. Mutates and returns `data` (a fresh copy).
  */
@@ -181,7 +182,12 @@ export function stripResearchWork(data: StromData): StromData {
             };
         }
         if (r.island) r.island = { size: r.island.size, hypos: r.island.hypos };
+        // Where the person stands in the lines, what is waited for and when the research added them: its workshop.
+        delete r.places;
+        delete r.waits;
+        delete r.added;
     }
+    delete data.researchDirections;
     return data;
 }
 

@@ -59,6 +59,9 @@ import {
     ResearchHypothesisVariant,
     ResearchVariantLink,
     ResearchIsland,
+    ResearchDirections,
+    ResearchPlace,
+    ResearchWait,
     YearSpan,
     SourceImageHeld,
     FactPart,
@@ -212,6 +215,11 @@ interface RawResearch {
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
     edge?: RawResearchBlock;
     island?: RawResearchBlock;
+    /** Each `1 _STROM_DIRECTION` (places in the lines) and `1 _STROM_WAIT` block, as written. */
+    directions?: RawResearchBlock[];
+    waits?: RawResearchBlock[];
+    /** `1 _STROM_ADDED`, as written. */
+    added?: string;
 }
 
 interface RawResearchBlock {
@@ -247,7 +255,7 @@ interface ResearchRefs {
 
 /** The research block being read, the level-2 line inside it and the level-3 line under that. */
 interface OpenResearch {
-    kind: 'conflict' | 'hypo' | 'searched' | 'edge' | 'island';
+    kind: 'conflict' | 'hypo' | 'searched' | 'edge' | 'island' | 'direction' | 'wait';
     sub: string | null;
     sub3?: string | null;
 }
@@ -439,6 +447,12 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
     if (edge) out.edge = edge;
     const island = raw.island ? researchIslandFromLines(raw.island) : null;
     if (island) out.island = island;
+    const places = researchPlacesFromLines(raw.directions ?? []);
+    if (places.length > 0) out.places = places;
+    const waits = (raw.waits ?? []).map(researchWaitFromLines).filter((w): w is ResearchWait => !!w);
+    if (waits.length > 0) out.waits = waits;
+    const added = raw.added ? researchInstant(raw.added) : undefined;
+    if (added) out.added = added;
     return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -666,6 +680,154 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
     edge.books = edge.books.filter(b => b.title);
     edge.tasks = edge.tasks.filter(t => t.title.trim()).map(t => ({ ...t, title: t.title.trim() }));
     return edge;
+}
+
+/** A side branch's id: B-P… (the branch of person P…). */
+const BRANCH_ID = /^B-(P\d{1,7})$/;
+
+/** An ISO instant or day as the research wrote it (normalised by Date); undefined otherwise. */
+function researchInstant(value: string): string | undefined {
+    const v = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(v)) return undefined;
+    const t = Date.parse(v.replace(' ', 'T'));
+    if (Number.isNaN(t)) return undefined;
+    return v.length === 10 ? v : new Date(t).toISOString();
+}
+
+/** A value from a closed list (lower case), undefined when not in it. */
+function researchOneOf<T extends string>(value: string, list: readonly T[]): T | undefined {
+    const v = value.trim().toLowerCase();
+    return (list as readonly string[]).includes(v) ? v as T : undefined;
+}
+
+const PLACE_ROLES = ['line', 'partner', 'branch', 'island'] as const;
+
+/**
+ * The person's `1 _STROM_DIRECTION [G…]` blocks → their places in the lines,
+ * the narrowest first, as written. A block without a known role goes, so does
+ * a line role without a line; a repeated place is kept once.
+ */
+export function researchPlacesFromLines(blocks: RawResearchBlock[]): ResearchPlace[] {
+    const out: ResearchPlace[] = [];
+    const seen = new Set<string>();
+    for (const block of blocks.slice(0, 50)) {
+        const line = block.value.trim();
+        let role: ResearchPlace['role'] | undefined;
+        let branch: string | undefined;
+        for (const { level, tag, value } of block.lines) {
+            if (level !== 2) continue;
+            if (tag === 'TYPE') role ??= researchOneOf(value, PLACE_ROLES);
+            else if (tag === '_BRANCH' && BRANCH_ID.test(value.trim())) branch ??= value.trim();
+        }
+        if (!role) continue;
+        const lineOk = RESEARCH_ID.G.test(line);
+        if ((role === 'line' || role === 'partner') && !lineOk) continue;
+        const place: ResearchPlace = { role, ...(lineOk ? { line } : {}), ...(branch ? { branch } : {}) };
+        const key = `${place.role}|${place.line ?? ''}|${place.branch ?? ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(place);
+    }
+    return out;
+}
+
+const WAIT_TYPES = ['letter', 'family', 'web', 'images', 'check', 'permission', 'other'] as const;
+const WAIT_GROUP_TYPES = ['archive', 'office', 'family', 'web', 'other'] as const;
+
+/** One `1 _STROM_WAIT T…` block → the wait (null without a task id). Unknown tags are skipped. */
+export function researchWaitFromLines(block: RawResearchBlock): ResearchWait | null {
+    const id = block.value.trim();
+    if (!RESEARCH_ID.T.test(id)) return null;
+    const wait: ResearchWait = { id };
+    let sub = '';
+    for (const { level, tag, value } of block.lines) {
+        const v = value.trim();
+        if (level === 2) {
+            sub = tag;
+            switch (tag) {
+                case 'TYPE': { const t = researchOneOf(v, WAIT_TYPES); if (t) wait.type = t; break; }
+                case 'TITL': if (v) wait.title = v; break;
+                case '_ON': if (v) wait.on = v; break;
+                case '_GROUP': if (v) wait.group = { name: v }; break;
+                case 'STAT': { const t = researchOneOf(v, ['todo', 'sent'] as const); if (t) wait.stat = t; break; }
+                case '_SENT': { const at = researchInstant(v); if (at) wait.sent = at; break; }
+                case '_PRIO': { const n = researchInt(v, 0, 999); if (n !== undefined) wait.prio = n; break; }
+            }
+        } else if (level === 3) {
+            if ((tag === 'CONC' || tag === 'CONT') && (sub === 'TITL' || sub === '_ON')) {
+                const key = sub === 'TITL' ? 'title' : 'on';
+                const joined = (wait[key] ?? '') + (tag === 'CONT' ? ' ' : '') + value;
+                if (joined.trim()) wait[key] = joined;
+            } else if (sub === '_GROUP' && wait.group) {
+                if (tag === 'TYPE') { const t = researchOneOf(v, WAIT_GROUP_TYPES); if (t) wait.group.type = t; }
+                else if (tag === '_KEY' && v) wait.group.key = v;
+                else if (tag === '_URL' && /^https?:\/\//i.test(v)) wait.group.url = v;
+            }
+        }
+    }
+    return wait;
+}
+
+const LINE_KINDS = ['ancestors', 'descendants', 'person', 'question'] as const;
+const LINE_STATES = ['active', 'paused', 'done'] as const;
+const BRANCH_RELS = ['sibling', 'partner', 'child', 'parent', 'other'] as const;
+const BRANCH_MODES = ['never', 'occasional', 'last', 'normal'] as const;
+
+/**
+ * The header's `1 _STROM_DIRECTION G…` and `1 _STROM_BRANCH B-P…` blocks
+ * (tag, value, lines) → the research's lines and side branches, in the
+ * file's order. A line without a name, a repeated id and unknown tags go.
+ */
+export function researchDirectionsFromHead(complete: boolean, blocks: (RawResearchBlock & { tag: string })[]): ResearchDirections {
+    const lines: ResearchDirections['lines'] = [];
+    const branches: ResearchDirections['branches'] = [];
+    const seen = new Set<string>();
+    for (const block of blocks.slice(0, 2000)) {
+        const id = block.value.trim();
+        if (seen.has(id)) continue;
+        if (block.tag === '_STROM_DIRECTION' && RESEARCH_ID.G.test(id)) {
+            let name = '';
+            const line: ResearchDirections['lines'][number] = { id, name };
+            let sub = '';
+            for (const { level, tag, value } of block.lines) {
+                const v = value.trim();
+                if (level === 2) {
+                    sub = tag;
+                    if (tag === 'NAME') name = value;
+                    else if (tag === 'TYPE') { const k = researchOneOf(v, LINE_KINDS); if (k) line.kind = k; }
+                    else if (tag === '_FOCUS' && RESEARCH_ID.P.test(v)) line.focus = v;
+                    else if (tag === 'STAT') { const st = researchOneOf(v, LINE_STATES); if (st) line.state = st; }
+                } else if (level === 3 && sub === 'NAME' && (tag === 'CONC' || tag === 'CONT')) {
+                    name += (tag === 'CONT' ? ' ' : '') + value;
+                }
+            }
+            line.name = name.trim();
+            if (!line.name) continue;
+            seen.add(id);
+            lines.push(line);
+        } else if (block.tag === '_STROM_BRANCH') {
+            const m = BRANCH_ID.exec(id);
+            if (!m) continue;
+            const branch: ResearchDirections['branches'][number] = { id, person: m[1] };
+            let sub = '';
+            for (const { level, tag, value } of block.lines) {
+                const v = value.trim();
+                if (level === 2) {
+                    sub = tag;
+                    if (tag === '_VIA' && RESEARCH_ID.P.test(v)) branch.via = { person: v };
+                    else if (tag === '_NEAREST' && RESEARCH_ID.G.test(v)) branch.nearest = v;
+                    else if (tag === '_DIRECTION' && RESEARCH_ID.G.test(v)) branch.line = v;
+                    else if (tag === '_MODE') { const mo = researchOneOf(v, BRANCH_MODES); if (mo) branch.mode = mo; }
+                } else if (level === 3 && sub === '_VIA' && tag === 'TYPE' && branch.via) {
+                    const rel = researchOneOf(v, BRANCH_RELS);
+                    if (rel) branch.via.rel = rel;
+                }
+            }
+            seen.add(id);
+            branches.push(branch);
+        }
+    }
+    return { complete, lines, branches };
 }
 
 /** The lines under one `1 _STROM_ISLAND n` → the island (null without a size). */
@@ -1407,6 +1569,8 @@ export interface ParsedGedcom {
     stromResearch?: boolean;
     /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
     researchAsOf?: string;
+    /** Header `1 _STROM_DIRECTIONS`, `_STROM_DIRECTION`, `_STROM_BRANCH`: the research's lines (research files only). */
+    researchDirections?: ResearchDirections;
     /** Header `1 SOUR STROM`: written by the Strom app. */
     stromApp?: boolean;
     /** What the header says of the program that wrote the file (HEAD > SOUR, DATE, FILE). */
@@ -2739,6 +2903,10 @@ export function parseGedcom(content: string): ParsedGedcom {
     let openHeadImport: Record<string, string> | null = null;
     let openHeadImportField: string | null = null;
     let researchAsOf = '';
+    // The header's lines and side branches (read only for a research file, decided at the end).
+    let headDirectionsComplete = false;
+    const headDirectionBlocks: (RawResearchBlock & { tag: string })[] = [];
+    let openHeadDirection: (RawResearchBlock & { tag: string }) | null = null;
     let lineageMarker = false;
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
@@ -3361,6 +3529,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentCitationId = null; currentCitationSlot = null; currentCitation = null;
             currentPlaceValue = null;
             inHeader = recordType === 'HEAD';
+            openHeadDirection = null;
             inNoteRecord = recordType === 'NOTE' || recordType === 'SNOTE';
             inSurnameNote = false;
             if (recordType !== 'REPO') currentRepoId = null;
@@ -3401,7 +3570,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (tag === 'SOUR' && value.trim() === 'STROM_RESEARCH') stromResearch = true;
                 else if (inStromSour) stromApp = true;
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
+                else if (tag === '_STROM_DIRECTIONS') headDirectionsComplete = value.trim().toUpperCase() === 'Y';
                 else if (tag === '_STROM_LINES') lineageMarker = true;
+                openHeadDirection = null;
+                if ((tag === '_STROM_DIRECTION' || tag === '_STROM_BRANCH') && headDirectionBlocks.length < 5000) {
+                    openHeadDirection = { tag, value, lines: [] };
+                    headDirectionBlocks.push(openHeadDirection);
+                }
+            } else if (openHeadDirection && level >= 2) {
+                openHeadDirection.lines.push({ level, tag, value });
             } else if (level === 2 && inStromSour && tag === 'VERS') {
                 stromAppVersion = value.trim();
             } else if (inSurnameNote && level === 2 && tag === 'CONT') {
@@ -3648,7 +3825,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case '_STROM_HYPO':
                         case '_STROM_SEARCHED':
                         case '_STROM_EDGE':
-                        case '_STROM_ISLAND': {
+                        case '_STROM_ISLAND':
+                        case '_STROM_DIRECTION':
+                        case '_STROM_WAIT':
+                        case '_STROM_ADDED': {
                             // What Strom Research knows about the person. Only
                             // its own files are trusted with it; elsewhere the
                             // tag is as unknown as it always was.
@@ -3666,6 +3846,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (tag === '_STROM_EDGE') research.edge = block;
                                 else research.island = block;
                                 currentResearch = { kind: tag === '_STROM_EDGE' ? 'edge' : 'island', sub: null };
+                            } else if (tag === '_STROM_DIRECTION' || tag === '_STROM_WAIT') {
+                                // Several per person: each its own block.
+                                const block = { value, lines: [] };
+                                if (tag === '_STROM_DIRECTION') (research.directions ??= []).push(block);
+                                else (research.waits ??= []).push(block);
+                                currentResearch = { kind: tag === '_STROM_DIRECTION' ? 'direction' : 'wait', sub: null };
+                            } else if (tag === '_STROM_ADDED') {
+                                research.added = value.trim();
+                                currentResearch = null;
                             } else {
                                 research.searched.push({ title: '', date: '', resn: '', at: '' });
                                 currentResearch = { kind: 'searched', sub: null };
@@ -3877,6 +4066,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 const open = currentResearch;
                 if (open.kind === 'edge' || open.kind === 'island') {
                     (open.kind === 'edge' ? research.edge : research.island)?.lines.push({ level, tag, value });
+                } else if (open.kind === 'direction' || open.kind === 'wait') {
+                    const blocks = open.kind === 'direction' ? research.directions : research.waits;
+                    blocks?.[blocks.length - 1]?.lines.push({ level, tag, value });
                 } else if (open.kind === 'conflict') {
                     const c = research.conflicts[research.conflicts.length - 1];
                     const lastValue = (): RawResearchValue | undefined =>
@@ -4637,7 +4829,12 @@ export function parseGedcom(content: string): ParsedGedcom {
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(lineageMarker ? { lineageMarker } : {}),
-        ...(stromResearch ? { stromResearch, ...(researchAsOf ? { researchAsOf } : {}) } : {}),
+        ...(stromResearch ? {
+            stromResearch,
+            ...(researchAsOf ? { researchAsOf } : {}),
+            ...(headDirectionsComplete || headDirectionBlocks.length > 0
+                ? { researchDirections: researchDirectionsFromHead(headDirectionsComplete, headDirectionBlocks) } : {}),
+        } : {}),
         ...(stromApp ? { stromApp } : {}),
         head: {
             ...((headSourName || headSourValue) ? { program: headSourName || headSourValue } : {}),
@@ -5707,6 +5904,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 ? { surnameRejections: (gedcom.surnameRejections ?? []).map(forms => ({ forms })) } : {}),
             ...(gedcom.stromResearch && gedcom.researchAsOf && researchIsoDate(gedcom.researchAsOf)
                 ? { researchAsOf: researchIsoDate(gedcom.researchAsOf) } : {}),
+            ...(gedcom.stromResearch && gedcom.researchDirections ? { researchDirections: gedcom.researchDirections } : {}),
             // Like the surname markers: with the header mark the file's list
             // (even an empty one) is what it says; without it, nothing said.
             ...(lineageOverrides || gedcom.lineageMarker ? { lineageOverrides: lineageOverrides ?? {} } : {}),

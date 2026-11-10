@@ -115,6 +115,11 @@ function fullTree(): Required<StromData> {
             sort: [{ col: 'bDate', dir: -1 }], unions: { collapsed: true, except: [ALICE] }, updated: '2026-11-10T09:00:00.000Z',
         }],
         researchAsOf: '2026-09-20',
+        researchDirections: {
+            complete: true,
+            lines: [{ id: 'G0001', name: 'Line one', kind: 'ancestors', focus: 'P0001', state: 'active' }],
+            branches: [{ id: 'B-P0004', person: 'P0004', via: { person: 'P0002', rel: 'sibling' }, nearest: 'G0001', mode: 'occasional' }],
+        },
         imports: [{ id: 'I1', program: 'Rodokmenář 5', version: '5.2', fileDate: '12 MAR 2024', at: '2026-11-08', file: 'rodokmen.ged', encoding: 'windows-1250' }],
         defaultPersonId: LAST_FOCUSED,
         defaultView: 'last',

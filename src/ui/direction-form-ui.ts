@@ -10,6 +10,7 @@
  */
 
 import type { LiveDirection, LiveDirectionKind } from '../research-link.js';
+import { DIRECTIONS_PLACES_FEATURE } from '../research-link.js';
 import { Person, PersonId } from '../types.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -141,9 +142,11 @@ export const directionFormMethods = uiModule({
      * growing branch waiting is drawn again (its main button's direction).
      */
     refreshDirectionPeople(s: LiveSession, head: string): void {
-        if (!s.caps?.directionsWrite || !s.features?.includes(PEOPLE_FEATURE)) return;
+        // Where people stand in the lines (directions.places) is read even where directions are not written here.
+        const places = !!s.features?.includes(DIRECTIONS_PLACES_FEATURE);
+        if (!places && (!s.caps?.directionsWrite || !s.features?.includes(PEOPLE_FEATURE))) return;
         const before = directionPeopleKept(s.bridge.base);
-        void fetchDirectionPeople(s.bridge.base, head).then(r => {
+        void fetchDirectionPeople(s.bridge.base, head, places ? s.directionsRev ?? '' : '').then(r => {
             if (!r.ok || liveSession() !== s || s.ended) return;
             this.renderPersonInLine();
             // A growing branch's main button picks its running direction by who is in which one: newly read, drawn again.

@@ -861,6 +861,86 @@ export interface PersonResearch {
     edge?: ResearchEdge;
     /** The person belongs to a family nothing links to the tree yet (GEDCOM _STROM_ISLAND). */
     island?: ResearchIsland;
+    /**
+     * Where the person stands in the research's lines (GEDCOM INDI
+     * _STROM_DIRECTION, spec 073 §16.9), the narrowest first.
+     */
+    places?: ResearchPlace[];
+    /** What is being waited for outside the app about the person: a letter, an office (GEDCOM _STROM_WAIT, §16.10). */
+    waits?: ResearchWait[];
+    /** When the research added the person to the tree (GEDCOM _STROM_ADDED, ISO UTC instant). */
+    added?: string;
+}
+
+/** How a person belongs to a line (GEDCOM 2 TYPE under INDI _STROM_DIRECTION). */
+export type ResearchPlaceRole = 'line' | 'partner' | 'branch' | 'island';
+
+/** One place of a person in the research's lines (§16.9). */
+export interface ResearchPlace {
+    role: ResearchPlaceRole;
+    /** The line (G…); absent for a branch or an island outside any line. */
+    line?: string;
+    /** The side branch (B-P…) the person is in. */
+    branch?: string;
+}
+
+/** Who a wait is with (GEDCOM 2 _GROUP under _STROM_WAIT). */
+export type ResearchWaitGroupType = 'archive' | 'office' | 'family' | 'web' | 'other';
+
+/** A wait for an answer from outside (GEDCOM INDI _STROM_WAIT T…, §16.10 items 5 and 6). */
+export interface ResearchWait {
+    /** The research's task (T…). */
+    id: string;
+    type?: 'letter' | 'family' | 'web' | 'images' | 'check' | 'permission' | 'other';
+    title?: string;
+    /** What it is about (2 _ON, as written). */
+    on?: string;
+    group?: { name: string; type?: ResearchWaitGroupType; key?: string; url?: string };
+    stat?: 'todo' | 'sent';
+    /** When it was sent (ISO). */
+    sent?: string;
+    /** Its priority (1 = first). */
+    prio?: number;
+}
+
+/** A line of the research (GEDCOM HEAD _STROM_DIRECTION G…). */
+export interface ResearchLine {
+    id: string;
+    name: string;
+    kind?: 'ancestors' | 'descendants' | 'person' | 'question';
+    /** The person it starts from (REFN P…). */
+    focus?: string;
+    state?: 'active' | 'paused' | 'done';
+}
+
+/** How a side branch hangs on its nearest person (GEDCOM 3 TYPE under _VIA). */
+export type ResearchBranchRel = 'sibling' | 'partner' | 'child' | 'parent' | 'other';
+
+/** A side branch outside the lines (GEDCOM HEAD _STROM_BRANCH B-P…). */
+export interface ResearchBranch {
+    /** B-P…: the branch of person P…. */
+    id: string;
+    /** The person of the branch (REFN P…, from the id). */
+    person: string;
+    /** The person it hangs on and how. */
+    via?: { person: string; rel?: ResearchBranchRel };
+    /** The nearest line (G…). */
+    nearest?: string;
+    /** The line it was added to (G…). */
+    line?: string;
+    /** How work outside the lines is ordered for it. */
+    mode?: 'never' | 'occasional' | 'last' | 'normal';
+}
+
+/**
+ * The research's lines and side branches (GEDCOM HEAD _STROM_DIRECTIONS,
+ * _STROM_DIRECTION, _STROM_BRANCH). Research trees only, never sent back.
+ */
+export interface ResearchDirections {
+    /** HEAD _STROM_DIRECTIONS Y: every person's places are written, so a person without one is off the lines. */
+    complete: boolean;
+    lines: ResearchLine[];
+    branches: ResearchBranch[];
 }
 
 /** A span of years (inclusive). */
@@ -1671,6 +1751,12 @@ export interface StromData {
      * header `_STROM_ASOF`, ISO date): "as of". Research trees only.
      */
     researchAsOf?: string;
+
+    /**
+     * The research's lines and side branches (GEDCOM header, spec 073 §16.9).
+     * Research trees only; never leaves the app.
+     */
+    researchDirections?: ResearchDirections;
 
     /**
      * The GEDCOM files loaded into this tree (data version 15, spec 066),

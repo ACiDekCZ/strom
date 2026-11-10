@@ -98,6 +98,36 @@ export interface CellValue {
      * source's value and a pill "+N" whose bubble lists these (the cited ids).
      */
     moreSources?: string[];
+    /** The research's cell (spec 073 §16, table-research.ts): its mark, count, parts and exported text. */
+    research?: ResearchCellDetail;
+}
+
+/** The research mark a cell starts with (§16.3). */
+export type ResearchMark = 'wait' | 'ext' | 'conf' | 'q' | 'agent' | 'done' | 'queue' | 'new';
+
+/** One piece of a research cell's text, with its look (§16.2, §16.9, §16.10). */
+export interface ResearchCellPart {
+    text: string;
+    tone?: 'faint' | 'light' | 'primary' | 'accent' | 'ghost';
+    weight?: 500 | 600;
+    italic?: boolean;
+}
+
+/** What a research cell shows beyond its plain text (§16). */
+export interface ResearchCellDetail {
+    mark?: ResearchMark;
+    /** The count shown after the mark (600). */
+    count?: number;
+    /** "+n": further kinds of signal (the Research column). */
+    more?: number;
+    /** The text after the mark and count, in pieces; joined they are the cell's text. */
+    parts: ResearchCellPart[];
+    /** The line the cell names (G…). */
+    lineId?: string;
+    /** A live-only column while the research is not followed: "–" faint, exported empty. */
+    liveOff?: boolean;
+    /** The text a CSV export writes (§16.7). */
+    export: string;
 }
 
 /** One name of a cell that lists people (§14.1). */
