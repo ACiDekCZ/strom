@@ -97,6 +97,23 @@ export interface GridInput {
     conflictAt?: (line: GridLine, col: ColumnDef, value: CellValue) => CellConflictMark | null;
     /** A research cell that opens its bubble (§16.4): a click, Enter or Space on it asks for it (`onResearch`). */
     researchAt?: (line: GridLine, col: ColumnDef, value: CellValue) => boolean;
+    /** The agent at a row's person while the research is followed (§16.6): the bar on the name's left edge, ✓ once done. */
+    agentAt?: (line: GridLine) => AgentRowState | null;
+}
+
+/** The agent at a row (§16.6): at work on its task, or just done. */
+export type AgentRowState = { kind: 'working'; task: string } | { kind: 'done' };
+
+/**
+ * The agent's bar on the name's left edge (§16.6): a 3 px track with a
+ * running segment, in step with every arc (the card's AGENT_SPIN_MS and
+ * shared phase, so a redraw does not restart it); ✓ when it is done.
+ */
+export function agentRowHtml(state: AgentRowState | null): string {
+    if (!state) return '';
+    if (state.kind === 'done') return researchMarkHtml('done');
+    const phase = sharedPhaseDelay(AGENT_SPIN_MS, (typeof document !== 'undefined' ? document.timeline?.currentTime as number | undefined : undefined) ?? performance.now());
+    return `<span class="tv-agent-bar" aria-hidden="true"><span class="tv-agent-run" style="animation-delay:${phase}"></span></span>`;
 }
 
 /** A row's action (§10.1): show in the tree, open the person, edit. */
@@ -342,6 +359,24 @@ export function namesHtml(names: readonly CellName[], hit = ''): string {
     }).join(', ');
 }
 
+/** A row as drawn: its opening tag and its cells (spacers included), each one element. */
+interface DrawnRow {
+    key: string;
+    open: string;
+    cells: string[];
+}
+
+/** A cell's HTML compared without an animation's shared phase (it moves with the clock, not with the content). */
+function drawnForm(html: string): string {
+    return html.includes('animation-delay:') ? html.replace(/animation-delay:[^;"]*/g, '') : html;
+}
+
+function elementOf(html: string): Element {
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    return t.content.firstElementChild!;
+}
+
 export class TableGrid {
     readonly el: HTMLElement;
     private readonly head: HTMLElement;
@@ -369,6 +404,10 @@ export class TableGrid {
     /** The body's active cell (roving tabindex, §3.4): the line's key and the column's drawn position. */
     private activeKey: string | null = null;
     private activeCol = 0;
+    /** The rows last drawn, so a redraw of the same rows replaces only the cells that changed (§16.6). */
+    private drawnRows: DrawnRow[] = [];
+    /** The agent's bars stop while out of sight (§16.6). */
+    private agentBars: IntersectionObserver | null = null;
     /** The rows lit after a change (row keys, §10.3) and the timer that ends it. */
     private readonly flashKeys = new Set<string>();
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1102,7 +1141,7 @@ export class TableGrid {
         const activeLine = this.activeLineIndex();
         const activeCol = Math.min(this.activeCol, input.columns.length - 1);
         const selectedPerson = input.selected;
-        let html = '';
+        const drawn: DrawnRow[] = [];
         for (let r = start; r < end; r++) {
             const line = this.lines[r];
             const row = line.row;
@@ -1128,23 +1167,24 @@ export class TableGrid {
                     attrs += ` aria-label="${esc(strings.table.a11y.unionRow(line.k, line.n, personName(line.row.person)))}"`;
                 }
             }
-            html += `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"${attrs}`
+            const open = `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"${attrs}`
                 + ` style="top:${tops[r]}px;height:${tops[r + 1] - tops[r]}px;width:${cw.total}px">`;
+            const cells: string[] = [];
             let prev = -1;
             const tailAt = this.tailColumn(input);
             for (const i of cw.indices) {
-                if (prev >= 0 && i !== prev + 1) html += this.spacer(cw.before);
+                if (prev >= 0 && i !== prev + 1 && cw.before > 0) cells.push(this.spacer(cw.before));
                 prev = i;
                 const col = input.columns[i];
                 const tab = r === activeLine && i === activeCol ? 0 : -1;
                 const band = input.bands?.[i];
                 if (band) {
-                    html += `<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
-                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(line, band) ?? ''}</div>`;
+                    cells.push(`<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
+                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(line, band) ?? ''}</div>`);
                     continue;
                 }
                 if (input.subRows && col.id === 'name') {
-                    html += this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : '');
+                    cells.push(this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : ''));
                     continue;
                 }
                 const value = lineCell(input.model, line, col);
@@ -1153,16 +1193,75 @@ export class TableGrid {
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
                 const res = line.kind !== 'more' && !issue && !!input.researchAt?.(line, col, value);
-                html += `<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
                     + (res ? ' aria-haspopup="dialog"' : '')
                     + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict)}`
-                    + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`;
+                    + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`);
             }
-            html += this.spacer(cw.after) + '</div>';
+            if (cw.after > 0) cells.push(this.spacer(cw.after));
+            drawn.push({ key, open, cells });
         }
-        this.body.innerHTML = html;
+        this.paintBody(drawn);
         this.syncNameTabs();
         if (refocus) this.focusActive(false);
+    }
+
+    /**
+     * Put the drawn rows in the body. A row drawn last time under the same
+     * key in the same place (a live change of the research's signals, §16.6;
+     * a selection; a row passing the filter now, put after the others) keeps
+     * its element: only its cells whose HTML changed are replaced, the rest
+     * stay as they are (no new layout, a running bar runs on). Other rows are
+     * drawn anew; with none to keep, the body anew.
+     */
+    private paintBody(rows: DrawnRow[]): void {
+        const last = this.drawnRows;
+        this.drawnRows = rows;
+        const els = Array.from(this.body.children);
+        const byKey = new Map<string, { el: Element; drawn: DrawnRow }>();
+        if (els.length === last.length) last.forEach((d, i) => byKey.set(d.key, { el: els[i], drawn: d }));
+        const whole = (): void => {
+            this.body.innerHTML = rows.map(r => r.open + r.cells.join('') + '</div>').join('');
+            this.watchAgentBars();
+        };
+        if (byKey.size === 0 || byKey.size !== last.length) { whole(); return; }
+        const next: Element[] = [];
+        let kept = 0;
+        let changed = false;
+        for (const now of rows) {
+            const old = byKey.get(now.key);
+            if (old) byKey.delete(now.key);
+            if (!old || old.drawn.open !== now.open || old.drawn.cells.length !== now.cells.length || old.el.children.length !== now.cells.length) {
+                if (old) old.el.remove();
+                next.push(elementOf(now.open + now.cells.join('') + '</div>'));
+                changed = true;
+                continue;
+            }
+            kept++;
+            for (let c = 0; c < now.cells.length; c++) {
+                const was = old.drawn.cells[c];
+                if (now.cells[c] === was || drawnForm(now.cells[c]) === drawnForm(was)) continue;
+                old.el.children[c].replaceWith(elementOf(now.cells[c]));
+                changed = true;
+            }
+            next.push(old.el);
+        }
+        if (kept === 0) { whole(); return; }
+        for (const gone of byKey.values()) { gone.el.remove(); changed = true; }
+        const body = this.body.children;
+        next.forEach((el, i) => { if (body[i] !== el) { this.body.insertBefore(el, body[i] ?? null); changed = true; } });
+        if (changed) this.watchAgentBars();
+    }
+
+    /** The agent's bars drawn now, paused while out of sight (a row under the head, the table off screen). */
+    private watchAgentBars(): void {
+        this.agentBars?.disconnect();
+        const bars = this.body.querySelectorAll<HTMLElement>('.tv-agent-bar');
+        if (!bars.length || typeof IntersectionObserver !== 'function') return;
+        this.agentBars ??= new IntersectionObserver((entries) => {
+            for (const e of entries) e.target.classList.toggle('is-paused', !e.isIntersecting);
+        });
+        for (const bar of bars) this.agentBars.observe(bar);
     }
 
     /**
@@ -1224,7 +1323,11 @@ export class TableGrid {
             ? `<div class="tv-cell tv-name tv-cell--${issue.severity} has-issue${conflict ? ' has-conf' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`
             : conflict ? open.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-conf') : open;
         const nameHtml = input.hit ? highlightHtml(name, input.hit) : esc(name);
-        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${pill}`
+        const agent = line.kind === 'row' ? input.agentAt?.(line) ?? null : null;
+        const bar = agent?.kind === 'working' ? agentRowHtml(agent) : '';
+        const done = agent?.kind === 'done' ? agentRowHtml(agent) : '';
+        const start = bar ? head.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-agent') : head;
+        return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${done}${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
 
@@ -1401,6 +1504,7 @@ export class TableGrid {
         if (this.frame) cancelAnimationFrame(this.frame);
         if (this.flashTimer) clearTimeout(this.flashTimer);
         this.resize?.disconnect();
+        this.agentBars?.disconnect();
         this.el.remove();
     }
 }

@@ -28,6 +28,24 @@ export function tableCsvField(raw: string): string {
     return /[";,\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/**
+ * A cell as the export writes it: as the table shows it; a research cell its
+ * words and counts without marks (§16.7: "waiting; conflict (1)", "1: birth"),
+ * a live-only one while the research is not followed empty.
+ */
+export function exportText(value: CellValue): string {
+    const r = value.research;
+    if (r) return r.liveOff ? '' : r.export;
+    return cellPlainText(value);
+}
+
+/** Whether an export of these columns writes live-only research cells empty (§16.7: the toast says so). */
+export function exportsNotLive(model: TableModel, rows: readonly TableRow[], columns: readonly ColumnDef[]): boolean {
+    const live = columns.filter(c => c.fromResearch && (c.id === 'rAgent' || c.id === 'rTasks'));
+    if (!live.length || !rows.length) return false;
+    return live.some(c => !!cellOf(model, rows[0], c).research?.liveOff);
+}
+
 export interface TableCsvInput {
     model: TableModel;
     type: RowType;
@@ -100,7 +118,7 @@ export function buildExportTable(input: TableCsvInput): ExportTable {
     }
     const lines: ExportLine[] = [];
     const push = (row: TableRow, union: number | null, continuation: boolean, cells: (CellValue | null)[], unionText: string): void => {
-        const texts = cells.map(v => (v ? cellPlainText(v) : ''));
+        const texts = cells.map(v => (v ? exportText(v) : ''));
         if (unionCol) {
             cells.splice(unionAt, 0, null);
             texts.splice(unionAt, 0, unionText);

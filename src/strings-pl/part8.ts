@@ -1224,6 +1224,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             placeOpen: (place: string, needs: string) => needs ? `${place} – nieokreślone; pomoże: ${needs}` : `${place} – nieokreślone`,
             liveTag: 'na żywo',
             liveOnly: 'Tylko podczas śledzenia badań',
+            exportNotLive: 'Agent i Zadania badań są puste: badania nie są śledzone.',
             following: '● Badania śledzone na żywo',
             stale: (when: string) => `Badania: stan z ${when}`,
             workingPair: (task: string) => task ? `pracuje nad parą: ${task}` : 'pracuje nad parą',

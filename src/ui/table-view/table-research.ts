@@ -264,6 +264,12 @@ function emptyResearch(liveOff = false): CellValue {
     return cell(liveOff ? '–' : '', null, { parts: [], export: '', ...(liveOff ? { liveOff: true } : {}) }, liveOff ? { ghost: true, empty: true } : {});
 }
 
+/** An empty cell of a counting column (conflicts, hypotheses): nothing shown, "0" in the export (§16.7). */
+function countedNone(): CellValue {
+    const c = emptyResearch();
+    return { ...c, research: { ...c.research!, export: '0' } };
+}
+
 /** A cell from its parts: the text is the parts joined, the export the given text (or the same). */
 function partsCell(parts: ResearchCellPart[], sortKey: number | string | null, more: Omit<ResearchCellDetail, 'parts' | 'export'> & { export?: string } = {}): CellValue {
     const text = [more.count !== undefined ? String(more.count) : '', ...parts.map(p => p.text)].filter(Boolean).join(' ');
@@ -370,7 +376,7 @@ function waitCell(env: ResearchTableEnv, p: Person): CellValue {
 
 function confCell(env: ResearchTableEnv, p: Person): CellValue {
     const open = openConflicts(env, p);
-    if (open.length === 0) return emptyResearch();
+    if (open.length === 0) return countedNone();
     const words = [...new Set(open.map(c => factWord(c.fact, c.title)))].join(', ');
     const parts: ResearchCellPart[] = [{ text: '· ' + words }];
     // Decidable in the app: never in a read-only copy (its bubbles have no actions).
@@ -385,7 +391,7 @@ function hypCell(p: Person): CellValue {
     if (all.some(h => h.decidedBy === 'agent' && h.status === 'decided')) {
         return partsCell([{ text: strings.table.res.agentDecided, tone: 'light' }], 0);
     }
-    return emptyResearch();
+    return countedNone();
 }
 
 function tasksCell(env: ResearchTableEnv, p: Person): CellValue {
@@ -418,6 +424,18 @@ function agentCell(env: ResearchTableEnv, p: Person): CellValue {
     const done = env.input.done?.get(ref);
     if (done !== undefined && env.input.now - done < AGENT_DONE_MS) return cell(R.done, 1, { signal: 'done', parts: [{ text: R.done }], export: R.done });
     return emptyResearch();
+}
+
+/** The agent at a person, for the bar on the name (§16.6): at work (its task), just done (✓ for AGENT_DONE_MS), else null. */
+export type ResearchAgentRow = { kind: 'working'; task: string } | { kind: 'done' };
+
+export function researchAgentRow(env: ResearchTableEnv, p: Person): ResearchAgentRow | null {
+    if (!env.input.live || env.input.kind !== 'research' || env.input.readOnly) return null;
+    const ref = p.refn;
+    if (!ref) return null;
+    if (env.working.has(ref)) return { kind: 'working', task: env.working.get(ref) ?? '' };
+    const done = env.input.done?.get(ref);
+    return done !== undefined && env.input.now - done < AGENT_DONE_MS ? { kind: 'done' } : null;
 }
 
 function matCell(env: ResearchTableEnv, p: Person): CellValue {

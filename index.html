@@ -9935,6 +9935,27 @@
             .tv-rmark--agent { animation: none; }
         }
         .tv-rmark--done { color: var(--primary); font-size: 13px; }
+        /* §16.6 the agent at a row's person: a 3 px bar on the name's left edge, a track (--primary 18 %) with a
+           running segment in the arc's rhythm (AGENT_SPIN_MS, its shared phase set when drawn); only transform moves.
+           Still under reduced motion (the segment at the top), paused out of sight; the same on every screen. */
+        .tv-name.has-agent:not(.tv-pinned) { position: relative; }
+        .tv-agent-bar {
+            position: absolute; left: 2px; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; overflow: hidden;
+            background: color-mix(in srgb, var(--primary) 18%, transparent); pointer-events: none;
+        }
+        .tv-agent-run {
+            position: absolute; left: 0; top: 0; width: 100%; height: 45%; border-radius: 2px; background: var(--primary);
+            animation: tvAgentRun 1.4s linear infinite; will-change: transform;
+        }
+        .tv-agent-bar.is-paused .tv-agent-run { animation-play-state: paused; }
+        @keyframes tvAgentRun { from { transform: translateY(-100%); } to { transform: translateY(223%); } }
+        .tv-name > .tv-rmark--done { margin-left: 6px; }
+        @media (prefers-reduced-motion: reduce) {
+            .tv-agent-run { animation: none; transform: none; }
+        }
+        @media (max-width: 640px) {
+            .tv-agent-bar { top: 6px; bottom: 6px; }
+        }
         /* ≠ on a fact's cell: before the value, no tint; a button that opens the conflicts. */
         .tv-conf { cursor: pointer; margin: 0 6px 0 3px; }
         .tv-conf:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }

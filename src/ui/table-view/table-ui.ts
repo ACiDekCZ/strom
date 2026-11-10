@@ -29,11 +29,11 @@ import { uiModule } from '../module.js';
 import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, type SortSpec } from './table-columns.js';
 import {
     applyResearch, isResearchChipId, researchChipCounts, researchChipOffer, researchColumnLiveOff, researchConflictWhat, researchOffer,
-    researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
+    researchAgentRow, researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
 } from './table-research.js';
 import { onComputer, researchTableLive } from '../research-ui.js';
 import { researchBubble, researchConflictBubble, type ResearchBubble } from './table-research-bubble.js';
-import { materialsCountNow, researchConflictsNow } from '../../card-signals.js';
+import { AGENT_DONE_MS, materialsCountNow, researchConflictsNow } from '../../card-signals.js';
 import { directionPlacesKept, onDirectionPlaces } from '../../research-directions-write.js';
 import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
 import type { ChangeKind, PersonChange } from '../../research-changes.js';
@@ -72,7 +72,7 @@ import {
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
 } from './table-views.js';
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
-import { buildTableCsv, exportColumnCount, tableCsvFileName, type TableCsvInput } from './table-export.js';
+import { buildTableCsv, exportColumnCount, exportsNotLive, tableCsvFileName, type TableCsvInput } from './table-export.js';
 import { buildTableXlsx } from './table-xlsx.js';
 import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, isPlaceColumn, type CellFinding, type ConflictCell } from './table-checks.js';
 import { conflictScope } from '../person-research-ui.js';
@@ -409,8 +409,10 @@ function viewRows(
     const f = filterRows(m, type, rowsOf(m, type), filter, q ? { query: q, columns } : undefined);
     const rows = sort.length ? sortRows(m, type, f.rows, sort, f.pass ? sortUnionOf(f.pass) : undefined) : f.rows;
     // §10.3: after a change of the data the rows stay in place, those that no longer
-    // pass dimmed, until the sort, the filter or the view change.
-    const kept = last && (last.model.rev !== m.rev || last.kept) ? keepOrder(m, last.result.rows, rows) : null;
+    // pass dimmed, until the sort, the filter or the view change. §16.6: so after a
+    // change of the research's signals (the same model, a new environment) as well.
+    const signals = !!last && last.model === m && last.research !== researchNow;
+    const kept = last && (last.model.rev !== m.rev || last.kept || signals) ? keepOrder(m, last.result.rows, rows) : null;
     const result: ShownRows = kept ? { rows: kept.rows, pass: f.pass, stale: kept.stale } : { rows, pass: f.pass, stale: NONE };
     view = { tree, model: m, type, key, checks: checksVersion, research: researchNow, kept: !!kept, result };
     return result;
@@ -431,6 +433,9 @@ function unionOfLine(line: GridLine): PartnershipId | null {
 function escHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+/** The draw that takes the agent's ✓ away (§16.6). */
+let agentDoneTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** The research's environment last given to the cells (§16) and what it was built from. */
 let researchMemo: { key: readonly unknown[]; env: ResearchTableEnv } | null = null;
@@ -475,20 +480,35 @@ export const tableMethods = uiModule({
         const now = researchTableLive();
         const places = now.base ? directionPlacesKept(now.base) : null;
         const b = this.researchChangesBase();
+        // §16.6: ✓ stands AGENT_DONE_MS after the agent left a person; the draw that drops it is asked for.
+        const at = Date.now();
+        const done = [...now.done].filter(([, t]) => at - t < AGENT_DONE_MS);
+        this.tableAgentDoneLater(done.length ? Math.min(...done.map(([, t]) => t)) + AGENT_DONE_MS - at : null);
         const key = [
-            data, rev, m, kind, readOnly, now.live, now.waiting, now.working, now.queue, [...now.done].join(';'), places,
+            data, rev, m, kind, readOnly, now.live, now.waiting, now.working, now.queue, done.join(';'), places,
             b && b !== 'same' ? b.base : b, b && b !== 'same' ? b.key : '',
         ];
         if (researchMemo && sameKey(researchMemo.key, key)) return researchMemo.env;
         const input: ResearchTableInput = {
-            kind, readOnly, live: now.live, waiting: now.waiting, working: now.working, queue: now.queue, done: new Map(now.done),
+            kind, readOnly, live: now.live, waiting: now.waiting, working: now.working, queue: now.queue, done: new Map(done),
             livePlaces: places, unsent: new LazyUnsent(() => this.researchChangesNow()),
             conflictsOf: researchConflictsNow, materialsOf: materialsCountNow,
-            generationOf: id => m.ctx.generations().get(id), now: Date.now(),
+            generationOf: id => m.ctx.generations().get(id), now: at,
         };
         const env = researchTableEnv(data, input);
         researchMemo = { key, env };
         return env;
+    },
+
+    /** Draw the table again once the oldest ✓ of the agent is due to go (§16.6; null: none stands). */
+    tableAgentDoneLater(ms: number | null): void {
+        if (agentDoneTimer) clearTimeout(agentDoneTimer);
+        agentDoneTimer = null;
+        if (ms === null) return;
+        agentDoneTimer = setTimeout(() => {
+            agentDoneTimer = null;
+            if (TreeRenderer.getViewMode() === 'table') redrawTable(el => this.renderTableView(el));
+        }, Math.max(0, ms) + 20);
     },
 
     /** When the research's state the cells show was taken (§16.2 "Research: as of …"): the tree's last load from it. */
@@ -752,6 +772,9 @@ export const tableMethods = uiModule({
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
             conflictAt: research ? (line, col, value) => conflictMarkAt(research, m, line, col, value) : undefined,
             researchAt: research ? researchCellOpens : undefined,
+            agentAt: research?.input.live
+                ? (line) => (line.kind === 'row' && line.row.kind === 'person' ? researchAgentRow(research, line.row.person) : null)
+                : undefined,
             issueAt: index ? (line, col): CellIssueMark | null => {
                 const f = cellFindings(index, m, line, col)[0];
                 return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
@@ -1806,7 +1829,13 @@ export const tableMethods = uiModule({
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
         const k = ROW_KEY[now.type];
-        this.showToast(strings.table.exportedToast[k](file, made.items, made.lines, made.columns), 5000);
+        const done = strings.table.exportedToast[k](file, made.items, made.lines, made.columns);
+        // §16.7: the live-only research columns went out empty while the research is not followed.
+        if (exportsNotLive(now.input.model, now.input.rows, now.input.columns)) {
+            this.showToast(strings.table.res.exportNotLive, 6000, { title: done });
+        } else {
+            this.showToast(done, 5000);
+        }
     },
 
     /** The Export dialog's link (11d): the dialog closes, the Table view opens with its Export. */
