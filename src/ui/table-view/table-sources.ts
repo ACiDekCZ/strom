@@ -11,7 +11,7 @@
  * count; a story's sources are not a fact's.
  */
 
-import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Person, type Source, type StromData } from '../../types.js';
+import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Partnership, type Person, type Source, type StromData } from '../../types.js';
 import type { SourceRow } from './table-model.js';
 
 /** How much of the tree one source documents. */
@@ -72,4 +72,44 @@ export function buildSourceRows(data: StromData): { rows: SourceRow[]; byId: Map
 /** The readers of a source's transcript (§14.2): the app and the research, as `readBy` says. */
 export function sourceReaders(source: Pick<Source, 'readBy'>): number {
     return source.readBy === 'both' ? 2 : source.readBy === 'user' || source.readBy === 'research' ? 1 : 0;
+}
+
+/** A cited source: the id the citation names (the catalog's key) and the source. */
+export interface CitedSource {
+    id: string;
+    source: Source;
+}
+
+/** The person's events whose citations are those of the birth (§14.3), of the death. */
+const BIRTH_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
+const DEATH_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'cremation']);
+
+/**
+ * The sources a fact cites (§14.3, the People table's citation columns), each
+ * once, in the order the data lists them; ids the catalog does not know are
+ * left out. The birth: its own citations, then those of a birth or baptism
+ * event; the death likewise with a death, burial or cremation event (as the
+ * reliability mark reads a fact's citations); a marriage: the union's own.
+ */
+export function factCitations(data: Pick<StromData, 'sources'>, fact: 'birth' | 'death', person: Person): CitedSource[];
+export function factCitations(data: Pick<StromData, 'sources'>, fact: 'marriage', union: Pick<Partnership, 'sourceIds'>): CitedSource[];
+export function factCitations(data: Pick<StromData, 'sources'>, fact: 'birth' | 'death' | 'marriage',
+    holder: Person | Pick<Partnership, 'sourceIds'>): CitedSource[] {
+    const ids: string[] = [];
+    if (fact === 'marriage') ids.push(...(holder.sourceIds ?? []));
+    else {
+        const p = holder as Person;
+        const types = fact === 'birth' ? BIRTH_EVENTS : DEATH_EVENTS;
+        ids.push(...((fact === 'birth' ? p.birthSourceIds : p.deathSourceIds) ?? []));
+        for (const e of p.events ?? []) if (types.has(e.type)) ids.push(...(e.sourceIds ?? []));
+    }
+    const out: CitedSource[] = [];
+    const seen = new Set<string>();
+    for (const id of ids) {
+        const source = data.sources?.[id];
+        if (!source || seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id, source });
+    }
+    return out;
 }

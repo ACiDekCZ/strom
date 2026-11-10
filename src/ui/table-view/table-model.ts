@@ -92,6 +92,11 @@ export interface CellValue {
      * ", ".
      */
     names?: CellName[];
+    /**
+     * The further citations of a fact (§14.3): the cell shows the first
+     * source's value and a pill "+N" whose bubble lists these (the cited ids).
+     */
+    moreSources?: string[];
 }
 
 /** One name of a cell that lists people (§14.1). */

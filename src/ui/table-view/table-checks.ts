@@ -18,7 +18,8 @@ import { dismissedKeys } from '../../quality-dismiss.js';
 import { placeKey } from '../../places.js';
 import { participantName } from '../../godparents.js';
 import { parentSlots, type ParticipantRole, type Partnership, type Person, type StromData } from '../../types.js';
-import type { CellSeverity, EventRow, TableModel, TableRow } from './table-model.js';
+import type { CellSeverity, EventRow, PersonRow, TableModel, TableRow } from './table-model.js';
+import { personGodparents } from './table-events.js';
 
 /** One cell a finding is about: a row of People, Unions or Events, a column, the union of a union column. */
 export interface CheckTarget {
@@ -280,6 +281,7 @@ export class CheckIndex {
         let list: CellFinding[] | undefined;
         if (row.kind === 'person') {
             list = this.cells.get(cellKey('persons', row.id, colId, union?.id));
+            if (colId === 'godparents' && this.recurring.size) list = [...(list ?? []), ...this.personRecurring(row)];
         } else if (row.kind === 'event') {
             list = this.eventFindings(row, colId);
         } else if (row.kind === 'union') {
@@ -299,7 +301,10 @@ export class CheckIndex {
     /** All findings of a cell, the shown one first (the bubble steps through them). */
     cellAll(row: TableRow, colId: string, union: Partnership | null, text = ''): CellFinding[] {
         const out: CellFinding[] = [];
-        if (row.kind === 'person') out.push(...(this.cells.get(cellKey('persons', row.id, colId, union?.id)) ?? []));
+        if (row.kind === 'person') {
+            out.push(...(this.cells.get(cellKey('persons', row.id, colId, union?.id)) ?? []));
+            if (colId === 'godparents' && this.recurring.size) out.push(...this.personRecurring(row));
+        }
         else if (row.kind === 'event') out.push(...this.eventFindings(row, colId));
         else if (row.kind === 'union') {
             const partner = UNION_PARTNER_COLUMNS[colId];
@@ -309,6 +314,17 @@ export class CheckIndex {
         }
         if (PLACE_COLUMNS.has(colId) && text) out.push(...(this.places.get(placeKey(text)) ?? []));
         return out.sort((a, b) => RANK[b.severity] - RANK[a.severity]);
+    }
+
+    /** A recurring godparent among a person's godparents (§14.5: on the People table's Godparents), each once. */
+    private personRecurring(row: PersonRow): CellFinding[] {
+        const out: CellFinding[] = [];
+        for (const x of personGodparents(row.person)) {
+            for (const k of participantKeys(this.data, x)) {
+                for (const f of this.recurring.get(k) ?? []) if (!out.includes(f)) out.push(f);
+            }
+        }
+        return out;
     }
 
     /**

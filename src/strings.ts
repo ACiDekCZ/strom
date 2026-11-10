@@ -8363,6 +8363,7 @@ const stringsEN = {
             p1: 'Partner 1', p2: 'Partner 2', age1: 'Age 1', rec1: 'Recorded age 1', age2: 'Age 2', rec2: 'Recorded age 2',
             evType: 'Type', evWho: 'Person or couple', evDate: 'Date', evPlace: 'Place', evAge: 'Age at the event', evValue: 'Value', godparents: 'Godparents', officiants: 'Officiant', others: 'Others present', evSource: 'Source', evRel: 'Reliability',
             srcTitle: 'Title', srcRepo: 'Archive', srcRef: 'Book, reference, folio', srcUrl: 'Online', srcPersons: 'People', srcFacts: 'Facts', srcRead: 'Read by the research', srcTranscript: 'Transcript', srcRecDate: 'Record date',
+            bArch: 'Birth: archive', bRef: 'Birth: reference', bUrl: 'Birth: link', wArch: 'Marriage: archive', wRef: 'Marriage: reference', wUrl: 'Marriage: link', dArch: 'Death: archive', dRef: 'Death: reference', dUrl: 'Death: link',
         },
         columns: 'Columns',
         columnsCount: (n: number, m: number) => `${numEn(n)} of ${numEn(m)}`,
@@ -8567,6 +8568,8 @@ const stringsEN = {
         noSourcesTitle: 'There is no source in the tree',
         noSourcesText: 'Sources appear here as soon as one is written in Sources or cited at a person.',
         readers: (n: number) => `${n} ${n === 1 ? 'reader' : 'readers'}`,
+        moreCites: (n: number) => nEn(n, 'more citation', 'more citations'),
+        citesTitle: 'Other citations',
         noFindingsTitle: 'No errors and nothing to check',
         noFindingsText: (n: number) => (n > 0
             ? `The checks found nothing worth checking. Leads (${numEn(n)}) are in Data quality.`
@@ -16632,6 +16635,7 @@ const stringsCZ: StringsType = {
             p1: 'Partner 1', p2: 'Partner 2', age1: 'Věk 1', rec1: 'Zapsaný věk 1', age2: 'Věk 2', rec2: 'Zapsaný věk 2',
             evType: 'Typ', evWho: 'Osoba nebo pár', evDate: 'Datum', evPlace: 'Místo', evAge: 'Věk při události', evValue: 'Údaj', godparents: 'Kmotři', officiants: 'Oddávající, křtitel', others: 'Jiní přítomní', evSource: 'Pramen', evRel: 'Spolehlivost',
             srcTitle: 'Titul', srcRepo: 'Archiv', srcRef: 'Kniha, signatura, folio', srcUrl: 'Online', srcPersons: 'Osob', srcFacts: 'Údajů', srcRead: 'Přečteno výzkumem', srcTranscript: 'Přepis', srcRecDate: 'Datum záznamu',
+            bArch: 'Narození: archiv', bRef: 'Narození: signatura', bUrl: 'Narození: odkaz', wArch: 'Sňatek: archiv', wRef: 'Sňatek: signatura', wUrl: 'Sňatek: odkaz', dArch: 'Úmrtí: archiv', dRef: 'Úmrtí: signatura', dUrl: 'Úmrtí: odkaz',
         },
         columns: 'Sloupce',
         columnsCount: (n: number, m: number) => `${numCs(n)} z ${numCs(m)}`,
@@ -16836,6 +16840,8 @@ const stringsCZ: StringsType = {
         noSourcesTitle: 'Ve stromu není žádný pramen',
         noSourcesText: 'Prameny se tu ukážou, jakmile bude nějaký zapsaný v Pramenech nebo citovaný u osoby.',
         readers: (n: number) => `${n} ${n === 1 ? 'čtenář' : 'čtenáři'}`,
+        moreCites: (n: number) => nCs(n, 'další citace', 'další citace', 'dalších citací'),
+        citesTitle: 'Další citace',
         noFindingsTitle: 'Bez chyb a k ověření',
         noFindingsText: (n: number) => (n > 0
             ? `Kontroly nenašly nic, co by stálo za ověření. Stopy (${numCs(n)}) jsou v Kvalitě dat.`
@@ -24820,6 +24826,7 @@ const stringsDE: StringsType = {
             p1: 'Partner 1', p2: 'Partner 2', age1: 'Alter 1', rec1: 'Angegeben 1', age2: 'Alter 2', rec2: 'Angegeben 2',
             evType: 'Art', evWho: 'Person oder Paar', evDate: 'Datum', evPlace: 'Ort', evAge: 'Alter beim Ereignis', evValue: 'Angabe', godparents: 'Paten', officiants: 'Amtsperson', others: 'Weitere Anwesende', evSource: 'Quelle', evRel: 'Verlässlichkeit',
             srcTitle: 'Titel', srcRepo: 'Archiv', srcRef: 'Buch, Signatur, Folio', srcUrl: 'Online', srcPersons: 'Personen', srcFacts: 'Angaben', srcRead: 'Von der Forschung gelesen', srcTranscript: 'Abschrift', srcRecDate: 'Datum des Eintrags',
+            bArch: 'Geburt: Archiv', bRef: 'Geburt: Signatur', bUrl: 'Geburt: Link', wArch: 'Heirat: Archiv', wRef: 'Heirat: Signatur', wUrl: 'Heirat: Link', dArch: 'Tod: Archiv', dRef: 'Tod: Signatur', dUrl: 'Tod: Link',
         },
         columns: 'Spalten',
         columnsCount: (n: number, m: number) => `${numDe(n)} von ${numDe(m)}`,
@@ -25024,6 +25031,8 @@ const stringsDE: StringsType = {
         noSourcesTitle: 'Im Stammbaum gibt es keine Quelle',
         noSourcesText: 'Quellen erscheinen hier, sobald eine unter Quellen eingetragen oder bei einer Person zitiert ist.',
         readers: (n: number) => `${n} Leser`,
+        moreCites: (n: number) => nDe(n, 'weitere Quellenangabe', 'weitere Quellenangaben'),
+        citesTitle: 'Weitere Quellenangaben',
         noFindingsTitle: 'Keine Fehler und nichts zu prüfen',
         noFindingsText: (n: number) => (n > 0
             ? `Die Prüfungen fanden nichts, was eine Prüfung lohnt. Spuren (${numDe(n)}) stehen in der Datenqualität.`

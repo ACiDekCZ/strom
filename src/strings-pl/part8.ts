@@ -1208,6 +1208,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             p1: 'Partner 1', p2: 'Partner 2', age1: 'Wiek 1', rec1: 'Wiek zapisany 1', age2: 'Wiek 2', rec2: 'Wiek zapisany 2',
             evType: 'Typ', evWho: 'Osoba lub para', evDate: 'Data', evPlace: 'Miejsce', evAge: 'Wiek w chwili wydarzenia', evValue: 'Wartość', godparents: 'Chrzestni', officiants: 'Celebrans', others: 'Inni obecni', evSource: 'Źródło', evRel: 'Wiarygodność',
             srcTitle: 'Tytuł', srcRepo: 'Archiwum', srcRef: 'Księga, sygnatura, folio', srcUrl: 'Online', srcPersons: 'Osób', srcFacts: 'Faktów', srcRead: 'Przeczytane w badaniach', srcTranscript: 'Transkrypcja', srcRecDate: 'Data wpisu',
+            bArch: 'Urodzenie: archiwum', bRef: 'Urodzenie: sygnatura', bUrl: 'Urodzenie: link', wArch: 'Ślub: archiwum', wRef: 'Ślub: sygnatura', wUrl: 'Ślub: link', dArch: 'Zgon: archiwum', dRef: 'Zgon: sygnatura', dUrl: 'Zgon: link',
         },
         columns: 'Kolumny',
         columnsCount: (n: number, m: number) => `${numPl(n)} z ${numPl(m)}`,
@@ -1412,6 +1413,8 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         noSourcesTitle: 'W drzewie nie ma żadnego źródła',
         noSourcesText: 'Źródła pojawią się tutaj, gdy jakieś zostanie zapisane w Źródłach lub przypisane do osoby.',
         readers: (n: number) => `${n} ${n === 1 ? 'czytelnik' : 'czytelników'}`,
+        moreCites: (n: number) => nPl(n, 'kolejne cytowanie', 'kolejne cytowania', 'kolejnych cytowań'),
+        citesTitle: 'Pozostałe cytowania',
         noFindingsTitle: 'Bez błędów i rzeczy do sprawdzenia',
         noFindingsText: (n: number) => (n > 0
             ? `Kontrole nie znalazły niczego, co warto sprawdzić. Tropy (${n}) są w Jakości danych.`

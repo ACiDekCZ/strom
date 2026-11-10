@@ -20,7 +20,8 @@ import { lifeEventLabel } from '../../person-sources.js';
 import { factReliability, type ReliabilityStepName } from '../../reliability.js';
 import { strings, type StringsType } from '../../strings.js';
 import { safeHttpUrl } from '../../validation.js';
-import { sourceReaders } from './table-sources.js';
+import { factCitations, sourceReaders, type CitedSource } from './table-sources.js';
+import { personGodparents } from './table-events.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link';
@@ -282,6 +283,26 @@ function personSources(row: PersonRow): number {
     return ids.size;
 }
 
+/**
+ * A citation cell (§14.3): the first cited source's archive, reference or
+ * web address (a link ↗); with more, the others' ids for the pill "+N".
+ * Sorted and filtered by the first one's value.
+ */
+export function citeCell(cites: readonly CitedSource[], field: 'repo' | 'ref' | 'url'): CellValue {
+    if (!cites.length) return emptyCell();
+    const first = cites[0].source;
+    const cell = field === 'url' ? urlCell(first.url) : textCell(field === 'repo' ? first.repository : first.reference);
+    return cites.length > 1 ? { ...cell, moreSources: cites.slice(1).map(c => c.id) } : cell;
+}
+
+/** Godparents (§14.5): the names of the birth's and the baptism's godparents, the tree's people as links to them. */
+function godparentsCell(ctx: TableContext, p: Person): CellValue {
+    return namesCell(personGodparents(p).map(x => {
+        const n = participantCellName(ctx, x);
+        return n.personId ? { text: n.text, personId: n.personId } : { text: n.text };
+    }));
+}
+
 function reliabilityText(step: ReliabilityStepName): string {
     const r = strings.reliability;
     if (step === 'human') return r.human;
@@ -417,6 +438,7 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'bAddr', group: 'birth', label: 'bAddr', width: 180, get: (_c, r) => textCell(asPerson(r).birthAddress) },
     { id: 'bapDate', group: 'birth', label: 'bapDate', width: 120, kind: 'date', get: (c, r) => dateCell(c, firstEvent(asPerson(r), 'baptism')?.date) },
     { id: 'bapPlace', group: 'birth', label: 'bapPlace', width: 180, get: (_c, r) => textCell(firstEvent(asPerson(r), 'baptism')?.place) },
+    { id: 'godparents', group: 'birth', label: 'godparents', width: 220, get: (c, r) => godparentsCell(c, asPerson(r)) },
     {
         id: 'fAge', group: 'birth', label: 'fAge', width: 104, kind: 'age', computed: true, get: (c, r) => {
             const [father] = parentsOf(c, asPerson(r));
@@ -522,6 +544,16 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'edu', group: 'events', label: 'edu', width: 160, get: (_c, r) => eventValues(asPerson(r), 'education') },
     // Sources
     { id: 'srcCount', group: 'sources', label: 'srcCount', width: 92, kind: 'number', computed: true, get: (_c, r) => numberCell(personSources(r as PersonRow)) },
+    // The citations of the birth, the marriage (the union of the row or sub-row) and the death (§14.3).
+    { id: 'bArch', group: 'sources', label: 'bArch', width: 200, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'repo') },
+    { id: 'bRef', group: 'sources', label: 'bRef', width: 190, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'ref') },
+    { id: 'bUrl', group: 'sources', label: 'bUrl', width: 200, kind: 'link', get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'url') },
+    { id: 'wArch', group: 'sources', label: 'wArch', width: 200, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'repo')) },
+    { id: 'wRef', group: 'sources', label: 'wRef', width: 190, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'ref')) },
+    { id: 'wUrl', group: 'sources', label: 'wUrl', width: 200, kind: 'link', unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'url')) },
+    { id: 'dArch', group: 'sources', label: 'dArch', width: 200, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'repo')) },
+    { id: 'dRef', group: 'sources', label: 'dRef', width: 190, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'ref')) },
+    { id: 'dUrl', group: 'sources', label: 'dUrl', width: 200, kind: 'link', get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'url')) },
     // Reliability and research
     { id: 'relN', group: 'rel', label: 'relN', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asPerson(r), 'name') },
     { id: 'relB', group: 'rel', label: 'relB', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asPerson(r), 'birth') },
@@ -843,13 +875,15 @@ function noteWhat(col: ColumnDef): string {
 
 /**
  * A cell as plain text (search, CSV, width fitting): the substitute's label
- * and a date's qualifier word in front of the value; "–" for a cell the
+ * and a date's qualifier word in front of the value, further citations
+ * as "(+2)" after it (§14.3, as the pill shows them); "–" for a cell the
  * column does not apply to.
  */
 export function cellPlainText(value: CellValue): string {
     if (value.na && !value.text) return '–';
     const s = strings.table.subst;
-    const parts = [value.subst === 'bap' ? s.bapShort : value.subst === 'bur' ? s.burShort : '', value.prefix ?? '', value.text];
+    const more = value.moreSources?.length ? `(+${value.moreSources.length})` : '';
+    const parts = [value.subst === 'bap' ? s.bapShort : value.subst === 'bur' ? s.burShort : '', value.prefix ?? '', value.text, more];
     return parts.filter(Boolean).join(' ');
 }
 

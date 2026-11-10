@@ -91,6 +91,24 @@ export function legendHtml(): string {
     return html;
 }
 
+/** One further citation of a cell (§14.3) as its bubble lists it. */
+export interface BubbleCite {
+    title: string;
+    /** The archive and the reference ("Archive · fol. 12"), empty when neither is written. */
+    meta: string;
+}
+
+/** The further citations' bubble (§14.3): a title, then each source as a button that opens it. */
+export function citesHtml(cites: readonly BubbleCite[]): string {
+    let html = `<div class="tv-bub-title">${esc(strings.table.citesTitle)}</div><div class="tv-bub-cites">`;
+    cites.forEach((c, i) => {
+        html += `<button type="button" class="tv-bub-cite" data-act="source" data-i="${i}">`
+            + `<span class="tv-bub-cite-title">${esc(c.title)}</span>`
+            + (c.meta ? `<span class="tv-bub-cite-meta">${esc(c.meta)}</span>` : '') + '</button>';
+    });
+    return html + '</div>';
+}
+
 let open: { el: HTMLElement; close(focusBack: boolean): void } | null = null;
 
 export function closeTableBubble(focusBack = false): void {
@@ -107,7 +125,7 @@ export function isTableBubbleOpen(): boolean {
  * `scroller` closes it when it scrolls.
  */
 export function openBubblePanel(opts: {
-    rect: DOMRect; label: string; html: string; kind: 'finding' | 'legend';
+    rect: DOMRect; label: string; html: string; kind: 'finding' | 'legend' | 'cites';
     focusBack: () => HTMLElement | null; scroller?: HTMLElement | null;
     onAction?: (act: string, index: number) => void;
 }): HTMLElement {
@@ -171,7 +189,7 @@ export function openBubblePanel(opts: {
 }
 
 /** The phone's sheet content: a title row with ×, then the bubble's content. */
-export function sheetElement(title: string, html: string, kind: 'finding' | 'legend', onClose: () => void,
+export function sheetElement(title: string, html: string, kind: 'finding' | 'legend' | 'cites', onClose: () => void,
     onAction?: (act: string, index: number) => void): HTMLElement {
     const el = document.createElement('div');
     el.className = `bottom-sheet tv-bubble tv-bubble--sheet tv-bubble--${kind}`;

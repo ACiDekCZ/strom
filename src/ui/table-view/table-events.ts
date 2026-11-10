@@ -173,3 +173,17 @@ export function eventEditTarget(r: EventRow): EventEditTarget | null {
     if ((r.source === 'marriage' || r.source === 'divorce') && r.union && first) return { kind: 'union', partnershipId: r.union.id, personId: first.id };
     return first ? { kind: 'person', personId: first.id } : null;
 }
+
+/**
+ * A person's godparents (§14.5, the People table's Godparents): the
+ * godparent participants of the person's birth and baptism events, each
+ * (person, or name) once — the same participants the Events table lists.
+ */
+export function personGodparents(p: Person): EventParticipant[] {
+    const out: EventParticipant[] = [];
+    for (const e of p.events ?? []) {
+        if (e.type !== 'birth' && e.type !== 'baptism') continue;
+        mergeParticipants(out, (e.participants ?? []).filter(x => x.role === 'godparent'));
+    }
+    return out;
+}

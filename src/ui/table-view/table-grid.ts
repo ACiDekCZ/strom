@@ -118,6 +118,8 @@ export interface GridHandlers {
      * (a link), a participant's name (its filter).
      */
     onName?(line: GridLine, col: ColumnDef, name: CellName, anchor: HTMLElement): void;
+    /** The pill "+N" of a citation cell (§14.3): the further citations' bubble. */
+    onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
     /** The row's menu (§10.1): a right click, Shift+F10, the menu key. */
     onRowMenu?(line: GridLine, anchor: HTMLElement): void;
     /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
@@ -215,6 +217,19 @@ export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark
 }
 
 function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
+    const html = cellValueCore(value, col, hit);
+    return value.moreSources?.length && !value.na ? html + moreCitesHtml(value.moreSources.length) : html;
+}
+
+/**
+ * The pill "+2" of a fact's further citations (§14.3): a button that opens
+ * their bubble, out of the tab order until its cell is the active one.
+ */
+export function moreCitesHtml(n: number): string {
+    return `<button type="button" class="tv-cites-more" tabindex="-1" aria-haspopup="dialog" aria-label="${esc(strings.table.moreCites(n))}">+${n}</button>`;
+}
+
+function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
         const fill = Math.round((value.percent * COMP_BAR) / 100);
         return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`
@@ -340,6 +355,8 @@ export class TableGrid {
             }
             const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
             if (nm && cellEl && this.nameAt(line, cellEl, nm)) return;
+            const more = t.closest<HTMLElement>('.tv-cites-more');
+            if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
             // A web address opens its own window (§14.2); the row stays as it is.
             if (t.closest('a.tv-link')) return;
             const act = t.closest<HTMLElement>('.tv-act[data-act]');
@@ -359,7 +376,7 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link')) return;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             this.handlers.onRowAction?.('edit', line);
@@ -414,9 +431,20 @@ export class TableGrid {
         return true;
     }
 
+    /** The pill "+N" of a citation cell (§14.3) to its handler; false: the cell has no further citations. */
+    private moreCitesAt(line: GridLine, cellEl: HTMLElement, btn: HTMLElement): boolean {
+        const input = this.input;
+        if (!input || line.kind === 'more' || !this.handlers.onMoreCites) return false;
+        const col = input.columns[Number(cellEl.getAttribute('aria-colindex')) - 1];
+        const ids = col ? lineCell(input.model, line, col).moreSources : undefined;
+        if (!col || !ids?.length) return false;
+        this.handlers.onMoreCites(line, col, ids, btn);
+        return true;
+    }
+
     /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
     private syncNameTabs(): void {
-        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link')) {
+        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more')) {
             b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -1176,7 +1204,7 @@ export class TableGrid {
         if (!input || !this.lines.length) return;
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link')) return;
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more')) return;
         const at = this.activeLineIndex();
         const line = this.lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);
