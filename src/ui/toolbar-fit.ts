@@ -1,37 +1,43 @@
 /**
- * Desktop toolbar fit: "＋ Add person" folds to ＋ alone when the toolbar
- * cannot hold every control with its full label.
+ * Desktop toolbar fit: the toolbar gives way step by step when it cannot hold
+ * every control with its full label.
  *
  * Fixed widths cannot know the content: a tree tied to a research adds the
  * Research button and the research state beside the logo, and the labels
  * differ by language (de is the widest). So the fit is measured instead. The
- * toolbar overflows (its last button is cut at the window edge), the tree
- * switcher is squeezed below its own pill, which then slides under the search
- * field, or the pill keeps its place but its tree name is cut shorter than the
- * name's own cap (de at 1440 with a research: "F."): in each case
- * `.toolbar-add-compact` hides the label of the add button (its tooltip and
- * accessible name stay). A renamed tree is measured again (the name's text is
- * watched: a name squeezed before and after need not change any size).
+ * toolbar is too tight when it overflows (its last button is cut at the
+ * window edge), the tree switcher is squeezed below its own pill (which then
+ * slides under the search field), the pill keeps its place but its tree name
+ * is cut shorter than the name's own cap (de at 1440 with a research: "F."),
+ * or a research tree's search field cannot hold its placeholder (up to
+ * SEARCH_ROOM_CAP_PX). The steps (spec 073 §1.2), each taken only when the
+ * ones before it are not enough:
  *
- * The measurement is always taken with the full label, so the decision is a
- * function of the width and the content alone and cannot oscillate. Leaving
- * the compact state asks for HYSTERESIS_PX of spare room, so a window resized
- * across the boundary does not flip the label pixel by pixel.
+ *   1. `.toolbar-add-compact`: "＋ Add person" → ＋ alone (its tooltip and
+ *      accessible name stay);
+ *   2. `.toolbar-squeeze`: narrower view tabs, no "/" hint;
+ *   3. `.toolbar-squeeze-2`: "Actions ▾" → ⋯;
+ *   4. `.toolbar-squeeze-name`: the tree's name capped shorter ("…", the
+ *      whole name in its tooltip);
+ *   5. `.toolbar-squeeze-3`: the search field → the magnifier, the field
+ *      opens over the toolbar.
+ *
+ * The view tabs never fold. A renamed tree is measured again (the name's text
+ * is watched: a name squeezed before and after need not change any size).
+ *
+ * Each step is measured with the steps before it taken and itself not, so the
+ * decision is a function of the width and the content alone and cannot
+ * oscillate. Leaving a step asks for HYSTERESIS_PX of spare room, so a window
+ * resized across a boundary does not flip it pixel by pixel.
  *
  * The fixed 1180–1280 px rule in index.html (a research tree, ＋ alone) stays:
- * measured on top of it, the toolbar fits and this class is not set there.
- *
- * A research tree also keeps the search field usable: the Research button
- * takes its room from the search field, so its input must still hold its
- * placeholder (up to SEARCH_ROOM_CAP_PX). When it does not, the add button
- * folds first; when that is still not enough, `.toolbar-squeeze` folds the
- * "Actions" label into ⋯. A tree without a research is measured as before.
+ * measured on top of it, the toolbar fits and the first class is not needed there.
  */
 
 import { isDesktop } from '../breakpoints.js';
 
-const COMPACT_CLASS = 'toolbar-add-compact';
-const SQUEEZE_CLASS = 'toolbar-squeeze';
+/** The steps in their order (see above). */
+export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
 const HYSTERESIS_PX = 16;
 /** The search input never asks for more room than this (a long placeholder may be cut). */
 export const SEARCH_ROOM_CAP_PX = 120;
@@ -93,22 +99,31 @@ function tooTight(toolbar: HTMLElement, reserve: number): boolean {
     return tight || searchShortfall(toolbar, reserve) > 0;
 }
 
-/** Re-measure the toolbar and set or clear the compact add button (and the squeeze). */
+/** Re-measure the toolbar and take as many steps as it needs. */
 export function updateToolbarFit(): void {
     const toolbar = document.querySelector<HTMLElement>('.toolbar');
     if (!toolbar) return;
     if (!isDesktop()) {
-        toolbar.classList.remove(COMPACT_CLASS, SQUEEZE_CLASS);
+        toolbar.classList.remove(...TOOLBAR_FIT_STEPS);
+        nameTooltip(toolbar);
         return;
     }
-    const wasCompact = toolbar.classList.contains(COMPACT_CLASS);
-    const wasSqueezed = toolbar.classList.contains(SQUEEZE_CLASS);
-    toolbar.classList.remove(COMPACT_CLASS, SQUEEZE_CLASS);
-    const compact = tooTight(toolbar, wasCompact ? HYSTERESIS_PX : 0);
-    toolbar.classList.toggle(COMPACT_CLASS, compact);
-    // The second step, measured with ＋ alone: only the search field's room decides it.
-    const squeeze = compact && searchShortfall(toolbar, wasSqueezed ? HYSTERESIS_PX : 0) > 0;
-    toolbar.classList.toggle(SQUEEZE_CLASS, squeeze);
+    const had = TOOLBAR_FIT_STEPS.map(step => toolbar.classList.contains(step));
+    toolbar.classList.remove(...TOOLBAR_FIT_STEPS);
+    for (let i = 0; i < TOOLBAR_FIT_STEPS.length; i++) {
+        if (!tooTight(toolbar, had[i] ? HYSTERESIS_PX : 0)) break;
+        toolbar.classList.add(TOOLBAR_FIT_STEPS[i]);
+    }
+    nameTooltip(toolbar);
+}
+
+/** A tree name cut short carries the whole name in its tooltip. */
+function nameTooltip(toolbar: HTMLElement): void {
+    const name = toolbar.querySelector<HTMLElement>('#current-tree-name');
+    if (!name) return;
+    const cut = name.scrollWidth > name.clientWidth + 1;
+    if (cut) name.title = name.textContent ?? '';
+    else name.removeAttribute('title');
 }
 
 /**

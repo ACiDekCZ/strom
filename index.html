@@ -996,11 +996,11 @@
             .actions-menu-btn .actions-menu-chevron { display: none; }
             .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
         }
-        /* A research tree whose search field is still short of room with ＋ alone
-           (measured, src/ui/toolbar-fit.ts): the ⋯-only trigger as well. */
-        .toolbar.toolbar-squeeze .actions-menu-label { display: none; }
-        .toolbar.toolbar-squeeze .actions-menu-btn .actions-menu-chevron { display: none; }
-        .toolbar.toolbar-squeeze .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
+        /* Fit step 3 (measured, src/ui/toolbar-fit.ts): the toolbar is still
+           too tight with ＋ alone and narrower tabs — the ⋯-only trigger. */
+        .toolbar.toolbar-squeeze-2 .actions-menu-label { display: none; }
+        .toolbar.toolbar-squeeze-2 .actions-menu-btn .actions-menu-chevron { display: none; }
+        .toolbar.toolbar-squeeze-2 .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
         /* View mode (an exported page, menu 1020 §10, D1): Anniversaries ·
            For the family › · Tree overview (in place of "Tree ›") · Settings.
            The rows outrank the view-mode rule that hides the editing rows. */
@@ -11260,10 +11260,34 @@
            otherwise painted a dark-green fill behind the dark hover text
            (dark-on-dark) — reassert a transparent background here. */
         @media (hover: hover) { .view-mode-segment button:hover { color: var(--text); background: transparent; } }
-        /* A research tree whose search field is short of room with ＋ alone (measured,
-           src/ui/toolbar-fit.ts): tighter tabs and no "/" hint, the field keeps its text. */
+        /* Fit step 2 (measured, src/ui/toolbar-fit.ts): the toolbar is too tight with
+           ＋ alone — tighter tabs and no "/" hint, the field keeps its text. */
         .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 9px; }
         .toolbar.toolbar-squeeze .search-shortcut { display: none; }
+        /* Fit step 4: the tree's name capped shorter ("…"; the whole name in its tooltip). */
+        .toolbar.toolbar-squeeze-name .tree-switcher-btn { max-width: min(96px, 100%); }
+        .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-name { max-width: 56px; }
+        /* Fit step 5 (desktop only): the search field folds to the magnifier; open, it
+           lies over the toolbar's middle. A query that holds marks the magnifier. */
+        @media (min-width: 1025px) {
+            .toolbar.toolbar-squeeze-3 .search-container { display: none; }
+            .toolbar.toolbar-squeeze-3 .search-open-btn {
+                display: flex; align-items: center; justify-content: center; flex: none;
+                width: 36px; height: 36px; padding: 0; margin-right: auto;
+                border: 1px solid var(--border); border-radius: var(--r-pill);
+                background: transparent; color: var(--text); cursor: pointer;
+            }
+            .toolbar.toolbar-squeeze-3 .search-open-btn svg { width: 18px; height: 18px; }
+            body.search-active .toolbar.toolbar-squeeze-3 .search-open-btn { border-color: var(--primary); color: var(--primary); }
+            body.search-open .toolbar.toolbar-squeeze-3 .search-container,
+            body.search-filters-open .toolbar.toolbar-squeeze-3 .search-container {
+                display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                width: min(360px, 60vw); margin: 0; z-index: 3;
+            }
+        }
+        @media (min-width: 1025px) and (hover: hover) {
+            .toolbar.toolbar-squeeze-3 .search-open-btn:hover { background: var(--surface-2); border-color: var(--primary); }
+        }
         .view-mode-segment button.active {
             color: var(--accent);
             border-bottom-color: var(--accent);
