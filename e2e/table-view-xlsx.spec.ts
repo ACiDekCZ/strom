@@ -63,6 +63,13 @@ test.describe('desktop (1440)', () => {
         const read = readXlsx(new Uint8Array(bytes));
         expect(read.cell('A2')?.text).toBe('Name');
         expect(read.cell('A3')?.text).toBe('filled');
+        // Every part parses in the browser's own XML parser: one broken attribute in
+        // styles.xml was enough for Numbers to refuse the whole file.
+        const broken = await page.evaluate(parts => parts
+            .filter(([, text]) => new DOMParser().parseFromString(text, 'application/xml').getElementsByTagName('parsererror').length > 0)
+            .map(([path]) => path), [...read.files]);
+        expect(read.files.size).toBeGreaterThan(6);
+        expect(broken).toEqual([]);
         // The coverage row's shares are numbers shown as a percentage, the names texts, and
         // Excel's "number stored as text" warning is off for the sheet.
         const coverage = [...read.rows[2].cells.values()].filter(c => c.ref !== 'A3');

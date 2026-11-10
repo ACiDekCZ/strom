@@ -142,7 +142,7 @@ function styles(): string {
     const fill = (rgb: string): string => `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
     // xf: numFmtId 49 is "@" (text): a value typed into the cell later stays text too.
     const xf = (font: number, fill: number, extra = '', fmt = 49): string =>
-        `<xf numFmtId="${fmt}" fontId=""${font}" fillId="${fill}" borderId="0" xfId="0" applyNumberFormat="1"`
+        `<xf numFmtId="${fmt}" fontId="${font}" fillId="${fill}" borderId="0" xfId="0" applyNumberFormat="1"`
         + `${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${extra ? ` applyAlignment="1">${extra}</xf>` : '/>'}`;
     return HEAD + `<styleSheet xmlns="${NS}">`
         + `<fonts count="3">${font('')}${font('<b/>')}${font('<i/><color rgb="FF6B6B6B"/>')}</fonts>`

@@ -21,6 +21,7 @@ import { buildTableXlsx } from '../ui/table-view/table-xlsx.js';
 import { sortRows } from '../ui/table-view/table-filter.js';
 import { buildXlsx, columnName, sheetName, xlsxText, XLSX_FILL, XLSX_NUMBER, XLSX_PERCENT, XLSX_STYLE } from '../xlsx.js';
 import { readXlsx } from './helpers/xlsx-read.js';
+import { parseXml } from './helpers/xml-parse.js';
 
 const WHEN = new Date('2026-06-15T10:00:00Z');
 
@@ -113,6 +114,52 @@ describe('the package (zip and parts)', () => {
         // "Number stored as text" off for the whole sheet, after pageMargins and before legacyDrawing (CT_Worksheet order).
         expect(read.sheet).toContain('<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
             + '<ignoredErrors><ignoredError sqref="A1:K9" numberStoredAsText="1"/></ignoredErrors><legacyDrawing ');
+    });
+
+    it('every part of every workbook is well-formed XML (parsed, not matched): all four row types, findings, a fuzzed workbook', () => {
+        const m = build();
+        const books: Array<[string, Uint8Array]> = [['persons with findings', peopleXlsx().out.bytes]];
+        for (const type of ['persons', 'unions', 'events', 'sources'] as const) {
+            const rows = type === 'persons' ? m.persons : type === 'unions' ? m.unions : type === 'events' ? m.events : m.sources;
+            books.push([type, buildTableXlsx({ model: m, type, rows, columns: columnsOf(type), pinned: 1, sheetName: '', when: WHEN }).bytes]);
+        }
+        books.push(['specials', buildXlsx({
+            name: 'S',
+            columns: [{ width: 10 }, { width: 10 }],
+            rows: [{ cells: [{ text: '<a href="x">&amp; "q" \'a\' ]]> \u0001 😀 क्ष', comment: '& < > " \' ]]>' }, { text: '=1+1' }] }],
+        }, WHEN)]);
+        for (const [label, bytes] of books) {
+            const files = readXlsx(bytes).files;
+            expect(files.size, label).toBeGreaterThan(6);
+            for (const [path, text] of files) {
+                const root = (() => {
+                    try { return parseXml(text); } catch (e) { throw new Error(`${label}: ${path}: ${(e as Error).message}`); }
+                })();
+                expect(root.name, `${label}: ${path}`).toBeTruthy();
+            }
+            // The styles the cells point at: every xf names a font, a fill and a number format that exist.
+            const styles = parseXml(files.get('xl/styles.xml')!);
+            const part = (n: string) => styles.children.find(c => c.name === n)!;
+            const xfs = part('cellXfs').children;
+            expect(xfs).toHaveLength(Number(part('cellXfs').attrs.get('count')));
+            for (const xf of xfs) {
+                expect(Number(xf.attrs.get('fontId')), label).toBeLessThan(part('fonts').children.length);
+                expect(Number(xf.attrs.get('fillId')), label).toBeLessThan(part('fills').children.length);
+                expect(xf.attrs.get('numFmtId'), label).toMatch(/^\d+$/);
+            }
+        }
+    });
+
+    it('the XML parser of the tests rejects what a spreadsheet program rejects', () => {
+        expect(parseXml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<a x="1"><b/>t&amp;&#x1F600;<![CDATA[<]]></a>').children).toHaveLength(1);
+        for (const bad of [
+            '<a><xf numFmtId="49" fontId=""0" fillId="0"/></a>',
+            '<a x="1" x="2"/>', '<a><b></a></b>', '<a>', '<a/><b/>', '<a>&nbsp;</a>', '<a>& b</a>', '<a x="<"/>',
+            '<a x=1/>', '<a>\u0001</a>', '<a>\uD800</a>', '<a>]]></a>', 'text<a/>', '<a/>text', '<a x="1"y="2"/>',
+            ' <?xml version="1.0"?><a/>', '<!DOCTYPE a><a/>', '<a><!-- a -- b --></a>',
+        ]) {
+            expect(() => parseXml(bad), bad).toThrow(/XML not well-formed/);
+        }
     });
 
     it('the archive is dated and the same input gives the same bytes', () => {
