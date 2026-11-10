@@ -111,8 +111,7 @@ function csvOf(path: string): string[][] {
 }
 
 async function downloadCsv(page: Page): Promise<string[][]> {
-    // While following, the live panel lies over the end of the table's toolbar: the button is pressed by itself.
-    await page.locator('#table-container .tv-export-btn').evaluate(el => (el as HTMLElement).click());
+    await page.locator('#table-container .tv-export-btn').click();
     const panel = page.locator('.tv-fpanel.tv-xpanel');
     await panel.locator('.tv-xfmt [data-fmt="csv"], .tv-xopt-pick', { hasText: 'CSV' }).first().click().catch(() => {});
     const [file] = await Promise.all([
@@ -183,6 +182,22 @@ test.describe('live (§16.6, 16s–16u)', () => {
         // The segment stands at the top of the track.
         const still = await run.boundingBox();
         expect(Math.abs(still!.y - box!.y)).toBeLessThanOrEqual(1);
+    });
+
+    test('while following, the live card stands below the table\'s bar: Export takes a click; back in the Family view at the top (1110)', async ({ page }) => {
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        const atTop = (await panel.boundingBox())!.y;
+        await openTable(page);
+        const bar = page.locator('#table-container > .tv-bar');
+        await expect.poll(async () => (await panel.boundingBox())!.y).toBeGreaterThanOrEqual((await bar.boundingBox())!.y + (await bar.boundingBox())!.height);
+        const hit = await page.locator('#table-container .tv-export-btn').evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+        });
+        expect(hit).toBe(true);
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+        await expect.poll(async () => (await panel.boundingBox())!.y).toBe(atTop);
     });
 
     test('CSV while following: the agent and the tasks written as words and counts, no toast about them', async ({ page }) => {
@@ -263,6 +278,6 @@ test.describe('phone (390): Research and Line right after the name (16x, 16zh)',
         await nextToName(page, 'rSum', true);
         await expect((await nameOf(page, 'P0003')).locator('.tv-agent-bar')).toBeVisible();
         await openView(page, 'r:line:G0001');
-        await nextToName(page, 'rLine', false);
+        await nextToName(page, 'rLine', true);
     });
 });

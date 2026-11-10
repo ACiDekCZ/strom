@@ -25,7 +25,7 @@ import {
     builtinViews, dropMissingViews, findView, isBuiltinId, isResearchViewId, researchViewId, researchViews, setResearchViews,
     switchView, takenViewNames, viewChanged, viewList,
 } from '../ui/table-view/table-views.js';
-import { defaultTableState } from '../ui/table-view/table-state.js';
+import { defaultTableState, shownColumns } from '../ui/table-view/table-state.js';
 import { tableEmptyState, type TableEmptyInput } from '../ui/table-view/table-empty.js';
 
 const GED = readFileSync(join(__dirname, '../../e2e/fixtures/research-table.ged'), 'utf8');
@@ -190,6 +190,22 @@ describe('the research\'s views (§16.5, §16.9, §16.10)', () => {
         const x = findView('r:exchange', [])!;
         expect(x.columns.map(c => c.id)).toEqual(['name', 'rSync', 'rOrig', 'rNew', 'rConf', 'bDate']);
         expect(x.sort).toEqual([]);
+    });
+
+    it('a phone of 390 px: the column right after the pinned name ends inside the screen in each research view (1110)', () => {
+        const env = envOf();
+        offerOf(env);
+        setResearchOffer(researchOffer(env));
+        const second = { 'r:research': 'rSum', 'r:line:G0001': 'rLine', 'r:offLine': 'rLine', 'r:exchange': 'rSync' };
+        for (const [id, col] of Object.entries(second)) {
+            const state = defaultTableState();
+            expect(switchView(state, id, [])).toBe(true);
+            const { columns, widths, pinned } = shownColumns('persons', state.types.persons, true);
+            expect(pinned).toBe(1);
+            expect(columns[1].id).toBe(col);
+            // The Line view's Line was 156 + 240 = 396 px: 6 px past the edge (Exchange's Sync 156 + 288).
+            expect(widths[0] + widths[1], id).toBeLessThanOrEqual(390);
+        }
     });
 
     it('opened, a research view is not changed; a line gone from the research takes its view away', () => {

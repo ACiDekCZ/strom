@@ -665,7 +665,6 @@ class TreeRendererClass {
 
     /** The Table view in its own container; the other views' containers and the canvas hidden. */
     private showTableView(canvas: HTMLElement): void {
-        const leftFan = document.body.dataset.viewMode === 'fan';
         this.fanView?.deactivate();
         document.body.dataset.viewMode = 'table';
         for (const id of ['timeline-container', 'fan-container', 'map-container']) {
@@ -681,7 +680,8 @@ class TreeRendererClass {
         }
         this.updateFocusUI();
         UI.updateViewModeUI?.();
-        if (leftFan) UI.placeLivePanel?.();
+        // A followed research's card stands below the table's bar (fitted again whenever the bar's height changes).
+        UI.placeLivePanel?.();
         UI.updateMinimap?.();
         UI.updateGenLabels?.();
         UI.updateViewLinksIndicator?.();
@@ -901,7 +901,8 @@ class TreeRendererClass {
         // §5.2: leaving the Fan view forgets its way back.
         if (this.viewMode !== 'fan') this.fanView?.deactivate();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
-        const leftFan = document.body.dataset.viewMode === 'fan' && this.viewMode !== 'fan';
+        // A followed research's card stood below the Fan or the Table view's bar: back at the top it is placed again.
+        const leftFan = (document.body.dataset.viewMode === 'fan' && this.viewMode !== 'fan') || document.body.dataset.viewMode === 'table';
         document.body.dataset.viewMode = this.viewMode;
         for (const [mode, view] of Object.entries(standalone)) {
             const el = document.getElementById(view.id);

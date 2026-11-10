@@ -146,6 +146,9 @@ function researchBarState(
     };
 }
 
+/** Watches the bar's height for a followed research's card below it. */
+let barWatch: ResizeObserver | null = null;
+
 /** The phone's Filters sheet while it is open (8h). */
 let filterSheet: { sheet: FilterSheet; overlay: HTMLElement } | null = null;
 
@@ -704,6 +707,17 @@ export const tableMethods = uiModule({
                 else if (act === 'follow') this.showLiveResearchNow();
             });
             container.append(bar, grid.el, empty, status);
+            // A followed research's card stands below the bar: placed again when the bar's bottom moves
+            // (the chips wrap, the research block opens, the window narrows).
+            barWatch?.disconnect();
+            let barBottom = -1;
+            barWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+                const bottom = Math.round(bar.getBoundingClientRect().bottom);
+                if (bottom === barBottom) return;
+                barBottom = bottom;
+                this.placeLivePanel?.();
+            }) : null;
+            barWatch?.observe(bar);
             mounted = {
                 container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
                 empty, emptyKey: '', unionsButton: null,

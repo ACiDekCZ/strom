@@ -1004,12 +1004,17 @@ export const DEFAULT_VIEWS: Record<RowType, DefaultView> = {
  */
 const PHONE_MIN_WIDTH: Partial<Record<ColumnKind, number>> = { date: 124, age: 92 };
 
+/** The phone width of Line and Sync at most: right after the pinned name they end inside a 390 px screen. */
+const PHONE_LINE_WIDTH = 222;
+
 /** Phone (≤ 640): the name column pinned at 156 px, the others at 0.8 of their width (min 70, a date or age more; §1.4). */
 export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): number {
     if (pinned && (col.id === 'name' || col.id === 'p1' || col.id === 'srcTitle')) return 156;
     if (pinned && col.id === 'evType') return 96;
     if (pinned && col.id === 'evWho') return 140;
     if (col.id === 'rSum') return 96;
+    // The Line and Exchange views put Line or Sync right after the pinned name: both whole on a 390 px phone (156 + 222 + a 12 px edge).
+    if (col.id === 'rLine' || col.id === 'rSync') return Math.min(PHONE_LINE_WIDTH, Math.round(width * 0.8));
     return Math.max(PHONE_MIN_WIDTH[col.kind] ?? 70, Math.round(width * 0.8));
 }
 

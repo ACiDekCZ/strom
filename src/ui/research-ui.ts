@@ -1407,14 +1407,15 @@ function placeLivePanel(panel: HTMLElement): void {
     const base = panel.getBoundingClientRect();
     const overlaps = (r: DOMRect) => r.width > 0 && r.height > 0 && r.left < base.right && r.right > base.left;
     let top = base.top;
-    for (const sel of ['#embedded-mode-banner.visible', '#collab-bar', '#collab-badge']) {
+    // The Table view's bar spans the width under the top bar (and may wrap): the card stands below it.
+    for (const sel of ['#embedded-mode-banner.visible', '#collab-bar', '#collab-badge', 'body[data-view-mode="table"] #table-container > .tv-bar']) {
         const node = document.querySelector<HTMLElement>(sel);
         if (!node || getComputedStyle(node).display === 'none') continue;
         const r = node.getBoundingClientRect();
         if (overlaps(r) && r.top < window.innerHeight / 3) top = Math.max(top, r.bottom + 8);
     }
     let bottom = window.innerHeight - 12;
-    for (const sel of ['.control-block', '.zoom-controls', '.fan-zoom-controls', '.bottom-bar', '#view-mode-banner.visible']) {
+    for (const sel of ['.control-block', '.zoom-controls', '.fan-zoom-controls', '.bottom-bar', '#view-mode-banner.visible', 'body[data-view-mode="table"] #table-container > .tv-status']) {
         const node = document.querySelector<HTMLElement>(sel);
         if (!node) continue;
         const r = node.getBoundingClientRect();
