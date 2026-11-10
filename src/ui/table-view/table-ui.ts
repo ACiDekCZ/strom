@@ -35,7 +35,7 @@ import {
     chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions,
 } from './table-filterbar.js';
 import { buildTableModel, modelIsCurrent, ROW_TYPES, rowKey, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
-import { TableGrid } from './table-grid.js';
+import { TableGrid, type RowAction } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
@@ -52,7 +52,7 @@ import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem, typ
 import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
 import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
-import type { Partnership, StromData, TableView, TreeId } from '../../types.js';
+import type { Partnership, PartnershipId, PersonId, StromData, TableView, TreeId } from '../../types.js';
 import {
     discardViewChanges, dropMissingViews, isBuiltinId, newViewId, openViewOf, readTableWork, restoreTableState, switchView,
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
@@ -63,6 +63,12 @@ import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, ty
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { markHtml, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement } from './table-bubble.js';
+import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
+import type { DataChangedDetail } from '../../data.js';
+import { isCoarsePointer } from '../bottom-sheet.js';
+import { ZoomPan } from '../../zoom.js';
+import { fanYears } from '../../fan-labels.js';
+import { shownNameOrEmpty as personName } from '../../person-name.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -93,7 +99,24 @@ let filterSheet: { sheet: FilterSheet; overlay: HTMLElement } | null = null;
 let panel: { panel: ColumnPanel; overlay: HTMLElement | null } | null = null;
 
 let model: TableModel | null = null;
-let view: { model: TableModel; type: RowType; key: string; result: FilterResult } | null = null;
+
+/** The rows shown: filtered and sorted, or kept in place after a change (§10.3) with those that no longer pass. */
+interface ShownRows extends FilterResult {
+    stale: ReadonlySet<string>;
+}
+const NONE: ReadonlySet<string> = new Set();
+/**
+ * The rows last shown: for the tree, the model, the row type, what the user
+ * set (filter, search, sort) and the findings it reads. `kept`: in their
+ * place since a change of the data (§10.3), until the user sets something.
+ */
+let view: { tree: string; model: TableModel; type: RowType; key: string; checks: number; kept: boolean; result: ShownRows } | null = null;
+
+/** An edit opened from the table (§10.3): the person and the records the edit may change, as stored before. */
+let watching: { tree: string; personId: PersonId; keys: Map<string, string> } | null = null;
+/** Records changed (entity keys) whose rows light up at the next draw (§10.3). */
+let flashNext: { tree: string; keys: readonly string[] } | null = null;
+const BRIDGE_TOAST_MS = 8000;
 let mounted: Mounted | null = null;
 /** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
 let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
@@ -187,17 +210,42 @@ function keepWork(tree: string, state: TableState): void {
  * stay; sorted or filtered by the findings, again when they change (else the
  * order stays, §13i).
  */
-function viewRows(m: TableModel, type: RowType, filter: TableFilter, search: string, sort: readonly SortSpec[], columns: readonly ColumnDef[]): FilterResult {
+function viewRows(
+    tree: string, m: TableModel, type: RowType, filter: TableFilter, search: string, sort: readonly SortSpec[], columns: readonly ColumnDef[],
+): ShownRows {
     const q = searchQuery(search);
     const byChecks = sort.some(s => CHECK_COLUMNS.includes(s.col))
         || filter.items.some(i => isChipItem(i) && CHECK_CHIPS.includes(i.chip));
-    const key = JSON.stringify([filter, q, q ? columns.map(c => c.id) : 0, sort, byChecks ? m.ctx.checks?.version ?? 0 : 0]);
-    if (view && view.model === m && view.type === type && view.key === key) return view.result;
+    const key = JSON.stringify([filter, q, q ? columns.map(c => c.id) : 0, sort]);
+    const checksVersion = byChecks ? m.ctx.checks?.version ?? 0 : 0;
+    const last = view && view.tree === tree && view.type === type && view.key === key ? view : null;
+    if (last && last.model === m && last.checks === checksVersion) return last.result;
     const f = filterRows(m, type, rowsOf(m, type), filter, q ? { query: q, columns } : undefined);
     const rows = sort.length ? sortRows(m, type, f.rows, sort, f.pass ? sortUnionOf(f.pass) : undefined) : f.rows;
-    const result = { rows, pass: f.pass };
-    view = { model: m, type, key, result };
+    // §10.3: after a change of the data the rows stay in place, those that no longer
+    // pass dimmed, until the sort, the filter or the view change.
+    const kept = last && (last.model.rev !== m.rev || last.kept) ? keepOrder(m, last.result.rows, rows) : null;
+    const result: ShownRows = kept ? { rows: kept.rows, pass: f.pass, stale: kept.stale } : { rows, pass: f.pass, stale: NONE };
+    view = { tree, model: m, type, key, checks: checksVersion, kept: !!kept, result };
     return result;
+}
+
+/** The row's person (a union row: its first partner). */
+function personOfRow(row: TableRow): PersonId | null {
+    if (row.kind === 'person') return row.id;
+    return row.p1?.id ?? row.p2?.id ?? null;
+}
+
+/** The union a line stands for, when its edit is the relationships panel (§10.1): a sub-row's, a union row's. */
+function unionOfLine(line: GridLine): PartnershipId | null {
+    if (line.row.kind === 'union') return line.row.id;
+    if (line.kind === 'sub') return line.row.unions[line.union]?.id ?? null;
+    return null;
+}
+
+/** No edits here (13j): a read-only page or a locked tree. */
+function tableReadOnly(): boolean {
+    return DataManager.isReadOnly() || DataManager.isTreeLocked();
 }
 
 export const tableMethods = uiModule({
@@ -243,6 +291,9 @@ export const tableMethods = uiModule({
                     s.types[s.rowType].selected = key;
                     this.renderTableView(container);
                 },
+                onRowClick: (line) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line); },
+                onRowAction: (action, line) => this.tableRowAction(action, line),
+                onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
                 onAllUnions: (expand) => this.changeTableColumns(st => setAllExpanded(st.unions, expand)),
@@ -278,7 +329,15 @@ export const tableMethods = uiModule({
                     redrawFrame = requestAnimationFrame(() => { redrawFrame = 0; redrawTable(el => this.renderTableView(el)); });
                 };
                 window.addEventListener(QUALITY_CHANGED_EVENT, later);
-                window.addEventListener('strom:user-change', later);
+                window.addEventListener('strom:user-change', () => {
+                    this.tableEditSaved();
+                    later();
+                });
+                // A load from the research's bridge (§10.3, 10d): its changed rows lit, a toast with Show.
+                window.addEventListener('strom:data-changed', (e) => {
+                    const detail = (e as CustomEvent<DataChangedDetail | undefined>).detail;
+                    if (detail?.source === 'live' && this.tableBridgeChanged(detail.previous)) later();
+                });
             }
             const status = createStatus();
             const legendBtn = status.querySelector<HTMLButtonElement>('.tv-legend-btn')!;
@@ -330,7 +389,7 @@ export const tableMethods = uiModule({
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
         mounted.display = display;
-        const { rows, pass } = viewRows(m, type, st.filter, st.search, st.sort, display.columns);
+        const { rows, pass, stale } = viewRows(tree, m, type, st.filter, st.search, st.sort, display.columns);
         const persons = type === 'persons';
         const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
@@ -359,7 +418,8 @@ export const tableMethods = uiModule({
             noMatch: !rows.length && summary
                 ? { title: strings.table.noMatch, text: strings.table.applies(summary), action: strings.table.clearFilters }
                 : null,
-            lines, subRows: persons, unionsButton,
+            lines, subRows: persons, unionsButton, stale,
+            actions: phone ? null : { edit: !tableReadOnly() },
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
@@ -376,6 +436,11 @@ export const tableMethods = uiModule({
                 return sev ? markHtml(sev) : '';
             } : undefined,
         }, restore);
+        if (flashNext) {
+            const lit = flashNext.tree === tree ? rowKeysFor(data, type, flashNext.keys) : null;
+            flashNext = null;
+            if (lit?.size) mounted.grid.flash(lit);
+        }
         panel?.panel.update(type, st);
         const open = openViewOf(state, type, data.tableViews);
         mounted.views.update({
@@ -807,6 +872,153 @@ export const tableMethods = uiModule({
         mounted?.grid.revealKey(key);
     },
 
+    // -----------------------------------------------------------------------
+    // The row's actions (§10)
+
+    /** ⌖ show in the tree, ▤ open the person, ✎ edit (a sub-row or a union row: the relationships panel at that union). */
+    tableRowAction(action: RowAction, line: GridLine): void {
+        const personId = personOfRow(line.row);
+        if (!personId || !DataManager.getPerson(personId)) return;
+        closeHeadMenu();
+        if (action === 'tree') {
+            // The only action that leaves the table: the family diagram with the person in the middle (as the search does).
+            TreeRenderer.presetViewMode('family');
+            TreeRenderer.setFocus(personId);
+            ZoomPan.centerOnPerson(personId);
+            ZoomPan.highlightPerson(personId);
+            return;
+        }
+        if (action === 'open') {
+            this.showPersonPage(personId);
+            return;
+        }
+        if (tableReadOnly()) return;
+        const data = DataManager.getData();
+        const union = unionOfLine(line);
+        watching = { tree: treeKey(), personId, keys: watchEdit(data, familyKeys(data, personId)) };
+        if (!union) {
+            this.clearDialogStack();
+            this.pushDialog('person-modal');
+            this.showEditPersonModal(personId);
+            return;
+        }
+        this.showRelationshipsPanel(personId);
+        const grid = document.querySelector<HTMLElement>(`#relationships-content .partnership-grid[data-partnership-id="${CSS.escape(union)}"]`);
+        grid?.scrollIntoView({ block: 'nearest' });
+    },
+
+    /** The row's menu (§10.1): Show in tree · Open person (Enter) · Edit… (double click) · Expand / Collapse unions. */
+    showTableRowMenu(line: GridLine, anchor: HTMLElement): void {
+        if (line.kind === 'more') return;
+        if (isPhoneBar()) { this.showTableRowSheet(line); return; }
+        const t = strings.table;
+        const run = (a: RowAction) => () => this.tableRowAction(a, line);
+        const entries: MenuEntry[] = [
+            { id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') },
+            { id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') },
+        ];
+        if (!tableReadOnly()) entries.push({ id: 'edit', label: t.act.edit, icon: '✎', hint: t.dblClickHint, run: run('edit') });
+        if (line.kind === 'row' && line.expanded !== null) {
+            const expand = !line.expanded;
+            const id = line.row.id;
+            entries.push(SEP, {
+                id: 'unions', label: expand ? t.expandAll : t.collapseAll, icon: expand ? '▸' : '▾', hint: expand ? '→' : '←',
+                run: () => this.changeTableColumns(st => setExpanded(st.unions, id, expand)),
+            });
+        }
+        const person = personOfRow(line.row);
+        const p = person ? DataManager.getPerson(person) : null;
+        const menu = openHeadMenu(anchor, '', '', entries);
+        menu.setAttribute('aria-label', t.actionsOf(p ? personName(p) : ''));
+    },
+
+    /**
+     * The row's sheet on a phone and by touch (10b): the name and years on
+     * top, the three actions, then a row per union into the relationships
+     * panel ("Union k: {partner} · Edit ›"); a sub-row's sheet has its union only.
+     */
+    showTableRowSheet(line: GridLine): void {
+        if (line.kind === 'more') return;
+        const personId = personOfRow(line.row);
+        const person = personId ? DataManager.getPerson(personId) : null;
+        if (!personId || !person) return;
+        const t = strings.table;
+        const ro = tableReadOnly();
+        const run = (a: RowAction, l: GridLine = line) => () => this.tableRowAction(a, l);
+        const rows = [
+            { label: t.act.tree, icon: '⌖', run: run('tree') },
+            { label: t.act.open, icon: '▤', run: run('open') },
+        ];
+        if (!ro) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
+        const blocks = [{ rows }];
+        if (!ro && line.row.kind === 'person') {
+            const row = line.row;
+            const n = row.unions.length;
+            const unionRows = row.unions.map((u, i) => {
+                if (line.kind === 'sub' && line.union !== i) return null;
+                const otherId = u.person1Id === personId ? u.person2Id : u.person1Id;
+                const other = DataManager.getPerson(otherId);
+                const sub: GridLine = { kind: 'sub', row, union: i, k: i + 1, n, dimmed: false };
+                return { label: t.unionWith(i + 1, other ? personName(other) : '?'), value: t.editMore, icon: '', run: run('edit', sub) };
+            }).filter((r): r is NonNullable<typeof r> => !!r);
+            if (unionRows.length) blocks.push({ rows: unionRows, divider: true } as typeof blocks[number]);
+        }
+        const years = fanYears(person);
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        this.presentMenuSheet(personName(person), blocks, years ? { subtitle: years } : {});
+    },
+
+    /** The dialog or panel opened from the table was saved (§10.3): its changed rows lit, "Saved: {name}". */
+    tableEditSaved(): void {
+        const w = watching;
+        watching = null;
+        if (!w || w.tree !== treeKey() || TreeRenderer.getViewMode() !== 'table') return;
+        const changed = changedKeys(DataManager.getData(), w.keys);
+        if (!changed.length) return;
+        flashNext = { tree: w.tree, keys: changed };
+        const person = DataManager.getPerson(w.personId);
+        this.showToast(strings.table.savedToast(person ? personName(person) : ''));
+    },
+
+    /** A load from the research's bridge (§10.3, 10d): its rows lit and a toast whose Show selects the first. True when the table shows it. */
+    tableBridgeChanged(previous: StromData): boolean {
+        if (TreeRenderer.getViewMode() !== 'table') return false;
+        const data = DataManager.getData();
+        const changes = bridgeChanges(previous, data);
+        if (!changes.keys.length) return false;
+        const tree = treeKey();
+        flashNext = { tree, keys: changes.keys };
+        const names = [...rowKeysFor(data, 'persons', changes.keys)]
+            .map(k => data.persons[k.slice(2) as PersonId])
+            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map(p => personName(p));
+        this.showToast(strings.table.bridgeToast(changes.facts, namesList(names)), BRIDGE_TOAST_MS, {
+            action: { label: strings.table.show, run: () => this.showTableChanged(tree, changes.keys) },
+        });
+        return true;
+    },
+
+    /** "Show" in the bridge's toast: the first changed row in the shown order selected and scrolled to. */
+    showTableChanged(tree: string, keys: readonly string[]): void {
+        if (treeKey() !== tree || TreeRenderer.getViewMode() !== 'table' || !view) return;
+        const state = stateOf(tree);
+        const want = rowKeysFor(DataManager.getData(), state.rowType, keys);
+        const first = view.result.rows.find(r => want.has(rowKey(r)));
+        if (!first) return;
+        const key = rowKey(first);
+        state.types[state.rowType].selected = key;
+        this.redrawTableNow();
+        mounted?.grid.revealKey(key);
+    },
+
+    /** The table is not shown: rows kept in place after an edit are sorted again when it comes back (§10.3). */
+    forgetTableOrder(): void {
+        view = null;
+        watching = null;
+        flashNext = null;
+    },
+
     /** Draw the table again now when it is shown. */
     redrawTableNow(): void {
         const el = document.getElementById('table-container');
@@ -877,6 +1089,7 @@ export const tableMethods = uiModule({
     openTableView(id: string): void {
         const state = stateOf(treeKey());
         if (!switchView(state, id, storedViews())) return;
+        view = null;
         this.redrawTableNow();
     },
 
@@ -960,6 +1173,7 @@ export const tableMethods = uiModule({
     /** "Discard changes" (§9.3). */
     discardTableViewChanges(): void {
         discardViewChanges(stateOf(treeKey()), storedViews());
+        view = null;
         this.redrawTableNow();
     },
 
@@ -980,7 +1194,10 @@ export const tableMethods = uiModule({
         const type = state.rowType;
         const st = state.types[type];
         const display = displayColumns(type, st, isPhoneBar());
-        const { rows, pass } = viewRows(model, type, st.filter, st.search, st.sort, display.columns);
+        const shown = viewRows(tree, model, type, st.filter, st.search, st.sort, display.columns);
+        // A row kept after an edit that no longer passes (§10.3) is not part of the export.
+        const rows = shown.stale.size ? shown.rows.filter(r => !shown.stale.has(rowKey(r))) : shown.rows;
+        const pass = shown.pass;
         const csv = buildTableCsv({ model, type, rows, columns: shownColumns(type, st, false).columns, pass });
         const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
         const file = tableCsvFileName(treeName, openViewOf(state, type, storedViews()).name, new Date());

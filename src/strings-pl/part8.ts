@@ -1356,6 +1356,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         viewCopyName: (name: string) => `${name} 2`,
         deleteConfirm: (name: string) => `Usunąć widok ${name}?`,
         act: { tree: 'Pokaż w drzewie', open: 'Otwórz osobę', edit: 'Edytuj…' },
+        dblClickHint: 'dwuklik',
         actionsOf: (name: string) => `Działania: ${name}`,
         unionWith: (k: number, name: string) => `Związek ${k}: ${name}`,
         editMore: 'Edytuj ›',

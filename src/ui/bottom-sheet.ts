@@ -51,6 +51,8 @@ interface MenuRow {
     page?: { title: string; rows: MenuRow[] };
     /** A stable id for the row (tests, focus). */
     id?: string;
+    /** A small sign before the label (the Table view's row actions: ⌖ ▤ ✎); '' keeps its place empty. */
+    icon?: string;
     /** A second line of the row's own (the tree's research marks). */
     extra?: HTMLElement;
 }
@@ -524,6 +526,13 @@ export const bottomSheetMethods = uiModule({
             btn.type = 'button';
             btn.className = 'bottom-sheet-item' + (row.danger ? ' danger' : '') + (row.active ? ' active' : '');
             if (row.id) btn.id = row.id;
+            if (row.icon !== undefined) {
+                const icon = document.createElement('span');
+                icon.className = 'bottom-sheet-icon';
+                icon.setAttribute('aria-hidden', 'true');
+                icon.textContent = row.icon;
+                btn.appendChild(icon);
+            }
             const label = document.createElement('span');
             label.className = 'bottom-sheet-label';
             label.textContent = row.label;

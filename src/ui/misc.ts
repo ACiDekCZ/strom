@@ -489,6 +489,8 @@ export const miscMethods = uiModule({
         // reliable beat to keep the toolbar Undo/Redo state honest.
         this.refreshUndoRedoToolbar();
         const mode = TreeRenderer.getViewMode();
+        // Away from the Table view its rows kept in place after an edit are sorted again next time (§10.3).
+        if (mode !== 'table') this.forgetTableOrder();
         // The family line's choice (spec 039 §1.5): hidden on the timeline and the map.
         this.syncRodPickerHost();
         // Mobile CSS hides the focus bar under the descendants badge.

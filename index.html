@@ -9523,6 +9523,30 @@
         .tv-body .tv-row--sub, .tv-body .tv-row--more { background: var(--sub); }
         .tv-body .tv-row.is-selected-sub { background: var(--line-selected-bg); }
         .tv-row.is-dimmed .tv-cell { opacity: 0.55; }
+        /* §10.1 row actions: in the first column, under the pointer and on the selected row (none on a phone, 10b).
+           Over the cell's end, so nothing moves under the pointer; the selected row's name ends in "…" before them. */
+        .tv-acts {
+            display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+            align-items: center; gap: 4px; padding-left: 6px; background: inherit;
+        }
+        .tv-body .tv-cell:not(.tv-pinned):has(> .tv-acts) { position: relative; }
+        .tv-body .tv-row[aria-selected="true"] .tv-acts { display: inline-flex; }
+        .tv-body .tv-row[aria-selected="true"] > .tv-cell:has(> .tv-acts) { padding-right: 100px; }
+        .tv-act {
+            width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-light);
+            font-family: var(--font-sans); font-size: 13px; line-height: 1; cursor: pointer;
+        }
+        .tv-act:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* §10.3: a changed row lit for 1.2 s, then back over 400 ms; a row that no longer passes the filter dimmed with a note. */
+        .tv-body .tv-row.is-flash { background: var(--primary-soft); }
+        .tv-body .tv-row.is-flash-out { transition: background-color 0.4s ease; }
+        .tv-body .tv-row.is-stale > .tv-cell { opacity: 0.55; }
+        .tv-stale-note {
+            flex: none; margin-left: auto; padding-left: 8px;
+            font-family: var(--font-sans); font-size: 11px; font-style: italic; font-weight: 400; color: var(--text-faint);
+        }
+        @media (prefers-reduced-motion: reduce) { .tv-body .tv-row.is-flash-out { transition: none; } }
         .tv-toggle {
             flex: none; align-self: stretch; display: inline-flex; align-items: center; justify-content: center;
             width: 16px; margin-right: 5px; font-family: var(--font-sans); font-size: 11px; color: var(--text-light); cursor: pointer;
@@ -9809,6 +9833,8 @@
         @media (hover: hover) {
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
+            .tv-body .tv-row:hover .tv-acts { display: inline-flex; }
+            .tv-act:hover { color: var(--text); border-color: var(--primary); }
             .tv-rowtype-btn:hover, .tv-legend-btn:hover { color: var(--text); border-color: var(--primary); }
             .tv-headcell:hover .tv-head-menu { opacity: 1; }
             .tv-head-menu:hover, .tv-group-toggle:hover, .tv-cp-close:hover, .tv-cp-gall:hover, .tv-cp-gcollapse:hover { background: var(--surface-2); }
@@ -9838,6 +9864,9 @@
         /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
         @media (pointer: coarse) {
             .table-view { --tv-row-h: 36px; }
+            /* Touch: a tap opens the row's sheet with 48 px actions (10b), no small icons. */
+            .tv-body .tv-row[aria-selected="true"] .tv-acts { display: none; }
+            .tv-body .tv-row[aria-selected="true"] > .tv-cell:has(> .tv-acts) { padding-right: 10px; }
             .tv-rowtype .segment-btn { height: 44px; }
             .tv-legend-btn { height: 44px; }
             .tv-cols-btn, .tv-export-btn, .tv-view-btn, .tv-view-act { height: 44px; }

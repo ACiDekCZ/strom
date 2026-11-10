@@ -27,6 +27,13 @@
  * A finding of Data quality on a cell (§7.3) tints it and puts its mark at
  * the end of the text (after the number in a numeric cell); a click on such
  * a cell, or Enter on it, asks for the finding's bubble (`onIssue`).
+ *
+ * The row's actions (§10.1): a click selects a row, ↑ ↓ move the selection,
+ * Escape clears it; the first column carries ⌖ ▤ ✎ (under the pointer and on
+ * the selected row), Enter opens the person, a double click edits, a right
+ * click / Shift+F10 / the menu key ask for the row's menu. After a change a
+ * row lights up for a moment (`flash`, §10.3) and a row that no longer
+ * passes the filter stays dimmed with a note (`stale`).
  */
 
 import { strings } from '../../strings.js';
@@ -79,7 +86,17 @@ export interface GridInput {
     filtered?: ReadonlySet<string>;
     /** Nothing passes the filter (§13c, §13d): said under the head, with "Clear filters". */
     noMatch?: { title: string; text: string; action: string } | null;
+    /** Rows kept after a change that no longer pass the filter (§10.3, their row keys). */
+    stale?: ReadonlySet<string>;
+    /** The action icons in the first column (§10.1; `edit` false: read-only); none on a phone (10b). */
+    actions?: { edit: boolean } | null;
 }
+
+/** A row's action (§10.1): show in the tree, open the person, edit. */
+export type RowAction = 'tree' | 'open' | 'edit';
+
+/** How long a changed row stays lit (§10.3). */
+export const FLASH_MS = 1200;
 
 /** A finding's mark in a cell: its level (or `unusual`) and the finding's title (for the mark's name). */
 export interface CellIssueMark {
@@ -90,8 +107,14 @@ export interface CellIssueMark {
 export interface GridHandlers {
     /** The grid scrolled (the view keeps its position per row type). */
     onScroll?(top: number, left: number): void;
-    /** A row was clicked (a sub-row selects its person). */
-    onSelect?(key: string, row: TableRow): void;
+    /** A row was selected (a click, ↑ ↓; a sub-row selects its person); null: Escape cleared it. */
+    onSelect?(key: string | null, row: TableRow | null): void;
+    /** A line was clicked or tapped, after its selection (a phone opens the row's sheet, 10b). */
+    onRowClick?(line: GridLine): void;
+    /** A row's action (§10.1): its icon, Enter (open), a double click (edit). */
+    onRowAction?(action: RowAction, line: GridLine): void;
+    /** The row's menu (§10.1): a right click, Shift+F10, the menu key. */
+    onRowMenu?(line: GridLine, anchor: HTMLElement): void;
     /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
     onToggleUnions?(personId: string, expand: boolean): void;
     /** "Expand unions" / "Collapse unions" in the name head, `*` / Shift+`*` (§3.2, §3.4). */
@@ -226,6 +249,9 @@ export class TableGrid {
     /** The body's active cell (roving tabindex, §3.4): the line's key and the column's drawn position. */
     private activeKey: string | null = null;
     private activeCol = 0;
+    /** The rows lit after a change (row keys, §10.3) and the timer that ends it. */
+    private readonly flashKeys = new Set<string>();
+    private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(private readonly handlers: GridHandlers = {}) {
         const el = document.createElement('div');
@@ -270,11 +296,35 @@ export class TableGrid {
                 this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
                 return;
             }
+            const act = t.closest<HTMLElement>('.tv-act[data-act]');
+            if (act) {
+                this.select(line);
+                this.handlers.onRowAction?.(act.dataset.act as RowAction, line);
+                return;
+            }
             if (cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
                 this.handlers.onIssue(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
                 return;
             }
-            this.handlers.onSelect?.(rowKey(line.row), line.row);
+            this.select(line);
+            this.handlers.onRowClick?.(line);
+        });
+        // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
+        this.body.addEventListener('dblclick', (e) => {
+            const t = e.target as Element;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn')) return;
+            const line = this.lineOf(t);
+            if (!line || line.kind === 'more') return;
+            this.handlers.onRowAction?.('edit', line);
+        });
+        this.body.addEventListener('contextmenu', (e) => {
+            const t = e.target as Element;
+            const line = this.lineOf(t);
+            if (!line || line.kind === 'more' || !this.handlers.onRowMenu) return;
+            e.preventDefault();
+            const anchor = t.closest<HTMLElement>('[aria-colindex]') ?? t.closest<HTMLElement>('.tv-row')!;
+            this.select(line);
+            this.handlers.onRowMenu(line, anchor);
         });
         this.body.addEventListener('keydown', (e) => this.onBodyKey(e));
         // The grid itself focused (its tab stop): an arrow enters the body at the active cell.
@@ -299,6 +349,38 @@ export class TableGrid {
     }
 
     /** New rows or columns: drawn now; `scroll` restores a kept position. */
+    /** The line a body element belongs to. */
+    private lineOf(t: Element): GridLine | undefined {
+        const rowEl = t.closest<HTMLElement>('.tv-row[data-index]');
+        return rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
+    }
+
+    /** Select a line's row (its person for a sub-row) unless it is the selected one. */
+    private select(line: GridLine): void {
+        const key = rowKey(line.row);
+        if (this.input?.selected !== key) this.handlers.onSelect?.(key, line.row);
+    }
+
+    /**
+     * Light these rows up (row keys, §10.3): `--primary-soft` for FLASH_MS,
+     * then back over 400 ms (the class `is-flash-out` carries the transition).
+     */
+    flash(keys: Iterable<string>, ms = FLASH_MS): void {
+        for (const k of keys) this.flashKeys.add(k);
+        if (!this.flashKeys.size) return;
+        if (this.flashTimer) clearTimeout(this.flashTimer);
+        this.bodyKey = '';
+        this.draw();
+        this.flashTimer = setTimeout(() => {
+            this.flashTimer = null;
+            this.flashKeys.clear();
+            for (const el of this.body.querySelectorAll<HTMLElement>('.tv-row.is-flash')) {
+                el.classList.add('is-flash-out');
+                el.classList.remove('is-flash');
+            }
+        }, ms);
+    }
+
     setInput(input: GridInput, scroll?: { top: number; left: number }): void {
         this.input = input;
         this.lines = input.lines ?? plainLines(input.rows);
@@ -855,9 +937,12 @@ export class TableGrid {
             const row = line.row;
             const key = lineKey(line);
             const home = row.kind === 'person' && row.id === input.homeId ? ' is-home' : '';
-            const rowSelected = rowKey(row) === selectedPerson;
+            const rk = rowKey(row);
+            const rowSelected = rk === selectedPerson;
             let attrs = ` aria-level="${lineLevel(line)}"`;
             let cls = 'tv-row' + home;
+            if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
+            if (input.stale?.has(rk)) cls += ' is-stale';
             if (line.kind === 'row') {
                 attrs += ` aria-selected="${rowSelected ? 'true' : 'false'}"`;
                 if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
@@ -887,7 +972,7 @@ export class TableGrid {
                     continue;
                 }
                 if (input.subRows && col.id === 'name') {
-                    html += this.nameCell(input, line, col, i, tab);
+                    html += this.nameCell(input, line, col, i, tab, i === 0 ? this.rowTail(input, line) : '');
                     continue;
                 }
                 const value = lineCell(input.model, line, col);
@@ -895,7 +980,8 @@ export class TableGrid {
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
                 html += `<div class="${cellClasses(value, col, issue?.severity ?? null)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '')}</div>`;
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '')}`
+                    + `${i === 0 ? this.rowTail(input, line) : ''}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
         }
@@ -903,8 +989,30 @@ export class TableGrid {
         if (refocus) this.focusActive(false);
     }
 
+    /**
+     * The end of a line's first cell (§10.1, §10.3): "no longer matches" on a
+     * stale row, then the action icons (shown by the stylesheet under the
+     * pointer and on the selected row).
+     */
+    private rowTail(input: GridInput, line: GridLine): string {
+        if (line.kind === 'more') return '';
+        let html = '';
+        if (line.kind === 'row' && input.stale?.has(rowKey(line.row))) {
+            html += `<span class="tv-stale-note">${esc(strings.table.staleRow)}</span>`;
+        }
+        const acts = input.actions;
+        if (acts) {
+            const t = strings.table.act;
+            const b = (act: RowAction, icon: string, label: string): string =>
+                `<button type="button" class="tv-act" data-act="${act}" tabindex="-1" title="${esc(label)}" aria-label="${esc(label)}">`
+                + `<span aria-hidden="true">${icon}</span></button>`;
+            html += `<span class="tv-acts">${b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
+        }
+        return html;
+    }
+
     /** The name cell of the People table (§3.1, §3.2): ▾/▸ and the count pill, a sub-row's "Union k of n", the "more" button. */
-    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number): string {
+    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number, tail = ''): string {
         const t = strings.table;
         const open = `<div class="tv-cell tv-name${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`;
         if (line.kind === 'more') {
@@ -913,7 +1021,7 @@ export class TableGrid {
         }
         if (line.kind === 'sub') {
             return `${open}><span class="tv-sub-indent" aria-hidden="true"></span><span class="tv-sub-branch" aria-hidden="true">└</span>`
-                + `<span class="tv-cell-text tv-sub-label">${esc(t.unionKofN(line.k, line.n))}</span></div>`;
+                + `<span class="tv-cell-text tv-sub-label">${esc(t.unionKofN(line.k, line.n))}</span>${tail}</div>`;
         }
         const value = lineCell(input.model, line, col);
         const name = cellText(value);
@@ -927,7 +1035,7 @@ export class TableGrid {
             : open;
         const nameHtml = input.hit ? highlightHtml(name, input.hit) : esc(name);
         return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${nameHtml}</span>${pill}`
-            + `${issue ? markHtml(issue.severity, issue.label) : ''}</div>`;
+            + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
 
     // -----------------------------------------------------------------------
@@ -993,13 +1101,29 @@ export class TableGrid {
         const page = Math.max(1, Math.floor((this.el.clientHeight - this.head.offsetHeight) / this.rowHeight()) - 1);
         const ctrl = e.ctrlKey || e.metaKey;
         let to: [number, number] | null = null;
+        // ↑ ↓ (and the page and Ctrl+Home/End jumps) move the selection with the focus (§10.1).
+        let selects = false;
+        if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+            if (line.kind === 'more' || !this.handlers.onRowMenu) return;
+            e.preventDefault();
+            const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+            this.select(line);
+            this.handlers.onRowMenu(line, cellEl ?? (e.target as HTMLElement));
+            return;
+        }
         switch (e.key) {
-            case 'ArrowDown': to = [at + 1, col]; break;
-            case 'ArrowUp': to = [at - 1, col]; break;
-            case 'PageDown': to = [at + page, col]; break;
-            case 'PageUp': to = [at - page, col]; break;
-            case 'Home': to = ctrl ? [0, 0] : [at, 0]; break;
-            case 'End': to = ctrl ? [this.lines.length - 1, input.columns.length - 1] : [at, input.columns.length - 1]; break;
+            case 'Escape':
+                if (!input.selected) return;
+                e.preventDefault();
+                e.stopPropagation();
+                this.handlers.onSelect?.(null, null);
+                return;
+            case 'ArrowDown': to = [at + 1, col]; selects = true; break;
+            case 'ArrowUp': to = [at - 1, col]; selects = true; break;
+            case 'PageDown': to = [at + page, col]; selects = true; break;
+            case 'PageUp': to = [at - page, col]; selects = true; break;
+            case 'Home': to = ctrl ? [0, 0] : [at, 0]; selects = ctrl; break;
+            case 'End': to = ctrl ? [this.lines.length - 1, input.columns.length - 1] : [at, input.columns.length - 1]; selects = ctrl; break;
             case 'ArrowRight':
                 if (onName && line.kind === 'row' && line.expanded === false) {
                     e.preventDefault();
@@ -1029,8 +1153,10 @@ export class TableGrid {
                     this.handlers.onIssue(line, col, cellEl);
                     return;
                 }
-                if (line.kind === 'more') this.handlers.onRevealUnions?.(line.row.id);
-                else this.handlers.onSelect?.(rowKey(line.row), line.row);
+                if (line.kind === 'more') { this.handlers.onRevealUnions?.(line.row.id); return; }
+                this.select(line);
+                // Enter opens the person (§10.1); Space only selects.
+                if (e.key === 'Enter') this.handlers.onRowAction?.('open', line);
                 return;
             }
             case '*':
@@ -1045,6 +1171,10 @@ export class TableGrid {
         }
         e.preventDefault();
         this.focusCell(to[0], to[1]);
+        if (selects) {
+            const now = this.lines[this.activeLineIndex()];
+            if (now) this.select(now);
+        }
     }
 
     /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
@@ -1072,6 +1202,7 @@ export class TableGrid {
 
     destroy(): void {
         if (this.frame) cancelAnimationFrame(this.frame);
+        if (this.flashTimer) clearTimeout(this.flashTimer);
         this.resize?.disconnect();
         this.el.remove();
     }
