@@ -6,7 +6,7 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
-- **Pohled Tabulka**: nový pohled vedle *Vějíře* a *Mapy* (na telefonu a tabletu v *Více*) ukáže strom jako tabulku osob nebo svazků se sloupci k výběru, dopočtenými věky, úplností osoby, nálezy kontrol v buňkách, filtry, hledáním a řazením, uloženými pohledy u stromu, akcemi u řádku a exportem do CSV. Zvládne i strom s tisíci osob.
+- **Pohled Tabulka**: nový pohled vedle *Vějíře* a *Mapy* (na telefonu a tabletu v *Více*) ukáže strom jako tabulku osob nebo svazků se sloupci k výběru, dopočtenými věky, úplností osoby, nálezy kontrol v buňkách, filtry, hledáním a řazením, uloženými pohledy u stromu, akcemi u řádku a exportem do CSV. Zvládne i strom s tisíci osob. Vychází z tabulky Ondřeje Chrpy.
 - **Kvalita dat: nové kontroly**: matka mladší 16 nebo starší 45 let a otec mladší 18 nebo starší 60 let při narození dítěte, sňatek před 16. rokem a zapsaný věk, který se od dat liší o víc než dva roky, se hlásí *k ověření*; varování se všude jmenují *k ověření*.
 - **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle rozvodu nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství, partneři i bubliny; bubliny sourozenců a dětí uvádějí jména podle narození.
 - **Dlouhá jména a popisy**: na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“, i v tisku, PDF a exportovaném obrázku; dlouhý popis pohledu v patičce exportovaného obrázku se zalomí uvnitř obrázku.

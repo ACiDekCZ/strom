@@ -6,7 +6,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 *This version is in preparation; this section grows with every test version.*
 
-- **Table view**: a new view beside *Fan* and *Map* (in *More* on a phone and a tablet) shows the tree as a table of people or unions, with columns to choose, computed ages, each person's completeness, the findings of the checks in the cells, filters, search and sorting, saved views kept with the tree, row actions and a CSV export. It handles trees of thousands of people.
+- **Table view**: a new view beside *Fan* and *Map* (in *More* on a phone and a tablet) shows the tree as a table of people or unions, with columns to choose, computed ages, each person's completeness, the findings of the checks in the cells, filters, search and sorting, saved views kept with the tree, row actions and a CSV export. It handles trees of thousands of people. It grew out of a spreadsheet by Ondřej Chrpa.
 - **Data quality: new checks**: a mother under 16 or over 45 and a father under 18 or over 60 at a child's birth, a wedding under 16 and a recorded age more than two years off the dates are reported *to check*; warnings are called *to check* everywhere.
 - **Order of marriages and siblings**: a marriage without a wedding date is placed by its divorce or the birth of its first child; a wedding “before 1982” comes before one in 1982. Marriage numbers, partners and bubbles follow this order; the bubbles of siblings and children list the names by birth.
 - **Long names and descriptions**: on the *Normal* and *Detailed* card a long name wraps onto more rows instead of ending in “…”, also in print, PDF and an exported image; a long view description in an exported image's footer wraps inside the image.
