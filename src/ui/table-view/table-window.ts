@@ -30,6 +30,11 @@ export function columnOffsets(widths: readonly number[]): number[] {
     return out;
 }
 
+/** The sticky `left` of each pinned column: the widths of the pinned ones before it (§4.5). */
+export function stickyLefts(widths: readonly number[], pinned: number): number[] {
+    return columnOffsets(widths.slice(0, Math.max(0, Math.min(pinned, widths.length)))).slice(0, -1);
+}
+
 export interface ColumnWindow {
     /** Indexes of the columns drawn, left to right (the pinned ones first). */
     indices: number[];
