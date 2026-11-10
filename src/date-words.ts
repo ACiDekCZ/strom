@@ -33,6 +33,16 @@ const FROM_TO = words('to do bis по до');
 /** Words that say nothing about the date: "po roce 1919", "kolem r. 1850", "1870 г.". */
 const FILLER = words('roce roku rok roky rokmi rokom letech lety r im jahr jahre jahren year years the in w roku g г года году гг року роках');
 
+/** Whether a word says "about" (GEDCOM ABT): 'cca', 'asi', 'circa', 'um', 'około' … */
+export function isAboutWord(word: string): boolean {
+    return ABOUT.has(foldDateWord(word));
+}
+
+/** Whether a word says "between" (GEDCOM BET): 'mezi', 'between', 'zwischen', 'między' … */
+export function isBetweenWord(word: string): boolean {
+    return BETWEEN.has(foldDateWord(word));
+}
+
 /**
  * Read a date written with local words into a flex date (see src/dates.ts):
  * '>1919', '~1850', '1850..1855'. `readDate` reads a bare date (GEDCOM or

@@ -16,6 +16,7 @@
  */
 
 import { getCurrentLanguage } from './strings.js';
+import { isAboutWord, isBetweenWord, readDateWords } from './date-words.js';
 
 export type DateQualifier = '' | '~' | '<' | '>';
 
@@ -68,10 +69,49 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /**
- * Parse a canonical stored value into components. Returns null when the value
- * is missing or not a valid canonical flex date.
+ * Parse a stored value into components. Returns null when the value is
+ * missing or not a date. A canonical value is read as it is; any other text
+ * (a date a person wrote into the data: 'Cca 5/1850', 'Mezi 1850-1852') is
+ * read the way the date field reads it (normalizeDateInput, in the UI
+ * language), and the text itself is never changed.
  */
 export function parseFlexDate(value?: string): FlexDate | null {
+    if (!value) return null;
+    return parseCanonical(value) ?? readStoredText(value);
+}
+
+/** Text readings of stored values, by UI language and value. */
+const storedTextReadings = new Map<string, FlexDate | null>();
+
+/** A stored value that is not canonical, read as typed text (see parseFlexDate). */
+function readStoredText(value: string): FlexDate | null {
+    // Every date has a year: text without three figures in a row is no date.
+    if (!/\d{3}/.test(value)) return null;
+    const lang = getCurrentLanguage();
+    const key = `${lang}\u0000${value}`;
+    let read = storedTextReadings.get(key);
+    if (read === undefined) {
+        const canonical = normalizeDateInput(value, lang);
+        read = canonical ? parseCanonical(canonical) : null;
+        if (storedTextReadings.size > 5000) storedTextReadings.clear();
+        storedTextReadings.set(key, read);
+    }
+    return read ? { ...read, ...(read.end ? { end: { ...read.end } } : {}) } : null;
+}
+
+/**
+ * The canonical form of a stored value: the value itself when it is
+ * canonical, its reading when it is a date written as text ('Cca 5/1850' →
+ * '~1850-05'), else the value unchanged.
+ */
+export function canonicalDate(value: string): string {
+    if (!value || parseCanonical(value)) return value;
+    const read = readStoredText(value);
+    return read ? toCanonical(read) : value;
+}
+
+/** Parse a canonical value only (no reading of text). */
+function parseCanonical(value?: string): FlexDate | null {
     if (!value) return null;
     const trimmed = value.trim();
 
@@ -80,11 +120,11 @@ export function parseFlexDate(value?: string): FlexDate | null {
     if (slash) {
         const [, a, b] = slash;
         if ((a && !PLAIN_RE.test(a)) || (b && !PLAIN_RE.test(b)) || (!a && !b)) return null;
-        const start = parseFlexDate(a || b);
+        const start = parseCanonical(a || b);
         if (!start) return null;
         if (!a) return { ...start, qualifier: '<', period: true };
         if (!b) return { ...start, qualifier: '>', period: true };
-        const end = parseFlexDate(b);
+        const end = parseCanonical(b);
         if (!end) return null;
         return { ...start, end: { year: end.year, month: end.month, day: end.day }, period: true };
     }
@@ -92,8 +132,8 @@ export function parseFlexDate(value?: string): FlexDate | null {
     // Range 'A..B' — both sides plain canonical dates (no qualifiers).
     const dots = trimmed.indexOf('..');
     if (dots > 0) {
-        const start = parseFlexDate(trimmed.slice(0, dots));
-        const end = parseFlexDate(trimmed.slice(dots + 2));
+        const start = parseCanonical(trimmed.slice(0, dots));
+        const end = parseCanonical(trimmed.slice(dots + 2));
         if (!start || !end || start.qualifier || end.qualifier || start.end || end.end) return null;
         return { ...start, end: { year: end.year, month: end.month, day: end.day } };
     }
@@ -142,18 +182,27 @@ export function toCanonical(date: FlexDate): string {
  * slash input is month-first in English ('5/15/1880', the US habit; the
  * display names the month, '15 May 1880') and day-first in Czech and German. An English slash date whose
  * first number cannot be a month ('15/5/1880') is read day-first, since that
- * is the only valid reading. `lang` defaults to the current UI language;
- * importers (GEDCOM etc.) never go through here.
+ * is the only valid reading. `lang` defaults to the current UI language.
+ * Beyond these, the forms of readWrittenForms ('asi 1850', 'mezi 1850-1852').
+ * The GEDCOM import comes here only for a date not written in GEDCOM words
+ * (readWrittenDate); a date already in the data that is not canonical is
+ * read here too (parseFlexDate).
  */
 export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de' | 'pl'): string | null {
-    let s = input.trim();
+    const s = input.trim();
     if (!s) return '';
+    return normalizeDateForm(s, lang) ?? readWrittenForms(s, lang);
+}
+
+/** The date forms of normalizeDateInput the field has always read. */
+function normalizeDateForm(input: string, lang?: 'cs' | 'en' | 'de' | 'pl'): string | null {
+    let s = input;
     const cur = lang ?? getCurrentLanguage();
     const monthFirstSlash = cur !== 'cs' && cur !== 'de' && cur !== 'pl';
 
     // Period: 'A/B', 'A/', '/B' as stored (the edit field shows it so), and
     // 'od A do B', 'from A to B', 'von A bis B'. 'od A' alone stays "after".
-    const stored = parseFlexDate(s);
+    const stored = parseCanonical(s);
     if (stored?.period) return toCanonical(stored);
     const periodMatch = /^(?:od|from|von|ab)\s+(.+?)\s+(?:do|to|bis)\s+(.+)$/i.exec(s);
     if (periodMatch) {
@@ -167,8 +216,9 @@ export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de' | 'p
     // through the single-date path (no qualifiers inside a range).
     const rangeMatch = /^(?:mezi|between|zwischen|między)\s+(.+?)\s+(?:a|and|und)\s+(.+)$/i.exec(s);
     const sides = rangeMatch ? [rangeMatch[1], rangeMatch[2]]
-        : s.includes('..') ? s.split('..', 2) : null;
+        : s.includes('..') ? s.split('..') : null;
     if (sides) {
+        if (sides.length !== 2) return null;   // '1880..1885..1890'
         const a = normalizeDateInput(sides[0], lang);
         const b = normalizeDateInput(sides[1], lang);
         if (!a || !b || !PLAIN_RE.test(a) || !PLAIN_RE.test(b)) return null;
@@ -244,7 +294,82 @@ export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de' | 'p
     if (year === undefined || year < 100 || year > 2200) return null;
     const candidate: FlexDate = { qualifier, year, month, day };
     const canonical = toCanonical(candidate);
-    return parseFlexDate(canonical) ? canonical : null;
+    return parseCanonical(canonical) ? canonical : null;
+}
+
+/**
+ * Forms people write a date in beyond the field's own (normalizeDateInput):
+ *   - local words with filler: 'asi 1850', 'po roce 1932', 'kolem r. 1850'
+ *     (the words of src/date-words.ts);
+ *   - a range with a hyphen: '1850-1852', '5/1850-7/1851', '5-7/1850' (May
+ *     to July 1850), '10-12/5/1850' (10 to 12 May), also after a between-word
+ *     ('mezi 1850-1852', 'zwischen 1850 - 1852') and after an about-word
+ *     ('cca 1850-1852': a range says "somewhere between" already, the closest
+ *     GEDCOM has is BET … AND …).
+ * The start must not lie after the end. Anything else gives null.
+ */
+function readWrittenForms(s: string, lang?: 'cs' | 'en' | 'de' | 'pl'): string | null {
+    const plainOf = (t: string): string | null => {
+        const d = normalizeDateInput(t, lang);
+        return d && PLAIN_RE.test(d) ? d : null;
+    };
+    const local = readDateWords(s, plainOf);
+    if (local) return local;
+    return readHyphenRange(s, lang)?.date ?? null;
+}
+
+/** A range written with a hyphen (see readWrittenForms), and whether an about-word was left out. */
+function readHyphenRange(text: string, lang?: 'cs' | 'en' | 'de' | 'pl'): { date: string; about: boolean } | null {
+    let s = text;
+    let about = false;
+    for (let i = 0; i < 2; i++) {
+        const word = /^(\p{L}+)\.?\s+(.+)$/u.exec(s);
+        if (!word) break;
+        if (isBetweenWord(word[1])) s = word[2];
+        else if (!about && i === 0 && isAboutWord(word[1])) { about = true; s = word[2]; }
+        else return null;
+    }
+    const m = /^([\d./]+)\s*[-–]\s*([\d./]+)$/.exec(s);
+    if (!m) return null;
+    const endValue = normalizeDateInput(m[2], lang);
+    const end = endValue && PLAIN_RE.test(endValue) ? parseCanonical(endValue) : null;
+    if (!end) return null;
+    // The start may leave out what it shares with the end: '5-7/1850', '10-12/5/1850'.
+    let startText = m[1];
+    if (/^\d{1,2}$/.test(startText)) {
+        if (end.day !== undefined) startText = `${startText}.${end.month}.${end.year}`;
+        else if (end.month !== undefined) startText = `${startText}.${end.year}`;
+        else return null;
+    } else if (/^\d{1,2}[./]\d{1,2}[./]?$/.test(startText) && end.day !== undefined) {
+        startText = `${startText.replace(/[./]$/, '')}${startText.includes('/') ? '/' : '.'}${end.year}`;
+    }
+    const startValue = normalizeDateInput(startText, lang);
+    const start = startValue && PLAIN_RE.test(startValue) ? parseCanonical(startValue) : null;
+    if (!start || !startValue || !endValue) return null;
+    const first = (d: FlexDate) => d.year * 10000 + (d.month ?? 1) * 100 + (d.day ?? 1);
+    if (first(start) > first(end)) return null;
+    return { date: startValue === endValue ? startValue : `${startValue}..${endValue}`, about };
+}
+
+/**
+ * A date written the way people write it rather than in GEDCOM words, for
+ * the GEDCOM import (spec: tester T42): a numeric day, month and year
+ * ('12/5/1850', 'cca 2/3/1850') or a range with a hyphen ('mezi 1850-1852',
+ * 'cca 1850-1852'), read as the date field reads it in the UI language.
+ * `assumed` says the reading took a choice the text does not make itself: a
+ * slash date whose day and month could swap ('2/3/1850'), or an about-word
+ * left out of a range — the importer then keeps the text as written beside
+ * the date. Null for anything else (GEDCOM forms read on their own).
+ */
+export function readWrittenDate(text: string, lang?: 'cs' | 'en' | 'de' | 'pl'): { date: string; assumed: boolean } | null {
+    const s = text.trim();
+    const slashDates = [...s.matchAll(/(?:^|[^\d/])(\d{1,2})\/(\d{1,2})\/\d{3,4}(?![\d/])/g)];
+    if (slashDates.length === 0 && !/\d\s*[-–]\s*\d/.test(s)) return null;
+    const date = normalizeDateInput(s, lang);
+    if (!date) return null;
+    const swappable = slashDates.some(m => +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2]);
+    const range = readHyphenRange(s, lang);
+    return { date, assumed: swappable || (range !== null && range.date === date && range.about) };
 }
 
 /** True when the input is empty or normalizes to a valid canonical date. */
@@ -297,6 +422,7 @@ export function yearFraction(date: string | undefined): number {
 /** Sort key: canonical value without the qualifier (keeps determinism). */
 export function dateSortKey(value?: string): string {
     if (!value) return '';
+    value = canonicalDate(value);
     return /^[~<>/]/.test(value) ? value.slice(1) : value;
 }
 
@@ -411,7 +537,8 @@ export function flexDateParts(value: string | undefined, lang: 'cs' | 'en' | 'de
  */
 export function formatDateForInput(value?: string): string {
     if (!value) return '';
-    const d = parseFlexDate(value);
+    // A date written as text in the data stays as written in the field.
+    const d = parseCanonical(value);
     if (!d) return value;
     if (d.end || d.period) return value;  // ranges and periods stay canonical ('1880..1885', '1880/1885')
     // Czech, German and Polish write dates day-first with dots ('15.5.1880').

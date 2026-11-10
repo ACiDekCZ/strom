@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcomDate, gedcomDatePhrase } from '../ged-parser.js';
 import { normalizeDateInput } from '../dates.js';
+import { setLanguage } from '../strings.js';
 
 describe('parseGedcomDate (flex dates)', () => {
     it('preserves precision instead of fabricating month/day', () => {
@@ -141,8 +142,29 @@ describe('a month and year in figures (T42)', () => {
         expect(parseGedcomDate('ABT 1699/00')).toBe('~1699');
         expect(parseGedcomDate('1987/07')).toBe('1987');
         expect(parseGedcomDate('kolem 12. 3. 1919')).toBe('~1919-03-12');
-        expect(parseGedcomDate('5/3/1919')).toBe('');
-        expect(gedcomDatePhrase('5/3/1919')).toBe('5/3/1919');
+    });
+
+    it('a slash date whose day and month could swap reads in the UI language, the text kept as written', () => {
+        // "5/3/1919" was left to the note with no date (T42): now it reads the
+        // way the date field reads it, and the note keeps what the file said.
+        setLanguage('cs');
+        try {
+            expect(parseGedcomDate('5/3/1919')).toBe('1919-03-05');
+            expect(gedcomDatePhrase('5/3/1919')).toBe('5/3/1919');
+            setLanguage('en');
+            expect(parseGedcomDate('5/3/1919')).toBe('1919-05-03');
+            expect(gedcomDatePhrase('5/3/1919')).toBe('5/3/1919');
+            // One order only: read alike in every language, no note.
+            for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+                setLanguage(lang);
+                expect(parseGedcomDate('25/3/1919'), lang).toBe('1919-03-25');
+                expect(gedcomDatePhrase('25/3/1919'), lang).toBeNull();
+                expect(parseGedcomDate('3/3/1919'), lang).toBe('1919-03-03');
+                expect(gedcomDatePhrase('3/3/1919'), lang).toBeNull();
+            }
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('a date typed in the app reads the same in every language', () => {

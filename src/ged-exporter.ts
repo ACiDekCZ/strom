@@ -34,6 +34,7 @@ import { placeKey } from './places.js';
 import { GedcomNameParts, noName, PRIMARY_NAME_TAG, readGedcomName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
+import { canonicalDate } from './dates.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 import { lineageOverridesOf } from './lineage.js';
 import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
@@ -263,6 +264,9 @@ export function formatGedcomDate(isoDate: string | undefined, asWritten?: Record
     // loaded data may hold anything, also a valid form of another date.
     const kept = asWritten?.[isoDate];
     if (isGedcomDateFormOf(isoDate, kept)) return kept;
+    // A date written as text in the data ('Cca 5/1850') goes out as the
+    // date it reads as ('ABT MAY 1850').
+    isoDate = canonicalDate(isoDate);
 
     // Period 'a/b' -> FROM a TO b, 'a/' -> FROM a, '/b' -> TO b
     const slash = isoDate.indexOf('/');

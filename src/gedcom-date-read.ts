@@ -5,7 +5,7 @@
  * without loading the whole parser.
  */
 
-import { normalizeDateInput } from './dates.js';
+import { normalizeDateInput, readWrittenDate } from './dates.js';
 import { readDateWords } from './date-words.js';
 
 const MONTHS: Record<string, string> = {
@@ -111,6 +111,13 @@ function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase
     // meaning is kept whole, so no "as written" note is needed.
     const local = readDateWords(dateStr, bareDate);
     if (local) return { date: local, lossy: false, phrase };
+
+    // A date written the way people write it ("12/5/1850", "Cca 2/3/1850",
+    // "Mezi 1850-1852", "Cca 1850-1852"): read as the date field reads it.
+    // When the reading took a choice the text does not make (day and month
+    // that could swap, "cca" left out of a range), the text stays as written.
+    const written = readWrittenDate(dateStr);
+    if (written) return { date: written.date, lossy: written.assumed, phrase };
 
     // Qualifier prefixes map to flex-date qualifiers instead of being dropped.
     // INT (interpreted) is an approximation of what the phrase says.
