@@ -198,7 +198,9 @@ test.describe('phone (390)', () => {
         await expect(viewName(page)).toHaveText('Deaths');
         await expect(status(page)).toHaveText('5 of 7 people');
 
-        await page.locator('#table-container .tv-export-btn').tap();
+        // On a phone Export is in ⋯ (§12).
+        await page.locator('#table-container .tv-more-menu-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Export' }).tap();
         const xs = page.locator('.tv-fsheet.tv-xpanel');
         await expect(xs).toBeVisible();
         await expect(xs.locator('.tv-xopt').last()).toHaveText('●Everything shown · 5 people');

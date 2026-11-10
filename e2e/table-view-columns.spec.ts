@@ -244,7 +244,9 @@ test.describe('phone (390)', () => {
         await expect(page.locator('#table-container .tv-grid')).toBeVisible();
         await expect(page.locator('#table-container .tv-group-toggle')).toHaveCount(0);
 
-        await page.locator('#table-container .tv-cols-btn').tap();
+        // On a phone Columns is in ⋯ (§12).
+        await page.locator('#table-container .tv-more-menu-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Columns' }).tap();
         const sheet = page.getByRole('dialog', { name: 'Columns' });
         await expect(sheet).toBeVisible();
         await expect(page.locator('.bottom-sheet-overlay.tv-colpanel-overlay')).toHaveClass(/active/);
