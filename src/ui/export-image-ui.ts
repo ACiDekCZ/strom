@@ -166,8 +166,9 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
     const drawing: PosterOptions = {
         config: cardConfig,
         ...(custom ? {} : { cardDensity: density as 'compact' | 'normal' }),
-        // The Normal card wraps a long name on the rows the screen measured (T40).
-        ...(density === 'normal' ? { measureCardTexts } : {}),
+        // The Normal card wraps a long name on the rows the screen measured (T40);
+        // the Compact card shortens it with "…" where the screen does (1110).
+        ...(density === 'normal' || density === 'compact' ? { measureCardTexts } : {}),
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),

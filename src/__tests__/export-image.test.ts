@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildTreeSvg, computeBounds, PosterLayout } from '../export-image.js';
+import { buildTreeSvg, computeBounds, PosterLayout, fitCompactName, COMPACT_NAME_MIN_SQUEEZE } from '../export-image.js';
 import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 import { MeasureTexts, normalCardHeights, cardNameMaxRows } from '../card-width.js';
 import type { CardValueLines } from '../card-fields.js';
@@ -432,7 +432,39 @@ describe('a long name on the card is never shortened in the image (T40)', () => 
         });
         expect(rows(svg)).toEqual([]);
         expect(svg.match(/<text /g)).toHaveLength(1);
-        expect(svg).toMatch(/textLength="128"/);
+        // Shortened with "…" inside the 128px room as on the screen, not squeezed (1110).
+        expect(svg).toMatch(/font-size="12.5"[^>]*>Bartoloměj Kryšto…<\/text>/);
+        expect(svg).not.toContain('textLength');
+    });
+
+    it('compact: a long name without spaces (PNG and SVG draw this) is shortened, never squeezed below a readable ratio (1110)', () => {
+        const word30 = person('a', { firstName: 'Ivo', lastName: 'Wolkenhammerstrandvoldeckenbergsheim' });
+        const draw = (m?: MeasureTexts) => buildTreeSvg(makeData(word30), layout({ a: { x: 0, y: 0 } }), {
+            config: { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 }, cardDensity: 'compact',
+            ...(m ? { measureCardTexts: m } : {}),
+        });
+        for (const svg of [draw(measure), draw()]) {
+            const text = /<text [^>]*>([^<]*)<\/text>/.exec(svg)!;
+            expect(text[1].endsWith('…')).toBe(true);
+            expect(text[1].startsWith('Ivo Wolkenham')).toBe(true);
+            const squeeze = /textLength="([\d.]+)"/.exec(text[0]);
+            if (squeeze) {
+                const natural = (m => m.get(text[1]) ?? 0)(measure('nameSmall', [text[1]]));
+                expect(Number(squeeze[1]) / natural).toBeGreaterThanOrEqual(COMPACT_NAME_MIN_SQUEEZE);
+            }
+        }
+    });
+
+    it('compact: 13px, then 12.5px, then a name a little too wide narrowed whole, then "…"', () => {
+        const w = (texts: string[]) => new Map(texts.map(t => [t, t.length * 10]));
+        expect(fitCompactName('Jan Novák', 128, w)).toEqual({ text: 'Jan Novák', size: 13, width: 93.6, squeezed: false });
+        expect(fitCompactName('Jan Nováková', 121, w)).toEqual({ text: 'Jan Nováková', size: 12.5, width: 120, squeezed: false });
+        // 130px in a 120px room: 92% of its width, drawn whole.
+        expect(fitCompactName('Jan Novákovsk', 120, w)).toEqual({ text: 'Jan Novákovsk', size: 12.5, width: 120, squeezed: true });
+        // 180px in 120px: "…".
+        expect(fitCompactName('Jan Novákovský Brn', 120, w)).toEqual({ text: 'Jan Novákov…', size: 12.5, width: 120, squeezed: false });
+        // A cut after a space: the space dropped before the "…".
+        expect(fitCompactName('Jan Nováko Brn', 120, w).text).toBe('Jan Nováko…');
     });
 
     it('detailed: the whole name on rows; register and custom keep two rows, the last ending in "…"', () => {

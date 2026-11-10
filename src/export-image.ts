@@ -192,6 +192,42 @@ function fittedText(
 }
 
 /**
+ * How far a Compact card's name may be narrowed (textLength) before it is
+ * shortened with "…" instead: a name only a little too wide stays whole,
+ * a long one is never squeezed unreadable (1110).
+ */
+export const COMPACT_NAME_MIN_SQUEEZE = 0.9;
+
+/** The Compact card's name as drawn: its text, font size and the width it is drawn at. */
+export interface CompactName { text: string; size: number; width: number; squeezed: boolean }
+
+/**
+ * The Compact card's name as the screen fits it (renderer.ts fitCardNames):
+ * 13px, then 12.5px, then shortened with "…" (the card's ellipsis). A name
+ * at most 1/COMPACT_NAME_MIN_SQUEEZE times the room is drawn whole, narrowed
+ * to the room. `widths` measures texts at 600 12.5px in the card's serif.
+ */
+export function fitCompactName(name: string, maxW: number, widths: (texts: string[]) => Map<string, number>): CompactName {
+    const w = widths([name]).get(name) ?? 0;
+    if (w * 13 / 12.5 <= maxW) return { text: name, size: 13, width: w * 13 / 12.5, squeezed: false };
+    if (w <= maxW) return { text: name, size: 12.5, width: w, squeezed: false };
+    if (w * COMPACT_NAME_MIN_SQUEEZE <= maxW) return { text: name, size: 12.5, width: maxW, squeezed: true };
+    const chars = [...name];
+    const cuts: string[] = [];
+    for (let n = chars.length - 1; n >= 1; n--) {
+        const head = chars.slice(0, n).join('').trimEnd();
+        if (head) cuts.push(`${head}…`);
+    }
+    const cutWidths = widths(cuts);
+    for (const text of cuts) {
+        const cw = cutWidths.get(text) ?? 0;
+        if (cw <= maxW) return { text, size: 12.5, width: cw, squeezed: false };
+    }
+    const last = cuts[cuts.length - 1] ?? '…';
+    return { text: last, size: 12.5, width: maxW, squeezed: (cutWidths.get(last) ?? 0) > maxW };
+}
+
+/**
  * The birth surname's row ("roz. Dvořáková") as it fits `maxW`: whole, or
  * shortened with "…" (never squeezed with textLength), or '' when fewer than
  * 4 letters of the surname would show — the screen's rule (fitCardBirths).
@@ -875,9 +911,12 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             // Compact: the name only (no avatar, no meta), centred in the whole
             // box at 13px — the screen's 10px side padding inside the border.
             // Beside the mark the name keeps 36px on the right (the screen's padding).
+            // A long name is shortened with "…" as on the screen, never squeezed unreadable (1110).
             const nameShift = markCls ? 13 : 0;
-            out.push(fittedText(shownName(person, '?'), pos.x + cw / 2 - nameShift, pos.y + ch / 2 + 4.5, cw - 22 - 2 * nameShift,
-                [13, 12.5], true, COLORS.text));
+            const measure = options.measureCardTexts ?? estimateCardTexts;
+            const fit = fitCompactName(shownName(person, '?'), cw - 22 - 2 * nameShift, texts => measure('nameSmall', texts));
+            const clamp = fit.squeezed ? ` textLength="${fit.width.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
+            out.push(`<text x="${(pos.x + cw / 2 - nameShift).toFixed(1)}" y="${(pos.y + ch / 2 + 4.5).toFixed(1)}" text-anchor="middle" font-size="${fit.size}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(fit.text)}</text>`);
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen), 34px (r=17) centred on the card's height; 10px left
