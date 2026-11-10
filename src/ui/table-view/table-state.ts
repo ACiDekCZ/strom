@@ -8,6 +8,7 @@
 import { columnById, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
 import type { RowType } from './table-model.js';
 import { defaultUnionCollapse, type UnionCollapse } from './table-subrows.js';
+import { emptyFilter, type TableFilter } from './table-filter.js';
 
 /** One row type's state (§2): its own columns, widths, pinning, sort, scroll and selection. */
 export interface RowTypeState {
@@ -32,6 +33,13 @@ export interface RowTypeState {
      * cleared when the filter changes (part C2). Not part of a view.
      */
     revealedUnions: string[];
+    /**
+     * The filter (§8.1 chips, §8.2 column filters; §9.1 `filter`): part D
+     * stores it in `TableView.filter` as it is.
+     */
+    filter: TableFilter;
+    /** The search text (§8.3; not part of a view). */
+    search: string;
     /** The setup "Reset to default" returns to (part D: the open view's stored one; else the default view). */
     base?: ColumnSetup;
 }
@@ -44,7 +52,7 @@ export interface TableState {
 /** A row type's state as its default view gives it. */
 export function defaultTypeState(type: RowType): RowTypeState {
     const v = DEFAULT_VIEWS[type];
-    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [] };
+    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '' };
 }
 
 export function defaultTableState(): TableState {
@@ -393,7 +401,7 @@ export function resetColumns(type: RowType, st: RowTypeState, base: ColumnSetup 
 }
 
 // ---------------------------------------------------------------------------
-// Sorting from the header menu (§4.6; the head's click is part C2's).
+// Sorting (§8.4): the header menu (§4.6) and the head's click.
 
 /** "Sort ascending / descending": this column alone. */
 export function sortOnly(st: RowTypeState, col: string, dir: SortSpec['dir']): void {
@@ -405,4 +413,24 @@ export function sortAdd(st: RowTypeState, col: string): void {
     const at = st.sort.find(s => s.col === col);
     if (at) at.dir = at.dir === 'asc' ? 'desc' : 'asc';
     else st.sort = [...st.sort, { col, dir: 'asc' }];
+}
+
+/** A click on a column's head (§8.4): ascending → descending → off; the column alone. */
+export function sortClick(st: RowTypeState, col: string): void {
+    const cur = st.sort.length === 1 && st.sort[0].col === col ? st.sort[0] : null;
+    const next = !cur ? 'asc' : cur.dir === 'asc' ? 'desc' : null;
+    st.sort = next ? [{ col, dir: next }] : [];
+}
+
+/** Shift + click (§8.4): adds the column, then changes its direction, then takes it out of the sort. */
+export function sortShiftClick(st: RowTypeState, col: string): void {
+    const at = st.sort.findIndex(s => s.col === col);
+    if (at < 0) st.sort = [...st.sort, { col, dir: 'asc' }];
+    else if (st.sort[at].dir === 'asc') st.sort = st.sort.map((s, i) => (i === at ? { col, dir: 'desc' } : s));
+    else st.sort = st.sort.filter((_s, i) => i !== at);
+}
+
+/** After a change of the filter: the unions shown on request are hidden again (§3.3). */
+export function filterChanged(st: RowTypeState): void {
+    st.revealedUnions = [];
 }

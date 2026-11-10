@@ -3,7 +3,9 @@
  * — the row model, the default sort (birth date) and the cells of the first
  * window of rows — and a sort by three columns on a fresh model (no cell
  * cached yet) takes under 300 ms; the tree's findings (§7.1: Data quality's
- * check and their mapping to the cells) are computed under 1 s. Timed against a calibration run right
+ * check and their mapping to the cells) are computed under 1 s; a filter
+ * (chips, a column range, a union column, the search) with a sort by three
+ * columns on a fresh model under 300 ms (K1.8). Timed against a calibration run right
  * before each run (helpers/perf-budget.ts), so a loaded machine does not
  * decide the result and a slower code still fails.
  */
@@ -12,8 +14,9 @@ import { describe, it, expect } from 'vitest';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 import { buildTableModel } from '../ui/table-view/table-model.js';
-import { cellOf, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
-import { sortRows } from '../ui/table-view/table-filter.js';
+import { cellOf, columnById, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
+import { filterRows, searchQuery, sortRows } from '../ui/table-view/table-filter.js';
+import { sortUnionOf } from '../ui/table-view/table-subrows.js';
 import { rowWindow } from '../ui/table-view/table-window.js';
 import { defaultTableState, shownColumns } from '../ui/table-view/table-state.js';
 import type { PersonId } from '../types.js';
@@ -65,6 +68,31 @@ describe('table view performance', () => {
             minPairs: 2, maxPairs: 5, maxWallMs: 20_000,
         });
         console.log(budgetReport('table sort by 3 columns, 5000 people', m, SORT_BUDGET_MS));
+        if (m.judged) expect(m.ms).toBeLessThan(SORT_BUDGET_MS);
+    }, 120_000);
+
+    it('filters (chips, columns, a union column, search) and sorts 5 000 people by three columns within the budget', () => {
+        const filter = {
+            op: 'and' as const,
+            items: [
+                { chip: 'deceased' as const },
+                { col: 'bDate', kind: 'date' as const, from: 1700, to: 2000 },
+                { col: 'wDate', kind: 'date' as const, filled: true as const },
+            ],
+        };
+        const columns = ['name', 'bPlace', 'partner', 'wPlace'].map(id => columnById('persons', id)!);
+        const specs = [{ col: 'bPlace', dir: 'asc' }, { col: 'bDate', dir: 'desc' }, { col: 'wDate', dir: 'asc' }] as const;
+        let model = fresh();
+        const work = () => {
+            const res = filterRows(model, 'persons', model.persons, filter, { query: searchQuery('an'), columns });
+            return sortRows(model, 'persons', res.rows, specs, sortUnionOf(res.pass)).length;
+        };
+        expect(work()).toBeGreaterThan(0);
+        const m = measureAgainstBudget(() => { model = fresh(); return work(); }, {
+            budgetMs: SORT_BUDGET_MS, calibrationRounds: CALIBRATION_ROUNDS, referenceMs: CALIBRATION_REFERENCE_MS,
+            minPairs: 2, maxPairs: 5, maxWallMs: 20_000,
+        });
+        console.log(budgetReport('table filter + sort by 3 columns, 5000 people', m, SORT_BUDGET_MS));
         if (m.judged) expect(m.ms).toBeLessThan(SORT_BUDGET_MS);
     }, 120_000);
 
