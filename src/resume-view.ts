@@ -16,7 +16,7 @@ import type { ViewMode } from './types.js';
 
 export const LAST_VIEW_STORAGE_KEY = 'strom-last-views';
 
-const VIEW_MODES: readonly ViewMode[] = ['family', 'descendants', 'timeline', 'fan', 'map'];
+const VIEW_MODES: readonly ViewMode[] = ['family', 'descendants', 'timeline', 'fan', 'map', 'table'];
 
 function isViewMode(v: unknown): v is ViewMode {
     return typeof v === 'string' && (VIEW_MODES as readonly string[]).includes(v);

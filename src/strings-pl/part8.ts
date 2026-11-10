@@ -1,5 +1,5 @@
 import type { StringsType, PersonPageCaptionEvent, PersonPageRegister } from '../strings.js';
-import { nPl, plPl, capFirstPl, langNamePl, joinAndPl, pluralCategoryPl } from './helpers.js';
+import { nPl, plPl, numPl, capFirstPl, langNamePl, joinAndPl, pluralCategoryPl } from './helpers.js';
 
 /** Polish month names: genitive (with a day, "2 listopada 1890") and nominative (month and year, "listopad 1890"). */
 const PL_MONTHS_GEN = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
@@ -14,7 +14,7 @@ function romanPl(n: number): string {
     return tens + ones;
 }
 
-export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext' | 'exportGed'> = {
+export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext' | 'exportGed' | 'table'> = {
     history: {
         settingLabel: 'Historia na osi czasu życia',
         settingHint: 'Wydarzenia epoki i miejsc, w których osoba żyła, z wiekiem osoby. Szuka ich badanie, każde ma źródło.',
@@ -1161,5 +1161,48 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         warnLoss: (s: number, c: number) => `Plik będzie bez ${nPl(s, 'źródła', 'źródeł', 'źródeł')} i ${nPl(c, 'cytatu', 'cytatów', 'cytatów')}.`,
         warnLiving: (n: number, c: number) => `U ${nPl(n, 'żyjącej osoby', 'żyjących osób', 'żyjących osób')} ${plPl(c, 'zostanie pominięty', 'zostaną pominięte', 'zostanie pominiętych')} ${nPl(c, 'cytat', 'cytaty', 'cytatów')}. Zmarłym źródła pozostaną.`,
         keepSources: 'Zachowaj źródła',
+    },
+    table: {
+        rows: { persons: 'Osoby', unions: 'Związki' },
+        rowType: 'Wiersze',
+        rowTypeNote: 'Każdy typ wierszy ma własne kolumny, filtr i sortowanie.',
+        rowTypeAria: (label: string, n: number) => `${label}, ${numPl(n)}`,
+        countOf: {
+            p: (n: number, m: number) => `${numPl(n)} z ${numPl(m)} ${m === 1 ? 'osoby' : 'osób'}`,
+            u: (n: number, m: number) => `${numPl(n)} z ${numPl(m)} ${m === 1 ? 'związku' : 'związków'}`,
+        },
+        sortedBy: (cols: string) => `Sortowanie: ${cols}`,
+        legend: 'Oznaczenia',
+        na: 'Nie dotyczy',
+        living: 'żyje',
+        yes: 'tak',
+        no: 'nie',
+        kinSelf: 'osoba główna',
+        evidence: { full: 'pełne', partial: 'częściowe', none: 'brak' },
+        group: {
+            person: 'Osoba', birth: 'Urodzenie i chrzest', parents: 'Rodzice', union: 'Związki', divorce: 'Rozwód',
+            death: 'Zgon i pochówek', events: 'Wydarzenia', sources: 'Źródła', rel: 'Wiarygodność i badania', checks: 'Kontrole',
+            pair: 'Para', wed: 'Ślub', uextra: 'Dzieci i źródła',
+        },
+        col: {
+            name: 'Imię i nazwisko', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
+            gender: 'Płeć', living: 'Żyje', researchId: 'ID badań', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
+            bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',
+            fAge: 'Wiek ojca przy urodzeniu', mAge: 'Wiek matki przy urodzeniu', bComp: 'Kompletność urodzenia',
+            father: 'Ojciec', mother: 'Matka', sibs: 'Liczba rodzeństwa', sibOrder: 'Kolejność wśród rodzeństwa',
+            uCount: 'Liczba związków', partner: 'Partner', wDate: 'Data ślubu', wPlace: 'Miejsce ślubu',
+            wAge: 'Wiek przy ślubie', wAgeRec: 'Wiek zapisany przy ślubie', wAgeDiff: 'Różnica wieku zapisanego',
+            pAge: 'Wiek partnera przy ślubie', pAgeRec: 'Wiek zapisany partnera', pAgeDiff: 'Różnica wieku partnera',
+            uStatus: 'Stan związku', witnesses: 'Świadkowie', uLen: 'Długość związku', uKids: 'Liczba dzieci', uComp: 'Kompletność związku',
+            div: 'Rozwód', divDate: 'Data rozwodu', divPlace: 'Miejsce rozwodu',
+            dDate: 'Data zgonu', dPlace: 'Miejsce zgonu', dCause: 'Przyczyna zgonu', dAddr: 'Adres zgonu',
+            burDate: 'Data pochówku', burPlace: 'Miejsce pochówku', dAge: 'Wiek w chwili zgonu', dAgeRec: 'Wiek zapisany przy zgonie',
+            dAgeDiff: 'Różnica wieku przy zgonie', dComp: 'Kompletność zgonu',
+            occ: 'Zawód', res: 'Miejsce zamieszkania', rel: 'Wyznanie', mil: 'Służba wojskowa', emi: 'Emigracja', edu: 'Wykształcenie',
+            srcCount: 'Liczba źródeł', relN: 'Wiarygodność imienia', relB: 'Wiarygodność urodzenia', relD: 'Wiarygodność zgonu', relW: 'Wiarygodność ślubu',
+            evid: 'Udokumentowanie osoby', certainty: 'Pewność z badań', nFind: 'Ustalenia', topSev: 'Najwyższy poziom',
+            unusual: 'Nietypowe, sprawdzone', comp: 'Kompletność ogółem',
+            p1: 'Partner 1', p2: 'Partner 2', age1: 'Wiek 1', rec1: 'Wiek zapisany 1', age2: 'Wiek 2', rec2: 'Wiek zapisany 2',
+        },
     },
 };

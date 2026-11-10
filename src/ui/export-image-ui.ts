@@ -91,7 +91,7 @@ function viewLabelFor(mode: ViewMode, name: string): string {
 
 /**
  * Describe what the poster will actually print for the CURRENT view — the
- * poster prints what you are looking at, so the map is honestly blocked
+ * poster prints what you are looking at, so the map and the table are honestly blocked
  * rather than silently exporting the family card layout underneath. The dialog
  * line shows the RAW focus name (the user is looking at their own screen); the
  * footer label is rebuilt from privacy-filtered data in buildCurrentPoster.
@@ -99,6 +99,7 @@ function viewLabelFor(mode: ViewMode, name: string): string {
 function posterViewInfo(): PosterViewInfo {
     const mode = TreeRenderer.getViewMode();
     if (mode === 'map') return { line: strings.poster.viewMapBlocked, label: '', blocked: true };
+    if (mode === 'table') return { line: strings.poster.viewTableBlocked, label: '', blocked: true };
     const label = viewLabelFor(mode, focusNameFrom(DataManager.getData()));
     return { line: `${strings.poster.printsView} ${label}`, label, blocked: false };
 }
@@ -205,7 +206,7 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
  */
 function buildCurrentPoster(): PosterBuild | null {
     const mode = TreeRenderer.getViewMode();
-    if (mode === 'map') return null; // not printable
+    if (mode === 'map' || mode === 'table') return null; // not printable
 
     const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
     const meta: PosterFooterMeta = {

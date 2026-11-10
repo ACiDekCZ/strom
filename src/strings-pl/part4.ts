@@ -155,6 +155,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         timeline: 'Oś czasu',
         fan: 'Wachlarz',
         map: 'Mapa',
+        table: 'Tabela',
         toggle: 'Widok rodzina / potomkowie',
         back: 'Powrót do widoku rodziny',
         badgeLabel: 'Potomkowie:',

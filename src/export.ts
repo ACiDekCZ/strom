@@ -61,7 +61,7 @@ function cleanDynamicMarkup(html: string): string {
  */
 export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
     // Tree view + alternative views
-    'tree-canvas', 'tree-lines', 'gen-labels', 'timeline-container', 'map-container',
+    'tree-canvas', 'tree-lines', 'gen-labels', 'timeline-container', 'map-container', 'table-container',
     'fan-chart', 'slideshow-caption', 'places-datalist',
     // Toolbar / focus / badges
     'current-tree-name', 'toolbar-search-picker', 'search-result-count', 'toolbar-focus-name',

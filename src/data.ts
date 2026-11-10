@@ -1175,7 +1175,20 @@ class DataManagerClass {
         this.save();
     }
 
+    /**
+     * Data revision: bumped on every change of the open tree's data (each
+     * mutation ends in save()), so derived caches (the table view's rows and
+     * cells) know when to rebuild. A swapped data object is caught by identity.
+     */
+    private revision = 0;
+
+    /** Current data revision (see `revision`). */
+    getRevision(): number {
+        return this.revision;
+    }
+
     private save(): void {
+        this.revision++;
         // Never save in view mode (read-only), over locked data (the
         // in-memory tree is a stand-in) or over a newer app's tree
         // (TreeManager would refuse both anyway).

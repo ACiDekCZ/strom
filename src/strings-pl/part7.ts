@@ -367,6 +367,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         viewFanTwoWay: (name: string, gens: number, desc: number) => `Wachlarz – przodkowie i potomkowie osoby ${name}, pokolenia w górę: ${gens}, w dół: ${desc}`,
         viewTimeline: (name: string) => `Oś czasu – widok osoby ${name}`,
         viewMapBlocked: 'Mapy nie można wydrukować jako plakatu – druk wymaga przełączenia na widok drzewa.',
+        viewTableBlocked: 'Tabeli nie można wydrukować jako plakatu; plakat drukuje widok drzewa.',
         svg: 'SVG (wektor)',
         svgDesc: 'Skalowalny wektor, otwiera się w przeglądarce lub w Inkscape',
         png: 'PNG (obraz)',

@@ -1654,11 +1654,12 @@ export interface StromData {
  * How the tree is drawn. 'family' is the default focus-centric view; the others
  * are alternative readings of the SAME selection of people ('descendants'
  * chart, 'timeline' life-bars, 'fan' ancestor chart, 'map' of their places).
+ * 'table' lists the whole tree (every real person or union) as rows.
  */
-export type ViewMode = 'family' | 'descendants' | 'timeline' | 'fan' | 'map';
+export type ViewMode = 'family' | 'descendants' | 'timeline' | 'fan' | 'map' | 'table';
 
 /** Views drawn by something other than the layout pipeline (own containers). */
-export const STANDALONE_VIEWS: readonly ViewMode[] = ['timeline', 'fan', 'map'];
+export const STANDALONE_VIEWS: readonly ViewMode[] = ['timeline', 'fan', 'map', 'table'];
 
 // ==================== UI TYPES ====================
 

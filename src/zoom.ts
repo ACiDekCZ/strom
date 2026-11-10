@@ -97,7 +97,7 @@ const WHEEL_IDLE_MS = 150;
 const MOVING_CLASS = 'is-moving';
 /** Views drawn in their own container over the (hidden) tree canvas. */
 // The welcome of an empty tree scrolls itself too (a phone held sideways is shorter than it).
-const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container, #empty-state';
+const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container, .table-container, #empty-state';
 
 /** Keep the hover card of the person card at (x, y) hidden until the pointer leaves it. */
 function quietTooltipUntilLeave(x: number, y: number): void {

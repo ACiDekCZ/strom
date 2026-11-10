@@ -359,7 +359,7 @@ export const rodViewMethods = uiModule({
      */
     moveFocusToRod(id: RodId): void {
         const view = TreeRenderer.getViewMode();
-        if (view === 'timeline' || view === 'map') return;
+        if (view === 'timeline' || view === 'map' || view === 'table') return;
         const drawn: ReadonlySet<PersonId> = view === 'fan'
             ? new Set([...document.querySelectorAll<HTMLElement>('[data-fan-person]')].map(el => (el.dataset.fanPerson ?? '') as PersonId))
             : TreeRenderer.getVisiblePersonIds({ includeView: true });
@@ -383,7 +383,7 @@ export const rodViewMethods = uiModule({
         const el = document.getElementById('view-rod-picker');
         if (!el) return;
         const view = TreeRenderer.getViewMode();
-        const off = view === 'timeline' || view === 'map';
+        const off = view === 'timeline' || view === 'map' || view === 'table';
         if (off) { el.hidden = true; return; }
         const key = `${DataManager.getCurrentTreeId() ?? ''}|${getSelectedRod() ?? ''}|${getCurrentLanguage()}`;
         const built = !!el.querySelector('details.sp-rodpick');
